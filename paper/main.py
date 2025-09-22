@@ -3447,6 +3447,15 @@ def login(user: UserAuth):
     return login_user(user)
 
 
+@academics_router.get("/api/public/supabase", summary="Public Supabase client config")
+def public_supabase_config():
+    base_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+    anon = os.getenv("SUPABASE_ANON_KEY", "")
+    if not base_url or not anon:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE_ANON_KEY")
+    return {"url": base_url, "anonKey": anon}
+
+
 @academics_router.post("/api/signup/full")
 def signup_full(payload: SignupFullIn):
     return signup_full_user(payload)

@@ -23,6 +23,7 @@
       }
     }
   </script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
     .glass {
       backdrop-filter: blur(10px);
@@ -95,6 +96,19 @@
               <button type="submit" id="submitBtn"
                 class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-5 py-2.5 text-white shadow-neon">Sign
                 in</button>
+
+              <div class="relative text-center">
+                <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                  <div class="w-full border-t border-slate-200/60 dark:border-white/10"></div>
+                </div>
+                <div class="relative inline-block bg-white dark:bg-night-800 px-2 text-xs text-slate-500 dark:text-slate-400">or</div>
+              </div>
+
+              <button type="button" id="googleBtn"
+                class="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-5 py-2.5 hover:border-brand-400/60">
+                <img alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="h-5 w-5" />
+                Continue with Google
+              </button>
               <div id="status"
                 class="hidden rounded-lg bg-white/70 dark:bg-night-800/70 border border-slate-200/60 dark:border-white/10 p-3 font-mono text-[12px] text-slate-700 dark:text-slate-300">
               </div>
@@ -120,6 +134,52 @@
     const form = document.getElementById('loginForm');
     const status = document.getElementById('status');
     const submitBtn = document.getElementById('submitBtn');
+    const googleBtn = document.getElementById('googleBtn');
+    let supabaseClient = null;
+
+    async function ensureSupabase() {
+      if (supabaseClient) return supabaseClient;
+      try {
+        const cfg = await fetch(`${apiBase}/api/public/supabase`).then(r => r.json());
+        if (!cfg?.url || !cfg?.anonKey) throw new Error('Missing Supabase config');
+        supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
+        return supabaseClient;
+      } catch (e) {
+        console.error('Supabase init failed', e);
+        throw e;
+      }
+    }
+
+    async function handleHashSession() {
+      // Handle OAuth redirect hash (access_token in URL)
+      if (!location.hash.includes('access_token')) return;
+      const hash = new URLSearchParams(location.hash.slice(1));
+      const token = hash.get('access_token');
+      if (token) {
+        try { localStorage.setItem('px_token', token); } catch {}
+        // Clean the hash
+        history.replaceState(null, document.title, location.pathname + location.search);
+        // Check if profile exists; if not, send to signup to complete details
+        try {
+          const res = await fetch(`${apiBase}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+          if (res.ok) {
+            location.href = 'profile.html';
+          } else if (res.status === 404) {
+            location.href = 'signup.html';
+          } else if (res.status === 401) {
+            // token invalid; fall back to normal flow
+            status.classList.remove('hidden');
+            status.textContent = '❌ Session invalid after Google sign-in. Please try again.';
+          } else {
+            location.href = 'profile.html';
+          }
+        } catch {
+          location.href = 'profile.html';
+        }
+      }
+    }
+
+    handleHashSession();
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -145,6 +205,24 @@
         status.textContent = '❌ Network error. Please try again.';
       } finally {
         submitBtn.disabled = false; submitBtn.textContent = 'Sign in';
+      }
+    });
+
+    googleBtn?.addEventListener('click', async () => {
+      status.classList.remove('hidden');
+      status.textContent = 'Redirecting to Google…';
+      try {
+        const sb = await ensureSupabase();
+        const redirectTo = `${location.origin}${location.pathname}`; // back to login page
+        const { data, error } = await sb.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo }
+        });
+        if (error) throw error;
+        // On success, browser will redirect. The handler above will capture the token.
+      } catch (err) {
+        console.error(err);
+        status.textContent = `❌ Google sign-in failed.`;
       }
     });
   </script>
