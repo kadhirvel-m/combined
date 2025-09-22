@@ -27,6 +27,43 @@
   window.__CHAT_API_BASE = (window.__API_BASE || 'http://127.0.0.1:8000') + '/api/tune-ai';
 })();
 
+(function(){
+  function setupNavDropdown(btnId, menuId){
+    var btn = document.getElementById(btnId);
+    var menu = document.getElementById(menuId);
+    if (!btn || !menu) return;
+    var hide = function(){ menu.classList.add('hidden'); };
+    btn.addEventListener('click', function(event){
+      event.preventDefault();
+      event.stopPropagation();
+      menu.classList.toggle('hidden');
+    });
+    document.addEventListener('click', function(event){
+      if (menu.classList.contains('hidden')) return;
+      if (!menu.contains(event.target) && !btn.contains(event.target)) hide();
+    });
+    window.addEventListener('blur', hide);
+  }
+  function setupMobileMenuReset(){
+    var menuBtn = document.getElementById('menuBtn');
+    if (!menuBtn) return;
+    menuBtn.addEventListener('click', function(){
+      var mobileMenu = document.getElementById('navProjectsMenuMobile');
+      if (mobileMenu) mobileMenu.classList.add('hidden');
+    });
+  }
+  var init = function(){
+    setupNavDropdown('navProjectsBtn', 'navProjectsMenu');
+    setupNavDropdown('navProjectsBtnMobile', 'navProjectsMenuMobile');
+    setupMobileMenuReset();
+  };
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
+
 // TuNe AI Chat Widget (global)
 (function(){
   if (!('document' in window)) return;
