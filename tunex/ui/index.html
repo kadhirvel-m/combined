@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>TuNe X — Build Teams, Supercharge Student Startups</title>
+    <meta name="description"
+        content="TuNe X is an AI-powered portal where students and tech professionals showcase projects and startups, recruit collaborators, and use agentic tools to research papers, blogs, tools, and market insights." />
+    <!-- Tailwind (with plugins) -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography,forms,line-clamp"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Ubuntu', 'Cantarell', 'Noto Sans', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#eef4ff', 100: '#d9e6ff', 200: '#b3ccff', 300: '#88adff', 400: '#628fff',
+                            500: '#3f6fff', 600: '#2f56e6', 700: '#2846bb', 800: '#223a95', 900: '#1c2f78'
+                        },
+                        ink: { 50: '#f7f7f9', 900: '#0c0f14' }
+                    },
+                    boxShadow: {
+                        'brand-lg': '0 10px 30px rgba(63,111,255,.25)',
+                        'soft': '0 6px 20px rgba(0,0,0,.08)',
+                    },
+                    backgroundImage: {
+                        'grid-radial': 'radial-gradient(1200px 600px at 90% -10%, rgba(63,111,255,.25), transparent 60%), radial-gradient(700px 400px at -10% 10%, rgba(99,102,241,.20), transparent 60%)',
+                        'glass': 'linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.35))',
+                        'glass-dark': 'linear-gradient(180deg, rgba(20,24,33,.6), rgba(20,24,33,.35))',
+                    },
+                    borderRadius: { '3xl': '1.5rem' }
+                }
+            }
+        }
+    </script>
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <style>
+        .icon {
+            font-family: 'Material Symbols Outlined';
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        /* smooth card hover */
+        .lift {
+            transition: transform .25s ease, box-shadow .25s ease;
+        }
+
+        .lift:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, .12);
+        }
+
+        /* hide scrollbar for horizontal scrollers */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+    <script>
+        // --- Theme persistence ---
+        const initTheme = () => {
+            const stored = localStorage.getItem('cx-theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if ((stored === 'dark') || (!stored && prefersDark)) document.documentElement.classList.add('dark');
+        };
+        initTheme();
+        const toggleTheme = () => {
+            const d = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('cx-theme', d ? 'dark' : 'light');
+        };
+    </script>
+    <script src="config.js"></script>
+</head>
+
+<body
+    class="bg-ink-50 dark:bg-[#0a0d12] text-[#0d1117] dark:text-zinc-100 selection:bg-brand-200 selection:text-ink-900">
+    <!-- ===== NAV ===== -->
+    <header
+        class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-black/30 border-b border-black/5 dark:border-white/10">
+        <nav class="container flex items-center gap-3 py-3">
+            <a href="#" class="flex items-center gap-2 font-semibold tracking-tight">
+                <span
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white shadow-brand-lg">CX</span>
+                <span class="hidden sm:inline">TuNe X</span>
+            </a>
+
+            <div class="ml-auto hidden md:flex items-center gap-6 text-sm">
+                <a href="#features" class="hover:text-brand-600 dark:hover:text-brand-300">Features</a>
+                <a href="#workflows" class="hover:text-brand-600 dark:hover:text-brand-300">Agentic Tools</a>
+                <a href="#discover" class="hover:text-brand-600 dark:hover:text-brand-300">Discover</a>
+                <a href="postings.html" class="hover:text-brand-600 dark:hover:text-brand-300">Postings</a>
+                <a href="#faq" class="hover:text-brand-600 dark:hover:text-brand-300">FAQ</a>
+                <a href="signin.html" class="hover:text-brand-600 dark:hover:text-brand-300">Sign in</a>
+                <a href="signup.html"
+                   class="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 px-4 py-2 hover:bg-black/5 dark:hover:bg-white/10">
+                    <span class="icon">person_add</span> Sign up
+                </a>
+                <a href="#join"
+                    class="inline-flex items-center gap-2 rounded-xl bg-brand-600 text-white px-4 py-2 shadow-brand-lg hover:brightness-110">
+                    <span class="icon">bolt</span> Create Project
+                </a>
+                <!-- Profile avatar (shown when logged in) -->
+                <a id="navProfile" href="profile.html" title="Profile"
+                   class="hidden inline-flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+                    <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+                    <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
+                </a>
+                <button onclick="toggleTheme()" class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"
+                    title="Toggle theme">
+                    <span class="icon align-[-4px]">dark_mode</span>
+                </button>
+            </div>
+
+            <div class="md:hidden flex items-center gap-2">
+                <button onclick="toggleTheme()" class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">
+                    <span class="icon">dark_mode</span>
+                </button>
+                <!-- Mobile profile avatar (shown when logged in) -->
+                <a id="navProfileMobile" href="profile.html" title="Profile"
+                   class="hidden inline-flex items-center justify-center w-8 h-8 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+                    <img id="navProfileMobileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+                    <span id="navProfileMobileInitial" class="text-[10px] font-semibold">Me</span>
+                </a>
+                <button id="menuBtn" class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
+                        class="icon">menu</span></button>
+            </div>
+        </nav>
+
+        <!-- mobile menu -->
+        <div id="mobileMenu" class="md:hidden hidden border-t border-black/5 dark:border-white/10">
+            <div class="container py-2 grid gap-1">
+                <a href="#features" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">Features</a>
+                <a href="#workflows" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">Agentic
+                    Tools</a>
+                <a href="#discover" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">Discover</a>
+                <a href="postings.html" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">Postings</a>
+                <a href="#faq" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">FAQ</a>
+                <a href="signin.html" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">Sign in</a>
+                <a href="signup.html" class="px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10">Sign up</a>
+                <a href="#join" class="px-3 py-2 rounded-lg bg-brand-600 text-white">Create Project</a>
+            </div>
+        </div>
+    </header>
+
+    <script>
+        // mobile menu
+        const menuBtn = document.getElementById('menuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        if (menuBtn) menuBtn.addEventListener('click', () => mobileMenu.classList.toggle('hidden'));
+
+        // Auth-aware navbar tweaks
+        const token = localStorage.getItem('access_token');
+        if (token) {
+            // Hide Sign in / Sign up (desktop + mobile)
+            document.querySelectorAll('a[href="signin.html"], a[href="signup.html"]').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('#mobileMenu a[href="signin.html"], #mobileMenu a[href="signup.html"]').forEach(el => el.classList.add('hidden'));
+
+            // Show avatar buttons
+            const navProfile = document.getElementById('navProfile');
+            const navProfileImg = document.getElementById('navProfileImg');
+            const navProfileInitial = document.getElementById('navProfileInitial');
+            const navProfileMobile = document.getElementById('navProfileMobile');
+            const navProfileMobileImg = document.getElementById('navProfileMobileImg');
+            const navProfileMobileInitial = document.getElementById('navProfileMobileInitial');
+            if (navProfile) navProfile.classList.remove('hidden');
+            if (navProfileMobile) navProfileMobile.classList.remove('hidden');
+
+            // Try to render profile image or initials
+            const API = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+            fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${token}` } })
+                .then(r => r.ok ? r.json() : null)
+                .then(p => {
+                    if (!p) return;
+                    let initials = 'ME';
+                    if (p.name) {
+                        initials = p.name.split(' ').filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0, 2).join('');
+                    }
+                    if (navProfileInitial) navProfileInitial.textContent = initials;
+                    if (navProfileMobileInitial) navProfileMobileInitial.textContent = initials;
+                    if (p.profile_image_url) {
+                        if (navProfileImg) { navProfileImg.src = p.profile_image_url; navProfileImg.classList.remove('hidden'); if (navProfileInitial) navProfileInitial.classList.add('hidden'); }
+                        if (navProfileMobileImg) { navProfileMobileImg.src = p.profile_image_url; navProfileMobileImg.classList.remove('hidden'); if (navProfileMobileInitial) navProfileMobileInitial.classList.add('hidden'); }
+                    }
+                })
+                .catch(() => { /* ignore */ });
+        }
+    </script>
+
+    <!-- ===== HERO ===== -->
+    <section class="relative overflow-hidden">
+        <div class="absolute inset-0 bg-grid-radial opacity-80 dark:opacity-60 pointer-events-none"></div>
+        <div class="container relative pt-16 pb-14 md:pt-5 md:pb-20">
+            <div class="grid lg:grid-cols-2 gap-10 items-center">
+                <div>
+                    <span
+                        class="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/10 px-3 py-1 text-xs mb-4 bg-white/70 dark:bg-white/5 backdrop-blur">
+                        <span class="icon text-brand-600">stars</span>
+                        Agentic AI for Projects, Startups & Research
+                    </span>
+                    <h1 class="font-extrabold text-4xl sm:text-5xl leading-tight tracking-tight">
+                        Build your <span class="text-brand-600 dark:text-brand-300">dream team</span> and ship faster
+                        with AI copilots.
+                    </h1>
+                    <p class="mt-4 text-lg text-black/70 dark:text-white/70 max-w-2xl">
+                        Showcase your project or startup, recruit collaborators, and let TuNe X’s agents auto-fetch
+                        related papers, blogs, tools, market insights, and even generate vacancy posts with essential
+                        skills.
+                    </p>
+
+                    <div class="mt-6 flex flex-col sm:flex-row gap-3">
+                        <a href="#join"
+                            class="inline-flex items-center gap-2 rounded-2xl bg-brand-600 text-white px-5 py-3 shadow-brand-lg hover:brightness-110">
+                            <span class="icon">bolt</span> Create your project
+                        </a>
+                        <a href="#discover"
+                            class="inline-flex items-center gap-2 rounded-2xl border border-black/10 dark:border-white/10 px-5 py-3 hover:bg-black/5 dark:hover:bg-white/10">
+                            <span class="icon">travel_explore</span> Discover teams
+                        </a>
+                    </div>
+
+                    <!-- global search -->
+                    <div
+                        class="mt-6 bg-white/80 dark:bg-white/5 backdrop-blur rounded-2xl border border-black/10 dark:border-white/10 p-3">
+                        <form onsubmit="event.preventDefault();" class="flex gap-3">
+                            <span class="icon mt-2 ml-1">search</span>
+                            <input id="q" class="w-full bg-transparent focus:outline-none"
+                                placeholder="Search projects, skills, stacks, colleges, cities..." />
+                            <button
+                                class="rounded-xl px-4 py-2 bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15">Search</button>
+                        </form>
+                    </div>
+
+                    <!-- stats -->
+                    <div class="mt-6 grid grid-cols-3 gap-3">
+                        <div
+                            class="rounded-2xl bg-white/70 dark:bg-white/5 backdrop-blur p-4 text-center border border-black/10 dark:border-white/10">
+                            <div class="text-2xl font-bold">12k+</div>
+                            <div class="text-xs opacity-70">Members</div>
+                        </div>
+                        <div
+                            class="rounded-2xl bg-white/70 dark:bg-white/5 backdrop-blur p-4 text-center border border-black/10 dark:border-white/10">
+                            <div class="text-2xl font-bold">3.5k</div>
+                            <div class="text-xs opacity-70">Active Projects</div>
+                        </div>
+                        <div
+                            class="rounded-2xl bg-white/70 dark:bg-white/5 backdrop-blur p-4 text-center border border-black/10 dark:border-white/10">
+                            <div class="text-2xl font-bold">97%</div>
+                            <div class="text-xs opacity-70">Match Satisfaction</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- mock panel -->
+                <div class="relative">
+                    <div
+                        class="rounded-3xl border border-black/10 dark:border-white/10 bg-glass dark:bg-glass-dark p-4 shadow-soft">
+                        <div class="flex items-center gap-2 text-sm opacity-70 mb-3"><span
+                                class="icon">auto_awesome</span> AI Suggestions</div>
+                        <div class="grid gap-3">
+                            <article
+                                class="lift rounded-2xl p-4 bg-white/80 dark:bg-zinc-900/60 border border-black/10 dark:border-white/10">
+                                <div class="text-sm mb-1 opacity-70">Related Papers</div>
+                                <p class="text-sm line-clamp-2">“Contrastive Learning for Low-Resource ASR” · “Graph RAG
+                                    for Course-Level QA” · “On-Device Diffusion for UI Mockups”</p>
+                            </article>
+                            <article
+                                class="lift rounded-2xl p-4 bg-white/80 dark:bg-zinc-900/60 border border-black/10 dark:border-white/10">
+                                <div class="text-sm mb-1 opacity-70">Open-Source Tools</div>
+                                <p class="text-sm line-clamp-2">Supabase · LangChain · AutoGen 0.7 · scikit-learn ·
+                                    Milvus/PGVector · Trafilatura · FastAPI</p>
+                            </article>
+                            <article
+                                class="lift rounded-2xl p-4 bg-white/80 dark:bg-zinc-900/60 border border-black/10 dark:border-white/10">
+                                <div class="text-sm mb-1 opacity-70">Vacancy Post (AI-generated)</div>
+                                <p class="text-sm line-clamp-3"><strong>Hiring:</strong> Full-stack + ML Engineer
+                                    (Python/FastAPI, Next.js, RAG). <strong>Nice to have:</strong> PGVector, arXiv
+                                    tooling, Tailwind, shadcn, Docker.</p>
+                            </article>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== FEATURE GRID ===== -->
+    <section id="features" class="container py-14 md:py-20">
+        <div class="text-center max-w-3xl mx-auto">
+            <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight">Everything you need to go from idea → team →
+                traction</h2>
+            <p class="mt-3 text-black/70 dark:text-white/70">TuNe X blends community + agentic AI to research,
+                recruit, and ship.</p>
+        </div>
+
+        <div class="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- 1 -->
+            <div
+                class="lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5">
+                <div class="flex items-center gap-3">
+                    <span class="icon text-brand-600 dark:text-brand-300">groups</span>
+                    <h3 class="font-semibold">Showcase & Recruit</h3>
+                </div>
+                <p class="mt-2 text-sm opacity-80">Publish project/startup pages, set roles (free/paid), accept requests
+                    with portfolios & verifications.</p>
+            </div>
+            <!-- 2 -->
+            <div
+                class="lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5">
+                <div class="flex items-center gap-3">
+                    <span class="icon text-brand-600 dark:text-brand-300">psychology</span>
+                    <h3 class="font-semibold">Agentic Research</h3>
+                </div>
+                <p class="mt-2 text-sm opacity-80">Give topic + short desc; agents fetch related projects, base papers,
+                    blogs, news, and best open-source tools.</p>
+            </div>
+            <!-- 3 -->
+            <div
+                class="lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5">
+                <div class="flex items-center gap-3">
+                    <span class="icon text-brand-600 dark:text-brand-300">post_add</span>
+                    <h3 class="font-semibold">Auto-Vacancy Posts</h3>
+                </div>
+                <p class="mt-2 text-sm opacity-80">AI drafts role descriptions, skills, tasks, interview prompts, and
+                    starter roadmaps from your repo/readme.</p>
+            </div>
+            <!-- 4 -->
+            <div
+                class="lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5">
+                <div class="flex items-center gap-3">
+                    <span class="icon text-brand-600 dark:text-brand-300">workspace_premium</span>
+                    <h3 class="font-semibold">Verification Score</h3>
+                </div>
+                <p class="mt-2 text-sm opacity-80">Get a dynamic trust score from docs, college ID, GitHub, LinkedIn,
+                    endorsements, and shipped milestones.</p>
+            </div>
+            <!-- 5 -->
+            <div
+                class="lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5">
+                <div class="flex items-center gap-3">
+                    <span class="icon text-brand-600 dark:text-brand-300">monitoring</span>
+                    <h3 class="font-semibold">Skills & Matching</h3>
+                </div>
+                <p class="mt-2 text-sm opacity-80">Smart matching across skills, timezone, stack, commitment, stipend,
+                    and research interests.</p>
+            </div>
+            <!-- 6 -->
+            <div
+                class="lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5">
+                <div class="flex items-center gap-3">
+                    <span class="icon text-brand-600 dark:text-brand-300">insights</span>
+                    <h3 class="font-semibold">Market & Tech Insights</h3>
+                </div>
+                <p class="mt-2 text-sm opacity-80">Optional agent: “teach stock reco” (educational) + trend scans +
+                    alternative open-source stacks.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== AGENTIC WORKFLOWS (Tabs) ===== -->
+    <section id="workflows" class="container py-14 md:py-20">
+        <div class="max-w-3xl">
+            <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight">Agentic workflows that do the heavy lifting
+            </h2>
+            <p class="mt-3 text-black/70 dark:text-white/70">Each workflow is a multi-agent flow
+                (retriever/synthesizer/validator) with citations.</p>
+        </div>
+
+        <div class="mt-8 rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-4">
+            <div class="flex flex-wrap gap-2" id="wfTabs">
+                <button data-tab="papers" class="wfTab rounded-xl px-4 py-2 bg-brand-600 text-white">Related
+                    Papers</button>
+                <button data-tab="projects"
+                    class="wfTab rounded-xl px-4 py-2 hover:bg-black/5 dark:hover:bg-white/10">Similar Projects</button>
+                <button data-tab="blogs"
+                    class="wfTab rounded-xl px-4 py-2 hover:bg-black/5 dark:hover:bg-white/10">Blogs &
+                    Tutorials</button>
+                <button data-tab="tools"
+                    class="wfTab rounded-xl px-4 py-2 hover:bg-black/5 dark:hover:bg-white/10">Open-Source
+                    Tools</button>
+                <button data-tab="vacancy"
+                    class="wfTab rounded-xl px-4 py-2 hover:bg-black/5 dark:hover:bg-white/10">Vacancy Draft</button>
+            </div>
+
+            <div class="mt-4 grid gap-3" id="wfPanels">
+                <div data-panel="papers" class="wfPanel grid md:grid-cols-2 gap-4">
+                    <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                        <div class="text-sm opacity-70 mb-1">Query</div>
+                        <p class="text-sm">“Multilingual ASR for Tamil/Telugu; low-resource finetuning; WER
+                            improvements.”</p>
+                    </div>
+                    <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                        <div class="text-sm opacity-70 mb-1">Top Finds</div>
+                        <ul class="text-sm list-disc ml-5 space-y-1">
+                            <li>Low-resource ASR with CTC + Conformer</li>
+                            <li>Whisper finetune with SpecAugment baselines</li>
+                            <li>LM rescoring & shallow fusion for code-mix</li>
+                        </ul>
+                    </div>
+                </div>
+                <div data-panel="projects" class="wfPanel hidden">
+                    <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                        <div class="text-sm opacity-70 mb-1">Similar Projects</div>
+                        <p class="text-sm">Campus voice-notes AI, Exam helper bots, Speech-to-notes tools.</p>
+                    </div>
+                </div>
+                <div data-panel="blogs" class="wfPanel hidden">
+                    <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                        <div class="text-sm opacity-70 mb-1">Curated Blogs</div>
+                        <p class="text-sm">FastAPI + PGVector RAG, arXiv toolchains, Tailwind UI patterns.</p>
+                    </div>
+                </div>
+                <div data-panel="tools" class="wfPanel hidden">
+                    <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                        <div class="text-sm opacity-70 mb-1">Toolchain</div>
+                        <p class="text-sm">Supabase, AutoGen 0.7, Trafilatura, LangSmith evals, Chroma/PGVector.</p>
+                    </div>
+                </div>
+                <div data-panel="vacancy" class="wfPanel hidden">
+                    <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4">
+                        <div class="text-sm opacity-70 mb-1">Draft</div>
+                        <p class="text-sm"><strong>Role:</strong> ML/ASR Engineer · <strong>Stack:</strong> Python,
+                            PyTorch, Whisper, Weights & Biases · <strong>Tasks:</strong> fine-tune, eval, deploy.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // tabs behavior
+        const tabBtns = document.querySelectorAll('.wfTab');
+        const panels = document.querySelectorAll('.wfPanel');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach(b => b.classList.remove('bg-brand-600', 'text-white'));
+                btn.classList.add('bg-brand-600', 'text-white');
+                const t = btn.getAttribute('data-tab');
+                panels.forEach(p => p.classList.toggle('hidden', p.getAttribute('data-panel') !== t));
+            });
+        });
+    </script>
+
+    <!-- ===== DISCOVER PROJECTS ===== -->
+    <section id="discover" class="container py-14 md:py-20">
+        <div class="flex flex-col sm:flex-row sm:items-end gap-3 justify-between">
+            <div>
+                <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight">Discover teams looking for you</h2>
+                <p class="mt-2 text-black/70 dark:text-white/70">Filter by skills, stack, stipend, remote, verification
+                    score.</p>
+            </div>
+            <div class="flex gap-2">
+                <select class="rounded-xl border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+                    <option>All Categories</option>
+                    <option>AI/ML</option>
+                    <option>Web</option>
+                    <option>Mobile</option>
+                    <option>Robotics</option>
+                </select>
+                <select class="rounded-xl border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+                    <option>Sort: Trending</option>
+                    <option>Newest</option>
+                    <option>Highest Score</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="discoverGrid" class="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+        <!-- horizontal logos / testimonials -->
+        <div
+            class="mt-10 rounded-2xl border border-black/10 dark:border-white/10 p-4 bg-white/70 dark:bg-zinc-900/60 overflow-x-auto no-scrollbar">
+            <div class="flex items-center gap-10 min-w-max">
+                <div class="text-sm opacity-70 flex items-center gap-2"><span class="icon">reviews</span> “Landed 2 ML
+                    interns in 48 hours.”</div>
+                <div class="text-sm opacity-70 flex items-center gap-2"><span class="icon">workspace_premium</span>
+                    “Verification score made hiring easy.”</div>
+                <div class="text-sm opacity-70 flex items-center gap-2"><span class="icon">trending_up</span> “Smart
+                    suggestions saved weeks.”</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== VERIFICATION SCORE EXPLAINER ===== -->
+    <section class="container py-14 md:py-20">
+        <div class="grid lg:grid-cols-2 gap-10 items-center">
+            <div>
+                <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight">Trust the process: Verification Score
+                </h2>
+                <p class="mt-3 text-black/70 dark:text-white/70">Students add dates & credentials; the more verified,
+                    the higher the score.</p>
+                <ul class="mt-4 space-y-2 text-sm">
+                    <li class="flex gap-2"><span class="icon text-emerald-500">check_circle</span> College ID +
+                        enrollment</li>
+                    <li class="flex gap-2"><span class="icon text-emerald-500">check_circle</span> GitHub + commits to
+                        listed repo</li>
+                    <li class="flex gap-2"><span class="icon text-emerald-500">check_circle</span> LinkedIn +
+                        endorsements</li>
+                    <li class="flex gap-2"><span class="icon text-emerald-500">check_circle</span> Shipped milestones &
+                        PRs</li>
+                    <li class="flex gap-2"><span class="icon text-emerald-500">check_circle</span> Faculty or alumni
+                        references</li>
+                </ul>
+            </div>
+            <div class="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5">
+                <div class="text-sm opacity-70 mb-2">Example breakdown</div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="rounded-xl p-4 bg-black/5 dark:bg-white/10">
+                        <div class="text-2xl font-bold">35%</div>
+                        <div class="text-xs opacity-70">Identity & Edu</div>
+                    </div>
+                    <div class="rounded-xl p-4 bg-black/5 dark:bg-white/10">
+                        <div class="text-2xl font-bold">25%</div>
+                        <div class="text-xs opacity-70">Open-source activity</div>
+                    </div>
+                    <div class="rounded-xl p-4 bg-black/5 dark:bg-white/10">
+                        <div class="text-2xl font-bold">20%</div>
+                        <div class="text-xs opacity-70">References</div>
+                    </div>
+                    <div class="rounded-xl p-4 bg-black/5 dark:bg-white/10">
+                        <div class="text-2xl font-bold">20%</div>
+                        <div class="text-xs opacity-70">Milestones</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== CTA / CREATE PROJECT ===== -->
+    <section id="join" class="container py-14 md:py-20">
+        <div
+            class="rounded-3xl border border-black/10 dark:border-white/10 bg-brand-600 text-white p-6 md:p-10 overflow-hidden relative">
+            <div class="absolute inset-0 opacity-20"
+                style="background: radial-gradient(800px 300px at 90% 10%, #fff, transparent 60%);"></div>
+            <div class="relative grid lg:grid-cols-2 gap-6 items-center">
+                <div>
+                    <h3 class="text-2xl md:text-3xl font-extrabold">Ready to recruit or join?</h3>
+                    <p class="mt-2 text-white/90">Create a page, list roles, and let our agents amplify your reach.</p>
+                </div>
+                <form onsubmit="event.preventDefault();" class="relative grid sm:grid-cols-2 gap-3">
+                    <input class="rounded-xl text-ink-900 px-4 py-3" placeholder="Project / Startup name" />
+                    <input class="rounded-xl text-ink-900 px-4 py-3"
+                        placeholder="Primary tech stack (e.g., FastAPI, Next.js)" />
+                    <input class="rounded-xl text-ink-900 px-4 py-3 sm:col-span-2"
+                        placeholder="One-line problem statement" />
+                    <button class="rounded-xl bg-black/20 hover:bg-black/25 px-5 py-3 sm:col-span-2">Preview
+                        Page</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== FAQ ===== -->
+    <section id="faq" class="container py-14 md:py-20">
+        <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight">Frequently asked</h2>
+        <div
+            class="mt-6 divide-y divide-black/10 dark:divide-white/10 rounded-2xl border border-black/10 dark:border-white/10">
+            <details class="p-4 group">
+                <summary class="cursor-pointer list-none flex items-center justify-between">
+                    <span>Is TuNe X free?</span><span
+                        class="icon opacity-60 group-open:rotate-180 transition">expand_more</span>
+                </summary>
+                <p class="mt-2 text-sm opacity-80">Free to browse & request. Pro adds advanced agent runs and higher
+                    exposure.</p>
+            </details>
+            <details class="p-4 group">
+                <summary class="cursor-pointer list-none flex items-center justify-between">
+                    <span>How do agentic tools work?</span><span
+                        class="icon opacity-60 group-open:rotate-180 transition">expand_more</span>
+                </summary>
+                <p class="mt-2 text-sm opacity-80">We orchestrate retriever → analyzer → validator agents with citations
+                    (papers, blogs, tools, news).</p>
+            </details>
+            <details class="p-4 group">
+                <summary class="cursor-pointer list-none flex items-center justify-between">
+                    <span>Is the “stock reco” financial advice?</span><span
+                        class="icon opacity-60 group-open:rotate-180 transition">expand_more</span>
+                </summary>
+                <p class="mt-2 text-sm opacity-80">No—educational trend scans only. Always do your own research.</p>
+            </details>
+        </div>
+    </section>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="border-t border-black/10 dark:border-white/10">
+        <div class="container py-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div>
+                <div class="flex items-center gap-2 font-semibold">
+                    <span
+                        class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white">CX</span>
+                    TuNe X
+                </div>
+                <p class="mt-2 text-sm opacity-75">Built for students, researchers, and founders to find each other—and
+                    ship.</p>
+            </div>
+            <div>
+                <h4 class="font-semibold mb-2">Explore</h4>
+                <ul class="space-y-1 text-sm opacity-80">
+                    <li><a href="#discover" class="hover:opacity-100">Projects</a></li>
+                    <li><a href="#features" class="hover:opacity-100">Features</a></li>
+                    <li><a href="#workflows" class="hover:opacity-100">Agentic Tools</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="font-semibold mb-2">For Teams</h4>
+                <ul class="space-y-1 text-sm opacity-80">
+                    <li><a href="#join" class="hover:opacity-100">Create Project</a></li>
+                    <li><a href="#" class="hover:opacity-100">Pricing</a></li>
+                    <li><a href="profile.html" class="hover:opacity-100">Staff Profiles</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="font-semibold mb-2">Legal</h4>
+                <ul class="space-y-1 text-sm opacity-80">
+                    <li><a href="#" class="hover:opacity-100">Terms</a></li>
+                    <li><a href="#" class="hover:opacity-100">Privacy</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="py-4 text-center text-xs opacity-60">© <span id="y"></span> TuNe X</div>
+    </footer>
+
+    <script>
+        // year
+        document.getElementById('y').textContent = new Date().getFullYear();
+
+        // Discover: load projects dynamically
+        (function(){
+          const API = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+          const grid = document.getElementById('discoverGrid');
+          if (!grid) return;
+          const skeleton = () => `
+            <article class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-4 animate-pulse">
+              <div class="h-4 w-24 bg-black/10 dark:bg-white/10 rounded"></div>
+              <div class="h-5 w-3/4 bg-black/10 dark:bg-white/10 rounded mt-3"></div>
+              <div class="h-4 w-full bg-black/10 dark:bg-white/10 rounded mt-2"></div>
+              <div class="h-4 w-2/3 bg-black/10 dark:bg-white/10 rounded mt-2"></div>
+              <div class="flex gap-2 mt-4">
+                <div class="h-6 w-16 bg-black/10 dark:bg-white/10 rounded"></div>
+                <div class="h-6 w-16 bg-black/10 dark:bg-white/10 rounded"></div>
+                <div class="h-6 w-16 bg-black/10 dark:bg-white/10 rounded"></div>
+              </div>
+            </article>`;
+          grid.innerHTML = skeleton() + skeleton() + skeleton();
+
+          const esc = (s)=> (s||'').toString().replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+          const chip = (t)=> `<span class="rounded-lg px-2 py-1 bg-black/5 dark:bg-white/10 text-xs">${esc(t)}</span>`;
+          const domainPill = (d)=> `<span class="text-xs rounded-full px-2 py-1 bg-brand-600 text-white">${esc(d)}</span>`;
+
+          const render = (items=[])=>{
+            if (!items.length){
+              grid.innerHTML = `<div class="col-span-full text-sm opacity-70 rounded-xl border border-black/10 dark:border-white/10 p-4">No projects yet. Be the first to <a href="#join" class="underline">create one</a>.</div>`;
+              return;
+            }
+            grid.innerHTML = items.map(p=>{
+              const cover = p.cover_url ? `<img src="${esc(p.cover_url)}" alt="Cover" class="w-full h-40 object-cover rounded-t-2xl">` : '';
+              const domain = (Array.isArray(p.domains) && p.domains[0]) ? domainPill(p.domains[0]) : '';
+              const techs = (Array.isArray(p.tech_stack) ? p.tech_stack.slice(0,3) : []).map(chip).join('');
+              const desc = esc(p.tagline || p.description || '');
+              return `
+                <article class="lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 overflow-hidden">
+                  ${cover}
+                  <div class="p-4">
+                    <div class="flex items-center justify-between">${domain}<span class="text-xs opacity-70"></span></div>
+                    <h3 class="mt-3 font-semibold line-clamp-1">${esc(p.title)}</h3>
+                    <p class="mt-1 text-sm opacity-80 line-clamp-3">${desc}</p>
+                    <div class="mt-3 flex flex-wrap gap-2 text-xs">${techs}</div>
+                    <div class="mt-4 flex items-center justify-between">
+                      <button class="rounded-xl px-3 py-2 border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10"><span class="icon align-[-3px]">bookmark_add</span> Save</button>
+                      <a href="#join" class="inline-flex items-center gap-2 rounded-xl bg-brand-600 text-white px-4 py-2"><span class="icon">person_add</span> Request to join</a>
+                    </div>
+                  </div>
+                </article>`;
+            }).join('');
+          };
+
+          fetch(`${API}/api/projects`).then(r=> r.ok ? r.json() : Promise.reject()).then(render).catch(()=>{
+            grid.innerHTML = `<div class="col-span-full text-sm opacity-70 rounded-xl border border-black/10 dark:border-white/10 p-4">Failed to load projects.</div>`;
+          });
+        })();
+    </script>
+</body>
+
+</html>

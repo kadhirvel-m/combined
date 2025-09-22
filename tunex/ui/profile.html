@@ -1,0 +1,613 @@
+﻿<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>TuNe X — Profile</title>
+    <meta name="description"
+        content="Your TuNe X profile — showcase credentials, links, and project activity with verification scoring." />
+    <!-- Tailwind (with forms + line-clamp for consistency) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Ubuntu', 'Cantarell', 'Noto Sans', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#eef4ff', 100: '#d9e6ff', 200: '#b3ccff', 300: '#88adff', 400: '#628fff',
+                            500: '#3f6fff', 600: '#2f56e6', 700: '#2846bb', 800: '#223a95', 900: '#1c2f78'
+                        },
+                        ink: { 50: '#f7f7f9', 900: '#0c0f14' }
+                    },
+                    boxShadow: {
+                        'brand-lg': '0 10px 30px rgba(63,111,255,.25)',
+                        'soft': '0 6px 20px rgba(0,0,0,.08)',
+                    },
+                    borderRadius: { '3xl': '1.5rem' },
+                    backgroundImage: {
+                        'glass': 'linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.35))',
+                        'glass-dark': 'linear-gradient(180deg, rgba(20,24,33,.6), rgba(20,24,33,.35))',
+                        'grid-radial': 'radial-gradient(1000px 500px at 90% -10%, rgba(63,111,255,.25), transparent 60%), radial-gradient(600px 300px at -10% 10%, rgba(99,102,241,.20), transparent 60%)',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <style>
+        .icon {
+            font-family: 'Material Symbols Outlined';
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .lift {
+            transition: transform .25s ease, box-shadow .25s ease;
+        }
+
+        /* Hover effects removed as requested */
+
+        .skeleton {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .skeleton::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            transform: translateX(-100%);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent);
+            animation: shimmer 1.25s infinite;
+        }
+
+        @keyframes shimmer {
+            100% {
+                transform: translateX(100%);
+            }
+        }
+    </style>
+    <script>
+        // Theme persistence (shared with homepage)
+        const initTheme = () => {
+            const stored = localStorage.getItem('cx-theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if ((stored === 'dark') || (!stored && prefersDark)) document.documentElement.classList.add('dark');
+        };
+        initTheme();
+        const toggleTheme = () => {
+            const d = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('cx-theme', d ? 'dark' : 'light');
+        };
+    </script>
+    <script src="config.js"></script>
+</head>
+
+<body class="bg-ink-50 dark:bg-[#0a0d12] text-[#0d1117] dark:text-zinc-100">
+    <!-- ===== NAV ===== -->
+    <header
+        class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-black/30 border-b border-black/5 dark:border-white/10">
+        <nav class="container flex items-center gap-3 py-3">
+            <a href="index.html" class="flex items-center gap-2 font-semibold tracking-tight">
+                <span
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white shadow-brand-lg">CX</span>
+                <span class="hidden sm:inline">TuNe X</span>
+            </a>
+            <div class="ml-auto flex items-center gap-2">
+                <a href="index.html#discover" class="hidden sm:inline rounded-lg px-3 py-2 text-sm">Discover</a>
+                <a href="index.html#join" class="hidden sm:inline rounded-lg px-3 py-2 text-sm">Create Project</a>
+                <!-- Profile avatar (shown when logged in) -->
+                <a id="navProfile" href="profile.html" title="Profile"
+                   class="hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+                    <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+                    <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
+                </a>
+                <button onclick="toggleTheme()" title="Toggle theme" class="rounded-lg px-3 py-2">
+                    <span class="icon">dark_mode</span>
+                </button>
+                <a href="signin.html" class="rounded-lg px-3 py-2 text-sm">Sign in</a>
+                <a href="signup.html" class="rounded-lg px-3 py-2 text-sm">Sign up</a>
+                <button id="signOutBtn" class="hidden rounded-lg border border-black/10 dark:border-white/10 px-3 py-2 text-sm">Sign Out</button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- ===== COVER ===== -->
+    <section class="relative overflow-hidden">
+        <div class="absolute inset-0 bg-grid-radial opacity-70 dark:opacity-60 pointer-events-none"></div>
+        <div class="container relative">
+            <div class="rounded-b-3xl h-36 md:h-44 bg-gradient-to-r from-slate-800 to-brand-700"></div>
+        </div>
+    </section>
+
+    <!-- ===== PROFILE CARD ===== -->
+    <main class="container -mt-16 md:-mt-20 pb-16">
+        <div
+            class="rounded-3xl border border-black/10 dark:border-white/10 bg-glass dark:bg-glass-dark shadow-soft p-6 md:p-8">
+            <div class="flex flex-col md:flex-row md:items-end gap-6">
+                <!-- Avatar -->
+                <div
+                    class="relative w-28 h-28 md:w-32 md:h-32 rounded-full border-4 border-white/90 dark:border-black/40 overflow-hidden bg-slate-200">
+                    <img id="profileImage" src="" alt="Profile picture" class="w-full h-full object-cover hidden" />
+                    <div id="profileImageFallback"
+                        class="absolute inset-0 flex items-center justify-center text-3xl text-slate-600">
+                        <span id="profileInitials">?</span>
+                    </div>
+                    <!-- Verification Badge -->
+                    <div id="verifyBadge"
+                        class="absolute -bottom-2 -right-2 flex items-center gap-1 rounded-full bg-emerald-600 text-white text-xs px-2 py-1 shadow-brand-lg">
+                        <span class="icon text-sm">verified</span><span id="verifyScore">--</span>
+                    </div>
+                </div>
+
+                <!-- Heading -->
+                <div class="flex-1 min-w-0">
+                    <h1 id="profileName" class="pt-12 font-extrabold text-3xl md:text-4xl tracking-tight">--</h1>
+                    <p id="profileHeadline"
+                        class="mt-1 text-sm md:text-base text-black/70 dark:text-white/70 line-clamp-2">Add a headline
+                        to introduce yourself.</p>
+                    <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-black/60 dark:text-white/60">
+                        <span class="icon">location_on</span><span id="profileLocation">—</span>
+                        <span class="icon ml-3">calendar_month</span><span id="info-batch-inline">—</span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center gap-2">
+                    <button id="editBtn"
+                        class="inline-flex items-center gap-2 rounded-xl bg-brand-600 text-white px-4 py-2 shadow-brand-lg">
+                        <span class="icon">edit</span> Edit Profile
+                    </button>
+                    <a href="project_post.html"
+                        class="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 px-4 py-2">
+                        <span class="icon">add_circle</span> Add Project
+                    </a>
+                    <a href="incoming_requests.html"
+                        class="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 px-4 py-2">
+                        <span class="icon">inbox</span> Go to Requests
+                    </a>
+                    <a href="my_applications.html"
+                        class="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 px-4 py-2">
+                        <span class="icon">work_history</span> My Applications
+                    </a>
+                </div>
+            </div>
+
+            <!-- Progress -->
+            <div class="mt-6">
+                <div class="flex items-center justify-between text-xs opacity-70 mb-1">
+                    <span>Profile completeness</span><span id="completePct">—</span>
+                </div>
+                <div class="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+                    <div id="completeBar" class="h-2 bg-brand-600 w-0 transition-all duration-700"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== TABS ===== -->
+        <section class="mt-8">
+            <div class="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-3">
+                <div class="flex flex-wrap gap-2">
+                    <button data-tab="overview"
+                        class="tabBtn rounded-xl px-4 py-2 bg-brand-600 text-white">Overview</button>
+                    <button data-tab="about" class="tabBtn rounded-xl px-4 py-2">About</button>
+                    <button data-tab="activity" class="tabBtn rounded-xl px-4 py-2">Activity</button>
+                </div>
+            </div>
+
+            <div class="mt-4 grid gap-4">
+                <!-- OVERVIEW -->
+                <div data-panel="overview" class="tabPanel grid lg:grid-cols-[1.2fr,.8fr] gap-4">
+                    <!-- Left: Basics -->
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-4 flex items-center gap-2"><span class="icon">badge</span> Basic
+                            Info</h3>
+                        <dl class="grid grid-cols-[auto,1fr] gap-x-6 gap-y-2 text-sm">
+                            <dt class="font-medium text-black/80 dark:text-white/80">Name</dt>
+                            <dd id="info-name" class="opacity-80 skeleton">—</dd>
+                            <dt class="font-medium text-black/80 dark:text-white/80">College</dt>
+                            <dd id="info-college" class="opacity-80 skeleton">—</dd>
+                            <dt class="font-medium text-black/80 dark:text-white/80">Batch</dt>
+                            <dd id="info-batch" class="opacity-80 skeleton">—</dd>
+                            <dt class="font-medium text-black/80 dark:text-white/80">Date of Birth</dt>
+                            <dd id="info-dob" class="opacity-80 skeleton">—</dd>
+                            <dt class="font-medium text-black/80 dark:text-white/80">Phone</dt>
+                            <dd class="opacity-80 flex items-center gap-2">
+                                <span id="info-phone" class="skeleton">—</span>
+                                <button id="copyPhone"
+                                    class="rounded-md px-2 py-1 text-xs border border-black/10 dark:border-white/10">Copy</button>
+                            </dd>
+                            <dt class="font-medium text-black/80 dark:text-white/80">Email</dt>
+                            <dd class="opacity-80 flex items-center gap-2">
+                                <span id="info-email" class="skeleton">—</span>
+                                <button id="copyEmail"
+                                    class="rounded-md px-2 py-1 text-xs border border-black/10 dark:border-white/10">Copy</button>
+                            </dd>
+                        </dl>
+                    </section>
+
+                    <!-- Right: Links -->
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-4 flex items-center gap-2"><span class="icon">link</span> Links</h3>
+                        <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                            <!-- Each anchor gets disabled state if empty -->
+                            <li><a id="link-linkedin" target="_blank"
+                                    class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span
+                                        class="icon">work</span> LinkedIn</a></li>
+                            <li><a id="link-github" target="_blank"
+                                    class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span
+                                        class="icon">code</span> GitHub</a></li>
+                            <li><a id="link-leetcode" target="_blank"
+                                    class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span
+                                        class="icon">extension</span> LeetCode</a></li>
+                            <li><a id="link-portfolio" target="_blank"
+                                    class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span
+                                        class="icon">web</span> Portfolio</a></li>
+                            <li><a id="link-website" target="_blank"
+                                    class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span
+                                        class="icon">public</span> Website</a></li>
+                            <li><a id="link-twitter" target="_blank"
+                                    class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span
+                                        class="icon">alternate_email</span> Twitter</a></li>
+                            <li><a id="link-instagram" target="_blank"
+                                    class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span
+                                        class="icon">camera_alt</span> Instagram</a></li>
+                            <li><a id="link-medium" target="_blank"
+                                    class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span
+                                        class="icon">menu_book</span> Medium</a></li>
+                            <li class="sm:col-span-2">
+                                <a id="link-resume" target="_blank"
+                                    class="flex items-center justify-center gap-2 rounded-xl bg-brand-600 text-white px-4 py-2 shadow-brand-lg">
+                                    <span class="icon">download</span> Download Resume
+                                </a>
+                            </li>
+                        </ul>
+                    </section>
+                </div>
+
+                <!-- ABOUT -->
+                <div data-panel="about" class="tabPanel hidden grid md:grid-cols-2 gap-4">
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">subject</span> Summary
+                        </h3>
+                        <p id="info-bio" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">Add a
+                            short summary about yourself.</p>
+                    </section>
+
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">school</span>
+                            Specializations</h3>
+                        <p id="info-specializations"
+                            class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">--</p>
+                    </section>
+
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">construction</span>
+                            Technologies</h3>
+                        <p id="info-technologies" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">
+                            --</p>
+                        <div id="tech-chips" class="mt-3 flex flex-wrap gap-2"></div>
+                    </section>
+
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span
+                                class="icon">workspace_premium</span> Skills</h3>
+                        <p id="info-skills" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">--</p>
+                        <div id="skills-chips" class="mt-3 flex flex-wrap gap-2"></div>
+                    </section>
+
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">military_tech</span>
+                            Achievements</h3>
+                        <p id="info-achievements" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">
+                            --</p>
+                    </section>
+
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span
+                                class="icon">workspace_premium</span> Certifications</h3>
+                        <p id="info-certifications"
+                            class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">--</p>
+                    </section>
+
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">translate</span>
+                            Languages</h3>
+                        <p id="info-languages" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">--
+                        </p>
+                    </section>
+
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">interests</span>
+                            Interests</h3>
+                        <p id="info-interests" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">--
+                        </p>
+                    </section>
+                </div>
+
+                <!-- ACTIVITY -->
+                <div data-panel="activity" class="tabPanel hidden grid md:grid-cols-2 gap-4">
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">science</span> Project
+                            Info</h3>
+                        <p id="info-projects" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">--
+                        </p>
+                    </section>
+
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">menu_book</span>
+                            Publications</h3>
+                        <p id="info-publications" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">
+                            --</p>
+                    </section>
+
+                    <section
+                        class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+                        <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">badge</span>
+                            Experience</h3>
+                        <p id="info-experience" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">--
+                        </p>
+                    </section>
+                </div>
+            </div>
+        </section>
+
+        <!-- Status text -->
+        <p id="status" class="mt-6 text-sm text-black/60 dark:text-white/60"></p>
+    </main>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="border-t border-black/10 dark:border-white/10">
+        <div class="container py-8 text-xs opacity-60">© <span id="y"></span> TuNe X</div>
+    </footer>
+
+    <script>
+        // Year
+        document.getElementById('y').textContent = new Date().getFullYear();
+
+        // Tabs behavior
+        const tabBtns = document.querySelectorAll('.tabBtn');
+        const tabPanels = document.querySelectorAll('.tabPanel');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach(b => b.classList.remove('bg-brand-600', 'text-white'));
+                btn.classList.add('bg-brand-600', 'text-white');
+                const t = btn.getAttribute('data-tab');
+                tabPanels.forEach(p => p.classList.toggle('hidden', p.getAttribute('data-panel') !== t));
+            });
+        });
+
+        // API + Populate
+        const API = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+        const token = localStorage.getItem("access_token");
+        const statusEl = document.getElementById("status");
+        const el = (id) => document.getElementById(id);
+
+        if (!token) { window.location.href = "signin.html"; }
+
+        const defaultText = (v, fb = "--") => v ? v : fb;
+        const setText = (id, v, fb = "--") => { const n = el(id); if (n) n.textContent = defaultText(v, fb); };
+        const setLink = (id, v) => {
+            const a = el(id); if (!a) return;
+            if (v) {
+                a.href = v;
+                a.classList.remove("pointer-events-none", "opacity-50");
+            } else {
+                a.href = "#";
+                a.classList.add("pointer-events-none", "opacity-50");
+            }
+        };
+
+        const calcCompleteness = (p) => {
+            // Rough completeness based on important fields present
+            const fields = [
+                p.name, p.headline, p.location, p.college, (p.batch_start || p.batch_end),
+                p.github, p.linkedin, p.resume_url, p.bio, p.skills, p.technologies
+            ];
+            const filled = fields.filter(Boolean).length;
+            return Math.min(100, Math.round((filled / fields.length) * 100)) || 0;
+        };
+
+        const renderSkillChips = (skillsText) => {
+            const wrap = document.getElementById('skills-chips');
+            if (!wrap) return;
+            wrap.innerHTML = '';
+            const parts = (skillsText || '').split(/[,|\n]/).map(s => s.trim()).filter(Boolean).slice(0, 25);
+            parts.forEach(s => {
+                const a = document.createElement('a');
+                a.href = `skill-test.html?skill=${encodeURIComponent(s)}`;
+                a.className = 'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs border border-brand-600/40 text-brand-700 dark:text-brand-200 bg-brand-500/10 hover:bg-brand-500/20';
+                a.innerHTML = '<span class="icon text-sm">bolt</span>' + s;
+                wrap.appendChild(a);
+            });
+        };
+
+        // New: helpers to render Technology chips with verification score badges
+        const parseItems = (text) => (text || '').split(/[ ,|\n]/).map(s => s.trim()).filter(Boolean);
+        const key = (s) => (s || '').trim().toLowerCase();
+        const badgeColor = (score) => (score >= 70 ? 'bg-emerald-600' : (score >= 40 ? 'bg-amber-600' : 'bg-rose-600'));
+        const renderTechChips = (technologiesText, verifMap) => {
+            const wrap = document.getElementById('tech-chips'); if (!wrap) return; wrap.innerHTML = '';
+            const parts = parseItems(technologiesText).slice(0, 30);
+            parts.forEach(t => {
+                const a = document.createElement('a');
+                a.href = `skill-test.html?skill=${encodeURIComponent(t)}`;
+                a.className = 'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs border border-brand-600/40 text-brand-700 dark:text-brand-200 bg-brand-500/10 hover:bg-brand-500/20';
+                const info = verifMap[key(t)];
+                const score = typeof info?.best_score === 'number' ? Math.round(info.best_score) : null;
+                const badge = score != null ? `<span class="ml-1 inline-flex items-center gap-1 ${badgeColor(score)} text-white rounded-full px-2 py-0.5"><span class="icon text-[14px]">verified</span>${score}</span>` : '';
+                a.innerHTML = `<span class="icon text-sm">bolt</span><span>${t}</span>${badge}`;
+                wrap.appendChild(a);
+            });
+        };
+        const loadMyVerifications = async () => {
+            try {
+                const r = await fetch(`${API}/api/skills/verifications`, { headers: { Authorization: `Bearer ${token}` } });
+                if (!r.ok) return {};
+                const rows = await r.json();
+                const map = {}; (rows || []).forEach(v => { map[key(v.skill)] = v; });
+                return map;
+            } catch { return {}; }
+        };
+
+        const populateProfile = (profile) => {
+            // Name, headline, location
+            const name = profile.name || "Add your name";
+            setText("profileName", name, "Add your name");
+            setText("profileHeadline", profile.headline, "Add a headline to introduce yourself.");
+            setText("profileLocation", profile.location, "");
+            setText("info-batch-inline", (profile.batch_start || profile.batch_end) ? `${profile.batch_start || "?"} - ${profile.batch_end || "?"}` : "—");
+
+            // Avatar / initials
+            const img = el("profileImage");
+            const fallback = el("profileImageFallback");
+            const initials = name.split(" ").filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0, 2).join("");
+            if (profile.profile_image_url) {
+                img.src = profile.profile_image_url;
+                img.classList.remove("hidden");
+                fallback.classList.add("hidden");
+            } else {
+                el("profileInitials").textContent = initials || "?";
+                img.classList.add("hidden");
+                fallback.classList.remove("hidden");
+            }
+
+            // Verification
+            const score = Number(profile.verification_score ?? 0);
+            el("verifyScore").textContent = isNaN(score) ? "--" : score.toString();
+            const badge = el("verifyBadge");
+            if (!isNaN(score)) {
+                badge.classList.toggle("bg-emerald-600", score >= 70);
+                badge.classList.toggle("bg-amber-600", score < 70 && score >= 40);
+                badge.classList.toggle("bg-rose-600", score < 40);
+            }
+
+            // Completeness bar
+            const pct = calcCompleteness(profile);
+            el("completePct").textContent = pct + "%";
+            el("completeBar").style.width = pct + "%";
+
+            // Info
+            setText("info-name", profile.name);
+            setText("info-college", profile.college);
+            setText("info-batch", (profile.batch_start || profile.batch_end) ? `${profile.batch_start || "?"} - ${profile.batch_end || "?"}` : "--");
+            setText("info-dob", profile.dob);
+            setText("info-phone", profile.phone);
+            setText("info-email", profile.email);
+
+            // Links
+            setLink("link-linkedin", profile.linkedin);
+            setLink("link-github", profile.github);
+            setLink("link-leetcode", profile.leetcode);
+            setLink("link-portfolio", profile.portfolio_url);
+            setLink("link-website", profile.website);
+            setLink("link-twitter", profile.twitter);
+            setLink("link-instagram", profile.instagram);
+            setLink("link-medium", profile.medium);
+            setLink("link-resume", profile.resume_url);
+
+            // About / Activity sections
+            setText("info-bio", profile.bio, "Add a short summary about yourself.");
+            setText("info-projects", profile.project_info);
+            setText("info-publications", profile.publications);
+            setText("info-achievements", profile.achievements);
+            setText("info-experience", profile.experience);
+            setText("info-specializations", profile.specializations);
+            setText("info-technologies", profile.technologies);
+            setText("info-skills", profile.skills);
+            renderSkillChips(profile.skills);
+            setText("info-certifications", profile.certifications);
+            setText("info-languages", profile.languages);
+            setText("info-interests", profile.interests);
+
+            // Clear skeletons
+            document.querySelectorAll('.skeleton').forEach(n => n.classList.remove('skeleton'));
+        };
+
+        const loadProfile = async () => {
+            statusEl.textContent = "Loading profile…";
+            try {
+                const res = await fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${token}` } });
+                if (res.status === 401) {
+                    localStorage.removeItem("access_token");
+                    window.location.href = "signin.html";
+                    return;
+                }
+                const data = await res.json();
+                populateProfile(data);
+                // After profile, load verifications and render technology chips with badges
+                const verifMap = await loadMyVerifications();
+                renderTechChips(data?.technologies, verifMap);
+                statusEl.textContent = "";
+            } catch (e) {
+                console.error(e);
+                statusEl.textContent = "Failed to load profile. Please try again.";
+            }
+        };
+
+        // Copy helpers
+        el("copyPhone").addEventListener("click", () => {
+            const v = el("info-phone").textContent?.trim();
+            if (v && v !== "—" && v !== "--") navigator.clipboard.writeText(v);
+        });
+        el("copyEmail").addEventListener("click", () => {
+            const v = el("info-email").textContent?.trim();
+            if (v && v !== "—" && v !== "--") navigator.clipboard.writeText(v);
+        });
+
+        // Buttons
+        el("editBtn").onclick = () => { window.location.href = "profile-edit.html"; };
+        el("signOutBtn").onclick = () => {
+            localStorage.removeItem("access_token");
+            window.location.href = "signin.html";
+        };
+
+        // Auth-aware navbar avatar (like index)
+        (function(){
+            const token = localStorage.getItem('access_token');
+            const navProfile = document.getElementById('navProfile');
+            const navProfileImg = document.getElementById('navProfileImg');
+            const navProfileInitial = document.getElementById('navProfileInitial');
+            const signOutBtn = document.getElementById('signOutBtn');
+            if (!token) return;
+            // Hide Sign in/Sign up
+            document.querySelectorAll('a[href="signin.html"], a[href="signup.html"]').forEach(el => el.classList.add('hidden'));
+            if (navProfile) navProfile.classList.remove('hidden');
+            if (signOutBtn) signOutBtn.classList.remove('hidden');
+            const API = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+            fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${token}` } })
+                .then(r => r.ok ? r.json() : null)
+                .then(p => {
+                    if (!p) return;
+                    let initials = 'ME';
+                    if (p.name) initials = p.name.split(' ').filter(Boolean).map(s=>s[0]?.toUpperCase()).slice(0,2).join('');
+                    if (navProfileInitial) navProfileInitial.textContent = initials;
+                    if (p.profile_image_url){
+                        if (navProfileImg){ navProfileImg.src = p.profile_image_url; navProfileImg.classList.remove('hidden'); if (navProfileInitial) navProfileInitial.classList.add('hidden'); }
+                    }
+                }).catch(()=>{});
+        })();
+
+        // Go
+        loadProfile();
+    </script>
+</body>
+
+</html>

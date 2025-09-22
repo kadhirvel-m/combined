@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Edit Profile — Pa[p]er X</title>
+    <meta name="description" content="Edit your profile details, photo, and resume." />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,-50..200" />
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 50: '#f0f7ff', 100: '#e0efff', 200: '#b9dbff', 300: '#8ac4ff', 400: '#59a9ff', 500: '#2b8cff', 600: '#116fe6', 700: '#0a57b4', 800: '#0b4890', 900: '#0d3a73' },
+                        night: { 900: '#0a0c10', 800: '#0f131a', 700: '#141a22', 600: '#1a2230' }
+                    },
+                    boxShadow: { glow: '0 0 0 1px rgba(59,130,246,.2), 0 8px 40px rgba(59,130,246,.15)', neon: '0 0 25px rgba(43,140,255,.35), 0 0 60px rgba(43,140,255,.25)' },
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, .06);
+            border: 1px solid rgba(255, 255, 255, .12)
+        }
+
+        .glass-dark {
+            background: rgba(20, 24, 32, .55);
+            border-color: rgba(255, 255, 255, .08)
+        }
+    </style>
+</head>
+
+<body class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200">
+    <div aria-hidden="true"
+        class="fixed inset-0 -z-10 bg-gradient-to-b from-transparent to-brand-50/40 dark:to-night-700/20"></div>
+    <header
+        class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-night-900/50 border-b border-black/5 dark:border-white/5">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="flex h-16 items-center justify-between">
+                <a href="profile.html"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 text-sm">
+                    <span class="material-symbols-rounded">arrow_back</span> Back
+                </a>
+                <div class="flex items-center gap-3">
+                    <a href="profile.html"
+                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-white shadow-neon">Done</a>
+                    <button id="signOutBtn" title="Sign out" aria-label="Sign out"
+                        class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 text-sm">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 12H3" />
+                            <path d="M15 12l-4-4" />
+                            <path d="M15 12l-4 4" />
+                            <path d="M21 7v10a2 2 0 0 1-2 2h-6" />
+                        </svg>
+                        <span>Sign Out</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="relative">
+        <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-10 pb-20 grid gap-6">
+            <h1 class="text-2xl font-semibold">Edit Profile</h1>
+
+            <div class="grid lg:grid-cols-12 gap-6">
+                <!-- Left: photo & resume -->
+                <div class="lg:col-span-4">
+                    <div
+                        class="rounded-2xl glass glass-dark p-6 border border-white/10 bg-white/80 dark:bg-night-800/70 grid gap-5">
+                        <div class="grid gap-3">
+                            <div class="flex items-center gap-4">
+                                <div id="avatar"
+                                    class="h-16 w-16 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 text-white grid place-items-center font-bold text-xl shadow-neon">
+                                    U</div>
+                                <div class="text-sm">
+                                    <div id="email" class="text-slate-600 dark:text-slate-300">—</div>
+                                    <div id="name" class="font-medium">—</div>
+                                </div>
+                            </div>
+                            <form id="imageForm" class="grid gap-2">
+                                <label class="text-xs text-slate-500">Profile image</label>
+                                <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp"
+                                    class="text-xs" />
+                                <img id="imagePreview" alt="Profile preview"
+                                    class="hidden h-24 w-24 rounded-lg object-cover border border-slate-200/60 dark:border-white/10" />
+                                <button type="submit"
+                                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 text-xs">
+                                    <span class="material-symbols-rounded text-[18px]">cloud_upload</span> Upload image
+                                </button>
+                                <a id="currentImage" href="#" target="_blank" class="text-xs text-brand-600 hidden">View
+                                    current</a>
+                            </form>
+                        </div>
+                        <div class="grid gap-2">
+                            <form id="resumeForm" class="grid gap-2">
+                                <label class="text-xs text-slate-500">Resume (PDF/DOC)</label>
+                                <input id="resumeInput" type="file" accept="application/pdf,.doc,.docx"
+                                    class="text-xs" />
+                                <button type="submit"
+                                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 text-xs">
+                                    <span class="material-symbols-rounded text-[18px]">cloud_upload</span> Upload resume
+                                </button>
+                                <a id="currentResume" href="#" target="_blank"
+                                    class="text-xs text-brand-600 hidden">View current</a>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: details form -->
+                <div class="lg:col-span-8">
+                    <form id="detailsForm"
+                        class="rounded-2xl glass glass-dark p-6 border border-white/10 bg-white/80 dark:bg-night-800/70 grid gap-5">
+                        <div class="grid md:grid-cols-2 gap-4">
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">Full name</span>
+                                <input id="f_name" type="text"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">Phone</span>
+                                <input id="f_phone" type="tel"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                        </div>
+                        <div class="grid md:grid-cols-2 gap-4">
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">College</span>
+                                <input id="f_college" type="text"
+                                    placeholder="Mannakul Vinayagar Institute of Technology"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">Department</span>
+                                <input id="f_department" type="text" placeholder="AIML"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                        </div>
+                        <div class="grid md:grid-cols-3 gap-4">
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">Batch From (year)</span>
+                                <input id="f_batch_from" type="number" inputmode="numeric" placeholder="2022"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">Batch To (year)</span>
+                                <input id="f_batch_to" type="number" inputmode="numeric" placeholder="2026"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">Semester</span>
+                                <input id="f_semester" type="number" inputmode="numeric" min="1" max="10"
+                                    placeholder="7"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                        </div>
+                        <label class="grid gap-1">
+                            <span class="text-sm text-slate-700 dark:text-slate-300">Registration No.</span>
+                            <input id="f_regno" type="text" placeholder="22TN0049"
+                                class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                        </label>
+                        <label class="grid gap-1">
+                            <span class="text-sm text-slate-700 dark:text-slate-300">Bio</span>
+                            <textarea id="f_bio" rows="3"
+                                class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2"></textarea>
+                        </label>
+                        <div class="grid md:grid-cols-3 gap-4">
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">LinkedIn</span>
+                                <input id="f_linkedin" type="url" placeholder="https://linkedin.com/in/…"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">GitHub</span>
+                                <input id="f_github" type="url" placeholder="https://github.com/…"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                            <label class="grid gap-1">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">LeetCode</span>
+                                <input id="f_leetcode" type="url" placeholder="https://leetcode.com/u/…"
+                                    class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                            </label>
+                        </div>
+                        <label class="grid gap-1">
+                            <span class="text-sm text-slate-700 dark:text-slate-300">Specializations (comma
+                                separated)</span>
+                            <input id="f_specs" type="text" placeholder="AI, Full-stack, Data viz"
+                                class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                        </label>
+                        <div class="grid gap-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-slate-700 dark:text-slate-300">Projects</span>
+                                <button id="addProject" type="button"
+                                    class="inline-flex items-center gap-1 rounded-lg border border-slate-200/60 dark:border-white/10 px-2 py-1 text-xs hover:border-brand-400/60">
+                                    <span class="material-symbols-rounded text-[18px]">add</span> Add project
+                                </button>
+                            </div>
+                            <div id="projectsList" class="grid gap-3"></div>
+                            <template id="projectRowTpl">
+                                <div class="rounded-xl border border-slate-200/60 dark:border-white/10 p-3 grid gap-2">
+                                    <div class="grid md:grid-cols-3 gap-2">
+                                        <input name="p_name" type="text" placeholder="Project name"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                                        <input name="p_link" type="url" placeholder="https://…"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
+                                        <div class="flex items-center justify-end">
+                                            <button type="button"
+                                                class="removeProject inline-flex items-center gap-1 rounded-lg border border-slate-200/60 dark:border-white/10 px-2 py-1 text-xs hover:border-rose-400/60">
+                                                <span class="material-symbols-rounded text-[18px]">delete</span> Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <textarea name="p_desc" rows="2" placeholder="Short description"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2"></textarea>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <a href="profile.html"
+                                class="rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-2 hover:border-brand-400/60">Cancel</a>
+                            <button type="submit"
+                                class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-5 py-2.5 text-white shadow-neon">Save
+                                Changes</button>
+                        </div>
+                        <div id="status"
+                            class="hidden text-xs rounded border border-slate-200/60 dark:border-white/10 p-2"></div>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const apiBase = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
+        function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
+        function authHeaders() { const t = getToken(); return t ? { 'Authorization': `Bearer ${t}` } : {}; }
+        function initials(name) { if (!name) return 'U'; const p = String(name).trim().split(/\s+/).slice(0, 2); return p.map(x => x[0]?.toUpperCase()).join('') || 'U'; }
+
+        async function loadProfile() {
+            const res = await fetch(`${apiBase}/api/profile/me`, { headers: authHeaders() });
+            if (res.status === 401) { window.location.href = 'login.html'; return; }
+            const data = await res.json();
+            document.getElementById('name').textContent = data.name || '—';
+            document.getElementById('email').textContent = data.email || '—';
+            document.getElementById('avatar').textContent = initials(data.name);
+            document.getElementById('f_name').value = data.name || '';
+            document.getElementById('f_phone').value = data.phone || '';
+            document.getElementById('f_college').value = (data.college && data.college.name) || '';
+            document.getElementById('f_department').value = (data.department && data.department.name) || '';
+            document.getElementById('f_batch_from').value = (data.batch && data.batch.from) || (data.batch_from || '');
+            document.getElementById('f_batch_to').value = (data.batch && data.batch.to) || (data.batch_to || '');
+            document.getElementById('f_semester').value = (data.semester ?? '');
+            document.getElementById('f_regno').value = data.regno || '';
+            document.getElementById('f_bio').value = data.bio || '';
+            document.getElementById('f_linkedin').value = data.linkedin || '';
+            document.getElementById('f_github').value = data.github || '';
+            document.getElementById('f_leetcode').value = data.leetcode || '';
+            document.getElementById('f_specs').value = Array.isArray(data.specializations) ? data.specializations.join(', ') : '';
+            renderProjects(Array.isArray(data.projects) ? data.projects : []);
+            if (data.profile_image_url) {
+                const a = document.getElementById('currentImage'); a.href = data.profile_image_url; a.classList.remove('hidden');
+                const img = document.getElementById('imagePreview'); img.src = data.profile_image_url; img.classList.remove('hidden');
+            }
+            if (data.resume_url) { const a = document.getElementById('currentResume'); a.href = data.resume_url; a.classList.remove('hidden'); }
+        }
+
+        function renderProjects(projects) {
+            const list = document.getElementById('projectsList');
+            list.innerHTML = '';
+            if (!projects || projects.length === 0) { addProjectRow(); return; }
+            projects.forEach(p => addProjectRow(p));
+        }
+
+        function addProjectRow(p = {}) {
+            const tpl = document.getElementById('projectRowTpl');
+            const node = tpl.content.cloneNode(true);
+            const root = node.querySelector('div.rounded-xl');
+            const name = node.querySelector('input[name="p_name"]');
+            const link = node.querySelector('input[name="p_link"]');
+            const desc = node.querySelector('textarea[name="p_desc"]');
+            name.value = p.name || '';
+            link.value = p.link || '';
+            desc.value = p.desc || p.description || '';
+            node.querySelector('.removeProject').addEventListener('click', (e) => {
+                e.preventDefault();
+                root.remove();
+            });
+            document.getElementById('projectsList').appendChild(node);
+        }
+
+        document.getElementById('addProject').addEventListener('click', () => addProjectRow());
+
+        document.getElementById('imageInput').addEventListener('change', (e) => {
+            const file = e.target.files && e.target.files[0];
+            const img = document.getElementById('imagePreview');
+            if (file) {
+                const url = URL.createObjectURL(file);
+                img.src = url; img.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('imageForm').addEventListener('submit', async (e) => {
+            e.preventDefault(); const file = document.getElementById('imageInput').files[0]; if (!file) return;
+            const fd = new FormData(); fd.append('kind', 'image'); fd.append('file', file);
+            const res = await fetch(`${apiBase}/api/profile/upload`, { method: 'POST', headers: authHeaders(), body: fd });
+            const out = await res.json().catch(() => ({}));
+            const st = document.getElementById('status'); st.classList.remove('hidden');
+            st.textContent = res.ok ? '✔ Image uploaded' : `❌ ${out?.detail || 'Upload failed'}`;
+            if (res.ok) loadProfile();
+        });
+
+        document.getElementById('resumeForm').addEventListener('submit', async (e) => {
+            e.preventDefault(); const file = document.getElementById('resumeInput').files[0]; if (!file) return;
+            const fd = new FormData(); fd.append('kind', 'resume'); fd.append('file', file);
+            const res = await fetch(`${apiBase}/api/profile/upload`, { method: 'POST', headers: authHeaders(), body: fd });
+            const out = await res.json().catch(() => ({}));
+            const st = document.getElementById('status'); st.classList.remove('hidden');
+            st.textContent = res.ok ? '✔ Resume uploaded' : `❌ ${out?.detail || 'Upload failed'}`;
+            if (res.ok) loadProfile();
+        });
+
+        document.getElementById('detailsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const specs = document.getElementById('f_specs').value.split(',').map(s => s.trim()).filter(Boolean);
+            const projects = Array.from(document.querySelectorAll('#projectsList > .rounded-xl')).map(row => ({
+                name: row.querySelector('input[name="p_name"]').value.trim(),
+                link: row.querySelector('input[name="p_link"]').value.trim(),
+                desc: row.querySelector('textarea[name="p_desc"]').value.trim(),
+            })).filter(p => p.name || p.link || p.desc);
+            const payload = {
+                name: document.getElementById('f_name').value || null,
+                phone: document.getElementById('f_phone').value || null,
+                college_name: document.getElementById('f_college').value || null,
+                department_name: document.getElementById('f_department').value || null,
+                batch_from: document.getElementById('f_batch_from').value ? parseInt(document.getElementById('f_batch_from').value, 10) : null,
+                batch_to: document.getElementById('f_batch_to').value ? parseInt(document.getElementById('f_batch_to').value, 10) : null,
+                semester: document.getElementById('f_semester').value ? parseInt(document.getElementById('f_semester').value, 10) : null,
+                regno: document.getElementById('f_regno').value || null,
+                bio: document.getElementById('f_bio').value || null,
+                linkedin: document.getElementById('f_linkedin').value || null,
+                github: document.getElementById('f_github').value || null,
+                leetcode: document.getElementById('f_leetcode').value || null,
+                specializations: specs,
+                projects: projects,
+            };
+            const res = await fetch(`${apiBase}/api/profile/me`, { method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const out = await res.json().catch(() => ({}));
+            const st = document.getElementById('status'); st.classList.remove('hidden');
+            st.textContent = res.ok ? '✔ Profile updated' : `❌ ${out?.detail || 'Update failed'}`;
+        });
+
+        loadProfile();
+        document.getElementById('signOutBtn')?.addEventListener('click', () => {
+            try { localStorage.removeItem('px_token'); } catch { }
+            window.location.href = 'login.html';
+        });
+    </script>
+</body>
+
+</html>

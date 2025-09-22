@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TuNe X — Public Profile</title>
+  <meta name="description" content="View a member's public profile and their projects on TuNe X." />
+  <script src="https://cdn.tailwindcss.com?plugins=typography,forms,line-clamp"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        container: { center: true, padding: '1rem' },
+        extend: {
+          fontFamily: { display: ['Inter','ui-sans-serif','system-ui','-apple-system','Segoe UI','Roboto','Ubuntu','Cantarell','Noto Sans','sans-serif'] },
+          colors: {
+            brand: { 50:'#eef4ff',100:'#d9e6ff',200:'#b3ccff',300:'#88adff',400:'#628fff',500:'#3f6fff',600:'#2f56e6',700:'#2846bb',800:'#223a95',900:'#1c2f78' },
+            ink: { 50:'#f7f7f9', 900:'#0c0f14' }
+          },
+          boxShadow: {
+            'brand-lg': '0 10px 30px rgba(63,111,255,.25)',
+            'soft': '0 6px 20px rgba(0,0,0,.08)',
+          },
+          backgroundImage: {
+            'grid-radial': 'radial-gradient(1200px 600px at 90% -10%, rgba(63,111,255,.25), transparent 60%), radial-gradient(700px 400px at -10% 10%, rgba(99,102,241,.20), transparent 60%)',
+          },
+          borderRadius: { '3xl': '1.5rem' }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    .icon{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+    .lift{transition:transform .25s ease, box-shadow .25s ease}
+    .lift:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(0,0,0,.12)}
+    .no-scrollbar::-webkit-scrollbar{display:none}
+    .no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+  </style>
+  <script>
+    const initTheme = () => {
+      const stored = localStorage.getItem('cx-theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if ((stored === 'dark') || (!stored && prefersDark)) document.documentElement.classList.add('dark');
+    };
+    initTheme();
+    const toggleTheme = () => {
+      const d = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('cx-theme', d ? 'dark' : 'light');
+    };
+  </script>
+  <script src="config.js"></script>
+</head>
+<body class="bg-ink-50 dark:bg-[#0a0d12] text-[#0d1117] dark:text-zinc-100">
+  <!-- NAV -->
+  <header class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-black/30 border-b border-black/5 dark:border-white/10">
+    <nav class="container flex items-center gap-3 py-3">
+      <a href="index.html" class="flex items-center gap-2 font-semibold tracking-tight">
+        <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white shadow-brand-lg">CX</span>
+        <span class="hidden sm:inline">TuNe X</span>
+      </a>
+      <div class="ml-auto hidden md:flex items-center gap-6 text-sm">
+        <a href="index.html#features" class="hover:text-brand-600 dark:hover:text-brand-300">Features</a>
+        <a href="index.html#workflows" class="hover:text-brand-600 dark:hover:text-brand-300">Agentic Tools</a>
+        <a href="postings.html" class="hover:text-brand-600 dark:hover:text-brand-300">Postings</a>
+        <!-- Profile avatar (shown when logged in) -->
+        <a id="navProfile" href="profile.html" title="Profile" class="hidden inline-flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+          <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+          <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
+        </a>
+        <a href="signin.html" class="hover:text-brand-600 dark:hover:text-brand-300">Sign in</a>
+        <a href="signup.html" class="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 px-4 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span class="icon">person_add</span> Sign up</a>
+        <button onclick="toggleTheme()" class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10" title="Toggle theme"><span class="icon align-[-4px]">dark_mode</span></button>
+      </div>
+      <div class="md:hidden flex items-center gap-2">
+        <button onclick="toggleTheme()" class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span class="icon">dark_mode</span></button>
+        <!-- Mobile profile avatar (shown when logged in) -->
+        <a id="navProfileMobile" href="profile.html" title="Profile" class="hidden inline-flex items-center justify-center w-8 h-8 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+          <img id="navProfileMobileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+          <span id="navProfileMobileInitial" class="text-[10px] font-semibold">Me</span>
+        </a>
+        <button id="menuBtn" class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span class="icon">menu</span></button>
+      </div>
+    </nav>
+    <div id="mobileMenu" class="md:hidden hidden border-t border-black/5 dark:border-white/10">
+      <div class="container py-2 grid gap-1">
+        <a href="index.html#features" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">Features</a>
+        <a href="index.html#workflows" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">Agentic Tools</a>
+        <a href="postings.html" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">Postings</a>
+        <a href="signin.html" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">Sign in</a>
+        <a href="signup.html" class="px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10">Sign up</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- COVER + PROFILE (mirrors profile.html look) -->
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 bg-grid-radial opacity-70 dark:opacity-60 pointer-events-none"></div>
+    <div class="container relative">
+      <div class="rounded-b-3xl h-36 md:h-44 bg-gradient-to-r from-slate-800 to-brand-700"></div>
+    </div>
+  </section>
+
+  <main class="container -mt-16 md:-mt-20 pb-16">
+    <!-- Owner actions for incoming request (conditional) -->
+    <div id="ownerActions" class="hidden rounded-3xl border border-emerald-600/30 bg-emerald-100/50 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-200 p-4 mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="text-sm"><span class="font-semibold">Request actions</span> · <span id="ownerActionsStatus">Status: pending</span></div>
+        <div class="flex items-center gap-2">
+          <a href="incoming_requests.html" class="rounded-lg px-3 py-1.5 border border-emerald-700/30 hover:bg-emerald-700/10">Back to Requests</a>
+          <button id="ownerAccept" class="rounded-lg px-3 py-1.5 bg-emerald-600 text-white">Accept</button>
+          <button id="ownerReject" class="rounded-lg px-3 py-1.5 border border-black/10 dark:border-white/10">Reject</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile Card -->
+    <div class="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 shadow-soft p-6 md:p-8">
+      <div class="flex flex-col md:flex-row md:items-end gap-6">
+        <!-- Avatar -->
+        <div class="relative w-28 h-28 md:w-32 md:h-32 rounded-full border-4 border-white/90 dark:border-black/40 overflow-hidden bg-slate-200">
+          <img id="profileImage" alt="Avatar" class="w-full h-full object-cover hidden" />
+          <div id="profileImageFallback" class="absolute inset-0 flex items-center justify-center text-3xl text-slate-600">
+            <span id="profileInitials">?</span>
+          </div>
+          <div id="verifyBadge" class="absolute -bottom-2 -right-2 flex items-center gap-1 rounded-full bg-emerald-600 text-white text-xs px-2 py-1 shadow-brand-lg">
+            <span class="icon text-sm">verified</span><span id="verifyScore">--</span>
+          </div>
+        </div>
+        <!-- Heading -->
+        <div class="flex-1 min-w-0">
+          <h1 id="profileName" class="pt-12 font-extrabold text-3xl md:text-4xl tracking-tight">Member</h1>
+          <p id="profileHeadline" class="mt-1 text-sm md:text-base text-black/70 dark:text-white/70">Public profile</p>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-black/60 dark:text-white/60">
+            <span class="icon">location_on</span><span id="profileLocation">—</span>
+            <span class="icon ml-3">calendar_month</span><span id="info-batch-inline">—</span>
+          </div>
+        </div>
+        <!-- Actions (public) -->
+        <div class="flex items-center gap-2">
+          <button id="shareBtn" class="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 px-4 py-2">
+            <span class="icon">share</span> Share
+          </button>
+        </div>
+      </div>
+      <!-- Progress -->
+      <div class="mt-6">
+        <div class="flex items-center justify-between text-xs opacity-70 mb-1">
+          <span>Profile completeness</span><span id="completePct">—</span>
+        </div>
+        <div class="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+          <div id="completeBar" class="h-2 bg-brand-600 w-0 transition-all duration-700"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABS (Overview/About/Activity) -->
+    <section class="mt-8">
+      <div class="rounded-3xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-3">
+        <div class="flex flex-wrap gap-2">
+          <button data-tab="overview" class="tabBtn rounded-xl px-4 py-2 bg-brand-600 text-white">Overview</button>
+          <button data-tab="about" class="tabBtn rounded-xl px-4 py-2">About</button>
+          <button data-tab="activity" class="tabBtn rounded-xl px-4 py-2">Activity</button>
+        </div>
+      </div>
+
+      <div class="mt-4 grid gap-4">
+        <!-- OVERVIEW -->
+        <div data-panel="overview" class="tabPanel grid lg:grid-cols-[1.2fr,.8fr] gap-4">
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-4 flex items-center gap-2"><span class="icon">badge</span> Basic Info</h3>
+            <dl class="grid grid-cols-[auto,1fr] gap-x-6 gap-y-2 text-sm">
+              <dt class="font-medium text-black/80 dark:text-white/80">Name</dt>
+              <dd id="info-name" class="opacity-80">—</dd>
+              <dt class="font-medium text-black/80 dark:text-white/80">College</dt>
+              <dd id="info-college" class="opacity-80">—</dd>
+              <dt class="font-medium text-black/80 dark:text-white/80">Batch</dt>
+              <dd id="info-batch" class="opacity-80">—</dd>
+              <dt class="font-medium text-black/80 dark:text-white/80">Date of Birth</dt>
+              <dd id="info-dob" class="opacity-80">—</dd>
+              <dt class="font-medium text-black/80 dark:text-white/80">Phone</dt>
+              <dd id="info-phone" class="opacity-80">—</dd>
+              <dt class="font-medium text-black/80 dark:text-white/80">Email</dt>
+              <dd id="info-email" class="opacity-80">—</dd>
+            </dl>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-4 flex items-center gap-2"><span class="icon">link</span> Links</h3>
+            <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <li><a id="link-linkedin" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span class="icon">work</span> LinkedIn</a></li>
+              <li><a id="link-github" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span class="icon">code</span> GitHub</a></li>
+              <li><a id="link-leetcode" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span class="icon">extension</span> LeetCode</a></li>
+              <li><a id="link-portfolio" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span class="icon">web</span> Portfolio</a></li>
+              <li><a id="link-website" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span class="icon">public</span> Website</a></li>
+              <li><a id="link-twitter" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span class="icon">alternate_email</span> Twitter</a></li>
+              <li><a id="link-instagram" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span class="icon">camera_alt</span> Instagram</a></li>
+              <li><a id="link-medium" target="_blank" class="flex items-center gap-2 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10"><span class="icon">menu_book</span> Medium</a></li>
+              <li class="sm:col-span-2"><a id="link-resume" target="_blank" class="flex items-center justify-center gap-2 rounded-xl bg-brand-600 text-white px-4 py-2 shadow-brand-lg"><span class="icon">download</span> Download Resume</a></li>
+            </ul>
+          </section>
+        </div>
+        <!-- ABOUT -->
+        <div data-panel="about" class="tabPanel hidden grid md:grid-cols-2 gap-4">
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">subject</span> Summary</h3>
+            <p id="info-bio" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">—</p>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">school</span> Specializations</h3>
+            <p id="info-specializations" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">—</p>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">construction</span> Technologies</h3>
+            <p id="info-technologies" class="text-sm opacity-80 bg-black/5 dark:bg-white/10 rounded-lg p-3">—</p>
+            <div id="tech-chips" class="mt-3 flex flex-wrap gap-2"></div>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">workspace_premium</span> Skills</h3>
+            <p id="info-skills" class="text-sm opacity-80 bg-black/5 dark:bg:white/10 rounded-lg p-3">—</p>
+            <div id="skills-chips" class="mt-3 flex flex-wrap gap-2"></div>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">military_tech</span> Achievements</h3>
+            <p id="info-achievements" class="text-sm opacity-80 bg-black/5 dark:bg:white/10 rounded-lg p-3">—</p>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">workspace_premium</span> Certifications</h3>
+            <p id="info-certifications" class="text-sm opacity-80 bg-black/5 dark:bg:white/10 rounded-lg p-3">—</p>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">translate</span> Languages</h3>
+            <p id="info-languages" class="text-sm opacity-80 bg-black/5 dark:bg:white/10 rounded-lg p-3">—</p>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">interests</span> Interests</h3>
+            <p id="info-interests" class="text-sm opacity-80 bg-black/5 dark:bg:white/10 rounded-lg p-3">—</p>
+          </section>
+        </div>
+        <!-- ACTIVITY (text fields) -->
+        <div data-panel="activity" class="tabPanel hidden grid md:grid-cols-2 gap-4">
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">science</span> Project Info</h3>
+            <p id="info-projects" class="text-sm opacity-80 bg-black/5 dark:bg:white/10 rounded-lg p-3">—</p>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">menu_book</span> Publications</h3>
+            <p id="info-publications" class="text-sm opacity-80 bg-black/5 dark:bg:white/10 rounded-lg p-3">—</p>
+          </section>
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-5 lift">
+            <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">badge</span> Experience</h3>
+            <p id="info-experience" class="text-sm opacity-80 bg-black/5 dark:bg:white/10 rounded-lg p-3">—</p>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- Projects Grid (kept for public view) -->
+    <section class="mt-10">
+      <div class="flex items-end justify-between gap-3">
+        <div>
+          <h2 id="sectionTitle" class="text-2xl md:text-3xl font-extrabold tracking-tight">Projects</h2>
+          <p id="sectionSub" class="text-sm text-black/70 dark:text-white/70">Published by this member</p>
+        </div>
+      </div>
+      <div id="grid" class="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
+    <p id="status" class="mt-6 text-sm text-black/60 dark:text-white/60"></p>
+  </main>
+
+  <footer class="border-t border-black/10 dark:border-white/10">
+    <div class="container py-8 text-xs opacity-60">© <span id="year"></span> TuNe X</div>
+  </footer>
+
+  <script>
+    // Year + mobile menu
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('menuBtn')?.addEventListener('click',()=>document.getElementById('mobileMenu')?.classList.toggle('hidden'));
+
+    const API = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+    const params = new URLSearchParams(location.search);
+    const uid = params.get('user_id');
+    const projectId = params.get('project_id');
+    const applicationId = params.get('application_id');
+    const token = localStorage.getItem('access_token');
+
+    const ownerActions = document.getElementById('ownerActions');
+    const ownerActionsStatus = document.getElementById('ownerActionsStatus');
+
+    function toggleOwnerButtons(show){
+      const a = document.getElementById('ownerAccept');
+      const r = document.getElementById('ownerReject');
+      if (!a || !r) return;
+      a.classList.toggle('hidden', !show);
+      r.classList.toggle('hidden', !show);
+    }
+
+    async function getAppIfOwner(){
+      if (!projectId || !applicationId || !token) return null;
+      try {
+        const r = await fetch(`${API}/api/projects/${encodeURIComponent(projectId)}/applications/${encodeURIComponent(applicationId)}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!r.ok) return null; // owner-only endpoint; non-owners will 403
+        const app = await r.json();
+        ownerActions.classList.remove('hidden');
+        const current = String(app?.status || 'pending').toLowerCase();
+        ownerActionsStatus.textContent = `Status: ${current}`;
+        toggleOwnerButtons(current === 'pending');
+        const setBusy = (b)=>{
+          document.getElementById('ownerAccept').disabled = b;
+          document.getElementById('ownerReject').disabled = b;
+        };
+        async function update(newStatus){
+          try{
+            setBusy(true);
+            const res = await fetch(`${API}/api/projects/${encodeURIComponent(projectId)}/applications/${encodeURIComponent(applicationId)}`, { method:'PATCH', headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body: JSON.stringify({ status: newStatus }) });
+            const data = await res.json().catch(()=>({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to update');
+            const final = String(data?.application?.status || newStatus).toLowerCase();
+            ownerActionsStatus.textContent = `Status: ${final}`;
+            toggleOwnerButtons(false);
+          }catch(e){ alert(e.message || 'Could not update'); }
+          finally{ setBusy(false); }
+        }
+        document.getElementById('ownerAccept').onclick = ()=> update('accepted');
+        document.getElementById('ownerReject').onclick = ()=> update('rejected');
+        return app;
+      } catch { return null; }
+    }
+
+    // Helpers (mirroring profile.html)
+    const el = (id) => document.getElementById(id);
+    const defaultText = (v, fb = "--") => v ? v : fb;
+    const setText = (id, v, fb = "--") => { const n = el(id); if (n) n.textContent = defaultText(v, fb); };
+    const setLink = (id, v) => {
+      const a = el(id); if (!a) return;
+      if (v) { a.href = v; a.classList.remove('pointer-events-none','opacity-50'); }
+      else { a.href = '#'; a.classList.add('pointer-events-none','opacity-50'); }
+    };
+    const calcCompleteness = (p) => {
+      const fields = [ p.name, p.headline, p.location, p.college, (p.batch_start || p.batch_end), p.github, p.linkedin, p.resume_url, p.bio, p.skills, p.technologies ];
+      const filled = fields.filter(Boolean).length;
+      return Math.min(100, Math.round((filled / fields.length) * 100)) || 0;
+    };
+    const renderSkillChips = (skillsText) => {
+      const wrap = document.getElementById('skills-chips'); if (!wrap) return; wrap.innerHTML = '';
+      const parts = (skillsText || '').split(/[ ,|\n]/).map(s=>s.trim()).filter(Boolean).slice(0,25);
+      parts.forEach(s=>{ const a=document.createElement('a'); a.href=`skill-test.html?skill=${encodeURIComponent(s)}`; a.className='inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs border border-brand-600/40 text-brand-700 dark:text-brand-200 bg-brand-500/10'; a.innerHTML='<span class="icon text-sm">bolt</span>'+s; wrap.appendChild(a); });
+    };
+
+    // New: Render Technology chips with verification badges
+    const parseItems = (text) => (text || '').split(/[ ,|\n]/).map(s=>s.trim()).filter(Boolean);
+    const key = (s) => (s||'').trim().toLowerCase();
+    const badgeColor = (score) => (score>=70? 'bg-emerald-600' : (score>=40? 'bg-amber-600' : 'bg-rose-600'));
+    const renderTechChips = (technologiesText, verifMap) => {
+      const wrap = document.getElementById('tech-chips'); if (!wrap) return; wrap.innerHTML='';
+      const parts = parseItems(technologiesText).slice(0, 30);
+      parts.forEach(t=>{
+        const chipEl = document.createElement('span');
+        chipEl.className = 'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs border border-brand-600/40 text-brand-700 dark:text-brand-200 bg-brand-500/10 cursor-default select-none';
+        const info = verifMap[key(t)];
+        const score = typeof info?.best_score === 'number' ? Math.round(info.best_score) : null;
+        const badge = score!=null ? `<span class="ml-1 inline-flex items-center gap-1 ${badgeColor(score)} text-white rounded-full px-2 py-0.5"><span class="icon text-[14px]">verified</span>${score}</span>` : '';
+        chipEl.innerHTML = `<span class="icon text-sm">bolt</span><span>${t}</span>${badge}`;
+        wrap.appendChild(chipEl);
+      });
+    };
+
+    const loadPublicVerifications = async (userId) => {
+      try {
+        const r = await fetch(`${API}/api/public/skills/verifications/${encodeURIComponent(userId)}`);
+        if (!r.ok) return {};
+        const rows = await r.json();
+        const map = {}; (rows||[]).forEach(v=>{ map[key(v.skill)] = v; });
+        return map;
+      } catch { return {}; }
+    };
+
+    const populateProfile = (profile) => {
+      const name = profile.name || 'Member';
+      setText('profileName', name, 'Member');
+      setText('profileHeadline', profile.headline, 'Public profile');
+      setText('profileLocation', profile.location, '');
+      setText('info-batch-inline', (profile.batch_start || profile.batch_end) ? `${profile.batch_start || "?"} - ${profile.batch_end || "?"}` : '—');
+
+      // Avatar / initials
+      const img = el('profileImage'); const fallback = el('profileImageFallback');
+      const initials = (name||'').split(' ').filter(Boolean).map(s=>s[0]?.toUpperCase()).slice(0,2).join('');
+      if (profile.profile_image_url){ img.src = profile.profile_image_url; img.classList.remove('hidden'); fallback.classList.add('hidden'); }
+      else { el('profileInitials').textContent = initials || '?'; img.classList.add('hidden'); fallback.classList.remove('hidden'); }
+
+      // Verification badge
+      const score = Number(profile.verification_score ?? 0);
+      el('verifyScore').textContent = isNaN(score) ? '--' : String(score);
+      const badge = el('verifyBadge');
+      if (!isNaN(score)){
+        badge.classList.toggle('bg-emerald-600', score >= 70);
+        badge.classList.toggle('bg-amber-600', score < 70 && score >= 40);
+        badge.classList.toggle('bg-rose-600', score < 40);
+      }
+
+      // Completeness
+      const pct = calcCompleteness(profile); el('completePct').textContent = pct + '%'; el('completeBar').style.width = pct + '%';
+
+      // Overview fields
+      setText('info-name', profile.name);
+      setText('info-college', profile.college);
+      setText('info-batch', (profile.batch_start || profile.batch_end) ? `${profile.batch_start || "?"} - ${profile.batch_end || "?"}` : '--');
+      setText('info-dob', profile.dob);
+      setText('info-phone', profile.phone);
+      setText('info-email', profile.email);
+
+      // Links
+      setLink('link-linkedin', profile.linkedin);
+      setLink('link-github', profile.github);
+      setLink('link-leetcode', profile.leetcode);
+      setLink('link-portfolio', profile.portfolio_url);
+      setLink('link-website', profile.website);
+      setLink('link-twitter', profile.twitter);
+      setLink('link-instagram', profile.instagram);
+      setLink('link-medium', profile.medium);
+      setLink('link-resume', profile.resume_url);
+
+      // About / Activity fields
+      setText('info-bio', profile.bio, '—');
+      setText('info-projects', profile.project_info);
+      setText('info-publications', profile.publications);
+      setText('info-achievements', profile.achievements);
+      setText('info-experience', profile.experience);
+      setText('info-specializations', profile.specializations);
+      setText('info-technologies', profile.technologies);
+      setText('info-skills', profile.skills);
+      renderSkillChips(profile.skills);
+      setText('info-certifications', profile.certifications);
+      setText('info-languages', profile.languages);
+      setText('info-interests', profile.interests);
+    };
+
+    // Tabs
+    const tabBtns = document.querySelectorAll('.tabBtn');
+    const tabPanels = document.querySelectorAll('.tabPanel');
+    tabBtns.forEach(btn=>btn.addEventListener('click', ()=>{
+      tabBtns.forEach(b=>b.classList.remove('bg-brand-600','text-white'));
+      btn.classList.add('bg-brand-600','text-white');
+      const t = btn.getAttribute('data-tab');
+      tabPanels.forEach(p=>p.classList.toggle('hidden', p.getAttribute('data-panel') !== t));
+    }));
+
+    const statusEl = el('status');
+
+    // Load page
+    const loadPublicProfile = async () => {
+      if (!uid){ statusEl.textContent = 'Missing user id.'; return; }
+      statusEl.textContent = 'Loading profile…';
+      try {
+        const res = await fetch(`${API}/api/public/profiles/${encodeURIComponent(uid)}`);
+        const p = await res.json();
+        populateProfile(p || { user_id: uid });
+        // Load per-tech verifications and render chips
+        const verifMap = await loadPublicVerifications(uid);
+        renderTechChips(p?.technologies, verifMap);
+        statusEl.textContent = '';
+        // Header texts for projects
+        const name = p?.name || 'Member';
+        el('sectionTitle').textContent = `Projects by ${name}`;
+        el('sectionSub').textContent = `Published by ${name}`;
+      } catch(e){ console.error(e); statusEl.textContent = 'Failed to load profile.'; }
+    };
+
+    const esc = (s)=> (s||'').toString().replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const chip = (t)=> `<span class="rounded-lg px-2 py-1 bg-black/5 dark:bg-white/10 text-xs">${esc(t)}</span>`;
+    const skeleton = () => `
+      <article class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-4 animate-pulse">
+        <div class="h-40 w-full bg-black/10 dark:bg-white/10 rounded-lg"></div>
+        <div class="h-5 w-3/4 bg-black/10 dark:bg:white/10 rounded mt-4"></div>
+        <div class="h-4 w-2/3 bg-black/10 dark:bg:white/10 rounded mt-2"></div>
+      </article>`;
+
+    const loadProjects = async () => {
+      const grid = el('grid');
+      grid.innerHTML = skeleton()+skeleton()+skeleton();
+      try {
+        const r = await fetch(`${API}/api/projects`);
+        const items = await r.json();
+        const mine = Array.isArray(items) ? items.filter(p=>p.user_id===uid) : [];
+        if (!mine.length){ grid.innerHTML = `<div class="col-span-full text-sm opacity-70 rounded-xl border border-black/10 dark:border-white/10 p-4">No public projects yet.</div>`; return; }
+        grid.innerHTML = mine.map(p=>{
+          const b = p.basics || {};
+          const cover = p.cover_url ? `<img src="${esc(p.cover_url)}" alt="Cover" class="w-full h-40 object-cover">` : `<div class=\"w-full h-40 bg-black/5 dark:bg-white/10\"></div>`;
+          const domain = (Array.isArray(b.domains) && b.domains[0]) ? `<span class=\"text-xs rounded-full px-2 py-1 bg-brand-600 text-white\">${esc(b.domains[0])}</span>` : '';
+          const techs = (Array.isArray(b.tech_stack) ? b.tech_stack.slice(0,3) : []).map(chip).join('');
+          const title = esc(b.title || 'Untitled');
+          const tagline = esc(b.tagline || (b.description || ''));
+          return `
+            <article class=\"lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 overflow-hidden\"> 
+              <div class=\"overflow-hidden\">${cover}</div>
+              <div class=\"p-4\">
+                <div class=\"flex items-center justify-between\">${domain}<span class=\"text-xs opacity-70\"></span></div>
+                <h3 class=\"mt-3 font-semibold line-clamp-1\">${title}</h3>
+                <p class=\"mt-1 text-sm opacity-80 line-clamp-2\">${tagline}</p>
+                <div class=\"mt-3 flex flex-wrap gap-2 text-xs\">${techs}</div>
+                <div class=\"mt-4 flex items-center justify-between\">
+                  <a href=\"project.html?id=${encodeURIComponent(p.id)}\" class=\"rounded-xl px-3 py-2 border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg:white/10\"><span class=\"icon align-[-3px]\">open_in_new</span> View</a>
+                </div>
+              </div>
+            </article>`;
+        }).join('');
+      } catch { grid.innerHTML = `<div class=\"col-span-full text-sm opacity-70 rounded-xl border border-black/10 dark:border-white/10 p-4\">Failed to load projects.</div>`; }
+    };
+
+    // Share button
+    document.getElementById('shareBtn')?.addEventListener('click', ()=>{
+      const url = window.location.href;
+      if (navigator.clipboard && window.isSecureContext){
+        navigator.clipboard.writeText(url).then(()=>{
+          const t = document.createElement('div'); t.className='fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] rounded-xl bg-black/90 text-white px-4 py-2 text-sm shadow-soft'; t.textContent='Link copied to clipboard'; document.body.appendChild(t); setTimeout(()=>t.remove(), 1500);
+        });
+      } else {
+        const ta=document.createElement('textarea'); ta.value=url; ta.style.position='fixed'; ta.style.left='-999px'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        const t = document.createElement('div'); t.className='fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] rounded-xl bg-black/90 text-white px-4 py-2 text-sm shadow-soft'; t.textContent='Link copied to clipboard'; document.body.appendChild(t); setTimeout(()=>t.remove(), 1500);
+      }
+    });
+
+    // Auth-aware navbar tweaks (avatar like index/postings)
+    (function(){
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      // Hide Sign in / Sign up
+      document.querySelectorAll('a[href="signin.html"], a[href="signup.html"]').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('#mobileMenu a[href="signin.html"], #mobileMenu a[href="signup.html"]').forEach(el => el.classList.add('hidden'));
+      // Show avatar buttons
+      const navProfile = document.getElementById('navProfile');
+      const navProfileImg = document.getElementById('navProfileImg');
+      const navProfileInitial = document.getElementById('navProfileInitial');
+      const navProfileMobile = document.getElementById('navProfileMobile');
+      const navProfileMobileImg = document.getElementById('navProfileMobileImg');
+      const navProfileMobileInitial = document.getElementById('navProfileMobileInitial');
+      if (navProfile) navProfile.classList.remove('hidden');
+      if (navProfileMobile) navProfileMobile.classList.remove('hidden');
+      const API = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+      fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(p => {
+          if (!p) return;
+          let initials = 'ME';
+          if (p.name) initials = p.name.split(' ').filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0,2).join('');
+          if (navProfileInitial) navProfileInitial.textContent = initials;
+          if (navProfileMobileInitial) navProfileMobileInitial.textContent = initials;
+          if (p.profile_image_url) {
+            if (navProfileImg) { navProfileImg.src = p.profile_image_url; navProfileImg.classList.remove('hidden'); if (navProfileInitial) navProfileInitial.classList.add('hidden'); }
+            if (navProfileMobileImg) { navProfileMobileImg.src = p.profile_image_url; navProfileMobileImg.classList.remove('hidden'); if (navProfileMobileInitial) navProfileMobileInitial.classList.add('hidden'); }
+          }
+        })
+        .catch(()=>{});
+    })();
+
+    // Init
+    if (!uid){ el('grid').innerHTML = `<div class="col-span-full rounded-xl border border-amber-400/40 bg-amber-100/60 text-amber-900 px-4 py-3">Missing user id.</div>`; }
+    loadPublicProfile();
+    loadProjects();
+    getAppIfOwner();
+  </script>
+</body>
+</html>

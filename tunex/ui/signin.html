@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>TuNe X — Sign In</title>
+    <meta name="description"
+        content="Sign in to TuNe X to showcase projects, recruit collaborators, and use agentic AI tools." />
+    <!-- Tailwind (forms plugin) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Ubuntu', 'Cantarell', 'Noto Sans', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#eef4ff', 100: '#d9e6ff', 200: '#b3ccff', 300: '#88adff', 400: '#628fff',
+                            500: '#3f6fff', 600: '#2f56e6', 700: '#2846bb', 800: '#223a95', 900: '#1c2f78'
+                        },
+                        ink: { 50: '#f7f7f9', 900: '#0c0f14' }
+                    },
+                    boxShadow: {
+                        'brand-lg': '0 10px 30px rgba(63,111,255,.25)',
+                        'soft': '0 6px 20px rgba(0,0,0,.08)',
+                    },
+                    borderRadius: { '3xl': '1.5rem' },
+                    backgroundImage: {
+                        'grid-radial': 'radial-gradient(1200px 600px at 90% -10%, rgba(63,111,255,.25), transparent 60%), radial-gradient(700px 400px at -10% 10%, rgba(99,102,241,.20), transparent 60%)',
+                        'glass': 'linear-gradient(180deg, rgba(255,255,255,.75), rgba(255,255,255,.45))',
+                        'glass-dark': 'linear-gradient(180deg, rgba(20,24,33,.65), rgba(20,24,33,.4))'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <style>
+        .icon {
+            font-family: 'Material Symbols Outlined';
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .lift {
+            transition: transform .25s ease, box-shadow .25s ease;
+        }
+
+        .lift:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, .12);
+        }
+    </style>
+    <script>
+        // Theme persistence (same as other pages)
+        const initTheme = () => {
+            const stored = localStorage.getItem('cx-theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if ((stored === 'dark') || (!stored && prefersDark)) document.documentElement.classList.add('dark');
+        };
+        initTheme();
+        const toggleTheme = () => {
+            const d = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('cx-theme', d ? 'dark' : 'light');
+        };
+    </script>
+    <script src="config.js"></script>
+</head>
+
+<body class="min-h-screen bg-ink-50 dark:bg-[#0a0d12] text-[#0d1117] dark:text-zinc-100">
+    <!-- Background -->
+    <div class="fixed inset-0 bg-grid-radial opacity-80 dark:opacity-60 pointer-events-none"></div>
+
+    <!-- Top bar -->
+    <header class="absolute top-0 left-0 right-0">
+        <nav class="container flex items-center justify-between py-4">
+            <a href="index.html" class="flex items-center gap-2 font-semibold tracking-tight">
+                <span
+                    class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-brand-lg">CX</span>
+                <span class="hidden sm:inline">TuNe X</span>
+            </a>
+            <div class="flex items-center gap-2">
+                <a href="signup.html"
+                    class="hidden sm:inline rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 text-sm">Create
+                    account</a>
+                <!-- Profile avatar (shown when logged in) -->
+                <a id="navProfile" href="profile.html" title="Profile"
+                   class="hidden inline-flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+                  <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+                  <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
+                </a>
+                <button onclick="toggleTheme()" title="Toggle theme"
+                    class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">
+                    <span class="icon">dark_mode</span>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Auth card -->
+    <main class="relative flex items-center justify-center px-4 pt-24 pb-10">
+        <div
+            class="w-full max-w-md rounded-3xl border border-black/10 dark:border-white/10 bg-glass dark:bg-glass-dark backdrop-blur p-6 md:p-8 shadow-soft lift">
+            <div class="flex items-center gap-2">
+                <span class="icon text-brand-600 dark:text-brand-300">login</span>
+                <h1 class="text-2xl font-extrabold tracking-tight">Sign in</h1>
+            </div>
+            <p class="mt-1 text-sm text-black/70 dark:text-white/70">Welcome back! Choose your preferred method.</p>
+
+            <!-- Tabs -->
+            <div class="mt-5 grid grid-cols-2 rounded-xl border border-black/10 dark:border-white/10 overflow-hidden">
+                <button id="tabEmail" class="px-3 py-2 bg-brand-600 text-white">Email</button>
+                <button id="tabPhone" class="px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">Phone</button>
+            </div>
+
+            <!-- Email form -->
+            <form id="formEmail" class="mt-6 space-y-4" autocomplete="on">
+                <div>
+                    <label class="text-sm">Email</label>
+                    <input name="email" type="email" required
+                        class="mt-1 w-full rounded-xl border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/60"
+                        placeholder="you@college.edu">
+                </div>
+                <div>
+                    <label class="text-sm">Password</label>
+                    <div class="relative">
+                        <input id="pw" name="password" type="password" required
+                            class="mt-1 w-full rounded-xl border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/60 pr-10"
+                            placeholder="••••••••">
+                        <button type="button" id="togglePw"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 hover:bg-black/5 dark:hover:bg-white/10">
+                            <span class="icon">visibility</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between mt-2 text-xs">
+                        <label class="inline-flex items-center gap-2">
+                            <input id="remember" type="checkbox" class="rounded border-black/20 dark:border-white/20">
+                            Remember me
+                        </label>
+                        <a href="#" class="text-brand-600 hover:underline">Forgot password?</a>
+                    </div>
+                </div>
+                <button id="btnEmail"
+                    class="w-full rounded-xl bg-brand-600 hover:brightness-110 text-white py-2.5 shadow-brand-lg inline-flex items-center justify-center gap-2">
+                    <span class="icon">arrow_forward</span> Sign In
+                </button>
+                <div id="msgEmail" class="text-sm mt-1 min-h-5"></div>
+            </form>
+
+            <!-- Phone form -->
+            <form id="formPhone" class="mt-6 space-y-4 hidden" autocomplete="off">
+                <div>
+                    <label class="text-sm">Phone</label>
+                    <div class="flex gap-2">
+                        <select id="cc"
+                            class="w-[6.5rem] rounded-xl border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/60">
+                            <option value="+91" selected>+91 🇮🇳</option>
+                            <option value="+1">+1 🇺🇸</option>
+                            <option value="+44">+44 🇬🇧</option>
+                        </select>
+                        <input id="phone" type="tel" inputmode="numeric" pattern="[0-9]{8,12}" required
+                            class="flex-1 rounded-xl border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/60"
+                            placeholder="9876543210">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-sm">OTP</label>
+                    <div class="flex gap-2">
+                        <input id="otp" type="text" inputmode="numeric" pattern="[0-9]{4,8}"
+                            class="flex-1 rounded-xl border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/60"
+                            placeholder="Enter OTP">
+                        <button id="btnSend" type="button"
+                            class="rounded-xl border border-black/10 dark:border-white/10 px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">Send
+                            OTP</button>
+                    </div>
+                    <p id="otpTimer" class="text-xs text-black/60 dark:text-white/60 mt-1"></p>
+                </div>
+                <button id="btnVerify"
+                    class="w-full rounded-xl bg-brand-600 hover:brightness-110 text-white py-2.5 shadow-brand-lg inline-flex items-center justify-center gap-2 disabled:opacity-60"
+                    disabled>
+                    <span class="icon">verified</span> Verify & Sign In
+                </button>
+                <div id="msgPhone" class="text-sm mt-1 min-h-5"></div>
+            </form>
+
+            <p class="mt-6 text-xs text-black/60 dark:text-white/60">
+                New user?
+                <a href="signup.html" class="text-brand-600 hover:underline">Create account</a>
+            </p>
+        </div>
+    </main>
+
+    <script>
+        const API = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+        const redirectAfter = () => { window.location.href = 'profile.html'; };
+        // Elements
+        const tabEmail = document.getElementById('tabEmail');
+        const tabPhone = document.getElementById('tabPhone');
+        const formEmail = document.getElementById('formEmail');
+        const formPhone = document.getElementById('formPhone');
+        const msgEmail = document.getElementById('msgEmail');
+        const msgPhone = document.getElementById('msgPhone');
+        const btnEmail = document.getElementById('btnEmail');
+        const togglePw = document.getElementById('togglePw');
+        const pw = document.getElementById('pw');
+        const btnSend = document.getElementById('btnSend');
+        const btnVerify = document.getElementById('btnVerify');
+        const otpTimer = document.getElementById('otpTimer');
+        const cc = document.getElementById('cc');
+        const phone = document.getElementById('phone');
+        const otp = document.getElementById('otp');
+
+        // Tabs
+        const setTab = (mode) => {
+            const onEmail = mode === 'email';
+            formEmail.classList.toggle('hidden', !onEmail);
+            formPhone.classList.toggle('hidden', onEmail);
+            tabEmail.classList.toggle('bg-brand-600', onEmail);
+            tabEmail.classList.toggle('text-white', onEmail);
+            tabPhone.classList.toggle('bg-brand-600', !onEmail);
+            tabPhone.classList.toggle('text-white', !onEmail);
+        };
+        tabEmail.onclick = () => setTab('email');
+        tabPhone.onclick = () => setTab('phone');
+
+        // Password reveal
+        togglePw.onclick = () => {
+            const type = pw.getAttribute('type') === 'password' ? 'text' : 'password';
+            pw.setAttribute('type', type);
+            togglePw.innerHTML = `<span class="icon">${type === 'password' ? 'visibility' : 'visibility_off'}</span>`;
+        };
+
+        // Helpers
+        const setStatus = (el, text, ok = false) => {
+            el.textContent = text || '';
+            el.className = `text-sm mt-1 ${!text ? '' : (ok ? 'text-emerald-600' : 'text-red-600')}`;
+        };
+        const setLoading = (btn, loading) => {
+            btn.disabled = loading;
+            btn.innerHTML = loading ? `<span class="icon animate-spin">progress_activity</span> Working...` : btn._label || btn.innerHTML;
+        };
+
+        // Preserve original button labels
+        btnEmail._label = btnEmail.innerHTML;
+        btnSend._label = btnSend.innerHTML;
+        btnVerify._label = btnVerify.innerHTML;
+
+        // Email submit
+        formEmail.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setStatus(msgEmail, 'Signing in…', true);
+            setLoading(btnEmail, true);
+            try {
+                const form = new FormData(formEmail);
+                const payload = Object.fromEntries(form.entries());
+                const r = await fetch(`${API}/api/signin`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.detail || "Sign-in failed");
+                if (!j.access_token) throw new Error("No access token received");
+                localStorage.setItem("access_token", j.access_token);
+                setStatus(msgEmail, "Signed in! Redirecting…", true);
+                setTimeout(redirectAfter, 400);
+            } catch (err) {
+                setStatus(msgEmail, err.message || "Something went wrong");
+            } finally {
+                setLoading(btnEmail, false);
+            }
+        });
+
+        // OTP countdown
+        let timer = null;
+        const startTimer = (sec = 30) => {
+            clearInterval(timer);
+            btnSend.disabled = true;
+            let t = sec;
+            otpTimer.textContent = `You can resend OTP in ${t}s`;
+            timer = setInterval(() => {
+                t -= 1;
+                if (t <= 0) {
+                    clearInterval(timer);
+                    otpTimer.textContent = '';
+                    btnSend.disabled = false;
+                } else {
+                    otpTimer.textContent = `You can resend OTP in ${t}s`;
+                }
+            }, 1000);
+        };
+
+        // Send OTP
+        btnSend.addEventListener('click', async () => {
+            const num = `${cc.value}${phone.value.trim()}`;
+            if (!/^\+\d{1,3}\d{8,12}$/.test(num)) {
+                setStatus(msgPhone, "Enter a valid phone number");
+                return;
+            }
+            setStatus(msgPhone, "Sending OTP…", true);
+            setLoading(btnSend, true);
+            try {
+                const r = await fetch(`${API}/api/otp/send`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ phone: num })
+                });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.detail || "Failed to send OTP");
+                setStatus(msgPhone, "OTP sent. Check your phone.", true);
+                btnVerify.disabled = false;
+                startTimer(30);
+            } catch (e) {
+                setStatus(msgPhone, e.message || "Could not send OTP");
+            } finally {
+                setLoading(btnSend, false);
+            }
+        });
+
+        // Verify OTP
+        btnVerify.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const num = `${cc.value}${phone.value.trim()}`;
+            const code = otp.value.trim();
+            if (!code) { setStatus(msgPhone, "Enter the OTP"); return; }
+            setStatus(msgPhone, "Verifying…", true);
+            setLoading(btnVerify, true);
+            try {
+                const r = await fetch(`${API}/api/otp/verify`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ phone: num, otp: code })
+                });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.detail || "OTP verification failed");
+                if (!j.access_token) throw new Error("No access token received");
+                localStorage.setItem("access_token", j.access_token);
+                setStatus(msgPhone, "Verified! Redirecting…", true);
+                setTimeout(redirectAfter, 400);
+            } catch (e) {
+                setStatus(msgPhone, e.message || "Verification failed");
+            } finally {
+                setLoading(btnVerify, false);
+            }
+        });
+
+        // Auth-aware navbar avatar
+        (function(){
+            const token = localStorage.getItem('access_token');
+            if (!token) return;
+            // Hide create account and show avatar
+            document.querySelectorAll('a[href="signup.html"]').forEach(el => el.classList.add('hidden'));
+            const navProfile = document.getElementById('navProfile');
+            const navProfileImg = document.getElementById('navProfileImg');
+            const navProfileInitial = document.getElementById('navProfileInitial');
+            if (navProfile) navProfile.classList.remove('hidden');
+            const API = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+            fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${token}` } })
+                .then(r => r.ok ? r.json() : null)
+                .then(p => {
+                    if (!p) return;
+                    let initials = 'ME';
+                    if (p.name) initials = p.name.split(' ').filter(Boolean).map(s=>s[0]?.toUpperCase()).slice(0,2).join('');
+                    if (navProfileInitial) navProfileInitial.textContent = initials;
+                    if (p.profile_image_url){
+                        if (navProfileImg){ navProfileImg.src = p.profile_image_url; navProfileImg.classList.remove('hidden'); if (navProfileInitial) navProfileInitial.classList.add('hidden'); }
+                    }
+                }).catch(()=>{});
+        })();
+    </script>
+</body>
+
+</html>

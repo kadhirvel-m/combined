@@ -1,0 +1,420 @@
+﻿<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Edit Profile</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <script src="config.js"></script>
+</head>
+
+<body class="bg-slate-100 min-h-screen">
+    <header class="bg-white shadow-sm">
+        <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-semibold text-slate-800">Edit Profile</h1>
+                <p class="text-sm text-slate-500">Update your details and uploads. Changes are saved to Supabase.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button id="backBtn"
+                    class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Back
+                    to Profile</button>
+                <button id="signOutBtn"
+                    class="rounded-lg bg-red-500 hover:bg-red-600 text-white px-4 py-2 text-sm font-medium">Sign
+                    Out</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 py-8">
+        <form id="profileForm" class="space-y-8 bg-white shadow-sm rounded-2xl p-6">
+            <input type="hidden" name="profile_image_url" id="profile_image_url" />
+            <input type="hidden" name="resume_url" id="resume_url" />
+
+            <section class="space-y-4">
+                <h2 class="text-xl font-semibold text-slate-800">Profile Media</h2>
+                <div class="grid gap-6 md:grid-cols-2">
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-4">
+                            <div class="w-20 h-20 rounded-full overflow-hidden bg-slate-200">
+                                <img id="profileImagePreview" src="" alt="Profile preview"
+                                    class="w-full h-full object-cover hidden" />
+                                <div id="profileImageFallback"
+                                    class="w-full h-full flex items-center justify-center text-2xl text-slate-500">?</div>
+                            </div>
+                            <div>
+                                <p class="text-sm text-slate-500">Upload a square image (PNG, JPG, WEBP, GIF).</p>
+                                <p id="profileImageStatus" class="text-xs text-slate-400"></p>
+                            </div>
+                        </div>
+                        <input type="file" id="profileImageInput" accept="image/png,image/jpeg,image/webp,image/gif"
+                            class="block w-full text-sm" />
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-slate-700">Resume</p>
+                                <p class="text-sm text-slate-500">Upload your latest resume (PDF, DOC, DOCX).</p>
+                                <p id="resumeStatus" class="text-xs text-slate-400"></p>
+                            </div>
+                            <a id="resumeLink" href="#" target="_blank"
+                                class="text-sm text-blue-600 hover:underline hidden">View current</a>
+                        </div>
+                        <input type="file" id="resumeInput" accept="application/pdf,.doc,.docx"
+                            class="block w-full text-sm" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="space-y-4">
+                <h2 class="text-xl font-semibold text-slate-800">Basic Information</h2>
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Full Name</label>
+                        <input name="name" type="text" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Headline</label>
+                        <input name="headline" type="text" class="mt-1 w-full rounded-lg border-slate-300"
+                            placeholder="E.g. Software Engineer @ InnovateX" />
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-slate-600">Summary</label>
+                        <textarea name="bio" rows="3" class="mt-1 w-full rounded-lg border-slate-300"
+                            placeholder="Introduce yourself, highlight your goals and strengths."></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Location</label>
+                        <input name="location" type="text" class="mt-1 w-full rounded-lg border-slate-300"
+                            placeholder="City, Country" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Date of Birth</label>
+                        <input name="dob" type="date" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Phone Number</label>
+                        <input name="phone" type="tel" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Email</label>
+                        <input name="email" type="email" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="space-y-4">
+                <h2 class="text-xl font-semibold text-slate-800">Education</h2>
+                <div class="grid gap-4 md:grid-cols-3">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-slate-600">College</label>
+                        <input name="college" type="text" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Batch Start</label>
+                        <input name="batch_start" type="number" min="1900" max="2100"
+                            class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Batch End</label>
+                        <input name="batch_end" type="number" min="1900" max="2100"
+                            class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="space-y-4">
+                <h2 class="text-xl font-semibold text-slate-800">Online Presence</h2>
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">LinkedIn</label>
+                        <input name="linkedin" type="url" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">GitHub</label>
+                        <input name="github" type="url" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">LeetCode</label>
+                        <input name="leetcode" type="url" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Portfolio</label>
+                        <input name="portfolio_url" type="url" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Website / Blog</label>
+                        <input name="website" type="url" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Twitter</label>
+                        <input name="twitter" type="url" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Instagram</label>
+                        <input name="instagram" type="url" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Medium</label>
+                        <input name="medium" type="url" class="mt-1 w-full rounded-lg border-slate-300" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="space-y-4">
+                <h2 class="text-xl font-semibold text-slate-800">Professional Highlights</h2>
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-slate-600">Project Info</label>
+                        <textarea name="project_info" rows="3" class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Publications</label>
+                        <textarea name="publications" rows="3" class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Achievements</label>
+                        <textarea name="achievements" rows="3" class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Experience</label>
+                        <textarea name="experience" rows="3" class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Specializations</label>
+                        <textarea name="specializations" rows="3" class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Technologies</label>
+                        <textarea name="technologies" rows="3" class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Skills</label>
+                        <textarea name="skills" rows="3" class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Certifications</label>
+                        <textarea name="certifications" rows="3"
+                            class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Languages</label>
+                        <textarea name="languages" rows="3" class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Interests</label>
+                        <textarea name="interests" rows="3" class="mt-1 w-full rounded-lg border-slate-300"></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <div class="flex items-center justify-between">
+                <p id="formStatus" class="text-sm text-slate-500"></p>
+                <div class="flex gap-3">
+                    <button type="button" id="cancelBtn"
+                        class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
+                    <button type="submit"
+                        class="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 text-sm font-semibold">Save
+                        Changes</button>
+                </div>
+            </div>
+        </form>
+    </main>
+
+    <script>
+        const API = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+        const token = localStorage.getItem("access_token");
+        const form = document.getElementById("profileForm");
+        const statusEl = document.getElementById("formStatus");
+
+        if (!token) {
+            window.location.href = "signin.html";
+        }
+
+        const showStatus = (message, tone = "info") => {
+            const tones = {
+                info: "text-slate-500",
+                success: "text-emerald-600",
+                error: "text-red-600"
+            };
+            statusEl.className = `text-sm ${tones[tone] || tones.info}`;
+            statusEl.textContent = message;
+        };
+
+        const fillForm = (profile) => {
+            const fields = [
+                "name", "headline", "bio", "location", "dob", "phone", "email",
+                "college", "batch_start", "batch_end",
+                "linkedin", "github", "leetcode", "portfolio_url", "website",
+                "twitter", "instagram", "medium",
+                "project_info", "publications", "achievements", "experience",
+                "specializations", "technologies", "skills", "certifications",
+                "languages", "interests"
+            ];
+
+            fields.forEach((field) => {
+                const input = form.elements[field];
+                if (!input) return;
+                const value = profile[field];
+                if (value === null || value === undefined) {
+                    input.value = "";
+                    return;
+                }
+                if (input.type === "number" && value !== "") {
+                    input.value = value;
+                } else if (input.type === "date" && value) {
+                    input.value = value.substring(0, 10);
+                } else {
+                    input.value = value;
+                }
+            });
+
+            if (profile.profile_image_url) {
+                profile_image_url.value = profile.profile_image_url;
+                profileImagePreview.src = profile.profile_image_url;
+                profileImagePreview.classList.remove("hidden");
+                profileImageFallback.classList.add("hidden");
+            }
+
+            if (profile.resume_url) {
+                resume_url.value = profile.resume_url;
+                resumeLink.href = profile.resume_url;
+                resumeLink.classList.remove("hidden");
+            }
+        };
+
+        const fetchProfile = async () => {
+            try {
+                const res = await fetch(`${API}/api/profile`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.status === 401) {
+                    localStorage.removeItem("access_token");
+                    window.location.href = "signin.html";
+                    return null;
+                }
+                const profile = await res.json();
+                fillForm(profile);
+                showStatus("Profile loaded.");
+                return profile;
+            } catch (error) {
+                console.error(error);
+                showStatus("Failed to load profile.", "error");
+                return null;
+            }
+        };
+
+        const uploadAsset = async (kind, file) => {
+            const statusMap = {
+                profile_image: profileImageStatus,
+                resume: resumeStatus
+            };
+            const statusTarget = statusMap[kind];
+            const setMessage = (msg, tone = "info") => {
+                if (!statusTarget) return;
+                statusTarget.textContent = msg;
+                statusTarget.className = `text-xs ${tone === "error" ? "text-red-600" : "text-slate-500"}`;
+            };
+            setMessage("Uploading...");
+            const formData = new FormData();
+            formData.append("kind", kind);
+            formData.append("file", file);
+            try {
+                const res = await fetch(`${API}/api/profile/upload`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: formData
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || "Upload failed");
+                }
+                if (kind === "profile_image") {
+                    profile_image_url.value = data.url;
+                    profileImagePreview.src = data.url;
+                    profileImagePreview.classList.remove("hidden");
+                    profileImageFallback.classList.add("hidden");
+                } else if (kind === "resume") {
+                    resume_url.value = data.url;
+                    resumeLink.href = data.url;
+                    resumeLink.classList.remove("hidden");
+                }
+                setMessage("Upload successful.");
+                showStatus("File uploaded and saved.", "success");
+            } catch (error) {
+                console.error(error);
+                setMessage(error.message || "Upload failed", "error");
+                showStatus(error.message || "Upload failed", "error");
+            }
+        };
+
+        profileImageInput?.addEventListener("change", (event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+                uploadAsset("profile_image", file);
+            }
+        });
+
+        resumeInput?.addEventListener("change", (event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+                uploadAsset("resume", file);
+            }
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            showStatus("Saving changes...");
+            const formData = new FormData(form);
+            const payload = {};
+            formData.forEach((value, key) => {
+                if (value === "") return;
+                if (key === "batch_start" || key === "batch_end") {
+                    payload[key] = Number(value);
+                } else {
+                    payload[key] = value;
+                }
+            });
+            if (profile_image_url.value) payload.profile_image_url = profile_image_url.value;
+            if (resume_url.value) payload.resume_url = resume_url.value;
+
+            try {
+                const res = await fetch(`${API}/api/profile`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || "Failed to save profile");
+                }
+                showStatus("Profile saved successfully!", "success");
+                setTimeout(() => {
+                    window.location.href = "profile.html";
+                }, 600);
+            } catch (error) {
+                console.error(error);
+                showStatus(error.message || "Failed to save profile", "error");
+            }
+        });
+
+        backBtn.onclick = () => {
+            window.location.href = "profile.html";
+        };
+        cancelBtn.onclick = () => {
+            window.location.href = "profile.html";
+        };
+        signOutBtn.onclick = () => {
+            localStorage.removeItem("access_token");
+            window.location.href = "signin.html";
+        };
+
+        fetchProfile();
+    </script>
+</body>
+
+</html>
