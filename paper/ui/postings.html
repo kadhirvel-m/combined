@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TuNe X — Project Postings</title>
+  <meta name="description" content="Browse all project postings from the TuNe X community." />
+  <!-- Tailwind (with plugins) -->
+  <script src="https://cdn.tailwindcss.com?plugins=typography,forms,line-clamp"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        container: { center: true, padding: '1rem' },
+        extend: {
+          fontFamily: { display: ['Inter','ui-sans-serif','system-ui','-apple-system','Segoe UI','Roboto','Ubuntu','Cantarell','Noto Sans','sans-serif'] },
+          colors: {
+            brand: { 50:'#eef4ff',100:'#d9e6ff',200:'#b3ccff',300:'#88adff',400:'#628fff',500:'#3f6fff',600:'#2f56e6',700:'#2846bb',800:'#223a95',900:'#1c2f78' },
+            ink: { 50:'#f7f7f9', 900:'#0c0f14' }
+          },
+          boxShadow: {
+            'brand-lg': '0 10px 30px rgba(63,111,255,.25)',
+            'soft': '0 6px 20px rgba(0,0,0,.08)',
+          },
+          backgroundImage: {
+            'grid-radial': 'radial-gradient(1200px 600px at 90% -10%, rgba(63,111,255,.25), transparent 60%), radial-gradient(700px 400px at -10% 10%, rgba(99,102,241,.20), transparent 60%)',
+            'glass': 'linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.35))',
+            'glass-dark': 'linear-gradient(180deg, rgba(20,24,33,.6), rgba(20,24,33,.35))',
+          },
+          borderRadius: { '3xl': '1.5rem' }
+        }
+      }
+    }
+  </script>
+  <!-- Material Symbols -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    .icon{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+    .lift{transition:transform .25s ease, box-shadow .25s ease}
+    .lift:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(0,0,0,.12)}
+    .no-scrollbar::-webkit-scrollbar{display:none}
+    .no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+  </style>
+  <script>
+    // Theme persistence
+    const initTheme = () => {
+      const stored = localStorage.getItem('cx-theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if ((stored === 'dark') || (!stored && prefersDark)) document.documentElement.classList.add('dark');
+    };
+    initTheme();
+    const toggleTheme = () => {
+      const d = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('cx-theme', d ? 'dark' : 'light');
+    };
+  </script>
+  <script src="config.js"></script>
+</head>
+<body class="bg-ink-50 dark:bg-[#0a0d12] text-[#0d1117] dark:text-zinc-100">
+  <!-- NAV (same look as index) -->
+  <header class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-black/30 border-b border-black/5 dark:border-white/10">
+    <nav class="container flex items-center gap-3 py-3">
+      <a href="index.html" class="flex items-center gap-2 font-semibold tracking-tight">
+        <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white shadow-brand-lg">CX</span>
+        <span class="hidden sm:inline">TuNe X</span>
+      </a>
+      <div class="ml-auto hidden md:flex items-center gap-6 text-sm">
+        <a href="index.html#features" class="hover:text-brand-600 dark:hover:text-brand-300">Features</a>
+        <a href="index.html#workflows" class="hover:text-brand-600 dark:hover:text-brand-300">Agentic Tools</a>
+        <a href="index.html#discover" class="hover:text-brand-600 dark:hover:text-brand-300">Discover</a>
+        <a href="postings.html" class="hover:text-brand-600 dark:hover:text-brand-300">Postings</a>
+        <a href="index.html#faq" class="hover:text-brand-600 dark:hover:text-brand-300">FAQ</a>
+        <a href="login.html" class="hover:text-brand-600 dark:hover:text-brand-300">Sign in</a>
+        <a href="signup.html" class="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 px-4 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span class="icon">person_add</span> Sign up</a>
+        <a href="project_post.html" class="inline-flex items-center gap-2 rounded-xl bg-brand-600 text-white px-4 py-2 shadow-brand-lg hover:brightness-110"><span class="icon">bolt</span> Create Project</a>
+        <!-- Profile avatar (shown when logged in) -->
+        <a id="navProfile" href="profile.html" title="Profile" class="hidden inline-flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+          <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+          <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
+        </a>
+        <button onclick="toggleTheme()" class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10" title="Toggle theme">
+          <span class="icon align-[-4px]">dark_mode</span>
+        </button>
+      </div>
+      <div class="md:hidden flex items-center gap-2">
+        <button onclick="toggleTheme()" class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg:white/10"><span class="icon">dark_mode</span></button>
+        <a id="navProfileMobile" href="profile.html" title="Profile" class="hidden inline-flex items-center justify-center w-8 h-8 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+          <img id="navProfileMobileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+          <span id="navProfileMobileInitial" class="text-[10px] font-semibold">Me</span>
+        </a>
+        <button id="menuBtn" class="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg:white/10"><span class="icon">menu</span></button>
+      </div>
+    </nav>
+    <div id="mobileMenu" class="md:hidden hidden border-t border-black/5 dark:border-white/10">
+      <div class="container py-2 grid gap-1">
+        <a href="index.html#features" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg:white/10">Features</a>
+        <a href="index.html#workflows" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg:white/10">Agentic Tools</a>
+        <a href="index.html#discover" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg:white/10">Discover</a>
+        <a href="postings.html" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg:white/10">Postings</a>
+        <a href="index.html#faq" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg:white/10">FAQ</a>
+        <a href="login.html" class="px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg:white/10">Sign in</a>
+        <a href="signup.html" class="px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg:white/10">Sign up</a>
+        <a href="project_post.html" class="px-3 py-2 rounded-lg bg-brand-600 text-white">Create Project</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Title + Filters -->
+  <section class="container pt-8 md:pt-10">
+    <div class="flex flex-col sm:flex-row sm:items-end gap-3 justify-between">
+      <div>
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">All Project Postings</h1>
+        <p class="mt-2 text-black/70 dark:text-white/70">Newest first. Use filters to narrow down.</p>
+      </div>
+      <div class="flex gap-2">
+        <select id="cat" class="rounded-xl border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+          <option value="">All Categories</option>
+          <option>AI/ML</option>
+          <option>Web</option>
+          <option>Mobile</option>
+          <option>Robotics</option>
+          <option>FinTech</option>
+          <option>EdTech</option>
+        </select>
+        <select id="sort" class="rounded-xl border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+          <option value="new">Sort: Newest</option>
+        </select>
+      </div>
+    </div>
+    <div class="mt-4 flex gap-2">
+      <div class="flex-1 relative">
+        <span class="icon absolute left-3 top-1/2 -translate-y-1/2 opacity-60">search</span>
+        <input id="q" class="w-full pl-9 rounded-xl border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60" placeholder="Search titles, stacks, domains..." />
+      </div>
+      <button id="btnSearch" class="rounded-xl px-4 py-2 border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg:white/10">Search</button>
+    </div>
+  </section>
+
+  <!-- Grid -->
+  <section class="container pb-20">
+    <div id="postingsGrid" class="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  </section>
+
+  <script>
+    // mobile menu
+    const menuBtn = document.getElementById('menuBtn');
+    const mobileMenu = document.getElementById('mobileMenu');
+    if (menuBtn) menuBtn.addEventListener('click', () => mobileMenu.classList.toggle('hidden'));
+
+    // Auth-aware navbar (avatar)
+    (function(){
+      const token = localStorage.getItem('px_token');
+      if (!token) return;
+      document.querySelectorAll('a[href="login.html"], a[href="signup.html"]').forEach(el => el.classList.add('hidden'));
+      const navProfile = document.getElementById('navProfile');
+      const navProfileImg = document.getElementById('navProfileImg');
+      const navProfileInitial = document.getElementById('navProfileInitial');
+      const navProfileMobile = document.getElementById('navProfileMobile');
+      const navProfileMobileImg = document.getElementById('navProfileMobileImg');
+      const navProfileMobileInitial = document.getElementById('navProfileMobileInitial');
+      if (navProfile) navProfile.classList.remove('hidden');
+      if (navProfileMobile) navProfileMobile.classList.remove('hidden');
+      const API = ((window.API_BASE || window.__API_BASE || 'http://127.0.0.1:8000')).replace(/\/$/, '');
+      fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(p => {
+          if (!p) return;
+          let initials = 'ME';
+          if (p.name) initials = p.name.split(' ').filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0,2).join('');
+          if (navProfileInitial) navProfileInitial.textContent = initials;
+          if (navProfileMobileInitial) navProfileMobileInitial.textContent = initials;
+          if (p.profile_image_url) {
+            if (navProfileImg) { navProfileImg.src = p.profile_image_url; navProfileImg.classList.remove('hidden'); if (navProfileInitial) navProfileInitial.classList.add('hidden'); }
+            if (navProfileMobileImg) { navProfileMobileImg.src = p.profile_image_url; navProfileMobileImg.classList.remove('hidden'); if (navProfileMobileInitial) navProfileMobileInitial.classList.add('hidden'); }
+          }
+        }).catch(()=>{});
+    })();
+
+    // Listing logic
+    (function(){
+      const API = ((window.API_BASE || window.__API_BASE || 'http://127.0.0.1:8000')).replace(/\/$/, '');
+      const grid = document.getElementById('postingsGrid');
+      const q = document.getElementById('q');
+      const cat = document.getElementById('cat');
+      const btnSearch = document.getElementById('btnSearch');
+
+      const skeleton = () => `
+        <article class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 p-4 animate-pulse">
+          <div class="h-40 w-full bg-black/10 dark:bg-white/10 rounded-lg"></div>
+          <div class="h-5 w-3/4 bg-black/10 dark:bg:white/10 rounded mt-4"></div>
+          <div class="h-4 w-2/3 bg-black/10 dark:bg:white/10 rounded mt-2"></div>
+          <div class="flex gap-2 mt-4">
+            <div class="h-6 w-16 bg-black/10 dark:bg:white/10 rounded"></div>
+            <div class="h-6 w-16 bg-black/10 dark:bg:white/10 rounded"></div>
+            <div class="h-6 w-16 bg-black/10 dark:bg:white/10 rounded"></div>
+          </div>
+        </article>`;
+
+      const esc = (s)=> (s||'').toString().replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      const chip = (t)=> `<span class="rounded-lg px-2 py-1 bg-black/5 dark:bg:white/10 text-xs">${esc(t)}</span>`;
+      const domainPill = (d)=> `<span class="text-xs rounded-full px-2 py-1 bg-brand-600 text-white">${esc(d)}</span>`;
+
+      const initialsOf = (name) => (name||'').split(' ').filter(Boolean).map(s=>s[0]?.toUpperCase()).slice(0,2).join('') || 'U';
+
+      // Helpers for skills parsing and match score
+      const normalize = (s) => (s||'').toString().trim().toLowerCase();
+      const splitSkills = (text) => {
+        if (!text) return [];
+        return text.split(/[,;\n\t|]+/).map(normalize).filter(Boolean);
+      };
+      const unique = (arr) => Array.from(new Set(arr));
+
+      const token = localStorage.getItem('px_token');
+      let mySkills = null; // null until loaded; [] if none
+      const getMyProfileSkills = async () => {
+        if (!token) return [];
+        try {
+          const r = await fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${token}` } });
+          if (!r.ok) return [];
+          const prof = await r.json();
+          const skills = unique([
+            ...splitSkills(prof.skills),
+            ...splitSkills(prof.technologies),
+          ]);
+          return skills;
+        } catch { return []; }
+      };
+
+      const matchScore = (postSkills = [], mySkillsArr = []) => {
+        const ps = unique((postSkills||[]).map(normalize).filter(Boolean));
+        const ms = new Set((mySkillsArr||[]).map(normalize).filter(Boolean));
+        const total = ps.length;
+        let matches = 0;
+        if (total && ms.size) {
+          ps.forEach(s => { if (ms.has(s)) matches++; });
+        }
+        const percent = total ? Math.round((matches/total)*100) : 0;
+        return { matches, total, percent };
+      };
+
+      const render = (items=[], publishers={}, mySkillsArr=[])=>{
+        if (!items.length){
+          grid.innerHTML = `<div class="col-span-full text-sm opacity-70 rounded-xl border border-black/10 dark:border-white/10 p-4">No postings yet.</div>`;
+          return;
+        }
+        grid.innerHTML = items.map(p=>{
+          const b = p.basics || {};
+          const cover = p.cover_url ? `<img src="${esc(p.cover_url)}" alt="Cover" class="w-full h-40 object-cover">` : `<div class="w-full h-40 bg-black/5 dark:bg:white/10"></div>`;
+          const domain = (Array.isArray(b.domains) && b.domains[0]) ? domainPill(b.domains[0]) : '';
+          const techs = (Array.isArray(b.tech_stack) ? b.tech_stack.slice(0,3) : []).map(chip).join('');
+          const title = esc(b.title || 'Untitled');
+          const tagline = esc(b.tagline || (b.description || ''));
+          const pub = publishers[p.user_id] || {};
+          const pubName = esc(pub.name || 'View publisher');
+          const pubHref = `public_profile.html?user_id=${encodeURIComponent(p.user_id || '')}`;
+          const avatar = pub.profile_image_url
+            ? `<img src="${esc(pub.profile_image_url)}" alt="${pubName}" class="w-7 h-7 rounded-full object-cover"/>`
+            : `<span class="w-7 h-7 inline-flex items-center justify-center rounded-full bg-black/10 dark:bg:white/10 text-[10px]">${initialsOf(pub.name)}</span>`;
+          const score = matchScore(b.tech_stack || [], mySkillsArr);
+          const color = score.total === 0 ? 'bg-black/60' : (score.percent >= 66 ? 'bg-emerald-600' : score.percent >= 33 ? 'bg-amber-600' : 'bg-zinc-600');
+          const pillTitle = score.total ? `${score.matches} of ${score.total} skills match` : (mySkillsArr.length ? 'No skills listed in posting' : 'Sign in and add skills to see match');
+          const pill = `<span title="${esc(pillTitle)}" class="inline-flex items-center gap-1 text-xs ${color} text-white px-2 py-1 rounded-full shadow-soft"><span class="icon text-[14px]">bolt</span>${score.total ? score.percent + '%' : '—'}</span>`;
+
+          return `
+            <article class="relative lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60 overflow-hidden cursor-pointer" onclick="window.location.href='project.html?id=${encodeURIComponent(p.id)}'">
+              <div class="absolute top-2 right-2 z-10">${pill}</div>
+              <div class="overflow-hidden">${cover}</div>
+              <div class="p-4">
+                <div class="flex items-center justify-between">${domain}<span class="text-xs opacity-70"></span></div>
+                <h3 class="mt-3 font-semibold line-clamp-1">${title}</h3>
+                <p class="mt-1 text-sm opacity-80 line-clamp-2">${tagline}</p>
+                <div class="mt-3 flex flex-wrap gap-2 text-xs">${techs}</div>
+                <div class="mt-4 flex items-center justify-between">
+                  <a href="${pubHref}" onclick="event.stopPropagation()" class="flex items-center gap-2 text-sm opacity-90 hover:opacity-100">
+                    ${avatar}
+                    <span class="hover:underline">${pubName}</span>
+                  </a>
+                  <button class="rounded-xl px-3 py-2 border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg:white/10"><span class="icon align-[-3px]">bookmark_add</span> Save</button>
+                </div>
+              </div>
+            </article>`;
+        }).join('');
+      };
+
+      const prefetchPublishers = async (items=[]) => {
+        const uids = Array.from(new Set(items.map(p=>p.user_id).filter(Boolean)));
+        const entries = await Promise.all(uids.map(async uid => {
+          try{
+            const r = await fetch(`${API}/api/public/profiles/${encodeURIComponent(uid)}`);
+            if (!r.ok) throw new Error('nf');
+            const d = await r.json();
+            return [uid, d];
+          }catch{ return [uid, { user_id: uid }]; }
+        }));
+        const map = {};
+        entries.forEach(([k,v])=> map[k]=v);
+        return map;
+      };
+
+      const load = async ()=>{
+        grid.innerHTML = skeleton()+skeleton()+skeleton();
+        try {
+          if (mySkills === null) mySkills = await getMyProfileSkills();
+          const r = await fetch(`${API}/api/projects`);
+          let items = await r.json();
+          if (!Array.isArray(items)) items = [];
+          // basic client-side filter using nested basics
+          const term = (q.value||'').toLowerCase();
+          const catVal = (cat.value||'').toLowerCase();
+          const filtered = items.filter(p=>{
+            const b = p.basics || {};
+            const joined = [b.title, b.tagline, b.description, ...(b.tech_stack||[]), ...(b.domains||[])].join(' ').toLowerCase();
+            const inTerm = !term || joined.includes(term);
+            const inCat = !catVal || (Array.isArray(b.domains) && b.domains.join(' ').toLowerCase().includes(catVal));
+            return inTerm && inCat;
+          });
+          const publishers = await prefetchPublishers(filtered);
+          render(filtered, publishers, mySkills || []);
+        } catch (e) {
+          grid.innerHTML = `<div class=\"col-span-full text-sm opacity-70 rounded-xl border border-black/10 dark:border-white/10 p-4\">Failed to load postings.</div>`;
+        }
+      };
+
+      btnSearch.addEventListener('click', load);
+      q.addEventListener('keydown', (e)=> { if (e.key === 'Enter') { e.preventDefault(); load(); } });
+      cat.addEventListener('change', load);
+      load();
+    })();
+  </script>
+</body>
+</html>

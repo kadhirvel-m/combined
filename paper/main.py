@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import random
 import re
 import requests
 import sys
@@ -66,7 +67,16 @@ def get_anon_client() -> Optional[Client]:
     return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+PROJECTS_TABLE = os.getenv("PROJECTS_TABLE") or os.getenv("SUPABASE_PROJECTS_TABLE") or "projects"
+PROJECT_APPLICATIONS_TABLE = os.getenv("PROJECT_APPLICATIONS_TABLE") or "project_applications"
+PROJECT_COLLAB_TABLE = os.getenv("PROJECT_COLLAB_TABLE") or "project_collab_messages"
+SKILL_TESTS_TABLE = os.getenv("SKILL_TESTS_TABLE") or "skill_tests"
+SKILL_VERIFICATIONS_TABLE = os.getenv("SKILL_VERIFICATIONS_TABLE") or "skill_verifications"
+PROJECTS_BUCKET = (os.getenv("SUPABASE_PROJECTS_BUCKET") or os.getenv("SUPABASE_BUCKET") or "").strip()
+PROJECT_MEDIA_EXTENSIONS = {
+    "cover": {".png", ".jpg", ".jpeg", ".webp", ".gif"},
+    "gallery": {".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".mov", ".webm"},
+}
 
 # --- AI model clients ---
 
@@ -2152,74 +2162,77 @@ def _update_profile_me(token: Optional[str], fields: dict):
     return {"updated": True}
 
 
+def _storage_get_client(svc_client):
+    storage = getattr(svc_client, "storage", None)
+    if callable(storage):
+        storage = storage()
+    if storage is None:
+        raise HTTPException(status_code=500, detail="Storage client unavailable")
+    return storage
+
+
+def _storage_upload_bytes(svc_client, bucket: str, dest: str, content: bytes, content_type: Optional[str] = None) -> str:
+    storage = _storage_get_client(svc_client)
+    last_err = None
+    try:
+        result = storage.from_(bucket).upload(dest, content, {"content-type": content_type or "application/octet-stream"})
+    except TypeError as exc:
+        last_err = exc
+        try:
+            result = storage.from_(bucket).upload(path=dest, file=content)
+        except Exception as exc2:
+            last_err = exc2
+            result = None
+    except Exception as exc:
+        last_err = exc
+        result = None
+    if result is None:
+        supabase_logger.exception("Upload failed: %s", last_err)
+        raise HTTPException(status_code=500, detail=f"Upload failed: {last_err}")
+    if isinstance(result, dict) and result.get("error"):
+        raise HTTPException(status_code=500, detail=f"Upload error: {result.get('error')}")
+    if getattr(result, "error", None):
+        raise HTTPException(status_code=500, detail=f"Upload error: {result.error}")
+    return dest
+
+
+def _storage_public_url(svc_client, bucket: str, path: str) -> str:
+    base_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+    storage = _storage_get_client(svc_client)
+    try:
+        res = storage.from_(bucket).get_public_url(path)
+        if isinstance(res, dict):
+            cand = res.get("publicUrl") or res.get("publicURL") or (res.get("data") or {}).get("publicUrl")
+            if cand:
+                return cand
+        elif isinstance(res, str):
+            return res
+        else:
+            for attr in ("public_url", "publicUrl", "publicURL"):
+                if hasattr(res, attr):
+                    val = getattr(res, attr)
+                    if isinstance(val, str):
+                        return val
+    except Exception:
+        pass
+    encoded = quote(path, safe="")
+    return f"{base_url}/storage/v1/object/public/{bucket}/{encoded}"
+
+
+def _read_upload_bytes(file_obj) -> bytes:
+    try:
+        file_obj.file.seek(0)
+        return file_obj.file.read()
+    except Exception:
+        try:
+            return file_obj.read()
+        except Exception:
+            return b""
+
+
+
 def _upload_profile_asset(token: Optional[str], kind: str, file):
     from uuid import uuid4
-
-    def _upload_file_to_bucket(svc_client, bucket: str, file_obj, dest_folder: str = "profiles") -> str:
-        filename = file_obj.filename or ("upload-" + uuid4().hex)
-        ext_local = os.path.splitext(filename)[1]
-        dest = f"{dest_folder}/{uuid4().hex}{ext_local}" if dest_folder else f"{uuid4().hex}{ext_local}"
-        # read bytes robustly
-        try:
-            file_obj.file.seek(0)
-            content = file_obj.file.read()
-        except Exception:
-            try:
-                content = file_obj.read()
-            except Exception:
-                content = b""
-        storage = getattr(svc_client, "storage", None)
-        if callable(storage):
-            storage = storage()
-        # attempt various signatures
-        last_err = None
-        try:
-            up = storage.from_(bucket).upload(dest, content, {"content-type": file_obj.content_type or "application/octet-stream"})
-        except TypeError as e:
-            last_err = e
-            try:
-                up = storage.from_(bucket).upload(path=dest, file=content)
-            except Exception as e2:
-                last_err = e2
-                up = None
-        except Exception as e:
-            last_err = e
-            up = None
-        if up is None:
-            supabase_logger.exception("Upload failed: %s", last_err)
-            raise HTTPException(status_code=500, detail=f"Upload failed: {last_err}")
-        # detect error response forms
-        if isinstance(up, dict) and up.get("error"):
-            raise HTTPException(status_code=500, detail=f"Upload error: {up.get('error')}")
-        if getattr(up, "error", None):
-            raise HTTPException(status_code=500, detail=f"Upload error: {up.error}")
-        return dest
-
-    def _get_public_url(svc_client, bucket: str, path: str) -> str:
-        base_url = os.getenv("SUPABASE_URL", "").rstrip("/")
-        storage = getattr(svc_client, "storage", None)
-        if callable(storage):
-            storage = storage()
-        try:
-            res = storage.from_(bucket).get_public_url(path)
-            # handle dict or object or str
-            if isinstance(res, dict):
-                cand = res.get("publicUrl") or res.get("publicURL") or (res.get("data") or {}).get("publicUrl")
-                if cand:
-                    return cand
-            elif isinstance(res, str):
-                return res
-            else:
-                for attr in ("public_url", "publicUrl", "publicURL"):
-                    if hasattr(res, attr):
-                        val = getattr(res, attr)
-                        if isinstance(val, str):
-                            return val
-        except Exception:
-            pass
-        # fallback manual composition
-        encoded = quote(path, safe="")
-        return f"{base_url}/storage/v1/object/public/{bucket}/{encoded}"
 
     _, profile_id = _require_user_and_profile(token)
     supabase = get_service_client()
@@ -2229,20 +2242,30 @@ def _upload_profile_asset(token: Optional[str], kind: str, file):
 
     filename = file.filename or ("upload-" + uuid4().hex)
     ext = os.path.splitext(filename)[1].lower()
-    if kind == "image" and ext not in {".png", ".jpg", ".jpeg", ".webp"}:
+    media_kind = (kind or "").strip().lower()
+    if media_kind == "image" and ext not in {".png", ".jpg", ".jpeg", ".webp"}:
         raise HTTPException(status_code=400, detail="Invalid image type")
-    if kind == "resume" and ext not in {".pdf", ".doc", ".docx"}:
+    if media_kind == "resume" and ext not in {".pdf", ".doc", ".docx"}:
         raise HTTPException(status_code=400, detail="Invalid resume type")
 
-    # Perform upload
-    storage_path = _upload_file_to_bucket(supabase, bucket, file, dest_folder=f"profiles/{profile_id}")
-    public_url = _get_public_url(supabase, bucket, storage_path)
+    blob = _read_upload_bytes(file)
+    if not blob:
+        raise HTTPException(status_code=400, detail="Empty upload")
 
-    col = "profile_image_url" if kind == "image" else "resume_url"
-    upd = supabase.table("user_profiles").update({col: public_url}).eq("id", profile_id).execute()
+    safe_ext = ext if ext else (".png" if media_kind == "image" else ".pdf")
+    dest_folder = f"profiles/{profile_id}"
+    dest = f"{dest_folder}/{uuid4().hex}{safe_ext}"
+    _storage_upload_bytes(supabase, bucket, dest, blob, file.content_type)
+    public_url = _storage_public_url(supabase, bucket, dest)
+
+    column = "profile_image_url" if media_kind == "image" else "resume_url"
+    upd = supabase.table("user_profiles").update({column: public_url}).eq("id", profile_id).execute()
     if getattr(upd, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (save url): {upd.error}")
-    return {"kind": kind, "url": public_url, "path": storage_path}
+        raise HTTPException(status_code=500, detail=f"Supabase error (update profile asset): {upd.error}")
+
+    return {"kind": media_kind, "url": public_url, "path": dest}
+
+
 
 
 def get_completed_topic_ids(token: Optional[str]):
@@ -2380,6 +2403,901 @@ def get_progress_summary(token: Optional[str]):
         })
 
     return {"courses": summary}
+
+
+# --- Projects & collaboration API ------------------------------------------
+
+
+def _listify(value: Any) -> List[Any]:
+    if isinstance(value, list):
+        return value
+    if value in (None, ""):
+        return []
+    return [value]
+
+
+class ProjectBasics(BaseModel):
+    title: str
+    tagline: str
+    domains: List[str] = Field(default_factory=list)
+    description: str
+    tech_stack: List[str] = Field(default_factory=list)
+
+
+class ProjectStatus(BaseModel):
+    status: str = ""
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    milestones: List[str] = Field(default_factory=list)
+
+
+class ProjectLinks(BaseModel):
+    github: Optional[str] = None
+    demo: Optional[str] = None
+    video: Optional[str] = None
+    docs: Optional[str] = None
+
+
+class ProjectFunding(BaseModel):
+    stage: Optional[str] = None
+    budget_inr: Optional[int] = None
+    use: Optional[str] = None
+
+
+class ProjectTeam(BaseModel):
+    members: List[str] = Field(default_factory=list)
+    roles_hiring: List[str] = Field(default_factory=list)
+    compensation: Optional[str] = None
+    hours: Optional[str] = None
+    role_desc: Optional[str] = None
+
+
+class ProjectIn(BaseModel):
+    basics: ProjectBasics
+    status: ProjectStatus
+    links: ProjectLinks
+    funding: ProjectFunding
+    team: ProjectTeam
+
+
+class ProjectOut(ProjectIn):
+    id: str
+    user_id: str
+    cover_url: Optional[str] = None
+    gallery_urls: List[str] = Field(default_factory=list)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ProjectApplicationIn(BaseModel):
+    message: Optional[str] = None
+
+
+class ProjectApplicationOut(BaseModel):
+    id: str
+    project_id: str
+    applicant_user_id: str
+    message: Optional[str] = None
+    status: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ProjectApplicationUpdateIn(BaseModel):
+    status: str = Field(..., pattern=r"^(pending|accepted|rejected)$")
+
+class CollabMessageIn(BaseModel):
+    content: str
+
+
+class CollabMessageOut(BaseModel):
+    id: str
+    application_id: str
+    sender_user_id: str
+    content: str
+    created_at: Optional[str] = None
+
+
+class SkillTestStartIn(BaseModel):
+    skill: str
+
+
+class SkillTestStartOut(BaseModel):
+    session_id: str
+    skill: str
+    questions: List[Dict[str, Any]]
+
+
+class SkillAnswer(BaseModel):
+    question_id: str
+    response: str
+
+
+class SkillTestSubmitIn(BaseModel):
+    answers: List[SkillAnswer]
+
+
+class SkillVerificationOut(BaseModel):
+    skill: str
+    best_score: Optional[float] = None
+    attempts: int = 0
+    status: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+
+def _project_payload_from_body(body: ProjectIn, user_id: str) -> dict:
+    basics = body.basics
+    status = body.status
+    links = body.links
+    funding = body.funding
+    team = body.team
+
+    def clean_list(items: Optional[List[str]]) -> List[str]:
+        return [item.strip() for item in (items or []) if isinstance(item, str) and item.strip()]
+
+    payload = {
+        "user_id": user_id,
+        "title": (basics.title or "").strip(),
+        "tagline": (basics.tagline or "").strip(),
+        "domains": clean_list(basics.domains),
+        "description": (basics.description or "").strip(),
+        "tech_stack": clean_list(basics.tech_stack),
+        "proj_status": (status.status or "").strip(),
+        "start_date": status.start_date or None,
+        "end_date": status.end_date or None,
+        "milestones": clean_list(status.milestones),
+        "github": (links.github or None),
+        "demo": (links.demo or None),
+        "video": (links.video or None),
+        "docs": (links.docs or None),
+        "fund_stage": (funding.stage or None),
+        "fund_budget_inr": int(funding.budget_inr) if funding.budget_inr is not None else None,
+        "fund_use": (funding.use or None),
+        "team_members": clean_list(team.members),
+        "roles_hiring": clean_list(team.roles_hiring),
+        "compensation": (team.compensation or None),
+        "hours": (team.hours or None),
+        "role_desc": (team.role_desc or None),
+    }
+    return payload
+
+
+def _project_row_to_out(row: dict) -> dict:
+    if not row:
+        raise HTTPException(status_code=500, detail="Project payload missing")
+    basics = ProjectBasics(
+        title=row.get("title") or "",
+        tagline=row.get("tagline") or "",
+        domains=_listify(row.get("domains")),
+        description=row.get("description") or "",
+        tech_stack=_listify(row.get("tech_stack")),
+    )
+    status = ProjectStatus(
+        status=row.get("proj_status") or "",
+        start_date=row.get("start_date"),
+        end_date=row.get("end_date"),
+        milestones=_listify(row.get("milestones")),
+    )
+    links = ProjectLinks(
+        github=row.get("github"),
+        demo=row.get("demo"),
+        video=row.get("video"),
+        docs=row.get("docs"),
+    )
+    funding = ProjectFunding(
+        stage=row.get("fund_stage"),
+        budget_inr=row.get("fund_budget_inr"),
+        use=row.get("fund_use"),
+    )
+    team = ProjectTeam(
+        members=_listify(row.get("team_members")),
+        roles_hiring=_listify(row.get("roles_hiring")),
+        compensation=row.get("compensation"),
+        hours=row.get("hours"),
+        role_desc=row.get("role_desc"),
+    )
+    project = ProjectOut(
+        basics=basics,
+        status=status,
+        links=links,
+        funding=funding,
+        team=team,
+        id=str(row.get("id")),
+        user_id=str(row.get("user_id")),
+        cover_url=row.get("cover_url"),
+        gallery_urls=_listify(row.get("gallery_urls")),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+    )
+    return project.dict()
+
+
+def _application_row_to_out(row: dict) -> dict:
+    app = ProjectApplicationOut(
+        id=str(row.get("id")),
+        project_id=str(row.get("project_id")),
+        applicant_user_id=str(row.get("applicant_user_id")),
+        message=row.get("message"),
+        status=str(row.get("status") or "pending"),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+    )
+    return app.dict()
+
+
+def _ensure_project_exists(project_id: str) -> dict:
+    supabase = get_service_client()
+    res = supabase.table(PROJECTS_TABLE).select("*").eq("id", project_id).single().execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    data = getattr(res, "data", None)
+    if not data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return data
+
+
+def _ensure_owner(project_id: str, user_id: str) -> dict:
+    project = _ensure_project_exists(project_id)
+    if str(project.get("user_id")) != str(user_id):
+        raise HTTPException(status_code=403, detail="Not your project")
+    return project
+
+
+def _normalize_skill(skill: str) -> str:
+    return (skill or "").strip()
+
+
+def _fallback_language_for_skill(skill: str) -> str:
+    low = (skill or "").lower()
+    if any(key in low for key in ("python", "pandas", "django")):
+        return "python"
+    if any(key in low for key in ("javascript", "react", "node")):
+        return "javascript"
+    if "java" in low:
+        return "java"
+    if "c++" in low or "cpp" in low:
+        return "cpp"
+    if "sql" in low:
+        return "sql"
+    return "python"
+
+
+def _fallback_questions(skill: str) -> List[Dict[str, Any]]:
+    language = _fallback_language_for_skill(skill)
+    base = skill or "the skill"
+    skill_lower = (skill or "skill").lower()
+    keywords_map = {
+        "python": ["def", "list", "dict"],
+        "javascript": ["function", "const", "array"],
+        "java": ["class", "public", "method"],
+        "cpp": ["vector", "std", "loop"],
+        "sql": ["select", "where", "join"],
+    }
+    keywords = keywords_map.get(language, [skill_lower, "project", "team"])
+    qid_prefix = uuid.uuid4().hex
+    return [
+        {
+            "id": f"{qid_prefix}-mc",
+            "kind": "ceq",
+            "prompt": f"Which option best captures a practical use-case of {base}?",
+            "options": [
+                "A. Documenting theory without implementation",
+                "B. Building or iterating on a real project with measurable outcomes",
+                "C. Collecting inspirational quotes",
+                "D. Focusing only on certifications",
+            ],
+            "answer_key": {"correct_option": "b"},
+        },
+        {
+            "id": f"{qid_prefix}-code",
+            "kind": "coding",
+            "language": language,
+            "prompt": f"Write a short {language} snippet that demonstrates how you would track progress while learning {base}. Include a test or printed output.",
+            "answer_key": {"keywords": keywords, "min_hits": max(2, len(keywords) - 1)},
+        },
+        {
+            "id": f"{qid_prefix}-reflect",
+            "kind": "coding",
+            "language": language,
+            "prompt": f"Describe in {language} (code or structured comments) how you would onboard a collaborator to your {base} project, mentioning tools, communication, and deliverables.",
+            "answer_key": {"keywords": ["plan", "deliverable", "feedback", base.lower()], "min_hits": 2},
+        },
+    ]
+
+
+def _public_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for q in questions:
+        out.append({k: v for k, v in q.items() if k != "answer_key"})
+    return out
+
+
+def _grade_skill_answers(questions: List[Dict[str, Any]], answers: Dict[str, str]) -> Dict[str, Any]:
+    details: List[Dict[str, Any]] = []
+    total = 0.0
+    counted = 0
+    for question in questions:
+        qid = question.get("id")
+        if not qid:
+            continue
+        kind = question.get("kind") or ""
+        response = (answers.get(qid) or "").strip()
+        info: Dict[str, Any] = {"question_id": qid, "kind": kind, "score": 0.0}
+        if not response:
+            info["feedback"] = "No answer provided."
+            details.append(info)
+            continue
+        score = 0.0
+        if kind == "ceq":
+            expected = (question.get("answer_key") or {}).get("correct_option", "").strip().lower()
+            if expected and response.lower().startswith(expected):
+                score = 100.0
+                info["feedback"] = "Correct option."
+            else:
+                info["feedback"] = f"Expected option {expected.upper() or '?'}"
+        else:
+            key = (question.get("answer_key") or {})
+            keywords = key.get("keywords") if isinstance(key, dict) else None
+            if keywords:
+                text_lower = response.lower()
+                hits = sum(1 for kw in keywords if isinstance(kw, str) and kw.lower() in text_lower)
+                min_hits = key.get("min_hits") or len(keywords)
+                score = min(100.0, (hits / max(1, min_hits)) * 100.0)
+                info["matched_keywords"] = hits
+                info["keywords"] = keywords
+                info["feedback"] = f"Matched {hits} of {len(keywords)} keywords."
+            else:
+                score = 50.0
+                info["feedback"] = "Heuristic score (no rubric)."
+        score = max(0.0, min(100.0, score))
+        info["score"] = round(score, 2)
+        details.append(info)
+        total += score
+        counted += 1
+    final_score = round(total / counted, 2) if counted else 0.0
+    status = "verified" if final_score >= 70 else "needs_review"
+    return {"score": final_score, "status": status, "details": details}
+
+
+def _insert_skill_test_session(user_id: str, skill: str, questions: List[Dict[str, Any]]) -> str:
+    supabase = get_service_client()
+    res = supabase.table(SKILL_TESTS_TABLE).insert({
+        "user_id": user_id,
+        "skill": skill,
+        "questions": questions,
+        "status": "active",
+    }).execute()
+    data = getattr(res, "data", None)
+    if isinstance(data, list) and data:
+        return data[0].get("id")
+    if isinstance(data, dict) and data.get("id"):
+        return data.get("id")
+    raise HTTPException(status_code=500, detail="Unable to create test session")
+
+
+def _get_skill_test_session(session_id: str) -> Optional[dict]:
+    supabase = get_service_client()
+    res = supabase.table(SKILL_TESTS_TABLE).select("*").eq("id", session_id).single().execute()
+    if getattr(res, "error", None):
+        return None
+    return getattr(res, "data", None)
+
+
+def _update_skill_test_submission(session_id: str, result: Dict[str, Any]):
+    supabase = get_service_client()
+    supabase.table(SKILL_TESTS_TABLE).update({
+        "status": "completed",
+        "score": result.get("score"),
+        "result": result,
+        "submitted_at": datetime.utcnow().isoformat() + "Z",
+    }).eq("id", session_id).execute()
+
+
+def _upsert_skill_verification(user_id: str, skill: str, score: float):
+    supabase = get_service_client()
+    payload = {
+        "user_id": user_id,
+        "skill": skill,
+        "best_score": score,
+        "attempts": 1,
+        "status": "verified" if score >= 70 else "needs_review",
+    }
+    try:
+        supabase.table(SKILL_VERIFICATIONS_TABLE).upsert(payload, on_conflict="user_id,skill").execute()
+    except Exception:
+        existing = supabase.table(SKILL_VERIFICATIONS_TABLE).select("best_score,attempts").eq("user_id", user_id).eq("skill", skill).single().execute()
+        row = getattr(existing, "data", None)
+        if row:
+            best = max(float(row.get("best_score") or 0.0), score)
+            attempts = int(row.get("attempts") or 0) + 1
+            supabase.table(SKILL_VERIFICATIONS_TABLE).update({
+                "best_score": best,
+                "attempts": attempts,
+                "status": "verified" if best >= 70 else "needs_review",
+            }).eq("user_id", user_id).eq("skill", skill).execute()
+        else:
+            supabase.table(SKILL_VERIFICATIONS_TABLE).insert(payload).execute()
+
+
+def _recompute_profile_verification_score(user_id: str):
+    supabase = get_service_client()
+    res = supabase.table(SKILL_VERIFICATIONS_TABLE).select("best_score").eq("user_id", user_id).execute()
+    if getattr(res, "error", None):
+        return
+    scores = [float(row.get("best_score") or 0.0) for row in (res.data or []) if row]
+    if not scores:
+        agg = 0
+    else:
+        top = sorted(scores, reverse=True)[:3]
+        agg = round(sum(top) / len(top))
+    try:
+        supabase.table("user_profiles").update({"verification_score": agg}).eq("auth_user_id", user_id).execute()
+    except Exception:
+        pass
+
+
+
+projects_router = APIRouter()
+
+
+@projects_router.post("/api/projects", response_model=ProjectOut)
+def create_project(body: ProjectIn, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    supabase = get_service_client()
+    payload = _project_payload_from_body(body, user_id)
+    res = supabase.table(PROJECTS_TABLE).insert(payload).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    data = getattr(res, "data", None)
+    if isinstance(data, list) and data:
+        return _project_row_to_out(data[0])
+    if isinstance(data, dict):
+        return _project_row_to_out(data)
+    raise HTTPException(status_code=500, detail="Unexpected insert response")
+
+
+@projects_router.get("/api/projects", response_model=List[ProjectOut])
+def list_projects(limit: int = 50):
+    supabase = get_service_client()
+    res = (
+        supabase.table(PROJECTS_TABLE)
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(max(1, min(200, limit)))
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    rows = getattr(res, "data", []) or []
+    return [_project_row_to_out(row) for row in rows]
+
+
+@projects_router.get("/api/projects/{project_id}", response_model=ProjectOut)
+def get_project(project_id: str):
+    row = _ensure_project_exists(project_id)
+    return _project_row_to_out(row)
+
+
+@projects_router.post("/api/projects/{project_id}/upload")
+async def upload_project_media(
+    project_id: str,
+    kind: str = Form(...),
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    if not PROJECTS_BUCKET:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_PROJECTS_BUCKET or SUPABASE_BUCKET")
+
+    project = _ensure_owner(project_id, user_id)
+    media_kind = (kind or "").strip().lower()
+    if media_kind not in PROJECT_MEDIA_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported media kind")
+
+    extension = os.path.splitext(file.filename or "")[1].lower()
+    allowed = PROJECT_MEDIA_EXTENSIONS[media_kind]
+    if extension and allowed and extension not in allowed:
+        raise HTTPException(status_code=400, detail="File type not allowed")
+
+    blob = await file.read()
+    if not blob:
+        raise HTTPException(status_code=400, detail="Empty upload")
+
+    safe_ext = extension or (".png" if media_kind == "cover" else ".bin")
+    storage_path = f"project_assets/{user_id}/{project_id}/{media_kind}_{int(time.time())}{safe_ext}"
+    supabase = get_service_client()
+    _storage_upload_bytes(supabase, PROJECTS_BUCKET, storage_path, blob, file.content_type)
+    public_url = _storage_public_url(supabase, PROJECTS_BUCKET, storage_path)
+
+    update: Dict[str, Any]
+    if media_kind == "cover":
+        update = {"cover_url": public_url}
+    else:
+        gallery = _listify(project.get("gallery_urls"))
+        gallery.append(public_url)
+        update = {"gallery_urls": gallery}
+
+    supabase.table(PROJECTS_TABLE).update(update).eq("id", project_id).execute()
+    refreshed = _ensure_project_exists(project_id)
+    return {
+        "project": _project_row_to_out(refreshed),
+        "uploaded": {"kind": media_kind, "url": public_url, "path": storage_path},
+    }
+
+
+@projects_router.post("/api/projects/{project_id}/apply")
+def apply_to_project(project_id: str, body: ProjectApplicationIn = None, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    project = _ensure_project_exists(project_id)
+    if str(project.get("user_id")) == str(user_id):
+        raise HTTPException(status_code=400, detail="You cannot apply to your own project")
+
+    supabase = get_service_client()
+    existing = (
+        supabase.table(PROJECT_APPLICATIONS_TABLE)
+        .select("*")
+        .eq("project_id", project_id)
+        .eq("applicant_user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(existing, "data", []) or []
+    if rows:
+        return {"ok": True, "status": rows[0].get("status") or "pending"}
+
+    payload = {
+        "project_id": project_id,
+        "applicant_user_id": user_id,
+        "message": ((body.message if body else None) or None),
+        "status": "pending",
+    }
+    res = supabase.table(PROJECT_APPLICATIONS_TABLE).insert(payload).execute()
+    if getattr(res, "error", None):
+        msg = str(res.error).lower()
+        if "duplicate" in msg or "unique" in msg:
+            return {"ok": True}
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    data = getattr(res, "data", None)
+    if isinstance(data, list) and data:
+        return {"ok": True, "status": data[0].get("status") or "pending"}
+    return {"ok": True}
+
+
+@projects_router.get("/api/projects/{project_id}/applications", response_model=List[ProjectApplicationOut])
+def list_project_applications(project_id: str, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    _ensure_owner(project_id, user_id)
+    supabase = get_service_client()
+    res = (
+        supabase.table(PROJECT_APPLICATIONS_TABLE)
+        .select("*")
+        .eq("project_id", project_id)
+        .order("created_at", desc=True)
+        .limit(1000)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    rows = getattr(res, "data", []) or []
+    return [_application_row_to_out(row) for row in rows]
+
+
+@projects_router.get("/api/projects/{project_id}/applications/me")
+def get_my_project_application(project_id: str, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    supabase = get_service_client()
+    res = (
+        supabase.table(PROJECT_APPLICATIONS_TABLE)
+        .select("*")
+        .eq("project_id", project_id)
+        .eq("applicant_user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(res, "data", []) or []
+    if not rows:
+        return {"applied": False}
+    return {"applied": True, "application": _application_row_to_out(rows[0])}
+
+
+@projects_router.get("/api/projects/{project_id}/applications/{application_id}", response_model=ProjectApplicationOut)
+def get_project_application(project_id: str, application_id: str, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    _ensure_owner(project_id, user_id)
+    supabase = get_service_client()
+    res = (
+        supabase.table(PROJECT_APPLICATIONS_TABLE)
+        .select("*")
+        .eq("id", application_id)
+        .eq("project_id", project_id)
+        .single()
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    data = getattr(res, "data", None)
+    if not data:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return _application_row_to_out(data)
+
+
+@projects_router.patch("/api/projects/{project_id}/applications/{application_id}")
+def update_project_application(project_id: str, application_id: str, body: ProjectApplicationUpdateIn, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    _ensure_owner(project_id, user_id)
+    supabase = get_service_client()
+    supabase.table(PROJECT_APPLICATIONS_TABLE).update({"status": body.status}).eq("id", application_id).eq("project_id", project_id).execute()
+    res = (
+        supabase.table(PROJECT_APPLICATIONS_TABLE)
+        .select("*")
+        .eq("id", application_id)
+        .eq("project_id", project_id)
+        .single()
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    row = getattr(res, "data", None)
+    if not row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return _application_row_to_out(row)
+
+
+@projects_router.get("/api/applications/incoming")
+def list_incoming_applications(authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    supabase = get_service_client()
+    projects_res = supabase.table(PROJECTS_TABLE).select("id,title,cover_url").eq("user_id", user_id).limit(1000).execute()
+    if getattr(projects_res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {projects_res.error}")
+    projects = getattr(projects_res, "data", []) or []
+    project_ids = [p.get("id") for p in projects if p and p.get("id")]
+    if not project_ids:
+        return {"applications": [], "projects": []}
+    apps_res = (
+        supabase.table(PROJECT_APPLICATIONS_TABLE)
+        .select("*")
+        .in_("project_id", project_ids)
+        .order("created_at", desc=True)
+        .limit(2000)
+        .execute()
+    )
+    if getattr(apps_res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {apps_res.error}")
+    apps = getattr(apps_res, "data", []) or []
+    return {
+        "applications": [_application_row_to_out(row) for row in apps],
+        "projects": [{"id": p.get("id"), "title": p.get("title"), "cover_url": p.get("cover_url")} for p in projects if p],
+    }
+
+
+@projects_router.get("/api/applications/mine")
+def list_my_applications(authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    supabase = get_service_client()
+    apps_res = (
+        supabase.table(PROJECT_APPLICATIONS_TABLE)
+        .select("*")
+        .eq("applicant_user_id", user_id)
+        .order("created_at", desc=True)
+        .limit(2000)
+        .execute()
+    )
+    if getattr(apps_res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {apps_res.error}")
+    apps = getattr(apps_res, "data", []) or []
+    if not apps:
+        return {"applications": [], "projects": []}
+    project_ids = list({row.get("project_id") for row in apps if row and row.get("project_id")})
+    projects = []
+    if project_ids:
+        proj_res = (
+            supabase.table(PROJECTS_TABLE)
+            .select("id,title,cover_url")
+            .in_("id", project_ids)
+            .limit(2000)
+            .execute()
+        )
+        if getattr(proj_res, "data", None):
+            projects = [{"id": r.get("id"), "title": r.get("title"), "cover_url": r.get("cover_url")} for r in proj_res.data if r]
+    return {
+        "applications": [_application_row_to_out(row) for row in apps],
+        "projects": projects,
+    }
+
+
+@projects_router.get("/api/applications/{application_id}")
+def get_application_by_id(application_id: str, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    supabase = get_service_client()
+    res = supabase.table(PROJECT_APPLICATIONS_TABLE).select("*").eq("id", application_id).single().execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    row = getattr(res, "data", None)
+    if not row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    project = _ensure_project_exists(str(row.get("project_id")))
+    if str(row.get("applicant_user_id")) != str(user_id) and str(project.get("user_id")) != str(user_id):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    return _application_row_to_out(row)
+
+
+@projects_router.get("/api/collab/{application_id}/messages")
+def list_collab_messages(application_id: str, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    supabase = get_service_client()
+    app_res = supabase.table(PROJECT_APPLICATIONS_TABLE).select("*").eq("id", application_id).single().execute()
+    if getattr(app_res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {app_res.error}")
+    app_row = getattr(app_res, "data", None)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    project = _ensure_project_exists(str(app_row.get("project_id")))
+    if str(app_row.get("status", "")).lower() != "accepted":
+        raise HTTPException(status_code=400, detail="Collaboration opens after acceptance")
+    if str(app_row.get("applicant_user_id")) != str(user_id) and str(project.get("user_id")) != str(user_id):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    msgs_res = (
+        supabase.table(PROJECT_COLLAB_TABLE)
+        .select("*")
+        .eq("application_id", application_id)
+        .order("created_at")
+        .limit(500)
+        .execute()
+    )
+    if getattr(msgs_res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {msgs_res.error}")
+    msgs = getattr(msgs_res, "data", []) or []
+    return {"messages": msgs}
+
+
+@projects_router.post("/api/collab/{application_id}/messages")
+def send_collab_message(application_id: str, body: CollabMessageIn, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    content = (body.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Message content required")
+    supabase = get_service_client()
+    app_res = supabase.table(PROJECT_APPLICATIONS_TABLE).select("*").eq("id", application_id).single().execute()
+    if getattr(app_res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {app_res.error}")
+    app_row = getattr(app_res, "data", None)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    project = _ensure_project_exists(str(app_row.get("project_id")))
+    if str(app_row.get("status", "")).lower() != "accepted":
+        raise HTTPException(status_code=400, detail="Collaboration opens after acceptance")
+    if str(app_row.get("applicant_user_id")) != str(user_id) and str(project.get("user_id")) != str(user_id):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    res = supabase.table(PROJECT_COLLAB_TABLE).insert({
+        "application_id": application_id,
+        "sender_user_id": user_id,
+        "content": content,
+    }).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    data = getattr(res, "data", None)
+    row = data[0] if isinstance(data, list) and data else data
+    return {"ok": True, "message": row}
+
+
+@projects_router.get("/api/public/profiles/{user_id}")
+def get_public_profile(user_id: str):
+    supabase = get_service_client()
+    res = (
+        supabase.table("user_profiles")
+        .select(
+            "auth_user_id,name,profile_image_url,bio,headline,location,linkedin,github,leetcode,technologies,skills,certifications,languages,interests,project_info,publications,achievements,experience,verification_score"
+        )
+        .eq("auth_user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    row = dict(res.data[0])
+    row["user_id"] = row.pop("auth_user_id")
+    return row
+
+
+@projects_router.get("/api/public/skills/verifications/{user_id}", response_model=List[SkillVerificationOut])
+def list_public_skill_verifications(user_id: str):
+    supabase = get_service_client()
+    res = (
+        supabase.table(SKILL_VERIFICATIONS_TABLE)
+        .select("skill,best_score,attempts,status,updated_at")
+        .eq("user_id", user_id)
+        .order("best_score", desc=True)
+        .order("updated_at", desc=True)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    rows = getattr(res, "data", []) or []
+    return [SkillVerificationOut(**{**row, "best_score": float(row.get("best_score") or 0.0)}).dict() for row in rows]
+
+
+@projects_router.get("/api/skills/verifications", response_model=List[SkillVerificationOut])
+def list_my_skill_verifications(authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    supabase = get_service_client()
+    res = (
+        supabase.table(SKILL_VERIFICATIONS_TABLE)
+        .select("skill,best_score,attempts,status,updated_at")
+        .eq("user_id", user_id)
+        .order("best_score", desc=True)
+        .order("updated_at", desc=True)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=400, detail=f"Supabase error: {res.error}")
+    rows = getattr(res, "data", []) or []
+    return [SkillVerificationOut(**{**row, "best_score": float(row.get("best_score") or 0.0)}).dict() for row in rows]
+
+
+@projects_router.post("/api/skills/tests/start", response_model=SkillTestStartOut)
+def start_skill_test(body: SkillTestStartIn, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    skill = _normalize_skill(body.skill)
+    if not skill:
+        raise HTTPException(status_code=400, detail="Skill is required")
+    questions = _fallback_questions(skill)
+    session_id = _insert_skill_test_session(user_id, skill, questions)
+    public = _public_questions(questions)
+    return {"session_id": session_id, "skill": skill, "questions": public}
+
+
+@projects_router.post("/api/skills/tests/{session_id}/submit")
+def submit_skill_test(session_id: str, body: SkillTestSubmitIn, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id, _ = _require_user_and_profile(token)
+    session = _get_skill_test_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if str(session.get("user_id")) != str(user_id):
+        raise HTTPException(status_code=403, detail="Not your session")
+    if (session.get("status") or "").lower() == "completed" and session.get("result"):
+        return session.get("result")
+    questions = session.get("questions") or []
+    answers = {ans.question_id: (ans.response or "").strip() for ans in (body.answers or []) if ans.question_id}
+    result = _grade_skill_answers(questions, answers)
+    _update_skill_test_submission(session_id, result)
+    score = float(result.get("score") or 0.0)
+    skill_name = session.get("skill") or ""
+    if skill_name:
+        _upsert_skill_verification(user_id, skill_name, score)
+        _recompute_profile_verification_score(user_id)
+    return result
+
+
+@projects_router.get("/api/profile")
+def get_profile_compat(authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    return _get_profile_me(token)
+
+
+@projects_router.post("/api/profile")
+def update_profile_compat(payload: dict, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    _update_profile_me(token, payload or {})
+    return _get_profile_me(token)
 
 # --- Academics API ---
 
@@ -2613,7 +3531,7 @@ def update_profile_me(payload: ProfileUpdateIn, authorization: Optional[str] = H
 
 @academics_router.post("/api/profile/upload", summary="Upload profile image or resume and save URL")
 def upload_profile_asset(
-    kind: str = Form(..., regex=r"^(image|resume)$"),
+    kind: str = Form(..., pattern=r"^(image|resume)$"),  # use pattern instead of regex
     file: UploadFile = File(...),
     authorization: Optional[str] = Header(default=None),
 ):
@@ -2887,6 +3805,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(projects_router)
     app.include_router(notes_router)
     app.include_router(academics_router)
 
