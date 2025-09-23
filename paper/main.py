@@ -3711,6 +3711,7 @@ def api_transform_note(payload: dict):
 
 
 @notes_router.post("/generate")
+@notes_router.post("/api/notes/generate")
 async def generate(payload: dict):
     topic = (payload or {}).get("topic", "").strip()
     force = bool((payload or {}).get("force", False))
@@ -3739,6 +3740,7 @@ async def generate(payload: dict):
 
 
 @notes_router.get("/generate/stream")
+@notes_router.get("/api/notes/generate/stream")
 async def generate_stream(topic: str, force: bool = False):
     async def event_source() -> AsyncGenerator[bytes, None]:
         yield b"event: open\n\n"
@@ -3794,11 +3796,13 @@ async def generate_stream(topic: str, force: bool = False):
 
 
 @notes_router.get("/notes")
+@notes_router.get("/api/notes")
 def api_list_notes():
     return {"items": list_notes()}
 
 
 @notes_router.post("/notes")
+@notes_router.post("/api/notes")
 def api_create_note(payload: dict):
     topic = (payload or {}).get("topic", "").strip() or "Untitled"
     markdown = (payload or {}).get("markdown", "")
@@ -3807,6 +3811,7 @@ def api_create_note(payload: dict):
 
 
 @notes_router.get("/notes/{note_id}")
+@notes_router.get("/api/notes/{note_id}")
 def api_read_note(note_id: str):
     try:
         return read_note(note_id)
@@ -3815,6 +3820,7 @@ def api_read_note(note_id: str):
 
 
 @notes_router.put("/notes/{note_id}")
+@notes_router.put("/api/notes/{note_id}")
 def api_update_note(note_id: str, payload: dict):
     markdown = (payload or {}).get("markdown", "")
     try:
@@ -3824,6 +3830,7 @@ def api_update_note(note_id: str, payload: dict):
 
 
 @notes_router.get("/notes/{note_id}/download")
+@notes_router.get("/api/notes/{note_id}/download")
 def api_download_note(note_id: str):
     path = note_path(note_id)
     if not path or not os.path.isfile(path):
@@ -3832,6 +3839,7 @@ def api_download_note(note_id: str):
 
 
 @notes_router.get("/notes/{note_id}/pdf")
+@notes_router.get("/api/notes/{note_id}/pdf")
 def api_note_pdf(note_id: str):
     try:
         data = read_note(note_id)
@@ -3851,6 +3859,7 @@ def api_note_pdf(note_id: str):
 
 
 @notes_router.post("/pdf")
+@notes_router.post("/api/pdf")
 def api_pdf_from_markdown(payload: dict):
     markdown = (payload or {}).get("markdown", "")
     title = (payload or {}).get("title", "notes").strip() or "notes"

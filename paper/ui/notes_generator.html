@@ -310,25 +310,6 @@
           <button id="themeBtn"
             class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)] transition"
             style="border-color: var(--outline)" title="Toggle theme">Dark</button>
-          <a id="navProfile" href="/paper/ui/profile.html" class="hidden h-9 w-9 rounded-xl overflow-hidden border"
-            style="border-color: var(--outline)" title="Profile">
-            <img id="navAvatarImg" alt="" class="hidden h-full w-full object-cover" />
-            <div id="navAvatarInitials"
-              class="grid place-items-center h-full w-full bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 text-white font-semibold">
-              U</div>
-          </a>
-          <button id="navSignOut" title="Sign out" aria-label="Sign out"
-            class="hidden ripple inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-[var(--brand-soft)] transition text-sm"
-            style="border-color: var(--outline)">
-            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M15 12H3" />
-              <path d="M15 12l-4-4" />
-              <path d="M15 12l-4 4" />
-              <path d="M21 7v10a2 2 0 0 1-2 2h-6" />
-            </svg>
-            <span>Sign Out</span>
-          </button>
         </div>
       </div>
     </div>
@@ -592,32 +573,6 @@
   </style>
 
   <script>
-      // ===== Auth avatar + sign-out in header =====
-      (function initAuthNav() {
-        const token = (() => { try { return localStorage.getItem('px_token'); } catch { return null; } })();
-        const navProfile = document.getElementById('navProfile');
-        const navSignOut = document.getElementById('navSignOut');
-        if (!token) { return; }
-        try {
-          navProfile?.classList.remove('hidden');
-          navSignOut?.classList.remove('hidden');
-          const base = (window.API_BASE || (window.location.origin || 'http://localhost:8000')).replace(/\/$/, '');
-          fetch(`${base}/api/me`, { headers: { 'Authorization': `Bearer ${token}` } })
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
-              if (!data) return;
-              const name = data.profile?.name || data.profile?.full_name || data.user?.email || '';
-              const initials = (name || 'U').trim().split(/\s+/).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || 'U';
-              const imgUrl = data.profile?.profile_image_url;
-              const img = document.getElementById('navAvatarImg');
-              const init = document.getElementById('navAvatarInitials');
-              if (imgUrl) { img.src = imgUrl; img.classList.remove('hidden'); init.classList.add('hidden'); }
-              else { init.textContent = initials; }
-            }).catch(() => { });
-          navSignOut?.addEventListener('click', () => { try { localStorage.removeItem('px_token'); } catch { } window.location.href = '/paper/ui/login.html'; });
-        } catch { }
-      })();
-
     // ===== Markdown / Mermaid setup =====
     mermaid.initialize({ startOnLoad: false, theme: 'default' });
     marked.use({ gfm: true, breaks: true, mangle: false, headerIds: true });
@@ -650,7 +605,6 @@
     const $wrap = document.getElementById('outputWrap');
     const $editToggle = document.getElementById('editToggle');
     const $save = document.getElementById('saveBtn');
-    const $fabSave = document.getElementById('fabSave');
     const $editor = document.getElementById('editor');
     const $meta = document.getElementById('noteMeta');
     const $snack = document.getElementById('snack');
@@ -766,7 +720,6 @@
 
     function setBusy(b) {
       $generate.disabled = b; $cancel.disabled = !b; $topic.disabled = b;
-      $fabSave.classList.toggle('hidden', b);
     }
 
     function postprocessLinks() {
@@ -1184,15 +1137,12 @@
       $output.classList.toggle('hidden', on);
       $editor.classList.toggle('hidden', !on);
       $save.classList.toggle('hidden', !on);
-      $fabSave.classList.toggle('hidden', !on);
       $editToggle.textContent = on ? 'Preview' : 'Edit';
       if (on) { $editor.value = lastMarkdown; }
       else { renderMarkdown($editor.value); }
     }
     let isEditing = false;
     $editToggle.addEventListener('click', () => { isEditing = !isEditing; setEditMode(isEditing); });
-    $fabSave.addEventListener('click', () => $save.click());
-
     $save.addEventListener('click', async () => {
       const md = $editor.value || '';
       if (!currentNoteId) {
