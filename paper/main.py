@@ -3584,6 +3584,24 @@ class ProfileUpdateIn(BaseModel):
     leetcode: Optional[str] = None
     specializations: Optional[list[str]] = None
     projects: Optional[list[dict]] = None
+    # Extended profile fields (UI sends these too)
+    headline: Optional[str] = None
+    location: Optional[str] = None
+    dob: Optional[str] = None  # YYYY-MM-DD
+    portfolio_url: Optional[str] = None
+    website: Optional[str] = None
+    twitter: Optional[str] = None
+    instagram: Optional[str] = None
+    medium: Optional[str] = None
+    technologies: Optional[str] = None
+    skills: Optional[str] = None
+    certifications: Optional[str] = None
+    languages: Optional[str] = None
+    interests: Optional[str] = None
+    achievements: Optional[str] = None
+    experience: Optional[str] = None
+    publications: Optional[str] = None
+    project_info: Optional[str] = None
     # Academic/identity fields
     semester: Optional[int] = None
     regno: Optional[str] = None
