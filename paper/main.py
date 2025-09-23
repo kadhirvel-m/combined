@@ -2105,8 +2105,70 @@ def _require_user_and_profile(token: Optional[str]) -> tuple[str, str]:
     return user_id, profile_id
 
 
+def _ensure_user_and_profile(token: Optional[str]) -> tuple[str, str]:
+    """Ensure there is a user_profiles row for the authenticated user.
+
+    Returns (auth_user_id, profile_id). Creates a minimal row if missing.
+    """
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    # Try existing profile first
+    prof_q = (
+        supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
+    )
+    if getattr(prof_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get profile): {prof_q.error}")
+    if prof_q.data:
+        return user_id, prof_q.data[0]["id"]
+
+    # Create a minimal profile using email/name from auth metadata when available
+    email = None
+    name = None
+    try:
+        auth_user = anon_client.auth.get_user(token)
+        user_obj = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+        email = (getattr(user_obj, "email", None) or (user_obj.get("email") if isinstance(user_obj, dict) else None))
+        meta = (getattr(user_obj, "user_metadata", None) or (user_obj.get("user_metadata") if isinstance(user_obj, dict) else None)) or {}
+        try:
+            name = meta.get("full_name") or meta.get("name") or meta.get("preferred_username")
+        except Exception:
+            name = None
+    except Exception:
+        pass
+
+    ins = (
+        supabase.table("user_profiles")
+        .insert({
+            "auth_user_id": user_id,
+            "email": email,
+            "name": name,
+        })
+        .execute()
+    )
+    if getattr(ins, "error", None):
+        # If a race created it already, proceed to refetch; otherwise fail
+        err_txt = str(ins.error)
+        if "duplicate" not in err_txt.lower():
+            raise HTTPException(status_code=500, detail=f"Supabase error (create profile): {ins.error}")
+
+    prof_q2 = (
+        supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
+    )
+    if getattr(prof_q2, "error", None) or not prof_q2.data:
+        raise HTTPException(status_code=500, detail=f"Supabase error (refetch profile): {getattr(prof_q2, 'error', None)}")
+    return user_id, prof_q2.data[0]["id"]
+
+
 def _get_profile_me(token: Optional[str]):
-    _, profile_id = _require_user_and_profile(token)
+    # Ensure a profile exists (creates a minimal one for OAuth users)
+    _, profile_id = _ensure_user_and_profile(token)
     supabase = get_service_client()
     prof_q = (
         supabase.table("user_profiles")
@@ -2126,7 +2188,8 @@ def _get_profile_me(token: Optional[str]):
 
 
 def _update_profile_me(token: Optional[str], fields: dict):
-    _, profile_id = _require_user_and_profile(token)
+    # Ensure a profile exists (creates a minimal one for OAuth users)
+    _, profile_id = _ensure_user_and_profile(token)
     supabase = get_service_client()
     # allow base fields first
     allowed = {
@@ -2234,7 +2297,8 @@ def _read_upload_bytes(file_obj) -> bytes:
 def _upload_profile_asset(token: Optional[str], kind: str, file):
     from uuid import uuid4
 
-    _, profile_id = _require_user_and_profile(token)
+    # Ensure a profile exists (creates a minimal one for OAuth users)
+    _, profile_id = _ensure_user_and_profile(token)
     supabase = get_service_client()
     bucket = os.getenv("SUPABASE_BUCKET", "").strip()
     if not bucket:
@@ -2269,7 +2333,8 @@ def _upload_profile_asset(token: Optional[str], kind: str, file):
 
 
 def get_completed_topic_ids(token: Optional[str]):
-    _, profile_id = _require_user_and_profile(token)
+    # Ensure a profile exists to scope progress correctly for new OAuth users
+    _, profile_id = _ensure_user_and_profile(token)
     supabase = get_service_client()
     q = (
         supabase.table("user_topic_progress")
@@ -2283,7 +2348,8 @@ def get_completed_topic_ids(token: Optional[str]):
 
 
 def toggle_topic_completion(token: Optional[str], topic_id: uuid.UUID, completed: bool):
-    _, profile_id = _require_user_and_profile(token)
+    # Ensure a profile exists for new OAuth users
+    _, profile_id = _ensure_user_and_profile(token)
     supabase = get_service_client()
     if completed:
         # Use upsert (idempotent) or gracefully ignore duplicate key errors.
@@ -2300,26 +2366,27 @@ def toggle_topic_completion(token: Optional[str], topic_id: uuid.UUID, completed
                     .insert({"user_profile_id": profile_id, "topic_id": str(topic_id)})
                     .execute()
                 )
-                # If a duplicate key error bubbles (depends on client version), ignore; else raise.
-                if getattr(resp, "error", None) and "duplicate key value" not in str(resp.error):
-                    raise HTTPException(status_code=500, detail=f"Supabase error (mark done): {resp.error}")
-        except Exception as e:
-            if "duplicate key value" in str(e):
-                # Ignore benign race / double-click condition.
-                pass
-            else:
+                if getattr(resp, "error", None):
+                    txt = str(resp.error).lower()
+                    if "duplicate" not in txt and "unique" not in txt:
+                        raise HTTPException(status_code=500, detail=f"Supabase error (mark done): {resp.error}")
+        except Exception as exc:
+            # Allow duplicate insert races silently
+            msg = str(getattr(exc, "detail", exc))
+            if not ("duplicate" in msg.lower() or "unique" in msg.lower()):
                 raise
+        return {"completed": True}
     else:
-        delr = (
+        resp = (
             supabase.table("user_topic_progress")
             .delete()
             .eq("user_profile_id", profile_id)
             .eq("topic_id", str(topic_id))
             .execute()
         )
-        if getattr(delr, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (unmark): {delr.error}")
-    return {"topic_id": str(topic_id), "completed": completed}
+        if getattr(resp, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (unmark done): {resp.error}")
+        return {"completed": False}
 
 
 def get_progress_summary(token: Optional[str]):
@@ -2913,7 +2980,7 @@ async def upload_project_media(
     public_url = _storage_public_url(supabase, PROJECTS_BUCKET, storage_path)
 
     update: Dict[str, Any]
-    if media_kind == "cover":
+    if (media_kind == "cover"):
         update = {"cover_url": public_url}
     else:
         gallery = _listify(project.get("gallery_urls"))

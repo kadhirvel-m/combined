@@ -440,6 +440,8 @@
       if (token) {
         try { localStorage.setItem('px_token', token); } catch { }
         history.replaceState(null, document.title, location.pathname + location.search);
+        // Ensure a minimal profile exists server-side
+        try { await fetch(`${apiBase}/api/profile/me`, { headers: { Authorization: `Bearer ${token}` } }); } catch {}
         // Stay here so user can complete academic details
         setStep(2);
         status.classList.remove('hidden');

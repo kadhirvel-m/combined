@@ -162,23 +162,11 @@
         try { localStorage.setItem('px_token', token); } catch { }
         // Clean the hash
         history.replaceState(null, document.title, location.pathname + location.search);
-        // Check if profile exists; if not, send to signup to complete details
+        // Ensure a minimal profile exists, then take user to profile edit
         try {
-          const res = await fetch(`${apiBase}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
-          if (res.ok) {
-            location.href = 'profile.html';
-          } else if (res.status === 404) {
-            location.href = 'signup.html';
-          } else if (res.status === 401) {
-            // token invalid; fall back to normal flow
-            status.classList.remove('hidden');
-            status.textContent = '❌ Session invalid after Google sign-in. Please try again.';
-          } else {
-            location.href = 'profile.html';
-          }
-        } catch {
-          location.href = 'profile.html';
-        }
+          await fetch(`${apiBase}/api/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
+        } catch { /* ignore */ }
+        location.href = 'profile_edit.html';
       }
     }
 
