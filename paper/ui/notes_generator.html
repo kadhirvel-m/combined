@@ -6,6 +6,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PaperX — Notes Generator (Material Style)</title>
 
+  <script>
+    (function () {
+      try {
+        var keys = ['cx-theme', 'theme', 'px-theme'];
+        var mode = null;
+        for (var i = 0; i < keys.length; i++) {
+          var v = localStorage.getItem(keys[i]);
+          if (v === 'dark' || v === 'light') { mode = v; break; }
+        }
+        if (!mode && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          mode = 'dark';
+        }
+        if (mode) {
+          document.documentElement.setAttribute('data-theme', mode);
+          document.documentElement.classList.toggle('dark', mode === 'dark');
+        }
+      } catch (e) { }
+    })();
+  </script>
+
   <!-- Tailwind + plugins -->
   <script src="https://cdn.tailwindcss.com?plugins=typography,forms,aspect-ratio,line-clamp"></script>
   <script>
@@ -60,6 +80,9 @@
       }
     }
   </script>
+
+  <!-- Shared config + theme manager -->
+  <script src="./config.js"></script>
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -647,41 +670,21 @@
       setTimeout(() => { circle.style.opacity = '0'; setTimeout(() => circle.remove(), 300); }, 250);
     }, true);
 
-    // ===== Theme Toggle =====
-    function setTheme(mode) {
-      document.documentElement.setAttribute('data-theme', mode);
-      // Sync with other pages that use the root .dark class
-      document.documentElement.classList.toggle('dark', mode === 'dark');
-      // Persist using both keys for cross-page compatibility
-      try { localStorage.setItem('paperx:theme', mode); } catch { }
-      try { localStorage.setItem('theme', mode); } catch { }
-      $themeBtn.textContent = mode === 'dark' ? 'Light' : 'Dark';
-      // prose invert for dark (kept for safety)
-      try { $output.classList.toggle('dark:prose-invert', mode === 'dark'); } catch { }
-    }
-
-    // Initialize from either key or system preference
-    (function initTheme() {
-      let initial = null;
-      try { initial = localStorage.getItem('paperx:theme') || localStorage.getItem('theme'); } catch { }
-      if (!initial) {
-        initial = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      }
-      setTheme(initial);
+    // ===== Theme (shared manager) =====
+    (function initSharedTheme() {
+      try {
+        // Ensure global Theme is initialized (config.js handles apply + data-theme)
+        if (window.Theme && typeof window.Theme.init === 'function') window.Theme.init();
+        const mode = (window.Theme && window.Theme.get && window.Theme.get()) || (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+        $themeBtn.textContent = mode === 'dark' ? 'Light' : 'Dark';
+      } catch { }
+      $themeBtn.addEventListener('click', () => {
+        try {
+          const mode = (window.Theme && window.Theme.toggle && window.Theme.toggle()) || (document.documentElement.classList.toggle('dark'), document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+          $themeBtn.textContent = mode === 'dark' ? 'Light' : 'Dark';
+        } catch { }
+      });
     })();
-
-    $themeBtn.addEventListener('click', () => {
-      const curIsDark = document.documentElement.classList.contains('dark') || document.documentElement.getAttribute('data-theme') === 'dark';
-      setTheme(curIsDark ? 'light' : 'dark');
-    });
-
-    // Reflect theme changes from other tabs/pages
-    window.addEventListener('storage', (e) => {
-      if (e.key === 'theme' || e.key === 'paperx:theme') {
-        const v = e.newValue;
-        if (v === 'dark' || v === 'light') setTheme(v);
-      }
-    });
 
     // ===== Density Toggle =====
     function setDensity(on) {

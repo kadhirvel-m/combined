@@ -22,6 +22,76 @@
   }
 })();
 
+// Global Theme manager: keep theme consistent across pages
+(function(){
+  try {
+    var KEY_PRIMARY = 'cx-theme';
+    var ALT_KEYS = ['theme', 'px-theme'];
+    var root = document.documentElement;
+
+    function readStored(){
+      try {
+        var v = localStorage.getItem(KEY_PRIMARY);
+        if (v) return v;
+        for (var i=0;i<ALT_KEYS.length;i++){
+          v = localStorage.getItem(ALT_KEYS[i]);
+          if (v) return v;
+        }
+      } catch(_){}
+      return null;
+    }
+
+    function writeStored(val){
+      try { localStorage.setItem(KEY_PRIMARY, val); } catch(_){}
+      for (var i=0;i<ALT_KEYS.length;i++){
+        try { localStorage.setItem(ALT_KEYS[i], val); } catch(_){}
+      }
+    }
+
+    function apply(val){
+      var wantDark = (val === 'dark');
+      root.classList.toggle('dark', wantDark);
+      try { root.setAttribute('data-theme', wantDark ? 'dark' : 'light'); } catch(_){ }
+      writeStored(wantDark ? 'dark' : 'light');
+      try { root.style.colorScheme = wantDark ? 'dark' : 'light'; } catch(_){}
+      return wantDark ? 'dark' : 'light';
+    }
+
+    function init(){
+      var stored = readStored();
+      if (!stored){
+        var prefersDark = false;
+        try { prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch(_){}
+        stored = prefersDark ? 'dark' : 'light';
+      }
+      apply(stored);
+    }
+
+    function get(){ return (readStored() || (root.classList.contains('dark') ? 'dark' : 'light')); }
+    function set(val){ return apply(val === 'dark' ? 'dark' : 'light'); }
+    function toggle(){ return apply(get() === 'dark' ? 'light' : 'dark'); }
+
+    // Expose and initialize
+    window.Theme = { get:get, set:set, toggle:toggle, init:init };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once:true });
+    else init();
+
+    // Back-compat for pages using onclick="toggleTheme()"
+    if (typeof window.toggleTheme !== 'function') window.toggleTheme = toggle;
+
+    // Sync on system preference changes
+    try {
+      if (window.matchMedia){
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        mq.addEventListener && mq.addEventListener('change', function(e){
+          var stored = readStored();
+          if (!stored) apply(e.matches ? 'dark' : 'light');
+        });
+      }
+    } catch(_){}
+  } catch(_){}
+})();
+
 (function(){
   window.__TUNE_AI_ENABLED = false;
   window.__CHAT_API_BASE = (window.__API_BASE || 'http://127.0.0.1:8000') + '/api/tune-ai';
