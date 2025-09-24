@@ -177,8 +177,16 @@ CREATE TABLE public.user_education (
   batch_range text,
   regno text,
   current_semester integer CHECK (current_semester >= 1 AND current_semester <= 12),
+  college_id uuid,
+  degree_id uuid,
+  department_id uuid,
+  batch_id uuid,
   CONSTRAINT user_education_pkey PRIMARY KEY (id),
-  CONSTRAINT user_education_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+  CONSTRAINT user_education_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_education_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
+  CONSTRAINT user_education_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id),
+  CONSTRAINT user_education_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT user_education_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id)
 );
 CREATE TABLE public.user_experiences (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -197,8 +205,10 @@ CREATE TABLE public.user_experiences (
   order_index integer DEFAULT 0,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  batch_id uuid,
   CONSTRAINT user_experiences_pkey PRIMARY KEY (id),
-  CONSTRAINT user_experiences_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+  CONSTRAINT user_experiences_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_experiences_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id)
 );
 CREATE TABLE public.user_portfolio_projects (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -227,9 +237,6 @@ CREATE TABLE public.user_profiles (
   name text,
   gender text CHECK (gender = ANY (ARRAY['female'::text, 'male'::text, 'other'::text])),
   phone text,
-  college_id uuid,
-  department_id uuid,
-  batch_id uuid,
   batch_from integer CHECK (batch_from >= 1950 AND batch_from <= 2100),
   batch_to integer,
   semester integer CHECK (semester >= 1 AND semester <= 12),
@@ -265,9 +272,6 @@ CREATE TABLE public.user_profiles (
   degree_id uuid,
   CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
   CONSTRAINT user_profiles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
-  CONSTRAINT user_profiles_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
-  CONSTRAINT user_profiles_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
-  CONSTRAINT user_profiles_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id),
   CONSTRAINT user_profiles_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id)
 );
 CREATE TABLE public.user_publications (
