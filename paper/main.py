@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from markdownify import markdownify as md
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, root_validator
 from rapidfuzz import fuzz
 from serpapi import GoogleSearch
 from supabase import Client, create_client
@@ -1064,27 +1064,122 @@ class BatchIn(BaseModel):
         return v
 
 
-class CollegeCreateIn(BaseModel):
-    college_name: str = Field(..., min_length=2, max_length=256)
-    departments: List[str]
+class DepartmentCreateIn(BaseModel):
+    name: str
     batches: List[BatchIn]
 
-    @validator("departments")
-    def normalize_depts(cls, v: List[str]):
-        seen = set()
-        out: List[str] = []
-        for d in (x.upper() for x in v):
-            if d and d not in seen:
-                seen.add(d)
-                out.append(d)
-        if not out:
-            raise ValueError("At least one department required.")
-        return out
+    @validator("name")
+    def normalize_name(cls, v: str):
+        value = (v or "").strip()
+        if not value:
+            raise ValueError("Department name required.")
+        return value.upper()
 
     @validator("batches")
-    def no_empty_batches(cls, v: List[BatchIn]):
+    def ensure_batches(cls, v: List[BatchIn]):
         if not v:
-            raise ValueError("At least one batch range required.")
+            raise ValueError("Add at least one batch range.")
+        seen: set[Tuple[int, int]] = set()
+        unique: List[BatchIn] = []
+        for batch in v:
+            pair = (batch.from_year, batch.to_year)
+            if pair in seen:
+                continue
+            seen.add(pair)
+            unique.append(batch)
+        return unique
+
+
+class DegreeCreateIn(BaseModel):
+    name: str = Field(..., min_length=2, max_length=256)
+    level: Optional[str] = Field(None, max_length=64)
+    duration_years: Optional[int] = Field(None, ge=1, le=10)
+    departments: List[DepartmentCreateIn]
+
+    @validator("name")
+    def trim_degree_name(cls, v: str):
+        value = (v or "").strip()
+        if not value:
+            raise ValueError("Degree name required.")
+        return value
+
+    @validator("departments")
+    def ensure_departments(cls, v: List[DepartmentCreateIn]):
+        if not v:
+            raise ValueError("Add at least one department to the degree.")
+        seen: set[str] = set()
+        for dept in v:
+            key = dept.name.upper()
+            if key in seen:
+                raise ValueError(f"Duplicate department '{dept.name}' in the same degree.")
+            seen.add(key)
+        return v
+
+
+class CollegeCreateIn(BaseModel):
+    college_name: str = Field(..., min_length=2, max_length=256)
+    degrees: Optional[List[DegreeCreateIn]] = None
+    departments: Optional[List[str]] = None  # legacy payload support
+    batches: Optional[List[BatchIn]] = None  # legacy payload support
+
+    @validator("college_name")
+    def trim_college(cls, v: str):
+        value = (v or "").strip()
+        if not value:
+            raise ValueError("College name required.")
+        return value
+
+    @root_validator(pre=True)
+    def coerce_legacy_payload(cls, values):
+        if not values:
+            return values
+        data = dict(values)
+        if data.get("degrees"):
+            return data
+        legacy_departments = [
+            (d or "").strip() for d in (data.get("departments") or []) if (d or "").strip()
+        ]
+        if legacy_departments:
+            legacy_batches_raw = data.get("batches") or []
+            if not legacy_batches_raw:
+                raise ValueError("Provide batch ranges when using legacy departments payload.")
+            coerced_batches = []
+            for item in legacy_batches_raw:
+                if isinstance(item, BatchIn):
+                    coerced_batches.append(item.dict(by_alias=True))
+                elif isinstance(item, dict):
+                    if "from" in item and "to" in item:
+                        coerced_batches.append({"from": item["from"], "to": item["to"]})
+                    elif "from_year" in item and "to_year" in item:
+                        coerced_batches.append({"from": item["from_year"], "to": item["to_year"]})
+                    else:
+                        raise ValueError("Invalid batch entry in legacy payload.")
+                else:
+                    raise ValueError("Invalid batch entry in legacy payload.")
+            data["degrees"] = [
+                {
+                    "name": "B.Tech",
+                    "level": None,
+                    "duration_years": None,
+                    "departments": [
+                        {"name": dept, "batches": coerced_batches}
+                        for dept in legacy_departments
+                    ],
+                }
+            ]
+            return data
+        raise ValueError("Provide at least one degree with departments and batch ranges.")
+
+    @validator("degrees")
+    def ensure_degrees(cls, v: Optional[List[DegreeCreateIn]]):
+        if not v:
+            raise ValueError("At least one degree is required.")
+        seen: set[str] = set()
+        for degree in v:
+            key = degree.name.strip().lower()
+            if key in seen:
+                raise ValueError(f"Duplicate degree '{degree.name}'.")
+            seen.add(key)
         return v
 
 
@@ -1093,14 +1188,30 @@ class College(BaseModel):
     name: str
 
 
+class DepartmentWithBatchesOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    batches: List[BatchIn]
+
+
+class DegreeOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    level: Optional[str] = None
+    duration_years: Optional[int] = None
+    departments: List[DepartmentWithBatchesOut]
+
+
 class CollegeFullOut(BaseModel):
     id: uuid.UUID
     name: str
+    degrees: List[DegreeOut]
     departments: List[str]
     batches: List[BatchIn]
 
 
 class DepartmentOut(BaseModel):
+
     id: uuid.UUID
     name: str
 
@@ -1247,144 +1358,282 @@ def upsert_college(name: str) -> uuid.UUID:
     return uuid.UUID(res2.data[0]["id"])
 
 
-def sync_departments(college_id: uuid.UUID, departments: List[str]) -> List[str]:
+def sync_degree_hierarchy(college_id: uuid.UUID, degrees: List[DegreeCreateIn]) -> None:
+    if not degrees:
+        return
     supabase = get_service_client()
-    existing = (
-        supabase.table("departments")
-        .select("name")
+
+    degree_res = (
+        supabase.table("degrees")
+        .select("id,name,level,duration_years")
         .eq("college_id", str(college_id))
         .execute()
     )
-    if getattr(existing, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (list departments): {existing.error}")
-    existing_names = {row["name"] for row in (existing.data or [])}
+    if getattr(degree_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list degrees): {degree_res.error}")
 
-    to_insert = [
-        {"college_id": str(college_id), "name": d}
-        for d in departments
-        if d not in existing_names
-    ]
+    degree_map: Dict[str, Dict[str, Any]] = {}
+    for row in degree_res.data or []:
+        key = (row.get("name") or "").strip().lower()
+        if key:
+            degree_map[key] = row
 
-    if to_insert:
-        ins = supabase.table("departments").insert(to_insert).execute()
-        if getattr(ins, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (insert departments): {ins.error}")
-
-    return sorted(existing_names.union(departments))
-
-
-def get_department_name_id_map(college_id: uuid.UUID) -> Dict[str, uuid.UUID]:
-    supabase = get_service_client()
-    res = (
+    dept_res = (
         supabase.table("departments")
-        .select("id,name")
+        .select("id,name,degree_id")
         .eq("college_id", str(college_id))
         .execute()
     )
-    if getattr(res, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (dept map): {res.error}")
-    return {row["name"]: uuid.UUID(row["id"]) for row in (res.data or [])}
+    if getattr(dept_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list departments): {dept_res.error}")
+    dept_map: Dict[str, Dict[str, Any]] = {}
+    for row in dept_res.data or []:
+        name = (row.get("name") or "").upper()
+        if name:
+            dept_map[name] = row
 
-
-def sync_batches(
-    college_id: uuid.UUID,
-    dept_name_to_id: Dict[str, uuid.UUID],
-    batches: List[BatchIn],
-) -> List[BatchIn]:
-    supabase = get_service_client()
-    existing = (
+    batch_res = (
         supabase.table("batches")
         .select("department_id,from_year,to_year")
         .eq("college_id", str(college_id))
         .execute()
     )
-    if getattr(existing, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (list batches): {existing.error}")
-    existing_set: set[Tuple[str, int, int]] = {
-        (row["department_id"], row["from_year"], row["to_year"]) for row in (existing.data or [])
-    }
+    if getattr(batch_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list batches): {batch_res.error}")
+    batches_by_department: Dict[str, set[Tuple[int, int]]] = {}
+    for row in batch_res.data or []:
+        dept_id = row.get("department_id")
+        if not dept_id:
+            continue
+        from_year = row.get("from_year")
+        to_year = row.get("to_year")
+        if from_year is None or to_year is None:
+            continue
+        batches_by_department.setdefault(dept_id, set()).add((int(from_year), int(to_year)))
 
-    to_insert = []
-    for name, dept_id in dept_name_to_id.items():
-        for b in batches:
-            key = (str(dept_id), b.from_year, b.to_year)
-            if key not in existing_set:
+    for degree in degrees:
+        degree_key = degree.name.strip().lower()
+        degree_row = degree_map.get(degree_key)
+        if degree_row:
+            degree_id = uuid.UUID(degree_row["id"])
+            updates: Dict[str, Any] = {}
+            if degree_row.get("level") != degree.level:
+                updates["level"] = degree.level
+            if degree_row.get("duration_years") != degree.duration_years:
+                updates["duration_years"] = degree.duration_years
+            if updates:
+                upd = supabase.table("degrees").update(updates).eq("id", str(degree_id)).execute()
+                if getattr(upd, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (update degree): {upd.error}")
+                degree_row.update(updates)
+        else:
+            payload = {
+                "college_id": str(college_id),
+                "name": degree.name,
+                "level": degree.level,
+                "duration_years": degree.duration_years,
+            }
+            ins = supabase.table("degrees").insert(payload).execute()
+            if getattr(ins, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (insert degree): {ins.error}")
+            if ins.data:
+                degree_row = ins.data[0]
+            else:
+                refetch = (
+                    supabase.table("degrees")
+                    .select("id,name,level,duration_years")
+                    .eq("college_id", str(college_id))
+                    .eq("name", degree.name)
+                    .limit(1)
+                    .execute()
+                )
+                if getattr(refetch, "error", None) or not refetch.data:
+                    raise HTTPException(status_code=500, detail="Failed to insert degree.")
+                degree_row = refetch.data[0]
+            degree_id = uuid.UUID(degree_row["id"])
+            degree_map[degree_key] = degree_row
+
+        degree_id_str = str(degree_id)
+
+        for department in degree.departments:
+            dept_key = department.name  # already upper-case from validation
+            dept_row = dept_map.get(dept_key)
+            if dept_row:
+                dept_id = uuid.UUID(dept_row["id"])
+                if dept_row.get("degree_id") != degree_id_str:
+                    upd = (
+                        supabase.table("departments")
+                        .update({"degree_id": degree_id_str})
+                        .eq("id", str(dept_id))
+                        .execute()
+                    )
+                    if getattr(upd, "error", None):
+                        raise HTTPException(status_code=500, detail=f"Supabase error (update department): {upd.error}")
+                    dept_row["degree_id"] = degree_id_str
+            else:
+                payload = {
+                    "college_id": str(college_id),
+                    "degree_id": degree_id_str,
+                    "name": dept_key,
+                }
+                ins = supabase.table("departments").insert(payload).execute()
+                if getattr(ins, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (insert department): {ins.error}")
+                if ins.data:
+                    dept_row = ins.data[0]
+                else:
+                    refetch = (
+                        supabase.table("departments")
+                        .select("id,name,degree_id")
+                        .eq("college_id", str(college_id))
+                        .eq("name", dept_key)
+                        .limit(1)
+                        .execute()
+                    )
+                    if getattr(refetch, "error", None) or not refetch.data:
+                        raise HTTPException(status_code=500, detail="Failed to insert department.")
+                    dept_row = refetch.data[0]
+                dept_map[dept_key] = dept_row
+                dept_id = uuid.UUID(dept_row["id"])
+                batches_by_department[str(dept_id)] = set()
+            dept_id = uuid.UUID(dept_row["id"])
+            dept_id_str = str(dept_id)
+            existing_pairs = batches_by_department.setdefault(dept_id_str, set())
+            to_insert = []
+            for batch in department.batches:
+                pair = (batch.from_year, batch.to_year)
+                if pair in existing_pairs:
+                    continue
                 to_insert.append(
                     {
                         "college_id": str(college_id),
-                        "department_id": str(dept_id),
-                        "from_year": b.from_year,
-                        "to_year": b.to_year,
+                        "department_id": dept_id_str,
+                        "from_year": batch.from_year,
+                        "to_year": batch.to_year,
                     }
                 )
-
-    if to_insert:
-        ins = supabase.table("batches").insert(to_insert).execute()
-        if getattr(ins, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (insert batches): {ins.error}")
-
-    all_rows = (
-        supabase.table("batches")
-        .select("from_year,to_year")
-        .eq("college_id", str(college_id))
-        .execute()
-    )
-    if getattr(all_rows, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get batches): {all_rows.error}")
-    uniq: set[Tuple[int, int]] = {
-        (row["from_year"], row["to_year"]) for row in (all_rows.data or [])
-    }
-    return [BatchIn(**{"from": f, "to": t}) for (f, t) in sorted(uniq)]
+                existing_pairs.add(pair)
+            if to_insert:
+                ins_batches = supabase.table("batches").insert(to_insert).execute()
+                if getattr(ins_batches, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (insert batches): {ins_batches.error}")
 
 
 def get_college_full(college_id: uuid.UUID):
     supabase = get_service_client()
-    c = (
+    college = (
         supabase.table("colleges")
         .select("id,name")
         .eq("id", str(college_id))
         .single()
         .execute()
     )
-    if getattr(c, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get college): {c.error}")
-    if not c.data:
+    if getattr(college, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get college): {college.error}")
+    if not college.data:
         raise HTTPException(status_code=404, detail="College not found.")
 
-    d = (
-        supabase.table("departments")
-        .select("name")
+    degree_rows = (
+        supabase.table("degrees")
+        .select("id,name,level,duration_years")
         .eq("college_id", str(college_id))
         .order("name")
         .execute()
     )
-    if getattr(d, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get departments): {d.error}")
-    departments = [row["name"] for row in (d.data or [])]
+    if getattr(degree_rows, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get degrees): {degree_rows.error}")
 
-    b = (
+    dept_rows = (
+        supabase.table("departments")
+        .select("id,name,degree_id")
+        .eq("college_id", str(college_id))
+        .order("name")
+        .execute()
+    )
+    if getattr(dept_rows, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get departments): {dept_rows.error}")
+
+    dept_lookup: Dict[str, Dict[str, Any]] = {}
+    dept_by_degree: Dict[str, List[Dict[str, Any]]] = {}
+    for row in dept_rows.data or []:
+        dept_id_str = row["id"]
+        dept_info = {
+            "id": uuid.UUID(dept_id_str),
+            "name": row.get("name"),
+            "batches": [],
+        }
+        dept_lookup[dept_id_str] = dept_info
+        degree_id_str = row.get("degree_id")
+        if degree_id_str:
+            dept_by_degree.setdefault(degree_id_str, []).append(dept_info)
+
+    for bucket in dept_by_degree.values():
+        bucket.sort(key=lambda item: (item["name"] or "").upper())
+
+    batch_rows = (
         supabase.table("batches")
-        .select("from_year,to_year")
+        .select("department_id,from_year,to_year")
         .eq("college_id", str(college_id))
         .order("from_year")
         .execute()
     )
-    if getattr(b, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get batches): {b.error}")
-    seen_pairs: set[Tuple[int, int]] = set()
-    batches: List[BatchIn] = []
-    for row in (b.data or []):
-        pair = (row["from_year"], row["to_year"])
-        if pair in seen_pairs:
+    if getattr(batch_rows, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get batches): {batch_rows.error}")
+
+    flat_seen: set[Tuple[int, int]] = set()
+    dept_seen: Dict[str, set[Tuple[int, int]]] = {}
+    flat_batches: List[BatchIn] = []
+    for row in batch_rows.data or []:
+        dept_id_str = row.get("department_id")
+        from_year = row.get("from_year")
+        to_year = row.get("to_year")
+        if from_year is None or to_year is None:
             continue
-        seen_pairs.add(pair)
-        batches.append(BatchIn(**{"from": row["from_year"], "to": row["to_year"]}))
+        pair = (int(from_year), int(to_year))
+        if pair not in flat_seen:
+            flat_seen.add(pair)
+            flat_batches.append(BatchIn(**{"from": pair[0], "to": pair[1]}))
+        if not dept_id_str or dept_id_str not in dept_lookup:
+            continue
+        dept_pairs = dept_seen.setdefault(dept_id_str, set())
+        if pair in dept_pairs:
+            continue
+        dept_pairs.add(pair)
+        dept_lookup[dept_id_str]["batches"].append(BatchIn(**{"from": pair[0], "to": pair[1]}))
+
+    for dept_info in dept_lookup.values():
+        dept_info["batches"].sort(key=lambda b: (b.from_year, b.to_year))
+
+    degree_data = sorted(degree_rows.data or [], key=lambda row: (row.get("name") or "").lower())
+    degrees_out: List[DegreeOut] = []
+    for row in degree_data:
+        degree_id_str = row["id"]
+        departments_out = [
+            DepartmentWithBatchesOut(
+                id=dept["id"],
+                name=dept["name"],
+                batches=dept["batches"],
+            )
+            for dept in dept_by_degree.get(degree_id_str, [])
+        ]
+        degrees_out.append(
+            DegreeOut(
+                id=uuid.UUID(degree_id_str),
+                name=row.get("name"),
+                level=row.get("level"),
+                duration_years=row.get("duration_years"),
+                departments=departments_out,
+            )
+        )
+
+    department_names = sorted({(row.get("name") or "").upper() for row in (dept_rows.data or []) if row.get("name")})
 
     return {
-        "id": uuid.UUID(c.data["id"]),
-        "name": c.data["name"],
-        "departments": departments,
-        "batches": batches,
+        "id": uuid.UUID(college.data["id"]),
+        "name": college.data["name"],
+        "degrees": degrees_out,
+        "departments": department_names,
+        "batches": flat_batches,
     }
 
 
@@ -3798,10 +4047,7 @@ def parse_syllabus_text(payload: ParseSyllabusIn):
 @academics_router.post("/api/colleges", response_model=CollegeFullOut, summary="Create or update a college with departments & batches")
 def create_college(payload: CollegeCreateIn):
     college_id = upsert_college(payload.college_name)
-    departments = sync_departments(college_id, payload.departments)
-    dept_map = get_department_name_id_map(college_id)
-    filtered_map = {name: dept_map[name] for name in departments if name in dept_map}
-    sync_batches(college_id, filtered_map, payload.batches)
+    sync_degree_hierarchy(college_id, payload.degrees or [])
     data = get_college_full(college_id)
     return CollegeFullOut(**data)
 
@@ -4496,3 +4742,8 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
+
+
+
+
+

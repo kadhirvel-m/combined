@@ -18,13 +18,25 @@ CREATE TABLE public.colleges (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT colleges_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.degrees (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  college_id uuid NOT NULL,
+  name text NOT NULL,
+  level text,
+  duration_years integer CHECK (duration_years >= 1 AND duration_years <= 10),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT degrees_pkey PRIMARY KEY (id),
+  CONSTRAINT degrees_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id)
+);
 CREATE TABLE public.departments (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   college_id uuid NOT NULL,
   name text NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  degree_id uuid NOT NULL,
   CONSTRAINT departments_pkey PRIMARY KEY (id),
-  CONSTRAINT departments_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id)
+  CONSTRAINT departments_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
+  CONSTRAINT departments_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id)
 );
 CREATE TABLE public.project_applications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -99,7 +111,7 @@ CREATE TABLE public.skill_verifications (
   attempts integer DEFAULT 0,
   status text DEFAULT 'needs_review'::text,
   updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT skill_verifications_pkey PRIMARY KEY (user_id, skill),
+  CONSTRAINT skill_verifications_pkey PRIMARY KEY (skill, user_id),
   CONSTRAINT skill_verifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.syllabus_courses (
@@ -132,6 +144,81 @@ CREATE TABLE public.syllabus_units (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT syllabus_units_pkey PRIMARY KEY (id),
   CONSTRAINT syllabus_units_course_id_fkey FOREIGN KEY (course_id) REFERENCES public.syllabus_courses(id)
+);
+CREATE TABLE public.user_certifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  name text NOT NULL,
+  issuing_org text,
+  issue_date date,
+  expiration_date date,
+  does_not_expire boolean DEFAULT false,
+  credential_id text,
+  credential_url text,
+  description text,
+  order_index integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_certifications_pkey PRIMARY KEY (id),
+  CONSTRAINT user_certifications_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.user_education (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  school text NOT NULL,
+  degree text,
+  grade text,
+  activities text,
+  description text,
+  order_index integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  department text,
+  batch_range text,
+  regno text,
+  current_semester integer CHECK (current_semester >= 1 AND current_semester <= 12),
+  CONSTRAINT user_education_pkey PRIMARY KEY (id),
+  CONSTRAINT user_education_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.user_experiences (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  title text NOT NULL,
+  employment_type text,
+  company text,
+  company_logo_url text,
+  location text,
+  location_type text,
+  start_date date NOT NULL,
+  end_date date,
+  is_current boolean DEFAULT false,
+  description text,
+  media jsonb,
+  order_index integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_experiences_pkey PRIMARY KEY (id),
+  CONSTRAINT user_experiences_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.user_portfolio_projects (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  name text NOT NULL,
+  associated_experience_id uuid,
+  associated_education_id uuid,
+  start_date date,
+  end_date date,
+  url text,
+  description text,
+  tech_stack ARRAY,
+  team jsonb,
+  order_index integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_portfolio_projects_pkey PRIMARY KEY (id),
+  CONSTRAINT user_portfolio_projects_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_portfolio_projects_associated_experience_id_fkey FOREIGN KEY (associated_experience_id) REFERENCES public.user_experiences(id),
+  CONSTRAINT user_portfolio_projects_associated_education_id_fkey FOREIGN KEY (associated_education_id) REFERENCES public.user_education(id)
 );
 CREATE TABLE public.user_profiles (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -175,11 +262,28 @@ CREATE TABLE public.user_profiles (
   publications text,
   achievements text,
   experience text,
+  degree_id uuid,
   CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
   CONSTRAINT user_profiles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
   CONSTRAINT user_profiles_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
   CONSTRAINT user_profiles_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
-  CONSTRAINT user_profiles_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id)
+  CONSTRAINT user_profiles_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id),
+  CONSTRAINT user_profiles_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id)
+);
+CREATE TABLE public.user_publications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  title text NOT NULL,
+  publisher text,
+  publication_date date,
+  authors ARRAY,
+  url text,
+  abstract text,
+  order_index integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_publications_pkey PRIMARY KEY (id),
+  CONSTRAINT user_publications_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
 );
 CREATE TABLE public.user_topic_progress (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -190,94 +294,3 @@ CREATE TABLE public.user_topic_progress (
   CONSTRAINT user_topic_progress_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_topic_progress_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
 );
-
--- Normalized profile section tables (LinkedIn-style richer profile)
-CREATE TABLE public.user_experiences (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-  title text NOT NULL,
-  employment_type text,
-  company text,
-  company_logo_url text,
-  location text,
-  location_type text, -- remote / hybrid / onsite
-  start_date date NOT NULL,
-  end_date date,
-  is_current boolean DEFAULT false,
-  description text,
-  media jsonb, -- array of {kind,url,title}
-  order_index integer DEFAULT 0,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-CREATE INDEX ON public.user_experiences (user_profile_id, order_index);
-
-CREATE TABLE public.user_education (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-  school text NOT NULL,
-  degree text,
-  field_of_study text,
-  start_date date,
-  end_date date,
-  grade text,
-  activities text,
-  description text,
-  order_index integer DEFAULT 0,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-CREATE INDEX ON public.user_education (user_profile_id, order_index);
-
-CREATE TABLE public.user_certifications (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  issuing_org text,
-  issue_date date,
-  expiration_date date,
-  does_not_expire boolean DEFAULT false,
-  credential_id text,
-  credential_url text,
-  description text,
-  order_index integer DEFAULT 0,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-CREATE INDEX ON public.user_certifications (user_profile_id, order_index);
-
-CREATE TABLE public.user_portfolio_projects (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  associated_experience_id uuid REFERENCES public.user_experiences(id) ON DELETE SET NULL,
-  associated_education_id uuid REFERENCES public.user_education(id) ON DELETE SET NULL,
-  start_date date,
-  end_date date,
-  url text,
-  description text,
-  tech_stack text[],
-  team jsonb, -- array of {name, user_id?}
-  order_index integer DEFAULT 0,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-CREATE INDEX ON public.user_portfolio_projects (user_profile_id, order_index);
-
-CREATE TABLE public.user_publications (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-  title text NOT NULL,
-  publisher text,
-  publication_date date,
-  authors text[],
-  url text,
-  abstract text,
-  order_index integer DEFAULT 0,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-CREATE INDEX ON public.user_publications (user_profile_id, order_index);
-
--- Optional: mark legacy denormalized columns for future removal (retain for backward compatibility)
--- ALTER TABLE public.user_profiles RENAME COLUMN experience TO experience_legacy; -- etc.
