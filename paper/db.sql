@@ -190,3 +190,94 @@ CREATE TABLE public.user_topic_progress (
   CONSTRAINT user_topic_progress_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_topic_progress_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
 );
+
+-- Normalized profile section tables (LinkedIn-style richer profile)
+CREATE TABLE public.user_experiences (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  employment_type text,
+  company text,
+  company_logo_url text,
+  location text,
+  location_type text, -- remote / hybrid / onsite
+  start_date date NOT NULL,
+  end_date date,
+  is_current boolean DEFAULT false,
+  description text,
+  media jsonb, -- array of {kind,url,title}
+  order_index integer DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+CREATE INDEX ON public.user_experiences (user_profile_id, order_index);
+
+CREATE TABLE public.user_education (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  school text NOT NULL,
+  degree text,
+  field_of_study text,
+  start_date date,
+  end_date date,
+  grade text,
+  activities text,
+  description text,
+  order_index integer DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+CREATE INDEX ON public.user_education (user_profile_id, order_index);
+
+CREATE TABLE public.user_certifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  issuing_org text,
+  issue_date date,
+  expiration_date date,
+  does_not_expire boolean DEFAULT false,
+  credential_id text,
+  credential_url text,
+  description text,
+  order_index integer DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+CREATE INDEX ON public.user_certifications (user_profile_id, order_index);
+
+CREATE TABLE public.user_portfolio_projects (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  associated_experience_id uuid REFERENCES public.user_experiences(id) ON DELETE SET NULL,
+  associated_education_id uuid REFERENCES public.user_education(id) ON DELETE SET NULL,
+  start_date date,
+  end_date date,
+  url text,
+  description text,
+  tech_stack text[],
+  team jsonb, -- array of {name, user_id?}
+  order_index integer DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+CREATE INDEX ON public.user_portfolio_projects (user_profile_id, order_index);
+
+CREATE TABLE public.user_publications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  publisher text,
+  publication_date date,
+  authors text[],
+  url text,
+  abstract text,
+  order_index integer DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+CREATE INDEX ON public.user_publications (user_profile_id, order_index);
+
+-- Optional: mark legacy denormalized columns for future removal (retain for backward compatibility)
+-- ALTER TABLE public.user_profiles RENAME COLUMN experience TO experience_legacy; -- etc.
