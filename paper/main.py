@@ -15,7 +15,7 @@ import textwrap
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, Iterator, List, Optional, Tuple
@@ -1809,6 +1809,39 @@ def get_current_user_profile(token: Optional[str]):
                     }
                 )
 
+        related_experiences: List[Dict[str, Any]] = []
+        related_education: List[Dict[str, Any]] = []
+        related_certifications: List[Dict[str, Any]] = []
+        related_projects: List[Dict[str, Any]] = []
+        related_publications: List[Dict[str, Any]] = []
+        profile_id = prof.get("id")
+        if profile_id:
+            related_experiences = _fetch_profile_related(
+                profile_id,
+                "user_experiences",
+                [("order_index", False), ("start_date", True), ("created_at", False)],
+            )
+            related_education = _fetch_profile_related(
+                profile_id,
+                "user_education",
+                [("order_index", False), ("start_date", True), ("created_at", False)],
+            )
+            related_certifications = _fetch_profile_related(
+                profile_id,
+                "user_certifications",
+                [("order_index", False), ("issue_date", True), ("created_at", False)],
+            )
+            related_projects = _fetch_profile_related(
+                profile_id,
+                "user_portfolio_projects",
+                [("order_index", False), ("start_date", True), ("created_at", False)],
+            )
+            related_publications = _fetch_profile_related(
+                profile_id,
+                "user_publications",
+                [("order_index", False), ("publication_date", True), ("created_at", False)],
+            )
+
         return {
             "profile": {
                 "id": prof["id"],
@@ -1843,6 +1876,11 @@ def get_current_user_profile(token: Optional[str]):
                 "publications": prof.get("publications"),
                 "achievements": prof.get("achievements"),
                 "experience": prof.get("experience"),
+                "experiences": related_experiences,
+                "education_entries": related_education,
+                "certification_entries": related_certifications,
+                "portfolio_projects": related_projects,
+                "publication_entries": related_publications,
                 "college": college,
                 "department": department,
                 "batch": batch,
@@ -2184,7 +2222,332 @@ def _get_profile_me(token: Optional[str]):
     )
     if getattr(prof_q, "error", None) or not prof_q.data:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return prof_q.data
+
+    profile = dict(prof_q.data)
+    profile_id_str = profile.get("id")
+    if profile_id_str:
+        profile["experiences"] = _fetch_profile_related(
+            profile_id_str,
+            "user_experiences",
+            [("order_index", False), ("start_date", True), ("created_at", False)],
+        )
+        profile["education_entries"] = _fetch_profile_related(
+            profile_id_str,
+            "user_education",
+            [("order_index", False), ("start_date", True), ("created_at", False)],
+        )
+        profile["certification_entries"] = _fetch_profile_related(
+            profile_id_str,
+            "user_certifications",
+            [("order_index", False), ("issue_date", True), ("created_at", False)],
+        )
+        profile["portfolio_projects"] = _fetch_profile_related(
+            profile_id_str,
+            "user_portfolio_projects",
+            [("order_index", False), ("start_date", True), ("created_at", False)],
+        )
+        profile["publication_entries"] = _fetch_profile_related(
+            profile_id_str,
+            "user_publications",
+            [("order_index", False), ("publication_date", True), ("created_at", False)],
+        )
+    return profile
+
+
+def _clean_media_items(media_items: Optional[List[Dict[str, Any]]]) -> Optional[List[Dict[str, Any]]]:
+    cleaned: List[Dict[str, Any]] = []
+    for raw in media_items or []:
+        if not isinstance(raw, dict):
+            continue
+        url = _strip_or_none(raw.get("url"))
+        if not url:
+            continue
+        cleaned.append(
+            {
+                "kind": _strip_or_none(raw.get("kind")),
+                "url": url,
+                "title": _strip_or_none(raw.get("title")),
+            }
+        )
+    return cleaned or None
+
+
+def _prepare_experience_rows(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    now_iso = datetime.utcnow().isoformat()
+    for idx, row in enumerate(rows or []):
+        if not isinstance(row, dict):
+            continue
+        title = _strip_or_none(row.get("title"))
+        start_date = _date_or_none(row.get("start_date"))
+        if not title or not start_date:
+            continue
+        prepared_row: Dict[str, Any] = {
+            "title": title,
+            "employment_type": _strip_or_none(row.get("employment_type")),
+            "company": _strip_or_none(row.get("company")),
+            "company_logo_url": _strip_or_none(row.get("company_logo_url")),
+            "location": _strip_or_none(row.get("location")),
+            "location_type": _strip_or_none(row.get("location_type")),
+            "start_date": start_date,
+            "end_date": _date_or_none(row.get("end_date")),
+            "is_current": bool(row.get("is_current")),
+            "description": _strip_or_none(row.get("description")),
+            "order_index": idx,
+            "updated_at": now_iso,
+        }
+        media_items = row.get("media")
+        cleaned_media = _clean_media_items(media_items if isinstance(media_items, list) else None)
+        if cleaned_media is not None:
+            prepared_row["media"] = cleaned_media
+        row_id = _strip_or_none(row.get("id"))
+        if not row_id:
+            row_id = str(uuid.uuid4())
+        prepared_row["id"] = row_id
+        prepared.append(prepared_row)
+    return prepared
+
+
+def _prepare_education_rows(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    now_iso = datetime.utcnow().isoformat()
+    for idx, row in enumerate(rows or []):
+        if not isinstance(row, dict):
+            continue
+        school = _strip_or_none(row.get("school"))
+        if not school:
+            continue
+        prepared_row: Dict[str, Any] = {
+            "school": school,
+            "degree": _strip_or_none(row.get("degree")),
+            "field_of_study": _strip_or_none(row.get("field_of_study")),
+            "start_date": _date_or_none(row.get("start_date")),
+            "end_date": _date_or_none(row.get("end_date")),
+            "grade": _strip_or_none(row.get("grade")),
+            "activities": _strip_or_none(row.get("activities")),
+            "description": _strip_or_none(row.get("description")),
+            "order_index": idx,
+            "updated_at": now_iso,
+        }
+        row_id = _strip_or_none(row.get("id"))
+        if not row_id:
+            row_id = str(uuid.uuid4())
+        prepared_row["id"] = row_id
+        prepared.append(prepared_row)
+    return prepared
+
+
+def _prepare_certification_rows(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    now_iso = datetime.utcnow().isoformat()
+    for idx, row in enumerate(rows or []):
+        if not isinstance(row, dict):
+            continue
+        name = _strip_or_none(row.get("name"))
+        if not name:
+            continue
+        prepared_row: Dict[str, Any] = {
+            "name": name,
+            "issuing_org": _strip_or_none(row.get("issuing_org")),
+            "issue_date": _date_or_none(row.get("issue_date")),
+            "expiration_date": _date_or_none(row.get("expiration_date")),
+            "does_not_expire": bool(row.get("does_not_expire")),
+            "credential_id": _strip_or_none(row.get("credential_id")),
+            "credential_url": _strip_or_none(row.get("credential_url")),
+            "description": _strip_or_none(row.get("description")),
+            "order_index": idx,
+            "updated_at": now_iso,
+        }
+        row_id = _strip_or_none(row.get("id"))
+        if not row_id:
+            row_id = str(uuid.uuid4())
+        prepared_row["id"] = row_id
+        prepared.append(prepared_row)
+    return prepared
+
+
+def _prepare_project_rows(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    now_iso = datetime.utcnow().isoformat()
+    for idx, row in enumerate(rows or []):
+        if not isinstance(row, dict):
+            continue
+        name = _strip_or_none(row.get("name"))
+        if not name:
+            continue
+        tech_stack_raw = row.get("tech_stack")
+        tech_stack_list: Optional[List[str]] = None
+        if isinstance(tech_stack_raw, list):
+            tech_stack_list = [s for s in (_strip_or_none(item) for item in tech_stack_raw) if s]
+        elif isinstance(tech_stack_raw, str):
+            tech_stack_list = [s for s in (_strip_or_none(part) for part in tech_stack_raw.split(",")) if s]
+        team_raw = row.get("team")
+        team_list: Optional[List[Dict[str, Any]]] = None
+        if isinstance(team_raw, list):
+            normalized: List[Dict[str, Any]] = []
+            for entry in team_raw:
+                if isinstance(entry, dict):
+                    name_val = _strip_or_none(entry.get("name"))
+                    if name_val:
+                        normalized.append(
+                            {
+                                "name": name_val,
+                                "role": _strip_or_none(entry.get("role")),
+                                "profile_url": _strip_or_none(entry.get("profile_url")),
+                                "user_id": _strip_or_none(entry.get("user_id")),
+                            }
+                        )
+                else:
+                    item_name = _strip_or_none(entry)
+                    if item_name:
+                        normalized.append({"name": item_name})
+            team_list = normalized or None
+        elif isinstance(team_raw, str):
+            members = [s for s in (_strip_or_none(part) for part in team_raw.split(",")) if s]
+            if members:
+                team_list = [{"name": member} for member in members]
+        prepared_row: Dict[str, Any] = {
+            "name": name,
+            "associated_experience_id": _strip_or_none(row.get("associated_experience_id")),
+            "associated_education_id": _strip_or_none(row.get("associated_education_id")),
+            "start_date": _date_or_none(row.get("start_date")),
+            "end_date": _date_or_none(row.get("end_date")),
+            "url": _strip_or_none(row.get("url")),
+            "description": _strip_or_none(row.get("description")),
+            "order_index": idx,
+            "updated_at": now_iso,
+        }
+        if tech_stack_list is not None:
+            prepared_row["tech_stack"] = tech_stack_list
+        if team_list is not None:
+            prepared_row["team"] = team_list
+        row_id = _strip_or_none(row.get("id"))
+        if not row_id:
+            row_id = str(uuid.uuid4())
+        prepared_row["id"] = row_id
+        prepared.append(prepared_row)
+    return prepared
+
+
+def _prepare_publication_rows(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    now_iso = datetime.utcnow().isoformat()
+    for idx, row in enumerate(rows or []):
+        if not isinstance(row, dict):
+            continue
+        title = _strip_or_none(row.get("title"))
+        if not title:
+            continue
+        authors_raw = row.get("authors")
+        authors_list: Optional[List[str]] = None
+        if isinstance(authors_raw, list):
+            authors_list = [s for s in (_strip_or_none(part) for part in authors_raw) if s]
+        elif isinstance(authors_raw, str):
+            authors_list = [s for s in (_strip_or_none(part) for part in authors_raw.split(",")) if s]
+        prepared_row: Dict[str, Any] = {
+            "title": title,
+            "publisher": _strip_or_none(row.get("publisher")),
+            "publication_date": _date_or_none(row.get("publication_date")),
+            "url": _strip_or_none(row.get("url")),
+            "abstract": _strip_or_none(row.get("abstract")),
+            "order_index": idx,
+            "updated_at": now_iso,
+        }
+        if authors_list is not None:
+            prepared_row["authors"] = authors_list
+        row_id = _strip_or_none(row.get("id"))
+        if not row_id:
+            row_id = str(uuid.uuid4())
+        prepared_row["id"] = row_id
+        prepared.append(prepared_row)
+    return prepared
+
+
+def _sync_profile_collection(profile_id: str, table: str, rows: List[Dict[str, Any]]):
+    supabase = get_service_client()
+    existing_q = (
+        supabase.table(table)
+        .select("id")
+        .eq("user_profile_id", profile_id)
+        .execute()
+    )
+    if getattr(existing_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch {table}): {existing_q.error}")
+    existing_ids = {row["id"] for row in (existing_q.data or []) if row.get("id")}
+    incoming_ids = {row["id"] for row in rows if row.get("id")}
+    to_delete = list(existing_ids - incoming_ids)
+
+    delete_res = None
+    existing_rows = [row for row in rows if row.get("id")]
+    new_rows = [row for row in rows if not row.get("id")]
+
+    if existing_rows:
+        payload = [{**row, "user_profile_id": profile_id} for row in existing_rows]
+        upsert = (
+            supabase.table(table)
+            .upsert(payload, on_conflict="id")
+            .execute()
+        )
+        if getattr(upsert, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (upsert {table}): {upsert.error}")
+
+    if new_rows:
+        insert_payload = [{**row, "user_profile_id": profile_id} for row in new_rows]
+        insert_res = supabase.table(table).insert(insert_payload).execute()
+        if getattr(insert_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert {table}): {insert_res.error}")
+
+    if to_delete:
+        delete_res = (
+            supabase.table(table)
+            .delete()
+            .in_("id", to_delete)
+            .execute()
+        )
+        if getattr(delete_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (cleanup {table}): {delete_res.error}")
+
+    if not rows and existing_ids and not to_delete:
+        delete_res = (
+            supabase.table(table)
+            .delete()
+            .eq("user_profile_id", profile_id)
+            .execute()
+        )
+        if getattr(delete_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (clear {table}): {delete_res.error}")
+
+    if delete_res is not None and getattr(delete_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete {table}): {delete_res.error}")
+
+
+def _fetch_profile_related(profile_id: str, table: str, order_by: Optional[List[Tuple[str, bool]]] = None) -> List[Dict[str, Any]]:
+    supabase = get_service_client()
+    query = supabase.table(table).select("*").eq("user_profile_id", profile_id)
+    if order_by:
+        for column, desc in order_by:
+            query = query.order(column, desc=bool(desc))
+    res = query.execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch {table}): {res.error}")
+    items: List[Dict[str, Any]] = []
+    for raw in res.data or []:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        item.pop("user_profile_id", None)
+        for key in ("created_at", "updated_at", "start_date", "end_date", "issue_date", "expiration_date", "publication_date"):
+            if key in item and isinstance(item[key], (datetime, date)):
+                item[key] = item[key].isoformat()
+        if table == "user_experiences":
+            item["media"] = item.get("media") or []
+        if table == "user_portfolio_projects":
+            item["tech_stack"] = item.get("tech_stack") or []
+            item["team"] = item.get("team") or []
+        if table == "user_publications":
+            item["authors"] = item.get("authors") or []
+        items.append(item)
+    return items
 
 
 def _update_profile_me(token: Optional[str], fields: dict):
@@ -2199,13 +2562,20 @@ def _update_profile_me(token: Optional[str], fields: dict):
         "verification_score", "technologies", "skills", "certifications", "languages", "interests",
         "project_info", "publications", "achievements", "experience",
     }
-    payload = {k: v for k, v in (fields or {}).items() if k in allowed}
+    fields = fields or {}
+    experiences_payload = fields.pop("experiences", None)
+    education_payload = fields.pop("education_entries", None)
+    certifications_payload = fields.pop("certification_entries", None)
+    projects_payload = fields.pop("portfolio_projects", None)
+    publications_payload = fields.pop("publication_entries", None)
+
+    payload = {k: v for k, v in fields.items() if k in allowed}
 
     # Resolve academic relations if provided
-    college_name = (fields or {}).get("college_name")
-    department_name = (fields or {}).get("department_name")
-    batch_from = (fields or {}).get("batch_from")
-    batch_to = (fields or {}).get("batch_to")
+    college_name = fields.get("college_name")
+    department_name = fields.get("department_name")
+    batch_from = fields.get("batch_from")
+    batch_to = fields.get("batch_to")
 
     if college_name:
         college_id = _resolve_college_id_by_name(college_name)
@@ -2222,6 +2592,21 @@ def _update_profile_me(token: Optional[str], fields: dict):
     upd = supabase.table("user_profiles").update(payload).eq("id", profile_id).execute()
     if getattr(upd, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (update profile): {upd.error}")
+    if experiences_payload is not None:
+        prepared = _prepare_experience_rows(experiences_payload if isinstance(experiences_payload, list) else None)
+        _sync_profile_collection(profile_id, "user_experiences", prepared)
+    if education_payload is not None:
+        prepared = _prepare_education_rows(education_payload if isinstance(education_payload, list) else None)
+        _sync_profile_collection(profile_id, "user_education", prepared)
+    if certifications_payload is not None:
+        prepared = _prepare_certification_rows(certifications_payload if isinstance(certifications_payload, list) else None)
+        _sync_profile_collection(profile_id, "user_certifications", prepared)
+    if projects_payload is not None:
+        prepared = _prepare_project_rows(projects_payload if isinstance(projects_payload, list) else None)
+        _sync_profile_collection(profile_id, "user_portfolio_projects", prepared)
+    if publications_payload is not None:
+        prepared = _prepare_publication_rows(publications_payload if isinstance(publications_payload, list) else None)
+        _sync_profile_collection(profile_id, "user_publications", prepared)
     return {"updated": True}
 
 
@@ -3278,6 +3663,33 @@ def get_public_profile(user_id: str):
     if not res.data:
         raise HTTPException(status_code=404, detail="Profile not found")
     row = dict(res.data[0])
+    profile_id = row.get("id")
+    if profile_id:
+        row["experiences"] = _fetch_profile_related(
+            profile_id,
+            "user_experiences",
+            [("order_index", False), ("start_date", True), ("created_at", False)],
+        )
+        row["education_entries"] = _fetch_profile_related(
+            profile_id,
+            "user_education",
+            [("order_index", False), ("start_date", True), ("created_at", False)],
+        )
+        row["certification_entries"] = _fetch_profile_related(
+            profile_id,
+            "user_certifications",
+            [("order_index", False), ("issue_date", True), ("created_at", False)],
+        )
+        row["portfolio_projects"] = _fetch_profile_related(
+            profile_id,
+            "user_portfolio_projects",
+            [("order_index", False), ("start_date", True), ("created_at", False)],
+        )
+        row["publication_entries"] = _fetch_profile_related(
+            profile_id,
+            "user_publications",
+            [("order_index", False), ("publication_date", True), ("created_at", False)],
+        )
     row["user_id"] = row.pop("auth_user_id")
     return row
 
@@ -3575,6 +3987,138 @@ def progress_summary(authorization: Optional[str] = Header(default=None)):
 
 # ---------- Profile update & uploads ----------
 
+
+def _strip_or_none(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        trimmed = value.strip()
+        return trimmed or None
+    return str(value)
+
+
+def _date_or_none(value: Any) -> Optional[str]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value.strip()).isoformat()
+        except ValueError:
+            return None
+    return None
+
+
+class ProfileMediaItemIn(BaseModel):
+    kind: Optional[str] = None
+    url: Optional[str] = None
+    title: Optional[str] = None
+
+    @validator("kind", "url", "title", pre=True)
+    def _normalize(cls, v: Any):  # noqa: N805
+        return _strip_or_none(v)
+
+
+class ExperienceIn(BaseModel):
+    id: Optional[str] = None
+    title: str
+    employment_type: Optional[str] = None
+    company: Optional[str] = None
+    company_logo_url: Optional[str] = None
+    location: Optional[str] = None
+    location_type: Optional[str] = None
+    start_date: date
+    end_date: Optional[date] = None
+    is_current: Optional[bool] = False
+    description: Optional[str] = None
+    media: Optional[List[ProfileMediaItemIn]] = None
+
+    @validator("title", "employment_type", "company", "company_logo_url", "location", "location_type", "description", pre=True)
+    def _trim_str(cls, v: Any):  # noqa: N805
+        return _strip_or_none(v)
+
+
+class EducationIn(BaseModel):
+    id: Optional[str] = None
+    school: str
+    degree: Optional[str] = None
+    field_of_study: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    grade: Optional[str] = None
+    activities: Optional[str] = None
+    description: Optional[str] = None
+
+    @validator("school", "degree", "field_of_study", "grade", "activities", "description", pre=True)
+    def _trim(cls, v: Any):  # noqa: N805
+        return _strip_or_none(v)
+
+
+class CertificationIn(BaseModel):
+    id: Optional[str] = None
+    name: str
+    issuing_org: Optional[str] = None
+    issue_date: Optional[date] = None
+    expiration_date: Optional[date] = None
+    does_not_expire: Optional[bool] = False
+    credential_id: Optional[str] = None
+    credential_url: Optional[str] = None
+    description: Optional[str] = None
+
+    @validator("name", "issuing_org", "credential_id", "credential_url", "description", pre=True)
+    def _trim(cls, v: Any):  # noqa: N805
+        return _strip_or_none(v)
+
+
+class PortfolioProjectIn(BaseModel):
+    id: Optional[str] = None
+    name: str
+    associated_experience_id: Optional[str] = None
+    associated_education_id: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    url: Optional[str] = None
+    description: Optional[str] = None
+    tech_stack: Optional[List[str]] = None
+    team: Optional[List[Dict[str, Any]]] = None
+
+    @validator("name", "associated_experience_id", "associated_education_id", "url", "description", pre=True)
+    def _trim(cls, v: Any):  # noqa: N805
+        return _strip_or_none(v)
+
+
+class PublicationIn(BaseModel):
+    id: Optional[str] = None
+    title: str
+    publisher: Optional[str] = None
+    publication_date: Optional[date] = None
+    authors: Optional[List[str]] = None
+    url: Optional[str] = None
+    abstract: Optional[str] = None
+
+    @validator("title", "publisher", "url", "abstract", pre=True)
+    def _trim(cls, v: Any):  # noqa: N805
+        return _strip_or_none(v)
+
+    @validator("authors", pre=True)
+    def _normalize_authors(cls, v: Any):  # noqa: N805
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return [part.strip() for part in v.split(",") if part.strip()]
+        if isinstance(v, list):
+            cleaned = []
+            for item in v:
+                cleaned_item = _strip_or_none(item)
+                if cleaned_item:
+                    cleaned.append(cleaned_item)
+            return cleaned
+        return None
+
+
 class ProfileUpdateIn(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
@@ -3584,6 +4128,11 @@ class ProfileUpdateIn(BaseModel):
     leetcode: Optional[str] = None
     specializations: Optional[list[str]] = None
     projects: Optional[list[dict]] = None
+    experiences: Optional[List[ExperienceIn]] = None
+    education_entries: Optional[List[EducationIn]] = None
+    certification_entries: Optional[List[CertificationIn]] = None
+    portfolio_projects: Optional[List[PortfolioProjectIn]] = None
+    publication_entries: Optional[List[PublicationIn]] = None
     # Extended profile fields (UI sends these too)
     headline: Optional[str] = None
     location: Optional[str] = None

@@ -311,35 +311,366 @@
                             </label>
                         </div>
 
-                        <h2 class="text-lg font-semibold">Projects</h2>
-                        <div class="grid gap-2">
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-slate-700 dark:text-slate-300">Projects</span>
-                                <button id="addProject" type="button"
-                                    class="inline-flex items-center gap-1 rounded-lg border border-slate-200/60 dark:border-white/10 px-2 py-1 text-xs hover:border-brand-400/60">
-                                    <span class="material-symbols-rounded text-[18px]">add</span> Add project
-                                </button>
-                            </div>
-                            <div id="projectsList" class="grid gap-3"></div>
-                            <template id="projectRowTpl">
-                                <div class="rounded-xl border border-slate-200/60 dark:border-white/10 p-3 grid gap-2">
-                                    <div class="grid md:grid-cols-3 gap-2">
-                                        <input name="p_name" type="text" placeholder="Project name"
-                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
-                                        <input name="p_link" type="url" placeholder="https://…"
-                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2" />
-                                        <div class="flex items-center justify-end">
-                                            <button type="button"
-                                                class="removeProject inline-flex items-center gap-1 rounded-lg border border-slate-200/60 dark:border-white/10 px-2 py-1 text-xs hover:border-rose-400/60">
-                                                <span class="material-symbols-rounded text-[18px]">delete</span> Remove
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <textarea name="p_desc" rows="2" placeholder="Short description"
-                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2"></textarea>
+                        <h2 class="text-lg font-semibold mt-8">Experience</h2>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">Chronicle roles, internships, research or teaching engagements.</p>
+                        <div id="experienceList" class="grid gap-3 mt-3"></div>
+                        <button id="addExperienceBtn" type="button"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 text-xs hover:border-brand-400/60 text-brand-600 dark:text-brand-300">
+                            <span class="material-symbols-rounded text-[18px]">add_circle</span> Add experience
+                        </button>
+                        <template id="experienceTemplate">
+                            <div class="rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-4 grid gap-3" data-entry="experience">
+                                <input type="hidden" name="exp_id" />
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Title *</span>
+                                        <input name="exp_title" type="text" required placeholder="Software Engineer"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Employment type</span>
+                                        <select name="exp_employment_type"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2">
+                                            <option value=""></option>
+                                            <option>Full-time</option>
+                                            <option>Part-time</option>
+                                            <option>Internship</option>
+                                            <option>Freelance</option>
+                                            <option>Contract</option>
+                                            <option>Self-employed</option>
+                                            <option>Apprenticeship</option>
+                                        </select>
+                                    </label>
                                 </div>
-                            </template>
-                        </div>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Company / Organization</span>
+                                        <input name="exp_company" type="text" placeholder="Company name"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Company logo URL</span>
+                                        <input name="exp_company_logo" type="url" placeholder="https://logo.png"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                </div>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Location</span>
+                                        <input name="exp_location" type="text" placeholder="City, Country"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Location type</span>
+                                        <select name="exp_location_type"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2">
+                                            <option value=""></option>
+                                            <option>Onsite</option>
+                                            <option>Remote</option>
+                                            <option>Hybrid</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="grid md:grid-cols-3 gap-3 items-end">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Start date *</span>
+                                        <input name="exp_start_date" type="date" required
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">End date</span>
+                                        <input name="exp_end_date" type="date"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                        <input name="exp_current" type="checkbox" class="rounded border-slate-300 text-brand-500"/>
+                                        <span>Currently here</span>
+                                    </label>
+                                </div>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Description</span>
+                                    <textarea name="exp_description" rows="3" placeholder="Impact, responsibilities, wins…"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2"></textarea>
+                                </label>
+                                <div class="grid gap-2" data-media-list></div>
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <button type="button" class="addExperienceMedia inline-flex items-center gap-1 rounded-lg border border-slate-200/60 dark:border-white/15 px-2 py-1 text-xs hover:border-brand-400/60">
+                                        <span class="material-symbols-rounded text-[18px]">attach_file_add</span> Attachment
+                                    </button>
+                                    <button type="button" class="removeEntry inline-flex items-center gap-1 rounded-lg border border-rose-300/40 text-rose-500 px-2 py-1 text-xs hover:border-rose-400/60">
+                                        <span class="material-symbols-rounded text-[18px]">delete</span> Remove experience
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                        <template id="experienceMediaTemplate">
+                            <div class="rounded-lg border border-slate-200/50 dark:border-white/15 bg-white/60 dark:bg-night-900/50 p-3 grid md:grid-cols-2 gap-2" data-media-item>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Title</span>
+                                    <input name="media_title" type="text" placeholder="Slide deck"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white px-2 py-1.5" />
+                                </label>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">URL</span>
+                                    <input name="media_url" type="url" placeholder="https://"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white px-2 py-1.5" />
+                                </label>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Type</span>
+                                    <select name="media_kind" class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white px-2 py-1.5">
+                                        <option value="link">Link</option>
+                                        <option value="document">Document</option>
+                                        <option value="video">Video</option>
+                                        <option value="image">Image</option>
+                                        <option value="presentation">Presentation</option>
+                                    </select>
+                                </label>
+                                <div class="flex items-end justify-end">
+                                    <button type="button" class="removeMedia inline-flex items-center gap-1 rounded-lg border border-rose-300/40 text-rose-500 px-2 py-1 text-xs hover:border-rose-400/60">Remove</button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <h2 class="text-lg font-semibold mt-8">Education</h2>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">Capture formal education, bootcamps or certifications earned through institutions.</p>
+                        <div id="educationList" class="grid gap-3 mt-3"></div>
+                        <button id="addEducationBtn" type="button"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 text-xs hover:border-brand-400/60 text-brand-600 dark:text-brand-300">
+                            <span class="material-symbols-rounded text-[18px]">add_circle</span> Add education
+                        </button>
+                        <template id="educationTemplate">
+                            <div class="rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-4 grid gap-3" data-entry="education">
+                                <input type="hidden" name="edu_id" />
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Institution *</span>
+                                    <input name="edu_school" type="text" required placeholder="University name"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                </label>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Degree</span>
+                                        <input name="edu_degree" type="text" placeholder="BSc, MSc…"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Field of study</span>
+                                        <input name="edu_field" type="text" placeholder="Computer Science"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                </div>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Start date</span>
+                                        <input name="edu_start" type="date"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">End date</span>
+                                        <input name="edu_end" type="date"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                </div>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Grade / GPA</span>
+                                        <input name="edu_grade" type="text" placeholder="9.1 CGPA"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Activities & societies</span>
+                                        <input name="edu_activities" type="text" placeholder="Clubs, committees…"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                </div>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Highlights</span>
+                                    <textarea name="edu_description" rows="3" placeholder="Leadership, projects, honours…"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2"></textarea>
+                                </label>
+                                <div class="flex justify-end">
+                                    <button type="button" class="removeEntry inline-flex items-center gap-1 rounded-lg border border-rose-300/40 text-rose-500 px-2 py-1 text-xs hover:border-rose-400/60">Remove education</button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <h2 class="text-lg font-semibold mt-8">Licenses & Certifications</h2>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">Add credentials so recruiters can verify your expertise.</p>
+                        <div id="certificationList" class="grid gap-3 mt-3"></div>
+                        <button id="addCertificationBtn" type="button"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 text-xs hover:border-brand-400/60 text-brand-600 dark:text-brand-300">
+                            <span class="material-symbols-rounded text-[18px]">add_circle</span> Add certification
+                        </button>
+                        <template id="certificationTemplate">
+                            <div class="rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-4 grid gap-3" data-entry="certification">
+                                <input type="hidden" name="cert_id" />
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Certification *</span>
+                                        <input name="cert_name" type="text" required placeholder="AWS Certified Developer"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Issuing organization</span>
+                                        <input name="cert_org" type="text" placeholder="AWS"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                </div>
+                                <div class="grid md:grid-cols-3 gap-3 items-end">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Issue date</span>
+                                        <input name="cert_issue" type="date"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Expiration date</span>
+                                        <input name="cert_expiry" type="date"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                        <input name="cert_no_expiry" type="checkbox" class="rounded border-slate-300 text-brand-500"/> Does not expire
+                                    </label>
+                                </div>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Credential ID</span>
+                                        <input name="cert_credential_id" type="text"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Credential URL</span>
+                                        <input name="cert_credential_url" type="url" placeholder="https://verify"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                </div>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Notes</span>
+                                    <textarea name="cert_description" rows="2" placeholder="Score, scope or coverage details"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2"></textarea>
+                                </label>
+                                <div class="flex justify-end">
+                                    <button type="button" class="removeEntry inline-flex items-center gap-1 rounded-lg border border-rose-300/40 text-rose-500 px-2 py-1 text-xs hover:border-rose-400/60">Remove certification</button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <h2 class="text-lg font-semibold mt-8">Portfolio Projects</h2>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">Showcase academic, professional or personal projects with outcomes.</p>
+                        <div id="portfolioList" class="grid gap-3 mt-3"></div>
+                        <button id="addPortfolioBtn" type="button"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 text-xs hover:border-brand-400/60 text-brand-600 dark:text-brand-300">
+                            <span class="material-symbols-rounded text-[18px]">add_circle</span> Add project
+                        </button>
+                        <template id="portfolioTemplate">
+                            <div class="rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-4 grid gap-3" data-entry="portfolio">
+                                <input type="hidden" name="proj_id" />
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Project name *</span>
+                                    <input name="proj_name" type="text" required placeholder="Build Week Platform"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                </label>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Linked experience</span>
+                                        <select name="proj_experience" data-associate="experience"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2">
+                                            <option value=""></option>
+                                        </select>
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Linked education</span>
+                                        <select name="proj_education" data-associate="education"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2">
+                                            <option value=""></option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Start date</span>
+                                        <input name="proj_start" type="date"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">End date</span>
+                                        <input name="proj_end" type="date"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                </div>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Project URL</span>
+                                    <input name="proj_url" type="url" placeholder="https://demo"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                </label>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Description</span>
+                                    <textarea name="proj_description" rows="3" placeholder="Goals, tech and impact…"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2"></textarea>
+                                </label>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Tech stack (comma separated)</span>
+                                        <input name="proj_stack" type="text" placeholder="React, FastAPI, Supabase"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Team (comma separated)</span>
+                                        <input name="proj_team" type="text" placeholder="Alice, Bob"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                </div>
+                                <div class="flex justify-end">
+                                    <button type="button" class="removeEntry inline-flex items-center gap-1 rounded-lg border border-rose-300/40 text-rose-500 px-2 py-1 text-xs hover:border-rose-400/60">Remove project</button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <h2 class="text-lg font-semibold mt-8">Publications</h2>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">Include papers, talks or articles to highlight thought leadership.</p>
+                        <div id="publicationList" class="grid gap-3 mt-3"></div>
+                        <button id="addPublicationBtn" type="button"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 text-xs hover:border-brand-400/60 text-brand-600 dark:text-brand-300">
+                            <span class="material-symbols-rounded text-[18px]">add_circle</span> Add publication
+                        </button>
+                        <template id="publicationTemplate">
+                            <div class="rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-4 grid gap-3" data-entry="publication">
+                                <input type="hidden" name="pub_id" />
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Title *</span>
+                                    <input name="pub_title" type="text" required placeholder="Paper title"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                </label>
+                                <div class="grid md:grid-cols-2 gap-3">
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Publisher / Journal</span>
+                                        <input name="pub_publisher" type="text" placeholder="ACM, Medium…"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                    <label class="grid gap-1">
+                                        <span class="text-xs text-slate-600 dark:text-slate-300">Publication date</span>
+                                        <input name="pub_date" type="date"
+                                            class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                    </label>
+                                </div>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Authors (comma separated)</span>
+                                    <input name="pub_authors" type="text" placeholder="You, Collaborator"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                </label>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Publication URL</span>
+                                    <input name="pub_url" type="url" placeholder="https://doi.org/..."
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2" />
+                                </label>
+                                <label class="grid gap-1">
+                                    <span class="text-xs text-slate-600 dark:text-slate-300">Abstract / Summary</span>
+                                    <textarea name="pub_abstract" rows="3" placeholder="Key findings, impact, context"
+                                        class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-900/50 px-3 py-2"></textarea>
+                                </label>
+                                <div class="flex justify-end">
+                                    <button type="button" class="removeEntry inline-flex items-center gap-1 rounded-lg border border-rose-300/40 text-rose-500 px-2 py-1 text-xs hover:border-rose-400/60">Remove publication</button>
+                                </div>
+                            </div>
+                        </template>
                         <div class="flex items-center justify-between">
                             <a href="profile.html"
                                 class="rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-2 hover:border-brand-400/60">Cancel</a>
@@ -360,6 +691,305 @@
         function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
         function authHeaders() { const t = getToken(); return t ? { 'Authorization': `Bearer ${t}` } : {}; }
         function initials(name) { if (!name) return 'U'; const p = String(name).trim().split(/\s+/).slice(0, 2); return p.map(x => x[0]?.toUpperCase()).join('') || 'U'; }
+
+        const experienceList = document.getElementById('experienceList');
+        const educationList = document.getElementById('educationList');
+        const certificationList = document.getElementById('certificationList');
+        const portfolioList = document.getElementById('portfolioList');
+        const publicationList = document.getElementById('publicationList');
+
+        const experienceTemplate = document.getElementById('experienceTemplate');
+        const experienceMediaTemplate = document.getElementById('experienceMediaTemplate');
+        const educationTemplate = document.getElementById('educationTemplate');
+        const certificationTemplate = document.getElementById('certificationTemplate');
+        const portfolioTemplate = document.getElementById('portfolioTemplate');
+        const publicationTemplate = document.getElementById('publicationTemplate');
+
+        const addExperienceBtn = document.getElementById('addExperienceBtn');
+        const addEducationBtn = document.getElementById('addEducationBtn');
+        const addCertificationBtn = document.getElementById('addCertificationBtn');
+        const addPortfolioBtn = document.getElementById('addPortfolioBtn');
+        const addPublicationBtn = document.getElementById('addPublicationBtn');
+
+
+        const parseList = (value) => (value || '').split(',').map(s => s.trim()).filter(Boolean);
+
+        const createFromTemplate = (template) => template ? template.content.firstElementChild.cloneNode(true) : null;
+
+        const toggleDisabled = (input, disabled) => {
+            if (!input) return;
+            if (disabled) {
+                input.value = '';
+                input.disabled = true;
+                input.classList.add('opacity-60');
+            } else {
+                input.disabled = false;
+                input.classList.remove('opacity-60');
+            }
+        };
+
+        const addExperienceMedia = (container, data = {}) => {
+            if (!experienceMediaTemplate || !container) return;
+            const node = createFromTemplate(experienceMediaTemplate);
+            if (!node) return;
+            node.querySelector('input[name="media_title"]').value = data.title || '';
+            node.querySelector('input[name="media_url"]').value = data.url || '';
+            node.querySelector('select[name="media_kind"]').value = data.kind || 'link';
+            node.querySelector('.removeMedia')?.addEventListener('click', () => node.remove());
+            container.appendChild(node);
+        };
+
+        const addExperienceRow = (data = {}) => {
+            if (!experienceTemplate || !experienceList) return;
+            const node = createFromTemplate(experienceTemplate);
+            if (!node) return;
+            node.querySelector('input[name="exp_id"]').value = data.id || '';
+            node.querySelector('input[name="exp_title"]').value = data.title || '';
+            node.querySelector('select[name="exp_employment_type"]').value = data.employment_type || '';
+            node.querySelector('input[name="exp_company"]').value = data.company || '';
+            node.querySelector('input[name="exp_company_logo"]').value = data.company_logo_url || '';
+            node.querySelector('input[name="exp_location"]').value = data.location || '';
+            node.querySelector('select[name="exp_location_type"]').value = data.location_type || '';
+            node.querySelector('input[name="exp_start_date"]').value = data.start_date || '';
+            node.querySelector('input[name="exp_end_date"]').value = data.end_date || '';
+            node.querySelector('textarea[name="exp_description"]').value = data.description || '';
+            const current = node.querySelector('input[name="exp_current"]');
+            current.checked = Boolean(data.is_current);
+            const endInput = node.querySelector('input[name="exp_end_date"]');
+            const toggle = () => toggleDisabled(endInput, current.checked);
+            current.addEventListener('change', toggle);
+            toggle();
+            const mediaWrap = node.querySelector('[data-media-list]');
+            (Array.isArray(data.media) ? data.media : []).forEach(item => addExperienceMedia(mediaWrap, item));
+            node.querySelector('.addExperienceMedia')?.addEventListener('click', () => addExperienceMedia(mediaWrap));
+            node.querySelector('.removeEntry')?.addEventListener('click', () => { node.remove(); refreshAssociations(); });
+            experienceList.appendChild(node);
+        };
+
+        const addEducationRow = (data = {}) => {
+            if (!educationTemplate || !educationList) return;
+            const node = createFromTemplate(educationTemplate);
+            if (!node) return;
+            node.querySelector('input[name="edu_id"]').value = data.id || '';
+            node.querySelector('input[name="edu_school"]').value = data.school || '';
+            node.querySelector('input[name="edu_degree"]').value = data.degree || '';
+            node.querySelector('input[name="edu_field"]').value = data.field_of_study || '';
+            node.querySelector('input[name="edu_start"]').value = data.start_date || '';
+            node.querySelector('input[name="edu_end"]').value = data.end_date || '';
+            node.querySelector('input[name="edu_grade"]').value = data.grade || '';
+            node.querySelector('input[name="edu_activities"]').value = data.activities || '';
+            node.querySelector('textarea[name="edu_description"]').value = data.description || '';
+            node.querySelector('.removeEntry')?.addEventListener('click', () => { node.remove(); refreshAssociations(); });
+            educationList.appendChild(node);
+        };
+
+        const addCertificationRow = (data = {}) => {
+            if (!certificationTemplate || !certificationList) return;
+            const node = createFromTemplate(certificationTemplate);
+            if (!node) return;
+            node.querySelector('input[name="cert_id"]').value = data.id || '';
+            node.querySelector('input[name="cert_name"]').value = data.name || '';
+            node.querySelector('input[name="cert_org"]').value = data.issuing_org || '';
+            node.querySelector('input[name="cert_issue"]').value = data.issue_date || '';
+            node.querySelector('input[name="cert_expiry"]').value = data.expiration_date || '';
+            const noExpiry = node.querySelector('input[name="cert_no_expiry"]');
+            noExpiry.checked = Boolean(data.does_not_expire);
+            const expiryInput = node.querySelector('input[name="cert_expiry"]');
+            const toggle = () => toggleDisabled(expiryInput, noExpiry.checked);
+            noExpiry.addEventListener('change', toggle);
+            toggle();
+            node.querySelector('input[name="cert_credential_id"]').value = data.credential_id || '';
+            node.querySelector('input[name="cert_credential_url"]').value = data.credential_url || '';
+            node.querySelector('textarea[name="cert_description"]').value = data.description || '';
+            node.querySelector('.removeEntry')?.addEventListener('click', () => node.remove());
+            certificationList.appendChild(node);
+        };
+
+        const getExperienceOptions = () => Array.from(experienceList?.querySelectorAll('[data-entry="experience"]') || [])
+            .map(row => ({
+                id: row.querySelector('input[name="exp_id"]').value,
+                label: row.querySelector('input[name="exp_title"]').value || 'Experience'
+            }))
+            .filter(item => item.id);
+
+        const getEducationOptions = () => Array.from(educationList?.querySelectorAll('[data-entry="education"]') || [])
+            .map(row => ({
+                id: row.querySelector('input[name="edu_id"]').value,
+                label: row.querySelector('input[name="edu_school"]').value || 'Education'
+            }))
+            .filter(item => item.id);
+
+        const fillAssociateOptions = (select, options, selected) => {
+            if (!select) return;
+            const current = selected ?? select.value ?? '';
+            select.innerHTML = '';
+            const blank = document.createElement('option');
+            blank.value = '';
+            blank.textContent = '';
+            select.appendChild(blank);
+            let hasMatch = false;
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.id;
+                option.textContent = opt.label;
+                if (opt.id === current) { option.selected = true; hasMatch = true; }
+                select.appendChild(option);
+            });
+            if (!hasMatch) select.value = '';
+        };
+
+        const refreshAssociations = () => {
+            const expOptions = getExperienceOptions();
+            const eduOptions = getEducationOptions();
+            Array.from(portfolioList?.querySelectorAll('[data-entry="portfolio"]') || []).forEach(row => {
+                const expSelect = row.querySelector('select[name="proj_experience"]');
+                const eduSelect = row.querySelector('select[name="proj_education"]');
+                if (expSelect) fillAssociateOptions(expSelect, expOptions, expSelect.dataset.selected || expSelect.value);
+                if (eduSelect) fillAssociateOptions(eduSelect, eduOptions, eduSelect.dataset.selected || eduSelect.value);
+            });
+        };
+
+        const addPortfolioRow = (data = {}) => {
+            if (!portfolioTemplate || !portfolioList) return;
+            const node = createFromTemplate(portfolioTemplate);
+            if (!node) return;
+            node.querySelector('input[name="proj_id"]').value = data.id || '';
+            node.querySelector('input[name="proj_name"]').value = data.name || '';
+            const expSelect = node.querySelector('select[name="proj_experience"]');
+            const eduSelect = node.querySelector('select[name="proj_education"]');
+            if (expSelect) expSelect.dataset.selected = data.associated_experience_id || '';
+            if (eduSelect) eduSelect.dataset.selected = data.associated_education_id || '';
+            node.querySelector('input[name="proj_start"]').value = data.start_date || '';
+            node.querySelector('input[name="proj_end"]').value = data.end_date || '';
+            node.querySelector('input[name="proj_url"]').value = data.url || '';
+            node.querySelector('textarea[name="proj_description"]').value = data.description || '';
+            node.querySelector('input[name="proj_stack"]').value = Array.isArray(data.tech_stack) ? data.tech_stack.join(', ') : '';
+            const teamNames = Array.isArray(data.team) ? data.team.map(member => typeof member === 'string' ? member : (member?.name || '')).filter(Boolean) : [];
+            node.querySelector('input[name="proj_team"]').value = teamNames.join(', ');
+            node.querySelector('.removeEntry')?.addEventListener('click', () => { node.remove(); });
+            portfolioList.appendChild(node);
+            refreshAssociations();
+        };
+
+        const addPublicationRow = (data = {}) => {
+            if (!publicationTemplate || !publicationList) return;
+            const node = createFromTemplate(publicationTemplate);
+            if (!node) return;
+            node.querySelector('input[name="pub_id"]').value = data.id || '';
+            node.querySelector('input[name="pub_title"]').value = data.title || '';
+            node.querySelector('input[name="pub_publisher"]').value = data.publisher || '';
+            node.querySelector('input[name="pub_date"]').value = data.publication_date || '';
+            const authors = Array.isArray(data.authors) ? data.authors.join(', ') : '';
+            node.querySelector('input[name="pub_authors"]').value = authors;
+            node.querySelector('input[name="pub_url"]').value = data.url || '';
+            node.querySelector('textarea[name="pub_abstract"]').value = data.abstract || '';
+            node.querySelector('.removeEntry')?.addEventListener('click', () => node.remove());
+            publicationList.appendChild(node);
+        };
+
+        const collectExperienceData = () => Array.from(experienceList?.querySelectorAll('[data-entry="experience"]') || []).map(row => {
+            const id = row.querySelector('input[name="exp_id"]').value || null;
+            const title = row.querySelector('input[name="exp_title"]').value.trim();
+            const start = row.querySelector('input[name="exp_start_date"]').value;
+            if (!title || !start) return null;
+            const media = Array.from(row.querySelectorAll('[data-media-item]')).map(item => {
+                const url = item.querySelector('input[name="media_url"]').value.trim();
+                if (!url) return null;
+                return {
+                    title: item.querySelector('input[name="media_title"]').value.trim() || null,
+                    url,
+                    kind: item.querySelector('select[name="media_kind"]').value || 'link',
+                };
+            }).filter(Boolean);
+            const endInput = row.querySelector('input[name="exp_end_date"]');
+            return {
+                id,
+                title,
+                employment_type: row.querySelector('select[name="exp_employment_type"]').value || null,
+                company: row.querySelector('input[name="exp_company"]').value.trim() || null,
+                company_logo_url: row.querySelector('input[name="exp_company_logo"]').value.trim() || null,
+                location: row.querySelector('input[name="exp_location"]').value.trim() || null,
+                location_type: row.querySelector('select[name="exp_location_type"]').value || null,
+                start_date: start || null,
+                end_date: endInput && endInput.disabled ? null : (endInput?.value || null),
+                is_current: row.querySelector('input[name="exp_current"]').checked,
+                description: row.querySelector('textarea[name="exp_description"]').value.trim() || null,
+                media,
+            };
+        }).filter(Boolean);
+
+        const collectEducationData = () => Array.from(educationList?.querySelectorAll('[data-entry="education"]') || []).map(row => {
+            const school = row.querySelector('input[name="edu_school"]').value.trim();
+            if (!school) return null;
+            return {
+                id: row.querySelector('input[name="edu_id"]').value || null,
+                school,
+                degree: row.querySelector('input[name="edu_degree"]').value.trim() || null,
+                field_of_study: row.querySelector('input[name="edu_field"]').value.trim() || null,
+                start_date: row.querySelector('input[name="edu_start"]').value || null,
+                end_date: row.querySelector('input[name="edu_end"]').value || null,
+                grade: row.querySelector('input[name="edu_grade"]').value.trim() || null,
+                activities: row.querySelector('input[name="edu_activities"]').value.trim() || null,
+                description: row.querySelector('textarea[name="edu_description"]').value.trim() || null,
+            };
+        }).filter(Boolean);
+
+        const collectCertificationData = () => Array.from(certificationList?.querySelectorAll('[data-entry="certification"]') || []).map(row => {
+            const name = row.querySelector('input[name="cert_name"]').value.trim();
+            if (!name) return null;
+            const noExpiry = row.querySelector('input[name="cert_no_expiry"]').checked;
+            const expiryInput = row.querySelector('input[name="cert_expiry"]');
+            return {
+                id: row.querySelector('input[name="cert_id"]').value || null,
+                name,
+                issuing_org: row.querySelector('input[name="cert_org"]').value.trim() || null,
+                issue_date: row.querySelector('input[name="cert_issue"]').value || null,
+                expiration_date: noExpiry ? null : (expiryInput?.value || null),
+                does_not_expire: noExpiry,
+                credential_id: row.querySelector('input[name="cert_credential_id"]').value.trim() || null,
+                credential_url: row.querySelector('input[name="cert_credential_url"]').value.trim() || null,
+                description: row.querySelector('textarea[name="cert_description"]').value.trim() || null,
+            };
+        }).filter(Boolean);
+
+        const collectPortfolioData = () => Array.from(portfolioList?.querySelectorAll('[data-entry="portfolio"]') || []).map(row => {
+            const name = row.querySelector('input[name="proj_name"]').value.trim();
+            if (!name) return null;
+            const stack = parseList(row.querySelector('input[name="proj_stack"]').value);
+            const team = parseList(row.querySelector('input[name="proj_team"]').value).map(member => ({ name: member }));
+            return {
+                id: row.querySelector('input[name="proj_id"]').value || null,
+                name,
+                associated_experience_id: row.querySelector('select[name="proj_experience"]').value || null,
+                associated_education_id: row.querySelector('select[name="proj_education"]').value || null,
+                start_date: row.querySelector('input[name="proj_start"]').value || null,
+                end_date: row.querySelector('input[name="proj_end"]').value || null,
+                url: row.querySelector('input[name="proj_url"]').value.trim() || null,
+                description: row.querySelector('textarea[name="proj_description"]').value.trim() || null,
+                tech_stack: stack,
+                team,
+            };
+        }).filter(Boolean);
+
+        const collectPublicationData = () => Array.from(publicationList?.querySelectorAll('[data-entry="publication"]') || []).map(row => {
+            const title = row.querySelector('input[name="pub_title"]').value.trim();
+            if (!title) return null;
+            return {
+                id: row.querySelector('input[name="pub_id"]').value || null,
+                title,
+                publisher: row.querySelector('input[name="pub_publisher"]').value.trim() || null,
+                publication_date: row.querySelector('input[name="pub_date"]').value || null,
+                authors: parseList(row.querySelector('input[name="pub_authors"]').value),
+                url: row.querySelector('input[name="pub_url"]').value.trim() || null,
+                abstract: row.querySelector('textarea[name="pub_abstract"]').value.trim() || null,
+            };
+        }).filter(Boolean);
+
+        addExperienceBtn?.addEventListener('click', () => { addExperienceRow(); });
+        addEducationBtn?.addEventListener('click', () => { addEducationRow(); });
+        addCertificationBtn?.addEventListener('click', () => { addCertificationRow(); });
+        addPortfolioBtn?.addEventListener('click', () => { addPortfolioRow(); });
+        addPublicationBtn?.addEventListener('click', () => { addPublicationRow(); });
 
         async function fetchProfileData() {
             let res = await fetch(`${apiBase}/api/profile/me`, { headers: authHeaders() });
@@ -409,39 +1039,50 @@
             document.getElementById('f_publications').value = data.publications || '';
             document.getElementById('f_project_info').value = data.project_info || '';
             document.getElementById('f_specs').value = Array.isArray(data.specializations) ? data.specializations.join(', ') : (data.specializations || '');
-            renderProjects(Array.isArray(data.projects) ? data.projects : []);
+
+            if (experienceList) {
+                experienceList.innerHTML = '';
+                const experiences = Array.isArray(data.experiences) ? data.experiences : [];
+                experiences.forEach(exp => addExperienceRow(exp));
+                if (!experiences.length) addExperienceRow();
+            }
+
+            if (educationList) {
+                educationList.innerHTML = '';
+                const educationEntries = Array.isArray(data.education_entries) ? data.education_entries : [];
+                educationEntries.forEach(entry => addEducationRow(entry));
+                if (!educationEntries.length) addEducationRow();
+            }
+
+            if (certificationList) {
+                certificationList.innerHTML = '';
+                const certEntries = Array.isArray(data.certification_entries) ? data.certification_entries : [];
+                certEntries.forEach(entry => addCertificationRow(entry));
+                if (!certEntries.length) addCertificationRow();
+            }
+
+            if (portfolioList) {
+                portfolioList.innerHTML = '';
+                const portfolioEntries = Array.isArray(data.portfolio_projects) ? data.portfolio_projects : [];
+                portfolioEntries.forEach(entry => addPortfolioRow(entry));
+                if (!portfolioEntries.length) addPortfolioRow();
+            }
+
+            if (publicationList) {
+                publicationList.innerHTML = '';
+                const publicationEntries = Array.isArray(data.publication_entries) ? data.publication_entries : [];
+                publicationEntries.forEach(entry => addPublicationRow(entry));
+                if (!publicationEntries.length) addPublicationRow();
+            }
+
+            refreshAssociations();
+
             if (data.profile_image_url) {
                 const a = document.getElementById('currentImage'); a.href = data.profile_image_url; a.classList.remove('hidden');
                 const img = document.getElementById('imagePreview'); img.src = data.profile_image_url; img.classList.remove('hidden');
             }
             if (data.resume_url) { const a = document.getElementById('currentResume'); a.href = data.resume_url; a.classList.remove('hidden'); }
         }
-
-        function renderProjects(projects) {
-            const list = document.getElementById('projectsList');
-            list.innerHTML = '';
-            if (!projects || projects.length === 0) { addProjectRow(); return; }
-            projects.forEach(p => addProjectRow(p));
-        }
-
-        function addProjectRow(p = {}) {
-            const tpl = document.getElementById('projectRowTpl');
-            const node = tpl.content.cloneNode(true);
-            const root = node.querySelector('div.rounded-xl');
-            const name = node.querySelector('input[name="p_name"]');
-            const link = node.querySelector('input[name="p_link"]');
-            const desc = node.querySelector('textarea[name="p_desc"]');
-            name.value = p.name || '';
-            link.value = p.link || '';
-            desc.value = p.desc || p.description || '';
-            node.querySelector('.removeProject').addEventListener('click', (e) => {
-                e.preventDefault();
-                root.remove();
-            });
-            document.getElementById('projectsList').appendChild(node);
-        }
-
-        document.getElementById('addProject').addEventListener('click', () => addProjectRow());
 
         document.getElementById('imageInput').addEventListener('change', (e) => {
             const file = e.target.files && e.target.files[0];
@@ -475,11 +1116,11 @@
         document.getElementById('detailsForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const specs = document.getElementById('f_specs').value.split(',').map(s => s.trim()).filter(Boolean);
-            const projects = Array.from(document.querySelectorAll('#projectsList > .rounded-xl')).map(row => ({
-                name: row.querySelector('input[name="p_name"]').value.trim(),
-                link: row.querySelector('input[name="p_link"]').value.trim(),
-                desc: row.querySelector('textarea[name="p_desc"]').value.trim(),
-            })).filter(p => p.name || p.link || p.desc);
+            const experiences = collectExperienceData();
+            const educationEntries = collectEducationData();
+            const certificationEntries = collectCertificationData();
+            const portfolioEntries = collectPortfolioData();
+            const publicationEntries = collectPublicationData();
             const payload = {
                 name: document.getElementById('f_name').value || null,
                 phone: document.getElementById('f_phone').value || null,
@@ -511,12 +1152,19 @@
                 experience: document.getElementById('f_experience').value || null,
                 publications: document.getElementById('f_publications').value || null,
                 project_info: document.getElementById('f_project_info').value || null,
-                projects: projects,
+                experiences: experiences,
+                education_entries: educationEntries,
+                certification_entries: certificationEntries,
+                portfolio_projects: portfolioEntries,
+                publication_entries: publicationEntries,
             };
             const res = await fetch(`${apiBase}/api/profile/me`, { method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const out = await res.json().catch(() => ({}));
             const st = document.getElementById('status'); st.classList.remove('hidden');
             st.textContent = res.ok ? '✔ Profile updated' : `❌ ${out?.detail || 'Update failed'}`;
+            if (res.ok) {
+                await loadProfile();
+            }
         });
 
         loadProfile();
