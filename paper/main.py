@@ -1824,7 +1824,7 @@ def get_current_user_profile(token: Optional[str]):
             related_education = _fetch_profile_related(
                 profile_id,
                 "user_education",
-                [("order_index", False), ("start_date", True), ("created_at", False)],
+                [("order_index", False), ("created_at", False)],
             )
             related_certifications = _fetch_profile_related(
                 profile_id,
@@ -2234,7 +2234,7 @@ def _get_profile_me(token: Optional[str]):
         profile["education_entries"] = _fetch_profile_related(
             profile_id_str,
             "user_education",
-            [("order_index", False), ("start_date", True), ("created_at", False)],
+            [("order_index", False), ("created_at", False)],
         )
         profile["certification_entries"] = _fetch_profile_related(
             profile_id_str,
@@ -2309,6 +2309,10 @@ def _prepare_experience_rows(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[
 
 
 def _prepare_education_rows(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """Prepare revised education rows.
+
+    Legacy keys (field_of_study, start_date, end_date) ignored after schema change.
+    """
     prepared: List[Dict[str, Any]] = []
     now_iso = datetime.utcnow().isoformat()
     for idx, row in enumerate(rows or []):
@@ -2320,9 +2324,10 @@ def _prepare_education_rows(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[s
         prepared_row: Dict[str, Any] = {
             "school": school,
             "degree": _strip_or_none(row.get("degree")),
-            "field_of_study": _strip_or_none(row.get("field_of_study")),
-            "start_date": _date_or_none(row.get("start_date")),
-            "end_date": _date_or_none(row.get("end_date")),
+            "department": _strip_or_none(row.get("department")),
+            "batch_range": _strip_or_none(row.get("batch_range")),
+            "regno": _strip_or_none(row.get("regno")),
+            "current_semester": row.get("current_semester") if isinstance(row.get("current_semester"), int) else None,
             "grade": _strip_or_none(row.get("grade")),
             "activities": _strip_or_none(row.get("activities")),
             "description": _strip_or_none(row.get("description")),
@@ -3673,7 +3678,7 @@ def get_public_profile(user_id: str):
         row["education_entries"] = _fetch_profile_related(
             profile_id,
             "user_education",
-            [("order_index", False), ("start_date", True), ("created_at", False)],
+            [("order_index", False), ("created_at", False)],
         )
         row["certification_entries"] = _fetch_profile_related(
             profile_id,
@@ -4042,17 +4047,30 @@ class ExperienceIn(BaseModel):
 
 
 class EducationIn(BaseModel):
+    """Revised education model: replaces field_of_study + start/end dates with department, batch_range, regno, current_semester."""
+
     id: Optional[str] = None
     school: str
     degree: Optional[str] = None
-    field_of_study: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
+    department: Optional[str] = None
+    batch_range: Optional[str] = None  # e.g. "2022-2026"
+    regno: Optional[str] = None
+    current_semester: Optional[int] = None
     grade: Optional[str] = None
     activities: Optional[str] = None
     description: Optional[str] = None
 
-    @validator("school", "degree", "field_of_study", "grade", "activities", "description", pre=True)
+    @validator(
+        "school",
+        "degree",
+        "department",
+        "batch_range",
+        "regno",
+        "grade",
+        "activities",
+        "description",
+        pre=True,
+    )
     def _trim(cls, v: Any):  # noqa: N805
         return _strip_or_none(v)
 

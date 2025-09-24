@@ -376,12 +376,17 @@
     const setText = (id, v, fb = '--') => { const n = el(id); if (n) n.textContent = defaultText(v, fb); };
     const setLink = (id, v) => { const a = el(id); if (!a) return; if (v) { a.href = v; a.classList.remove('pointer-events-none', 'opacity-50'); } else { a.href = '#'; a.classList.add('pointer-events-none', 'opacity-50'); } };
     const calcCompleteness = (p) => {
+      const firstEdu = Array.isArray(p.education_entries) && p.education_entries.length ? p.education_entries[0] : {};
       const fields = [
         p.name,
         p.headline,
         p.location,
-        p.college?.name,
-        (p.batch?.from || p.batch?.to),
+        firstEdu.school,
+        firstEdu.degree,
+        firstEdu.department,
+        firstEdu.batch_range,
+        firstEdu.current_semester,
+        firstEdu.regno,
         p.linkedin,
         p.github,
         p.resume_url,
@@ -473,20 +478,26 @@
         title.className = 'font-semibold text-sm';
         title.textContent = ed.school || 'Institution';
         card.appendChild(title);
-        const subtitle = [ed.degree, ed.field_of_study].filter(Boolean).join(' • ');
-        if (subtitle) {
+        // New subtitle composition: degree • department (previously degree • field_of_study)
+        const subtitleParts = [ed.degree, ed.department].filter(Boolean);
+        if (subtitleParts.length) {
           const sub = document.createElement('p');
           sub.className = 'text-xs text-black/60 dark:text-white/55 mt-1';
-          sub.textContent = subtitle;
+            sub.textContent = subtitleParts.join(' • ');
           card.appendChild(sub);
         }
-        const dates = formatDateRange(ed.start_date, ed.end_date, false);
-        if (dates) {
-          const dateEl = document.createElement('p');
-          dateEl.className = 'text-xs text-black/55 dark:text-white/50 mt-1';
-          dateEl.textContent = dates;
-          card.appendChild(dateEl);
+        // Batch range + current semester (if available)
+        const academicMetaParts = [];
+        if (ed.batch_range) academicMetaParts.push(ed.batch_range); // e.g. 2022-2026
+        if (ed.current_semester) academicMetaParts.push(`Sem ${ed.current_semester}`);
+        if (ed.regno) academicMetaParts.push(ed.regno);
+        if (academicMetaParts.length) {
+          const metaEl = document.createElement('p');
+          metaEl.className = 'text-xs text-black/55 dark:text-white/50 mt-1';
+          metaEl.textContent = academicMetaParts.join('  |  ');
+          card.appendChild(metaEl);
         }
+        // Extras: grade + activities
         const extras = [ed.grade, ed.activities].filter(Boolean).join(' • ');
         if (extras) {
           const extraEl = document.createElement('p');
@@ -499,6 +510,17 @@
           desc.className = 'text-sm opacity-80 mt-2 whitespace-pre-line';
           desc.textContent = ed.description;
           card.appendChild(desc);
+        }
+        // Graceful fallback: if legacy fields exist (older cached data), show date range / field_of_study
+        const legacyParts = [];
+        if (!subtitleParts.length && ed.field_of_study) legacyParts.push(ed.field_of_study);
+        if (ed.start_date || ed.end_date) legacyParts.push(formatDateRange(ed.start_date, ed.end_date, false));
+        const legacyStr = legacyParts.filter(Boolean).join(' • ');
+        if (legacyStr) {
+          const legacyEl = document.createElement('p');
+          legacyEl.className = 'text-xs text-black/45 dark:text-white/40 mt-2';
+          legacyEl.textContent = legacyStr;
+          card.appendChild(legacyEl);
         }
         wrap.appendChild(card);
       });
