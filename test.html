@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X — Cloud Landing</title>
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind (forms/typography/aspect-ratio) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+    <script>
+        // Tailwind config with your palette + light mode complements
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            900: '#1E1E2F', // deep night
+                            700: '#4C2A59', // plum
+                            500: '#9E4B8A', // magenta
+                        },
+                        brandlt: {        // light-theme complements
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)'
+                    },
+                    backgroundImage: {
+                        'hero-dark':
+                            'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+                        'hero-light':
+                            'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Smooth icon alignment */
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        .gradient-hero-text {
+            background: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+    </style>
+
+    <script>
+            // Theme boot (runs before paint to avoid flash)
+            (() => {
+                const stored = localStorage.getItem('px_theme');
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const isDark = stored ? stored === 'dark' : prefersDark;
+                if (isDark) document.documentElement.classList.add('dark');
+            })();
+    </script>
+</head>
+
+<body
+    class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors">
+    <!-- Top announcement -->
+    <div
+        class="w-full text-xs text-neutral-700 dark:text-white/80 bg-brandlt-100/70 dark:bg-brand-700/20 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center gap-2 py-2">
+            <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-brandlt-200 dark:bg-brand-500/20 ring-1 ring-brandlt-300 dark:ring-brand-500/40">New</span>
+            <p class="truncate">Gateway API on Kubernetes is here, enabling next-gen traffic management.</p>
+            <span class="ml-auto">→</span>
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-4">
+            <!-- Brand -->
+            <div class="flex items-center gap-3">
+                <!-- Light theme logo -->
+                <img src="assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
+                <!-- Dark theme logo -->
+                <img src="assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
+            </div>
+
+            <!-- Nav -->
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <button
+                    class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">
+                    Products <span
+                        class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span>
+                </button>
+                <button
+                    class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">
+                    Solutions <span
+                        class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span>
+                </button>
+                <button
+                    class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">
+                    Developers <span
+                        class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span>
+                </button>
+                <button
+                    class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">
+                    Partners <span
+                        class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span>
+                </button>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="#">Pricing</a>
+            </nav>
+
+            <!-- Right cluster -->
+            <div class="hidden md:flex items-center gap-2">
+                <!-- Theme toggle -->
+                <button id="themeToggle"
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden sm:block">Theme</span>
+                </button>
+                <a href="#"
+                    class="text-sm text-neutral-700 dark:text-white/85 hover:text-brandlt-900 dark:hover:text-white px-3 py-2 rounded-full">Log
+                    in</a>
+                <a href="#"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+
+            <!-- Mobile menu button -->
+            <button
+                class="md:hidden inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">
+                <span class="material-symbols-rounded">menu</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="relative overflow-hidden">
+        <!-- decorative orbs -->
+        <div
+            class="pointer-events-none absolute -top-24 -right-24 size-[420px] rounded-full bg-brand-500/20 blur-3xl dark:blur-[90px]">
+        </div>
+        <div
+            class="pointer-events-none absolute top-24 -left-24 size-[360px] rounded-full bg-brand-700/20 blur-3xl dark:blur-[90px]">
+        </div>
+
+        <div class="container max-w-6xl text-center py-16 md:py-24">
+            <h1
+                class="text-4xl md:text-6xl font-extrabold tracking-tight mx-auto max-w-5xl leading-[1.08] gradient-hero-text">
+                Simple, complete cloud for your most complex needs
+            </h1>
+            <p class="mt-5 text-lg md:text-xl text-neutral-600 dark:text-white/75 max-w-3xl mx-auto">
+                Build, scale, and secure apps with an elegant developer experience.
+            </p>
+
+            <!-- CTA row -->
+            <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+                <!-- Email -->
+                <a href="#"
+                    class="inline-flex items-center gap-3 rounded-full bg-[#25D366] text-white px-6 py-3 text-sm font-semibold hover:shadow-glow ring-1 ring-black/10 dark:ring-white/15 transition dark:bg-[#1F9E58] dark:text-[#E9FFE9] dark:hover:bg-[#26C96C]">
+                    <svg aria-hidden="true" class="size-5" viewBox="0 0 32 32" fill="currentColor">
+                        <path
+                            d="M16.027 2.003c-7.802 0-14.139 6.336-14.139 14.139 0 2.493.65 4.918 1.887 7.051l-1.994 7.296 7.478-1.961c2.066 1.13 4.395 1.729 6.768 1.729h.001c7.802 0 14.139-6.336 14.139-14.139 0-3.779-1.472-7.332-4.144-10.004a14.094 14.094 0 0 0-10.996-4.111zm0 25.865c-2.135 0-4.217-.572-6.03-1.656l-.433-.256-4.44 1.165 1.184-4.338-.282-.445a11.877 11.877 0 0 1-1.838-6.378c0-6.566 5.345-11.911 11.911-11.911 3.182 0 6.169 1.24 8.414 3.486a11.84 11.84 0 0 1 3.497 8.426c0 6.566-5.345 11.911-11.911 11.911zm6.44-8.905c-.352-.176-2.085-1.029-2.408-1.147-.323-.118-.559-.176-.794.176-.235.352-.911 1.147-1.117 1.382-.206.235-.411.264-.764.088-.352-.176-1.486-.547-2.832-1.743-1.046-.934-1.751-2.088-1.957-2.44-.206-.352-.022-.542.154-.718.158-.157.352-.411.529-.617.176-.206.235-.352.352-.587.117-.235.059-.441-.03-.617-.088-.176-.794-1.912-1.088-2.617-.286-.688-.578-.594-.794-.605-.206-.01-.441-.012-.676-.012s-.617.088-.941.441c-.323.352-1.235 1.205-1.235 2.941s1.265 3.422 1.441 3.656c.176.235 2.493 3.809 6.04 5.338.844.363 1.502.58 2.016.743.846.27 1.614.232 2.223.141.679-.101 2.085-.853 2.378-1.676.293-.823.293-1.528.205-1.676-.088-.147-.323-.235-.676-.411z" />
+                    </svg>
+                    Sign up with WhatsApp
+                </a>
+
+
+                <!-- Google (exact multi-color SVG) -->
+                <a href="#"
+                    class="inline-flex items-center gap-3 rounded-full bg-white text-brand-900 px-6 py-3 text-sm font-semibold hover:shadow-glow ring-1 ring-black/10 transition dark:bg-white/10 dark:text-white dark:ring-white/15 dark:hover:bg-white/20">
+                    <svg aria-hidden="true" class="size-5" viewBox="0 0 48 48">
+                        <path fill="#FFC107"
+                            d="M43.611 20.083h-1.611V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.153 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.651-.389-3.917z" />
+                        <path fill="#FF3D00"
+                            d="M6.306 14.691l6.571 4.817C14.41 16.379 18.839 12 24 12c3.059 0 5.842 1.153 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 15.317 4 8.068 9.337 6.306 14.691z" />
+                        <path fill="#4CAF50"
+                            d="M24 44c5.159 0 9.86-1.97 13.4-5.185l-6.19-5.239C29.142 35.664 26.708 36.5 24 36.5c-5.203 0-9.622-3.321-11.282-7.957l-6.503 5.01C8.047 39.297 15.48 44 24 44z" />
+                        <path fill="#1976D2"
+                            d="M43.611 20.083H42V20H24v8h11.303c-.79 2.231-2.255 4.133-4.093 5.565.001-.001 6.19 5.239 6.19 5.239l.431.316C40.278 35.938 44 30.5 44 24c0-1.341-.138-2.651-.389-3.917z" />
+                    </svg>
+                    Sign up with Google
+                </a>
+
+                <!-- LinkedIn (official mark) -->
+                <a href="#"
+                    class="inline-flex items-center gap-3 rounded-full bg-[#0A66C2] text-white px-6 py-3 text-sm font-semibold hover:shadow-glow ring-1 ring-black/10 dark:ring-white/15 transition dark:bg-[#084B94] dark:text-[#E6F1FF] dark:hover:bg-[#0B5FB5]">
+                    <svg aria-hidden="true" class="size-5" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.137 1.445-2.137 2.939v5.667H9.351V9h3.414v1.561h.049c.476-.9 1.637-1.852 3.37-1.852 3.601 0 4.267 2.37 4.267 5.456v6.287zM5.337 7.433c-1.144 0-2.069-.927-2.069-2.071 0-1.144.925-2.07 2.069-2.07 1.145 0 2.071.926 2.071 2.07 0 1.144-.926 2.071-2.071 2.071zM7.119 20.452H3.554V9h3.565v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.226.792 24 1.771 24h20.451C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z" />
+                    </svg>
+                    Sign up with LinkedIn
+                </a>
+            </div>
+
+            <!-- Card visual -->
+            <div class="mt-14 md:mt-20">
+                <div
+                    class="mx-auto max-w-5xl rounded-3xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-brand-900/40 backdrop-blur p-1 shadow-soft dark:shadow-glow">
+                    <div class="rounded-[22px] bg-white/70 dark:bg-brand-900/60 backdrop-blur">
+                        <div class="aspect-[16/9] w-full grid place-content-center relative overflow-hidden">
+                            <!-- floating glyph stack -->
+                            <div class="grid place-items-center gap-8">
+                                <div
+                                    class="size-24 rounded-2xl border border-black/10 dark:border-white/15 bg-gradient-to-br from-white to-white/70 dark:from-white/10 dark:to-white/5 grid place-content-center">
+                                    <div class="size-7 rounded-lg bg-brand-500"></div>
+                                </div>
+                                <div
+                                    class="size-24 rounded-2xl border border-black/10 dark:border-white/15 bg-gradient-to-br from-white to-white/70 dark:from-white/10 dark:to-white/5 grid place-content-center">
+                                    <div class="w-12 h-5 rounded bg-brand-700"></div>
+                                </div>
+                                <div
+                                    class="size-24 rounded-2xl border border-black/10 dark:border-white/15 bg-gradient-to-br from-white to-white/70 dark:from-white/10 dark:to-white/5 grid place-content-center">
+                                    <div class="size-7 rounded-lg bg-brand-500"></div>
+                                </div>
+                            </div>
+
+                            <!-- subtle scan line -->
+                            <div
+                                class="absolute inset-x-0 top-1/3 h-px bg-gradient-to-r from-transparent via-brand-500/40 to-transparent">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 text-xs text-neutral-500 dark:text-white/50">Replace with your product visual.</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-black/5 dark:border-white/10">
+        <div class="container py-10 text-center text-sm text-neutral-600 dark:text-white/60">
+            © <span id="y"></span> Paper X • Built with Tailwind
+        </div>
+    </footer>
+
+    <!-- Theme + year scripts -->
+    <script>
+        const y = document.getElementById('y'); if (y) y.textContent = new Date().getFullYear();
+
+        const toggleBtn = document.getElementById('themeToggle');
+        const root = document.documentElement;
+        const setTheme = (mode) => {
+            if (mode === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+            localStorage.setItem('px_theme', mode);
+            toggleBtn.querySelector('.material-symbols-rounded').textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+        };
+        // Init toggle icon
+        setTheme(root.classList.contains('dark') ? 'dark' : 'light');
+        toggleBtn.addEventListener('click', () => {
+            const next = root.classList.contains('dark') ? 'light' : 'dark';
+            setTheme(next);
+        });
+    </script>
+</body>
+
+</html>
