@@ -26,7 +26,7 @@ from autogen_core.models import ModelInfo
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -1300,6 +1300,14 @@ class SyllabusCourseOut(BaseModel):
     units: List[UnitOut]
 
 
+class SyllabusCourseSummaryOut(BaseModel):
+    id: uuid.UUID
+    batch_id: uuid.UUID
+    semester: int
+    course_code: str
+    title: str
+
+
 class BatchResolveIn(BaseModel):
     college_id: uuid.UUID
     dept_name: str
@@ -2432,6 +2440,69 @@ def sync_units_and_topics(course_id: uuid.UUID, units: List[UnitIn]) -> List[Uni
             )
         )
     return out_units
+
+
+def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
+    supabase = get_service_client()
+    course_q = (
+        supabase.table("syllabus_courses")
+        .select("id,batch_id,semester,course_code,title")
+        .eq("id", str(course_id))
+        .single()
+        .execute()
+    )
+    if getattr(course_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get course): {course_q.error}")
+    if not course_q.data:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    units_rows = (
+        supabase.table("syllabus_units")
+        .select("id,unit_title,order_in_course")
+        .eq("course_id", str(course_id))
+        .order("order_in_course")
+        .execute()
+    )
+    if getattr(units_rows, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get units): {units_rows.error}")
+
+    units_out: List[UnitOut] = []
+    for unit_row in units_rows.data or []:
+        unit_id = uuid.UUID(unit_row["id"])
+        topics_rows = (
+            supabase.table("syllabus_topics")
+            .select("id,topic,order_in_unit")
+            .eq("unit_id", str(unit_id))
+            .order("order_in_unit")
+            .execute()
+        )
+        if getattr(topics_rows, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (get topics): {topics_rows.error}")
+        units_out.append(
+            UnitOut(
+                id=unit_id,
+                unit_title=unit_row["unit_title"],
+                order_in_course=unit_row["order_in_course"],
+                topics=[
+                    TopicOut(
+                        id=uuid.UUID(topic_row["id"]),
+                        topic=topic_row["topic"],
+                        order_in_unit=topic_row["order_in_unit"],
+                    )
+                    for topic_row in (topics_rows.data or [])
+                ],
+            )
+        )
+
+    data = course_q.data
+    return SyllabusCourseOut(
+        id=uuid.UUID(data["id"]),
+        batch_id=uuid.UUID(data["batch_id"]),
+        semester=int(data["semester"]),
+        course_code=data.get("course_code"),
+        title=data.get("title"),
+        units=units_out,
+    )
 
 
 def resolve_or_create_batch(
@@ -4425,6 +4496,47 @@ def get_me(authorization: Optional[str] = Header(default=None)):
 @academics_router.post("/api/syllabus/courses", response_model=SyllabusCourseOut, summary="Upsert syllabus course with units & topics")
 def api_upsert_syllabus_course(payload: SyllabusCourseIn):
     return upsert_syllabus_course(payload)
+
+
+@academics_router.get(
+    "/api/batches/{batch_id}/courses",
+    response_model=List[SyllabusCourseSummaryOut],
+    summary="List syllabus courses (subjects) for a batch",
+)
+def api_list_courses_for_batch(
+    batch_id: uuid.UUID,
+    semester: Optional[int] = Query(default=None, ge=1, le=12),
+):
+    supabase = get_service_client()
+    query = (
+        supabase.table("syllabus_courses")
+        .select("id,batch_id,semester,course_code,title")
+        .eq("batch_id", str(batch_id))
+    )
+    if semester is not None:
+        query = query.eq("semester", semester)
+    res = query.order("course_code").execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list courses): {res.error}")
+    return [
+        SyllabusCourseSummaryOut(
+            id=uuid.UUID(row["id"]),
+            batch_id=uuid.UUID(row["batch_id"]),
+            semester=int(row["semester"]),
+            course_code=row.get("course_code"),
+            title=row.get("title"),
+        )
+        for row in (res.data or [])
+    ]
+
+
+@academics_router.get(
+    "/api/syllabus/courses/{course_id}",
+    response_model=SyllabusCourseOut,
+    summary="Get syllabus course with units & topics",
+)
+def api_get_syllabus_course(course_id: uuid.UUID):
+    return load_course_with_units(course_id)
 
 
 # ---------- Progress tracking ----------

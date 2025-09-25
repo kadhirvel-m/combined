@@ -240,14 +240,37 @@
         if (!res.ok) { window.location.href = 'login.html'; return; }
         const data = await res.json();
         const p = data?.profile || {};
-        ctx.batch_id = p.batch?.id || null;
-        ctx.semester = p.semester || null;
-        ctx.college = p.college?.name || null;
-        ctx.department = p.department?.name || null;
-        ctx.batchLabel = p.batch ? `${p.batch.from}–${p.batch.to}` : null;
+        // Prefer education entries for academic context
+        const edu = Array.isArray(p.education_entries) ? p.education_entries.slice() : [];
+        let primaryEdu = null;
+        if (edu.length) {
+          // choose highest current_semester, else first
+          edu.sort((a, b) => ((b?.current_semester || 0) - (a?.current_semester || 0)) || ((a?.order_index || 0) - (b?.order_index || 0)));
+          primaryEdu = edu[0];
+        }
+        if (primaryEdu) {
+          ctx.batch_id = primaryEdu.batch_id || null;
+          ctx.semester = primaryEdu.current_semester || p.semester || null;
+          ctx.college = (primaryEdu.college && primaryEdu.college.name) || p.college?.name || primaryEdu.school || null;
+          ctx.department = (primaryEdu.department && primaryEdu.department.name) || p.department?.name || primaryEdu.department || null;
+          if (primaryEdu.batch_id && primaryEdu.batch) {
+            ctx.batchLabel = `${primaryEdu.batch.from}–${primaryEdu.batch.to}`;
+          } else if (primaryEdu.batch_range) {
+            ctx.batchLabel = primaryEdu.batch_range;
+          } else if (p.batch) {
+            ctx.batchLabel = `${p.batch.from}–${p.batch.to}`;
+          }
+        } else {
+          // fallback to profile fields
+          ctx.batch_id = p.batch?.id || null;
+          ctx.semester = p.semester || null;
+          ctx.college = p.college?.name || null;
+          ctx.department = p.department?.name || null;
+          ctx.batchLabel = p.batch ? `${p.batch.from}–${p.batch.to}` : null;
+        }
         if (!ctx.batch_id) {
-          alert('Your profile has no batch set. Please complete signup first.');
-          window.location.href = 'profile.html';
+          alert('No batch detected from your education entries or profile. Please add education in profile_edit first.');
+          window.location.href = 'profile_edit.html';
           return;
         }
         setCtxUI();

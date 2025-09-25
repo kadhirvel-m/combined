@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>College Navigator · Subjects</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 50: '#f0f7ff', 100: '#e0efff', 200: '#b9dbff', 300: '#8ac4ff', 400: '#59a9ff', 500: '#2b8cff', 600: '#116fe6', 700: '#0a57b4', 800: '#0b4890', 900: '#0d3a73' },
+                        night: { 900: '#0a0c10', 800: '#0f131a', 700: '#141a22', 600: '#1a2230' }
+                    },
+                    boxShadow: {
+                        glow: '0 0 0 1px rgba(59,130,246,.2), 0 8px 40px rgba(59,130,246,.15)',
+                        neon: '0 0 25px rgba(43,140,255,.35), 0 0 60px rgba(43,140,255,.25)'
+                    },
+                    backgroundImage: {
+                        'grid-radial': 'radial-gradient(circle at 20% 10%, rgba(43,140,255,.25), transparent 35%), radial-gradient(circle at 80% 20%, rgba(168,85,247,.2), transparent 35%), radial-gradient(circle at 50% 80%, rgba(16,185,129,.2), transparent 35%)'
+                    }
+                }
+            }
+        };
+    </script>
+    <script src="../config.js"></script>
+    <script src="helpers.js"></script>
+    <style>
+        .glass {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .glass-dark {
+            background: rgba(20, 24, 32, 0.55);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+
+<body
+    class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200 selection:bg-brand-200 selection:text-slate-900">
+    <div aria-hidden="true" class="fixed inset-0 -z-10 bg-grid-radial opacity-70 dark:opacity-50"></div>
+
+    <header
+        class="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-night-900/60 border-b border-black/5 dark:border-white/5">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="flex h-16 items-center justify-between">
+                <a href="../index.html" class="flex items-center gap-3 group">
+                    <div
+                        class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
+                        PX</div>
+                    <div>
+                        <p class="text-lg font-semibold leading-tight group-hover:text-brand-600">Pa[p]er X</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 -mt-1">Agentic AI for Indian syllabi</p>
+                    </div>
+                </a>
+                <a id="backLink" href="batches.html"
+                    class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-3 py-1.5 text-sm hover:border-brand-400/60 transition"
+                    title="Back to batches">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M12.707 15.707a1 1 0 01-1.414 0L5.586 10l5.707-5.707a1 1 0 011.414 1.414L8.414 10l4.293 4.293a1 1 0 010 1.414z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                    Back
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="relative">
+        <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
+            <div class="flex flex-col gap-6">
+                <div
+                    class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/70 dark:bg-night-800/60 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 backdrop-blur">
+                    <span class="h-2 w-2 rounded-full bg-brand-500"></span>
+                    Subjects overview
+                </div>
+                <div class="flex flex-col gap-2">
+                    <nav id="breadcrumbs"
+                        class="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400"
+                        aria-label="breadcrumb"></nav>
+                    <div>
+                        <h1 id="pageTitle" class="text-3xl sm:text-4xl font-bold leading-tight">Subjects</h1>
+                        <p id="pageSubtitle" class="mt-2 text-slate-600 dark:text-slate-300">Loading subjects…</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <p id="batchDetails" class="text-sm text-slate-600 dark:text-slate-300"></p>
+                <label class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                    <span class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter by
+                        semester</span>
+                    <select id="semesterFilter"
+                        class="rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/60">
+                        <option value="">All semesters</option>
+                    </select>
+                </label>
+            </div>
+
+            <div id="results" class="mt-10 grid gap-6 sm:grid-cols-2 xl:grid-cols-3"></div>
+        </section>
+    </main>
+
+    <script>
+        const params = Collage.parseQuery();
+        const collegeId = params.collegeId;
+        const collegeName = params.collegeName ? decodeURIComponent(params.collegeName) : '';
+        const degreeId = params.degreeId;
+        const degreeName = params.degreeName ? decodeURIComponent(params.degreeName) : '';
+        const departmentName = params.departmentName ? decodeURIComponent(params.departmentName) : '';
+        const batchId = params.batchId;
+        const batchRange = params.batchRange ? decodeURIComponent(params.batchRange) : '';
+
+        const results = document.getElementById('results');
+        const titleEl = document.getElementById('pageTitle');
+        const subtitleEl = document.getElementById('pageSubtitle');
+        const breadcrumbsEl = document.getElementById('breadcrumbs');
+        const backLink = document.getElementById('backLink');
+        const batchDetails = document.getElementById('batchDetails');
+        const semesterFilter = document.getElementById('semesterFilter');
+
+        if (semesterFilter) {
+            for (let i = 1; i <= 12; i += 1) {
+                const option = document.createElement('option');
+                option.value = String(i);
+                option.textContent = `Semester ${i}`;
+                semesterFilter.appendChild(option);
+            }
+        }
+
+        if (backLink && collegeId && degreeId) {
+            backLink.href = `batches.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
+        }
+
+        function makeBreadcrumb(items) {
+            if (!Array.isArray(items)) return '';
+            return items.map((item, idx) => {
+                if (!item) return '';
+                if (item.href && idx !== items.length - 1) {
+                    return `<a href="${item.href}" class="hover:text-brand-600">${Collage.escapeHtml(item.label || item.text || '')}</a>`;
+                }
+                return `<span class="text-slate-700 dark:text-slate-200">${Collage.escapeHtml(item.label || item.text || '')}</span>`;
+            }).filter(Boolean).join('<span class="text-slate-400 dark:text-slate-500">/</span>');
+        }
+
+        function showLoader() {
+            results.innerHTML = `
+        <div class="col-span-full flex items-center justify-center py-16">
+          <div class="h-12 w-12 animate-spin rounded-full border-2 border-brand-400 border-t-transparent"></div>
+        </div>`;
+        }
+
+        function showError(message) {
+            results.innerHTML = `
+        <div class="col-span-full rounded-2xl border border-red-500/40 bg-red-50/90 dark:bg-red-500/10 dark:border-red-400/30 p-6 shadow">
+          <h2 class="text-lg font-semibold text-red-700 dark:text-red-200">Unable to load subjects</h2>
+          <p class="mt-2 text-sm text-red-600/80 dark:text-red-200/80">${Collage.escapeHtml(message || 'Please check the batch reference and try again.')}</p>
+        </div>`;
+        }
+
+        function showEmpty() {
+            results.innerHTML = `
+        <div class="col-span-full rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow">
+          <h2 class="text-lg font-semibold">No subjects recorded</h2>
+          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Add syllabus courses for this batch to populate the subject list.</p>
+        </div>`;
+        }
+
+        async function loadSubjects() {
+            if (!batchId) {
+                showError('Missing batchId in URL.');
+                return;
+            }
+            showLoader();
+            const selectedSemester = semesterFilter.value ? Number(semesterFilter.value) : null;
+            try {
+                const query = selectedSemester ? `?semester=${selectedSemester}` : '';
+                const data = await Collage.fetchJson(`/api/batches/${batchId}/courses${query}`, { skipAuth: true });
+                titleEl.textContent = `Subjects for ${departmentName || 'Department'} · ${batchRange || batchId}`;
+                subtitleEl.textContent = `${(data || []).length} subject${(data || []).length === 1 ? '' : 's'} found${selectedSemester ? ` in semester ${selectedSemester}` : ''}.`;
+                batchDetails.textContent = `${collegeName || 'College'} • ${degreeName || 'Degree'} • ${departmentName || 'Department'} • ${batchRange || ''}`;
+                breadcrumbsEl.innerHTML = makeBreadcrumb([
+                    { label: 'Colleges', href: 'clg_info.html' },
+                    { label: collegeName || 'College', href: `degrees.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}` },
+                    { label: degreeName || 'Degree', href: `departments.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}` },
+                    { label: departmentName || 'Department', href: `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}` },
+                    { label: batchRange || 'Batch' }
+                ]);
+                if (!Array.isArray(data) || !data.length) {
+                    showEmpty();
+                    return;
+                }
+                results.innerHTML = data.map((course, index) => {
+                    const link = `syllabus.html?courseId=${encodeURIComponent(course.id)}&courseCode=${encodeURIComponent(course.course_code || '')}&courseTitle=${encodeURIComponent(course.title || '')}&semester=${encodeURIComponent(course.semester)}&batchRange=${encodeURIComponent(batchRange || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
+                    const accentColor = ['from-brand-400 via-brand-500 to-indigo-500', 'from-emerald-400 via-teal-400 to-emerald-600', 'from-fuchsia-400 via-pink-500 to-rose-500', 'from-cyan-400 via-sky-500 to-blue-500', 'from-amber-400 via-orange-500 to-amber-600'][index % 5];
+                    return `
+            <a class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow" href="${link}">
+              <div class="absolute inset-x-4 top-4 h-28 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
+              <div class="relative flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">${Collage.escapeHtml(course.course_code || 'Course')}</span>
+                <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200"><svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 0 0-2 2v1H3a1 1 0 0 0 0 2h1v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7h1a1 1 0 1 0 0-2h-1V4a2 2 0 0 0-2-2H6Zm2 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm4 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z" /></svg>Semester ${course.semester}</span>
+              </div>
+              <h2 class="relative mt-5 text-xl font-semibold text-slate-900 dark:text-white group-hover:text-brand-500">${Collage.escapeHtml(course.title || 'Untitled subject')}</h2>
+              <p class="relative mt-3 text-sm text-slate-600 dark:text-slate-300">Open to review the detailed units and topics for this subject.</p>
+              <div class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300">
+                View syllabus
+                <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                </svg>
+              </div>
+            </a>`;
+                }).join('');
+            } catch (err) {
+                console.error(err);
+                showError(err.message || 'Unexpected error');
+            }
+        }
+
+        semesterFilter?.addEventListener('change', loadSubjects);
+        document.addEventListener('DOMContentLoaded', loadSubjects);
+    </script>
+</body>
+
+</html>
