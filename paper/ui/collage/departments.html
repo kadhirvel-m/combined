@@ -78,11 +78,6 @@
     <main class="relative">
         <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
             <div class="flex flex-col gap-6">
-                <div
-                    class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/70 dark:bg-night-800/60 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 backdrop-blur">
-                    <span class="h-2 w-2 rounded-full bg-brand-500"></span>
-                    Departments overview
-                </div>
                 <div class="flex flex-col gap-2">
                     <nav id="breadcrumbs"
                         class="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400"
@@ -94,9 +89,66 @@
                 </div>
             </div>
 
+            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-sm text-slate-600 dark:text-slate-300">Define the departments offered under this degree
+                    before mapping batches and syllabi.</p>
+                <button id="addDepartmentBtn"
+                    class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 hover:shadow-glow transition"
+                    type="button">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                    Add department
+                </button>
+            </div>
+
             <div id="results" class="mt-12 grid gap-6 sm:grid-cols-2 xl:grid-cols-3"></div>
         </section>
     </main>
+
+    <div id="departmentModal"
+        class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8" role="dialog"
+        aria-modal="true" aria-labelledby="departmentModalTitle">
+        <div id="departmentModalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div
+            class="relative w-full max-w-xl rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/90 dark:bg-night-900/90 shadow-xl">
+            <div
+                class="flex items-start justify-between gap-4 border-b border-slate-200/60 dark:border-white/10 px-6 py-5">
+                <div>
+                    <h2 id="departmentModalTitle" class="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a
+                        new department</h2>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Name the department offered under this
+                        degree.</p>
+                </div>
+                <button id="departmentModalClose" type="button"
+                    class="rounded-lg border border-transparent p-2 text-slate-500 hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60">
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <form id="departmentForm" class="space-y-5 px-6 py-6">
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Department name
+                    <input id="departmentName" name="name" type="text" required
+                        class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
+                        placeholder="e.g. Computer Science Engineering" />
+                </label>
+                <p id="departmentModalMessage" class="hidden text-sm text-red-500"></p>
+                <div class="flex items-center justify-end gap-3">
+                    <button id="departmentModalCancel" type="button"
+                        class="rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:border-brand-400/60 transition">Cancel</button>
+                    <button id="departmentSubmitBtn" type="submit"
+                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-neon hover:opacity-95 transition">Save
+                        department</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
         const params = Collage.parseQuery();
@@ -110,6 +162,21 @@
         const subtitleEl = document.getElementById('pageSubtitle');
         const breadcrumbsEl = document.getElementById('breadcrumbs');
         const backLink = document.getElementById('backLink');
+        const addDepartmentBtn = document.getElementById('addDepartmentBtn');
+        const departmentModal = document.getElementById('departmentModal');
+        const departmentModalBackdrop = document.getElementById('departmentModalBackdrop');
+        const departmentModalTitle = document.getElementById('departmentModalTitle');
+        const departmentForm = document.getElementById('departmentForm');
+        const departmentNameInput = document.getElementById('departmentName');
+        const departmentModalMessage = document.getElementById('departmentModalMessage');
+        const departmentModalCancel = document.getElementById('departmentModalCancel');
+        const departmentModalClose = document.getElementById('departmentModalClose');
+        const departmentSubmitBtn = document.getElementById('departmentSubmitBtn');
+        let currentCollegeLabel = collegeName || 'Selected college';
+        let currentDegreeLabel = degreeName || 'Selected degree';
+        let departmentsCache = [];
+        let departmentModalMode = 'add';
+        let editingDepartmentId = null;
 
         function makeBreadcrumb(items) {
             if (!Array.isArray(items)) return '';
@@ -145,6 +212,164 @@
         </div>`;
         }
 
+        function resetDepartmentModal() {
+            departmentForm?.reset();
+            departmentModalMessage.textContent = '';
+            departmentModalMessage.classList.add('hidden');
+            departmentModalMode = 'add';
+            editingDepartmentId = null;
+            departmentSubmitBtn.textContent = 'Save department';
+        }
+
+        function setDepartmentModalLoading(isLoading) {
+            departmentSubmitBtn.disabled = isLoading;
+            departmentSubmitBtn.textContent = isLoading
+                ? 'Saving…'
+                : (departmentModalMode === 'edit' ? 'Save changes' : 'Save department');
+        }
+
+        function closeDepartmentModal() {
+            departmentModal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            resetDepartmentModal();
+        }
+
+        function openDepartmentModal(mode = 'add', department) {
+            if (!degreeId) return;
+            resetDepartmentModal();
+            departmentModalMode = mode;
+
+            if (mode === 'edit' && department) {
+                editingDepartmentId = department.id;
+                departmentNameInput.value = department.name || '';
+            }
+
+            departmentModalTitle.textContent = mode === 'edit'
+                ? 'Edit department'
+                : `Add a new department for ${currentDegreeLabel}`;
+            departmentSubmitBtn.textContent = mode === 'edit' ? 'Save changes' : 'Save department';
+
+            departmentModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => {
+                if (mode === 'edit') {
+                    departmentNameInput?.select();
+                } else {
+                    departmentNameInput?.focus();
+                }
+            }, 100);
+        }
+
+        async function handleDepartmentSubmit(event) {
+            event.preventDefault();
+            if (!collegeId || !degreeId) {
+                departmentModalMessage.textContent = 'Missing college or degree context. Please navigate from the degrees page again.';
+                departmentModalMessage.classList.remove('hidden');
+                return;
+            }
+            const name = (departmentNameInput.value || '').trim();
+            if (!name) {
+                departmentModalMessage.textContent = 'Please enter the department name.';
+                departmentModalMessage.classList.remove('hidden');
+                departmentNameInput.focus();
+                return;
+            }
+            departmentModalMessage.classList.add('hidden');
+            setDepartmentModalLoading(true);
+            const payload = { name };
+            try {
+                if (departmentModalMode === 'edit' && editingDepartmentId) {
+                    await Collage.fetchJson(`/api/departments/${editingDepartmentId}`, {
+                        method: 'PUT',
+                        body: payload,
+                        skipAuth: true
+                    });
+                } else {
+                    await Collage.fetchJson(`/api/degrees/${degreeId}/departments`, {
+                        method: 'POST',
+                        body: payload,
+                        skipAuth: true
+                    });
+                }
+                closeDepartmentModal();
+                await loadDepartments();
+            } catch (error) {
+                let message = error?.message ?? 'Unable to save department. Please try again.';
+                if (typeof message !== 'string') {
+                    try {
+                        message = JSON.stringify(message);
+                    } catch (_) {
+                        message = 'Unable to save department. Please try again.';
+                    }
+                }
+                if (message === '[object Object]') {
+                    message = 'Unexpected response from server. Please try again.';
+                }
+                departmentModalMessage.textContent = message;
+                departmentModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setDepartmentModalLoading(false);
+            }
+        }
+
+        function initDepartmentModal() {
+            if (!addDepartmentBtn) return;
+            if (!degreeId) {
+                addDepartmentBtn.disabled = true;
+                addDepartmentBtn.classList.add('opacity-70', 'cursor-not-allowed');
+            }
+            addDepartmentBtn?.addEventListener('click', () => openDepartmentModal('add'));
+            departmentModalCancel?.addEventListener('click', closeDepartmentModal);
+            departmentModalClose?.addEventListener('click', closeDepartmentModal);
+            departmentModalBackdrop?.addEventListener('click', closeDepartmentModal);
+            departmentForm?.addEventListener('submit', handleDepartmentSubmit);
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !departmentModal.classList.contains('hidden')) {
+                    closeDepartmentModal();
+                }
+            });
+        }
+
+        function attachDepartmentEditHandlers() {
+            const editButtons = results.querySelectorAll('[data-department-edit]');
+            editButtons.forEach(button => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    const id = button.getAttribute('data-department-edit');
+                    const department = departmentsCache.find(item => String(item.id) === String(id));
+                    if (department) {
+                        openDepartmentModal('edit', department);
+                    }
+                });
+            });
+        }
+
+        function attachDepartmentCardNavigation() {
+            const cards = results.querySelectorAll('[data-department-card]');
+            cards.forEach(card => {
+                const href = card.getAttribute('data-department-card');
+                if (!href) return;
+                card.addEventListener('click', (event) => {
+                    if (event.target.closest('[data-department-edit]')) {
+                        return;
+                    }
+                    if (event.target.closest('a')) {
+                        return;
+                    }
+                    window.location.href = href;
+                });
+                card.addEventListener('keydown', (event) => {
+                    if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('[data-department-edit]')) {
+                        event.preventDefault();
+                        window.location.href = href;
+                    }
+                });
+            });
+        }
+
         async function loadDepartments() {
             if (!collegeId || !degreeId) {
                 showError('Missing collegeId or degreeId in URL.');
@@ -154,7 +379,9 @@
             try {
                 const data = await Collage.fetchJson(`/api/colleges/${collegeId}`, { skipAuth: true });
                 const collegeLabel = data?.name || collegeName || 'Selected college';
-                const degree = (data?.degrees || []).find(d => String(d.id) === String(degreeId));
+                currentCollegeLabel = collegeLabel;
+                const degrees = Array.isArray(data?.degrees) ? data.degrees : [];
+                const degree = degrees.find(item => String(item.id) === String(degreeId));
                 if (backLink) {
                     backLink.href = `degrees.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeLabel)}`;
                 }
@@ -169,49 +396,81 @@
                     ]);
                     return;
                 }
-                const degreeLabel = degree?.name || degreeName || 'Selected degree';
-                titleEl.textContent = `Departments in ${degreeLabel}`;
-                const deptCount = Array.isArray(degree.departments) ? degree.departments.length : 0;
-                subtitleEl.textContent = `${deptCount} department${deptCount === 1 ? '' : 's'} recorded for ${degreeLabel}.`;
+
+                currentDegreeLabel = degree?.name || degreeName || 'Selected degree';
+                titleEl.textContent = `Departments in ${currentDegreeLabel}`;
+                const departments = Array.isArray(degree.departments) ? degree.departments : [];
+                departmentsCache = departments.slice();
+                const deptCount = departments.length;
+                subtitleEl.textContent = `${deptCount} department${deptCount === 1 ? '' : 's'} recorded for ${currentDegreeLabel}.`;
                 breadcrumbsEl.innerHTML = makeBreadcrumb([
                     { label: 'Colleges', href: 'clg_info.html' },
                     { label: collegeLabel, href: `degrees.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeLabel)}` },
-                    { label: degreeLabel }
+                    { label: currentDegreeLabel }
                 ]);
 
                 if (!deptCount) {
                     showEmpty();
                     return;
                 }
-                results.innerHTML = degree.departments.map((department, index) => {
+
+                const accentPalette = [
+                    'from-brand-400 via-brand-500 to-indigo-500',
+                    'from-emerald-400 via-teal-400 to-emerald-600',
+                    'from-fuchsia-400 via-pink-500 to-rose-500',
+                    'from-cyan-400 via-sky-500 to-blue-500',
+                    'from-amber-400 via-orange-500 to-amber-600'
+                ];
+
+                results.innerHTML = departments.map((department, index) => {
                     const batches = Array.isArray(department.batches) ? department.batches : [];
                     const firstBatch = batches[0];
                     const batchLabel = firstBatch ? Collage.escapeHtml(Collage.formatYearRange(firstBatch.from, firstBatch.to)) : '—';
-                    const accentColor = ['from-brand-400 via-brand-500 to-indigo-500', 'from-emerald-400 via-teal-400 to-emerald-600', 'from-fuchsia-400 via-pink-500 to-rose-500', 'from-cyan-400 via-sky-500 to-blue-500', 'from-amber-400 via-orange-500 to-amber-600'][index % 5];
+                    const accentColor = accentPalette[index % accentPalette.length];
+                    const departmentLink = `batches.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeLabel)}&degreeId=${encodeURIComponent(degreeId)}&degreeName=${encodeURIComponent(currentDegreeLabel)}&departmentId=${encodeURIComponent(department.id)}&departmentName=${encodeURIComponent(department.name || '')}`;
                     return `
-            <a class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow" href="batches.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeLabel)}&degreeId=${encodeURIComponent(degreeId)}&degreeName=${encodeURIComponent(degreeLabel)}&departmentId=${encodeURIComponent(department.id)}&departmentName=${encodeURIComponent(department.name || '')}">
+            <article class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow focus-within:border-brand-400/60 focus-within:shadow-glow" data-department-card="${departmentLink}" tabindex="0">
               <div class="absolute inset-x-4 top-4 h-28 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
+              <button type="button" data-department-edit="${department.id}" aria-label="Edit ${Collage.escapeHtml(department.name || '')}"
+                class="absolute top-4 right-4 z-20 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-brand-500 hover:border-brand-400/60 transition">
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path d="M17.414 2.586a2 2 0 00-2.828 0L6.414 10.758a2 2 0 00-.516.878l-.8 2.798a1 1 0 001.226 1.226l2.798-.8a2 2 0 00.878-.516l8.172-8.172a2 2 0 000-2.828l-.758-.758zm-3.535 1.414L15 5.536 13.536 7 12 5.464l1.879-1.879zM11.293 6.172L3.707 13.758l-.353 1.237 1.237-.353 7.586-7.586L11.293 6.172z" />
+                </svg>
+              </button>
               <div class="relative flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                 <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">${batches.length} batch${batches.length === 1 ? '' : 'es'}</span>
                 <span class="inline-flex items-center gap-2 text-xs text-slate-500/80 dark:text-slate-400/80"><svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 0 0-2 2v1H3a1 1 0 0 0 0 2h1v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7h1a1 1 0 1 0 0-2h-1V4a2 2 0 0 0-2-2H6Zm2 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm4 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z" /></svg>${batchLabel}</span>
               </div>
-              <h2 class="relative mt-5 text-xl font-semibold text-slate-900 dark:text-white group-hover:text-brand-500">${Collage.escapeHtml(department.name || 'Unnamed department')}</h2>
+              <h2 class="relative mt-5 text-xl font-semibold text-slate-900 dark:text-white">
+                <a href="${departmentLink}" class="relative inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-night-900 group-hover:text-brand-500">
+                  ${Collage.escapeHtml(department.name || 'Unnamed department')}
+                  <svg class="h-4 w-4 text-brand-500 opacity-0 group-hover:opacity-100 transition" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                  </svg>
+                </a>
+              </h2>
               <p class="relative mt-3 text-sm text-slate-600 dark:text-slate-300">Inspect all batches under this department and drill down to their subjects.</p>
-              <div class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300">
+              <a class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300" href="${departmentLink}">
                 View batches
                 <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                 </svg>
-              </div>
-            </a>`;
+              </a>
+            </article>`;
                 }).join('');
+
+                attachDepartmentEditHandlers();
+                attachDepartmentCardNavigation();
             } catch (err) {
                 console.error(err);
                 showError(err.message || 'Unexpected error');
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadDepartments);
+        document.addEventListener('DOMContentLoaded', () => {
+            initDepartmentModal();
+            loadDepartments();
+        });
     </script>
 </body>
 

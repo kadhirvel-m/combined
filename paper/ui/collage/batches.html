@@ -78,11 +78,6 @@
     <main class="relative">
         <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
             <div class="flex flex-col gap-6">
-                <div
-                    class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/70 dark:bg-night-800/60 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 backdrop-blur">
-                    <span class="h-2 w-2 rounded-full bg-brand-500"></span>
-                    Batches overview
-                </div>
                 <div class="flex flex-col gap-2">
                     <nav id="breadcrumbs"
                         class="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400"
@@ -94,9 +89,74 @@
                 </div>
             </div>
 
+            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-sm text-slate-600 dark:text-slate-300">Create cohorts for this department before
+                    assigning
+                    subjects.</p>
+                <button id="addBatchBtn"
+                    class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 hover:shadow-glow transition"
+                    type="button">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                    Add batch
+                </button>
+            </div>
+
             <div id="results" class="mt-12 grid gap-6 sm:grid-cols-2 xl:grid-cols-3"></div>
         </section>
     </main>
+
+    <div id="batchModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
+        role="dialog" aria-modal="true" aria-labelledby="batchModalTitle">
+        <div id="batchModalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div
+            class="relative w-full max-w-xl rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/90 dark:bg-night-900/90 shadow-xl">
+            <div
+                class="flex items-start justify-between gap-4 border-b border-slate-200/60 dark:border-white/10 px-6 py-5">
+                <div>
+                    <h2 id="batchModalTitle" class="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a new
+                        batch</h2>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Set the academic year range for this
+                        cohort.</p>
+                </div>
+                <button id="batchModalClose" type="button"
+                    class="rounded-lg border border-transparent p-2 text-slate-500 hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60">
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <form id="batchForm" class="space-y-5 px-6 py-6">
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                        From year
+                        <input id="batchFromYear" name="from" type="number" min="1950" max="2100" required
+                            class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
+                            placeholder="e.g. 2021" />
+                    </label>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                        To year
+                        <input id="batchToYear" name="to" type="number" min="1950" max="2100" required
+                            class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
+                            placeholder="e.g. 2025" />
+                    </label>
+                </div>
+                <p id="batchModalMessage" class="hidden text-sm text-red-500"></p>
+                <div class="flex items-center justify-end gap-3">
+                    <button id="batchModalCancel" type="button"
+                        class="rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:border-brand-400/60 transition">Cancel</button>
+                    <button id="batchSubmitBtn" type="submit"
+                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-neon hover:opacity-95 transition">Save
+                        batch</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
         const params = Collage.parseQuery();
@@ -112,6 +172,20 @@
         const subtitleEl = document.getElementById('pageSubtitle');
         const breadcrumbsEl = document.getElementById('breadcrumbs');
         const backLink = document.getElementById('backLink');
+        const addBatchBtn = document.getElementById('addBatchBtn');
+        const batchModal = document.getElementById('batchModal');
+        const batchModalBackdrop = document.getElementById('batchModalBackdrop');
+        const batchModalTitle = document.getElementById('batchModalTitle');
+        const batchForm = document.getElementById('batchForm');
+        const batchFromYearInput = document.getElementById('batchFromYear');
+        const batchToYearInput = document.getElementById('batchToYear');
+        const batchModalMessage = document.getElementById('batchModalMessage');
+        const batchModalCancel = document.getElementById('batchModalCancel');
+        const batchModalClose = document.getElementById('batchModalClose');
+        const batchSubmitBtn = document.getElementById('batchSubmitBtn');
+        let batchesCache = [];
+        let batchModalMode = 'add';
+        let editingBatchId = null;
 
         function makeBreadcrumb(items) {
             if (!Array.isArray(items)) return '';
@@ -147,6 +221,184 @@
         </div>`;
         }
 
+        function resetBatchModal() {
+            batchForm?.reset();
+            batchModalMessage.textContent = '';
+            batchModalMessage.classList.add('hidden');
+            batchModalMode = 'add';
+            editingBatchId = null;
+            batchSubmitBtn.textContent = 'Save batch';
+        }
+
+        function setBatchModalLoading(isLoading) {
+            batchSubmitBtn.disabled = isLoading;
+            batchSubmitBtn.textContent = isLoading
+                ? 'Saving…'
+                : (batchModalMode === 'edit' ? 'Save changes' : 'Save batch');
+        }
+
+        function closeBatchModal() {
+            batchModal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            resetBatchModal();
+        }
+
+        function openBatchModal(mode = 'add', batch) {
+            if (!departmentId) return;
+            resetBatchModal();
+            batchModalMode = mode;
+
+            if (mode === 'edit' && batch) {
+                editingBatchId = batch.id;
+                batchFromYearInput.value = batch.from_year;
+                batchToYearInput.value = batch.to_year;
+            }
+
+            const deptLabel = departmentName || 'this department';
+            batchModalTitle.textContent = mode === 'edit'
+                ? 'Edit batch'
+                : `Add a new batch for ${deptLabel}`;
+            batchSubmitBtn.textContent = mode === 'edit' ? 'Save changes' : 'Save batch';
+
+            batchModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => {
+                if (mode === 'edit') {
+                    batchFromYearInput?.select();
+                } else {
+                    batchFromYearInput?.focus();
+                }
+            }, 100);
+        }
+
+        function validateBatchYears(fromYear, toYear) {
+            if (!Number.isInteger(fromYear) || !Number.isInteger(toYear)) {
+                return 'Enter both from and to years.';
+            }
+            if (fromYear < 1950 || fromYear > 2100 || toYear < 1950 || toYear > 2100) {
+                return 'Year range must be between 1950 and 2100.';
+            }
+            if (toYear < fromYear) {
+                return 'Ending year must be greater than or equal to the starting year.';
+            }
+            return '';
+        }
+
+        async function handleBatchSubmit(event) {
+            event.preventDefault();
+            if (!departmentId) {
+                batchModalMessage.textContent = 'Missing department context. Please navigate from the departments page again.';
+                batchModalMessage.classList.remove('hidden');
+                return;
+            }
+
+            const fromYear = Number.parseInt(batchFromYearInput.value, 10);
+            const toYear = Number.parseInt(batchToYearInput.value, 10);
+            const validationMessage = validateBatchYears(fromYear, toYear);
+            if (validationMessage) {
+                batchModalMessage.textContent = validationMessage;
+                batchModalMessage.classList.remove('hidden');
+                const targetInput = Number.isInteger(fromYear) ? batchToYearInput : batchFromYearInput;
+                targetInput?.focus();
+                return;
+            }
+
+            batchModalMessage.classList.add('hidden');
+            setBatchModalLoading(true);
+            const payload = { from: fromYear, to: toYear };
+
+            try {
+                if (batchModalMode === 'edit' && editingBatchId) {
+                    await Collage.fetchJson(`/api/batches/${editingBatchId}`, {
+                        method: 'PUT',
+                        body: payload,
+                        skipAuth: true
+                    });
+                } else {
+                    await Collage.fetchJson(`/api/departments/${departmentId}/batches`, {
+                        method: 'POST',
+                        body: payload,
+                        skipAuth: true
+                    });
+                }
+                closeBatchModal();
+                await loadBatches();
+            } catch (error) {
+                let message = error?.message ?? 'Unable to save batch. Please try again.';
+                if (typeof message !== 'string') {
+                    try {
+                        message = JSON.stringify(message);
+                    } catch (_) {
+                        message = 'Unable to save batch. Please try again.';
+                    }
+                }
+                if (message === '[object Object]') {
+                    message = 'Unexpected response from server. Please try again.';
+                }
+                batchModalMessage.textContent = message;
+                batchModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setBatchModalLoading(false);
+            }
+        }
+
+        function initBatchModal() {
+            if (!addBatchBtn) return;
+            if (!departmentId) {
+                addBatchBtn.disabled = true;
+                addBatchBtn.classList.add('opacity-60', 'cursor-not-allowed');
+            }
+            addBatchBtn?.addEventListener('click', () => openBatchModal('add'));
+            batchModalCancel?.addEventListener('click', closeBatchModal);
+            batchModalClose?.addEventListener('click', closeBatchModal);
+            batchModalBackdrop?.addEventListener('click', closeBatchModal);
+            batchForm?.addEventListener('submit', handleBatchSubmit);
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !batchModal.classList.contains('hidden')) {
+                    closeBatchModal();
+                }
+            });
+        }
+
+        function attachBatchEditHandlers() {
+            const editButtons = results.querySelectorAll('[data-batch-edit]');
+            editButtons.forEach(button => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const id = button.getAttribute('data-batch-edit');
+                    const batch = batchesCache.find(item => String(item.id) === String(id));
+                    if (batch) {
+                        openBatchModal('edit', batch);
+                    }
+                });
+            });
+        }
+
+        function attachBatchCardNavigation() {
+            const cards = results.querySelectorAll('[data-batch-card]');
+            cards.forEach(card => {
+                const href = card.getAttribute('data-batch-card');
+                if (!href) return;
+                card.addEventListener('click', (event) => {
+                    if (event.target.closest('[data-batch-edit]')) {
+                        return;
+                    }
+                    if (event.target.closest('a')) {
+                        return;
+                    }
+                    window.location.href = href;
+                });
+                card.addEventListener('keydown', (event) => {
+                    if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('[data-batch-edit]')) {
+                        event.preventDefault();
+                        window.location.href = href;
+                    }
+                });
+            });
+        }
+
         async function loadBatches() {
             if (!collegeId || !departmentName) {
                 showError('Missing collegeId or departmentName in URL.');
@@ -158,7 +410,13 @@
                 const batches = await Collage.fetchJson(`/api/colleges/${collegeId}/departments/${deptSlug}/batches/full`, { skipAuth: true });
                 const label = departmentName || 'Selected department';
                 titleEl.textContent = `Batches · ${label}`;
-                subtitleEl.textContent = `${(batches || []).length} batch${(batches || []).length === 1 ? '' : 'es'} registered for this department.`;
+                const list = Array.isArray(batches) ? batches : [];
+                batchesCache = list.map(item => ({
+                    id: item.id,
+                    from_year: Number(item.from_year),
+                    to_year: Number(item.to_year)
+                }));
+                subtitleEl.textContent = `${list.length} batch${list.length === 1 ? '' : 'es'} recorded for this department.`;
                 breadcrumbsEl.innerHTML = makeBreadcrumb([
                     { label: 'Colleges', href: 'clg_info.html' },
                     { label: collegeName || 'College', href: `degrees.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}` },
@@ -168,37 +426,66 @@
                 if (backLink) {
                     backLink.href = `departments.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}`;
                 }
-                if (!Array.isArray(batches) || !batches.length) {
+                if (!list.length) {
                     showEmpty();
                     return;
                 }
-                results.innerHTML = batches.map((batch, index) => {
+
+                const accentPalette = [
+                    'from-brand-400 via-brand-500 to-indigo-500',
+                    'from-emerald-400 via-teal-400 to-emerald-600',
+                    'from-fuchsia-400 via-pink-500 to-rose-500',
+                    'from-cyan-400 via-sky-500 to-blue-500',
+                    'from-amber-400 via-orange-500 to-amber-600'
+                ];
+
+                results.innerHTML = list.map((batch, index) => {
                     const range = Collage.formatYearRange(batch.from_year, batch.to_year);
-                    const accentColor = ['from-brand-400 via-brand-500 to-indigo-500', 'from-emerald-400 via-teal-400 to-emerald-600', 'from-fuchsia-400 via-pink-500 to-rose-500', 'from-cyan-400 via-sky-500 to-blue-500', 'from-amber-400 via-orange-500 to-amber-600'][index % 5];
+                    const accentColor = accentPalette[index % accentPalette.length];
+                    const subjectsLink = `subjects.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(batch.id)}&batchRange=${encodeURIComponent(range)}`;
                     return `
-            <a class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow" href="subjects.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(batch.id)}&batchRange=${encodeURIComponent(range)}">
+            <article class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow focus-within:border-brand-400/60 focus-within:shadow-glow" data-batch-card="${subjectsLink}" tabindex="0">
               <div class="absolute inset-x-4 top-4 h-28 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
+              <button type="button" data-batch-edit="${batch.id}" aria-label="Edit batch ${Collage.escapeHtml(range)}"
+                class="absolute top-4 right-4 z-20 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-brand-500 hover:border-brand-400/60 transition">
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path d="M17.414 2.586a2 2 0 00-2.828 0L6.414 10.758a2 2 0 00-.516.878l-.8 2.798a1 1 0 001.226 1.226l2.798-.8a2 2 0 00.878-.516l8.172-8.172a2 2 0 000-2.828l-.758-.758zm-3.535 1.414L15 5.536 13.536 7 12 5.464l1.879-1.879zM11.293 6.172L3.707 13.758l-.353 1.237 1.237-.353 7.586-7.586L11.293 6.172z" />
+                </svg>
+              </button>
               <div class="relative flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                 <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">Batch</span>
-                <span class="font-mono text-[11px] text-slate-500/80 dark:text-slate-400/80">${batch.id.slice(0, 8)}…</span>
+                <span class="font-mono text-[11px] text-slate-500/80 dark:text-slate-400/80">${Collage.escapeHtml(String(batch.id).slice(0, 8))}…</span>
               </div>
-              <h2 class="relative mt-5 text-xl font-semibold text-slate-900 dark:text-white group-hover:text-brand-500">${Collage.escapeHtml(range)}</h2>
+              <h2 class="relative mt-5 text-xl font-semibold text-slate-900 dark:text-white group-hover:text-brand-500">
+                <a href="${subjectsLink}" class="relative inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-night-900">
+                  ${Collage.escapeHtml(range)}
+                  <svg class="h-4 w-4 text-brand-500 opacity-0 group-hover:opacity-100 transition" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                  </svg>
+                </a>
+              </h2>
               <p class="relative mt-3 text-sm text-slate-600 dark:text-slate-300">View all subjects (syllabus courses) taught in this cohort and dive into their syllabus.</p>
-              <div class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300">
+              <a class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300" href="${subjectsLink}">
                 View subjects
                 <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                 </svg>
-              </div>
-            </a>`;
+              </a>
+            </article>`;
                 }).join('');
+
+                attachBatchEditHandlers();
+                attachBatchCardNavigation();
             } catch (err) {
                 console.error(err);
                 showError(err.message || 'Unexpected error');
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadBatches);
+        document.addEventListener('DOMContentLoaded', () => {
+            initBatchModal();
+            loadBatches();
+        });
     </script>
 </body>
 

@@ -1206,6 +1206,40 @@ class DepartmentWithBatchesOut(BaseModel):
     batches: List[BatchIn]
 
 
+class DepartmentSimpleBase(BaseModel):
+    name: str = Field(..., min_length=2, max_length=256)
+    batches: Optional[List[BatchIn]] = None
+
+    @validator("name")
+    def normalize_name(cls, v: str):
+        value = (v or "").strip()
+        if not value:
+            raise ValueError("Department name required.")
+        return value.upper()
+
+    @validator("batches")
+    def dedupe_batches(cls, v: Optional[List[BatchIn]]):
+        if v is None:
+            return None
+        seen: set[Tuple[int, int]] = set()
+        unique: List[BatchIn] = []
+        for batch in v:
+            pair = (batch.from_year, batch.to_year)
+            if pair in seen:
+                continue
+            seen.add(pair)
+            unique.append(batch)
+        return unique
+
+
+class DepartmentSimpleCreateIn(DepartmentSimpleBase):
+    pass
+
+
+class DepartmentSimpleUpdateIn(DepartmentSimpleBase):
+    pass
+
+
 class DegreeOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -1337,6 +1371,35 @@ class SyllabusCourseSummaryOut(BaseModel):
     semester: int
     course_code: str
     title: str
+
+
+class SyllabusCourseSimpleBase(BaseModel):
+    semester: int = Field(..., ge=1, le=12)
+    course_code: str = Field(..., min_length=1, max_length=64)
+    title: str = Field(..., min_length=1, max_length=256)
+
+    @validator("course_code", "title", pre=True)
+    def _strip_text(cls, value: Any):  # noqa: N805
+        if value is None:
+            raise ValueError("Value is required")
+        if isinstance(value, str):
+            trimmed = value.strip()
+            if not trimmed:
+                raise ValueError("Value is required")
+            return trimmed
+        return str(value)
+
+    @validator("course_code")
+    def _uppercase_code(cls, value: str):  # noqa: N805
+        return value.upper()
+
+
+class SyllabusCourseSimpleCreateIn(SyllabusCourseSimpleBase):
+    pass
+
+
+class SyllabusCourseSimpleUpdateIn(SyllabusCourseSimpleBase):
+    pass
 
 
 class BatchResolveIn(BaseModel):
@@ -1677,6 +1740,64 @@ def get_college_full(college_id: uuid.UUID):
     }
 
 
+def _locate_department_from_snapshot(
+    college_snapshot: Dict[str, Any],
+    degree_id: uuid.UUID,
+    department_id: uuid.UUID,
+) -> DepartmentWithBatchesOut:
+    degrees = college_snapshot.get("degrees") if isinstance(college_snapshot, dict) else []
+    if degrees is None:
+        degrees = []
+    target_degree_id = uuid.UUID(str(degree_id))
+    target_department_id = uuid.UUID(str(department_id))
+
+    for degree in degrees:
+        deg_id = getattr(degree, "id", None)
+        if deg_id is None and isinstance(degree, dict):
+            deg_id = degree.get("id")
+        if deg_id is None:
+            continue
+        if str(deg_id) != str(target_degree_id):
+            continue
+
+        departments = getattr(degree, "departments", None)
+        if departments is None and isinstance(degree, dict):
+            departments = degree.get("departments")
+        if not departments:
+            break
+
+        for dept in departments:
+            dept_id = getattr(dept, "id", None)
+            if dept_id is None and isinstance(dept, dict):
+                dept_id = dept.get("id")
+            if dept_id is None or str(dept_id) != str(target_department_id):
+                continue
+
+            name = getattr(dept, "name", None)
+            if name is None and isinstance(dept, dict):
+                name = dept.get("name")
+
+            batches = getattr(dept, "batches", None)
+            if batches is None and isinstance(dept, dict):
+                batches = dept.get("batches")
+            batch_models: List[BatchIn] = []
+            for batch in batches or []:
+                if isinstance(batch, BatchIn):
+                    batch_models.append(batch)
+                elif isinstance(batch, dict):
+                    frm = batch.get("from") or batch.get("from_year")
+                    to = batch.get("to") or batch.get("to_year")
+                    if frm is not None and to is not None:
+                        batch_models.append(BatchIn(**{"from": frm, "to": to}))
+            return DepartmentWithBatchesOut(
+                id=target_department_id,
+                name=name,
+                batches=batch_models,
+            )
+
+    raise HTTPException(status_code=404, detail="Department not found in college snapshot.")
+
+
 def _extract_access_token(res) -> Optional[str]:
     try:
         session = getattr(res, "session", None) or (res.get("session") if isinstance(res, dict) else None)
@@ -1780,6 +1901,52 @@ def _get_or_create_batch_id(
     if getattr(ref, "error", None) or not ref.data:
         raise HTTPException(status_code=500, detail=f"Supabase error (refetch batch): {getattr(ref, 'error', None)}")
     return uuid.UUID(ref.data[0]["id"])
+
+
+def _ensure_department_batches(
+    college_id: uuid.UUID, department_id: uuid.UUID, batches: Optional[List[BatchIn]]
+) -> None:
+    if not batches:
+        return
+
+    supabase = get_service_client()
+    existing = (
+        supabase.table("batches")
+        .select("from_year,to_year")
+        .eq("college_id", str(college_id))
+        .eq("department_id", str(department_id))
+        .execute()
+    )
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list department batches): {existing.error}")
+
+    existing_pairs: set[Tuple[int, int]] = set()
+    for row in getattr(existing, "data", []) or []:
+        from_year = row.get("from_year")
+        to_year = row.get("to_year")
+        if from_year is None or to_year is None:
+            continue
+        existing_pairs.add((int(from_year), int(to_year)))
+
+    to_insert: List[Dict[str, Any]] = []
+    for batch in batches:
+        pair = (batch.from_year, batch.to_year)
+        if pair in existing_pairs:
+            continue
+        to_insert.append(
+            {
+                "college_id": str(college_id),
+                "department_id": str(department_id),
+                "from_year": batch.from_year,
+                "to_year": batch.to_year,
+            }
+        )
+        existing_pairs.add(pair)
+
+    if to_insert:
+        ins = supabase.table("batches").insert(to_insert).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert department batches): {ins.error}")
 
 
 def _clean_lines(text: str) -> List[str]:
@@ -4494,6 +4661,148 @@ def update_degree(degree_id: uuid.UUID, payload: DegreeSimpleCreateIn):
     raise HTTPException(status_code=404, detail="Updated degree not found in college snapshot.")
 
 
+@academics_router.post(
+    "/api/degrees/{degree_id}/departments",
+    response_model=DepartmentWithBatchesOut,
+    summary="Create a department for a degree",
+)
+def create_department_simple(degree_id: uuid.UUID, payload: DepartmentSimpleCreateIn):
+    supabase = get_service_client()
+
+    degree_res = (
+        supabase.table("degrees")
+        .select("id,college_id")
+        .eq("id", str(degree_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(degree_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find degree): {degree_res.error}")
+    if not degree_res.data:
+        raise HTTPException(status_code=404, detail="Degree not found")
+
+    degree_row = degree_res.data[0]
+    college_id_str = degree_row.get("college_id")
+    if not college_id_str:
+        raise HTTPException(status_code=400, detail="Degree missing college reference")
+    college_id = uuid.UUID(college_id_str)
+
+    department_id: Optional[uuid.UUID] = None
+    existing = (
+        supabase.table("departments")
+        .select("id")
+        .eq("degree_id", str(degree_id))
+        .eq("name", payload.name)
+        .limit(1)
+        .execute()
+    )
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find department): {existing.error}")
+
+    if existing.data:
+        department_id = uuid.UUID(existing.data[0]["id"])
+    else:
+        insert_payload: Dict[str, Any] = {
+            "college_id": str(college_id),
+            "degree_id": str(degree_id),
+            "name": payload.name,
+        }
+        ins = supabase.table("departments").insert(insert_payload).execute()
+        if getattr(ins, "error", None):
+            error_text = str(ins.error)
+            if "duplicate key value" in error_text:
+                raise HTTPException(
+                    status_code=409,
+                    detail="A department with this name already exists for this degree.",
+                )
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert department): {ins.error}")
+        if ins.data:
+            department_id = uuid.UUID(ins.data[0]["id"])
+        else:
+            refetch = (
+                supabase.table("departments")
+                .select("id")
+                .eq("degree_id", str(degree_id))
+                .eq("name", payload.name)
+                .limit(1)
+                .execute()
+            )
+            if getattr(refetch, "error", None) or not refetch.data:
+                raise HTTPException(status_code=500, detail="Failed to retrieve created department.")
+            department_id = uuid.UUID(refetch.data[0]["id"])
+
+    if department_id is None:
+        raise HTTPException(status_code=500, detail="Unable to determine department identifier after upsert.")
+
+    _ensure_department_batches(college_id, department_id, payload.batches)
+
+    college_snapshot = get_college_full(college_id)
+    return _locate_department_from_snapshot(college_snapshot, degree_id, department_id)
+
+
+@academics_router.put(
+    "/api/departments/{department_id}",
+    response_model=DepartmentWithBatchesOut,
+    summary="Update department metadata",
+)
+def update_department_simple(department_id: uuid.UUID, payload: DepartmentSimpleUpdateIn):
+    supabase = get_service_client()
+
+    dept_res = (
+        supabase.table("departments")
+        .select("id,degree_id,college_id")
+        .eq("id", str(department_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(dept_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find department): {dept_res.error}")
+    if not dept_res.data:
+        raise HTTPException(status_code=404, detail="Department not found")
+
+    dept_row = dept_res.data[0]
+    college_id_str = dept_row.get("college_id")
+    degree_id_str = dept_row.get("degree_id")
+    if not college_id_str or not degree_id_str:
+        raise HTTPException(status_code=400, detail="Department missing degree or college reference")
+
+    dup_res = (
+        supabase.table("departments")
+        .select("id")
+        .eq("degree_id", degree_id_str)
+        .eq("name", payload.name)
+        .neq("id", str(department_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(dup_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (check duplicate department): {dup_res.error}")
+    if dup_res.data:
+        raise HTTPException(status_code=409, detail="Another department with this name already exists for the degree.")
+
+    upd = (
+        supabase.table("departments")
+        .update({"name": payload.name})
+        .eq("id", str(department_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        error_text = str(upd.error)
+        if "duplicate key value" in error_text:
+            raise HTTPException(
+                status_code=409,
+                detail="A department with this name already exists for the college. Please choose a different name.",
+            )
+        raise HTTPException(status_code=500, detail=f"Supabase error (update department): {upd.error}")
+
+    college_id = uuid.UUID(college_id_str)
+    degree_uuid = uuid.UUID(degree_id_str)
+    _ensure_department_batches(college_id, department_id, payload.batches)
+
+    college_snapshot = get_college_full(college_id)
+    return _locate_department_from_snapshot(college_snapshot, degree_uuid, department_id)
+
+
 @academics_router.put(
     "/api/colleges/{college_id}",
     response_model=College,
@@ -4628,6 +4937,214 @@ def list_batches_for_department_with_ids(college_id: uuid.UUID, dept_name: str):
     ]
 
 
+@academics_router.post(
+    "/api/departments/{department_id}/batches",
+    response_model=BatchWithIdOut,
+    summary="Create a batch for a department",
+)
+def create_batch_for_department(department_id: uuid.UUID, payload: BatchIn):
+    supabase = get_service_client()
+
+    dept_res = (
+        supabase.table("departments")
+        .select("id,college_id")
+        .eq("id", str(department_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(dept_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find department): {dept_res.error}")
+    if not dept_res.data:
+        raise HTTPException(status_code=404, detail="Department not found")
+
+    dept_row = dept_res.data[0]
+    college_id_str = dept_row.get("college_id")
+    if not college_id_str:
+        raise HTTPException(status_code=400, detail="Department missing college reference")
+
+    dup_res = (
+        supabase.table("batches")
+        .select("id")
+        .eq("department_id", str(department_id))
+        .eq("from_year", payload.from_year)
+        .eq("to_year", payload.to_year)
+        .limit(1)
+        .execute()
+    )
+    if getattr(dup_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (check duplicate batch): {dup_res.error}")
+    if dup_res.data:
+        raise HTTPException(status_code=409, detail="This batch already exists for the department.")
+
+    insert_payload = {
+        "college_id": college_id_str,
+        "department_id": str(department_id),
+        "from_year": payload.from_year,
+        "to_year": payload.to_year,
+    }
+    ins = supabase.table("batches").insert(insert_payload).execute()
+    if getattr(ins, "error", None):
+        error_text = str(ins.error)
+        if "duplicate key value" in error_text:
+            raise HTTPException(status_code=409, detail="This batch already exists for the department.")
+        raise HTTPException(status_code=500, detail=f"Supabase error (insert batch): {ins.error}")
+
+    if not ins.data:
+        refetch = (
+            supabase.table("batches")
+            .select("id,from_year,to_year")
+            .eq("department_id", str(department_id))
+            .eq("from_year", payload.from_year)
+            .eq("to_year", payload.to_year)
+            .limit(1)
+            .execute()
+        )
+        if getattr(refetch, "error", None) or not refetch.data:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created batch.")
+        batch_row = refetch.data[0]
+    else:
+        batch_row = ins.data[0]
+
+    return BatchWithIdOut(
+        id=uuid.UUID(batch_row["id"]),
+        from_year=int(batch_row.get("from_year", payload.from_year)),
+        to_year=int(batch_row.get("to_year", payload.to_year)),
+    )
+
+
+@academics_router.put(
+    "/api/batches/{batch_id}",
+    response_model=BatchWithIdOut,
+    summary="Update batch years",
+)
+def update_batch(batch_id: uuid.UUID, payload: BatchIn):
+    supabase = get_service_client()
+
+    batch_res = (
+        supabase.table("batches")
+        .select("id,college_id,department_id")
+        .eq("id", str(batch_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(batch_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find batch): {batch_res.error}")
+    if not batch_res.data:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    batch_row = batch_res.data[0]
+    department_id_str = batch_row.get("department_id")
+    if not department_id_str:
+        raise HTTPException(status_code=400, detail="Batch missing department reference")
+
+    dup_res = (
+        supabase.table("batches")
+        .select("id")
+        .eq("department_id", department_id_str)
+        .eq("from_year", payload.from_year)
+        .eq("to_year", payload.to_year)
+        .neq("id", str(batch_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(dup_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (check duplicate batch): {dup_res.error}")
+    if dup_res.data:
+        raise HTTPException(status_code=409, detail="Another batch with this year range already exists for the department.")
+
+    upd = (
+        supabase.table("batches")
+        .update({"from_year": payload.from_year, "to_year": payload.to_year})
+        .eq("id", str(batch_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        error_text = str(upd.error)
+        if "duplicate key value" in error_text:
+            raise HTTPException(status_code=409, detail="Another batch with this year range already exists for the department.")
+        raise HTTPException(status_code=500, detail=f"Supabase error (update batch): {upd.error}")
+
+    return BatchWithIdOut(id=batch_id, from_year=payload.from_year, to_year=payload.to_year)
+
+
+@academics_router.post(
+    "/api/batches/{batch_id}/courses",
+    response_model=SyllabusCourseSummaryOut,
+    summary="Create a subject for a batch",
+)
+def create_course_for_batch(batch_id: uuid.UUID, payload: SyllabusCourseSimpleCreateIn):
+    supabase = get_service_client()
+
+    batch_res = (
+        supabase.table("batches")
+        .select("id")
+        .eq("id", str(batch_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(batch_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find batch): {batch_res.error}")
+    if not batch_res.data:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    dup_res = (
+        supabase.table("syllabus_courses")
+        .select("id")
+        .eq("batch_id", str(batch_id))
+        .eq("semester", payload.semester)
+        .eq("course_code", payload.course_code)
+        .limit(1)
+        .execute()
+    )
+    if getattr(dup_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (check duplicate course): {dup_res.error}")
+    if dup_res.data:
+        raise HTTPException(
+            status_code=409,
+            detail="A subject with this course code already exists for the semester in this batch.",
+        )
+
+    insert_payload = {
+        "batch_id": str(batch_id),
+        "semester": payload.semester,
+        "course_code": payload.course_code,
+        "title": payload.title,
+    }
+    ins = supabase.table("syllabus_courses").insert(insert_payload).execute()
+    if getattr(ins, "error", None):
+        error_text = str(ins.error)
+        if "duplicate key value" in error_text:
+            raise HTTPException(
+                status_code=409,
+                detail="A subject with this course code already exists for the semester in this batch.",
+            )
+        raise HTTPException(status_code=500, detail=f"Supabase error (insert course): {ins.error}")
+
+    if ins.data:
+        row = ins.data[0]
+    else:
+        refetch = (
+            supabase.table("syllabus_courses")
+            .select("id,semester,course_code,title")
+            .eq("batch_id", str(batch_id))
+            .eq("semester", payload.semester)
+            .eq("course_code", payload.course_code)
+            .limit(1)
+            .execute()
+        )
+        if getattr(refetch, "error", None) or not refetch.data:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created subject.")
+        row = refetch.data[0]
+
+    return SyllabusCourseSummaryOut(
+        id=uuid.UUID(row["id"]),
+        batch_id=batch_id,
+        semester=int(row.get("semester", payload.semester)),
+        course_code=row.get("course_code", payload.course_code),
+        title=row.get("title", payload.title),
+    )
+
+
 @academics_router.post("/api/batches/resolve", response_model=BatchWithIdOut, summary="Resolve or create a batch id for a college + dept + year range")
 def resolve_or_create_batch(payload: BatchResolveIn):
     return resolve_or_create_batch(payload.college_id, payload.dept_name, payload.from_year, payload.to_year)
@@ -4675,6 +5192,78 @@ def get_me(authorization: Optional[str] = Header(default=None)):
 @academics_router.post("/api/syllabus/courses", response_model=SyllabusCourseOut, summary="Upsert syllabus course with units & topics")
 def api_upsert_syllabus_course(payload: SyllabusCourseIn):
     return upsert_syllabus_course(payload)
+
+
+@academics_router.put(
+    "/api/syllabus/courses/{course_id}",
+    response_model=SyllabusCourseSummaryOut,
+    summary="Update subject metadata",
+)
+def update_course_metadata(course_id: uuid.UUID, payload: SyllabusCourseSimpleUpdateIn):
+    supabase = get_service_client()
+
+    existing = (
+        supabase.table("syllabus_courses")
+        .select("id,batch_id")
+        .eq("id", str(course_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find course): {existing.error}")
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    row = existing.data[0]
+    batch_id_str = row.get("batch_id")
+    if not batch_id_str:
+        raise HTTPException(status_code=400, detail="Subject missing batch reference")
+
+    dup_res = (
+        supabase.table("syllabus_courses")
+        .select("id")
+        .eq("batch_id", batch_id_str)
+        .eq("semester", payload.semester)
+        .eq("course_code", payload.course_code)
+        .neq("id", str(course_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(dup_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (check duplicate course): {dup_res.error}")
+    if dup_res.data:
+        raise HTTPException(
+            status_code=409,
+            detail="Another subject with this course code already exists for the semester in this batch.",
+        )
+
+    updates = {
+        "semester": payload.semester,
+        "course_code": payload.course_code,
+        "title": payload.title,
+    }
+    upd = (
+        supabase.table("syllabus_courses")
+        .update(updates)
+        .eq("id", str(course_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        error_text = str(upd.error)
+        if "duplicate key value" in error_text:
+            raise HTTPException(
+                status_code=409,
+                detail="Another subject with this course code already exists for the semester in this batch.",
+            )
+        raise HTTPException(status_code=500, detail=f"Supabase error (update course): {upd.error}")
+
+    return SyllabusCourseSummaryOut(
+        id=course_id,
+        batch_id=uuid.UUID(batch_id_str),
+        semester=payload.semester,
+        course_code=payload.course_code,
+        title=payload.title,
+    )
 
 
 @academics_router.get(
