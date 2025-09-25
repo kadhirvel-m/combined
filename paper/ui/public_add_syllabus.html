@@ -243,21 +243,59 @@
         const navSignOut = document.getElementById('navSignOut');
         if (navProfile) navProfile.classList.remove('hidden');
         if (navSignOut) { navSignOut.classList.remove('hidden'); navSignOut.onclick = () => { try { localStorage.removeItem('px_token'); } catch { } window.location.href = 'login.html'; }; }
+
+        const applyNavProfile = (profile) => {
+          if (!profile) return;
+          let initials = 'ME';
+          if (profile.name) {
+            initials = profile.name
+              .split(' ')
+              .filter(Boolean)
+              .map(part => part[0]?.toUpperCase())
+              .slice(0, 2)
+              .join('') || 'ME';
+          }
+          if (navProfileInitial) {
+            navProfileInitial.textContent = initials;
+            navProfileInitial.classList.remove('hidden');
+          }
+          if (profile.profile_image_url && navProfileImg) {
+            navProfileImg.src = profile.profile_image_url;
+            navProfileImg.classList.remove('hidden');
+            if (navProfileInitial) navProfileInitial.classList.add('hidden');
+          } else if (navProfileImg) {
+            navProfileImg.classList.add('hidden');
+          }
+        };
+
+        window.__PX_NAV_APPLY = applyNavProfile;
+
+        const useProfile = (profile) => { if (profile) applyNavProfile(profile); };
+
+        if (window.__PX_PROFILE_SNAPSHOT) {
+          applyNavProfile(window.__PX_PROFILE_SNAPSHOT);
+          return;
+        }
+
         const apiBase = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
-        fetch(`${apiBase}/api/me`, { headers: { Authorization: `Bearer ${t}` } })
-          .then(r => r.ok ? r.json() : null)
-          .then(d => {
-            const p = d?.profile; if (!p) return;
-            let initials = 'ME';
-            if (p.name) initials = p.name.split(' ').filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0, 2).join('');
-            if (navProfileInitial) navProfileInitial.textContent = initials;
-            if (p.profile_image_url && navProfileImg) {
-              navProfileImg.src = p.profile_image_url;
-              navProfileImg.classList.remove('hidden');
-              if (navProfileInitial) navProfileInitial.classList.add('hidden');
-            }
-          })
-          .catch(() => { });
+        if (!window.__PX_NAV_PROFILE_PROMISE) {
+          window.__PX_NAV_PROFILE_PROMISE = fetch(`${apiBase}/api/me`, { headers: { Authorization: `Bearer ${t}` } })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+              const profile = d?.profile || null;
+              if (profile) {
+                window.__PX_PROFILE_SNAPSHOT = profile;
+                applyNavProfile(profile);
+              }
+              return profile;
+            })
+            .catch(() => null);
+        }
+
+        const pending = window.__PX_NAV_PROFILE_PROMISE;
+        if (pending && typeof pending.then === 'function') {
+          pending.then(useProfile).catch(() => { });
+        }
       })();
 
     const apiBase = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');

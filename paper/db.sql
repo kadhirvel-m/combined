@@ -269,10 +269,8 @@ CREATE TABLE public.user_profiles (
   publications text,
   achievements text,
   experience text,
-  degree_id uuid,
   CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
-  CONSTRAINT user_profiles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
-  CONSTRAINT user_profiles_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id)
+  CONSTRAINT user_profiles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.user_publications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

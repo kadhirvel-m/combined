@@ -2375,50 +2375,75 @@ def get_current_user_profile(token: Optional[str]):
                 )
                 if getattr(courses_q, "error", None):
                     raise HTTPException(status_code=500, detail=f"Supabase error (courses): {courses_q.error}")
-                new_syllabus = []
-                for c in (courses_q.data or []):
+
+                course_rows = courses_q.data or []
+                course_ids = [row.get("id") for row in course_rows if row.get("id")]
+                units_by_course: Dict[str, List[Dict[str, Any]]] = {}
+                unit_lookup: Dict[str, Dict[str, Any]] = {}
+
+                if course_ids:
                     units_q = (
                         supabase.table("syllabus_units")
-                        .select("id,unit_title,order_in_course")
-                        .eq("course_id", c["id"])
+                        .select("id,course_id,unit_title,order_in_course")
+                        .in_("course_id", [str(cid) for cid in course_ids])
+                        .order("course_id")
                         .order("order_in_course")
                         .execute()
                     )
                     if getattr(units_q, "error", None):
                         raise HTTPException(status_code=500, detail=f"Supabase error (units): {units_q.error}")
-                    units = []
-                    for u in (units_q.data or []):
+                    for raw_unit in units_q.data or []:
+                        unit_id = raw_unit.get("id")
+                        course_id = raw_unit.get("course_id")
+                        if not unit_id or not course_id:
+                            continue
+                        unit_obj = {
+                            "id": unit_id,
+                            "unit_title": raw_unit.get("unit_title"),
+                            "order_in_course": raw_unit.get("order_in_course"),
+                            "topics": [],
+                        }
+                        units_by_course.setdefault(course_id, []).append(unit_obj)
+                        unit_lookup[unit_id] = unit_obj
+
+                    unit_ids = list(unit_lookup.keys())
+                    if unit_ids:
                         topics_q = (
                             supabase.table("syllabus_topics")
-                            .select("id,topic,order_in_unit")
-                            .eq("unit_id", u["id"])
+                            .select("id,unit_id,topic,order_in_unit")
+                            .in_("unit_id", [str(uid) for uid in unit_ids])
+                            .order("unit_id")
                             .order("order_in_unit")
                             .execute()
                         )
                         if getattr(topics_q, "error", None):
                             raise HTTPException(status_code=500, detail=f"Supabase error (topics): {topics_q.error}")
-                        units.append(
-                            {
-                                "id": u["id"],
-                                "unit_title": u["unit_title"],
-                                "order_in_course": u["order_in_course"],
-                                "topics": [
-                                    {
-                                        "id": t["id"],
-                                        "topic": t["topic"],
-                                        "order_in_unit": t["order_in_unit"],
-                                    }
-                                    for t in (topics_q.data or [])
-                                ],
-                            }
-                        )
+                        for raw_topic in topics_q.data or []:
+                            unit_id = raw_topic.get("unit_id")
+                            unit_obj = unit_lookup.get(unit_id)
+                            if not unit_obj:
+                                continue
+                            unit_obj["topics"].append(
+                                {
+                                    "id": raw_topic.get("id"),
+                                    "topic": raw_topic.get("topic"),
+                                    "order_in_unit": raw_topic.get("order_in_unit"),
+                                }
+                            )
+
+                new_syllabus: List[Dict[str, Any]] = []
+                for course in course_rows:
+                    cid = course.get("id")
+                    course_units = units_by_course.get(cid, [])
+                    for unit in course_units:
+                        unit["topics"].sort(key=lambda t: (t.get("order_in_unit") or 0))
                     new_syllabus.append(
                         {
-                            "id": c["id"],
-                            "course_code": c["course_code"],
-                            "title": c["title"],
-                            "semester": c["semester"],
-                            "units": units,
+                            "id": cid,
+                            "course_code": course.get("course_code"),
+                            "title": course.get("title"),
+                            "semester": course.get("semester"),
+                            "units": course_units,
                         }
                     )
                 syllabus = new_syllabus
