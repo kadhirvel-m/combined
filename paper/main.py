@@ -1189,6 +1189,17 @@ class College(BaseModel):
     name: str
 
 
+class CollegeNameOnlyIn(BaseModel):
+    name: str = Field(..., min_length=2, max_length=256)
+
+    @validator("name")
+    def trim_name(cls, v: str):
+        value = (v or "").strip()
+        if not value:
+            raise ValueError("College name required.")
+        return value
+
+
 class DepartmentWithBatchesOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -1201,6 +1212,26 @@ class DegreeOut(BaseModel):
     level: Optional[str] = None
     duration_years: Optional[int] = None
     departments: List[DepartmentWithBatchesOut]
+
+
+class DegreeSimpleCreateIn(BaseModel):
+    name: str = Field(..., min_length=2, max_length=256)
+    level: Optional[str] = Field(None, max_length=64)
+    duration_years: Optional[int] = Field(None, ge=1, le=10)
+
+    @validator("name")
+    def trim_name(cls, v: str):
+        value = (v or "").strip()
+        if not value:
+            raise ValueError("Degree name required.")
+        return value
+
+    @validator("level")
+    def normalize_level(cls, v: Optional[str]):
+        if v is None:
+            return None
+        value = v.strip()
+        return value or None
 
 
 class CollegeFullOut(BaseModel):
@@ -4339,11 +4370,159 @@ def create_college(payload: CollegeCreateIn):
     return CollegeFullOut(**data)
 
 
+@academics_router.post(
+    "/api/colleges/simple",
+    response_model=CollegeFullOut,
+    summary="Create a college by name with no academic structure",
+)
+def create_college_simple(payload: CollegeNameOnlyIn):
+    college_id = upsert_college(payload.name)
+    data = get_college_full(college_id)
+    return CollegeFullOut(**data)
+
+
 @academics_router.get("/api/colleges", response_model=List[College], summary="List all colleges (id & name)")
 def list_colleges():
     supabase = get_service_client()
     res = supabase.table("colleges").select("id,name").order("name").execute()
     return [{"id": row["id"], "name": row["name"]} for row in (res.data or [])]
+
+
+@academics_router.post(
+    "/api/colleges/{college_id}/degrees",
+    response_model=DegreeOut,
+    summary="Create a degree for a college",
+)
+def create_degree_simple(college_id: uuid.UUID, payload: DegreeSimpleCreateIn):
+    supabase = get_service_client()
+
+    existing = (
+        supabase.table("degrees")
+        .select("id,name,level,duration_years")
+        .eq("college_id", str(college_id))
+        .eq("name", payload.name)
+        .limit(1)
+        .execute()
+    )
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find degree): {existing.error}")
+
+    if existing.data:
+        degree_row = existing.data[0]
+    else:
+        insert_payload: Dict[str, Any] = {
+            "college_id": str(college_id),
+            "name": payload.name,
+        }
+        if payload.level is not None:
+            insert_payload["level"] = payload.level
+        if payload.duration_years is not None:
+            insert_payload["duration_years"] = payload.duration_years
+
+        ins = supabase.table("degrees").insert(insert_payload).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert degree): {ins.error}")
+        if ins.data:
+            degree_row = ins.data[0]
+        else:
+            refetch = (
+                supabase.table("degrees")
+                .select("id,name,level,duration_years")
+                .eq("college_id", str(college_id))
+                .eq("name", payload.name)
+                .limit(1)
+                .execute()
+            )
+            if getattr(refetch, "error", None) or not refetch.data:
+                raise HTTPException(status_code=500, detail="Failed to retrieve created degree.")
+            degree_row = refetch.data[0]
+
+    college_snapshot = get_college_full(college_id)
+    degree_id = uuid.UUID(degree_row["id"])
+    for item in college_snapshot["degrees"]:
+        if item.id == degree_id:
+            return item
+
+    raise HTTPException(status_code=404, detail="Created degree not found in college snapshot.")
+
+
+@academics_router.put(
+    "/api/degrees/{degree_id}",
+    response_model=DegreeOut,
+    summary="Update degree metadata",
+)
+def update_degree(degree_id: uuid.UUID, payload: DegreeSimpleCreateIn):
+    supabase = get_service_client()
+
+    existing = (
+        supabase.table("degrees")
+        .select("id,college_id")
+        .eq("id", str(degree_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find degree): {existing.error}")
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Degree not found")
+
+    degree_row = existing.data[0]
+    college_id_str = degree_row.get("college_id")
+    if not college_id_str:
+        raise HTTPException(status_code=400, detail="Degree missing college reference")
+
+    updates: Dict[str, Any] = {
+        "name": payload.name,
+        "level": payload.level,
+        "duration_years": payload.duration_years,
+    }
+
+    upd = (
+        supabase.table("degrees")
+        .update(updates)
+        .eq("id", str(degree_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update degree): {upd.error}")
+
+    college_snapshot = get_college_full(uuid.UUID(college_id_str))
+    for item in college_snapshot["degrees"]:
+        if item.id == degree_id:
+            return item
+
+    raise HTTPException(status_code=404, detail="Updated degree not found in college snapshot.")
+
+
+@academics_router.put(
+    "/api/colleges/{college_id}",
+    response_model=College,
+    summary="Rename a college",
+)
+def rename_college(college_id: uuid.UUID, payload: CollegeNameOnlyIn):
+    supabase = get_service_client()
+    upd = (
+        supabase.table("colleges")
+        .update({"name": payload.name})
+        .eq("id", str(college_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (rename college): {upd.error}")
+
+    ref = (
+        supabase.table("colleges")
+        .select("id,name")
+        .eq("id", str(college_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(ref, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch college): {ref.error}")
+    if not ref.data:
+        raise HTTPException(status_code=404, detail="College not found")
+    row = ref.data[0]
+    return College(id=uuid.UUID(row["id"]), name=row["name"])
 
 
 @academics_router.get("/api/colleges/{college_id}", response_model=CollegeFullOut, summary="Get a college with departments & batches")

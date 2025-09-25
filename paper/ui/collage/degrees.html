@@ -95,9 +95,79 @@
                 </div>
             </div>
 
+            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-sm text-slate-600 dark:text-slate-300">Define the degrees offered at this college before
+                    drilling into departments and batches.</p>
+                <button id="addDegreeBtn"
+                    class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 hover:shadow-glow transition"
+                    type="button">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                    Add degree
+                </button>
+            </div>
+
             <div id="results" class="mt-12 grid gap-6 sm:grid-cols-2 xl:grid-cols-3"></div>
         </section>
     </main>
+
+    <div id="degreeModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
+        role="dialog" aria-modal="true" aria-labelledby="degreeModalTitle">
+        <div id="degreeModalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div
+            class="relative w-full max-w-xl rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/90 dark:bg-night-900/90 shadow-xl">
+            <div
+                class="flex items-start justify-between gap-4 border-b border-slate-200/60 dark:border-white/10 px-6 py-5">
+                <div>
+                    <h2 id="degreeModalTitle" class="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a
+                        new degree</h2>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Capture the degree title along with any
+                        optional level and duration information.</p>
+                </div>
+                <button id="degreeModalClose" type="button"
+                    class="rounded-lg border border-transparent p-2 text-slate-500 hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60">
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <form id="degreeForm" class="space-y-5 px-6 py-6">
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Degree name
+                    <input id="degreeName" name="name" type="text" required
+                        class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
+                        placeholder="e.g. Bachelor of Technology" />
+                </label>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                        Level (optional)
+                        <input id="degreeLevel" name="level" type="text"
+                            class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
+                            placeholder="e.g. Undergraduate" />
+                    </label>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                        Duration (years, optional)
+                        <input id="degreeDuration" name="duration" type="number" min="1" max="10"
+                            class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
+                            placeholder="4" />
+                    </label>
+                </div>
+                <p id="degreeModalMessage" class="hidden text-sm text-red-500"></p>
+                <div class="flex items-center justify-end gap-3">
+                    <button id="degreeModalCancel" type="button"
+                        class="rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:border-brand-400/60 transition">Cancel</button>
+                    <button id="degreeSubmitBtn" type="submit"
+                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-neon hover:opacity-95 transition">Save
+                        degree</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
         const params = Collage.parseQuery();
@@ -108,6 +178,22 @@
         const subtitleEl = document.getElementById('pageSubtitle');
         const breadcrumbsEl = document.getElementById('breadcrumbs');
         const backLink = document.getElementById('backLink');
+        const addDegreeBtn = document.getElementById('addDegreeBtn');
+        const degreeModal = document.getElementById('degreeModal');
+        const degreeModalBackdrop = document.getElementById('degreeModalBackdrop');
+        const degreeModalTitle = document.getElementById('degreeModalTitle');
+        const degreeForm = document.getElementById('degreeForm');
+        const degreeNameInput = document.getElementById('degreeName');
+        const degreeLevelInput = document.getElementById('degreeLevel');
+        const degreeDurationInput = document.getElementById('degreeDuration');
+        const degreeModalMessage = document.getElementById('degreeModalMessage');
+        const degreeModalCancel = document.getElementById('degreeModalCancel');
+        const degreeModalClose = document.getElementById('degreeModalClose');
+        const degreeSubmitBtn = document.getElementById('degreeSubmitBtn');
+        let currentCollegeLabel = collegeName || 'Selected college';
+        let degreesCache = [];
+        let degreeModalMode = 'add';
+        let editingDegreeId = null;
 
         function makeBreadcrumb(items) {
             if (!Array.isArray(items)) return '';
@@ -143,6 +229,161 @@
         </div>`;
         }
 
+        function resetDegreeModal() {
+            degreeForm?.reset();
+            degreeModalMessage.textContent = '';
+            degreeModalMessage.classList.add('hidden');
+            editingDegreeId = null;
+            degreeModalMode = 'add';
+            degreeSubmitBtn.textContent = 'Save degree';
+        }
+
+        function setDegreeModalLoading(isLoading) {
+            degreeSubmitBtn.disabled = isLoading;
+            degreeSubmitBtn.textContent = isLoading ? 'Saving…' : (degreeModalMode === 'edit' ? 'Save changes' : 'Save degree');
+        }
+
+        function closeDegreeModal() {
+            degreeModal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            resetDegreeModal();
+        }
+
+        function openDegreeModal(mode = 'add', degree) {
+            if (!collegeId) return;
+            resetDegreeModal();
+            degreeModalMode = mode;
+
+            if (mode === 'edit' && degree) {
+                editingDegreeId = degree.id;
+                degreeNameInput.value = degree.name || '';
+                degreeLevelInput.value = degree.level || '';
+                degreeDurationInput.value = typeof degree.duration_years === 'number' && !Number.isNaN(degree.duration_years)
+                    ? degree.duration_years
+                    : '';
+            }
+
+            degreeModalTitle.textContent = mode === 'edit'
+                ? 'Edit degree'
+                : `Add a new degree for ${currentCollegeLabel}`;
+            degreeSubmitBtn.textContent = mode === 'edit' ? 'Save changes' : 'Save degree';
+
+            degreeModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => {
+                if (mode === 'edit') {
+                    degreeNameInput?.select();
+                } else {
+                    degreeNameInput?.focus();
+                }
+            }, 100);
+        }
+
+        async function handleDegreeSubmit(event) {
+            event.preventDefault();
+            if (!collegeId) {
+                degreeModalMessage.textContent = 'Missing college context. Please navigate from the colleges page again.';
+                degreeModalMessage.classList.remove('hidden');
+                return;
+            }
+            const name = (degreeNameInput.value || '').trim();
+            const level = (degreeLevelInput.value || '').trim();
+            const durationRaw = (degreeDurationInput.value || '').trim();
+            if (!name) {
+                degreeModalMessage.textContent = 'Please enter the degree name.';
+                degreeModalMessage.classList.remove('hidden');
+                degreeNameInput.focus();
+                return;
+            }
+            const payload = { name };
+            payload.level = level ? level : null;
+            let duration = null;
+            if (durationRaw) {
+                const parsed = parseInt(durationRaw, 10);
+                if (!Number.isNaN(parsed)) {
+                    duration = parsed;
+                }
+            }
+            if (duration !== null) {
+                payload.duration_years = duration;
+            } else {
+                payload.duration_years = null;
+            }
+            degreeModalMessage.classList.add('hidden');
+            setDegreeModalLoading(true);
+            try {
+                if (degreeModalMode === 'edit' && editingDegreeId) {
+                    await Collage.fetchJson(`/api/degrees/${editingDegreeId}`, {
+                        method: 'PUT',
+                        body: payload,
+                        skipAuth: true
+                    });
+                } else {
+                    const createPayload = { ...payload };
+                    if (createPayload.level === null) delete createPayload.level;
+                    if (createPayload.duration_years === null) delete createPayload.duration_years;
+                    await Collage.fetchJson(`/api/colleges/${collegeId}/degrees`, {
+                        method: 'POST',
+                        body: createPayload,
+                        skipAuth: true
+                    });
+                }
+                closeDegreeModal();
+                await loadDegrees();
+            } catch (error) {
+                let message = error?.message ?? 'Unable to save degree. Please try again.';
+                if (typeof message !== 'string') {
+                    try {
+                        message = JSON.stringify(message);
+                    } catch (_) {
+                        message = 'Unable to save degree. Please try again.';
+                    }
+                }
+                if (message === '[object Object]') {
+                    message = 'Unexpected response from server. Please try again.';
+                }
+                degreeModalMessage.textContent = message;
+                degreeModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setDegreeModalLoading(false);
+            }
+        }
+
+        function initDegreeModal() {
+            if (!addDegreeBtn) return;
+            if (!collegeId) {
+                addDegreeBtn.disabled = true;
+                addDegreeBtn.classList.add('opacity-70', 'cursor-not-allowed');
+            }
+            addDegreeBtn?.addEventListener('click', () => openDegreeModal('add'));
+            degreeModalCancel?.addEventListener('click', closeDegreeModal);
+            degreeModalClose?.addEventListener('click', closeDegreeModal);
+            degreeModalBackdrop?.addEventListener('click', closeDegreeModal);
+            degreeForm?.addEventListener('submit', handleDegreeSubmit);
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !degreeModal.classList.contains('hidden')) {
+                    closeDegreeModal();
+                }
+            });
+        }
+
+        function attachDegreeEditHandlers() {
+            const editButtons = results.querySelectorAll('[data-degree-edit]');
+            editButtons.forEach(button => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    const id = button.getAttribute('data-degree-edit');
+                    const degree = degreesCache.find(item => item.id === id);
+                    if (degree) {
+                        openDegreeModal('edit', degree);
+                    }
+                });
+            });
+        }
+
         async function loadDegrees() {
             if (!collegeId) {
                 showError('Missing collegeId in URL.');
@@ -152,6 +393,7 @@
             try {
                 const data = await Collage.fetchJson(`/api/colleges/${collegeId}`, { skipAuth: true });
                 const collegeLabel = data?.name || collegeName || 'Selected college';
+                currentCollegeLabel = collegeLabel;
                 titleEl.textContent = `Degrees at ${collegeLabel}`;
                 subtitleEl.textContent = `${(data?.degrees || []).length} degree${(data?.degrees || []).length === 1 ? '' : 's'} available. Select one to review its departments.`;
                 breadcrumbsEl.innerHTML = makeBreadcrumb([
@@ -162,6 +404,7 @@
                     backLink.href = `clg_info.html`;
                 }
                 const degrees = Array.isArray(data?.degrees) ? data.degrees : [];
+                degreesCache = degrees.slice();
                 if (!degrees.length) {
                     showEmpty();
                     return;
@@ -173,27 +416,45 @@
                     if (degree.level) chips.push(`<span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">${Collage.escapeHtml(degree.level)}</span>`);
                     if (degree.duration_years) chips.push(`<span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">${degree.duration_years} years</span>`);
                     chips.push(`<span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200"><svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm-3 4c-3.132 0-6 1.567-6 3.5V16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.5C15 12.567 12.132 11 10 11Z" /></svg>${deptCount} department${deptCount === 1 ? '' : 's'}</span>`);
+                    const detailLink = `departments.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeLabel)}&degreeId=${encodeURIComponent(degree.id)}&degreeName=${encodeURIComponent(degree.name || '')}`;
                     return `
-            <a class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow" href="departments.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeLabel)}&degreeId=${encodeURIComponent(degree.id)}&degreeName=${encodeURIComponent(degree.name || '')}">
-              <div class="absolute inset-x-4 top-4 h-28 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
-              <div class="relative flex flex-wrap gap-2">${chips.join('')}</div>
-              <h2 class="relative mt-5 text-xl font-semibold text-slate-900 dark:text-white group-hover:text-brand-500">${Collage.escapeHtml(degree.name || 'Unnamed degree')}</h2>
-              <p class="relative mt-3 text-sm text-slate-600 dark:text-slate-300">Explore all departments and batches mapped to this degree.</p>
-              <div class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300">
-                View departments
-                <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                  <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                </svg>
-              </div>
-            </a>`;
+                        <article class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow">
+                            <div class="absolute inset-x-4 top-4 h-28 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
+                            <button type="button" data-degree-edit="${degree.id}" aria-label="Edit ${Collage.escapeHtml(degree.name || '')}"
+                                class="absolute top-4 right-4 z-20 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-brand-500 hover:border-brand-400/60 transition">
+                                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <path d="M17.414 2.586a2 2 0 00-2.828 0L6.414 10.758a2 2 0 00-.516.878l-.8 2.798a1 1 0 001.226 1.226l2.798-.8a2 2 0 00.878-.516l8.172-8.172a2 2 0 000-2.828l-.758-.758zm-3.535 1.414L15 5.536 13.536 7 12 5.464l1.879-1.879zM11.293 6.172L3.707 13.758l-.353 1.237 1.237-.353 7.586-7.586L11.293 6.172z" />
+                                </svg>
+                            </button>
+                            <div class="relative flex flex-wrap gap-2">${chips.join('')}</div>
+                            <h2 class="relative z-10 mt-5 text-xl font-semibold">
+                                <a href="${detailLink}" class="relative inline-flex items-center gap-2 rounded-lg text-slate-900 dark:text-white group-hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-night-900">
+                                    ${Collage.escapeHtml(degree.name || 'Unnamed degree')}
+                                    <svg class="h-4 w-4 text-brand-500 opacity-0 group-hover:opacity-100 transition" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                    </svg>
+                                </a>
+                            </h2>
+                            <p class="relative mt-3 text-sm text-slate-600 dark:text-slate-300">Explore all departments and batches mapped to this degree.</p>
+                            <a class="relative z-10 mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300" href="${detailLink}">
+                                View departments
+                                <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                </svg>
+                            </a>
+                        </article>`;
                 }).join('');
+                attachDegreeEditHandlers();
             } catch (err) {
                 console.error(err);
                 showError(err.message || 'Unexpected error');
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadDegrees);
+        document.addEventListener('DOMContentLoaded', () => {
+            initDegreeModal();
+            loadDegrees();
+        });
     </script>
 </body>
 

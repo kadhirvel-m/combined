@@ -77,10 +77,24 @@
                     College Navigator
                 </div>
                 <div class="max-w-3xl">
-                    <h1 class="text-3xl sm:text-4xl font-bold leading-tight">Choose a college to explore its full
-                        academic hierarchy.</h1>
-                    <p class="mt-3 text-slate-600 dark:text-slate-300">Drill down from college → degrees → departments →
-                        batches → subjects → detailed syllabus in a single flow.</p>
+                    <h1 class="text-3xl sm:text-4xl font-bold leading-tight">Choose a college</h1>
+                </div>
+            </div>
+
+            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-sm text-slate-600 dark:text-slate-300">Manage and curate the college directory shown to
+                    learners.</p>
+                <div class="flex items-center gap-3">
+                    <button id="addCollegeBtn"
+                        class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 hover:shadow-glow transition"
+                        type="button">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd"
+                                d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                                clip-rule="evenodd"></path>
+                        </svg>
+                        Add college
+                    </button>
                 </div>
             </div>
 
@@ -88,8 +102,62 @@
         </section>
     </main>
 
+    <div id="collegeModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
+        role="dialog" aria-modal="true" aria-labelledby="collegeModalTitle">
+        <div id="collegeModalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div
+            class="relative w-full max-w-lg rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/90 dark:bg-night-900/90 shadow-xl">
+            <div
+                class="flex items-start justify-between gap-4 border-b border-slate-200/60 dark:border-white/10 px-6 py-5">
+                <div>
+                    <h2 id="collegeModalTitle" class="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a
+                        new college</h2>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Provide the official name as it should
+                        appear throughout the navigator.</p>
+                </div>
+                <button id="collegeModalClose" type="button"
+                    class="rounded-lg border border-transparent p-2 text-slate-500 hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60">
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <form id="collegeForm" class="space-y-5 px-6 py-6">
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    College name
+                    <input id="collegeName" name="name" type="text" required
+                        class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
+                        placeholder="e.g. Mannakul Vinayagar Institute of Technology" />
+                </label>
+                <p id="collegeModalMessage" class="hidden text-sm text-red-500"></p>
+                <div class="flex items-center justify-end gap-3">
+                    <button id="collegeModalCancel" type="button"
+                        class="rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:border-brand-400/60 transition">Cancel</button>
+                    <button id="collegeSubmitBtn" type="submit"
+                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-neon hover:opacity-95 transition">Save
+                        college</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const results = document.getElementById('results');
+        const addCollegeBtn = document.getElementById('addCollegeBtn');
+        const collegeModal = document.getElementById('collegeModal');
+        const collegeModalBackdrop = document.getElementById('collegeModalBackdrop');
+        const collegeModalTitle = document.getElementById('collegeModalTitle');
+        const collegeForm = document.getElementById('collegeForm');
+        const collegeNameInput = document.getElementById('collegeName');
+        const collegeModalMessage = document.getElementById('collegeModalMessage');
+        const collegeModalCancel = document.getElementById('collegeModalCancel');
+        const collegeSubmitBtn = document.getElementById('collegeSubmitBtn');
+        const collegeModalClose = document.getElementById('collegeModalClose');
+        let collegesCache = [];
+        let modalMode = 'add';
+        let editingCollegeId = null;
 
         function showLoader() {
             results.innerHTML = `
@@ -114,43 +182,174 @@
         </div>`;
         }
 
+        function resetModal() {
+            collegeForm.reset();
+            collegeModalMessage.textContent = '';
+            collegeModalMessage.classList.add('hidden');
+            editingCollegeId = null;
+        }
+
+        function setModalLoading(isLoading) {
+            collegeSubmitBtn.disabled = isLoading;
+            collegeSubmitBtn.textContent = isLoading ? 'Saving…' : (modalMode === 'edit' ? 'Save changes' : 'Save college');
+        }
+
+        function closeCollegeModal() {
+            collegeModal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            resetModal();
+        }
+
+        function openCollegeModal(mode, college) {
+            modalMode = mode;
+            resetModal();
+            if (mode === 'edit' && college) {
+                editingCollegeId = college.id;
+                collegeNameInput.value = college.name || '';
+            }
+            collegeModalTitle.textContent = mode === 'edit' ? 'Edit college' : 'Add a new college';
+            collegeSubmitBtn.textContent = mode === 'edit' ? 'Save changes' : 'Save college';
+            collegeModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => {
+                collegeNameInput?.focus();
+                if (mode === 'edit') {
+                    collegeNameInput?.select();
+                }
+            }, 100);
+        }
+
+        function attachCollegeEditHandlers() {
+            const editButtons = results.querySelectorAll('[data-college-edit]');
+            editButtons.forEach(button => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    const id = button.getAttribute('data-college-edit');
+                    const college = collegesCache.find(item => item.id === id);
+                    if (college) {
+                        openCollegeModal('edit', college);
+                    }
+                });
+            });
+        }
+
+        async function handleCollegeSubmit(event) {
+            event.preventDefault();
+            const name = (collegeNameInput.value || '').trim();
+            if (!name) {
+                collegeModalMessage.textContent = 'Please enter the college name.';
+                collegeModalMessage.classList.remove('hidden');
+                collegeNameInput.focus();
+                return;
+            }
+            collegeModalMessage.classList.add('hidden');
+            setModalLoading(true);
+            try {
+                if (modalMode === 'edit' && editingCollegeId) {
+                    await Collage.fetchJson(`/api/colleges/${editingCollegeId}`, {
+                        method: 'PUT',
+                        body: { name },
+                        skipAuth: true
+                    });
+                } else {
+                    await Collage.fetchJson('/api/colleges/simple', {
+                        method: 'POST',
+                        body: { name },
+                        skipAuth: true
+                    });
+                }
+                closeCollegeModal();
+                await loadColleges();
+            } catch (error) {
+                let message = error?.message ?? 'Unable to save college. Please try again.';
+                if (typeof message !== 'string') {
+                    try {
+                        message = JSON.stringify(message);
+                    } catch (_) {
+                        message = 'Unable to save college. Please try again.';
+                    }
+                }
+                if (message === '[object Object]') {
+                    message = 'Unexpected response from server. Please try again.';
+                }
+                collegeModalMessage.textContent = message;
+                collegeModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setModalLoading(false);
+            }
+        }
+
         async function loadColleges() {
             showLoader();
             try {
                 const colleges = await Collage.fetchJson('/api/colleges', { skipAuth: true });
+                collegesCache = Array.isArray(colleges) ? colleges.slice() : [];
                 if (!Array.isArray(colleges) || !colleges.length) {
                     showEmpty();
                     return;
                 }
                 results.innerHTML = colleges.map((college, index) => {
                     const accentColor = ['from-brand-400 via-brand-500 to-indigo-500', 'from-emerald-400 via-teal-400 to-emerald-600', 'from-fuchsia-400 via-pink-500 to-rose-500', 'from-cyan-400 via-sky-500 to-blue-500', 'from-amber-400 via-orange-500 to-amber-600'][index % 5];
+                    const target = `degrees.html?collegeId=${encodeURIComponent(college.id)}&collegeName=${encodeURIComponent((college && college.name) || '')}`;
                     return `
-            <a class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow" href="degrees.html?collegeId=${encodeURIComponent(college.id)}&collegeName=${encodeURIComponent(college.name)}">
+                                                                        <article class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow">
               <div class="absolute inset-x-4 top-4 h-28 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
+              <button type="button" data-college-edit="${college.id}" aria-label="Edit ${Collage.escapeHtml(college.name)}"
+                                                        class="absolute top-4 right-4 z-20 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-brand-500 hover:border-brand-400/60 transition">
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path d="M17.414 2.586a2 2 0 00-2.828 0L6.414 10.758a2 2 0 00-.516.878l-.8 2.798a1 1 0 001.226 1.226l2.798-.8a2 2 0 00.878-.516l8.172-8.172a2 2 0 000-2.828l-.758-.758zm-3.535 1.414L15 5.536 13.536 7 12 5.464l1.879-1.879zM11.293 6.172L3.707 13.758l-.353 1.237 1.237-.353 7.586-7.586L11.293 6.172z" />
+                </svg>
+              </button>
               <div class="relative flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                 <span class="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">
                   <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
                   Active
                 </span>
-                <span class="font-mono text-[11px] text-slate-500/80 dark:text-slate-400/80">${college.id.slice(0, 6)}…</span>
               </div>
-              <h2 class="relative mt-6 text-xl font-semibold text-slate-900 dark:text-white group-hover:text-brand-500">${Collage.escapeHtml(college.name)}</h2>
+                                            <h2 class="relative z-10 mt-6 text-xl font-semibold">
+                                                <a href="${target}" class="relative inline-flex items-center gap-2 rounded-lg text-slate-900 dark:text-white group-hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-night-900">
+                                    ${Collage.escapeHtml(college.name)}
+                                    <svg class="h-4 w-4 text-brand-500 opacity-0 group-hover:opacity-100 transition" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                    </svg>
+                                </a>
+                            </h2>
               <p class="relative mt-3 text-sm text-slate-600 dark:text-slate-300">Dive into its degrees, departments, batches, subjects, and full syllabus structure.</p>
-              <div class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300">
+                            <div class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300">
                 Explore hierarchy
                 <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                 </svg>
               </div>
-            </a>`;
+                        </article>`;
                 }).join('');
+                attachCollegeEditHandlers();
             } catch (err) {
                 console.error(err);
                 showError(err.message || 'Unexpected error');
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadColleges);
+        function initCollegeManagement() {
+            addCollegeBtn?.addEventListener('click', () => openCollegeModal('add'));
+            collegeModalCancel?.addEventListener('click', closeCollegeModal);
+            collegeModalClose?.addEventListener('click', closeCollegeModal);
+            collegeModalBackdrop?.addEventListener('click', closeCollegeModal);
+            collegeForm?.addEventListener('submit', handleCollegeSubmit);
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !collegeModal.classList.contains('hidden')) {
+                    closeCollegeModal();
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCollegeManagement();
+            loadColleges();
+        });
     </script>
 </body>
 
