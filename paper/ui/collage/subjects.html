@@ -190,6 +190,22 @@
         const backLink = document.getElementById('backLink');
         const batchDetails = document.getElementById('batchDetails');
         const semesterFilter = document.getElementById('semesterFilter');
+        const addSubjectBtn = document.getElementById('addSubjectBtn');
+        const subjectModal = document.getElementById('subjectModal');
+        const subjectModalBackdrop = document.getElementById('subjectModalBackdrop');
+        const subjectModalTitle = document.getElementById('subjectModalTitle');
+        const subjectForm = document.getElementById('subjectForm');
+        const subjectCourseCodeInput = document.getElementById('subjectCourseCode');
+        const subjectSemesterInput = document.getElementById('subjectSemester');
+        const subjectTitleInput = document.getElementById('subjectTitle');
+        const subjectModalMessage = document.getElementById('subjectModalMessage');
+        const subjectModalCancel = document.getElementById('subjectModalCancel');
+        const subjectModalClose = document.getElementById('subjectModalClose');
+        const subjectSubmitBtn = document.getElementById('subjectSubmitBtn');
+
+        let coursesCache = [];
+        let subjectModalMode = 'add';
+        let editingCourseId = null;
 
         if (semesterFilter) {
             for (let i = 1; i <= 12; i += 1) {
@@ -198,6 +214,20 @@
                 option.textContent = `Semester ${i}`;
                 semesterFilter.appendChild(option);
             }
+        }
+
+        if (subjectSemesterInput) {
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.textContent = 'Select semester';
+            subjectSemesterInput.appendChild(placeholderOption);
+            for (let i = 1; i <= 12; i += 1) {
+                const option = document.createElement('option');
+                option.value = String(i);
+                option.textContent = `Semester ${i}`;
+                subjectSemesterInput.appendChild(option);
+            }
+            subjectSemesterInput.value = '';
         }
 
         if (backLink && collegeId && degreeId) {
@@ -234,8 +264,214 @@
             results.innerHTML = `
         <div class="col-span-full rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow">
           <h2 class="text-lg font-semibold">No subjects recorded</h2>
-          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Add syllabus courses for this batch to populate the subject list.</p>
+          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Use the “Add subject” button to record syllabus courses for this batch.</p>
         </div>`;
+        }
+
+        function resetSubjectModal() {
+            subjectForm?.reset();
+            if (subjectSemesterInput) {
+                subjectSemesterInput.value = '';
+            }
+            subjectModalMessage.textContent = '';
+            subjectModalMessage.classList.add('hidden');
+            subjectModalMode = 'add';
+            editingCourseId = null;
+            if (subjectSubmitBtn) {
+                subjectSubmitBtn.disabled = false;
+                subjectSubmitBtn.textContent = 'Save subject';
+            }
+        }
+
+        function setSubjectModalLoading(isLoading) {
+            if (!subjectSubmitBtn) return;
+            subjectSubmitBtn.disabled = isLoading;
+            subjectSubmitBtn.textContent = isLoading
+                ? 'Saving…'
+                : (subjectModalMode === 'edit' ? 'Save changes' : 'Save subject');
+        }
+
+        function closeSubjectModal() {
+            subjectModal?.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            resetSubjectModal();
+        }
+
+        function openSubjectModal(mode = 'add', course) {
+            if (!batchId) return;
+            resetSubjectModal();
+            subjectModalMode = mode;
+
+            let defaultSemester = semesterFilter?.value ? Number(semesterFilter.value) : null;
+
+            if (mode === 'edit' && course) {
+                editingCourseId = course.id;
+                subjectCourseCodeInput.value = course.course_code || '';
+                subjectTitleInput.value = course.title || '';
+                if (course.semester) {
+                    defaultSemester = course.semester;
+                }
+            }
+
+            if (subjectSemesterInput) {
+                const targetValue = defaultSemester ? String(defaultSemester) : '';
+                if (targetValue && subjectSemesterInput.querySelector(`option[value="${targetValue}"]`)) {
+                    subjectSemesterInput.value = targetValue;
+                } else if (subjectSemesterInput.querySelector('option[value="1"]')) {
+                    subjectSemesterInput.value = '1';
+                } else {
+                    subjectSemesterInput.value = '';
+                }
+            }
+
+            const batchLabel = batchRange || 'this batch';
+            subjectModalTitle.textContent = mode === 'edit'
+                ? 'Edit subject'
+                : `Add a new subject for ${batchLabel}`;
+            subjectSubmitBtn.textContent = mode === 'edit' ? 'Save changes' : 'Save subject';
+
+            subjectModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => {
+                subjectCourseCodeInput?.focus();
+                if (mode === 'edit') {
+                    subjectCourseCodeInput?.select();
+                }
+            }, 100);
+        }
+
+        async function handleSubjectSubmit(event) {
+            event.preventDefault();
+            if (!batchId) {
+                subjectModalMessage.textContent = 'Missing batch context. Please navigate from the batches page again.';
+                subjectModalMessage.classList.remove('hidden');
+                return;
+            }
+
+            const rawCode = subjectCourseCodeInput.value.trim();
+            const semesterValue = subjectSemesterInput.value;
+            const rawTitle = subjectTitleInput.value.trim();
+            const semesterNumber = Number.parseInt(semesterValue, 10);
+
+            if (!rawCode) {
+                subjectModalMessage.textContent = 'Enter a course code.';
+                subjectModalMessage.classList.remove('hidden');
+                subjectCourseCodeInput.focus();
+                return;
+            }
+            if (!semesterValue || Number.isNaN(semesterNumber)) {
+                subjectModalMessage.textContent = 'Select a valid semester.';
+                subjectModalMessage.classList.remove('hidden');
+                subjectSemesterInput.focus();
+                return;
+            }
+            if (!rawTitle) {
+                subjectModalMessage.textContent = 'Enter a subject title.';
+                subjectModalMessage.classList.remove('hidden');
+                subjectTitleInput.focus();
+                return;
+            }
+
+            subjectModalMessage.classList.add('hidden');
+
+            const payload = {
+                course_code: rawCode.toUpperCase(),
+                semester: semesterNumber,
+                title: rawTitle,
+            };
+
+            setSubjectModalLoading(true);
+
+            try {
+                if (subjectModalMode === 'edit' && editingCourseId) {
+                    await Collage.fetchJson(`/api/syllabus/courses/${editingCourseId}`, {
+                        method: 'PUT',
+                        body: payload,
+                        skipAuth: true,
+                    });
+                } else {
+                    await Collage.fetchJson(`/api/batches/${batchId}/courses`, {
+                        method: 'POST',
+                        body: payload,
+                        skipAuth: true,
+                    });
+                }
+                closeSubjectModal();
+                await loadSubjects();
+            } catch (error) {
+                let message = error?.message ?? 'Unable to save subject. Please try again.';
+                if (typeof message !== 'string') {
+                    try {
+                        message = JSON.stringify(message);
+                    } catch (_) {
+                        message = 'Unable to save subject. Please try again.';
+                    }
+                }
+                if (message === '[object Object]') {
+                    message = 'Unexpected response from server. Please try again.';
+                }
+                subjectModalMessage.textContent = message;
+                subjectModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setSubjectModalLoading(false);
+            }
+        }
+
+        function initSubjectModal() {
+            if (!addSubjectBtn) return;
+            if (!batchId) {
+                addSubjectBtn.disabled = true;
+                addSubjectBtn.classList.add('opacity-60', 'cursor-not-allowed');
+            }
+            addSubjectBtn.addEventListener('click', () => openSubjectModal('add'));
+            subjectModalCancel?.addEventListener('click', closeSubjectModal);
+            subjectModalClose?.addEventListener('click', closeSubjectModal);
+            subjectModalBackdrop?.addEventListener('click', closeSubjectModal);
+            subjectForm?.addEventListener('submit', handleSubjectSubmit);
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !subjectModal.classList.contains('hidden')) {
+                    closeSubjectModal();
+                }
+            });
+        }
+
+        function attachSubjectEditHandlers() {
+            const editButtons = results.querySelectorAll('[data-course-edit]');
+            editButtons.forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const id = button.getAttribute('data-course-edit');
+                    const course = coursesCache.find((item) => String(item.id) === String(id));
+                    if (course) {
+                        openSubjectModal('edit', course);
+                    }
+                });
+            });
+        }
+
+        function attachSubjectCardNavigation() {
+            const cards = results.querySelectorAll('[data-course-card]');
+            cards.forEach((card) => {
+                const href = card.getAttribute('data-course-card');
+                if (!href) return;
+                card.addEventListener('click', (event) => {
+                    if (event.target.closest('[data-course-edit]')) {
+                        return;
+                    }
+                    if (event.target.closest('a')) {
+                        return;
+                    }
+                    window.location.href = href;
+                });
+                card.addEventListener('keydown', (event) => {
+                    if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('[data-course-edit]')) {
+                        event.preventDefault();
+                        window.location.href = href;
+                    }
+                });
+            });
         }
 
         async function loadSubjects() {
@@ -244,12 +480,20 @@
                 return;
             }
             showLoader();
-            const selectedSemester = semesterFilter.value ? Number(semesterFilter.value) : null;
+            const selectedSemester = semesterFilter?.value ? Number(semesterFilter.value) : null;
             try {
                 const query = selectedSemester ? `?semester=${selectedSemester}` : '';
                 const data = await Collage.fetchJson(`/api/batches/${batchId}/courses${query}`, { skipAuth: true });
+                const list = Array.isArray(data) ? data : [];
+                coursesCache = list.map((course) => ({
+                    id: course.id,
+                    batch_id: course.batch_id,
+                    semester: Number(course.semester),
+                    course_code: course.course_code || '',
+                    title: course.title || '',
+                }));
                 titleEl.textContent = `Subjects for ${departmentName || 'Department'} · ${batchRange || batchId}`;
-                subtitleEl.textContent = `${(data || []).length} subject${(data || []).length === 1 ? '' : 's'} found${selectedSemester ? ` in semester ${selectedSemester}` : ''}.`;
+                subtitleEl.textContent = `${list.length} subject${list.length === 1 ? '' : 's'} found${selectedSemester ? ` in semester ${selectedSemester}` : ''}.`;
                 batchDetails.textContent = `${collegeName || 'College'} • ${degreeName || 'Degree'} • ${departmentName || 'Department'} • ${batchRange || ''}`;
                 breadcrumbsEl.innerHTML = makeBreadcrumb([
                     { label: 'Colleges', href: 'clg_info.html' },
@@ -258,30 +502,52 @@
                     { label: departmentName || 'Department', href: `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}` },
                     { label: batchRange || 'Batch' }
                 ]);
-                if (!Array.isArray(data) || !data.length) {
+                if (!list.length) {
                     showEmpty();
                     return;
                 }
-                results.innerHTML = data.map((course, index) => {
+                const accentPalette = [
+                    'from-brand-400 via-brand-500 to-indigo-500',
+                    'from-emerald-400 via-teal-400 to-emerald-600',
+                    'from-fuchsia-400 via-pink-500 to-rose-500',
+                    'from-cyan-400 via-sky-500 to-blue-500',
+                    'from-amber-400 via-orange-500 to-amber-600'
+                ];
+                results.innerHTML = list.map((course, index) => {
                     const link = `syllabus.html?courseId=${encodeURIComponent(course.id)}&courseCode=${encodeURIComponent(course.course_code || '')}&courseTitle=${encodeURIComponent(course.title || '')}&semester=${encodeURIComponent(course.semester)}&batchRange=${encodeURIComponent(batchRange || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
-                    const accentColor = ['from-brand-400 via-brand-500 to-indigo-500', 'from-emerald-400 via-teal-400 to-emerald-600', 'from-fuchsia-400 via-pink-500 to-rose-500', 'from-cyan-400 via-sky-500 to-blue-500', 'from-amber-400 via-orange-500 to-amber-600'][index % 5];
+                    const accentColor = accentPalette[index % accentPalette.length];
                     return `
-            <a class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow" href="${link}">
+            <article class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow focus-within:border-brand-400/60 focus-within:shadow-glow" data-course-card="${link}" tabindex="0">
               <div class="absolute inset-x-4 top-4 h-28 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
+              <button type="button" data-course-edit="${course.id}" aria-label="Edit subject ${Collage.escapeHtml(course.course_code || 'Course')}"
+                class="absolute top-4 right-4 z-20 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-brand-500 hover:border-brand-400/60 transition">
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path d="M17.414 2.586a2 2 0 00-2.828 0L6.414 10.758a2 2 0 00-.516.878l-.8 2.798a1 1 0 001.226 1.226l2.798-.8a2 2 0 00.878-.516l8.172-8.172a2 2 0 000-2.828l-.758-.758zm-3.535 1.414L15 5.536 13.536 7 12 5.464l1.879-1.879zM11.293 6.172L3.707 13.758l-.353 1.237 1.237-.353 7.586-7.586L11.293 6.172z" />
+                </svg>
+              </button>
               <div class="relative flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">${Collage.escapeHtml(course.course_code || 'Course')}</span>
-                <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200"><svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 0 0-2 2v1H3a1 1 0 0 0 0 2h1v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7h1a1 1 0 1 0 0-2h-1V4a2 2 0 0 0-2-2H6Zm2 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm4 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z" /></svg>Semester ${course.semester}</span>
+                <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">Semester ${course.semester}</span>
               </div>
-              <h2 class="relative mt-5 text-xl font-semibold text-slate-900 dark:text-white group-hover:text-brand-500">${Collage.escapeHtml(course.title || 'Untitled subject')}</h2>
+              <h2 class="relative mt-5 text-xl font-semibold text-slate-900 dark:text-white group-hover:text-brand-500">
+                <a href="${link}" class="relative inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-night-900">
+                  ${Collage.escapeHtml(course.title || 'Untitled subject')}
+                  <svg class="h-4 w-4 text-brand-500 opacity-0 group-hover:opacity-100 transition" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                  </svg>
+                </a>
+              </h2>
               <p class="relative mt-3 text-sm text-slate-600 dark:text-slate-300">Open to review the detailed units and topics for this subject.</p>
-              <div class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300">
+              <a class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300" href="${link}">
                 View syllabus
                 <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                 </svg>
-              </div>
-            </a>`;
+              </a>
+            </article>`;
                 }).join('');
+                attachSubjectEditHandlers();
+                attachSubjectCardNavigation();
             } catch (err) {
                 console.error(err);
                 showError(err.message || 'Unexpected error');
@@ -289,7 +555,10 @@
         }
 
         semesterFilter?.addEventListener('change', loadSubjects);
-        document.addEventListener('DOMContentLoaded', loadSubjects);
+        document.addEventListener('DOMContentLoaded', () => {
+            initSubjectModal();
+            loadSubjects();
+        });
     </script>
 </body>
 

@@ -1325,6 +1325,20 @@ class SignupFullIn(BaseModel):
 class TopicIn(BaseModel):
     topic: str = Field(..., min_length=1)
 
+    @validator("topic", pre=True)
+    def _strip_topic(cls, value: Any):  # noqa: N805
+        if value is None:
+            raise ValueError("Topic cannot be empty")
+        if isinstance(value, str):
+            trimmed = value.strip()
+            if not trimmed:
+                raise ValueError("Topic cannot be empty")
+            return trimmed
+        trimmed = str(value).strip()
+        if not trimmed:
+            raise ValueError("Topic cannot be empty")
+        return trimmed
+
 
 class UnitIn(BaseModel):
     unit_title: str = Field(..., min_length=1)
@@ -1400,6 +1414,31 @@ class SyllabusCourseSimpleCreateIn(SyllabusCourseSimpleBase):
 
 class SyllabusCourseSimpleUpdateIn(SyllabusCourseSimpleBase):
     pass
+
+
+class UnitTopicsIn(BaseModel):
+    unit_title: str = Field(..., min_length=1, max_length=256)
+    topics: List[TopicIn] = Field(default_factory=list)
+
+    @validator("unit_title", pre=True)
+    def _normalize_unit_title(cls, value: Any):  # noqa: N805
+        if value is None:
+            raise ValueError("Unit title cannot be empty")
+        if isinstance(value, str):
+            trimmed = value.strip()
+            if not trimmed:
+                raise ValueError("Unit title cannot be empty")
+            return trimmed
+        trimmed = str(value).strip()
+        if not trimmed:
+            raise ValueError("Unit title cannot be empty")
+        return trimmed
+
+    @validator("topics", pre=True)
+    def _ensure_topics_list(cls, value: Any):  # noqa: N805
+        if value is None:
+            return []
+        return value
 
 
 class BatchResolveIn(BaseModel):
@@ -2700,6 +2739,46 @@ def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
         course_code=data.get("course_code"),
         title=data.get("title"),
         units=units_out,
+    )
+
+
+def load_unit_with_topics(unit_id: uuid.UUID) -> UnitOut:
+    supabase = get_service_client()
+    unit_res = (
+        supabase.table("syllabus_units")
+        .select("id,unit_title,order_in_course")
+        .eq("id", str(unit_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(unit_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get unit): {unit_res.error}")
+    if not unit_res.data:
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    unit_row = unit_res.data[0]
+    topics_res = (
+        supabase.table("syllabus_topics")
+        .select("id,topic,order_in_unit")
+        .eq("unit_id", str(unit_id))
+        .order("order_in_unit")
+        .execute()
+    )
+    if getattr(topics_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get unit topics): {topics_res.error}")
+
+    return UnitOut(
+        id=unit_id,
+        unit_title=unit_row.get("unit_title"),
+        order_in_course=int(unit_row.get("order_in_course", 0)),
+        topics=[
+            TopicOut(
+                id=uuid.UUID(topic_row["id"]),
+                topic=topic_row.get("topic"),
+                order_in_unit=int(topic_row.get("order_in_unit", 0)),
+            )
+            for topic_row in (topics_res.data or [])
+        ],
     )
 
 
@@ -5305,6 +5384,171 @@ def api_list_courses_for_batch(
 )
 def api_get_syllabus_course(course_id: uuid.UUID):
     return load_course_with_units(course_id)
+
+
+@academics_router.post(
+    "/api/syllabus/courses/{course_id}/units",
+    response_model=UnitOut,
+    summary="Create a unit (with topics) for a syllabus course",
+)
+def create_unit_for_course(course_id: uuid.UUID, payload: UnitTopicsIn):
+    supabase = get_service_client()
+
+    course_res = (
+        supabase.table("syllabus_courses")
+        .select("id")
+        .eq("id", str(course_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(course_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find course): {course_res.error}")
+    if not course_res.data:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    dup_res = (
+        supabase.table("syllabus_units")
+        .select("id")
+        .eq("course_id", str(course_id))
+        .eq("unit_title", payload.unit_title)
+        .limit(1)
+        .execute()
+    )
+    if getattr(dup_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (check duplicate unit): {dup_res.error}")
+    if dup_res.data:
+        raise HTTPException(status_code=409, detail="A unit with this title already exists for this course.")
+
+    units_res = (
+        supabase.table("syllabus_units")
+        .select("id")
+        .eq("course_id", str(course_id))
+        .execute()
+    )
+    if getattr(units_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list units): {units_res.error}")
+    next_order = len(units_res.data or [])
+
+    ins = (
+        supabase.table("syllabus_units")
+        .insert(
+            {
+                "course_id": str(course_id),
+                "unit_title": payload.unit_title,
+                "order_in_course": next_order,
+            }
+        )
+        .execute()
+    )
+    if getattr(ins, "error", None):
+        error_text = str(ins.error)
+        if "duplicate key value" in error_text:
+            raise HTTPException(status_code=409, detail="A unit with this title already exists for this course.")
+        raise HTTPException(status_code=500, detail=f"Supabase error (insert unit): {ins.error}")
+
+    if ins.data:
+        unit_id_str = ins.data[0].get("id")
+    else:
+        refetch = (
+            supabase.table("syllabus_units")
+            .select("id")
+            .eq("course_id", str(course_id))
+            .eq("unit_title", payload.unit_title)
+            .limit(1)
+            .execute()
+        )
+        if getattr(refetch, "error", None) or not refetch.data:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created unit.")
+        unit_id_str = refetch.data[0].get("id")
+
+    if not unit_id_str:
+        raise HTTPException(status_code=500, detail="Unit identifier missing after creation.")
+    unit_id = uuid.UUID(unit_id_str)
+
+    topic_rows = [
+        {
+            "unit_id": str(unit_id),
+            "topic": topic.topic,
+            "order_in_unit": index,
+        }
+        for index, topic in enumerate(payload.topics or [])
+    ]
+    if topic_rows:
+        tins = supabase.table("syllabus_topics").insert(topic_rows).execute()
+        if getattr(tins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert topics): {tins.error}")
+
+    return load_unit_with_topics(unit_id)
+
+
+@academics_router.put(
+    "/api/syllabus/units/{unit_id}",
+    response_model=UnitOut,
+    summary="Update a syllabus unit title and topics",
+)
+def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
+    supabase = get_service_client()
+
+    unit_res = (
+        supabase.table("syllabus_units")
+        .select("id,course_id")
+        .eq("id", str(unit_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(unit_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find unit): {unit_res.error}")
+    if not unit_res.data:
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    course_id_str = unit_res.data[0].get("course_id")
+    if not course_id_str:
+        raise HTTPException(status_code=400, detail="Unit missing course reference")
+
+    dup_res = (
+        supabase.table("syllabus_units")
+        .select("id")
+        .eq("course_id", course_id_str)
+        .eq("unit_title", payload.unit_title)
+        .neq("id", str(unit_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(dup_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (check duplicate unit): {dup_res.error}")
+    if dup_res.data:
+        raise HTTPException(status_code=409, detail="Another unit with this title already exists for this course.")
+
+    upd = (
+        supabase.table("syllabus_units")
+        .update({"unit_title": payload.unit_title})
+        .eq("id", str(unit_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        error_text = str(upd.error)
+        if "duplicate key value" in error_text:
+            raise HTTPException(status_code=409, detail="Another unit with this title already exists for this course.")
+        raise HTTPException(status_code=500, detail=f"Supabase error (update unit): {upd.error}")
+
+    del_res = supabase.table("syllabus_topics").delete().eq("unit_id", str(unit_id)).execute()
+    if getattr(del_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete topics): {del_res.error}")
+
+    topic_rows = [
+        {
+            "unit_id": str(unit_id),
+            "topic": topic.topic,
+            "order_in_unit": index,
+        }
+        for index, topic in enumerate(payload.topics or [])
+    ]
+    if topic_rows:
+        tins = supabase.table("syllabus_topics").insert(topic_rows).execute()
+        if getattr(tins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert topics): {tins.error}")
+
+    return load_unit_with_topics(unit_id)
 
 
 # ---------- Progress tracking ----------

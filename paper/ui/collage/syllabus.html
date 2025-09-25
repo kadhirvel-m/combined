@@ -78,11 +78,6 @@
     <main class="relative">
         <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
             <div class="flex flex-col gap-6">
-                <div
-                    class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/70 dark:bg-night-800/60 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 backdrop-blur">
-                    <span class="h-2 w-2 rounded-full bg-brand-500"></span>
-                    Course syllabus
-                </div>
                 <div class="flex flex-col gap-2">
                     <nav id="breadcrumbs"
                         class="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400"
@@ -98,9 +93,78 @@
                 class="mt-8 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 shadow p-6">
             </div>
 
+            <div class="mt-6 flex justify-end">
+                <button id="addUnitBtn" type="button"
+                    class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 hover:shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled>
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                    Add unit
+                </button>
+            </div>
+
             <div id="results" class="mt-10 space-y-6"></div>
         </section>
     </main>
+
+    <div id="unitModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
+        role="dialog" aria-modal="true" aria-labelledby="unitModalTitle">
+        <div id="unitModalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div
+            class="relative w-full max-w-2xl rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/90 dark:bg-night-900/90 shadow-xl">
+            <div
+                class="flex items-start justify-between gap-4 border-b border-slate-200/60 dark:border-white/10 px-6 py-5">
+                <div>
+                    <h2 id="unitModalTitle" class="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a new
+                        unit</h2>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Provide the unit title and list of topics
+                        covered.</p>
+                </div>
+                <button id="unitModalClose" type="button"
+                    class="rounded-lg border border-transparent p-2 text-slate-500 hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60">
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <form id="unitForm" class="space-y-5 px-6 py-6">
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Unit title
+                    <input id="unitTitle" name="unit_title" type="text" required maxlength="256"
+                        class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
+                        placeholder="e.g. Introduction to Algorithms" />
+                </label>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-slate-700 dark:text-slate-200">Topics</span>
+                        <button id="addTopicRow" type="button"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 transition">
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd"
+                                    d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                                    clip-rule="evenodd"></path>
+                            </svg>
+                            Add topic
+                        </button>
+                    </div>
+                    <div id="topicsContainer" class="space-y-3"></div>
+                </div>
+                <p id="unitModalMessage" class="hidden text-sm text-red-500"></p>
+                <div class="flex items-center justify-end gap-3">
+                    <button id="unitModalCancel" type="button"
+                        class="rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:border-brand-400/60 transition">Cancel</button>
+                    <button id="unitSubmitBtn" type="submit"
+                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-neon hover:opacity-95 transition">Save
+                        unit</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
         const params = Collage.parseQuery();
@@ -119,6 +183,23 @@
         const breadcrumbsEl = document.getElementById('breadcrumbs');
         const contextPanel = document.getElementById('contextPanel');
         const backLink = document.getElementById('backLink');
+        const addUnitBtn = document.getElementById('addUnitBtn');
+
+        const unitModal = document.getElementById('unitModal');
+        const unitModalBackdrop = document.getElementById('unitModalBackdrop');
+        const unitModalTitle = document.getElementById('unitModalTitle');
+        const unitModalMessage = document.getElementById('unitModalMessage');
+        const unitModalCancel = document.getElementById('unitModalCancel');
+        const unitModalClose = document.getElementById('unitModalClose');
+        const unitSubmitBtn = document.getElementById('unitSubmitBtn');
+        const unitForm = document.getElementById('unitForm');
+        const unitTitleInput = document.getElementById('unitTitle');
+        const topicsContainer = document.getElementById('topicsContainer');
+        const addTopicRowButton = document.getElementById('addTopicRow');
+
+        let syllabusCourse = null;
+        let unitModalMode = 'add';
+        let editingUnitId = null;
 
         if (backLink && params.batchId) {
             backLink.href = `subjects.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(params.degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(params.batchId || '')}&batchRange=${encodeURIComponent(batchRange || '')}`;
@@ -154,7 +235,7 @@
             results.innerHTML = `
                 <div class="rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-6 shadow">
                     <h2 class="text-lg font-semibold">No units recorded</h2>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Add units and topics for this course to complete the syllabus.</p>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Use the “Add unit” button to record units and topics for this course.</p>
                 </div>`;
         }
 
@@ -173,25 +254,261 @@
             contextPanel.innerHTML = `
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex flex-wrap gap-3">${chips || '<span class="text-sm text-slate-600 dark:text-slate-400">No additional metadata available.</span>'}</div>
-                      <div class="text-sm text-slate-600 dark:text-slate-300">${trail || ''}</div>
+                    <div class="text-sm text-slate-600 dark:text-slate-300">${trail || ''}</div>
                 </div>`;
         }
 
-        async function loadSyllabus() {
-            if (!courseId) {
-                showError('Missing courseId in URL.');
+        function attachUnitEditHandlers() {
+            const editButtons = results.querySelectorAll('[data-unit-edit]');
+            editButtons.forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const unitId = button.getAttribute('data-unit-edit');
+                    const unit = (syllabusCourse?.units || []).find((item) => String(item.id) === String(unitId));
+                    if (unit) {
+                        openUnitModal('edit', unit);
+                    }
+                });
+            });
+        }
+
+        function renderUnits(units) {
+            if (!Array.isArray(units) || !units.length) {
+                showEmpty();
                 return;
             }
-            showLoader();
+            const accentPalette = [
+                'from-brand-400 via-brand-500 to-indigo-500',
+                'from-emerald-400 via-teal-400 to-emerald-600',
+                'from-fuchsia-400 via-pink-500 to-rose-500',
+                'from-cyan-400 via-sky-500 to-blue-500',
+                'from-amber-400 via-orange-500 to-amber-600'
+            ];
+            results.innerHTML = units.map((unit, index) => {
+                const topics = Array.isArray(unit.topics) ? unit.topics : [];
+                const accentColor = accentPalette[index % accentPalette.length];
+                const orderIndex = Number(unit.order_in_course ?? index) + 1;
+                const topicsMarkup = topics.length
+                    ? `<ol class="mt-4 space-y-2 pl-5 text-sm text-slate-700 dark:text-slate-200 list-decimal">${topics.map((topic) => `<li>${Collage.escapeHtml(topic.topic || '')}</li>`).join('')}</ol>`
+                    : '<p class="mt-4 text-sm text-slate-500 dark:text-slate-400">No topics recorded.</p>';
+
+                return `
+            <article class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60">
+              <div class="absolute inset-x-6 top-4 h-24 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
+              <button type="button" data-unit-edit="${unit.id}" aria-label="Edit unit ${Collage.escapeHtml(unit.unit_title || '')}"
+                class="absolute top-4 right-4 z-20 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-brand-500 hover:border-brand-400/60 transition">
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path d="M17.414 2.586a2 2 0 00-2.828 0L6.414 10.758a2 2 0 00-.516.878l-.8 2.798a1 1 0 001.226 1.226l2.798-.8a2 2 0 00.878-.516l8.172-8.172a2 2 0 000-2.828l-.758-.758zm-3.535 1.414L15 5.536 13.536 7 12 5.464l1.879-1.879zM11.293 6.172L3.707 13.758l-.353 1.237 1.237-.353 7.586-7.586L11.293 6.172z" />
+                </svg>
+              </button>
+              <div class="relative inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">
+                <span class="font-semibold">Unit ${orderIndex}</span>
+                ${topics.length ? `<span class="flex items-center gap-1 text-slate-500 dark:text-slate-300"><svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 000 2h1v8a2 2 0 002 2h7a2 2 0 002-2v-1h2a1 1 0 001-1V9.414a1 1 0 00-.293-.707l-2.414-2.414A1 1 0 0015.586 6H14V4a2 2 0 00-2-2H6z"/></svg>${topics.length} topic${topics.length === 1 ? '' : 's'}</span>` : ''}
+              </div>
+              <h2 class="relative mt-4 text-xl font-semibold text-slate-900 dark:text-white">${Collage.escapeHtml(unit.unit_title || 'Untitled unit')}</h2>
+              ${topicsMarkup}
+            </article>`;
+            }).join('');
+            attachUnitEditHandlers();
+        }
+
+        function setAddUnitAvailability() {
+            if (!addUnitBtn) return;
+            if (courseId) {
+                addUnitBtn.disabled = false;
+            } else {
+                addUnitBtn.disabled = true;
+            }
+        }
+
+        function addTopicRow(value = '') {
+            if (!topicsContainer) return;
+            const row = document.createElement('div');
+            row.className = 'flex items-start gap-3';
+            row.dataset.topicRow = 'true';
+
+            const textarea = document.createElement('textarea');
+            textarea.className = 'flex-1 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60';
+            textarea.rows = 2;
+            textarea.placeholder = 'Enter topic';
+            textarea.value = value;
+            row.appendChild(textarea);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'mt-1 inline-flex items-center justify-center rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-red-500 hover:border-red-300/60 transition';
+            removeBtn.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M6.293 6.293a1 1 0 011.414 0L10 8.586l2.293-2.293a1 1 0 111.414 1.414L11.414 10l2.293 2.293a1 1 0 01-1.414 1.414L10 11.414l-2.293 2.293a1 1 0 01-1.414-1.414L8.586 10 6.293 7.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>';
+            removeBtn.addEventListener('click', () => {
+                row.remove();
+                if (!topicsContainer.querySelector('[data-topic-row]')) {
+                    addTopicRow();
+                }
+            });
+            row.appendChild(removeBtn);
+
+            topicsContainer.appendChild(row);
+        }
+
+        function resetUnitModal() {
+            unitForm?.reset();
+            topicsContainer.innerHTML = '';
+            unitModalMessage.textContent = '';
+            unitModalMessage.classList.add('hidden');
+            unitModalMode = 'add';
+            editingUnitId = null;
+            addTopicRow();
+        }
+
+        function openUnitModal(mode = 'add', unit = null) {
+            if (!unitModal || !unitTitleInput) return;
+            resetUnitModal();
+            unitModalMode = mode;
+
+            if (mode === 'edit' && unit) {
+                editingUnitId = unit.id;
+                unitTitleInput.value = unit.unit_title || '';
+                topicsContainer.innerHTML = '';
+                const topicList = Array.isArray(unit.topics) ? unit.topics : [];
+                if (topicList.length) {
+                    topicList.forEach((topic) => addTopicRow(topic.topic || ''));
+                } else {
+                    addTopicRow();
+                }
+                unitModalTitle.textContent = 'Edit unit';
+                unitSubmitBtn.textContent = 'Save changes';
+            } else {
+                unitModalTitle.textContent = 'Add a new unit';
+                unitSubmitBtn.textContent = 'Save unit';
+            }
+
+            unitModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => unitTitleInput.focus(), 80);
+        }
+
+        function closeUnitModal() {
+            unitModal?.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            resetUnitModal();
+        }
+
+        function setUnitModalLoading(isLoading) {
+            if (!unitSubmitBtn) return;
+            unitSubmitBtn.disabled = isLoading;
+            unitSubmitBtn.textContent = isLoading
+                ? 'Saving…'
+                : (unitModalMode === 'edit' ? 'Save changes' : 'Save unit');
+        }
+
+        async function handleUnitSubmit(event) {
+            event.preventDefault();
+            if (!courseId) {
+                unitModalMessage.textContent = 'Missing course context. Please reload the page and try again.';
+                unitModalMessage.classList.remove('hidden');
+                return;
+            }
+
+            const title = unitTitleInput.value.trim();
+            if (!title) {
+                unitModalMessage.textContent = 'Enter a unit title.';
+                unitModalMessage.classList.remove('hidden');
+                unitTitleInput.focus();
+                return;
+            }
+
+            const topicInputs = topicsContainer.querySelectorAll('textarea');
+            const topics = [];
+            topicInputs.forEach((input) => {
+                const value = input.value.trim();
+                if (value) {
+                    topics.push({ topic: value });
+                }
+            });
+
+            unitModalMessage.classList.add('hidden');
+            setUnitModalLoading(true);
+
+            const payload = {
+                unit_title: title,
+                topics,
+            };
+
+            try {
+                if (unitModalMode === 'edit' && editingUnitId) {
+                    await Collage.fetchJson(`/api/syllabus/units/${editingUnitId}`, {
+                        method: 'PUT',
+                        body: payload,
+                        skipAuth: true,
+                    });
+                } else {
+                    await Collage.fetchJson(`/api/syllabus/courses/${courseId}/units`, {
+                        method: 'POST',
+                        body: payload,
+                        skipAuth: true,
+                    });
+                }
+                closeUnitModal();
+                await loadSyllabus();
+            } catch (error) {
+                let message = error?.message ?? 'Unable to save unit. Please try again.';
+                if (typeof message !== 'string') {
+                    try {
+                        message = JSON.stringify(message);
+                    } catch (_) {
+                        message = 'Unable to save unit. Please try again.';
+                    }
+                }
+                if (message === '[object Object]') {
+                    message = 'Unexpected response from server. Please try again.';
+                }
+                unitModalMessage.textContent = message;
+                unitModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setUnitModalLoading(false);
+            }
+        }
+
+        addUnitBtn?.addEventListener('click', () => openUnitModal('add'));
+        addTopicRowButton?.addEventListener('click', () => addTopicRow());
+        unitModalCancel?.addEventListener('click', closeUnitModal);
+        unitModalClose?.addEventListener('click', closeUnitModal);
+        unitModalBackdrop?.addEventListener('click', closeUnitModal);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && unitModal && !unitModal.classList.contains('hidden')) {
+                closeUnitModal();
+            }
+        });
+        unitForm?.addEventListener('submit', handleUnitSubmit);
+
+        async function loadSyllabus(showSpinner = true) {
+            if (!courseId) {
+                showError('Missing courseId in URL.');
+                setAddUnitAvailability();
+                return;
+            }
+            if (showSpinner) {
+                showLoader();
+            }
             try {
                 const data = await Collage.fetchJson(`/api/syllabus/courses/${courseId}`, { skipAuth: true });
+                syllabusCourse = data;
                 const title = data?.title || courseTitle || 'Subject syllabus';
                 const code = data?.course_code || courseCode;
                 const semester = data?.semester || semesterParam;
                 const batch = batchRange || data?.batch_id || '';
 
                 titleEl.textContent = title;
-                subtitleEl.textContent = semester ? `Semester ${semester} · Batch ${batch}` : batch ? `Batch ${batch}` : '';
+                if (semester && batch) {
+                    subtitleEl.textContent = `Semester ${semester} · Batch ${batch}`;
+                } else if (semester) {
+                    subtitleEl.textContent = `Semester ${semester}`;
+                } else if (batch) {
+                    subtitleEl.textContent = `Batch ${batch}`;
+                } else {
+                    subtitleEl.textContent = '';
+                }
                 breadcrumbsEl.innerHTML = makeBreadcrumb([
                     { label: 'Colleges', href: 'clg_info.html' },
                     collegeName ? { label: collegeName, href: `degrees.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName)}` } : null,
@@ -202,39 +519,21 @@
                 ]);
 
                 renderContext({ title, code, semester, batch });
+                setAddUnitAvailability();
 
                 const units = Array.isArray(data?.units) ? data.units : [];
-                if (!units.length) {
-                    showEmpty();
-                    return;
-                }
-
-                results.innerHTML = units.map((unit, index) => {
-                    const topics = Array.isArray(unit.topics) ? unit.topics : [];
-                    const accentColor = ['from-brand-400 via-brand-500 to-indigo-500', 'from-emerald-400 via-teal-400 to-emerald-600', 'from-fuchsia-400 via-pink-500 to-rose-500', 'from-cyan-400 via-sky-500 to-blue-500', 'from-amber-400 via-orange-500 to-amber-600'][index % 5];
-                    const orderIndex = Number(unit.order_in_course ?? index) + 1;
-                    const topicsMarkup = topics.length
-                        ? `<ol class="mt-4 space-y-2 pl-5 text-sm text-slate-700 dark:text-slate-200 list-decimal">${topics.map(topic => `<li>${Collage.escapeHtml(topic.topic || '')}</li>`).join('')}</ol>`
-                        : '<p class="mt-4 text-sm text-slate-500 dark:text-slate-400">No topics recorded.</p>';
-
-                    return `
-                        <article class="relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60">
-                            <div class="absolute inset-x-6 top-4 h-24 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
-                            <div class="relative inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">
-                                <span class="font-semibold">Unit ${orderIndex}</span>
-                                ${topics.length ? `<span class="flex items-center gap-1 text-slate-500 dark:text-slate-300"><svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 000 2h1v8a2 2 0 002 2h7a2 2 0 002-2v-1h2a1 1 0 001-1V9.414a1 1 0 00-.293-.707l-2.414-2.414A1 1 0 0015.586 6H14V4a2 2 0 00-2-2H6z"/></svg>${topics.length} topic${topics.length === 1 ? '' : 's'}</span>` : ''}
-                            </div>
-                            <h2 class="relative mt-4 text-xl font-semibold text-slate-900 dark:text-white">${Collage.escapeHtml(unit.unit_title || 'Untitled unit')}</h2>
-                            ${topicsMarkup}
-                        </article>`;
-                }).join('');
+                syllabusCourse.units = units;
+                renderUnits(units);
             } catch (err) {
                 console.error(err);
                 showError(err.message || 'Unexpected error');
             }
         }
 
-        document.addEventListener('DOMContentLoaded', loadSyllabus);
+        document.addEventListener('DOMContentLoaded', () => {
+            setAddUnitAvailability();
+            loadSyllabus();
+        });
     </script>
 </body>
 
