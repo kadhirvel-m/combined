@@ -62,13 +62,21 @@
         }
 
         .gradient-hero-text {
-            background: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            display: inline-block; /* ensure background sizing ties to content */
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
             background-size: 200% 200%;
             animation: gradient-shift 4s ease-in-out infinite;
             color: transparent;
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+            -webkit-box-decoration-break: clone;
+            box-decoration-break: clone;
+        }
+
+        /* Dark theme override for gradient hero text */
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
         }
 
         @keyframes gradient-shift {
@@ -84,6 +92,43 @@
                 background-position: 0% 50%;
             }
         }
+
+        /* Logo ticker */
+        .logo-ticker-mask {
+            mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+            -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+        }
+
+        .logo-track {
+            display: flex;
+            width: max-content;
+            gap: 3.5rem;
+            will-change: transform;
+        }
+
+        .logo-ticker-viewport {
+            overflow: hidden;
+        }
+
+        .logo-track[data-paused="true"] {
+            animation-play-state: paused;
+        }
+
+        /* Testimonial marquee (continuous loop) */
+        .marquee-track { display:flex; width:max-content; will-change:transform; }
+        .marquee-wrapper { overflow:hidden; }
+        .grad-1 { background: linear-gradient(135deg,#4C2A59 0%,#9E4B8A 100%); }
+        .grad-2 { background: linear-gradient(135deg,#1E1E2F 0%,#4C2A59 100%); }
+        .grad-3 { background: linear-gradient(135deg,#9E4B8A 0%,#4C2A59 100%); }
+        /* Isolate hovered customer card */
+        #custMarquee:hover article.card-fx { opacity: .18; filter: blur(1px); }
+        #custMarquee article.card-fx { transition: opacity .35s ease, filter .35s ease, transform .35s ease; }
+        #custMarquee article.card-fx:hover { opacity:1 !important; filter:none; transform:scale(1.045); z-index:40; }
+        /* Improve corner smoothing during scale */
+        #custMarquee article.card-fx { backface-visibility:hidden; -webkit-backface-visibility:hidden; transform-style:preserve-3d; will-change:transform; }
+        /* Persist rounded corners while scaling */
+        #custMarquee article.card-fx { border-radius:1rem; clip-path:inset(0 round 1rem); transform-origin:center; }
+        #custMarquee article.card-fx:hover { border-radius:1rem; clip-path:inset(0 round 1rem); }
     </style>
 
     <script>
@@ -265,6 +310,119 @@
         </div>
     </section>
 
+    <!-- Scrolling Logos -->
+    <section class="py-12 border-y border-black/5 dark:border-white/10">
+        <div class="container">
+            <p class="text-xs uppercase tracking-wider text-neutral-500 dark:text-white/50 mb-6 text-center">Learning resources integration (sample)</p>
+            <div class="logo-ticker-viewport relative logo-ticker-mask group" id="logoTicker" aria-label="Scrolling list of resource logos">
+                <div class="logo-track" id="logoTrack" role="list">
+                    <!-- Single logical set of logos (will be looped in JS) -->
+                    <div role="listitem" class="flex items-center gap-3 shrink-0">
+                        <div class="size-12 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 grid place-content-center p-1">
+                            <img src="https://media.geeksforgeeks.org/wp-content/uploads/gfg_200X200.png" alt="GeeksforGeeks" class="h-8 w-auto object-contain" loading="lazy">
+                        </div>
+                        <span class="text-sm font-medium text-neutral-600 dark:text-white/70">GeeksforGeeks</span>
+                    </div>
+                    <div role="listitem" class="flex items-center gap-3 shrink-0">
+                        <div class="size-12 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 grid place-content-center p-1">
+                            <img src="https://play-lh.googleusercontent.com/F10OOHNkeNbOf5x9DYpoihAIkLRlSMxCsPHyCErXgm0oM2gZtJwVymJIZoN59v4JJWBZ" alt="Tutorialspoint" class="h-8 w-auto object-contain" loading="lazy">
+                        </div>
+                        <span class="text-sm font-medium text-neutral-600 dark:text-white/70">Tutorialspoint</span>
+                    </div>
+                    <div role="listitem" class="flex items-center gap-3 shrink-0">
+                        <div class="size-12 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 grid place-content-center p-1">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/8/80/Wikipedia-logo-v2.svg" alt="Wikipedia" class="h-8 w-auto object-contain" loading="lazy">
+                        </div>
+                        <span class="text-sm font-medium text-neutral-600 dark:text-white/70">Wikipedia</span>
+                    </div>
+                    <div role="listitem" class="flex items-center gap-3 shrink-0">
+                        <div class="size-12 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 grid place-content-center p-1">
+                            <img src="https://i.pinimg.com/736x/ee/4f/82/ee4f8235abca76a1da9b6045ba4226e4.jpg" alt="Byjus" class="h-8 w-auto object-contain rounded" loading="lazy">
+                        </div>
+                        <span class="text-sm font-medium text-neutral-600 dark:text-white/70">Byjus</span>
+                    </div>
+                </div>
+            </div>
+            <p class="mt-6 text-[10px] text-neutral-500 dark:text-white/40 text-center">Logos hot‑linked for demo. Download & serve locally (optimized SVG/PNG) for production.</p>
+        </div>
+    </section>
+
+    <!-- Customers Carousel (auto-scrolling) -->
+    <section class="py-20 border-y border-black/5 dark:border-white/10" aria-label="Customer success stories">
+        <div class="container">
+            <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight text-center">Customers growing with us</h2>
+            <p class="mt-3 text-sm text-neutral-600 dark:text-white/60 text-center max-w-2xl mx-auto">Continuous carousel of real-world impact. (Demo content)</p>
+            <div id="custMarquee" class="mt-10 marquee-wrapper group relative">
+                <div id="custTrack" class="marquee-track" role="list">
+                    <!-- Single logical set of slides; JS will clone for seamless loop -->
+                    <div role="listitem" class="w-[260px] sm:w-[300px] md:w-[340px] p-3">
+                        <!-- Modified card: background image with gradient overlay, bottom quote on hover -->
+                        <article class="cursor-target card-fx group relative overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5 h-[320px] flex flex-col justify-between text-white">
+                            <img src="https://media.istockphoto.com/id/1636023306/photo/portrait-of-young-hispanic-businessman-inside-office-boss-in-business-suit-smiling-and.jpg?s=612x612&w=0&k=20&c=3aC2P0heBBWlaVdFq6P711W3TMw7Lqgb5Wru6xwH8_w=" alt="Customer background" class="absolute inset-0 w-full h-full object-cover object-center opacity-60" loading="lazy" aria-hidden="true">
+                            <div class="absolute inset-0 bg-[linear-gradient(135deg,#4C2A59_0%,#9E4B8A_100%)] dark:bg-[linear-gradient(135deg,#1E1E2F_0%,#4C2A59_100%)] opacity-80 transition-opacity duration-300 group-hover:opacity-55 mix-blend-multiply" aria-hidden="true"></div>
+                            <div class="relative z-10 group-hover:opacity-95 transition-opacity"><div class="text-sm font-semibold">Yury Kamyshenko</div><div class="text-[11px] opacity-70">Head of R&D, Tango</div></div>
+                            <div class="relative z-10 text-[11px] font-medium opacity-80 group-hover:opacity-95 transition-all group-hover:text-sm md:group-hover:text-base leading-snug">
+                                <span class="inline group-hover:hidden">Growing on Paper X</span>
+                                <span class="hidden group-hover:inline">Growing on Paper X with confidence</span>
+                            </div>
+                        </article>
+                    </div>
+                    <div role="listitem" class="w-[260px] sm:w-[300px] md:w-[340px] p-3">
+                        <!-- Image background applied (Indian businessman) with bottom quote -->
+                        <article class="cursor-target card-fx group relative overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5 h-[320px] flex flex-col justify-between text-white">
+                            <img src="https://media.istockphoto.com/id/1562983249/photo/portrait-of-happy-and-successful-businessman-indian-man-smiling-and-looking-at-camera.jpg?s=612x612&w=0&k=20&c=tfBv6taG9nTidFwENcrvEEvRHABN5gDAmg-K1G1Etnc=" alt="Customer background" class="absolute inset-0 w-full h-full object-cover object-center opacity-60" loading="lazy" aria-hidden="true">
+                            <div class="absolute inset-0 bg-[linear-gradient(135deg,#1E1E2F_0%,#4C2A59_100%)] dark:bg-[linear-gradient(135deg,#4C2A59_0%,#9E4B8A_100%)] opacity-80 transition-opacity duration-300 group-hover:opacity-55 mix-blend-multiply" aria-hidden="true"></div>
+                            <div class="relative z-10 group-hover:opacity-95 transition-opacity"><div class="text-sm font-semibold">Richard Li</div><div class="text-[11px] opacity-70">Founder & CEO, Amorphous Data</div></div>
+                            <div class="relative z-10 text-[11px] font-medium opacity-80 group-hover:opacity-95 transition-all group-hover:text-sm md:group-hover:text-base leading-snug">
+                                <span class="inline group-hover:hidden">Kubernetes + GPUs</span>
+                                <span class="hidden group-hover:inline">Kubernetes + GPUs, predictable and fast</span>
+                            </div>
+                        </article>
+                    </div>
+                    <div role="listitem" class="w-[260px] sm:w-[300px] md:w-[340px] p-3">
+                        <!-- Image background applied (Businesswoman city) with bottom quote -->
+                        <article class="cursor-target card-fx group relative overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5 h-[320px] flex flex-col justify-between text-white">
+                            <img src="https://img.freepik.com/free-photo/smiley-businesswoman-posing-city-with-arms-crossed_23-2148767033.jpg" alt="Customer background" class="absolute inset-0 w-full h-full object-cover object-center opacity-60" loading="lazy" aria-hidden="true">
+                            <div class="absolute inset-0 bg-[linear-gradient(135deg,#9E4B8A_0%,#4C2A59_100%)] dark:bg-[linear-gradient(135deg,#1E1E2F_0%,#4C2A59_100%)] opacity-80 transition-opacity duration-300 group-hover:opacity-55 mix-blend-multiply" aria-hidden="true"></div>
+                            <div class="relative z-10 group-hover:opacity-95 transition-opacity"><div class="text-sm font-semibold">Andres Murcia</div><div class="text-[11px] opacity-70">CTO, Picap</div></div>
+                            <div class="relative z-10 text-[11px] font-medium opacity-80 group-hover:opacity-95 transition-all group-hover:text-sm md:group-hover:text-base leading-snug">
+                                <span class="inline group-hover:hidden">Cost wins</span>
+                                <span class="hidden group-hover:inline">Cost wins without performance compromise</span>
+                            </div>
+                        </article>
+                    </div>
+                    <div role="listitem" class="w-[260px] sm:w-[300px] md:w-[340px] p-3">
+                        <!-- Image background applied (Businesswoman restaurant) with bottom quote -->
+                        <article class="cursor-target card-fx group relative overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5 h-[320px] flex flex-col justify-between text-white">
+                            <img src="https://img.freepik.com/free-photo/portrait-smiling-successful-businesswoman-looking-into-camera-sitting-restaurant-business-lady-with-stylish-hairstyle-wears-elegant-suit-business-meeting-attractive-appearance_8353-12611.jpg?semt=ais_hybrid&w=740&q=80" alt="Customer background" class="absolute inset-0 w-full h-full object-cover object-center opacity-60" loading="lazy" aria-hidden="true">
+                            <div class="absolute inset-0 bg-[linear-gradient(135deg,#4C2A59_0%,#9E4B8A_100%)] dark:bg-[linear-gradient(135deg,#1E1E2F_0%,#4C2A59_100%)] opacity-80 transition-opacity duration-300 group-hover:opacity-55 mix-blend-multiply" aria-hidden="true"></div>
+                            <div class="relative z-10 group-hover:opacity-95 transition-opacity"><div class="text-sm font-semibold">Matt Gray</div><div class="text-[11px] opacity-70">CEO, Servd Hosting</div></div>
+                            <div class="relative z-10 text-[11px] font-medium opacity-80 group-hover:opacity-95 transition-all group-hover:text-sm md:group-hover:text-base leading-snug">
+                                <span class="inline group-hover:hidden">Scale without stress</span>
+                                <span class="hidden group-hover:inline">Scale without stress or surprise spend</span>
+                            </div>
+                        </article>
+                    </div>
+                    <div role="listitem" class="w-[260px] sm:w-[300px] md:w-[340px] p-3">
+                        <!-- Image background reused (first image) final card with bottom quote -->
+                        <article class="cursor-target card-fx group relative overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5 h-[320px] flex flex-col justify-between text-white">
+                            <img src="https://media.istockphoto.com/id/1636023306/photo/portrait-of-young-hispanic-businessman-inside-office-boss-in-business-suit-smiling-and.jpg?s=612x612&w=0&k=20&c=3aC2P0heBBWlaVdFq6P711W3TMw7Lqgb5Wru6xwH8_w=" alt="Customer background" class="absolute inset-0 w-full h-full object-cover object-center opacity-60" loading="lazy" aria-hidden="true">
+                            <div class="absolute inset-0 bg-[linear-gradient(135deg,#1E1E2F_0%,#4C2A59_100%)] dark:bg-[linear-gradient(135deg,#4C2A59_0%,#9E4B8A_100%)] opacity-80 transition-opacity duration-300 group-hover:opacity-55 mix-blend-multiply" aria-hidden="true"></div>
+                            <div class="relative z-10 group-hover:opacity-95 transition-opacity"><div class="text-sm font-semibold">Travis Banks</div><div class="text-[11px] opacity-70">CTO, Consultech</div></div>
+                            <div class="relative z-10 text-[11px] font-medium opacity-80 group-hover:opacity-95 transition-all group-hover:text-sm md:group-hover:text-base leading-snug">
+                                <span class="inline group-hover:hidden">Happy engineers</span>
+                                <span class="hidden group-hover:inline">Happy engineers, faster shipping cycles</span>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+                <!-- gradient mask edges -->
+                <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-hero-light dark:from-brand-900 to-transparent"></div>
+                <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-hero-light dark:from-brand-900 to-transparent"></div>
+            </div>
+        </div>
+    </section>
+
     <!-- Footer -->
     <footer class="border-t border-black/5 dark:border-white/10">
         <div class="container py-10 text-center text-sm text-neutral-600 dark:text-white/60">
@@ -289,6 +447,103 @@
             const next = root.classList.contains('dark') ? 'light' : 'dark';
             setTheme(next);
         });
+    </script>
+    <script>
+        (function() {
+            const track = document.getElementById('logoTrack');
+            if (!track) return;
+            const viewport = document.getElementById('logoTicker');
+            const SPEED = 60; // pixels per second
+            let lastTs = 0;
+            let offset = 0;
+            // Duplicate children until total width >= 2 * viewport width for seamless loop
+            const ensureFill = () => {
+                const vpWidth = viewport.clientWidth;
+                const groupWidth = track.scrollWidth;
+                // clone until track width at least 2 * viewport width
+                while (track.scrollWidth < vpWidth * 2) {
+                    Array.from(track.children).forEach(child => {
+                        const clone = child.cloneNode(true);
+                        clone.setAttribute('aria-hidden', 'true');
+                        track.appendChild(clone);
+                    });
+                }
+            };
+            ensureFill();
+            const step = (ts) => {
+                if (!lastTs) lastTs = ts;
+                const dt = (ts - lastTs) / 1000; // seconds
+                lastTs = ts;
+                if (!track.dataset.paused) {
+                    offset += SPEED * dt;
+                    // When the first child is fully out of view, move it to end and adjust offset
+                    let first = track.firstElementChild;
+                    while (first) {
+                        const firstWidth = first.getBoundingClientRect().width + parseFloat(getComputedStyle(track).gap || 0);
+                        if (offset >= firstWidth) {
+                            offset -= firstWidth;
+                            track.appendChild(first);
+                            first = track.firstElementChild;
+                            continue;
+                        }
+                        break;
+                    }
+                    track.style.transform = `translateX(${-offset}px)`;
+                }
+                requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+            // Pause on hover
+            viewport.addEventListener('mouseenter', () => track.dataset.paused = 'true');
+            viewport.addEventListener('mouseleave', () => { delete track.dataset.paused; });
+            // Recalculate on resize
+            let resizeTO;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTO);
+                resizeTO = setTimeout(() => {
+                    // Reset
+                    offset = 0; track.style.transform = 'translateX(0)';
+                    // Remove clones (keep only first logical set)
+                    const originals = Array.from(track.children).slice(0, 4); // we know we started with 4 logos
+                    track.innerHTML = '';
+                    originals.forEach(el => track.appendChild(el));
+                    ensureFill();
+                }, 150);
+            });
+        })();
+    </script>
+    <script>
+        // Continuous testimonial marquee (independent of logos ticker)
+        (function(){
+            const track = document.getElementById('custTrack');
+            const wrapper = document.getElementById('custMarquee');
+            if(!track || !wrapper) return;
+            const SPEED = 40; // px/sec
+            const FILL_MULT = 2; // ensure width >= viewport * multiplier
+            let baseSlides = Array.from(track.children);
+            let offset = 0; let last=0; let paused=false;
+
+            function fill(){
+                track.innerHTML=''; baseSlides.forEach(s=>track.appendChild(s));
+                const need = wrapper.clientWidth * FILL_MULT;
+                while(track.scrollWidth < need){
+                    baseSlides.forEach(s=>{ if(track.scrollWidth >= need) return; const clone = s.cloneNode(true); clone.setAttribute('aria-hidden','true'); track.appendChild(clone); });
+                }
+            }
+            function recycle(){
+                let first = track.firstElementChild;
+                while(first){
+                    const w = first.getBoundingClientRect().width; // includes padding
+                    if(offset >= w){ offset -= w; track.appendChild(first); first = track.firstElementChild; continue; }
+                    break;
+                }
+            }
+            function step(ts){ if(!last) last = ts; const dt = (ts-last)/1000; last=ts; if(!paused){ offset += SPEED*dt; recycle(); track.style.transform = `translateX(${-offset}px)`; } requestAnimationFrame(step); }
+            wrapper.addEventListener('mouseenter', ()=> paused=true);
+            wrapper.addEventListener('mouseleave', ()=> paused=false);
+            window.addEventListener('resize', ()=>{ clearTimeout(fill._t); fill._t=setTimeout(()=>{ offset=0; track.style.transform='translateX(0)'; fill(); },120); });
+            fill(); requestAnimationFrame(step);
+        })();
     </script>
 </body>
 
