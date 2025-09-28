@@ -4,9 +4,34 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Profile — Paper</title>
-  <meta name="description" content="Your profile — TuNeX-style layout on Paper backend." />
+  <title>Paper X — Profile</title>
+  <meta name="description" content="Your Paper X profile dashboard." />
+  <link rel="icon" type="image/svg+xml" href="../../assets/img/favicon.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+    rel="stylesheet" />
+
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+  <script>
+    (() => {
+      try {
+        const keys = ['cx-theme', 'px-theme', 'px_theme', 'theme'];
+        let stored = null;
+        for (const key of keys) {
+          try {
+            const value = localStorage.getItem(key);
+            if (value) { stored = value; break; }
+          } catch (_) { }
+        }
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const useDark = stored ? stored === 'dark' : prefersDark;
+        if (useDark) document.documentElement.classList.add('dark');
+      } catch (_) { }
+    })();
+  </script>
   <script src="config.js"></script>
   <script>
     tailwind.config = {
@@ -14,29 +39,91 @@
       theme: {
         container: { center: true, padding: '1rem' },
         extend: {
-          fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Ubuntu', 'Cantarell', 'Noto Sans', 'sans-serif'] },
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
           colors: {
-            /* Material-leaning primary palette (tonal, vivid at 600/700) */
-            brand: { 50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81' },
-            ink: { 50: '#f6f7fb', 900: '#0a0d12' }
+            brand: {
+              50: '#FAF5FB',
+              100: '#F3E7F2',
+              200: '#E7D0E4',
+              300: '#D9B4D3',
+              400: '#C88DBA',
+              500: '#9E4B8A',
+              600: '#824074',
+              700: '#4C2A59',
+              800: '#2E1C3B',
+              900: '#1E1E2F'
+            },
+            brandlt: {
+              50: '#FAF5FB',
+              100: '#F3E7F2',
+              200: '#E7D0E4',
+              300: '#D9B4D3',
+              400: '#C88DBA',
+              500: '#9E4B8A',
+              700: '#4C2A59',
+              900: '#1E1E2F'
+            },
+            ink: '#1E1E2F',
+            plum: '#4C2A59',
+            orchid: '#9E4B8A'
           },
-          boxShadow: { 'brand-lg': '0 10px 30px rgba(79,70,229,.22)', 'soft': '0 6px 18px rgba(0,0,0,.10)' },
+          boxShadow: {
+            glow: '0 8px 30px rgba(158,75,138,0.25)',
+            soft: '0 10px 30px rgba(0,0,0,0.12)',
+            card: '0 24px 60px rgba(30,30,47,0.28)'
+          },
           borderRadius: { '3xl': '1.5rem' },
           backgroundImage: {
-            glass: 'linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.35))',
-            'glass-dark': 'linear-gradient(180deg, rgba(20,24,33,.6), rgba(20,24,33,.35))',
-            'grid-radial': 'radial-gradient(1000px 500px at 90% -10%, rgba(63,111,255,.25), transparent 60%), radial-gradient(600px 300px at -10% 10%, rgba(99,102,241,.20), transparent 60%)'
+            'hero-dark':
+              'radial-gradient(900px 520px at 50% -10%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg, #1E1E2F 0%, #221B38 45%, #141321 100%)',
+            'hero-light':
+              'radial-gradient(900px 520px at 50% -10%, rgba(158,75,138,0.18), transparent 65%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
           }
         }
       }
-    }
+    };
   </script>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
-    rel="stylesheet" />
   <style>
-    .icon {
-      font-family: 'Material Symbols Outlined';
+    .material-symbols-rounded {
+      vertical-align: -6px;
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .icon {
+      font-family: 'Material Symbols Rounded';
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    body {
+      background-repeat: no-repeat;
+      background-size: cover;
+    }
+
+    .profile-hero::before,
+    .profile-hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .profile-hero::before {
+      background: radial-gradient(480px 260px at 85% -20%, rgba(158, 75, 138, 0.25), transparent 70%),
+        radial-gradient(420px 220px at 15% -30%, rgba(76, 42, 89, 0.18), transparent 65%);
+    }
+
+    .profile-hero::after {
+      background: radial-gradient(360px 220px at 50% 120%, rgba(158, 75, 138, 0.18), transparent 70%);
+    }
+
+    .profile-card {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.65));
+      box-shadow: 0 18px 40px rgba(30, 30, 47, 0.12);
+    }
+
+    .dark .profile-card {
+      background: linear-gradient(180deg, rgba(30, 30, 47, 0.82), rgba(30, 30, 47, 0.6));
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
     }
 
     .link-icon {
@@ -46,10 +133,10 @@
       width: 2.25rem;
       height: 2.25rem;
       border-radius: 0.75rem;
-      background: rgba(79, 70, 229, 0.08);
-      color: #4338ca;
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
-      transition: transform .2s ease, box-shadow .2s ease;
+      background: rgba(158, 75, 138, 0.12);
+      color: #9E4B8A;
+      box-shadow: 0 6px 18px rgba(30, 30, 47, 0.12);
+      transition: transform .25s ease, box-shadow .25s ease;
       flex-shrink: 0;
     }
 
@@ -59,8 +146,8 @@
     }
 
     .links-grid .group:hover .link-icon {
-      transform: translateY(-1px);
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 26px rgba(30, 30, 47, 0.18);
     }
 
     .resume-link {
@@ -69,43 +156,54 @@
       justify-content: center;
       gap: 0.75rem;
       width: 100%;
-      padding: 0.6rem 1.5rem;
-      border-radius: 1rem;
-      background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+      padding: 0.65rem 1.6rem;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, #9E4B8A 0%, #B06AB3 50%, #FF7FD1 100%);
       color: #fff;
       font-weight: 600;
-      box-shadow: 0 12px 24px rgba(79, 70, 229, 0.25);
+      box-shadow: 0 16px 32px rgba(158, 75, 138, 0.28);
       transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
     }
 
     .resume-link .link-icon {
       width: 2rem;
       height: 2rem;
-      background: rgba(255, 255, 255, 0.2);
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
-      color: #4338ca;
-    }
-
-    .resume-link span:last-child {
-      letter-spacing: 0.01em;
+      background: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 10px 24px rgba(30, 30, 47, 0.22);
+      color: #4C2A59;
     }
 
     .resume-link:hover {
       transform: translateY(-2px);
-      box-shadow: 0 16px 28px rgba(79, 70, 229, 0.28);
-      background: linear-gradient(135deg, #818cf8 0%, #4f46e5 100%);
+      box-shadow: 0 22px 38px rgba(158, 75, 138, 0.32);
+      background: linear-gradient(90deg, #A95A95 0%, #C37CBE 50%, #FF8FDC 100%);
     }
 
     .resume-link:focus-visible {
-      outline: 3px solid rgba(99, 102, 241, 0.35);
+      outline: 3px solid rgba(158, 75, 138, 0.35);
       outline-offset: 3px;
     }
 
     .resume-link:active {
       transform: translateY(0);
-      box-shadow: 0 10px 20px rgba(79, 70, 229, 0.24);
+      box-shadow: 0 14px 24px rgba(158, 75, 138, 0.24);
     }
 
+    .tabBtn {
+      position: relative;
+      transition: all .25s ease;
+    }
+
+    .tabBtn.tab-active {
+      background: linear-gradient(90deg, #9E4B8A 0%, #B06AB3 50%, #FF7FD1 100%);
+      color: #fff !important;
+      box-shadow: 0 12px 28px rgba(158, 75, 138, 0.28);
+      border-color: transparent !important;
+    }
+
+    .dark .tabBtn.tab-active {
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4);
+    }
 
     .skeleton {
       position: relative;
@@ -139,7 +237,7 @@
       top: 0.35rem;
       bottom: 0.35rem;
       width: 2px;
-      background: linear-gradient(180deg, rgba(99, 102, 241, .45), transparent 85%);
+      background: linear-gradient(180deg, rgba(158, 75, 138, 0.5), transparent 85%);
     }
 
     .timeline-item {
@@ -155,108 +253,206 @@
       width: 0.65rem;
       height: 0.65rem;
       border-radius: 9999px;
-      background: linear-gradient(135deg, #6366f1, #4338ca);
-      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+      background: linear-gradient(135deg, #9E4B8A, #4C2A59);
+      box-shadow: 0 0 0 4px rgba(158, 75, 138, 0.16);
+    }
+
+    #mobileNavBackdrop {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease;
+    }
+
+    #mobileNavPanel {
+      opacity: 0;
+      transform: translateY(-12px);
+      pointer-events: none;
+      transition: opacity .25s ease, transform .25s ease;
+    }
+
+    #mobileNavBackdrop[data-open="true"],
+    #mobileNavBackdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #mobileNavPanel[data-open="true"],
+    #mobileNavPanel.open {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
     }
   </style>
-  <script>
-    // Theme handled by config.js (window.Theme)
-  </script>
 </head>
 
-<body class="bg-ink-50 dark:bg-[#0a0d12] text-[#0d1117] dark:text-zinc-100">
-  <header class="sticky top-0 z-50 bg-white/95 dark:bg-[#0b0f15]/90 border-b border-black/5 dark:border-white/10">
-    <nav class="container flex items-center gap-3 py-3">
-      <a href="index.html" class="flex items-center gap-2 font-semibold tracking-tight">
-        <span
-          class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white shadow-brand-lg">PX</span>
-        <span class="hidden sm:inline">Paper</span>
+<body
+  class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors">
+  <header
+    class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10 relative">
+    <div class="container flex items-center justify-between py-4">
+      <a href="../../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+        <img src="../../assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden" />
+        <img src="../../assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block" />
       </a>
-      <div class="ml-auto flex items-center gap-2">
-        <a href="index.html"
-          class="hidden sm:inline rounded-lg px-3 py-2 text-sm text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white">Home</a>
+      <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="../../index.html">Home</a>
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="about.html">About</a>
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="postings.html">Opportunities</a>
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="my_applications.html">My applications</a>
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="contact.html">Support</a>
+      </nav>
+      <div class="hidden md:flex items-center gap-2">
+        <button data-theme-toggle aria-label="Toggle theme"
+          class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          <span class="material-symbols-rounded">dark_mode</span>
+          <span class="hidden lg:block">Theme</span>
+        </button>
+        <a href="login.html"
+          class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+          in</a>
+        <a href="signup.html"
+          class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+          up</a>
         <a id="navProfile" href="profile.html" title="Profile"
-          class="hidden sm:inline-flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900">
+          class="hidden md:inline-flex items-center justify-center w-10 h-10 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60">
           <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
-          <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
+          <span id="navProfileInitial" class="text-xs font-semibold">ME</span>
         </a>
-        <button onclick="toggleTheme()" title="Toggle theme"
-          class="rounded-lg px-3 py-2 text-black/70 dark:text-white/70"><span class="icon">dark_mode</span></button>
-        <a href="login.html" class="rounded-lg px-3 py-2 text-sm text-black/70 dark:text-white/70">Sign in</a>
-        <a href="signup.html" class="rounded-lg px-3 py-2 text-sm text-black/70 dark:text-white/70">Sign up</a>
-        <button id="signOutBtn" title="Sign out" aria-label="Sign out"
-          class="hidden inline-flex items-center gap-2 rounded-lg border border-black/10 dark:border-white/10 px-3 py-1.5 text-sm">
-          <span class="icon">logout</span>
-          <span>Sign Out</span>
+        <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out"
+          class="hidden md:inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          <span class="material-symbols-rounded text-base">logout</span>
+          <span>Sign out</span>
         </button>
       </div>
-    </nav>
+      <div class="md:hidden flex items-center gap-2">
+        <button type="button" data-theme-toggle aria-label="Toggle theme"
+          class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          <span class="material-symbols-rounded">dark_mode</span>
+        </button>
+        <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
+          class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          <span class="sr-only">Toggle navigation</span>
+          <span class="material-symbols-rounded" data-icon>menu</span>
+        </button>
+      </div>
+    </div>
   </header>
 
-  <section class="relative overflow-hidden">
-    <div class="absolute inset-0 bg-grid-radial opacity-70 dark:opacity-60 pointer-events-none"></div>
+  <div id="mobileNavBackdrop" aria-hidden="true"
+    class="md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+  <nav id="mobileNavPanel" aria-hidden="true"
+    class="md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+    <div class="flex flex-col gap-2 text-sm text-neutral-700 dark:text-white/80">
+      <a href="../../index.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/25 transition">Home</a>
+      <a href="about.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/25 transition">About</a>
+      <a href="postings.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/25 transition">Opportunities</a>
+      <a href="my_applications.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/25 transition">My applications</a>
+      <a href="contact.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/25 transition">Support</a>
+    </div>
+    <div class="flex flex-col gap-3 border-t border-black/5 dark:border-white/10 pt-4">
+      <a href="login.html" data-close-mobile-nav
+        class="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">Log
+        in</a>
+      <a href="signup.html" data-close-mobile-nav
+        class="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)] transition">Sign
+        up</a>
+      <a id="navProfileMobile" href="profile.html" data-close-mobile-nav
+        class="hidden inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/15 px-4 py-2 text-sm text-neutral-700 dark:text-white/80 bg-white/70 dark:bg-brand-900/60">
+        <span class="material-symbols-rounded text-base">account_circle</span>
+        <span data-profile-name>My profile</span>
+      </a>
+      <button id="signOutBtnMobile" type="button"
+        class="hidden inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">
+        <span class="material-symbols-rounded text-base">logout</span>
+        <span>Sign out</span>
+      </button>
+    </div>
+  </nav>
+
+  <section class="relative overflow-hidden profile-hero">
     <div class="container relative">
-      <div class="rounded-b-3xl h-24 md:h-20 bg-gradient-to-r from-slate-800 to-brand-700"></div>
+      <div
+        class="rounded-b-3xl h-28 md:h-24 bg-gradient-to-r from-brand-400/80 via-brand-500/70 to-brand-700/80 dark:from-brand-700 dark:via-brand-800 dark:to-brand-900 shadow-[0_18px_60px_rgba(76,42,89,0.35)]">
+      </div>
     </div>
   </section>
 
-  <main class="container -mt-16 md:-mt-20 pb-16">
+  <main class="container -mt-16 md:-mt-20 pb-20 space-y-8">
     <div
-      class="rounded-3xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-soft p-6 md:p-8">
-      <div class="flex flex-col md:flex-row md:items-end gap-6">
+      class="rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/60 backdrop-blur shadow-card p-6 md:p-8">
+      <div class="flex flex-col md:flex-row md:items-end gap-6 md:gap-8">
         <div
-          class="relative w-28 h-28 md:w-32 md:h-32 rounded-full border-4 border-white/90 dark:border-black/40 overflow-hidden bg-slate-200">
+          class="relative w-28 h-28 md:w-32 md:h-32 rounded-full border-[5px] border-white/90 dark:border-brand-700/60 overflow-hidden bg-brandlt-100 dark:bg-brand-900/50">
           <img id="profileImage" src="" alt="Profile picture" class="w-full h-full object-cover hidden" />
           <div id="profileImageFallback"
-            class="absolute inset-0 flex items-center justify-center text-3xl text-slate-600"><span
-              id="profileInitials">?</span></div>
+            class="absolute inset-0 flex items-center justify-center text-3xl font-semibold text-brand-700 dark:text-brandlt-100">
+            <span id="profileInitials">?</span></div>
           <div id="verifyBadge"
             class="absolute -bottom-2 -right-2 flex items-center gap-1 rounded-full text-white text-xs px-2 py-1 shadow-brand-lg hidden">
             <span class="icon text-sm">verified</span><span id="verifyScore">--</span>
           </div>
         </div>
         <div class="flex-1 min-w-0">
-          <h1 id="profileName" class="pt-12 font-extrabold text-3xl md:text-4xl tracking-tight">--</h1>
-          <p id="profileHeadline" class="mt-1 text-sm md:text-base text-black/70 dark:text-white/70 line-clamp-2">Add a
+          <h1 id="profileName"
+            class="pt-10 md:pt-0 font-extrabold text-3xl md:text-4xl tracking-tight text-neutral-900 dark:text-white">--
+          </h1>
+          <p id="profileHeadline" class="mt-2 text-sm md:text-base text-neutral-600 dark:text-white/70 line-clamp-2">Add
+            a
             headline to introduce yourself.</p>
-          <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-black/60 dark:text-white/60">
+          <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-neutral-500 dark:text-white/60">
             <span class="icon">location_on</span><span id="profileLocation">—</span>
             <span class="icon ml-3">calendar_month</span><span id="info-batch-inline">—</span>
           </div>
         </div>
         <div class="flex items-center gap-2">
           <a href="academicas.html"
-            class="inline-flex items-center gap-2 rounded-xl border border-brand-600/30 text-brand-700 dark:text-brand-200 bg-brand-500/10 px-4 py-2"><span
-              class="icon">school</span> Academics</a>
+            class="inline-flex items-center gap-2 rounded-full border border-brand-500/30 bg-brandlt-100/80 dark:bg-brand-700/30 px-4 py-2 text-sm font-medium text-brand-700 dark:text-brandlt-100 transition hover:border-brand-500/60 hover:shadow-glow">
+            <span class="icon text-base">school</span> Academics
+          </a>
           <a href="profile_edit.html"
-            class="inline-flex items-center gap-2 rounded-xl bg-brand-600 text-white px-4 py-2 shadow-brand-lg"><span
-              class="icon">edit</span> Edit Profile</a>
+            class="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] text-white px-5 py-2.5 text-sm font-semibold shadow-[0_14px_30px_rgba(158,75,138,0.28)] hover:shadow-[0_18px_36px_rgba(158,75,138,0.35)] transition">
+            <span class="icon text-base">edit</span> Edit Profile
+          </a>
         </div>
       </div>
       <div class="mt-6">
-        <div class="flex items-center justify-between text-xs opacity-70 mb-1"><span>Profile completeness</span><span
-            id="completePct">—</span></div>
-        <div class="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
-          <div id="completeBar" class="h-2 bg-brand-600 w-0"></div>
+        <div class="flex items-center justify-between text-xs text-neutral-500 dark:text-white/65 mb-1"><span>Profile
+            completeness</span><span id="completePct">—</span></div>
+        <div class="h-2 rounded-full bg-brandlt-200/60 dark:bg-brand-900/40 overflow-hidden">
+          <div id="completeBar" class="h-2 bg-brand-500 w-0 transition-all duration-500"></div>
         </div>
       </div>
     </div>
 
     <section class="mt-8">
-      <div class="rounded-3xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-3">
+      <div
+        class="rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-3">
         <div class="flex flex-wrap gap-2">
-          <button data-tab="overview" class="tabBtn rounded-xl px-4 py-2 bg-brand-600 text-white">Overview</button>
+          <button data-tab="overview"
+            class="tabBtn tab-active rounded-full px-4 py-2 text-sm font-semibold transition ring-1 ring-transparent text-white">
+            Overview
+          </button>
           <button data-tab="about"
-            class="tabBtn rounded-xl px-4 py-2 text-black/70 dark:text-white/70 bg-brand-500/10">About</button>
+            class="tabBtn rounded-full px-4 py-2 text-sm font-semibold text-neutral-600 dark:text-white/70 bg-white/70 dark:bg-brand-900/40 ring-1 ring-black/5 dark:ring-white/10 transition">
+            About
+          </button>
           <button data-tab="activity"
-            class="tabBtn rounded-xl px-4 py-2 text-black/70 dark:text-white/70 bg-brand-500/10">Activity</button>
+            class="tabBtn rounded-full px-4 py-2 text-sm font-semibold text-neutral-600 dark:text-white/70 bg-white/70 dark:bg-brand-900/40 ring-1 ring-black/5 dark:ring-white/10 transition">
+            Activity
+          </button>
         </div>
       </div>
 
       <div class="mt-4 grid gap-4">
         <div data-panel="overview" class="tabPanel grid gap-4">
           <div class="grid lg:grid-cols-[1.2fr,.8fr] gap-4">
-            <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+            <section
+              class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
               <h3 class="font-semibold mb-4 flex items-center gap-2"><span class="icon">badge</span> Basic Info</h3>
               <dl class="grid grid-cols-[auto,1fr] gap-x-6 gap-y-2 text-sm">
                 <dt class="font-medium text-black/80 dark:text-white/80">Name</dt>
@@ -270,70 +466,71 @@
                 <dt class="font-medium text-black/80 dark:text-white/80">Phone</dt>
                 <dd class="opacity-80 flex items-center gap-2"><span id="info-phone" class="skeleton">—</span><button
                     id="copyPhone"
-                    class="rounded-md px-2 py-1 text-xs border border-brand-600/30 text-brand-700 dark:text-brand-200 bg-brand-500/10">Copy</button>
+                    class="rounded-full px-2.5 py-1.5 text-xs border border-brand-500/30 text-brand-700 dark:text-brandlt-100 bg-brandlt-100/70 dark:bg-brand-700/30 hover:border-brand-500/60 transition">Copy</button>
                 </dd>
                 <dt class="font-medium text-black/80 dark:text-white/80">Email</dt>
                 <dd class="opacity-80 flex items-center gap-2"><span id="info-email" class="skeleton">—</span><button
                     id="copyEmail"
-                    class="rounded-md px-2 py-1 text-xs border border-brand-600/30 text-brand-700 dark:text-brand-200 bg-brand-500/10">Copy</button>
+                    class="rounded-full px-2.5 py-1.5 text-xs border border-brand-500/30 text-brand-700 dark:text-brandlt-100 bg-brandlt-100/70 dark:bg-brand-700/30 hover:border-brand-500/60 transition">Copy</button>
                 </dd>
               </dl>
             </section>
-            <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+            <section
+              class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
               <h3 class="font-semibold mb-4 flex items-center gap-2"><span class="icon">link</span> Links</h3>
               <ul id="links-list" class="links-grid grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm hidden">
                 <li class="hidden">
                   <a id="link-linkedin" target="_blank" rel="noopener noreferrer"
-                    class="group flex items-center gap-3 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/70 hover:border-brand-500/40 transition-colors">
+                    class="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 border border-black/5 dark:border-white/10 bg-white/85 dark:bg-brand-900/50 hover:border-brand-500/40 hover:shadow-glow transition">
                     <span class="link-icon" aria-hidden="true" data-icon="linkedin"></span>
                     <span>LinkedIn</span>
                   </a>
                 </li>
                 <li class="hidden">
                   <a id="link-github" target="_blank" rel="noopener noreferrer"
-                    class="group flex items-center gap-3 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/70 hover:border-brand-500/40 transition-colors">
+                    class="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 border border-black/5 dark:border-white/10 bg-white/85 dark:bg-brand-900/50 hover:border-brand-500/40 hover:shadow-glow transition">
                     <span class="link-icon" aria-hidden="true" data-icon="github"></span>
                     <span>GitHub</span>
                   </a>
                 </li>
                 <li class="hidden">
                   <a id="link-leetcode" target="_blank" rel="noopener noreferrer"
-                    class="group flex items-center gap-3 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/70 hover:border-brand-500/40 transition-colors">
+                    class="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 border border-black/5 dark:border-white/10 bg-white/85 dark:bg-brand-900/50 hover:border-brand-500/40 hover:shadow-glow transition">
                     <span class="link-icon" aria-hidden="true" data-icon="leetcode"></span>
                     <span>LeetCode</span>
                   </a>
                 </li>
                 <li class="hidden">
                   <a id="link-portfolio" target="_blank" rel="noopener noreferrer"
-                    class="group flex items-center gap-3 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/70 hover:border-brand-500/40 transition-colors">
+                    class="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 border border-black/5 dark:border-white/10 bg-white/85 dark:bg-brand-900/50 hover:border-brand-500/40 hover:shadow-glow transition">
                     <span class="link-icon" aria-hidden="true" data-icon="portfolio"></span>
                     <span>Portfolio</span>
                   </a>
                 </li>
                 <li class="hidden">
                   <a id="link-website" target="_blank" rel="noopener noreferrer"
-                    class="group flex items-center gap-3 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/70 hover:border-brand-500/40 transition-colors">
+                    class="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 border border-black/5 dark:border-white/10 bg-white/85 dark:bg-brand-900/50 hover:border-brand-500/40 hover:shadow-glow transition">
                     <span class="link-icon" aria-hidden="true" data-icon="website"></span>
                     <span>Website</span>
                   </a>
                 </li>
                 <li class="hidden">
                   <a id="link-twitter" target="_blank" rel="noopener noreferrer"
-                    class="group flex items-center gap-3 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/70 hover:border-brand-500/40 transition-colors">
+                    class="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 border border-black/5 dark:border-white/10 bg-white/85 dark:bg-brand-900/50 hover:border-brand-500/40 hover:shadow-glow transition">
                     <span class="link-icon" aria-hidden="true" data-icon="twitter"></span>
                     <span>Twitter</span>
                   </a>
                 </li>
                 <li class="hidden">
                   <a id="link-instagram" target="_blank" rel="noopener noreferrer"
-                    class="group flex items-center gap-3 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/70 hover:border-brand-500/40 transition-colors">
+                    class="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 border border-black/5 dark:border-white/10 bg-white/85 dark:bg-brand-900/50 hover:border-brand-500/40 hover:shadow-glow transition">
                     <span class="link-icon" aria-hidden="true" data-icon="instagram"></span>
                     <span>Instagram</span>
                   </a>
                 </li>
                 <li class="hidden">
                   <a id="link-medium" target="_blank" rel="noopener noreferrer"
-                    class="group flex items-center gap-3 rounded-lg px-3 py-2 border border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/70 hover:border-brand-500/40 transition-colors">
+                    class="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 border border-black/5 dark:border-white/10 bg-white/85 dark:bg-brand-900/50 hover:border-brand-500/40 hover:shadow-glow transition">
                     <span class="link-icon" aria-hidden="true" data-icon="medium"></span>
                     <span>Medium</span>
                   </a>
@@ -350,7 +547,8 @@
             </section>
           </div>
 
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <div class="flex items-center justify-between">
               <h3 class="font-semibold flex items-center gap-2"><span class="icon">work</span> Experience</h3>
               <a href="profile_edit.html#experience" class="text-xs text-brand-600 dark:text-brand-300">Manage</a>
@@ -361,7 +559,8 @@
           </section>
 
           <div class="grid xl:grid-cols-2 gap-4">
-            <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+            <section
+              class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
               <div class="flex items-center justify-between">
                 <h3 class="font-semibold flex items-center gap-2"><span class="icon">school</span> Education</h3>
                 <a href="profile_edit.html#education" class="text-xs text-brand-600 dark:text-brand-300">Manage</a>
@@ -370,7 +569,8 @@
               <p id="education-empty" class="text-sm text-black/50 dark:text-white/50 mt-2">Add your academic history,
                 degrees and highlights.</p>
             </section>
-            <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+            <section
+              class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
               <div class="flex items-center justify-between">
                 <h3 class="font-semibold flex items-center gap-2"><span class="icon">workspace_premium</span>
                   Certifications</h3>
@@ -382,7 +582,8 @@
             </section>
           </div>
 
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <div class="flex items-center justify-between">
               <h3 class="font-semibold flex items-center gap-2"><span class="icon">rocket_launch</span> Portfolio
                 Projects</h3>
@@ -393,7 +594,8 @@
               proud of with outcomes and links.</p>
           </section>
 
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <div class="flex items-center justify-between">
               <h3 class="font-semibold flex items-center gap-2"><span class="icon">menu_book</span> Publications</h3>
               <a href="profile_edit.html#publications" class="text-xs text-brand-600 dark:text-brand-300">Manage</a>
@@ -405,64 +607,76 @@
         </div>
 
         <div data-panel="about" class="tabPanel hidden grid md:grid-cols-2 gap-4">
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">subject</span> Summary</h3>
             <p id="info-bio" class="text-sm opacity-80">Add a short summary about yourself.</p>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">school</span> Specializations</h3>
             <p id="info-specializations" class="text-sm opacity-80">--</p>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">construction</span> Technologies
             </h3>
             <p id="info-technologies" class="text-sm opacity-80">--</p>
             <div id="tech-chips" class="mt-3 flex flex-wrap gap-2"></div>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">workspace_premium</span> Skills
             </h3>
             <p id="info-skills" class="text-sm opacity-80">--</p>
             <div id="skills-chips" class="mt-3 flex flex-wrap gap-2"></div>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">military_tech</span> Achievements
             </h3>
             <p id="info-achievements" class="text-sm opacity-80">--</p>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">workspace_premium</span>
               Certifications</h3>
             <p id="info-certifications" class="text-sm opacity-80">--</p>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">translate</span> Languages</h3>
             <p id="info-languages" class="text-sm opacity-80">--</p>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">interests</span> Interests</h3>
             <p id="info-interests" class="text-sm opacity-80">--</p>
           </section>
         </div>
 
         <div data-panel="activity" class="tabPanel hidden grid md:grid-cols-2 gap-4">
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">science</span> Project Highlights
             </h3>
             <p id="info-projects" class="text-sm opacity-80">Share context about the work you are exploring, hackathons
               or collaborations.</p>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">workspace_premium</span>
               Achievements</h3>
             <p id="info-achievements-activity" class="text-sm opacity-80">Capture awards, recognitions or milestones.
             </p>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">badge</span> Career Summary</h3>
             <p id="info-experience" class="text-sm opacity-80">Summarise your professional focus and strengths.</p>
           </section>
-          <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-5">
+          <section
+            class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-5">
             <h3 class="font-semibold mb-2 flex items-center gap-2"><span class="icon">menu_book</span> Publication
               Highlights</h3>
             <p id="info-publications" class="text-sm opacity-80">Add commentary on published work, citations or speaking
@@ -474,15 +688,146 @@
     </section>
   </main>
 
-  <footer class="border-t border-black/10 dark:border-white/10">
-    <div class="container py-8 text-xs opacity-60">© <span id="y"></span> Paper</div>
+  <footer class="mt-12 border-t border-black/5 dark:border-white/10">
+    <div
+      class="container py-10 text-xs md:text-sm text-neutral-600 dark:text-white/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <p>© <span id="y"></span> Paper X. Crafted for ambitious learners.</p>
+      <div class="flex items-center gap-4">
+        <a href="#" class="hover:text-brandlt-900 dark:hover:text-white">Privacy</a>
+        <a href="#" class="hover:text-brandlt-900 dark:hover:text-white">Terms</a>
+        <a href="#" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+      </div>
+    </div>
   </footer>
 
   <script>
     document.getElementById('y').textContent = new Date().getFullYear();
     const tabBtns = document.querySelectorAll('.tabBtn');
     const tabPanels = document.querySelectorAll('.tabPanel');
-    tabBtns.forEach(btn => { btn.addEventListener('click', () => { tabBtns.forEach(b => b.classList.remove('bg-brand-600', 'text-white')); btn.classList.add('bg-brand-600', 'text-white'); const t = btn.getAttribute('data-tab'); tabPanels.forEach(p => p.classList.toggle('hidden', p.getAttribute('data-panel') !== t)); }); });
+    const inactiveTabClasses = ['bg-white/70', 'dark:bg-brand-900/40', 'ring-1', 'ring-black/5', 'dark:ring-white/10', 'text-neutral-600', 'dark:text-white/70'];
+    const activeRemoveClasses = ['bg-white/70', 'dark:bg-brand-900/40', 'ring-1', 'ring-black/5', 'dark:ring-white/10', 'text-neutral-600', 'dark:text-white/70'];
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-tab');
+        tabBtns.forEach(b => {
+          b.classList.remove('tab-active', 'text-white');
+          inactiveTabClasses.forEach(cls => {
+            if (!b.classList.contains(cls)) b.classList.add(cls);
+          });
+        });
+        activeRemoveClasses.forEach(cls => btn.classList.remove(cls));
+        btn.classList.add('tab-active', 'text-white');
+        tabPanels.forEach(panel => {
+          panel.classList.toggle('hidden', panel.getAttribute('data-panel') !== target);
+        });
+      });
+    });
+
+    const root = document.documentElement;
+    const themeButtons = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+    const setThemeToggleIcons = (mode) => {
+      const iconName = mode === 'dark' ? 'light_mode' : 'dark_mode';
+      themeButtons().forEach(btn => {
+        const icon = btn.querySelector('.material-symbols-rounded');
+        if (icon) icon.textContent = iconName;
+      });
+    };
+    const resolveTheme = () => {
+      if (window.Theme && typeof window.Theme.get === 'function') {
+        return window.Theme.get();
+      }
+      return root.classList.contains('dark') ? 'dark' : 'light';
+    };
+    const toggleThemeFallback = () => {
+      const next = root.classList.contains('dark') ? 'light' : 'dark';
+      if (next === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+      ['px_theme', 'px-theme', 'cx-theme', 'theme'].forEach(key => {
+        try { localStorage.setItem(key, next); } catch (_) { }
+      });
+      return next;
+    };
+    const syncThemeToggles = () => setThemeToggleIcons(resolveTheme());
+    syncThemeToggles();
+    document.addEventListener('click', (event) => {
+      const trigger = event.target.closest('[data-theme-toggle]');
+      if (!trigger) return;
+      event.preventDefault();
+      const next = (window.Theme && typeof window.Theme.toggle === 'function') ? window.Theme.toggle() : toggleThemeFallback();
+      setThemeToggleIcons(next);
+    });
+    window.addEventListener('storage', (event) => {
+      if (!event.key) return;
+      if (['cx-theme', 'theme', 'px-theme', 'px_theme'].includes(event.key)) {
+        syncThemeToggles();
+      }
+    });
+    try {
+      if (window.matchMedia) {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        if (mq && mq.addEventListener) {
+          mq.addEventListener('change', () => syncThemeToggles());
+        } else if (mq && mq.addListener) {
+          mq.addListener(() => syncThemeToggles());
+        }
+      }
+    } catch (_) { }
+
+    (function () {
+      const toggle = document.getElementById('mobileNavToggle');
+      const panel = document.getElementById('mobileNavPanel');
+      const backdrop = document.getElementById('mobileNavBackdrop');
+      if (!toggle || !panel || !backdrop) return;
+
+      const icon = toggle.querySelector('[data-icon]');
+      const focusableSelector = 'a[href], button:not([disabled])';
+
+      const openMenu = () => {
+        panel.setAttribute('data-open', 'true');
+        panel.classList.add('open');
+        panel.setAttribute('aria-hidden', 'false');
+        backdrop.setAttribute('data-open', 'true');
+        backdrop.classList.add('open');
+        backdrop.setAttribute('aria-hidden', 'false');
+        toggle.setAttribute('aria-expanded', 'true');
+        if (icon) icon.textContent = 'close';
+        document.body.classList.add('overflow-hidden');
+        const first = panel.querySelector(focusableSelector);
+        if (first) first.focus();
+      };
+
+      const closeMenu = () => {
+        panel.removeAttribute('data-open');
+        panel.classList.remove('open');
+        panel.setAttribute('aria-hidden', 'true');
+        backdrop.removeAttribute('data-open');
+        backdrop.classList.remove('open');
+        backdrop.setAttribute('aria-hidden', 'true');
+        toggle.setAttribute('aria-expanded', 'false');
+        if (icon) icon.textContent = 'menu';
+        document.body.classList.remove('overflow-hidden');
+        toggle.focus();
+      };
+
+      const toggleMenu = () => {
+        const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+        (isOpen ? closeMenu : openMenu)();
+      };
+
+      toggle.addEventListener('click', toggleMenu);
+      backdrop.addEventListener('click', closeMenu);
+      panel.addEventListener('click', (evt) => {
+        if (evt.target.closest('[data-close-mobile-nav]')) {
+          closeMenu();
+        }
+      });
+      document.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+          closeMenu();
+        }
+      });
+
+      window.__PX_CLOSE_MOBILE_NAV = closeMenu;
+    })();
 
     const API = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
     const token = localStorage.getItem('px_token');
@@ -574,7 +919,7 @@
       toggleEmpty('experience-empty', true);
       items.forEach(exp => {
         const card = document.createElement('article');
-        card.className = 'timeline-item rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-zinc-900/60 p-4 shadow-sm';
+        card.className = 'timeline-item rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-4 shadow-sm';
         const header = document.createElement('div');
         header.className = 'flex flex-wrap items-center justify-between gap-2';
         const title = document.createElement('h4');
@@ -627,7 +972,7 @@
       toggleEmpty('education-empty', true);
       items.forEach(ed => {
         const card = document.createElement('article');
-        card.className = 'rounded-2xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-zinc-900/55 p-4';
+        card.className = 'rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-4';
         const title = document.createElement('h4');
         title.className = 'font-semibold text-sm';
         title.textContent = ed.school || 'Institution';
@@ -687,7 +1032,7 @@
       toggleEmpty('certifications-empty', true);
       items.forEach(cert => {
         const card = document.createElement('article');
-        card.className = 'rounded-2xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-zinc-900/55 p-4';
+        card.className = 'rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-4';
         const title = document.createElement('h4');
         title.className = 'font-semibold text-sm';
         title.textContent = cert.name || 'Certification';
@@ -734,7 +1079,7 @@
       toggleEmpty('portfolio-empty', true);
       items.forEach(project => {
         const card = document.createElement('article');
-        card.className = 'rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-zinc-900/60 p-4 flex flex-col gap-3';
+        card.className = 'rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-4 flex flex-col gap-3';
         const header = document.createElement('div');
         header.className = 'flex items-start justify-between gap-2';
         const title = document.createElement('h4');
@@ -795,7 +1140,7 @@
       toggleEmpty('publications-empty', true);
       items.forEach(pub => {
         const card = document.createElement('article');
-        card.className = 'rounded-2xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-zinc-900/55 p-4';
+        card.className = 'rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-4';
         const title = document.createElement('h4');
         title.className = 'font-semibold text-sm';
         title.textContent = pub.title || 'Publication';
@@ -872,6 +1217,8 @@
       const navProfile = el('navProfile');
       const navProfileImg = el('navProfileImg');
       const navProfileInitial = el('navProfileInitial');
+      const navProfileMobile = el('navProfileMobile');
+      const navProfileMobileLabel = navProfileMobile ? navProfileMobile.querySelector('[data-profile-name]') : null;
       let initials = 'ME';
       if (profile.name) {
         initials = profile.name
@@ -892,7 +1239,17 @@
       } else if (navProfileImg) {
         navProfileImg.classList.add('hidden');
       }
-      if (navProfile) navProfile.classList.remove('hidden');
+      if (navProfile) {
+        navProfile.classList.remove('hidden');
+        navProfile.setAttribute('title', profile.name || 'Profile');
+      }
+      if (navProfileMobile) {
+        navProfileMobile.classList.remove('hidden');
+        if (navProfileMobileLabel) {
+          const firstName = (profile.name || '').split(/\s+/).filter(Boolean)[0];
+          navProfileMobileLabel.textContent = firstName ? `Hi, ${firstName}` : 'My profile';
+        }
+      }
     };
 
     const loadProfile = async () => {
@@ -915,20 +1272,31 @@
     el('copyEmail').addEventListener('click', () => { const v = el('info-email').textContent?.trim(); if (v && v !== '—' && v !== '--') navigator.clipboard.writeText(v); });
 
     (function () {
-      const t = localStorage.getItem('px_token');
-      const navProfile = el('navProfile');
-      const signOutBtn = el('signOutBtn');
-      if (!t) return;
+      const tokenStored = localStorage.getItem('px_token');
+      if (!tokenStored) return;
       document.querySelectorAll('a[href="login.html"], a[href="signup.html"]').forEach(a => a.classList.add('hidden'));
-      if (navProfile) navProfile.classList.remove('hidden');
-      if (signOutBtn) signOutBtn.classList.remove('hidden');
+      [el('navProfile'), el('navProfileMobile')].forEach(node => node && node.classList.remove('hidden'));
+      [el('signOutBtn'), el('signOutBtnMobile')].forEach(node => node && node.classList.remove('hidden'));
       window.__PX_NAV_APPLY = applyNavProfile;
       if (window.__PX_PROFILE_SNAPSHOT) {
         applyNavProfile(window.__PX_PROFILE_SNAPSHOT);
       }
     })();
 
-    el('signOutBtn').onclick = () => { localStorage.removeItem('px_token'); window.location.href = 'login.html'; };
+    const handleSignOut = () => {
+      localStorage.removeItem('px_token');
+      if (typeof window.__PX_CLOSE_MOBILE_NAV === 'function') {
+        window.__PX_CLOSE_MOBILE_NAV();
+      }
+      window.location.href = 'login.html';
+    };
+    [el('signOutBtn'), el('signOutBtnMobile')].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        handleSignOut();
+      });
+    });
     applyLinkIcons();
     loadProfile();
   </script>
