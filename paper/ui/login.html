@@ -5,141 +5,474 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sign In — Pa[p]er X</title>
-  <meta name="description" content="Sign in to Pa[p]er X. Matches the homepage theme and components." />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="config.js"></script>
+  <meta name="description" content="Sign in to Pa[p]er X. Matches the Pa[p]er X landing experience." />
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+
+  <!-- Inter + Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+    rel="stylesheet">
+
+  <!-- Tailwind (forms/typography/aspect-ratio) -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
       theme: {
+        container: { center: true, padding: '1rem' },
         extend: {
-          fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
           colors: {
-            brand: { 50: '#f0f7ff', 100: '#e0efff', 200: '#b9dbff', 300: '#8ac4ff', 400: '#59a9ff', 500: '#2b8cff', 600: '#116fe6', 700: '#0a57b4', 800: '#0b4890', 900: '#0d3a73' },
-            night: { 900: '#0a0c10', 800: '#0f131a', 700: '#141a22', 600: '#1a2230' }
+            brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+            brandlt: {
+              50: '#FAF5FB',
+              100: '#F3E7F2',
+              200: '#E7D0E4',
+              300: '#D9B4D3',
+              400: '#C88DBA',
+              500: '#9E4B8A',
+              700: '#4C2A59',
+              900: '#1E1E2F'
+            },
+            ink: '#1E1E2F',
+            plum: '#4C2A59',
+            orchid: '#9E4B8A'
           },
-          boxShadow: { glow: '0 0 0 1px rgba(59,130,246,.2), 0 8px 40px rgba(59,130,246,.15)', neon: '0 0 25px rgba(43,140,255,.35), 0 0 60px rgba(43,140,255,.25)' },
-          backgroundImage: { 'grid-radial': 'radial-gradient(circle at 20% 10%, rgba(43,140,255,.25), transparent 35%), radial-gradient(circle at 80% 20%, rgba(168,85,247,.2), transparent 35%), radial-gradient(circle at 50% 80%, rgba(16,185,129,.2), transparent 35%)' }
+          boxShadow: {
+            glow: '0 8px 30px rgba(158,75,138,0.35)',
+            soft: '0 10px 30px rgba(0,0,0,0.25)',
+            card: '0 24px 60px rgba(30,30,47,0.35)'
+          },
+          backgroundImage: {
+            'hero-dark':
+              'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+            'hero-light':
+              'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+          }
         }
       }
     }
   </script>
+  <script src="config.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    .glass {
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      background: rgba(255, 255, 255, .06);
-      border: 1px solid rgba(255, 255, 255, .12)
+    .material-symbols-rounded {
+      vertical-align: -6px;
     }
 
-    .glass-dark {
-      background: rgba(20, 24, 32, .55);
-      border-color: rgba(255, 255, 255, .08)
+    .gradient-hero-text {
+      display: inline-block;
+      background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+      background-size: 200% 200%;
+      animation: gradient-shift 4s ease-in-out infinite;
+      color: transparent;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+    }
+
+    .dark .gradient-hero-text {
+      background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+    }
+
+    @keyframes gradient-shift {
+      0% {
+        background-position: 0% 50%;
+      }
+
+      50% {
+        background-position: 100% 50%;
+      }
+
+      100% {
+        background-position: 0% 50%;
+      }
+    }
+
+    .dark body {
+      background-image: linear-gradient(to left top,
+          #1e1e2f,
+          #242138,
+          #2b2440,
+          #332649,
+          #3d2850,
+          #3f254a,
+          #402244,
+          #401f3e,
+          #34182d,
+          #26131e,
+          #190b11,
+          #000000);
+      background-repeat: no-repeat;
+      background-size: cover;
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(158, 75, 138, 0.18);
+    }
+
+    .dark .glass-card {
+      background: rgba(30, 30, 47, 0.72);
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+    }
+
+    .inline-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-radius: 9999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.75rem;
+      line-height: 1rem;
+      border: 1px solid rgba(252, 231, 243, 0.8);
+      background: rgba(255, 255, 255, 0.7);
+      color: #4C2A59;
+      box-shadow: 0 8px 18px rgba(158, 75, 138, 0.15);
+    }
+
+    .dark .inline-chip {
+      border-color: rgba(255, 255, 255, 0.08);
+      background: rgba(58, 43, 76, 0.65);
+      color: rgba(255, 255, 255, 0.8);
+      box-shadow: none;
+    }
+
+    html:not(.dark) h1:not(.gradient-hero-text),
+    html:not(.dark) h2:not(.gradient-hero-text),
+    html:not(.dark) h3:not(.gradient-hero-text),
+    html:not(.dark) h4:not(.gradient-hero-text),
+    html:not(.dark) h5:not(.gradient-hero-text),
+    html:not(.dark) h6:not(.gradient-hero-text) {
+      color: #1E1E2F;
     }
   </style>
+
+  <script>
+    (() => {
+      const stored = localStorage.getItem('px_theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const isDark = stored ? stored === 'dark' : prefersDark;
+      if (isDark) document.documentElement.classList.add('dark');
+    })();
+  </script>
 </head>
 
 <body
-  class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200 selection:bg-brand-200 selection:text-slate-900">
-  <div aria-hidden="true" class="fixed inset-0 -z-10 bg-grid-radial opacity-70 dark:opacity-50"></div>
+  class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors overflow-x-hidden">
+  <!-- Ambient gradients -->
+  <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
+    <div
+      class="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-brand-500/15 blur-[110px] dark:bg-brand-500/30">
+    </div>
+    <div
+      class="absolute top-[40%] -right-24 w-[380px] h-[380px] rounded-full bg-brand-700/15 blur-[120px] dark:bg-brand-700/35">
+    </div>
+  </div>
+
+  <!-- Navbar -->
   <header
-    class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-night-900/50 border-b border-black/5 dark:border-white/5">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="flex h-16 items-center justify-between">
-        <a href="index.html" class="flex items-center gap-3 group">
-          <div
-            class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
-            PX</div>
-          <div>
-            <p class="text-lg font-semibold leading-tight group-hover:text-brand-600">Pa[p]er X</p>
-            <p class="text-xs text-slate-500 dark:text-slate-400 -mt-1">Agentic AI for Indian syllabi</p>
-          </div>
-        </a>
+    class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10 relative">
+    <div class="container flex items-center justify-between py-4">
+      <a href="index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+        <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
+        <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
+      </a>
+      <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="../index.html">Home</a>
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="../about.html">About</a>
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="../contact.html">Contact</a>
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="../help.html">Help</a>
+        <a class="hover:text-brandlt-900 dark:hover:text-white" href="../index.html#pricing">Pricing</a>
+      </nav>
+      <div class="hidden md:flex items-center gap-2">
+        <button data-theme-toggle
+          class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+          aria-label="Toggle theme">
+          <span class="material-symbols-rounded">dark_mode</span>
+          <span class="hidden sm:block">Theme</span>
+        </button>
+        <a href="signup.html"
+          class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Create
+          account</a>
+      </div>
+      <div class="md:hidden flex items-center gap-2">
+        <button type="button" data-theme-toggle aria-label="Toggle theme"
+          class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          <span class="material-symbols-rounded">dark_mode</span>
+        </button>
+        <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
+          class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          <span class="sr-only">Toggle navigation</span>
+          <span class="material-symbols-rounded" data-icon>menu</span>
+        </button>
       </div>
     </div>
   </header>
 
-  <main class="relative">
-    <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
-      <div class="grid lg:grid-cols-12 gap-10 items-start">
-        <div class="lg:col-span-5">
-          <div
-            class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/60 dark:bg-night-800/60 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 backdrop-blur">
-            <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            Welcome back
-          </div>
-          <h1 class="mt-4 text-3xl sm:text-4xl font-extrabold leading-tight">Sign in to <span
-              class="bg-gradient-to-r from-brand-500 via-indigo-500 to-fuchsia-500 bg-clip-text text-transparent">Pa[p]er
-              X</span></h1>
-          <p class="mt-3 text-slate-600 dark:text-slate-300">Use your email and password.</p>
-        </div>
-        <div class="lg:col-span-7">
-          <div
-            class="relative rounded-2xl glass glass-dark p-6 md:p-8 shadow-neon border border-white/10 bg-white/80 dark:bg-night-800/70">
-            <form id="loginForm" class="grid gap-6" novalidate>
-              <label class="grid gap-1">
-                <span class="text-sm text-slate-700 dark:text-slate-300">Email</span>
-                <input required name="email" type="email" autocomplete="email" placeholder="you@college.edu"
-                  class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400/60 w-full" />
-              </label>
-              <label class="grid gap-1 relative">
-                <span class="text-sm text-slate-700 dark:text-slate-300">Password</span>
-                <input required name="password" id="pwd" minlength="6" type="password" placeholder="Your password"
-                  class="rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-brand-400/60" />
-                <button type="button" id="togglePwd" class="absolute right-2 top-9 text-slate-500 hover:text-brand-600"
-                  aria-label="Show password">
-                  <svg id="eye" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7Zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10Z" />
-                  </svg>
-                </button>
-              </label>
-              <button type="submit" id="submitBtn"
-                class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-5 py-2.5 text-white shadow-neon">Sign
-                in</button>
+  <!-- Mobile navigation -->
+  <div id="mobileNavBackdrop" aria-hidden="true"
+    class="md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+  <nav id="mobileNavPanel" aria-hidden="true"
+    class="md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+    <div class="flex flex-col gap-2 text-sm text-neutral-700 dark:text-white/80">
+      <a href="../index.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Home</a>
+      <a href="../about.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">About</a>
+      <a href="../contact.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Contact</a>
+      <a href="../help.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Help</a>
+      <a href="../index.html#pricing" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Pricing</a>
+      <a href="signup.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Create account</a>
+    </div>
+    <div class="flex flex-col gap-3 border-t border-black/5 dark:border-white/10 pt-4">
+      <a href="#" data-close-mobile-nav
+        class="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">
+        Customer care
+      </a>
+      <a href="signup.html" data-close-mobile-nav
+        class="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)] transition">
+        Create account
+      </a>
+    </div>
+  </nav>
 
+  <main>
+    <section class="relative overflow-hidden py-16 lg:py-15">
+      <div
+        class="pointer-events-none absolute inset-0 opacity-[0.35] bg-[radial-gradient(circle_at_20%_10%,rgba(158,75,138,0.25),transparent_60%),radial-gradient(circle_at_80%_85%,rgba(76,42,89,0.28),transparent_60%)]">
+      </div>
+      <div class="container relative z-10 grid gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] items-center">
+        <div class="space-y-6">
+          <span class="inline-chip">Portal Access · Trusted by 10k+ students</span>
+          <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight leading-tight">
+            Seamless login to <span class="gradient-hero-text">Paper X</span>
+          </h1>
+          <p class="text-lg text-neutral-600 dark:text-white/70 max-w-xl">
+            Pick up where you left off with auto-synced notes, flashcards, and project collabs. Your AI-first toolkit
+            stays perfectly in sync across devices.
+          </p>
+      <div
+        class="rounded-3xl overflow-hidden bg-white/80 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 shadow-soft dark:shadow-glow aspect-[16/9] md:aspect-[21/10] max-w-xl md:max-w-lg mx-auto">
+              <video class="w-full h-full object-cover" autoplay muted loop playsinline>
+                  <source src="../assets/video/login.mp4" type="video/mp4" />
+                  Your browser does not support the video tag.
+              </video>
+          </div>
+          <ul class="space-y-3 text-sm text-neutral-600 dark:text-white/65">
+            <li class="flex items-start gap-3">
+              <span
+                class="mt-0.5 inline-flex size-6 items-center justify-center rounded-full bg-brand-500/15 text-brand-500"><span
+                  class="material-symbols-rounded text-base">bolt</span></span>
+              Instant access to smart study plans and live AI chat.
+            </li>
+            <li class="flex items-start gap-3">
+              <span
+                class="mt-0.5 inline-flex size-6 items-center justify-center rounded-full bg-brand-700/15 text-brand-700"><span
+                  class="material-symbols-rounded text-base">verified</span></span>
+              Secure authentication backed by Supabase and responsible AI guardrails.
+            </li>
+            <li class="flex items-start gap-3">
+              <span
+                class="mt-0.5 inline-flex size-6 items-center justify-center rounded-full bg-brand-500/15 text-brand-500"><span
+                  class="material-symbols-rounded text-base">sync</span></span>
+              Syncs with your profile, project applications, and collaborative notes instantly.
+            </li>
+          </ul>
+          <div class="flex flex-wrap gap-3 text-sm text-neutral-500 dark:text-white/60">
+            <span class="inline-flex items-center gap-1">
+              <span class="material-symbols-rounded text-base">lock</span>
+              OTP-less secure session
+            </span>
+            <span class="inline-flex items-center gap-1">
+              <span class="material-symbols-rounded text-base">devices_other</span>
+              Works on any device
+            </span>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div
+            class="glass-card rounded-3xl p-6 sm:p-8 shadow-soft dark:shadow-glow ring-1 ring-black/5 dark:ring-white/10">
+            <div class="mb-6 space-y-2 text-center">
+              <h2 class="text-2xl font-semibold">Welcome back</h2>
+              <p class="text-sm text-neutral-500 dark:text-white/60">Sign in using your registered credentials or
+                continue with Google.</p>
+            </div>
+            <form id="loginForm" class="space-y-6" novalidate>
+              <div>
+                <label for="email" class="text-sm font-medium text-neutral-700 dark:text-white/85">Email</label>
+                <input id="email" required name="email" type="email" autocomplete="email"
+                  placeholder="you@college.edu"
+                  class="mt-2 block w-full rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 text-sm text-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/70 focus:border-transparent transition" />
+              </div>
+              <div class="relative">
+                <label for="pwd" class="text-sm font-medium text-neutral-700 dark:text-white/85">Password</label>
+                <input required name="password" id="pwd" minlength="6" type="password"
+                  placeholder="Minimum 6 characters"
+                  class="mt-2 block w-full rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 pr-12 text-sm text-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/70 focus:border-transparent transition" />
+                <button type="button" id="togglePwd"
+                  class="absolute inset-y-[42px] right-3 inline-flex size-8 items-center justify-center rounded-full text-neutral-500 hover:text-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+                  aria-label="Show password">
+                  <span class="material-symbols-rounded text-xl">visibility</span>
+                </button>
+              </div>
+              <div class="flex items-center justify-between text-xs text-neutral-500 dark:text-white/55">
+                <label class="inline-flex items-center gap-2">
+                  <input type="checkbox" class="rounded border-black/10 dark:border-white/20 text-brand-500 focus:ring-brand-500/60" />
+                  Keep me signed in
+                </label>
+                <a href="#" class="font-medium text-brand-500 hover:text-brand-700">Forgot password?</a>
+              </div>
+              <button type="submit" id="submitBtn"
+                class="w-full inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(158,75,138,0.28)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.35)] transition disabled:opacity-60">
+                <span class="material-symbols-rounded text-base" data-icon>login</span>
+                <span data-label>Sign in</span>
+              </button>
               <div class="relative text-center">
                 <div class="absolute inset-0 flex items-center" aria-hidden="true">
-                  <div class="w-full border-t border-slate-200/60 dark:border-white/10"></div>
+                  <div class="w-full border-t border-black/10 dark:border-white/10"></div>
                 </div>
                 <div
-                  class="relative inline-block bg-white dark:bg-night-800 px-2 text-xs text-slate-500 dark:text-slate-400">
-                  or</div>
+                  class="relative inline-flex items-center gap-2 bg-white dark:bg-white/5 px-3 text-[11px] uppercase tracking-[0.3em] text-neutral-500 dark:text-white/50">
+                  <span>Or continue with</span>
+                </div>
               </div>
-
               <button type="button" id="googleBtn"
-                class="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-5 py-2.5 hover:border-brand-400/60">
+                class="w-full inline-flex items-center justify-center gap-3 rounded-full border border-black/10 dark:border-white/15 bg-white dark:bg-white/10 px-6 py-3 text-sm font-semibold text-neutral-700 dark:text-white hover:border-brand-500/40 hover:shadow-[0_12px_28px_rgba(158,75,138,0.16)] transition">
                 <img alt="Google" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
                   class="h-5 w-5" />
-                Continue with Google
+                Google
               </button>
               <div id="status"
-                class="hidden rounded-lg bg-white/70 dark:bg-night-800/70 border border-slate-200/60 dark:border-white/10 p-3 font-mono text-[12px] text-slate-700 dark:text-slate-300">
-              </div>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Don’t have an account? <a
-                  class="underline decoration-dotted hover:text-brand-600" href="signup.html">Create one</a></p>
+                class="hidden rounded-2xl border border-brand-500/25 bg-brand-500/10 px-4 py-3 text-xs text-brand-900 dark:text-white/80"></div>
+              <p class="text-sm text-neutral-500 dark:text-white/60 text-center">New to Paper X? <a
+                  class="font-semibold text-brand-500 hover:text-brand-700" href="signup.html">Create an account</a>
+                in seconds.</p>
             </form>
           </div>
+          <p class="mt-4 text-[11px] text-center text-neutral-500 dark:text-white/45">By continuing you agree to our <a
+              href="#" class="underline">Terms</a> and <a href="#" class="underline">Privacy Policy</a>.</p>
         </div>
       </div>
     </section>
   </main>
 
   <script>
-    const themeToggle = null; // optional; consistent with other pages if you add
+    const root = document.documentElement;
+    const themeToggles = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+    const updateToggleIcons = (mode) => {
+      themeToggles().forEach(btn => {
+        const icon = btn.querySelector('.material-symbols-rounded');
+        if (icon) icon.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+      });
+    };
+    const setTheme = (mode) => {
+      if (mode === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+      localStorage.setItem('px_theme', mode);
+      updateToggleIcons(mode);
+    };
+    setTheme(root.classList.contains('dark') ? 'dark' : 'light');
+    document.addEventListener('click', (e) => {
+      const trigger = e.target.closest('[data-theme-toggle]');
+      if (!trigger) return;
+      const next = root.classList.contains('dark') ? 'light' : 'dark';
+      setTheme(next);
+    });
+
+    (function () {
+      const toggle = document.getElementById('mobileNavToggle');
+      const panel = document.getElementById('mobileNavPanel');
+      const backdrop = document.getElementById('mobileNavBackdrop');
+      if (!toggle || !panel || !backdrop) return;
+
+      const icon = toggle.querySelector('[data-icon]');
+      const focusableSelector = 'a[href], button:not([disabled])';
+
+      const openMenu = () => {
+        panel.setAttribute('data-open', 'true');
+        panel.classList.add('open');
+        panel.setAttribute('aria-hidden', 'false');
+        backdrop.setAttribute('data-open', 'true');
+        backdrop.classList.add('open');
+        backdrop.setAttribute('aria-hidden', 'false');
+        toggle.setAttribute('aria-expanded', 'true');
+        if (icon) icon.textContent = 'close';
+        document.body.classList.add('overflow-hidden');
+        const first = panel.querySelector(focusableSelector);
+        if (first) first.focus();
+      };
+
+      const closeMenu = () => {
+        panel.removeAttribute('data-open');
+        panel.classList.remove('open');
+        panel.setAttribute('aria-hidden', 'true');
+        backdrop.removeAttribute('data-open');
+        backdrop.classList.remove('open');
+        backdrop.setAttribute('aria-hidden', 'true');
+        toggle.setAttribute('aria-expanded', 'false');
+        if (icon) icon.textContent = 'menu';
+        document.body.classList.remove('overflow-hidden');
+        toggle.focus();
+      };
+
+      const toggleMenu = () => {
+        const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+        (isOpen ? closeMenu : openMenu)();
+      };
+
+      toggle.addEventListener('click', toggleMenu);
+      backdrop.addEventListener('click', closeMenu);
+      panel.addEventListener('click', (evt) => {
+        if (evt.target.closest('[data-close-mobile-nav]')) {
+          closeMenu();
+        }
+      });
+      window.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Escape') closeMenu();
+      });
+      window.matchMedia('(min-width: 768px)').addEventListener('change', (evt) => {
+        if (evt.matches) closeMenu();
+      });
+    })();
+
     const apiBase = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
-    const toggle = document.getElementById('togglePwd');
-    toggle?.addEventListener('click', () => {
+    const togglePwd = document.getElementById('togglePwd');
+    togglePwd?.addEventListener('click', () => {
       const pwd = document.getElementById('pwd');
+      const icon = togglePwd.querySelector('.material-symbols-rounded');
+      if (!pwd) return;
       pwd.type = pwd.type === 'password' ? 'text' : 'password';
-      toggle.setAttribute('aria-label', pwd.type === 'password' ? 'Show password' : 'Hide password');
+      togglePwd.setAttribute('aria-label', pwd.type === 'password' ? 'Show password' : 'Hide password');
+      if (icon) icon.textContent = pwd.type === 'password' ? 'visibility' : 'visibility_off';
     });
 
     const form = document.getElementById('loginForm');
     const status = document.getElementById('status');
     const submitBtn = document.getElementById('submitBtn');
+    const submitIcon = submitBtn?.querySelector('[data-icon]');
+    const submitLabel = submitBtn?.querySelector('[data-label]');
     const googleBtn = document.getElementById('googleBtn');
     let supabaseClient = null;
+
+    const setSubmitState = (loading) => {
+      if (!submitBtn) return;
+      submitBtn.disabled = loading;
+      submitBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
+      if (submitLabel) submitLabel.textContent = loading ? 'Signing in…' : 'Sign in';
+      if (submitIcon) submitIcon.textContent = loading ? 'hourglass_empty' : 'login';
+    };
 
     async function ensureSupabase() {
       if (supabaseClient) return supabaseClient;
@@ -155,18 +488,16 @@
     }
 
     async function handleHashSession() {
-      // Handle OAuth redirect hash (access_token in URL)
       if (!location.hash.includes('access_token')) return;
       const hash = new URLSearchParams(location.hash.slice(1));
       const token = hash.get('access_token');
       if (token) {
         try { localStorage.setItem('px_token', token); } catch { }
-        // Clean the hash
         history.replaceState(null, document.title, location.pathname + location.search);
-        // Ensure a minimal profile exists, then take user to profile edit
         try {
           await fetch(`${apiBase}/api/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
-        } catch { /* ignore */ }
+        } catch {
+        }
         location.href = 'profile_edit.html';
       }
     }
@@ -175,14 +506,16 @@
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!form.reportValidity()) return;
       status.classList.remove('hidden');
       status.textContent = '';
-      if (!form.reportValidity()) return;
+      setSubmitState(true);
       const fd = new FormData(form);
       const payload = { email: fd.get('email'), password: fd.get('password') };
-      submitBtn.disabled = true; submitBtn.textContent = 'Signing in…';
       try {
-        const res = await fetch(`${apiBase}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const res = await fetch(`${apiBase}/login`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) {
           status.textContent = `❌ ${out?.detail || out?.message || 'Login failed.'}`;
@@ -196,7 +529,7 @@
       } catch (err) {
         status.textContent = '❌ Network error. Please try again.';
       } finally {
-        submitBtn.disabled = false; submitBtn.textContent = 'Sign in';
+        setSubmitState(false);
       }
     });
 
@@ -205,16 +538,15 @@
       status.textContent = 'Redirecting to Google…';
       try {
         const sb = await ensureSupabase();
-        const redirectTo = `${location.origin}${location.pathname}`; // back to login page
-        const { data, error } = await sb.auth.signInWithOAuth({
+        const redirectTo = `${location.origin}${location.pathname}`;
+        const { error } = await sb.auth.signInWithOAuth({
           provider: 'google',
           options: { redirectTo }
         });
         if (error) throw error;
-        // On success, browser will redirect. The handler above will capture the token.
       } catch (err) {
         console.error(err);
-        status.textContent = `❌ Google sign-in failed.`;
+        status.textContent = '❌ Google sign-in failed.';
       }
     });
   </script>
