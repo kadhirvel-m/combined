@@ -4,150 +4,395 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Academics — Pa[p]er X</title>
-    <meta name="description" content="Your profile and syllabus overview." />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="config.js"></script>
-    <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,-50..200" />
+    <title>Academics — Paper X</title>
+    <meta name="description" content="Academic dashboard: syllabus mastery, progress, schedule & insights." />
+    <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+        rel="stylesheet" />
+
+    <!-- Tailwind (CDN for demo) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
+                container: { center: true, padding: '1rem' },
                 extend: {
-                    fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
                     colors: {
-                        brand: { 50: '#f0f7ff', 100: '#e0efff', 200: '#b9dbff', 300: '#8ac4ff', 400: '#59a9ff', 500: '#2b8cff', 600: '#116fe6', 700: '#0a57b4', 800: '#0b4890', 900: '#0d3a73' },
-                        night: { 900: '#0a0c10', 800: '#0f131a', 700: '#141a22', 600: '#1a2230' }
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
                     },
-                    boxShadow: { glow: '0 0 0 1px rgba(59,130,246,.2), 0 8px 40px rgba(59,130,246,.15)', neon: '0 0 25px rgba(43,140,255,.35), 0 0 60px rgba(43,140,255,.25)' },
-                    backgroundImage: { 'grid-radial': 'radial-gradient(circle at 20% 10%, rgba(43,140,255,.25), transparent 35%), radial-gradient(circle at 80% 20%, rgba(168,85,247,.2), transparent 35%), radial-gradient(circle at 50% 80%, rgba(16,185,129,.2), transparent 35%)', 'glass': 'linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.04))' },
-                    keyframes: { shimmer: { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } } },
-                    animation: { shimmer: 'shimmer 2.5s linear infinite' }
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.28)',
+                        soft: '0 6px 22px rgba(30,30,47,0.14)',
+                        card: '0 24px 64px -20px rgba(30,30,47,0.45)',
+                        ringed: '0 0 0 1px rgba(158,75,138,0.35), 0 6px 22px rgba(158,75,138,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)',
+                        'mesh-dark': 'radial-gradient(40% 50% at 20% 0%, rgba(158,75,138,0.18), transparent 60%), radial-gradient(40% 60% at 100% 0%, rgba(76,42,89,0.35), transparent 60%)',
+                    },
+                    keyframes: {
+                        fadeUp: { '0%': { opacity: 0, transform: 'translateY(14px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+                        pulseBar: { '0%,100%': { opacity: .55 }, '50%': { opacity: .15 } },
+                        ringIn: { '0%': { transform: 'scale(.92)', opacity: .6 }, '100%': { transform: 'scale(1)', opacity: 1 } },
+                    },
+                    animation: {
+                        fadeUp: 'fadeUp .6s cubic-bezier(.4,.1,.2,1)',
+                        pulseBar: 'pulseBar 2s ease-in-out infinite',
+                        ringIn: 'ringIn .5s ease-out both'
+                    }
                 }
             }
         }
     </script>
+
+    <!-- Brand utilities + a11y helpers -->
     <style>
-        .glass {
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, .06);
-            border: 1px solid rgba(255, 255, 255, .12)
+        .material-symbols-rounded {
+            vertical-align: -6px;
         }
 
-        .glass-dark {
-            background: rgba(20, 24, 32, .55);
-            border-color: rgba(255, 255, 255, .08)
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .66));
+            backdrop-filter: blur(28px);
+            box-shadow: 0 12px 42px -10px rgba(30, 30, 47, .18);
+        }
+
+        .dark .glass-panel {
+            background: linear-gradient(180deg, rgba(30, 30, 47, .78), rgba(30, 30, 47, .58));
+            box-shadow: 0 22px 60px -12px rgba(0, 0, 0, .55);
+        }
+
+        .metric-ring {
+            background: conic-gradient(var(--ring-color, #9E4B8A) calc(var(--pct, 0)*1%), rgba(158, 75, 138, .16) 0);
+        }
+
+        .skeleton {
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(90deg, rgba(0, 0, 0, .04), rgba(0, 0, 0, .08), rgba(0, 0, 0, .04));
+            background-size: 300% 100%;
+            animation: shimmer 2.3s linear infinite;
+        }
+
+        .dark .skeleton {
+            background: linear-gradient(90deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .12), rgba(255, 255, 255, .06));
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: 0 0
+            }
+
+            100% {
+                background-position: -300% 0
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation: none !important;
+                transition: none !important;
+            }
         }
     </style>
+
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+    <script src="config.js"></script>
 </head>
 
-<body
-    class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200 selection:bg-brand-200 selection:text-slate-900">
-    <div aria-hidden="true" class="fixed inset-0 -z-10 bg-grid-radial opacity-70 dark:opacity-50"></div>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+    <!-- ================= NAVBAR ================= -->
     <header
-        class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-night-900/50 border-b border-black/5 dark:border-white/5">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="flex h-16 items-center justify-between">
-                <a href="index.html" class="flex items-center gap-3 group">
-                    <div
-                        class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
-                        PX</div>
-                    <div>
-                        <p class="text-lg font-semibold leading-tight group-hover:text-brand-600">Pa[p]er X</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 -mt-1">Agentic AI for Indian syllabi</p>
-                    </div>
+        class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+                <a href="help.html" class="hover:text-brandlt-900 dark:hover:text-white">Help</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+                <a id="navProfile" href="profile.html" title="Profile"
+                    class="hidden md:inline-flex items-center justify-center w-10 h-10 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60">
+                    <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+                    <span id="navProfileInitial" class="text-xs font-semibold">ME</span>
                 </a>
-                <div class="flex items-center gap-3">
-                    <a id="navProfile" href="profile.html" title="Profile"
-                        class="hidden items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/60">
-                        <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
-                        <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
-                    </a>
-                    <button id="navSignOut" title="Sign out" aria-label="Sign out"
-                        class="hidden inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 text-sm">
-                        <span class="material-symbols-rounded text-[20px]">logout</span>
-                        <span>Sign Out</span>
-                    </button>
-                </div>
+                <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out"
+                    class="hidden md:inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded text-base">logout</span>
+                    <span>Sign out</span>
+                </button>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
             </div>
         </div>
     </header>
 
-    <main class="relative">
-        <section class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
-            <div class="grid gap-8">
-                <!-- Profile header card -->
-                <div
-                    class="rounded-2xl glass glass-dark p-6 shadow-neon border border-white/10 bg-white/80 dark:bg-night-800/70">
-                    <div id="profileHeader" class="grid md:grid-cols-3 gap-6 items-start">
-                        <div class="flex items-center gap-4">
-                            <div id="avatarWrap" class="relative">
-                                <div class="h-14 w-14 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 text-white grid place-items-center font-bold text-xl shadow-neon overflow-hidden"
-                                    id="avatar">U</div>
-                                <img id="avatarImg" alt="Profile"
-                                    class="hidden absolute inset-0 h-full w-full object-cover" />
+    <!-- ================= HERO / OVERVIEW ================= -->
+    <section class="relative overflow-hidden">
+        <!-- Subtle mesh accents -->
+        <div class="pointer-events-none absolute inset-0 opacity-[.06] dark:opacity-[.12] bg-mesh-dark"></div>
+        <div class="container pt-10 pb-6 lg:pt-14 lg:pb-10">
+            <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-start">
+                <!-- Left: Headline + metrics -->
+                <div>
+                    <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight mb-4">
+                        Your Academic <span
+                            class="bg-gradient-to-r from-brand-500 via-brand-700 to-brand-900 bg-clip-text text-transparent">Command
+                            Center</span>
+                    </h1>
+                    <p class="text-neutral-600 dark:text-white/70 max-w-xl">Track syllabus mastery, revisit topics, and
+                        accelerate revision with adaptive progress signals and instant access to generated notes.</p>
+                    <div class="mt-8 flex flex-wrap gap-4">
+                        <a href="#syllabus-section"
+                            class="inline-flex items-center gap-2 rounded-full bg-brand-500 text-white px-6 py-3 text-sm font-semibold shadow-glow hover:shadow-ringed transition">
+                            <span class="material-symbols-rounded text-base">school</span>
+                            View Syllabus
+                        </a>
+                        <a href="notes_generator.html"
+                            class="inline-flex items-center gap-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 px-6 py-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">
+                            <span class="material-symbols-rounded text-base">auto_stories</span>
+                            Generate Notes
+                        </a>
+                    </div>
+
+                    <!-- KPI cards -->
+                    <div class="mt-10 grid grid-cols-3 gap-4 max-w-md">
+                        <div class="glass-panel rounded-2xl p-4 flex flex-col gap-2 animate-fadeUp"
+                            style="animation-delay:.05s">
+                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">Topics
+                                Done</p>
+                            <div class="flex items-end gap-2">
+                                <span id="statTopicsDone" class="text-2xl font-extrabold">0</span>
+                                <span class="text-xs text-neutral-500 dark:text-white/50">/ <span
+                                        id="statTopicsTotal">0</span></span>
                             </div>
-                            <div>
-                                <p class="text-xl font-semibold" id="name">—</p>
-                                <p class="text-sm text-slate-600 dark:text-slate-300" id="email">—</p>
+                            <div class="h-1 rounded-full bg-brand-500/20 overflow-hidden">
+                                <div id="barTopics" class="h-full w-0 bg-brand-500 animate-pulseBar"></div>
                             </div>
                         </div>
-                        <div class="grid gap-1 text-sm">
-                            <div><span class="text-slate-500">College:</span> <span id="college">—</span></div>
-                            <div><span class="text-slate-500">Department:</span> <span id="department">—</span></div>
-                            <div><span class="text-slate-500">Batch:</span> <span id="batch">—</span></div>
-                        </div>
-                        <div class="grid gap-2 text-sm">
-                            <div><span class="text-slate-500">Semester:</span> <span id="semester">—</span></div>
-                            <div><span class="text-slate-500">Reg. No:</span> <span id="regno">—</span></div>
-                            <div><span class="text-slate-500">Phone:</span> <span id="phone">—</span></div>
-                            <div class="pt-1">
-                                <a href="profile_edit.html"
-                                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 text-xs">
-                                    <span class="material-symbols-rounded text-[18px]">edit</span>
-                                    Edit Profile
-                                </a>
+                        <div class="glass-panel rounded-2xl p-4 flex flex-col gap-2 animate-fadeUp"
+                            style="animation-delay:.1s">
+                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">
+                                Completion</p>
+                            <div class="relative h-14 w-14 animate-ringIn">
+                                <div id="ringCompletion" class="absolute inset-0 rounded-full metric-ring"
+                                    style="--pct:0;--ring-color:#9E4B8A"></div>
+                                <div id="ringCompletionText"
+                                    class="absolute inset-0 flex items-center justify-center text-xs font-semibold">0%
+                                </div>
                             </div>
+                        </div>
+                        <div class="glass-panel rounded-2xl p-4 flex flex-col gap-2 animate-fadeUp"
+                            style="animation-delay:.15s">
+                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">Active
+                                Courses</p>
+                            <div id="statCourses" class="text-2xl font-extrabold">0</div>
+                            <div id="statSemester" class="text-xs text-neutral-500 dark:text-white/50">Sem —</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Syllabus -->
-                <div class="grid gap-4">
-                    <h2 class="text-lg font-semibold">Syllabus</h2>
-                    <div id="syllabus" class="grid gap-4"></div>
-                    <div id="syllabusEmpty" class="hidden text-sm text-slate-500">No syllabus found for your
-                        batch/semester yet.
+                <!-- Right: Profile card -->
+                <div class="relative">
+                    <div class="glass-panel rounded-3xl p-6 md:p-8 space-y-6 animate-fadeUp"
+                        style="animation-delay:.2s">
+                        <div class="flex items-start gap-4">
+                            <div id="avatar"
+                                class="relative w-20 h-20 rounded-2xl overflow-hidden ring-2 ring-brand-500/40 bg-brandlt-100 dark:bg-brand-900/40 flex items-center justify-center text-2xl font-bold">
+                                U</div>
+                            <img id="avatarImg" class="hidden absolute w-20 h-20 object-cover rounded-2xl"
+                                alt="Profile" />
+                            <div class="flex-1 min-w-0">
+                                <h2 id="name" class="text-xl font-semibold truncate">—</h2>
+                                <p id="email" class="text-sm text-neutral-600 dark:text-white/65 truncate">—</p>
+                                <div class="mt-3 flex flex-wrap gap-2 text-[11px] font-medium">
+                                    <span id="semester"
+                                        class="px-2 py-1 rounded-full bg-brand-500/10 text-brand-700 dark:text-brandlt-200">Sem
+                                        —</span>
+                                    <span id="regno"
+                                        class="px-2 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15">—</span>
+                                    <span id="phone"
+                                        class="px-2 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15">—</span>
+                                </div>
+                            </div>
+                            <a href="profile_edit.html"
+                                class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                                <span class="material-symbols-rounded text-sm">edit</span>
+                                Edit
+                            </a>
+                        </div>
+                        <div class="grid sm:grid-cols-3 gap-4 text-xs">
+                            <div class="flex flex-col gap-1"><span
+                                    class="text-neutral-500 dark:text-white/50">College</span><span id="college"
+                                    class="font-medium truncate">—</span></div>
+                            <div class="flex flex-col gap-1"><span
+                                    class="text-neutral-500 dark:text-white/50">Department</span><span id="department"
+                                    class="font-medium truncate">—</span></div>
+                            <div class="flex flex-col gap-1"><span
+                                    class="text-neutral-500 dark:text-white/50">Batch</span><span id="batch"
+                                    class="font-medium truncate">—</span></div>
+                        </div>
+                        <div id="profileMetaNote"
+                            class="pt-2 border-t border-black/5 dark:border-white/10 text-xs text-neutral-600 dark:text-white/55">
+                            Keep your profile updated to improve verification scoring and collaboration visibility.
+                        </div>
                     </div>
                 </div>
             </div>
-        </section>
-    </main>
+        </div>
+    </section>
 
+    <!-- ================= SYLLABUS EXPLORER ================= -->
+    <section id="syllabus-section" class="relative py-12 md:py-16 border-t border-black/5 dark:border-white/10">
+        <div class="container">
+            <header class="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                <div>
+                    <h3 class="text-2xl md:text-3xl font-extrabold tracking-tight">Syllabus Explorer</h3>
+                    <p class="mt-2 text-neutral-600 dark:text-white/70 max-w-xl">Expand courses to track unit mastery.
+                        Toggle topics as you complete them to update progress instantly.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="relative">
+                        <span
+                            class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-base">search</span>
+                        <input id="syllabusSearch" type="text" placeholder="Filter topics…"
+                            class="pl-9 pr-3 py-2 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-brand-900/40 focus:outline-none focus:ring-2 focus:ring-brand-500 w-56">
+                    </div>
+                    <button id="expandAllCourses"
+                        class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                        <span class="material-symbols-rounded text-base">unfold_more</span>
+                        Expand All
+                    </button>
+                    <button id="collapseAllCourses"
+                        class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                        <span class="material-symbols-rounded text-base">unfold_less</span>
+                        Collapse All
+                    </button>
+                </div>
+            </header>
+
+            <div id="syllabus" class="grid gap-6"></div>
+            <div id="syllabusEmpty" class="hidden text-sm text-neutral-600 dark:text-white/60 mt-6">No syllabus found
+                for your batch / semester yet.</div>
+        </div>
+    </section>
+
+    <!-- ================= QUICK ACTIONS & INSIGHTS ================= -->
+    <section class="py-14 border-t border-black/5 dark:border-white/10">
+        <div class="container grid lg:grid-cols-3 gap-10 items-start">
+            <div class="lg:col-span-2 space-y-8">
+                <div class="glass-panel rounded-3xl p-6 md:p-8 space-y-6">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-lg font-semibold">Upcoming (Beta)</h4>
+                        <span
+                            class="text-[11px] px-2 py-1 rounded-full bg-brand-500/10 text-brand-700 dark:text-brandlt-200">Soon</span>
+                    </div>
+                    <div id="upcomingList" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div
+                            class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4 bg-white/70 dark:bg-brand-900/40 flex flex-col gap-2">
+                            <span class="text-xs font-medium text-neutral-500 dark:text-white/50">Exams</span>
+                            <p class="text-sm text-neutral-600 dark:text-white/65">Adaptive exam prep timeline will
+                                appear here.</p>
+                        </div>
+                        <div
+                            class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4 bg-white/70 dark:bg-brand-900/40 flex flex-col gap-2">
+                            <span class="text-xs font-medium text-neutral-500 dark:text-white/50">Study Streak</span>
+                            <p class="text-sm text-neutral-600 dark:text-white/65">Daily revision streak metrics
+                                incoming.</p>
+                        </div>
+                        <div
+                            class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4 bg-white/70 dark:bg-brand-900/40 flex flex-col gap-2">
+                            <span class="text-xs font-medium text-neutral-500 dark:text-white/50">Targets</span>
+                            <p class="text-sm text-neutral-600 dark:text-white/65">Set weekly topic goals soon.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <aside class="space-y-8">
+                <div class="glass-panel rounded-3xl p-6 md:p-8 space-y-6">
+                    <h4 class="text-lg font-semibold flex items-center gap-2">
+                        <span class="material-symbols-rounded text-base">tips_and_updates</span>
+                        Tips
+                    </h4>
+                    <ul id="tipsList" class="text-sm space-y-3 text-neutral-600 dark:text-white/65">
+                        <li>Click a course row to expand units. Click a unit to reveal its topics.</li>
+                        <li>Use the check icon to mark a topic complete — progress updates instantly.</li>
+                        <li>Generate AI-notes for any topic via the linked notes page.</li>
+                        <li>More analytics & streak tracking coming soon.</li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </section>
+
+    <!-- ================= FOOTER ================= -->
+    <footer
+        class="py-10 border-t border-black/5 dark:border-white/10 text-center text-xs text-neutral-600 dark:text-white/60">
+        © <span id="year"></span> Paper X • Academics Dashboard
+    </footer>
+
+    <!-- ================= TEMPLATES ================= -->
     <template id="courseCardTpl">
-        <div class="rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70">
-            <div class="px-5 py-4 border-b border-slate-200/60 dark:border-white/10 flex items-center justify-between cursor-pointer hover:bg-white/70 dark:hover:bg-night-700/40 transition-colors rounded-t-xl group"
+        <div
+            class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur overflow-hidden group">
+            <div class="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-white/70 dark:hover:bg-brand-900/40 transition-colors"
                 data-course-toggle aria-expanded="false">
-                <div class="flex items-center gap-3 font-semibold">
-                    <span
-                        class="material-symbols-rounded text-slate-500 group-hover:text-brand-600 transition-transform duration-200 -rotate-90"
+                <div class="flex items-center gap-3 font-semibold text-sm md:text-base">
+                    <span class="material-symbols-rounded text-neutral-500 transition-transform duration-200 -rotate-90"
                         data-course-caret>expand_more</span>
-                    <span data-cc class="text-brand-600"></span>
-                    <span class="opacity-50">—</span>
-                    <span data-title></span>
+                    <span data-cc class="text-brand-600 dark:text-brand-400"></span>
+                    <span class="opacity-40">•</span>
+                    <span data-title class="truncate max-w-[14ch] sm:max-w-[24ch]"></span>
                 </div>
                 <div class="flex items-center gap-3">
-                    <div class="hidden md:block w-40 h-2 rounded bg-slate-200/70 dark:bg-white/10 overflow-hidden"
+                    <div class="hidden md:block w-40 h-2 rounded bg-black/5 dark:bg-white/10 overflow-hidden"
                         aria-label="Course progress">
                         <div class="h-full bg-brand-500 transition-all" style="width:0%" data-course-progress-bar></div>
                     </div>
-                    <span class="text-xs rounded-full border border-slate-200/60 dark:border-white/10 px-2 py-0.5">
-                        <span data-course-progress-text>0/0</span>
-                    </span>
-                    <span class="text-xs rounded-full border border-slate-200/60 dark:border-white/10 px-2 py-0.5">Sem
-                        <span data-sem></span></span>
+                    <span class="text-[11px] rounded-full ring-1 ring-black/10 dark:ring-white/15 px-2 py-0.5"><span
+                            data-course-progress-text>0/0</span></span>
+                    <span class="text-[11px] rounded-full ring-1 ring-black/10 dark:ring-white/15 px-2 py-0.5">Sem <span
+                            data-sem></span></span>
                 </div>
             </div>
             <div class="p-5 grid gap-4" data-units></div>
@@ -155,322 +400,205 @@
     </template>
 
     <template id="unitItemTpl">
-        <div class="rounded-lg border border-slate-200/60 dark:border-white/10">
+        <div class="rounded-xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-brand-900/40">
             <button type="button"
-                class="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-white/60 dark:hover:bg-night-700/40 transition-colors"
+                class="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-white/60 dark:hover:bg-brand-900/30 transition-colors"
                 data-unit-toggle aria-expanded="false">
-                <div class="font-medium flex items-center gap-2" data-unit-title></div>
-                <span class="material-symbols-rounded text-slate-500 transition-transform duration-200 -rotate-90"
+                <div class="font-medium flex items-center gap-2 text-sm" data-unit-title></div>
+                <span class="material-symbols-rounded text-neutral-500 transition-transform duration-200 -rotate-90"
                     data-unit-caret>expand_more</span>
             </button>
             <div class="px-4 pb-4">
                 <div class="flex items-center gap-3 mb-2">
-                    <div class="w-36 h-2 rounded bg-slate-200/70 dark:bg-white/10 overflow-hidden"
+                    <div class="w-36 h-2 rounded bg-black/5 dark:bg-white/10 overflow-hidden"
                         aria-label="Unit progress">
                         <div class="h-full bg-emerald-500 transition-all" style="width:0%" data-unit-progress-bar></div>
                     </div>
-                    <span class="text-xs text-slate-600 dark:text-slate-300" data-unit-progress-text>0/0</span>
+                    <span class="text-[11px] text-neutral-600 dark:text-white/60" data-unit-progress-text>0/0</span>
                 </div>
                 <ul class="space-y-0.5 text-sm leading-tight" data-topics></ul>
             </div>
         </div>
     </template>
 
+    <!-- ================= SCRIPTS ================= -->
     <script>
-        const apiBase = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
+        const API_BASE = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
         const completedTopicIds = new Set();
+        const $ = (id) => document.getElementById(id);
+        const setText = (id, val) => { const n = $(id); if (n) n.textContent = val ?? '—'; };
+        function initials(name) { if (!name) return 'U'; return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase()).join('') || 'U'; }
+        function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
+        function authHeaders() { const t = getToken(); return t ? { Authorization: `Bearer ${t}` } : {}; }
 
-        function getToken() {
-            try { return localStorage.getItem('px_token'); } catch { return null; }
-        }
-        function authHeaders() {
-            const token = getToken();
-            return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
-        }
-        function setText(id, value) { const el = document.getElementById(id); if (el) el.textContent = value ?? '—'; }
-
-        async function fetchJsonRetry(url, options = {}, retries = 2, delay = 400) {
-            for (let i = 0; i <= retries; i++) {
-                try {
-                    const res = await fetch(url, options);
-                    if (res.status === 401) return { unauthorized: true };
-                    if (res.ok) {
-                        return { data: await res.json(), status: res.status };
-                    }
-                    // Retry on 5xx only
-                    if (res.status >= 500 && res.status < 600 && i < retries) {
-                        await new Promise(r => setTimeout(r, delay * (i + 1)));
-                        continue;
-                    }
-                    // Non-retryable
-                    return { error: true, status: res.status };
-                } catch (e) {
-                    if (i < retries) {
-                        await new Promise(r => setTimeout(r, delay * (i + 1)));
-                        continue;
-                    }
-                    return { error: true };
-                }
-            }
-        }
-
-        async function fetchMe() {
-            const token = getToken();
-            if (!token) { window.location.href = 'login.html'; return; }
+        async function fetchJson(url, opts = {}) {
             try {
-                // Fetch profile and progress with simple retry/backoff
-                const [meOut, progOut] = await Promise.all([
-                    fetchJsonRetry(`${apiBase}/api/me`, { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetchJsonRetry(`${apiBase}/api/progress/topics`, { headers: { 'Authorization': `Bearer ${token}` } }),
-                ]);
-                if (meOut?.unauthorized) { window.location.href = 'login.html'; return; }
-                if (!meOut || meOut.error || !meOut.data) { throw new Error('Failed to load profile'); }
-                const data = meOut.data;
-                const prog = (!progOut || progOut.error) ? { completed_topic_ids: [] } : (progOut.data || { completed_topic_ids: [] });
-                completedTopicIds.clear();
-                for (const id of (prog.completed_topic_ids || [])) { completedTopicIds.add(id); }
-                renderProfile(data);
-                if (data?.profile) {
-                    window.__PX_PROFILE_SNAPSHOT = data.profile;
-                    if (typeof window.__PX_NAV_APPLY === 'function') {
-                        window.__PX_NAV_APPLY(data.profile);
-                    }
-                }
-            } catch (e) {
-                // soft redirect
-                window.location.href = 'login.html';
-            }
+                const r = await fetch(url, opts);
+                if (r.status === 401) return { unauthorized: true };
+                const data = await (r.ok ? r.json() : null);
+                return { status: r.status, data };
+            } catch (e) { return { error: true }; }
         }
 
-        function initials(name) {
-            if (!name) return 'U';
-            const parts = String(name).trim().split(/\s+/).slice(0, 2);
-            return parts.map(p => p[0]?.toUpperCase()).join('') || 'U';
+        async function loadProfileAndProgress() {
+            const t = getToken(); if (!t) { window.location.href = 'login.html'; return; }
+            const [meOut, progOut] = await Promise.all([
+                fetchJson(`${API_BASE}/api/me`, { headers: authHeaders() }),
+                fetchJson(`${API_BASE}/api/progress/topics`, { headers: authHeaders() })
+            ]);
+            if (meOut.unauthorized) { window.location.href = 'login.html'; return; }
+
+            const profile = meOut?.data?.profile || {}; window.__PX_PROFILE_SNAPSHOT = profile; if (typeof window.__PX_NAV_APPLY === 'function') { window.__PX_NAV_APPLY(profile); }
+            renderProfile(profile);
+
+            const progressIds = progOut?.data?.completed_topic_ids || []; completedTopicIds.clear(); progressIds.forEach(id => completedTopicIds.add(id));
+            const syllabus = meOut?.data?.syllabus || [];
+            if (!syllabus.length) { $('#syllabusEmpty').classList.remove('hidden'); }
+            renderSyllabus(syllabus);
+            computeAggregateStats(syllabus);
         }
 
-        function renderProfile(data) {
-            const p = data?.profile || {};
-            const avatar = document.getElementById('avatar');
-            const avatarImg = document.getElementById('avatarImg');
+        function renderProfile(p) {
+            const avatar = $('avatar'); const img = $('avatarImg');
             avatar.textContent = initials(p.name);
-            if (p.profile_image_url) {
-                avatarImg.src = p.profile_image_url;
-                avatarImg.classList.remove('hidden');
-            } else {
-                avatarImg.classList.add('hidden');
-            }
-            setText('name', p.name);
-            setText('email', p.email);
-            setText('semester', p.semester);
-            setText('regno', p.regno);
-            setText('phone', p.phone);
-            setText('college', p.college?.name || '—');
-            setText('department', p.department?.name || '—');
+            if (p.profile_image_url) { img.src = p.profile_image_url; img.classList.remove('hidden'); }
+            setText('name', p.name); setText('email', p.email);
+            setText('semester', p.semester ? `Sem ${p.semester}` : 'Sem —');
+            setText('regno', p.regno); setText('phone', p.phone);
+            setText('college', p.college?.name || p.college || '—');
+            setText('department', p.department?.name || p.department || '—');
             setText('batch', p.batch ? `${p.batch.from}–${p.batch.to}` : '—');
+        }
 
-            const syllabusWrap = document.getElementById('syllabus');
-            syllabusWrap.innerHTML = '';
-            const list = data?.syllabus || [];
-            if (!list.length) {
-                document.getElementById('syllabusEmpty').classList.remove('hidden');
-                return;
-            }
-            document.getElementById('syllabusEmpty').classList.add('hidden');
+        function pct(done, total) { return total ? Math.round((done / total) * 100) : 0; }
+        function updateRing(p) { const ring = $('ringCompletion'); const text = $('ringCompletionText'); if (ring) ring.style.setProperty('--pct', p); if (text) text.textContent = p + '%'; }
 
-            const cTpl = document.getElementById('courseCardTpl');
-            const uTpl = document.getElementById('unitItemTpl');
+        function computeAggregateStats(syllabus) {
+            let totalTopics = 0, doneTopics = 0, courses = 0, semesterLabel = '';
+            syllabus.forEach(c => { courses++; semesterLabel = c.semester || semesterLabel; (c.units || []).forEach(u => { (u.topics || []).forEach(t => { totalTopics++; if (completedTopicIds.has(t.id)) doneTopics++; }); }); });
+            setText('statTopicsDone', doneTopics); setText('statTopicsTotal', totalTopics); setText('statCourses', courses); setText('statSemester', semesterLabel ? 'Sem ' + semesterLabel : 'Sem —');
+            const completion = pct(doneTopics, totalTopics); updateRing(completion); const bar = $('barTopics'); if (bar) { bar.style.width = (completion || 0) + '%'; bar.classList.remove('animate-pulseBar'); }
+        }
+
+        function renderSyllabus(list) {
+            const wrap = $('syllabus'); wrap.innerHTML = ''; const cTpl = $('courseCardTpl'); const uTpl = $('unitItemTpl');
+            const courseNodes = [];
             list.forEach(c => {
-                const cNode = cTpl.content.cloneNode(true);
-                cNode.querySelector('[data-cc]').textContent = c.course_code;
-                cNode.querySelector('[data-title]').textContent = c.title;
-                cNode.querySelector('[data-sem]').textContent = c.semester;
-                const unitsWrap = cNode.querySelector('[data-units]');
-                const courseHeader = cNode.querySelector('[data-course-toggle]');
-                const courseCaret = cNode.querySelector('[data-course-caret]');
-                const courseProgBar = cNode.querySelector('[data-course-progress-bar]');
-                const courseProgText = cNode.querySelector('[data-course-progress-text]');
-                unitsWrap.classList.add('hidden');
-                courseHeader.setAttribute('aria-expanded', 'false');
-                courseHeader.addEventListener('click', () => {
-                    const collapsed = unitsWrap.classList.toggle('hidden');
-                    const expanded = !collapsed;
-                    courseHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                    courseCaret.classList.toggle('-rotate-90', !expanded ? true : false);
-                    courseCaret.classList.toggle('rotate-0', expanded ? true : false);
-                });
-
+                const cNode = cTpl.content.cloneNode(true); const header = cNode.querySelector('[data-course-toggle]'); const caret = cNode.querySelector('[data-course-caret]'); const unitsWrap = cNode.querySelector('[data-units]'); const progBar = cNode.querySelector('[data-course-progress-bar]'); const progText = cNode.querySelector('[data-course-progress-text]');
+                cNode.querySelector('[data-cc]').textContent = c.course_code; cNode.querySelector('[data-title]').textContent = c.title; cNode.querySelector('[data-sem]').textContent = c.semester;
+                unitsWrap.classList.add('hidden'); header.setAttribute('aria-expanded', 'false');
+                header.addEventListener('click', () => { const collapsed = unitsWrap.classList.toggle('hidden'); const expanded = !collapsed; header.setAttribute('aria-expanded', expanded ? 'true' : 'false'); caret.classList.toggle('-rotate-90', !expanded ? true : false); caret.classList.toggle('rotate-0', expanded ? true : false); });
                 const courseCounts = { done: 0, total: 0 };
                 (c.units || []).forEach(u => {
-                    const uNode = uTpl.content.cloneNode(true);
-                    const unitTitleEl = uNode.querySelector('[data-unit-title]');
-                    const topicsUl = uNode.querySelector('[data-topics]');
-                    const unitToggle = uNode.querySelector('[data-unit-toggle]');
-                    const unitCaret = uNode.querySelector('[data-unit-caret]');
-                    const unitProgBar = uNode.querySelector('[data-unit-progress-bar]');
-                    const unitProgText = uNode.querySelector('[data-unit-progress-text]');
-                    unitTitleEl.textContent = u.unit_title;
-                    topicsUl.classList.add('hidden');
-                    unitToggle.setAttribute('aria-expanded', 'false');
-                    unitToggle.addEventListener('click', () => {
-                        const collapsed = topicsUl.classList.toggle('hidden');
-                        const expanded = !collapsed;
-                        unitToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                        unitCaret.classList.toggle('-rotate-90', !expanded ? true : false);
-                        unitCaret.classList.toggle('rotate-0', expanded ? true : false);
-                    });
+                    const uNode = uTpl.content.cloneNode(true); const uHeader = uNode.querySelector('[data-unit-toggle]'); const uCaret = uNode.querySelector('[data-unit-caret]'); const topicsWrap = uNode.querySelector('[data-topics]'); const unitTitle = uNode.querySelector('[data-unit-title]'); const unitProgBar = uNode.querySelector('[data-unit-progress-bar]'); const unitProgText = uNode.querySelector('[data-unit-progress-text]'); topicsWrap.classList.add('hidden'); uHeader.setAttribute('aria-expanded', 'false');
+                    unitTitle.textContent = u.unit_title || u.title || 'Unit';
+                    uHeader.addEventListener('click', () => { const collapsed = topicsWrap.classList.toggle('hidden'); const expanded = !collapsed; uHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false'); uCaret.classList.toggle('-rotate-90', !expanded); uCaret.classList.toggle('rotate-0', expanded); });
                     const unitCounts = { done: 0, total: 0 };
                     (u.topics || []).forEach(t => {
-                        const li = document.createElement('li');
-                        li.className = 'flex items-center gap-2 py-0.5 px-2 rounded hover:bg-white/60 dark:hover:bg-night-700/40 transition-colors text-sm leading-tight';
-
-                        const btn = document.createElement('button');
-                        btn.type = 'button';
-                        btn.className = 'p-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/20 focus:outline-none focus:ring-2 focus:ring-emerald-400/50';
-                        btn.dataset.topicId = t.id;
-                        const icon = document.createElement('span');
-                        icon.className = 'material-symbols-rounded text-[20px]';
-                        const isCheckedInit = completedTopicIds.has(t.id);
-                        icon.textContent = isCheckedInit ? 'check_circle' : 'radio_button_unchecked';
-                        icon.style.color = isCheckedInit ? '#10b981' : 'currentColor';
-                        btn.appendChild(icon);
-                        li.appendChild(btn);
-
-                        const a = document.createElement('a');
-                        a.href = 'notes_generator.html?topic=' + encodeURIComponent(t.topic);
-                        a.textContent = t.topic;
-                        a.className = 'text-brand-600 hover:underline';
-                        li.appendChild(a);
-
-                        unitCounts.total += 1;
-                        if (isCheckedInit) unitCounts.done += 1;
-
-                        btn.addEventListener('click', async () => {
-                            const isChecked = !completedTopicIds.has(t.id);
-                            try {
-                                await fetch(`${apiBase}/api/progress/toggle`, {
-                                    method: 'POST',
-                                    headers: authHeaders(),
-                                    body: JSON.stringify({ topic_id: t.id, completed: isChecked })
-                                });
-                                if (isChecked) { completedTopicIds.add(t.id); } else { completedTopicIds.delete(t.id); }
-                                unitCounts.done += isChecked ? 1 : -1;
-                                courseCounts.done += isChecked ? 1 : -1;
-                                updateUnitProgress(unitCounts, unitProgBar, unitProgText);
-                                updateCourseProgress(courseCounts, courseProgBar, courseProgText);
-                                icon.textContent = isChecked ? 'check_circle' : 'radio_button_unchecked';
-                                icon.style.color = isChecked ? '#10b981' : 'currentColor';
-                                updateUnitCompletedStyle(unitCounts, unitTitleEl);
-                            } catch { }
-                        });
-                        topicsUl.appendChild(li);
+                        const li = document.createElement('li'); li.className = 'flex items-center gap-2 py-0.5 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm leading-tight';
+                        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'p-1 rounded focus:outline-none focus:ring-2 focus:ring-brand-500/40'; const icon = document.createElement('span'); icon.className = 'material-symbols-rounded text-[20px]';
+                        const initChecked = completedTopicIds.has(t.id); icon.textContent = initChecked ? 'check_circle' : 'radio_button_unchecked'; icon.style.color = initChecked ? '#10b981' : 'currentColor'; btn.appendChild(icon); btn.dataset.topicId = t.id;
+                        btn.addEventListener('click', () => toggleTopic(t.id, icon, unitCounts, courseCounts, unitProgBar, unitProgText, progBar, progText, unitTitle)); li.appendChild(btn);
+                        const a = document.createElement('a'); a.href = 'notes_generator.html?topic=' + encodeURIComponent(t.topic); a.textContent = t.topic; a.className = 'text-brand-600 dark:text-brand-300 hover:underline'; li.appendChild(a);
+                        unitCounts.total++; if (initChecked) unitCounts.done++; topicsWrap.appendChild(li);
                     });
-                    courseCounts.total += unitCounts.total;
-                    courseCounts.done += unitCounts.done;
-                    updateUnitProgress(unitCounts, unitProgBar, unitProgText);
-                    updateUnitCompletedStyle(unitCounts, unitTitleEl);
-                    unitsWrap.appendChild(uNode);
+                    courseCounts.total += unitCounts.total; courseCounts.done += unitCounts.done; updateUnitProgress(unitCounts, unitProgBar, unitProgText); updateUnitCompletedStyle(unitCounts, unitTitle); unitsWrap.appendChild(uNode);
                 });
-                updateCourseProgress(courseCounts, courseProgBar, courseProgText);
-                syllabusWrap.appendChild(cNode);
+                updateCourseProgress(courseCounts, progBar, progText); wrap.appendChild(cNode); courseNodes.push({ header, unitsWrap });
+            });
+
+            // Expand/collapse helpers
+            const expandAllBtn = $('expandAllCourses'); const collapseAllBtn = $('collapseAllCourses');
+            if (expandAllBtn) expandAllBtn.onclick = () => { courseNodes.forEach(n => { n.unitsWrap.classList.remove('hidden'); n.header.setAttribute('aria-expanded', 'true'); }); };
+            if (collapseAllBtn) collapseAllBtn.onclick = () => { courseNodes.forEach(n => { n.unitsWrap.classList.add('hidden'); n.header.setAttribute('aria-expanded', 'false'); }); };
+
+            // Search filter
+            const search = $('syllabusSearch');
+            if (search) {
+                search.oninput = () => {
+                    const q = search.value.trim().toLowerCase();
+                    document.querySelectorAll('#syllabus [data-units]').forEach(uw => {
+                        uw.querySelectorAll('[data-unit-toggle]').forEach(btn => {
+                            const unit = btn.parentElement; const topics = unit.querySelector('[data-topics]');
+                            let matchCount = 0; topics.querySelectorAll('li a').forEach(a => { const m = !q || a.textContent.toLowerCase().includes(q); a.parentElement.classList.toggle('hidden', !m); if (m) matchCount++; });
+                            const showUnit = !q || matchCount > 0; unit.classList.toggle('hidden', !showUnit);
+                            // auto expand matching units
+                            if (q && showUnit) { topics.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true'); unit.querySelector('[data-unit-caret]')?.classList.replace('-rotate-90', 'rotate-0'); }
+                        });
+                    });
+                };
+            }
+        }
+
+        function toggleTopic(id, icon, unitCounts, courseCounts, unitProgBar, unitProgText, courseProgBar, courseProgText, unitTitle) {
+            const willCheck = !completedTopicIds.has(id);
+            fetch(`${API_BASE}/api/progress/toggle`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ topic_id: id, completed: willCheck }) }).catch(() => { });
+            if (willCheck) { completedTopicIds.add(id); unitCounts.done++; courseCounts.done++; } else { completedTopicIds.delete(id); unitCounts.done--; courseCounts.done--; }
+            icon.textContent = willCheck ? 'check_circle' : 'radio_button_unchecked'; icon.style.color = willCheck ? '#10b981' : 'currentColor';
+            updateUnitProgress(unitCounts, unitProgBar, unitProgText); updateCourseProgress(courseCounts, courseProgBar, courseProgText); updateUnitCompletedStyle(unitCounts, unitTitle);
+            computeAggregateStatsFromState();
+        }
+
+        function computeAggregateStatsFromState() { /* reserved for potential DOM-scan recompute */ }
+        function updateUnitProgress(c, b, t) { const p = pct(c.done, c.total); if (b) b.style.width = p + '%'; if (t) t.textContent = `${c.done}/${c.total}`; }
+        function updateCourseProgress(c, b, t) { const p = pct(c.done, c.total); if (b) b.style.width = p + '%'; if (t) t.textContent = `${c.done}/${c.total}`; }
+        function updateUnitCompletedStyle(c, titleEl) { if (!titleEl) return; const complete = c.total > 0 && c.done >= c.total; titleEl.classList.toggle('line-through', complete); titleEl.classList.toggle('opacity-60', complete); }
+
+        // Quick note (local only)
+        const notesKey = 'px_quick_notes';
+        function loadNotes() { try { return JSON.parse(localStorage.getItem(notesKey) || '[]'); } catch { return []; } }
+        function saveNotes(list) {
+            try { localStorage.setItem(notesKey, JSON.stringify(list.slice(-50))); } catch { }
+        }
+        const form = $('quickNoteForm');
+        if (form) {
+            form.addEventListener('submit', e => {
+                e.preventDefault(); const topic = $('quickNoteTopic').value.trim(); const body = $('quickNoteBody').value.trim();
+                if (!topic && !body) { $('quickNoteStatus').textContent = 'Nothing to save.'; return; }
+                const list = loadNotes(); list.push({ topic, body, ts: Date.now() }); saveNotes(list);
+                $('quickNoteTopic').value = ''; $('quickNoteBody').value = ''; $('quickNoteStatus').textContent = 'Saved locally (' + list.length + ' notes).';
+                setTimeout(() => $('quickNoteStatus').textContent = '', 3000);
             });
         }
 
-        function pct(done, total) {
-            return total ? Math.round((done / total) * 100) : 0;
-        }
-        function updateUnitProgress(counts, barEl, textEl) {
-            const p = pct(counts.done, counts.total);
-            if (barEl) barEl.style.width = p + '%';
-            if (textEl) textEl.textContent = `${counts.done}/${counts.total}`;
-        }
-        function updateCourseProgress(counts, barEl, textEl) {
-            const p = pct(counts.done, counts.total);
-            if (barEl) barEl.style.width = p + '%';
-            if (textEl) textEl.textContent = `${counts.done}/${counts.total}`;
-        }
+        // Theme toggle (shared)
+        (function () {
+            const root = document.documentElement;
+            const applyIcon = (m) => document.querySelectorAll('[data-theme-toggle] .material-symbols-rounded').forEach(i => i.textContent = m === 'dark' ? 'light_mode' : 'dark_mode');
+            const set = (m) => { if (m === 'dark') { root.classList.add('dark'); } else { root.classList.remove('dark'); } localStorage.setItem('px_theme', m); applyIcon(m); };
+            const current = root.classList.contains('dark') ? 'dark' : 'light'; applyIcon(current);
+            document.addEventListener('click', e => { const b = e.target.closest('[data-theme-toggle]'); if (!b) return; set(root.classList.contains('dark') ? 'light' : 'dark'); });
+        })();
 
-        function updateUnitCompletedStyle(counts, titleEl) {
-            if (!titleEl) return;
-            const complete = counts.total > 0 && counts.done >= counts.total;
-            titleEl.classList.toggle('line-through', complete);
-            titleEl.classList.toggle('decoration-2', complete);
-            titleEl.classList.toggle('decoration-slate-400', complete);
-            titleEl.classList.toggle('dark:decoration-slate-500', complete);
-            titleEl.classList.toggle('text-slate-400', complete);
-            titleEl.classList.toggle('dark:text-slate-500', complete);
-        }
-
+        // Nav profile helpers
         (function initNavAuth() {
             const t = getToken();
             const navProfile = document.getElementById('navProfile');
             const navProfileImg = document.getElementById('navProfileImg');
             const navProfileInitial = document.getElementById('navProfileInitial');
-            const navSignOut = document.getElementById('navSignOut');
+            const signOutBtn = document.getElementById('signOutBtn');
             if (!t) return;
-            document.querySelectorAll('a[href="login.html"], a[href="signup.html"]').forEach(a => {
-                a.classList.add('hidden');
-                a.style.display = 'none';
-            });
+            document.querySelectorAll('a[href="login.html"], a[href="signup.html"]').forEach(a => { a.classList.add('hidden'); a.style.display = 'none'; });
             if (navProfile) navProfile.classList.remove('hidden');
-            if (navSignOut) {
-                navSignOut.classList.remove('hidden');
-                navSignOut.onclick = () => { try { localStorage.removeItem('px_token'); } catch { } window.location.href = 'login.html'; };
+            if (signOutBtn) {
+                signOutBtn.classList.remove('hidden');
+                signOutBtn.onclick = () => { try { localStorage.removeItem('px_token'); } catch { } window.location.href = 'login.html'; };
             }
             const applyNavProfile = (profile) => {
-                if (!profile) return;
-                let initials = 'ME';
-                if (profile.name) {
-                    initials = profile.name
-                        .split(' ')
-                        .filter(Boolean)
-                        .map(part => part[0]?.toUpperCase())
-                        .slice(0, 2)
-                        .join('') || 'ME';
-                }
-                if (navProfileInitial) {
-                    navProfileInitial.textContent = initials;
-                    navProfileInitial.classList.remove('hidden');
-                }
-                if (profile.profile_image_url && navProfileImg) {
-                    navProfileImg.src = profile.profile_image_url;
-                    navProfileImg.classList.remove('hidden');
-                    if (navProfileInitial) navProfileInitial.classList.add('hidden');
-                } else if (navProfileImg) {
-                    navProfileImg.classList.add('hidden');
-                }
+                if (!profile) return; let initialsTxt = 'ME';
+                if (profile.name) { initialsTxt = profile.name.split(' ').filter(Boolean).map(part => part[0]?.toUpperCase()).slice(0, 2).join('') || 'ME'; }
+                if (navProfileInitial) { navProfileInitial.textContent = initialsTxt; navProfileInitial.classList.remove('hidden'); }
+                if (profile.profile_image_url && navProfileImg) { navProfileImg.src = profile.profile_image_url; navProfileImg.classList.remove('hidden'); if (navProfileInitial) navProfileInitial.classList.add('hidden'); } else if (navProfileImg) { navProfileImg.classList.add('hidden'); }
             };
-
             window.__PX_NAV_APPLY = applyNavProfile;
-
-            const useProfile = (profile) => {
-                if (profile) applyNavProfile(profile);
-            };
-
-            if (window.__PX_PROFILE_SNAPSHOT) {
-                applyNavProfile(window.__PX_PROFILE_SNAPSHOT);
-            } else {
-                const pending = window.__PX_NAV_PROFILE_PROMISE;
-                if (pending && typeof pending.then === 'function') {
-                    pending.then(useProfile).catch(() => { });
-                } else {
-                    const apiBaseLocal = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
-                    window.__PX_NAV_PROFILE_PROMISE = fetch(`${apiBaseLocal}/api/me`, { headers: { Authorization: `Bearer ${t}` } })
-                        .then(r => r.ok ? r.json() : null)
-                        .then(d => {
-                            const profile = d?.profile || null;
-                            if (profile) {
-                                window.__PX_PROFILE_SNAPSHOT = profile;
-                                applyNavProfile(profile);
-                            }
-                            return profile;
-                        })
-                        .catch(() => null);
-                }
-            }
         })();
 
-        fetchMe();
+        // Bootstrap
+        loadProfileAndProgress();
     </script>
+
+    <script src="auth.js"></script>
+    <script>const y = document.getElementById('year'); if (y) y.textContent = new Date().getFullYear();</script>
 </body>
 
 </html>

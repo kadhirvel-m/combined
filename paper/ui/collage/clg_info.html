@@ -4,140 +4,505 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>College Navigator · Colleges</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Paper X — College Directory</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind (forms/typography/aspect-ratio) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
+                container: { center: true, padding: '1rem' },
                 extend: {
-                    fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
                     colors: {
-                        brand: { 50: '#f0f7ff', 100: '#e0efff', 200: '#b9dbff', 300: '#8ac4ff', 400: '#59a9ff', 500: '#2b8cff', 600: '#116fe6', 700: '#0a57b4', 800: '#0b4890', 900: '#0d3a73' },
-                        night: { 900: '#0a0c10', 800: '#0f131a', 700: '#141a22', 600: '#1a2230' }
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        },
+                        ink: '#1E1E2F',
+                        plum: '#4C2A59',
+                        orchid: '#9E4B8A'
                     },
                     boxShadow: {
-                        glow: '0 0 0 1px rgba(59,130,246,.2), 0 8px 40px rgba(59,130,246,.15)',
-                        neon: '0 0 25px rgba(43,140,255,.35), 0 0 60px rgba(43,140,255,.25)'
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 20px 44px rgba(30,30,47,0.2)'
                     },
                     backgroundImage: {
-                        'grid-radial': 'radial-gradient(circle at 20% 10%, rgba(43,140,255,.25), transparent 35%), radial-gradient(circle at 80% 20%, rgba(168,85,247,.2), transparent 35%), radial-gradient(circle at 50% 80%, rgba(16,185,129,.2), transparent 35%)'
+                        'hero-light':
+                            'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)',
+                        'hero-dark':
+                            'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)'
                     }
                 }
             }
-        };
+        }
     </script>
-    <script src="../config.js"></script>
-    <script src="helpers.js"></script>
     <style>
-        .glass {
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+        .material-symbols-rounded {
+            vertical-align: -6px;
         }
 
-        .glass-dark {
-            background: rgba(20, 24, 32, 0.55);
-            border-color: rgba(255, 255, 255, 0.08);
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .hero-aurora::before {
+            content: "";
+            position: absolute;
+            inset: -30% -5% auto -30%;
+            height: 420px;
+            background: radial-gradient(circle at top, rgba(158, 75, 138, 0.45), transparent 60%);
+            filter: blur(60px);
+            opacity: 0.65;
+            pointer-events: none;
+        }
+
+        .hero-aurora::after {
+            content: "";
+            position: absolute;
+            inset: auto -25% -35% 30%;
+            height: 380px;
+            background: radial-gradient(circle at bottom, rgba(76, 42, 89, 0.45), transparent 60%);
+            filter: blur(60px);
+            opacity: 0.55;
+            pointer-events: none;
+        }
+
+        .dark .hero-aurora::before {
+            opacity: 0.75;
+        }
+
+        .dark .hero-aurora::after {
+            opacity: 0.75;
+        }
+
+        #mobileNavBackdrop {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s ease;
+        }
+
+        #mobileNavPanel {
+            opacity: 0;
+            transform: translateY(-12px);
+            pointer-events: none;
+            transition: opacity .25s ease, transform .25s ease;
+        }
+
+        #mobileNavBackdrop[data-open="true"],
+        #mobileNavBackdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #mobileNavPanel[data-open="true"],
+        #mobileNavPanel.open {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .dark body {
+            background-image: linear-gradient(to left top,
+                    #1e1e2f,
+                    #242138,
+                    #2b2440,
+                    #332649,
+                    #3d2850,
+                    #3f254a,
+                    #402244,
+                    #401f3e,
+                    #34182d,
+                    #26131e,
+                    #190b11,
+                    #000000);
+            background-repeat: no-repeat;
+            background-size: cover;
         }
     </style>
+
+    <script>
+            (() => {
+                const stored = localStorage.getItem('px_theme');
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const isDark = stored ? stored === 'dark' : prefersDark;
+                if (isDark) document.documentElement.classList.add('dark');
+            })();
+    </script>
+
+    <script src="../config.js" defer></script>
+    <script src="helpers.js" defer></script>
 </head>
 
 <body
-    class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200 selection:bg-brand-200 selection:text-slate-900">
-    <div aria-hidden="true" class="fixed inset-0 -z-10 bg-grid-radial opacity-70 dark:opacity-50"></div>
+    class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors">
+    <!-- Top announcement -->
+    <div
+        class="w-full text-xs text-neutral-700 dark:text-white/80 bg-brandlt-100/70 dark:bg-brand-700/20 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center gap-2 py-2">
+            <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-brandlt-200 dark:bg-brand-500/20 ring-1 ring-brandlt-300 dark:ring-brand-500/40">Console</span>
+            <p class="truncate">Agentic directory builder now mirrors the marketing site aesthetic.</p>
+            <span class="ml-auto">→</span>
+        </div>
+    </div>
 
+    <!-- Navbar -->
     <header
-        class="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-night-900/60 border-b border-black/5 dark:border-white/5">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="flex h-16 items-center justify-between">
-                <a href="../index.html" class="flex items-center gap-3 group">
-                    <div
-                        class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
-                        PX</div>
-                    <div>
-                        <p class="text-lg font-semibold leading-tight group-hover:text-brand-600">Pa[p]er X</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 -mt-1">Agentic AI for Indian syllabi</p>
-                    </div>
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10 relative">
+        <div class="container flex items-center justify-between py-4">
+            <a href="../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="../../assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
+                <img src="../../assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../index.html">Home</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../about.html">About</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../contact.html">Contact</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../help.html">Help</a>
+                <a class="inline-flex items-center gap-1 rounded-full bg-brandlt-200/70 px-3 py-1.5 text-brand-700 dark:bg-white/10 dark:text-white"
+                    href="clg_info.html" aria-current="page">
+                    <span>Collages</span>
+                    <span class="material-symbols-rounded text-base">auto_awesome</span>
                 </a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden sm:block">Theme</span>
+                </button>
                 <a href="../login.html"
-                    class="hidden sm:inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 hover:border-brand-400/60 transition">Sign
-                    in</a>
+                    class="text-sm text-neutral-700 dark:text-white/85 hover:text-brandlt-900 dark:hover:text-white px-3 py-2 rounded-full transition">
+                    Log in
+                </a>
+                <a href="../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">
+                    Sign up
+                </a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+                <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="material-symbols-rounded" data-icon>menu</span>
+                </button>
             </div>
         </div>
     </header>
 
-    <main class="relative">
-        <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
-            <div class="flex flex-col gap-4">
-                <div class="max-w-3xl">
-                    <h1 class="text-3xl sm:text-4xl font-bold leading-tight">Choose a college</h1>
+    <!-- Mobile navigation (drawer) -->
+    <div id="mobileNavBackdrop" aria-hidden="true"
+        class="md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+    <nav id="mobileNavPanel" aria-hidden="true"
+        class="md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_1.5rem_4rem_-1.5rem_rgba(30,30,47,0.75)] backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+        <div class="flex flex-col gap-2 text-sm text-neutral-700 dark:text-white/80">
+            <a href="../index.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Home</a>
+            <a href="../about.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">About</a>
+            <a href="../contact.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Contact</a>
+            <a href="../help.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Help</a>
+            <a href="clg_info.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 bg-brandlt-200/70 dark:bg-white/10 text-brand-700 dark:text-white transition">
+                Collages
+            </a>
+        </div>
+        <div class="flex flex-col gap-3 border-t border-black/5 dark:border-white/10 pt-4">
+            <a href="../login.html" data-close-mobile-nav
+                class="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">
+                Log in
+            </a>
+            <a href="../signup.html" data-close-mobile-nav
+                class="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)] transition">
+                Sign up
+            </a>
+        </div>
+    </nav>
+
+    <main>
+        <!-- Hero -->
+        <section class="relative overflow-hidden border-b border-black/5 dark:border-white/10 hero-aurora">
+            <div aria-hidden="true" class="absolute inset-0">
+                <div class="absolute -top-32 right-0 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl dark:blur-[90px]">
+                </div>
+                <div class="absolute top-24 -left-32 h-80 w-80 rounded-full bg-brand-700/20 blur-3xl dark:blur-[90px]">
                 </div>
             </div>
-
-            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <p class="text-sm text-slate-600 dark:text-slate-300">Manage and curate the college directory shown to
-                    learners.</p>
-                <div class="flex items-center gap-3">
-                    <button id="addCollegeBtn"
-                        class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 hover:shadow-glow transition"
-                        type="button">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fill-rule="evenodd"
-                                d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                                clip-rule="evenodd"></path>
-                        </svg>
+            <div class="relative container max-w-6xl py-16 md:py-20">
+                <div class="max-w-3xl space-y-6">
+                    <span
+                        class="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/80 dark:bg-white/10 px-3 py-1 text-xs font-medium text-brand-700 dark:text-white/80">
+                        <span class="material-symbols-rounded text-base">hub</span>
+                        Operations
+                    </span>
+                    <h1 class="text-4xl md:text-5xl font-extrabold leading-tight gradient-hero-text">
+                        Orchestrate every college from one console.
+                    </h1>
+                    <p class="text-lg md:text-xl text-neutral-600 dark:text-white/70">
+                        Curate your entire academic hierarchy, from colleges to syllabi, using the same futuristic
+                        experience
+                        that powers the Paper X marketing site.
+                    </p>
+                </div>
+                <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <button id="addCollegeBtn" type="button"
+                        class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-6 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition">
+                        <span class="material-symbols-rounded text-base">add</span>
                         Add college
                     </button>
+                    <a href="../help.html#collage"
+                        class="inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-neutral-700 dark:text-white/75 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition">
+                        <span class="material-symbols-rounded text-base">lightbulb</span>
+                        Bulk import playbook
+                    </a>
+                </div>
+                <div class="mt-10 grid gap-4 sm:grid-cols-3 max-w-3xl">
+                    <div
+                        class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-white/5 backdrop-blur p-5">
+                        <p
+                            class="text-xs font-semibold uppercase tracking-[0.32em] text-neutral-500 dark:text-white/60">
+                            Colleges live
+                        </p>
+                        <p class="mt-3 text-3xl font-bold text-neutral-900 dark:text-white" id="collegeMetric">0</p>
+                    </div>
+                    <div
+                        class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-white/5 backdrop-blur p-5">
+                        <p
+                            class="text-xs font-semibold uppercase tracking-[0.32em] text-neutral-500 dark:text-white/60">
+                            Sync status
+                        </p>
+                        <p class="mt-3 text-lg font-semibold text-neutral-900 dark:text-white" id="syncStatusLabel">
+                            Preparing
+                        </p>
+                        <p class="text-xs text-neutral-500 dark:text-white/50">Auto-refresh every 30s</p>
+                    </div>
+                    <div
+                        class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-white/5 backdrop-blur p-5">
+                        <p
+                            class="text-xs font-semibold uppercase tracking-[0.32em] text-neutral-500 dark:text-white/60">
+                            API surface
+                        </p>
+                        <p class="mt-3 text-lg font-semibold text-neutral-900 dark:text-white">REST + Graph</p>
+                        <p class="text-xs text-neutral-500 dark:text-white/50">Protected & agent-ready</p>
+                    </div>
                 </div>
             </div>
+        </section>
 
-            <div id="results" class="mt-12 grid gap-6 sm:grid-cols-2 xl:grid-cols-3"></div>
+        <!-- Directory section -->
+        <section class="py-16">
+            <div class="container max-w-6xl">
+                <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                    <div class="max-w-2xl">
+                        <h2 class="text-2xl md:text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white">
+                            College directory
+                        </h2>
+                        <p class="mt-3 text-sm md:text-base text-neutral-600 dark:text-white/70">
+                            Select a college to drill down into its degrees, departments, batches, and subjects. Changes
+                            are
+                            reflected instantly across Paper X experiences.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3 text-sm text-neutral-500 dark:text-white/60">
+                        <span
+                            class="inline-flex items-center gap-2 rounded-full border border-black/5 dark:border-white/15 bg-white/70 dark:bg-white/5 px-3 py-1.5">
+                            <span class="material-symbols-rounded text-base text-brand-500">robot</span>
+                            Agentic workflow ready
+                        </span>
+                    </div>
+                </div>
+
+                <div id="results" class="mt-10 grid gap-6 sm:grid-cols-2 xl:grid-cols-3"></div>
+            </div>
         </section>
     </main>
 
-    <div id="collegeModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
-        role="dialog" aria-modal="true" aria-labelledby="collegeModalTitle">
-        <div id="collegeModalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <!-- Modal -->
+    <div id="collegeModal" class="fixed inset-0 z-50 hidden items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+        <div id="collegeModalBackdrop" class="absolute inset-0 bg-brand-900/70 dark:bg-black/70 backdrop-blur-sm"></div>
         <div
-            class="relative w-full max-w-lg rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/90 dark:bg-night-900/90 shadow-xl">
-            <div
-                class="flex items-start justify-between gap-4 border-b border-slate-200/60 dark:border-white/10 px-6 py-5">
+            class="relative w-full max-w-xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)]">
+            <div class="flex items-start justify-between gap-4 border-b border-black/5 dark:border-white/10 px-6 py-5">
                 <div>
-                    <h2 id="collegeModalTitle" class="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a
-                        new college</h2>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Provide the official name as it should
-                        appear throughout the navigator.</p>
+                    <h2 id="collegeModalTitle" class="text-xl font-semibold text-neutral-900 dark:text-white">Add a new
+                        college</h2>
+                    <p class="mt-1 text-sm text-neutral-600 dark:text-white/65">Provide the exact label that should
+                        appear
+                        throughout the navigator.</p>
                 </div>
                 <button id="collegeModalClose" type="button"
-                    class="rounded-lg border border-transparent p-2 text-slate-500 hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60">
-                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fill-rule="evenodd"
-                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                            clip-rule="evenodd"></path>
-                    </svg>
+                    class="rounded-full border border-transparent p-2 text-neutral-500 hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
+                    <span class="material-symbols-rounded text-lg">close</span>
                 </button>
             </div>
             <form id="collegeForm" class="space-y-5 px-6 py-6">
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">
                     College name
                     <input id="collegeName" name="name" type="text" required
-                        class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
+                        class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
                         placeholder="e.g. Mannakul Vinayagar Institute of Technology" />
                 </label>
                 <p id="collegeModalMessage" class="hidden text-sm text-red-500"></p>
                 <div class="flex items-center justify-end gap-3">
                     <button id="collegeModalCancel" type="button"
-                        class="rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:border-brand-400/60 transition">Cancel</button>
+                        class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">
+                        Cancel
+                    </button>
                     <button id="collegeSubmitBtn" type="submit"
-                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-neon hover:opacity-95 transition">Save
-                        college</button>
+                        class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition">
+                        <span class="material-symbols-rounded text-base">save</span>
+                        Save college
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 
+    <footer class="border-t border-black/5 dark:border-white/10 py-10">
+        <div
+            class="container flex flex-col gap-3 text-sm text-neutral-500 dark:text-white/60 sm:flex-row sm:items-center sm:justify-between">
+            <p>© <span id="y"></span> Paper X · College Console.</p>
+            <div class="flex flex-wrap items-center gap-4">
+                <a href="../about.html" class="hover:text-brand-500 dark:hover:text-white transition">About</a>
+                <a href="../help.html" class="hover:text-brand-500 dark:hover:text-white transition">Help centre</a>
+                <a href="../contact.html" class="hover:text-brand-500 dark:hover:text-white transition">Contact</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const y = document.getElementById('y');
+        if (y) y.textContent = new Date().getFullYear();
+
+        const root = document.documentElement;
+        const themeToggles = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+        const updateToggleIcons = (mode) => {
+            themeToggles().forEach(btn => {
+                const icon = btn.querySelector('.material-symbols-rounded');
+                if (icon) icon.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+            });
+        };
+        const setTheme = (mode) => {
+            if (mode === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+            localStorage.setItem('px_theme', mode);
+            updateToggleIcons(mode);
+        };
+        setTheme(root.classList.contains('dark') ? 'dark' : 'light');
+        document.addEventListener('click', (e) => {
+            const trigger = e.target.closest('[data-theme-toggle]');
+            if (!trigger) return;
+            const next = root.classList.contains('dark') ? 'light' : 'dark';
+            setTheme(next);
+        });
+    </script>
+    <script>
+        (function () {
+            const toggle = document.getElementById('mobileNavToggle');
+            const panel = document.getElementById('mobileNavPanel');
+            const backdrop = document.getElementById('mobileNavBackdrop');
+            if (!toggle || !panel || !backdrop) return;
+
+            const icon = toggle.querySelector('[data-icon]');
+            const focusableSelector = 'a[href], button:not([disabled])';
+
+            const openMenu = () => {
+                panel.setAttribute('data-open', 'true');
+                panel.classList.add('open');
+                panel.setAttribute('aria-hidden', 'false');
+                backdrop.setAttribute('data-open', 'true');
+                backdrop.classList.add('open');
+                backdrop.setAttribute('aria-hidden', 'false');
+                toggle.setAttribute('aria-expanded', 'true');
+                if (icon) icon.textContent = 'close';
+                document.body.classList.add('overflow-hidden');
+                const first = panel.querySelector(focusableSelector);
+                if (first) first.focus();
+            };
+
+            const closeMenu = () => {
+                panel.removeAttribute('data-open');
+                panel.classList.remove('open');
+                panel.setAttribute('aria-hidden', 'true');
+                backdrop.removeAttribute('data-open');
+                backdrop.classList.remove('open');
+                backdrop.setAttribute('aria-hidden', 'true');
+                toggle.setAttribute('aria-expanded', 'false');
+                if (icon) icon.textContent = 'menu';
+                document.body.classList.remove('overflow-hidden');
+                toggle.focus();
+            };
+
+            const toggleMenu = () => {
+                const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+                (isOpen ? closeMenu : openMenu)();
+            };
+
+            toggle.addEventListener('click', toggleMenu);
+            backdrop.addEventListener('click', closeMenu);
+            panel.addEventListener('click', (evt) => {
+                if (evt.target.closest('[data-close-mobile-nav]')) {
+                    closeMenu();
+                }
+            });
+
+            window.addEventListener('keydown', (evt) => {
+                if (evt.key === 'Escape') closeMenu();
+            });
+
+            window.matchMedia('(min-width: 768px)').addEventListener('change', (evt) => {
+                if (evt.matches) closeMenu();
+            });
+        })();
+    </script>
     <script>
         const results = document.getElementById('results');
         const addCollegeBtn = document.getElementById('addCollegeBtn');
@@ -150,31 +515,46 @@
         const collegeModalCancel = document.getElementById('collegeModalCancel');
         const collegeSubmitBtn = document.getElementById('collegeSubmitBtn');
         const collegeModalClose = document.getElementById('collegeModalClose');
+        const collegeMetric = document.getElementById('collegeMetric');
+        const syncStatusLabel = document.getElementById('syncStatusLabel');
+
         let collegesCache = [];
         let modalMode = 'add';
         let editingCollegeId = null;
 
+        const updateMetrics = (count, state = 'Live') => {
+            if (typeof count === 'number' && collegeMetric) {
+                collegeMetric.textContent = String(count);
+            }
+            if (syncStatusLabel) {
+                syncStatusLabel.textContent = state;
+            }
+        };
+
         function showLoader() {
             results.innerHTML = `
         <div class="col-span-full flex items-center justify-center py-16">
-          <div class="h-12 w-12 animate-spin rounded-full border-2 border-brand-400 border-t-transparent"></div>
+          <div class="h-12 w-12 animate-spin rounded-full border-2 border-brand-500/50 border-t-transparent"></div>
         </div>`;
+            updateMetrics(collegesCache.length || 0, 'Syncing…');
         }
 
         function showError(message) {
             results.innerHTML = `
-        <div class="col-span-full rounded-2xl border border-red-500/40 bg-red-50/90 dark:bg-red-500/10 dark:border-red-400/30 p-6 shadow">
+        <div class="col-span-full rounded-3xl border border-red-400/35 bg-red-100/70 dark:bg-red-500/10 dark:border-red-400/25 p-8 shadow-soft">
           <h2 class="text-lg font-semibold text-red-700 dark:text-red-200">Unable to load colleges</h2>
-          <p class="mt-2 text-sm text-red-600/80 dark:text-red-200/80">${Collage.escapeHtml(message || 'Please try again in a moment.')}</p>
+          <p class="mt-2 text-sm text-red-600/85 dark:text-red-200/80">${Collage.escapeHtml(message || 'Please try again shortly.')}</p>
         </div>`;
+            updateMetrics(collegesCache.length || 0, 'Error');
         }
 
         function showEmpty() {
             results.innerHTML = `
-        <div class="col-span-full rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow">
-          <h2 class="text-lg font-semibold">No colleges yet</h2>
-          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Add a college from the admin tools or import academic data to get started.</p>
+        <div class="col-span-full rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur p-8 text-sm text-neutral-600 dark:text-white/65">
+          <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">No colleges yet</h2>
+          <p class="mt-2">Add a college to kickstart your hierarchy, or bulk import data from the admin tooling.</p>
         </div>`;
+            updateMetrics(0, 'Awaiting entries');
         }
 
         function resetModal() {
@@ -186,7 +566,11 @@
 
         function setModalLoading(isLoading) {
             collegeSubmitBtn.disabled = isLoading;
-            collegeSubmitBtn.textContent = isLoading ? 'Saving…' : (modalMode === 'edit' ? 'Save changes' : 'Save college');
+            collegeSubmitBtn.innerHTML = isLoading
+                ? `<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Saving…`
+                : (modalMode === 'edit'
+                    ? `<span class="material-symbols-rounded text-base">save</span>Save changes`
+                    : `<span class="material-symbols-rounded text-base">save</span>Save college`);
         }
 
         function closeCollegeModal() {
@@ -203,7 +587,9 @@
                 collegeNameInput.value = college.name || '';
             }
             collegeModalTitle.textContent = mode === 'edit' ? 'Edit college' : 'Add a new college';
-            collegeSubmitBtn.textContent = mode === 'edit' ? 'Save changes' : 'Save college';
+            collegeSubmitBtn.innerHTML = mode === 'edit'
+                ? `<span class="material-symbols-rounded text-base">save</span>Save changes`
+                : `<span class="material-symbols-rounded text-base">save</span>Save college`;
             collegeModal.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
             setTimeout(() => {
@@ -211,7 +597,7 @@
                 if (mode === 'edit') {
                     collegeNameInput?.select();
                 }
-            }, 100);
+            }, 80);
         }
 
         function attachCollegeEditHandlers() {
@@ -220,7 +606,6 @@
                 button.addEventListener('click', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    event.stopImmediatePropagation();
                     const id = button.getAttribute('data-college-edit');
                     const college = collegesCache.find(item => item.id === id);
                     if (college) {
@@ -286,39 +671,46 @@
                     showEmpty();
                     return;
                 }
+                updateMetrics(colleges.length, 'Live');
+                const accentPalette = [
+                    'from-brand-500/70 via-brandlt-300/60 to-brand-700/80',
+                    'from-[#FF7FD1]/55 via-brand-500/60 to-brand-700/80',
+                    'from-brandlt-200/60 via-white/40 to-brand-500/65',
+                    'from-[#7F57D1]/55 via-brand-500/60 to-brand-700/80',
+                    'from-brand-700/65 via-brandlt-400/55 to-brand-500/70'
+                ];
                 results.innerHTML = colleges.map((college, index) => {
-                    const accentColor = ['from-brand-400 via-brand-500 to-indigo-500', 'from-emerald-400 via-teal-400 to-emerald-600', 'from-fuchsia-400 via-pink-500 to-rose-500', 'from-cyan-400 via-sky-500 to-blue-500', 'from-amber-400 via-orange-500 to-amber-600'][index % 5];
+                    const accentColor = accentPalette[index % accentPalette.length];
                     const target = `degrees.html?collegeId=${encodeURIComponent(college.id)}&collegeName=${encodeURIComponent((college && college.name) || '')}`;
+                    const label = Collage.escapeHtml(college.name);
+                    const idFragment = Collage.escapeHtml(String(college.id || '').slice(0, 8));
                     return `
-                                                                        <article class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow">
-              <div class="absolute inset-x-4 top-4 h-28 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
-              <button type="button" data-college-edit="${college.id}" aria-label="Edit ${Collage.escapeHtml(college.name)}"
-                                                        class="absolute top-4 right-4 z-20 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-brand-500 hover:border-brand-400/60 transition">
-                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path d="M17.414 2.586a2 2 0 00-2.828 0L6.414 10.758a2 2 0 00-.516.878l-.8 2.798a1 1 0 001.226 1.226l2.798-.8a2 2 0 00.878-.516l8.172-8.172a2 2 0 000-2.828l-.758-.758zm-3.535 1.414L15 5.536 13.536 7 12 5.464l1.879-1.879zM11.293 6.172L3.707 13.758l-.353 1.237 1.237-.353 7.586-7.586L11.293 6.172z" />
-                </svg>
-              </button>
-              <div class="relative flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                <span class="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">
-                  <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-                  Active
-                </span>
-              </div>
-                                            <h2 class="relative z-10 mt-6 text-xl font-semibold">
-                                                <a href="${target}" class="relative inline-flex items-center gap-2 rounded-lg text-slate-900 dark:text-white group-hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-night-900">
-                                    ${Collage.escapeHtml(college.name)}
-                                    <svg class="h-4 w-4 text-brand-500 opacity-0 group-hover:opacity-100 transition" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                                        <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                                    </svg>
-                                </a>
-                            </h2>
-              <p class="relative mt-3 text-sm text-slate-600 dark:text-slate-300">Dive into its degrees, departments, batches, subjects, and full syllabus structure.</p>
-                            <div class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300">
-                Explore hierarchy
-                <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                  <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                </svg>
-              </div>
+                        <article class="group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition">
+                          <div class="absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accentColor} opacity-20 blur-3xl"></div>
+                          <button type="button" data-college-edit="${college.id}" aria-label="Edit ${label}"
+                            class="absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition">
+                            <span class="material-symbols-rounded text-base">edit</span>
+                          </button>
+                          <div class="relative flex items-center justify-between text-xs text-neutral-500 dark:text-white/55">
+                            <span class="inline-flex items-center gap-2 rounded-full border border-black/5 dark:border-white/15 bg-white/80 dark:bg-white/10 px-3 py-1 font-medium text-neutral-700 dark:text-white/80">
+                              <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                              Active
+                            </span>
+                            <span class="font-mono text-[11px] text-neutral-500/70 dark:text-white/45">#${idFragment}…</span>
+                          </div>
+                          <h2 class="relative mt-6 text-xl font-semibold text-neutral-900 dark:text-white">
+                            <a href="${target}" class="inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900 group-hover:text-brand-500 transition">
+                              ${label}
+                              <span class="material-symbols-rounded text-base opacity-0 group-hover:opacity-100 transition">north_east</span>
+                            </a>
+                          </h2>
+                          <p class="relative mt-3 text-sm text-neutral-600 dark:text-white/65">
+                            Dive into its degrees, departments, batches, subjects, and syllabus hierarchy.
+                          </p>
+                          <a class="relative mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85" href="${target}">
+                            Manage hierarchy
+                            <span class="material-symbols-rounded text-base transition group-hover:translate-x-1">arrow_forward</span>
+                          </a>
                         </article>`;
                 }).join('');
                 attachCollegeEditHandlers();
