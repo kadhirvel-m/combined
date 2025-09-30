@@ -77,12 +77,28 @@
     document.querySelectorAll('a[href$="login.html"], a[href$="signup.html"]').forEach(a=>a.classList.remove('hidden'));
   }
   function showSessionUI(){
-    [el('navProfile'), el('navProfileMobile')].forEach(n=> n && n.classList.remove('hidden'));
-    [el('signOutBtn'), el('signOutBtnMobile')].forEach(n=> n && n.classList.remove('hidden'));
+    [el('navProfile'), el('navProfileMobile')].forEach(n=> {
+      if(!n) return;
+      n.classList.remove('hidden');
+      if(!n.classList.contains('inline-flex') && !n.classList.contains('flex')){
+        // Use inline-flex for compact alignment unless developer overrides
+        n.classList.add('inline-flex');
+      }
+    });
+    [el('signOutBtn'), el('signOutBtnMobile')].forEach(n=> {
+      if(!n) return;
+      n.classList.remove('hidden');
+      if(!n.classList.contains('inline-flex') && !n.classList.contains('flex')){
+        n.classList.add('inline-flex');
+      }
+    });
   }
   function hideSessionUI(){
-    [el('navProfile'), el('navProfileMobile')].forEach(n=> n && n.classList.add('hidden'));
-    [el('signOutBtn'), el('signOutBtnMobile')].forEach(n=> n && n.classList.add('hidden'));
+    [el('navProfile'), el('navProfileMobile'), el('signOutBtn'), el('signOutBtnMobile')].forEach(n=> {
+      if(!n) return;
+      n.classList.add('hidden');
+      // Do not remove display class so that once authenticated it remains consistent
+    });
   }
 
   function handleSignOut(ev){
