@@ -1187,6 +1187,7 @@ class CollegeCreateIn(BaseModel):
 class College(BaseModel):
     id: uuid.UUID
     name: str
+    logo_url: Optional[str] = None
 
 
 class CollegeNameOnlyIn(BaseModel):
@@ -1271,6 +1272,7 @@ class DegreeSimpleCreateIn(BaseModel):
 class CollegeFullOut(BaseModel):
     id: uuid.UUID
     name: str
+    logo_url: Optional[str] = None
     degrees: List[DegreeOut]
     departments: List[str]
     batches: List[BatchIn]
@@ -1665,7 +1667,7 @@ def get_college_full(college_id: uuid.UUID):
     supabase = get_service_client()
     college = (
         supabase.table("colleges")
-        .select("id,name")
+        .select("id,name,logo_url")
         .eq("id", str(college_id))
         .single()
         .execute()
@@ -1773,6 +1775,7 @@ def get_college_full(college_id: uuid.UUID):
     return {
         "id": uuid.UUID(college.data["id"]),
         "name": college.data["name"],
+        "logo_url": college.data.get("logo_url"),
         "degrees": degrees_out,
         "departments": department_names,
         "batches": flat_batches,
@@ -3465,18 +3468,43 @@ def _storage_get_client(svc_client):
 def _storage_upload_bytes(svc_client, bucket: str, dest: str, content: bytes, content_type: Optional[str] = None) -> str:
     storage = _storage_get_client(svc_client)
     last_err = None
+    result = None
+    attempts = []
+    # Attempt 1: modern signature
     try:
+        attempts.append("upload(dest, bytes, content-type dict)")
         result = storage.from_(bucket).upload(dest, content, {"content-type": content_type or "application/octet-stream"})
-    except TypeError as exc:
-        last_err = exc
-        try:
-            result = storage.from_(bucket).upload(path=dest, file=content)
-        except Exception as exc2:
-            last_err = exc2
-            result = None
     except Exception as exc:
         last_err = exc
         result = None
+    # Attempt 2: keyword args path/file
+    if result is None:
+        try:
+            attempts.append("upload(path=dest, file=bytes)")
+            result = storage.from_(bucket).upload(path=dest, file=content)
+        except Exception as exc:
+            last_err = exc
+            result = None
+    # Attempt 3: wrap bytes in BytesIO
+    if result is None:
+        import io as _io
+        try:
+            attempts.append("upload(path=dest, file=BytesIO)")
+            result = storage.from_(bucket).upload(path=dest, file=_io.BytesIO(content))
+        except Exception as exc:
+            last_err = exc
+            result = None
+    # Attempt 4: raw simple call (legacy)
+    if result is None:
+        try:
+            attempts.append("upload(dest, bytes)")
+            result = storage.from_(bucket).upload(dest, content)
+        except Exception as exc:
+            last_err = exc
+            result = None
+    if result is None:
+        supabase_logger.error("All upload attempts failed", extra={"bucket": bucket, "dest": dest, "attempts": attempts, "error": str(last_err)})
+        raise HTTPException(status_code=500, detail=f"Upload failed: {last_err}")
     if result is None:
         supabase_logger.exception("Upload failed: %s", last_err)
         raise HTTPException(status_code=500, detail=f"Upload failed: {last_err}")
@@ -4633,6 +4661,116 @@ def parse_syllabus_text(payload: ParseSyllabusIn):
     return parse_syllabus(payload)
 
 
+def _asset_debug(msg: str, **extra):  # lightweight conditional debug
+    if os.getenv("ASSET_DEBUG"):
+        try:
+            print(f"[ASSET_DEBUG] {msg} " + (" ".join(f"{k}={v}" for k,v in extra.items())))
+        except Exception:
+            pass
+
+
+def _upload_college_logo(college_id: uuid.UUID, file: UploadFile):
+    supabase = get_service_client()
+    # Resolve primary bucket with fallbacks
+    bucket = (
+        os.getenv("SUPABASE_BUCKET", "").strip()
+        or os.getenv("SUPABASE_ASSETS_BUCKET", "").strip()
+        or os.getenv("SUPABASE_PROJECTS_BUCKET", "").strip()
+    )
+    if not bucket:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_BUCKET (and fallbacks) in environment")
+    filename = file.filename or "logo.png"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}:
+        raise HTTPException(status_code=400, detail="Unsupported logo image type")
+    blob = _read_upload_bytes(file)
+    if not blob:
+        raise HTTPException(status_code=400, detail="Empty upload")
+    # Path pattern: colleges/{college_id}/logo{rand}.ext (keep history by random hash)
+    from uuid import uuid4
+    dest = f"colleges/{college_id}/logo-{uuid4().hex}{ext}"
+    try:
+        supabase_logger.info(
+            "Uploading college logo", extra={
+                "college_id": str(college_id),
+                "bucket": bucket,
+                "dest": dest,
+                "size": len(blob),
+                "content_type": file.content_type,
+            }
+        )
+        _asset_debug("start_logo_upload", college_id=college_id, bucket=bucket, dest=dest, size=len(blob), ct=file.content_type)
+        _storage_upload_bytes(supabase, bucket, dest, blob, file.content_type or "image/png")
+    except HTTPException:
+        _asset_debug("logo_upload_http_exception", college_id=college_id)
+        raise
+    except Exception as exc:
+        supabase_logger.exception("College logo upload unexpected failure")
+        _asset_debug("logo_upload_unexpected_failure", college_id=college_id, error=exc)
+        raise HTTPException(status_code=500, detail=f"Unexpected upload failure: {exc}")
+    public_url = _storage_public_url(supabase, bucket, dest)
+    _asset_debug("logo_public_url", college_id=college_id, url=public_url)
+    upd = supabase.table("colleges").update({"logo_url": public_url}).eq("id", str(college_id)).execute()
+    if getattr(upd, "error", None):
+        _asset_debug("logo_db_update_failed", college_id=college_id, error=upd.error)
+        raise HTTPException(status_code=500, detail=f"Supabase error (update college logo): {upd.error}")
+    _asset_debug("logo_db_update_success", college_id=college_id)
+    return {"college_id": str(college_id), "logo_url": public_url, "path": dest}
+
+
+@academics_router.post("/api/colleges/{college_id}/logo", summary="Upload/replace college logo")
+def upload_college_logo(college_id: uuid.UUID, file: UploadFile = File(...)):
+    # Existence check (fast fail)
+    supabase = get_service_client()
+    _asset_debug("endpoint_invoked", college_id=college_id, filename=file.filename, ct=file.content_type)
+    exists = supabase.table("colleges").select("id").eq("id", str(college_id)).limit(1).execute()
+    if getattr(exists, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find college): {exists.error}")
+    if not exists.data:
+        raise HTTPException(status_code=404, detail="College not found")
+    return _upload_college_logo(college_id, file)
+
+
+@academics_router.get("/api/colleges/{college_id}/logo/debug", summary="Debug: list stored logo objects for a college")
+def debug_list_college_logos(college_id: uuid.UUID):  # pragma: no cover - debug utility
+    supabase = get_service_client()
+    bucket = (
+        os.getenv("SUPABASE_BUCKET", "").strip()
+        or os.getenv("SUPABASE_ASSETS_BUCKET", "").strip()
+        or os.getenv("SUPABASE_PROJECTS_BUCKET", "").strip()
+    )
+    if not bucket:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_BUCKET (and fallbacks) in environment")
+    storage = _storage_get_client(supabase)
+    prefix = f"colleges/{college_id}".rstrip("/")
+    try:
+        # Some SDK versions: list(path=prefix, ...) ; others: from_(bucket).list(path=prefix)
+        try:
+            objs = storage.from_(bucket).list(prefix)
+        except TypeError:
+            objs = storage.from_(bucket).list(path=prefix)
+    except Exception as exc:
+        supabase_logger.exception("List objects failed")
+        raise HTTPException(status_code=500, detail=f"List failed: {exc}")
+    out = []
+    if isinstance(objs, list):
+        for o in objs:
+            if not isinstance(o, dict):
+                continue
+            name = o.get("name") or o.get("Key")
+            if not name:
+                continue
+            full_path = f"{prefix}/{name}" if not name.startswith(prefix) else name
+            out.append({
+                "name": name,
+                "path": full_path,
+                "size": o.get("metadata", {}).get("size") if isinstance(o.get("metadata"), dict) else o.get("size"),
+                "last_modified": o.get("updated_at") or o.get("LastModified") or o.get("last_modified"),
+                "public_url": _storage_public_url(supabase, bucket, full_path),
+            })
+    return {"bucket": bucket, "prefix": prefix, "objects": out}
+
+
 @academics_router.post("/api/colleges", response_model=CollegeFullOut, summary="Create or update a college with departments & batches")
 def create_college(payload: CollegeCreateIn):
     college_id = upsert_college(payload.college_name)
@@ -4655,8 +4793,8 @@ def create_college_simple(payload: CollegeNameOnlyIn):
 @academics_router.get("/api/colleges", response_model=List[College], summary="List all colleges (id & name)")
 def list_colleges():
     supabase = get_service_client()
-    res = supabase.table("colleges").select("id,name").order("name").execute()
-    return [{"id": row["id"], "name": row["name"]} for row in (res.data or [])]
+    res = supabase.table("colleges").select("id,name,logo_url").order("name").execute()
+    return [{"id": row["id"], "name": row["name"], "logo_url": row.get("logo_url")} for row in (res.data or [])]
 
 
 @academics_router.post(

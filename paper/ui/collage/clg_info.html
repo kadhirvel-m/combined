@@ -328,7 +328,8 @@
     </main>
 
     <!-- Modal -->
-    <div id="collegeModal" class="fixed inset-0 z-50 hidden items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+    <div id="collegeModal"
+        class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div id="collegeModalBackdrop" class="absolute inset-0 bg-brand-900/70 dark:bg-black/70 backdrop-blur-sm"></div>
         <div
             class="relative w-full max-w-xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)]">
@@ -346,12 +347,32 @@
                 </button>
             </div>
             <form id="collegeForm" class="space-y-5 px-6 py-6">
-                <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">
-                    College name
-                    <input id="collegeName" name="name" type="text" required
-                        class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
-                        placeholder="e.g. Mannakul Vinayagar Institute of Technology" />
-                </label>
+                <div class="grid gap-6 md:grid-cols-3 items-start">
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-white/85 md:col-span-2">
+                        College name
+                        <input id="collegeName" name="name" type="text" required
+                            class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                            placeholder="e.g. Mannakul Vinayagar Institute of Technology" />
+                    </label>
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Logo
+                            <input id="collegeLogo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                class="mt-2 block w-full text-xs file:mr-3 file:rounded-full file:border-0 file:bg-brand-500 file:px-3 file:py-1.5 file:text-white file:text-xs hover:file:bg-brand-700 cursor-pointer" />
+                        </label>
+                        <img id="collegeLogoPreview"
+                            class="hidden w-20 h-20 rounded-xl object-cover ring-1 ring-black/10 dark:ring-white/15 bg-white/40 dark:bg-white/10"
+                            alt="Logo preview" />
+                        <p class="text-[10px] text-neutral-500 dark:text-white/40">PNG/JPG/WEBP/SVG • Optional</p>
+                        <button type="button" id="changeLogoBtn"
+                            class="hidden text-xs text-brand-500 hover:text-brand-700 dark:text-white/70 underline">Change
+                            logo</button>
+                        <button type="button" id="uploadLogoNowBtn"
+                            class="hidden mt-1 inline-flex items-center gap-1 rounded-full bg-brand-500 text-white px-3 py-1.5 text-[11px] font-medium shadow hover:bg-brand-700 transition">
+                            <span class="material-symbols-rounded text-[16px]">cloud_upload</span>
+                            Upload logo
+                        </button>
+                    </div>
+                </div>
                 <p id="collegeModalMessage" class="hidden text-sm text-red-500"></p>
                 <div class="flex items-center justify-end gap-3">
                     <button id="collegeModalCancel" type="button"
@@ -483,6 +504,8 @@
         let modalMode = 'add';
         let editingCollegeId = null;
 
+        const apiBase = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
+
         const updateMetrics = (count, state = 'Live') => {
             if (typeof count === 'number' && collegeMetric) {
                 collegeMetric.textContent = String(count);
@@ -540,12 +563,29 @@
             resetModal();
         }
 
+        const collegeLogoInput = document.getElementById('collegeLogo');
+        const collegeLogoPreview = document.getElementById('collegeLogoPreview');
+        const changeLogoBtn = document.getElementById('changeLogoBtn');
+        const uploadLogoNowBtn = document.getElementById('uploadLogoNowBtn');
+        let pendingLogoFile = null;
+        window.__logoUploadedExplicitly = false;
+
         function openCollegeModal(mode, college) {
             modalMode = mode;
             resetModal();
             if (mode === 'edit' && college) {
                 editingCollegeId = college.id;
                 collegeNameInput.value = college.name || '';
+                if (college.logo_url) {
+                    collegeLogoPreview.src = college.logo_url;
+                    collegeLogoPreview.classList.remove('hidden');
+                    changeLogoBtn?.classList.remove('hidden');
+                    uploadLogoNowBtn?.classList.add('hidden');
+                } else {
+                    collegeLogoPreview.classList.add('hidden');
+                    changeLogoBtn?.classList.add('hidden');
+                    uploadLogoNowBtn?.classList.add('hidden');
+                }
             }
             collegeModalTitle.textContent = mode === 'edit' ? 'Edit college' : 'Add a new college';
             collegeSubmitBtn.innerHTML = mode === 'edit'
@@ -561,6 +601,60 @@
             }, 80);
         }
 
+        if (collegeLogoInput) {
+            collegeLogoInput.addEventListener('change', (ev) => {
+                const file = ev.target.files && ev.target.files[0];
+                pendingLogoFile = file || null;
+                window.__logoUploadedExplicitly = false;
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        collegeLogoPreview.src = reader.result;
+                        collegeLogoPreview.classList.remove('hidden');
+                    };
+                    reader.readAsDataURL(file);
+                    if (modalMode === 'edit') {
+                        uploadLogoNowBtn?.classList.remove('hidden');
+                    }
+                } else {
+                    collegeLogoPreview.classList.add('hidden');
+                    uploadLogoNowBtn?.classList.add('hidden');
+                }
+            });
+        }
+
+        if (uploadLogoNowBtn) {
+            uploadLogoNowBtn.addEventListener('click', async () => {
+                if (!(editingCollegeId && pendingLogoFile)) {
+                    console.debug('[CollegeModal] Upload button clicked but no editingCollegeId or pending file');
+                    return;
+                }
+                const fd = new FormData();
+                fd.append('file', pendingLogoFile);
+                uploadLogoNowBtn.disabled = true;
+                uploadLogoNowBtn.textContent = 'Uploading...';
+                try {
+                    console.debug('[CollegeModal] Explicit logo upload start');
+                    const up = await fetch(`${apiBase}/api/colleges/${editingCollegeId}/logo`, { method: 'POST', body: fd });
+                    if (!up.ok) {
+                        let msg = 'Upload failed';
+                        try { const jd = await up.json(); msg = jd.detail || jd.error || msg; } catch (e) { }
+                        alert(msg);
+                        console.warn('[CollegeModal] Explicit upload failed', msg);
+                        +                        console.debug('[CollegeModal] Response status', up.status);
+                    } else {
+                        window.__logoUploadedExplicitly = true;
+                        uploadLogoNowBtn.textContent = 'Uploaded';
+                        console.debug('[CollegeModal] Explicit logo upload success');
+                    }
+                } catch (e) {
+                    console.error('[CollegeModal] Explicit upload error', e);
+                } finally {
+                    setTimeout(() => { uploadLogoNowBtn.disabled = false; }, 1500);
+                }
+            });
+        }
+
         function attachCollegeEditHandlers() {
             const editButtons = results.querySelectorAll('[data-college-edit]');
             editButtons.forEach(button => {
@@ -571,6 +665,18 @@
                     const college = collegesCache.find(item => item.id === id);
                     if (college) {
                         openCollegeModal('edit', college);
+                    }
+                });
+            });
+            // Make entire card (except edit button) clickable
+            const cards = results.querySelectorAll('article.group');
+            cards.forEach(card => {
+                card.addEventListener('click', (e) => {
+                    // Ignore clicks on edit button
+                    if (e.target.closest('[data-college-edit]')) return;
+                    const link = card.querySelector('[data-college-link]');
+                    if (link) {
+                        window.location.href = link.getAttribute('href');
                     }
                 });
             });
@@ -588,18 +694,29 @@
             collegeModalMessage.classList.add('hidden');
             setModalLoading(true);
             try {
+                let createdId = null;
                 if (modalMode === 'edit' && editingCollegeId) {
-                    await Collage.fetchJson(`/api/colleges/${editingCollegeId}`, {
-                        method: 'PUT',
-                        body: { name },
-                        skipAuth: true
-                    });
+                    await Collage.fetchJson(`/api/colleges/${editingCollegeId}`, { method: 'PUT', body: { name }, skipAuth: true });
+                    createdId = editingCollegeId;
                 } else {
-                    await Collage.fetchJson('/api/colleges/simple', {
-                        method: 'POST',
-                        body: { name },
-                        skipAuth: true
-                    });
+                    const created = await Collage.fetchJson('/api/colleges/simple', { method: 'POST', body: { name }, skipAuth: true });
+                    createdId = created?.id;
+                }
+                // If user hasn't already uploaded the logo explicitly via the new button, do a final attempt
+                if (createdId && pendingLogoFile && !window.__logoUploadedExplicitly) {
+                    console.debug('[CollegeModal] Auto-uploading pending logo during save');
+                    const fd = new FormData();
+                    fd.append('file', pendingLogoFile);
+                    try {
+                        const up = await fetch(`${apiBase}/api/colleges/${createdId}/logo`, { method: 'POST', body: fd });
+                        if (!up.ok) {
+                            let msg = 'Logo upload failed';
+                            try { const jd = await up.json(); msg = jd.detail || msg; } catch (e) { }
+                            console.warn(msg);
+                        } else {
+                            window.__logoUploadedExplicitly = true;
+                        }
+                    } catch (e) { console.error(e); }
                 }
                 closeCollegeModal();
                 await loadColleges();
@@ -644,35 +761,36 @@
                     const accentColor = accentPalette[index % accentPalette.length];
                     const target = `degrees.html?collegeId=${encodeURIComponent(college.id)}&collegeName=${encodeURIComponent((college && college.name) || '')}`;
                     const label = Collage.escapeHtml(college.name);
-                    const idFragment = Collage.escapeHtml(String(college.id || '').slice(0, 8));
+                    // Large logo (fallback if none)
+                    const logoTag = college.logo_url
+                        ? `<img src="${college.logo_url}" alt="${label} logo" class=\"h-20 w-20 rounded-2xl object-cover ring-2 ring-white/60 dark:ring-white/10 shadow-md\" />`
+                        : `<div class=\"h-20 w-20 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white grid place-items-center text-[11px] font-semibold ring-2 ring-white/40 dark:ring-white/10 shadow-md\">LOGO</div>`;
                     return `
-                        <article class="group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition">
-                          <div class="absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accentColor} opacity-20 blur-3xl"></div>
-                          <button type="button" data-college-edit="${college.id}" aria-label="Edit ${label}"
-                            class="absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition">
-                            <span class="material-symbols-rounded text-base">edit</span>
-                          </button>
-                          <div class="relative flex items-center justify-between text-xs text-neutral-500 dark:text-white/55">
-                            <span class="inline-flex items-center gap-2 rounded-full border border-black/5 dark:border-white/15 bg-white/80 dark:bg-white/10 px-3 py-1 font-medium text-neutral-700 dark:text-white/80">
-                              <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-                              Active
-                            </span>
-                            <span class="font-mono text-[11px] text-neutral-500/70 dark:text-white/45">#${idFragment}…</span>
-                          </div>
-                          <h2 class="relative mt-6 text-xl font-semibold text-neutral-900 dark:text-white">
-                            <a href="${target}" class="inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900 group-hover:text-brand-500 transition">
-                              ${label}
-                              <span class="material-symbols-rounded text-base opacity-0 group-hover:opacity-100 transition">north_east</span>
-                            </a>
-                          </h2>
-                          <p class="relative mt-3 text-sm text-neutral-600 dark:text-white/65">
-                            Dive into its degrees, departments, batches, subjects, and syllabus hierarchy.
-                          </p>
-                          <a class="relative mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85" href="${target}">
-                            Manage hierarchy
-                            <span class="material-symbols-rounded text-base transition group-hover:translate-x-1">arrow_forward</span>
-                          </a>
-                        </article>`;
+                                                <article class="group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition">
+                                                    <div class="absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accentColor} opacity-25 blur-3xl"></div>
+                                                    <!-- Edit button top-right -->
+                                                    <button type="button" data-college-edit="${college.id}" aria-label="Edit ${label}"
+                                                        class="absolute top-5 right-5 z-30 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/95 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition shadow-sm">
+                                                        <span class="material-symbols-rounded text-base">edit</span>
+                                                    </button>
+                                                    <!-- Logo centered vertically on right -->
+                                                    <div class="absolute top-1/2 -translate-y-1/2 right-4 z-20 pointer-events-none">${logoTag}</div>
+                                                    <div class="pr-16 pt-1"> <!-- further reduced gap -->
+                                                        <h2 class="text-lg font-semibold text-neutral-900 dark:text-white leading-snug">
+                                                            <a href="${target}" data-college-link class="inline-flex items-start gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900 group-hover:text-brand-500 transition cursor-pointer relative z-10">
+                                                                <span class="whitespace-normal break-words">${label}</span>
+                                                                <span class="material-symbols-rounded text-[17px] opacity-0 group-hover:opacity-100 transition flex-shrink-0 mt-[2px]">north_east</span>
+                                                            </a>
+                                                        </h2>
+                                                        <p class="mt-4 text-sm text-neutral-600 dark:text-white/65">
+                                                            Dive into its degrees, departments, batches, subjects, and syllabus hierarchy.
+                                                        </p>
+                                                        <a class="mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85" href="${target}">
+                                                            Manage hierarchy
+                                                            <span class="material-symbols-rounded text-base transition group-hover:translate-x-1">arrow_forward</span>
+                                                        </a>
+                                                    </div>
+                                                </article>`;
                 }).join('');
                 attachCollegeEditHandlers();
             } catch (err) {

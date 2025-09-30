@@ -258,7 +258,10 @@
                             </a>
                         </div>
                         <div class="space-y-3">
-                            <h1 id="pageTitle" class="text-2xl md:text-4xl font-bold gradient-hero-text">Degrees</h1>
+                            <!-- Title now becomes flex container so we can inject logo beside college name dynamically -->
+                            <h1 id="pageTitle"
+                                class="text-2xl md:text-4xl font-bold gradient-hero-text flex flex-wrap items-center gap-3">
+                                Degrees</h1>
                             <p id="pageSubtitle" class="hidden"></p>
                         </div>
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -697,9 +700,17 @@
                 currentCollegeLabel = collegeLabel;
                 const degrees = Array.isArray(data?.degrees) ? data.degrees : [];
 
-                titleEl.textContent = degrees.length
-                    ? `Degrees at ${collegeLabel}`
-                    : `Configure degrees for ${collegeLabel}`;
+                const prefix = degrees.length ? 'Degrees at' : 'Configure degrees for';
+                const safeLabel = Collage.escapeHtml(collegeLabel);
+                const logoBlock = data?.logo_url
+                    ? `<img src="${data.logo_url}" alt="${safeLabel} logo" class=\"h-20 w-20 rounded-2xl object-cover ring-2 ring-white/60 dark:ring-white/10 shadow-md flex-shrink-0\" />`
+                    : `<div class=\"h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white grid place-items-center text-xs font-semibold ring-2 ring-white/40 dark:ring-white/10 shadow-md flex-shrink-0\">${safeLabel.slice(0, 2).toUpperCase()}</div>`;
+                titleEl.innerHTML = `
+                    <span class="opacity-80">${prefix}</span>
+                    <span class="inline-flex items-center gap-3 ml-1">
+                        ${logoBlock}
+                        <span class="whitespace-normal break-words leading-tight">${safeLabel}</span>
+                    </span>`;
                 // Subtitle intentionally suppressed per requirement (removed availability line)
                 subtitleEl.textContent = '';
                 breadcrumbsEl.innerHTML = makeBreadcrumb([
