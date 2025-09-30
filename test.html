@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pa[p]er X — Agentic AI Learning for Indian College Syllabus</title>
+    <meta name="description"
+        content="Pa[p]er X is an agentic AI learning platform built for Indian college syllabi. Syllabus → Unit → Topic parser, structured notes with citations, diagrams, flashcards, analytics, faculty portal, and responsible AI." />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <!-- Material Symbols for nav icons used in Project Portal dropdown -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <script>
+        // Tailwind on-the-fly config
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff', 100: '#e0efff', 200: '#b9dbff', 300: '#8ac4ff', 400: '#59a9ff', 500: '#2b8cff', 600: '#116fe6', 700: '#0a57b4', 800: '#0b4890', 900: '#0d3a73'
+                        },
+                        night: {
+                            900: '#0a0c10', 800: '#0f131a', 700: '#141a22', 600: '#1a2230'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 0 0 1px rgba(59,130,246,.2), 0 8px 40px rgba(59,130,246,.15)',
+                        neon: '0 0 25px rgba(43,140,255,.35), 0 0 60px rgba(43,140,255,.25)'
+                    },
+                    backgroundImage: {
+                        'grid-radial': 'radial-gradient(circle at 20% 10%, rgba(43,140,255,.25), transparent 35%), radial-gradient(circle at 80% 20%, rgba(168,85,247,.2), transparent 35%), radial-gradient(circle at 50% 80%, rgba(16,185,129,.2), transparent 35%)',
+                        'glass': 'linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.04))'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .icon {
+            font-family: 'Material Symbols Outlined';
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24
+        }
+
+        .glass {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .glass-dark {
+            background: rgba(20, 24, 32, 0.55);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        /* Disable all animations/transitions for performance */
+        .no-anim *,
+        .no-anim *::before,
+        .no-anim *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+    </style>
+</head>
+
+<body
+    class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200 selection:bg-brand-200 selection:text-slate-900 no-anim">
+    <!-- Background decorations -->
+    <div aria-hidden="true" class="fixed inset-0 -z-10 bg-grid-radial opacity-70 dark:opacity-50"></div>
+    <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
+        <svg class="absolute top-[-20%] right-[-10%] opacity-30 blur-3xl" width="600" height="600" viewBox="0 0 600 600"
+            fill="none">
+            <circle cx="300" cy="300" r="300" fill="url(#g1)" />
+            <defs>
+                <radialGradient id="g1">
+                    <stop offset="0%" stop-color="#8b5cf6" />
+                    <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0" />
+                </radialGradient>
+            </defs>
+        </svg>
+    </div>
+
+    <!-- Top Nav -->
+    <header
+        class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-night-900/50 border-b border-black/5 dark:border-white/5">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="flex h-16 items-center justify-between">
+                <a href="#top" class="flex items-center gap-3 group">
+                    <div
+                        class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
+                        PX</div>
+                    <div>
+                        <p class="text-lg font-semibold leading-tight group-hover:text-brand-600">Pa[p]er X</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 -mt-1">Agentic AI for Indian syllabi</p>
+                    </div>
+                </a>
+                <nav class="hidden md:flex items-center gap-6 text-sm">
+                    <a href="#features" class="hover:text-brand-600">Features</a>
+                    <a href="#how" class="hover:text-brand-600">How it works</a>
+                    <a href="#pricing" class="hover:text-brand-600">Pricing</a>
+                    <a href="#faq" class="hover:text-brand-600">FAQ</a>
+                    <!-- Project Portal dropdown (mirrors postings.html) -->
+                    <div class="relative" id="navProjectsWrap">
+                        <button type="button" id="navProjectsBtn"
+                            class="inline-flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition">
+                            <span class="icon text-base leading-none">hub</span>
+                            <span>Project Portal</span>
+                            <span class="icon text-base leading-none">expand_more</span>
+                        </button>
+                        <div id="navProjectsMenu"
+                            class="absolute right-0 mt-2 w-60 rounded-xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-night-800/95 shadow-lg backdrop-blur hidden">
+                            <a href="postings.html"
+                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 rounded-t-xl"><span
+                                    class="icon text-base leading-none">folder_open</span>Project Postings</a>
+                            <a href="project_post.html"
+                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
+                                    class="icon text-base leading-none">add_circle</span>Create Project</a>
+                            <a href="incoming_requests.html"
+                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
+                                    class="icon text-base leading-none">inbox</span>Incoming Requests</a>
+                            <a href="my_applications.html"
+                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
+                                    class="icon text-base leading-none">assignment_ind</span>My Applications</a>
+                            <a href="skill-test.html"
+                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 rounded-b-xl"><span
+                                    class="icon text-base leading-none">verified</span>Skill Test Portal</a>
+                        </div>
+                    </div>
+                    <a href="staff_profile.html"
+                        class="inline-flex items-center gap-1 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 hover:shadow-glow transition">Faculty
+                        Portal</a>
+                </nav>
+                <div class="flex items-center gap-3">
+                    <button id="themeToggle"
+                        class="rounded-lg border border-slate-200/60 dark:border-white/10 p-2 hover:border-brand-400/60"
+                        title="Toggle theme" aria-label="Toggle dark mode">
+                        <svg id="sun" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden dark:block"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path
+                                d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364-6.364-1.414 1.414M7.05 16.95l-1.414 1.414m12.728 0-1.414-1.414M7.05 7.05 5.636 5.636" />
+                            <circle cx="12" cy="12" r="4" />
+                        </svg>
+                        <svg id="moon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 dark:hidden"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z" />
+                        </svg>
+                    </button>
+                    <a id="navProfile" href="profile.html" title="Profile"
+                        class="hidden items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/60">
+                        <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+                        <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
+                    </a>
+                    <button id="navSignOut" title="Sign out" aria-label="Sign out"
+                        class="hidden inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 12H3" />
+                            <path d="M15 12l-4-4" />
+                            <path d="M15 12l-4 4" />
+                            <path d="M21 7v10a2 2 0 0 1-2 2h-6" />
+                        </svg>
+                        <span class="text-sm">Sign Out</span>
+                    </button>
+                    <a href="signup.html"
+                        class="hidden sm:inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 hover:border-brand-400/60 transition">Sign
+                        up</a>
+                    <a href="login.html"
+                        class="hidden sm:inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-white shadow-neon hover:opacity-95 transition">Sign
+                        in</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- HERO -->
+    <section id="top" class="relative overflow-hidden">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-16 pb-20 sm:pt-12 sm:pb-14">
+            <div class="grid lg:grid-cols-12 gap-10 items-center">
+                <div class="lg:col-span-6">
+                    <div
+                        class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/60 dark:bg-night-800/60 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 backdrop-blur">
+                        <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                        Live • Agent Orchestration v0.7
+                    </div>
+                    <h1 class="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.05]">
+                        The <span
+                            class="bg-gradient-to-r from-brand-500 via-indigo-500 to-fuchsia-500 bg-clip-text text-transparent">futuristic
+                            learning OS</span><br /> for Indian college syllabi
+                    </h1>
+                    <p class="mt-5 text-lg text-slate-600 dark:text-slate-300 max-w-xl">Paste a syllabus or pick your
+                        college/branch/semester. Pa[p]er X parses <em>Subject → Unit → Topic</em>, fetches trusted
+                        sources, and
+                        crafts structured notes with diagrams, tables, flashcards, and citations—backed by responsible
+                        AI.</p>
+                    <div class="mt-7 flex flex-wrap gap-3">
+                        <a href="#demo"
+                            class="inline-flex items-center gap-2 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-night-900 px-5 py-3 shadow-glow">
+                            Launch Demo
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3Z" />
+                            </svg>
+                        </a>
+                        <a href="#features"
+                            class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-5 py-3 hover:border-brand-400/60">Explore
+                            Features</a>
+                    </div>
+                    <div class="mt-6 flex items-center gap-6 text-xs text-slate-500 dark:text-slate-400">
+                        <div class="flex items-center gap-2"><svg class="h-4 w-4" viewBox="0 0 24 24"
+                                fill="currentColor">
+                                <path d="M12 2 1 21h22L12 2Zm0 4.84L19.53 19H4.47L12 6.84Z" />
+                            </svg> Transparent citations</div>
+                        <div class="flex items-center gap-2"><svg class="h-4 w-4" viewBox="0 0 24 24"
+                                fill="currentColor">
+                                <path d="M4 12h16v2H4v-2Zm0-4h16v2H4V8Zm0 8h10v2H4v-2Z" />
+                            </svg> Structured notes</div>
+                        <div class="flex items-center gap-2"><svg class="h-4 w-4" viewBox="0 0 24 24"
+                                fill="currentColor">
+                                <path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7V3Z" />
+                            </svg> Offline-first</div>
+                    </div>
+                </div>
+                <div class="lg:col-span-6">
+                    <!-- Futuristic product mockup card -->
+                    <div class="relative rounded-2xl glass glass-dark p-4 md:p-6 shadow-neon border border-white/10">
+                        <div
+                            class="absolute -inset-0.5 -z-10 rounded-2xl bg-gradient-to-r from-brand-500/30 via-fuchsia-500/20 to-emerald-500/20 blur-2xl">
+                        </div>
+                        <div class="rounded-xl bg-black/60 text-slate-100 p-4 md:p-6 border border-white/10">
+                            <div class="flex items-center justify-between text-xs text-slate-400">
+                                <span>Note Composer (AI)</span>
+                                <span class="rounded-md border border-white/10 px-2 py-0.5">Unit 3 • DBMS</span>
+                            </div>
+                            <div class="mt-3 grid gap-3">
+                                <div class="rounded-lg bg-white/5 border border-white/10 p-3">
+                                    <p class="text-xs uppercase tracking-wide text-slate-400">Prompt</p>
+                                    <p class="mt-1 text-sm">Generate structured notes for <strong>Normalization</strong>
+                                        with definitions,
+                                        examples, diagrams, pros/cons, TL;DR. Cite GeeksforGeeks and textbook.</p>
+                                </div>
+                                <div class="rounded-lg bg-white/5 border border-white/10 p-3">
+                                    <p class="text-xs uppercase tracking-wide text-slate-400">Preview • 12 sources
+                                        checked</p>
+                                    <div class="mt-2 grid gap-2 text-sm">
+                                        <div class="flex items-center gap-2"><span
+                                                class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                                            <span>Intro & Definitions</span>
+                                        </div>
+                                        <div class="flex items-center gap-2"><span
+                                                class="h-2 w-2 rounded-full bg-blue-400"></span>
+                                            <span>Examples & Diagrams</span>
+                                        </div>
+                                        <div class="flex items-center gap-2"><span
+                                                class="h-2 w-2 rounded-full bg-fuchsia-400"></span>
+                                            <span>Applications & TL;DR</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div
+                                    class="rounded-lg bg-gradient-to-r from-brand-500/10 to-fuchsia-500/10 border border-white/10 p-3">
+                                    <p class="text-xs uppercase tracking-wide text-slate-300">Citation Snippets</p>
+                                    <div class="mt-2 text-xs text-slate-300/90">[1] gfg/normalization • [2] Korth DBMS
+                                        Ch. 15 • [3]
+                                        tpointtech • [4] wiki</div>
+                                </div>
+                                <div class="flex justify-end gap-2 mt-2">
+                                    <button
+                                        class="rounded-lg border border-white/10 px-3 py-1.5 text-sm hover:border-emerald-400/50">Refine</button>
+                                    <button
+                                        class="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm text-black hover:opacity-90">Save</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="mt-3 text-center text-xs text-slate-500">Mock UI for illustration</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scrolling marquee -->
+        <div class="relative overflow-hidden border-y border-black/5 dark:border-white/5">
+            <div class="whitespace-nowrap">
+                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
+                        class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> GeeksforGeeks</span>
+                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
+                        class="h-1.5 w-1.5 rounded-full bg-blue-400"></span> Tutorialspoint</span>
+                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
+                        class="h-1.5 w-1.5 rounded-full bg-fuchsia-400"></span> Wikipedia</span>
+                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
+                        class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span> Scaler</span>
+                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
+                        class="h-1.5 w-1.5 rounded-full bg-amber-400"></span> TPointTech</span>
+                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
+                        class="h-1.5 w-1.5 rounded-full bg-teal-400"></span> Textbooks</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="py-20">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-2xl mx-auto">
+                <h2 class="text-3xl sm:text-4xl font-bold">Everything students need. Everything faculty trusts.</h2>
+                <p class="mt-3 text-slate-600 dark:text-slate-300">Multi‑agent retrieval, structured outputs, and a
+                    syllabus‑aware pipeline to reduce hallucinations.</p>
+            </div>
+            <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <!-- Card -->
+                <div
+                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
+                    <div
+                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-brand-400 to-indigo-500 text-white grid place-items-center shadow-neon">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M4 6h16v2H4V6Zm0 5h10v2H4v-2Zm0 5h16v2H4v-2Z" />
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold">Syllabus Parser</h3>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Subject → Unit → Topic mapping with
+                        college/branch/semester presets and CSV/PDF import.</p>
+                </div>
+                <div
+                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
+                    <div
+                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 text-white grid place-items-center shadow-neon">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 3l9 4.5v9L12 21 3 16.5v-9L12 3Z" />
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold">Structured Notes</h3>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Intro, definitions, examples,
+                        applications,
+                        pros/cons, TL;DR—always with citations.</p>
+                </div>
+                <div
+                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
+                    <div
+                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-fuchsia-400 to-pink-500 text-white grid place-items-center shadow-neon">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M7 4h10v2H7V4ZM5 8h14v2H5V8Zm2 4h10v2H7v-2Zm-2 4h14v2H5v-2Z" />
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold">Images, Tables & Diagrams</h3>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Auto‑generate and embed visuals; export
+                        to PDF/PNG
+                        with captions and alt‑text.</p>
+                </div>
+                <div
+                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
+                    <div
+                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 text-white grid place-items-center shadow-neon">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17 4H7v2h10V4ZM5 8h14v2H5V8Zm2 4h10v2H7v-2Zm-2 4h14v2H5v-2Z" />
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold">Flashcards & Spaced Repetition</h3>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Auto‑convert notes into decks with
+                        Leitner
+                        scheduling and study streaks.</p>
+                </div>
+                <div
+                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
+                    <div
+                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-400 to-indigo-500 text-white grid place-items-center shadow-neon">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z" />
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold">Community Notes & Faculty Review</h3>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Peer notes with upvotes, rubric grading,
+                        and
+                        faculty verification badges.</p>
+                </div>
+                <div
+                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
+                    <div
+                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-400 to-sky-500 text-white grid place-items-center shadow-neon">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M4 7h16v2H4V7Zm0 4h10v2H4v-2Zm0 4h16v2H4v-2Z" />
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold">Responsible AI</h3>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Transparent citations, source
+                        cross‑checks, safety
+                        filters, and human‑in‑loop.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TABS: Personas -->
+    <section class="py-20 bg-gradient-to-b from-slate-50 to-white dark:from-night-800/60 dark:to-night-900">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="grid lg:grid-cols-12 gap-10 items-start">
+                <div class="lg:col-span-5">
+                    <h2 class="text-3xl font-bold">Built for students, faculty, and campuses</h2>
+                    <p class="mt-3 text-slate-600 dark:text-slate-300">Switch views to see what each persona gets out of
+                        Pa[p]er
+                        X.</p>
+                    <div
+                        class="mt-6 inline-flex rounded-xl border border-slate-200/60 dark:border-white/10 p-1 bg-white/60 dark:bg-night-800/60">
+                        <button data-tab="student"
+                            class="tab-btn rounded-lg px-3 py-1.5 text-sm bg-brand-500 text-white">Student</button>
+                        <button data-tab="faculty" class="tab-btn rounded-lg px-3 py-1.5 text-sm">Faculty</button>
+                        <button data-tab="institution"
+                            class="tab-btn rounded-lg px-3 py-1.5 text-sm">Institution</button>
+                    </div>
+                </div>
+                <div class="lg:col-span-7">
+                    <div class="rounded-2xl glass glass-dark p-6 border border-white/10">
+                        <div id="tab-student" class="tab-panel grid gap-4">
+                            <h3 class="text-xl font-semibold">Student Dashboard</h3>
+                            <ul class="grid sm:grid-cols-2 gap-3 text-sm">
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Smart syllabus import</li>
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Notes with diagrams & TL;DR
+                                </li>
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Flashcards & spaced
+                                    repetition</li>
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Offline sync & PDF export
+                                </li>
+                            </ul>
+                        </div>
+                        <div id="tab-faculty" class="tab-panel hidden grid gap-4">
+                            <h3 class="text-xl font-semibold">Faculty Console</h3>
+                            <ul class="grid sm:grid-cols-2 gap-3 text-sm">
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Syllabus approvals &
+                                    versioning</li>
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Rubric‑based evaluation
+                                </li>
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Plagiarism & safety checks
+                                </li>
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">LMS / Google Drive / Notion
+                                    integrations
+                                </li>
+                            </ul>
+                        </div>
+                        <div id="tab-institution" class="tab-panel hidden grid gap-4">
+                            <h3 class="text-xl font-semibold">Institution Analytics</h3>
+                            <ul class="grid sm:grid-cols-2 gap-3 text-sm">
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Cohort progress & gaps</li>
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Outcome metrics & heatmaps
+                                </li>
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Usage & engagement reports
+                                </li>
+                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Campus licensing controls
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how" class="py-20">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <h2 class="text-3xl sm:text-4xl font-bold text-center">From syllabus to mastery in 4 steps</h2>
+            <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <div
+                    class="rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60">
+                    <div class="text-sm text-slate-500">Step 1</div>
+                    <h3 class="font-semibold mt-1">Ingest</h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Upload syllabus/PDF or search college →
+                        branch →
+                        semester. Parse Subject → Unit → Topic.</p>
+                </div>
+                <div
+                    class="rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60">
+                    <div class="text-sm text-slate-500">Step 2</div>
+                    <h3 class="font-semibold mt-1">Retrieve</h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Multi‑agent retrieval with
+                        domain‑whitelists,
+                        reranking, and cross‑checks.</p>
+                </div>
+                <div
+                    class="rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60">
+                    <div class="text-sm text-slate-500">Step 3</div>
+                    <h3 class="font-semibold mt-1">Compose</h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Structured notes with diagrams, tables,
+                        examples,
+                        applications, pros/cons, TL;DR.</p>
+                </div>
+                <div
+                    class="rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60">
+                    <div class="text-sm text-slate-500">Step 4</div>
+                    <h3 class="font-semibold mt-1">Revise</h3>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Flashcards, practice questions,
+                        analytics, and
+                        faculty‑verified notes.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- DEMO CALL TO ACTION -->
+    <section id="demo" class="py-20 bg-gradient-to-br from-brand-500/10 via-indigo-500/10 to-fuchsia-500/10">
+        <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div
+                class="rounded-3xl p-8 md:p-12 border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 shadow-glow">
+                <div class="grid md:grid-cols-2 gap-8 items-center">
+                    <div>
+                        <h3 class="text-2xl font-bold">Experience Pa[p]er X</h3>
+                        <p class="mt-2 text-slate-600 dark:text-slate-300">Try a guided flow: pick a subject, watch the
+                            pipeline
+                            fetch sources, produce notes, and export flashcards.</p>
+                        <div class="mt-5 flex gap-3">
+                            <a href="#"
+                                class="rounded-xl bg-slate-900 text-white dark:bg-white dark:text-night-900 px-5 py-3 shadow-glow">Start
+                                Guided Demo</a>
+                            <a href="#"
+                                class="rounded-xl border border-slate-200/60 dark:border-white/10 px-5 py-3">View API
+                                Docs</a>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="rounded-2xl bg-black/70 text-slate-100 p-5 border border-white/10">
+                            <div class="text-xs text-slate-400">Console • agent logs</div>
+                            <pre class="mt-2 text-xs overflow-auto leading-relaxed"><code>$ ingest syllabus.pdf
+✔ parsed 5 subjects, 25 units, 142 topics
+$ retrieve --trusted "gfg,tpoint,wiki,textbook"
+✔ 48 sources found • 16 selected • 6 cross‑checks passed
+$ compose --unit 3 --topic normalization --visuals
+✔ structured notes + 2 diagrams + 10 flashcards
+$ export --format pdf,apkg
+✔ saved to /downloads/DBMS_U3_Normalization.pdf
+</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ANALYTICS PREVIEW -->
+    <section class="py-20">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="grid lg:grid-cols-12 gap-10 items-center">
+                <div class="lg:col-span-6 order-2 lg:order-1">
+                    <div class="rounded-2xl glass glass-dark p-6 border border-white/10">
+                        <div class="grid sm:grid-cols-2 gap-4">
+                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                                <div class="text-xs text-slate-400">Study Streak</div>
+                                <div class="text-3xl font-bold mt-2">14 days</div>
+                            </div>
+                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                                <div class="text-xs text-slate-400">Flashcards Reviewed</div>
+                                <div class="text-3xl font-bold mt-2">1,240</div>
+                            </div>
+                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                                <div class="text-xs text-slate-400">Topics Mastered</div>
+                                <div class="text-3xl font-bold mt-2">86%</div>
+                            </div>
+                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                                <div class="text-xs text-slate-400">Confidence Gain</div>
+                                <div class="text-3xl font-bold mt-2">+23%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lg:col-span-6 order-1 lg:order-2">
+                    <h2 class="text-3xl font-bold">Analytics that motivate and guide</h2>
+                    <p class="mt-3 text-slate-600 dark:text-slate-300">Personalized dashboards show strengths, gaps, and
+                        suggested
+                        next steps—built for adaptive learning at scale.</p>
+                    <ul class="mt-5 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                        <li class="flex items-start gap-2"><span
+                                class="mt-1 h-2 w-2 rounded-full bg-emerald-400"></span> Heatmaps
+                            by unit/topic with mastery thresholds</li>
+                        <li class="flex items-start gap-2"><span class="mt-1 h-2 w-2 rounded-full bg-brand-400"></span>
+                            Flashcard
+                            decay curves & spaced repetition timing</li>
+                        <li class="flex items-start gap-2"><span
+                                class="mt-1 h-2 w-2 rounded-full bg-fuchsia-400"></span> Cohort
+                            comparisons for campuses and faculty</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PRICING -->
+    <section id="pricing"
+        class="py-20 bg-gradient-to-b from-slate-50 to-white dark:from-night-800/60 dark:to-night-900">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-2xl mx-auto">
+                <h2 class="text-3xl sm:text-4xl font-bold">Simple, student‑friendly pricing</h2>
+                <p class="mt-3 text-slate-600 dark:text-slate-300">Start free. Upgrade when you need advanced exports,
+                    longer
+                    context, and campus features.</p>
+            </div>
+            <div class="mt-10 grid gap-6 md:grid-cols-3">
+                <div
+                    class="rounded-2xl border border-slate-200/60 dark:border-white/10 p-6 bg-white/70 dark:bg-night-800/70">
+                    <h3 class="text-lg font-semibold">Free</h3>
+                    <div class="mt-2 text-3xl font-bold">₹0</div>
+                    <ul class="mt-4 text-sm space-y-2">
+                        <li>• 3 subjects / sem</li>
+                        <li>• Structured notes + citations</li>
+                        <li>• 200 flashcards</li>
+                        <li>• PDF export (basic)</li>
+                    </ul>
+                    <a href="#"
+                        class="mt-6 inline-flex rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2">Get
+                        started</a>
+                </div>
+                <div class="relative rounded-2xl border-2 border-brand-400 p-6 bg-white shadow-glow dark:bg-night-800">
+                    <div
+                        class="absolute -top-3 right-6 text-xs rounded-full bg-brand-500 text-white px-2 py-0.5 shadow-neon">
+                        Popular</div>
+                    <h3 class="text-lg font-semibold">Pro</h3>
+                    <div class="mt-2 text-3xl font-bold">₹199<span
+                            class="text-base font-normal text-slate-500">/mo</span></div>
+                    <ul class="mt-4 text-sm space-y-2">
+                        <li>• Unlimited subjects</li>
+                        <li>• Advanced visuals (tables/diagrams)</li>
+                        <li>• Spaced repetition & analytics</li>
+                        <li>• Offline packs</li>
+                    </ul>
+                    <a href="#"
+                        class="mt-6 inline-flex rounded-xl bg-brand-500 px-4 py-2 text-white shadow-neon">Upgrade</a>
+                </div>
+                <div
+                    class="rounded-2xl border border-slate-200/60 dark:border-white/10 p-6 bg-white/70 dark:bg-night-800/70">
+                    <h3 class="text-lg font-semibold">Campus</h3>
+                    <div class="mt-2 text-3xl font-bold">Custom</div>
+                    <ul class="mt-4 text-sm space-y-2">
+                        <li>• Faculty console</li>
+                        <li>• Institution analytics</li>
+                        <li>• SSO & LMS integrations</li>
+                        <li>• Dedicated onboarding</li>
+                    </ul>
+                    <a href="#"
+                        class="mt-6 inline-flex rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2">Contact
+                        sales</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="py-20">
+        <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+            <h2 class="text-3xl font-bold text-center">Frequently asked questions</h2>
+            <div class="mt-10 divide-y divide-slate-200/60 dark:divide-white/10">
+                <details class="group py-4">
+                    <summary class="flex cursor-pointer list-none items-center justify-between text-lg font-medium">
+                        How do you reduce hallucinations?
+                        <span class="transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <p class="mt-2 text-slate-600 dark:text-slate-300">We use trusted‑source retrieval, reranking, and
+                        cross‑checks; every note block carries citations. Faculty can verify content via the console.
+                    </p>
+                </details>
+                <details class="group py-4">
+                    <summary class="flex cursor-pointer list-none items-center justify-between text-lg font-medium">
+                        Can I study offline?
+                        <span class="transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <p class="mt-2 text-slate-600 dark:text-slate-300">Yes—download offline packs with notes, diagrams,
+                        and
+                        flashcards. Progress syncs when you're back online.</p>
+                </details>
+                <details class="group py-4">
+                    <summary class="flex cursor-pointer list-none items-center justify-between text-lg font-medium">
+                        Does it support my language?
+                        <span class="transition group-open:rotate-180">▾</span>
+                    </summary>
+                    <p class="mt-2 text-slate-600 dark:text-slate-300">We support English and are rolling out
+                        multilingual packs
+                        (Hindi, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali) based on demand.</p>
+                </details>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-black/5 dark:border-white/5">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
+            <div class="grid md:grid-cols-2 gap-8 items-start">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <div
+                            class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
+                            PX</div>
+                        <div>
+                            <p class="font-semibold">Pa[p]er X</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 -mt-0.5">Learning that adapts to your
+                                syllabus</p>
+                        </div>
+                    </div>
+                    <p class="mt-4 text-sm text-slate-600 dark:text-slate-300 max-w-md">Made for Indian engineering &
+                        science
+                        students. Built with responsible AI, human‑in‑loop, and open integrations.</p>
+                </div>
+                <div class="grid sm:grid-cols-3 gap-6 text-sm">
+                    <div>
+                        <p class="font-semibold">Product</p>
+                        <ul class="mt-3 space-y-2 text-slate-600 dark:text-slate-300">
+                            <li><a href="#features" class="hover:text-brand-600">Features</a></li>
+                            <li><a href="#demo" class="hover:text-brand-600">Demo</a></li>
+                            <li><a href="#pricing" class="hover:text-brand-600">Pricing</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="font-semibold">For</p>
+                        <ul class="mt-3 space-y-2 text-slate-600 dark:text-slate-300">
+                            <li><a href="#" class="hover:text-brand-600">Students</a></li>
+                            <li><a href="staff_profile.html" class="hover:text-brand-600">Faculty</a></li>
+                            <li><a href="#" class="hover:text-brand-600">Institutions</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="font-semibold">Legal</p>
+                        <ul class="mt-3 space-y-2 text-slate-600 dark:text-slate-300">
+                            <li><a href="#" class="hover:text-brand-600">Privacy</a></li>
+                            <li><a href="#" class="hover:text-brand-600">Terms</a></li>
+                            <li><a href="#" class="hover:text-brand-600">Contact</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div
+                class="mt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+                <p>© <span id="yr"></span> Pa[p]er X. All rights reserved.</p>
+                <div class="flex items-center gap-4">
+                    <a href="#" class="hover:text-brand-600">Twitter</a>
+                    <a href="#" class="hover:text-brand-600">GitHub</a>
+                    <a href="#" class="hover:text-brand-600">Discord</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // Theme toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const root = document.documentElement;
+        const stored = localStorage.getItem('theme');
+        if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            root.classList.add('dark');
+        }
+        themeToggle?.addEventListener('click', () => {
+            root.classList.toggle('dark');
+            localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light');
+        });
+
+        // Tabs
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const panels = document.querySelectorAll('.tab-panel');
+        tabBtns.forEach(btn => btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('bg-brand-500', 'text-white'));
+            panels.forEach(p => p.classList.add('hidden'));
+            btn.classList.add('bg-brand-500', 'text-white');
+            document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+        }));
+
+        // Year
+        document.getElementById('yr').textContent = new Date().getFullYear();
+
+        // If logged in: hide Sign in/Sign up (all breakpoints), show avatar and sign-out
+        (function () {
+            const t = localStorage.getItem('px_token');
+            const navProfile = document.getElementById('navProfile');
+            const navProfileImg = document.getElementById('navProfileImg');
+            const navProfileInitial = document.getElementById('navProfileInitial');
+            const navSignOut = document.getElementById('navSignOut');
+            if (!t) return;
+            document.querySelectorAll('a[href="login.html"], a[href="signup.html"]').forEach(a => {
+                a.classList.add('hidden', 'sm:hidden', 'md:hidden', 'lg:hidden', 'xl:hidden', '2xl:hidden');
+                a.style.display = 'none';
+            });
+            if (navProfile) navProfile.classList.remove('hidden');
+            if (navSignOut) {
+                navSignOut.classList.remove('hidden');
+                navSignOut.onclick = () => { try { localStorage.removeItem('px_token'); } catch { } window.location.href = 'login.html'; };
+            }
+            const API = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
+            fetch(`${API}/api/me`, { headers: { Authorization: `Bearer ${t}` } })
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    const p = d?.profile;
+                    if (!p) return;
+                    let initials = 'ME';
+                    if (p.name) initials = p.name.split(' ').filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0, 2).join('');
+                    if (navProfileInitial) navProfileInitial.textContent = initials;
+                    if (p.profile_image_url && navProfileImg) {
+                        navProfileImg.src = p.profile_image_url;
+                        navProfileImg.classList.remove('hidden');
+                        if (navProfileInitial) navProfileInitial.classList.add('hidden');
+                    }
+                })
+                .catch(() => { /* ignore */ });
+        })();
+
+        // Project Portal dropdown is handled by config.js (setupNavDropdown)
+    </script>
+</body>
+
+</html>
