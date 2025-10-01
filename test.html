@@ -4,803 +4,731 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pa[p]er X — Agentic AI Learning for Indian College Syllabus</title>
+    <title>Paper X — Mega Menu Demo</title>
     <meta name="description"
-        content="Pa[p]er X is an agentic AI learning platform built for Indian college syllabi. Syllabus → Unit → Topic parser, structured notes with citations, diagrams, flashcards, analytics, faculty portal, and responsible AI." />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="config.js"></script>
-    <!-- Material Symbols for nav icons used in Project Portal dropdown -->
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
+        content="Paper X themed mega menu demo using Tailwind + Alpine.js with Project Portal dropdown." />
+    <link rel="icon" type="image/x-icon" href="paper/assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
         rel="stylesheet">
+
+    <!-- Tailwind (with brand palette) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
     <script>
-        // Tailwind on-the-fly config
         tailwind.config = {
             darkMode: 'class',
             theme: {
+                container: { center: true, padding: '1rem' },
                 extend: {
-                    fontFamily: {
-                        display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-                    },
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
                     colors: {
-                        brand: {
-                            50: '#f0f7ff', 100: '#e0efff', 200: '#b9dbff', 300: '#8ac4ff', 400: '#59a9ff', 500: '#2b8cff', 600: '#116fe6', 700: '#0a57b4', 800: '#0b4890', 900: '#0d3a73'
-                        },
-                        night: {
-                            900: '#0a0c10', 800: '#0f131a', 700: '#141a22', 600: '#1a2230'
-                        }
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' },
+                        ink: '#1E1E2F', plum: '#4C2A59', orchid: '#9E4B8A',
+                        /* Added from mega menu (test3.html) */
+                        indigoDark: '#1E1E2F',
+                        deepPurple: '#4C2A59',
+                        magenta: '#9E4B8A',
+                        paper: '#FFFFFF',
+                        stoneTint: '#F6F7FB',
+                        edge: '#E7E9F2'
                     },
                     boxShadow: {
-                        glow: '0 0 0 1px rgba(59,130,246,.2), 0 8px 40px rgba(59,130,246,.15)',
-                        neon: '0 0 25px rgba(43,140,255,.35), 0 0 60px rgba(43,140,255,.25)'
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)',
+                        ring: '0 1px 2px 0 rgb(16 24 40 / 0.06), 0 1px 3px 0 rgb(16 24 40 / 0.10)'
                     },
+                    borderRadius: { '4xl': '2rem' },
                     backgroundImage: {
-                        'grid-radial': 'radial-gradient(circle at 20% 10%, rgba(43,140,255,.25), transparent 35%), radial-gradient(circle at 80% 20%, rgba(168,85,247,.2), transparent 35%), radial-gradient(circle at 50% 80%, rgba(16,185,129,.2), transparent 35%)',
-                        'glass': 'linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.04))'
+                        'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
                     }
                 }
             }
         }
     </script>
     <style>
-        .icon {
-            font-family: 'Material Symbols Outlined';
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24
+        .material-symbols-rounded {
+            vertical-align: -6px;
         }
 
-        .glass {
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+        /* Hide scrollbar for small panels on mobile */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none
         }
 
-        .glass-dark {
-            background: rgba(20, 24, 32, 0.55);
-            border-color: rgba(255, 255, 255, 0.08);
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none
         }
 
-        /* Disable all animations/transitions for performance */
-        .no-anim *,
-        .no-anim *::before,
-        .no-anim *::after {
-            animation: none !important;
-            transition: none !important;
-            scroll-behavior: auto !important;
+        .gradient-hero-text {
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%
+            }
+
+            50% {
+                background-position: 100% 50%
+            }
+
+            100% {
+                background-position: 0% 50%
+            }
+        }
+
+        .dark body {
+            background-image: linear-gradient(to left top, #1e1e2f, #242138, #2b2440, #332649, #3d2850, #3f254a, #402244, #401f3e, #34182d, #26131e, #190b11, #000000);
+            background-repeat: no-repeat;
+            background-size: cover;
         }
     </style>
+    <script>
+            // Theme boot (no flash)
+            (() => { const s = localStorage.getItem('px_theme'); const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches; const dark = s ? s === 'dark' : prefers; if (dark) document.documentElement.classList.add('dark'); })();
+    </script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 
-<body
-    class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200 selection:bg-brand-200 selection:text-slate-900 no-anim">
-    <!-- Background decorations -->
-    <div aria-hidden="true" class="fixed inset-0 -z-10 bg-grid-radial opacity-70 dark:opacity-50"></div>
-    <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
-        <svg class="absolute top-[-20%] right-[-10%] opacity-30 blur-3xl" width="600" height="600" viewBox="0 0 600 600"
-            fill="none">
-            <circle cx="300" cy="300" r="300" fill="url(#g1)" />
-            <defs>
-                <radialGradient id="g1">
-                    <stop offset="0%" stop-color="#8b5cf6" />
-                    <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0" />
-                </radialGradient>
-            </defs>
-        </svg>
-    </div>
+<body class="bg-slate-50 text-slate-900 antialiased">
 
-    <!-- Top Nav -->
-    <header
-        class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-night-900/50 border-b border-black/5 dark:border-white/5">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="flex h-16 items-center justify-between">
-                <a href="#top" class="flex items-center gap-3 group">
-                    <div
-                        class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
-                        PX</div>
-                    <div>
-                        <p class="text-lg font-semibold leading-tight group-hover:text-brand-600">Pa[p]er X</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 -mt-1">Agentic AI for Indian syllabi</p>
-                    </div>
-                </a>
-                <nav class="hidden md:flex items-center gap-6 text-sm">
-                    <a href="#features" class="hover:text-brand-600">Features</a>
-                    <a href="#how" class="hover:text-brand-600">How it works</a>
-                    <a href="#pricing" class="hover:text-brand-600">Pricing</a>
-                    <a href="#faq" class="hover:text-brand-600">FAQ</a>
-                    <!-- Project Portal dropdown (mirrors postings.html) -->
-                    <div class="relative" id="navProjectsWrap">
-                        <button type="button" id="navProjectsBtn"
-                            class="inline-flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition">
-                            <span class="icon text-base leading-none">hub</span>
-                            <span>Project Portal</span>
-                            <span class="icon text-base leading-none">expand_more</span>
-                        </button>
-                        <div id="navProjectsMenu"
-                            class="absolute right-0 mt-2 w-60 rounded-xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-night-800/95 shadow-lg backdrop-blur hidden">
-                            <a href="postings.html"
-                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 rounded-t-xl"><span
-                                    class="icon text-base leading-none">folder_open</span>Project Postings</a>
-                            <a href="project_post.html"
-                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
-                                    class="icon text-base leading-none">add_circle</span>Create Project</a>
-                            <a href="incoming_requests.html"
-                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
-                                    class="icon text-base leading-none">inbox</span>Incoming Requests</a>
-                            <a href="my_applications.html"
-                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
-                                    class="icon text-base leading-none">assignment_ind</span>My Applications</a>
-                            <a href="skill-test.html"
-                                class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 rounded-b-xl"><span
-                                    class="icon text-base leading-none">verified</span>Skill Test Portal</a>
+    <!-- Paper X style Navbar with Mega Menu -->
+    <header x-data="headerMenu()"
+        class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-4">
+            <a href="paper/ui/index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="paper/assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
+                <img src="paper/assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
+            </a>
+            <!-- Desktop navigation -->
+            <nav class="hidden md:flex items-center gap-2 text-sm text-neutral-700 dark:text-white/85">
+                <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="paper/ui/index.html">Home</a>
+                <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="paper/ui/about.html">About</a>
+                <!-- Products Mega Menu trigger -->
+                <div class="relative" @mouseenter="open('products')" @mouseleave="close('products')">
+                    <button :aria-expanded="isOpen('products')" @click="toggle('products')"
+                        @keydown.escape.window="closeAll()"
+                        class="group inline-flex items-center gap-1 rounded-full px-3 py-2 font-medium hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
+                        Products
+                        <span class="material-symbols-rounded text-base transition-transform"
+                            :class="{ 'rotate-180' : isOpen('products') }">expand_more</span>
+                    </button>
+                    <!-- Mega panel (brand themed) -->
+                    <div x-cloak x-show="isOpen('products')" x-transition:enter="transition ease-out duration-150"
+                        x-transition:enter-start="opacity-0 -translate-y-1"
+                        x-transition:enter-end="opacity-100 translate-y-0"
+                        x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100"
+                        x-transition:leave-end="opacity-0" @click.outside="close('products')"
+                        class="absolute left-1/2 z-40 mt-2 w-[880px] -translate-x-1/2">
+                        <div
+                            class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 backdrop-blur shadow-[0_8px_28px_-4px_rgba(30,30,47,0.35)]">
+                            <div class="grid grid-cols-3 gap-0 p-4">
+                                <!-- Features -->
+                                <div class="col-span-1 border-r border-black/5 dark:border-white/10 pr-4">
+                                    <div
+                                        class="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/40">
+                                        Features</div>
+                                    <ul class="space-y-1.5">
+                                        <li><a href="#"
+                                                class="group flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"><span
+                                                    class="material-symbols-rounded text-brand-500 dark:text-white/80">hub</span><span><span
+                                                        class="block text-sm font-semibold">Platform
+                                                        Overview</span><span
+                                                        class="block text-xs text-neutral-600 dark:text-white/50">Connect
+                                                        directly with your ideal collaborators.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="group flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
+                                                    class="material-symbols-rounded text-brand-500 dark:text-white/80">nest_audio</span><span><span
+                                                        class="block text-sm font-semibold">Pitch
+                                                        Intelligence</span><span
+                                                        class="block text-xs text-neutral-600 dark:text-white/50">Deliver
+                                                        the right message at the right time.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="group flex items-start gap-3 rounded-xl px-2 py-2 bg-brandlt-100 dark:bg-white/5 border border-brandlt-200/70 dark:border-white/10"><span
+                                                    class="material-symbols-rounded text-brand-500 dark:text-white/80">extension</span><span><span
+                                                        class="flex items-center gap-1 text-sm font-semibold">Chrome
+                                                        Extension <span
+                                                            class="ml-1 rounded-full bg-brandlt-200 dark:bg-white/10 px-1.5 text-[10px] font-medium">New</span></span><span
+                                                        class="block text-xs text-neutral-600 dark:text-white/50">Build
+                                                        lists anywhere on the web.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="group flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
+                                                    class="material-symbols-rounded text-brand-500 dark:text-white/80">bolt</span><span><span
+                                                        class="block text-sm font-semibold">Integrations</span><span
+                                                        class="block text-xs text-neutral-600 dark:text-white/50">Export
+                                                        to your existing stack.</span></span></a></li>
+                                    </ul>
+                                </div>
+                                <!-- Premium -->
+                                <div class="col-span-1 border-r border-black/5 dark:border-white/10 px-4">
+                                    <div
+                                        class="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/40">
+                                        Premium</div>
+                                    <div class="rounded-xl bg-brandlt-50 dark:bg-white/5 p-3">
+                                        <ul class="space-y-1">
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">database</span><span><span
+                                                            class="block text-sm font-semibold">Data
+                                                            Enrichment</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">Keep
+                                                            data fresh across tools.</span></span></a></li>
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">auto_mode</span><span><span
+                                                            class="block text-sm font-semibold">Autopilot</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">Automate
+                                                            list building workflows.</span></span></a></li>
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">work_update</span><span><span
+                                                            class="block text-sm font-semibold">Job Changes</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">Track
+                                                            key account movement.</span></span></a></li>
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">emoji_objects</span><span><span
+                                                            class="block text-sm font-semibold">Buyer Intent
+                                                            Data</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">Identify
+                                                            ready-to-engage accounts.</span></span></a></li>
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">ink_highlighter</span><span><span
+                                                            class="block text-sm font-semibold">Writer</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">AI
+                                                            powered messaging.</span></span></a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <!-- Solutions -->
+                                <div class="col-span-1 pl-4">
+                                    <div
+                                        class="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/40">
+                                        Solutions</div>
+                                    <ul class="space-y-1.5">
+                                        <template x-for="item in solutions" :key="item.label">
+                                            <li>
+                                                <a :href="item.href"
+                                                    class="group flex items-center justify-between gap-3 rounded-xl px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10">
+                                                    <span class="flex items-center gap-3">
+                                                        <span
+                                                            class="material-symbols-rounded text-neutral-700 dark:text-white/70"
+                                                            x-text="item.icon"></span>
+                                                        <span class="text-sm" x-text="item.label"></span>
+                                                    </span>
+                                                    <span
+                                                        class="material-symbols-rounded text-neutral-400 group-hover:text-neutral-600 dark:group-hover:text-white/70">chevron_right</span>
+                                                </a>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                    <a href="#"
+                                        class="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] font-medium hover:bg-black/5 dark:hover:bg-white/10">
+                                        All Solutions <span
+                                            class="material-symbols-rounded text-sm">arrow_forward</span>
+                                    </a>
+                                </div>
+                            </div>
+                            <div
+                                class="flex items-center justify-between gap-4 border-t border-black/5 dark:border-white/10 bg-brandlt-50/70 dark:bg-white/5 px-4 py-3 rounded-b-2xl">
+                                <div class="flex items-center gap-2 text-sm text-neutral-700 dark:text-white/70"><span
+                                        class="material-symbols-rounded text-brand-500">chat_add_on</span><span><span
+                                            class="font-semibold">Want Free Leads?</span> Try Paper X Portal</span>
+                                </div>
+                                <a href="#"
+                                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2 hover:shadow-glow">Get
+                                    Started</a>
+                            </div>
                         </div>
                     </div>
-                    <a href="staff_profile.html"
-                        class="inline-flex items-center gap-1 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 hover:shadow-glow transition">Faculty
-                        Portal</a>
-                </nav>
-                <div class="flex items-center gap-3">
-                    <button id="themeToggle"
-                        class="rounded-lg border border-slate-200/60 dark:border-white/10 p-2 hover:border-brand-400/60"
-                        title="Toggle theme" aria-label="Toggle dark mode">
-                        <svg id="sun" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden dark:block"
-                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <path
-                                d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364-6.364-1.414 1.414M7.05 16.95l-1.414 1.414m12.728 0-1.414-1.414M7.05 7.05 5.636 5.636" />
-                            <circle cx="12" cy="12" r="4" />
-                        </svg>
-                        <svg id="moon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 dark:hidden"
-                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z" />
-                        </svg>
+                </div>
+                <!-- Projects Mega Menu (imported from test3.html) -->
+                <div class="relative" x-data="megaNav()" @mouseenter="open('projects')" @mouseleave="close('projects')">
+                    <button @click="toggle('projects')" :aria-expanded="isOpen('projects')"
+                        class="group inline-flex items-center gap-1 rounded-full px-3 py-2 font-medium text-ink/90 dark:text-white/90 hover:bg-stoneTint dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-magenta">
+                        projects
+                        <span class="material-symbols-rounded text-base transition-transform"
+                            :class="{ 'rotate-180' : isOpen('projects') }">expand_more</span>
                     </button>
-                    <a id="navProfile" href="profile.html" title="Profile"
-                        class="hidden items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/60">
-                        <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
-                        <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
-                    </a>
-                    <button id="navSignOut" title="Sign out" aria-label="Sign out"
-                        class="hidden inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60">
-                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M15 12H3" />
-                            <path d="M15 12l-4-4" />
-                            <path d="M15 12l-4 4" />
-                            <path d="M21 7v10a2 2 0 0 1-2 2h-6" />
-                        </svg>
-                        <span class="text-sm">Sign Out</span>
-                    </button>
-                    <a href="signup.html"
-                        class="hidden sm:inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 hover:border-brand-400/60 transition">Sign
-                        up</a>
-                    <a href="login.html"
-                        class="hidden sm:inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-white shadow-neon hover:opacity-95 transition">Sign
-                        in</a>
+                    <div x-cloak x-show="isOpen('projects')" x-transition:enter="transition ease-out duration-150"
+                        x-transition:enter-start="opacity-0 -translate-y-1"
+                        x-transition:enter-end="opacity-100 translate-y-0"
+                        x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100"
+                        x-transition:leave-end="opacity-0" @click.outside="close('projects')"
+                        class="absolute left-1/2 mt-3 w-[1050px] max-w-[95vw] -translate-x-1/2 z-50">
+                        <div
+                            class="rounded-3xl border border-edge dark:border-transparent bg-white dark:bg-brand-900/95 shadow-2xl dark:shadow-[0_8px_32px_-4px_rgba(0,0,0,0.55)] backdrop-blur supports-[backdrop-filter]:bg-white/90 dark:supports-[backdrop-filter]:bg-brand-900/80">
+                            <div class="grid grid-cols-[300px,1fr] gap-0">
+                                <aside
+                                    class="border-r border-edge/80 dark:border-white/10 p-4 bg-white/60 dark:bg-white/5">
+                                    <ul class="space-y-2">
+                                        <template x-for="(c, i) in categories" :key="c.id">
+                                            <li>
+                                                <button @click="select(i)" @mouseenter="select(i)" @focus="select(i)"
+                                                    :aria-current="i===current? 'true':'false'"
+                                                    class="group flex w-full items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-3 text-left transition hover:bg-stoneTint dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-magenta/70 dark:focus-visible:ring-magenta"
+                                                    :class="i===current ? 'bg-white dark:bg-magenta/10 shadow-sm border-edge dark:border-magenta/40' : ''">
+                                                    <span>
+                                                        <span
+                                                            class="block text-[13px] font-bold tracking-wide text-deepPurple dark:text-white uppercase"
+                                                            x-text="c.title"></span>
+                                                        <span
+                                                            class="mt-0.5 block text-[12px] text-ink/70 dark:text-white/50"
+                                                            x-text="c.subtitle"></span>
+                                                    </span>
+                                                    <span
+                                                        class="material-symbols-rounded text-magenta group-hover:translate-x-0.5 transition dark:text-magenta/80">chevron_right</span>
+                                                </button>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </aside>
+                                <section class="p-5">
+                                    <div class="flex items-baseline justify-between">
+                                        <h3
+                                            class="text-[13px] font-bold tracking-[0.12em] text-ink/80 dark:text-white/70 uppercase">
+                                            Featured Pages</h3>
+                                        <div class="hidden sm:flex items-center gap-2">
+                                            <button @click="prev()" :disabled="!canPrev"
+                                                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-edge dark:border-white/15 bg-white dark:bg-white/10 text-ink dark:text-white hover:bg-stoneTint dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"><span
+                                                    class="material-symbols-rounded">chevron_left</span></button>
+                                            <button @click="next()" :disabled="!canNext"
+                                                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-edge dark:border-white/15 bg-white dark:bg-white/10 text-ink dark:text-white hover:bg-stoneTint dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"><span
+                                                    class="material-symbols-rounded">chevron_right</span></button>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <div class="relative w-full max-w-[760px]">
+                                            <div class="flex gap-3" role="list">
+                                                <template x-for="(b, idx) in categories[current].brands" :key="b.name">
+                                                    <template x-if="idx >= pageStart && idx < pageStart + visibleCount">
+                                                        <a :href="b.href" role="listitem"
+                                                            class="group relative flex h-64 w-40 flex-col overflow-hidden rounded-xl border border-edge dark:border-white/15 bg-white dark:bg-white/5 shadow-ring hover:border-magenta/50 dark:hover:border-magenta/60 transition-colors">
+                                                            <template x-if="b.img">
+                                                                <img :src="b.img" :alt="b.name + ' image'"
+                                                                    class="h-48 w-full object-cover opacity-95 group-hover:opacity-100 transition-opacity" />
+                                                            </template>
+                                                            <template x-if="!b.img">
+                                                                <div
+                                                                    class="h-48 w-full bg-stoneTint dark:bg-white/10 flex items-center justify-center text-xs text-ink/60 dark:text-white/50">
+                                                                    No Image</div>
+                                                            </template>
+                                                            <div class="flex flex-1 flex-col px-2 py-2">
+                                                                <div class="text-[10px] font-semibold uppercase tracking-wider text-magenta dark:text-magenta/80"
+                                                                    x-text="b.tag"></div>
+                                                                <div class="mt-0.5 text-sm font-bold leading-snug text-ink dark:text-white"
+                                                                    x-text="b.name"></div>
+                                                            </div>
+                                                        </a>
+                                                    </template>
+                                                </template>
+                                            </div>
+                                            <div class="mt-2 text-[11px] text-ink/60 dark:text-white/50"
+                                                x-show="totalPages > 1">
+                                                <span x-text="currentPage + 1"></span>/<span x-text="totalPages"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 flex items-center">
+                                        <span class="mr-2 h-6 w-1 rounded-full bg-magenta"></span>
+                                        <a :href="categories[current].cta.href"
+                                            class="inline-flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-magenta hover:text-deepPurple dark:hover:text-white dark:text-magenta/90">
+                                            <span x-text="categories[current].cta.label"></span>
+                                            <span class="material-symbols-rounded text-base">chevron_right</span>
+                                        </a>
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="paper/ui/contact.html">Contact</a>
+                <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="paper/ui/help.html">Help</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button id="themeToggle" data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden sm:block">Theme</span>
+                </button>
+                <a href="paper/ui/login.html"
+                    class="text-sm hover:text-brandlt-900 dark:hover:text-white px-3 py-2 rounded-full">Log in</a>
+                <a href="paper/ui/signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <!-- Mobile buttons -->
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"><span
+                        class="material-symbols-rounded">dark_mode</span></button>
+                <button @click="mobileOpen = true"
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                        class="material-symbols-rounded" data-icon>menu</span></button>
+            </div>
+        </div>
+
+        <!-- Mobile sheet -->
+        <div x-cloak x-show="mobileOpen" x-transition.opacity class="fixed inset-0 z-50 md:hidden">
+            <div class="absolute inset-0 bg-slate-900/30" @click="mobileOpen = false"></div>
+            <div class="ml-auto flex h-full w-[90%] max-w-sm flex-col bg-white shadow-2xl">
+                <div class="flex items-center justify-between p-4">
+                    <div class="flex items-center gap-2 font-extrabold"><span
+                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">A</span>
+                        Acme</div>
+                    <button @click="mobileOpen = false" class="rounded-lg border border-slate-200 p-2"><span
+                            class="material-symbols-rounded">close</span></button>
+                </div>
+                <div class="border-y border-slate-200 p-2 overflow-y-auto no-scrollbar">
+                    <details class="group" open>
+                        <summary
+                            class="flex cursor-pointer list-none items-center justify-between rounded-lg px-2 py-2 text-sm font-semibold hover:bg-slate-50">
+                            Products <span
+                                class="material-symbols-rounded transition-transform group-open:rotate-180">expand_more</span>
+                        </summary>
+                        <div class="mt-2 rounded-xl border border-slate-200">
+                            <div class="grid grid-cols-1">
+                                <div class="p-3 border-b border-slate-200">
+                                    <div class="pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                        Features</div>
+                                    <ul class="space-y-2">
+                                        <li><a href="#"
+                                                class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><span
+                                                    class="material-symbols-rounded text-indigo-600">hub</span><span><span
+                                                        class="block text-sm font-semibold">Platform
+                                                        Overview</span><span
+                                                        class="block text-xs text-slate-600">Connect directly with your
+                                                        ideal customers & close more deals.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><span
+                                                    class="material-symbols-rounded text-indigo-600">nest_audio</span><span><span
+                                                        class="block text-sm font-semibold">Pitch
+                                                        Intelligence</span><span
+                                                        class="block text-xs text-slate-600">Deliver the right message,
+                                                        to the right person, at the right time.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="flex items-start gap-3 rounded-lg px-2 py-2 bg-slate-100 border border-slate-200"><span
+                                                    class="material-symbols-rounded text-indigo-600">extension</span><span><span
+                                                        class="block text-sm font-semibold">Chrome Extension</span><span
+                                                        class="block text-xs text-slate-600">Build lists anywhere on the
+                                                        web with our Chrome Extension.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><span
+                                                    class="material-symbols-rounded text-indigo-600">bolt</span><span><span
+                                                        class="block text-sm font-semibold">Integrations</span><span
+                                                        class="block text-xs text-slate-600">Export directly to your
+                                                        existing tech stack in a single‑click.</span></span></a></li>
+                                    </ul>
+                                </div>
+                                <div class="p-3 border-b border-slate-200">
+                                    <div class="pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                        Premium</div>
+                                    <ul class="space-y-2">
+                                        <li><a href="#"
+                                                class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><span
+                                                    class="material-symbols-rounded text-indigo-700">database</span><span><span
+                                                        class="block text-sm font-semibold">Data Enrichment</span><span
+                                                        class="block text-xs text-slate-600">Keep your data up‑to‑date,
+                                                        no matter where it lives.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><span
+                                                    class="material-symbols-rounded text-indigo-700">auto_mode</span><span><span
+                                                        class="block text-sm font-semibold">Autopilot</span><span
+                                                        class="block text-xs text-slate-600">Automate list‑building
+                                                        efforts to build pipeline faster than ever.</span></span></a>
+                                        </li>
+                                        <li><a href="#"
+                                                class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><span
+                                                    class="material-symbols-rounded text-indigo-700">work_update</span><span><span
+                                                        class="block text-sm font-semibold">Job Changes</span><span
+                                                        class="block text-xs text-slate-600">Stay on top of key accounts
+                                                        & maintain an active pipeline.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><span
+                                                    class="material-symbols-rounded text-indigo-700">emoji_objects</span><span><span
+                                                        class="block text-sm font-semibold">Buyer Intent
+                                                        Data</span><span class="block text-xs text-slate-600">Identify,
+                                                        prioritize, & engage with ready‑to‑buy
+                                                        accounts.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><span
+                                                    class="material-symbols-rounded text-indigo-700">ink_highlighter</span><span><span
+                                                        class="block text-sm font-semibold">Writer</span><span
+                                                        class="block text-xs text-slate-600">AI powered copy that cuts
+                                                        through the noise.</span></span></a></li>
+                                    </ul>
+                                </div>
+                                <div class="p-3">
+                                    <div class="pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                        Solutions</div>
+                                    <ul class="space-y-2">
+                                        <template x-for="item in solutions" :key="item.label">
+                                            <li><a :href="item.href"
+                                                    class="flex items-center justify-between gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"><span
+                                                        class="flex items-center gap-3"><span
+                                                            class="material-symbols-rounded text-slate-700"
+                                                            x-text="item.icon"></span><span class="text-sm"
+                                                            x-text="item.label"></span></span><span
+                                                        class="material-symbols-rounded text-slate-400">chevron_right</span></a>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div
+                                class="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-3 py-3">
+                                <div class="flex items-center gap-2 text-sm text-slate-700"><span
+                                        class="material-symbols-rounded text-indigo-600">chat_add_on</span><span><span
+                                            class="font-semibold">Want Free Leads?</span> Take Acme for a Test
+                                        Drive</span></div>
+                                <a href="#"
+                                    class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">Get
+                                    Started</a>
+                            </div>
+                        </div>
+                    </details>
+                    <details class="group">
+                        <summary
+                            class="flex cursor-pointer list-none items-center justify-between rounded-lg px-2 py-2 text-sm font-semibold hover:bg-slate-50">
+                            Customers <span
+                                class="material-symbols-rounded transition-transform group-open:rotate-180">expand_more</span>
+                        </summary>
+                        <div class="px-2 pb-3">
+                            <a href="#" class="block rounded-lg px-3 py-2 text-sm hover:bg-slate-50">Case Studies</a>
+                            <a href="#" class="block rounded-lg px-3 py-2 text-sm hover:bg-slate-50">Customer
+                                Stories</a>
+                            <a href="#" class="block rounded-lg px-3 py-2 text-sm hover:bg-slate-50">Reviews</a>
+                        </div>
+                    </details>
+                    <details class="group">
+                        <summary
+                            class="flex cursor-pointer list-none items-center justify-between rounded-lg px-2 py-2 text-sm font-semibold hover:bg-slate-50">
+                            Company <span
+                                class="material-symbols-rounded transition-transform group-open:rotate-180">expand_more</span>
+                        </summary>
+                        <div class="px-2 pb-3">
+                            <a href="#" class="block rounded-lg px-3 py-2 text-sm hover:bg-slate-50">About</a>
+                            <a href="#" class="block rounded-lg px-3 py-2 text-sm hover:bg-slate-50">Careers</a>
+                            <a href="#" class="block rounded-lg px-3 py-2 text-sm hover:bg-slate-50">Press</a>
+                        </div>
+                    </details>
+                    <a href="#" class="block rounded-lg px-2 py-2 text-sm font-semibold hover:bg-slate-50">Talk to
+                        Sales</a>
+                </div>
+                <div class="p-4 flex items-center gap-2">
+                    <a href="#"
+                        class="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-center text-sm font-semibold">Login</a>
+                    <a href="#"
+                        class="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white">Get
+                        started</a>
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- HERO -->
-    <section id="top" class="relative overflow-hidden">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-16 pb-20 sm:pt-12 sm:pb-14">
-            <div class="grid lg:grid-cols-12 gap-10 items-center">
-                <div class="lg:col-span-6">
-                    <div
-                        class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/60 dark:bg-night-800/60 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 backdrop-blur">
-                        <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-                        Live • Agent Orchestration v0.7
-                    </div>
-                    <h1 class="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.05]">
-                        The <span
-                            class="bg-gradient-to-r from-brand-500 via-indigo-500 to-fuchsia-500 bg-clip-text text-transparent">futuristic
-                            learning OS</span><br /> for Indian college syllabi
-                    </h1>
-                    <p class="mt-5 text-lg text-slate-600 dark:text-slate-300 max-w-xl">Paste a syllabus or pick your
-                        college/branch/semester. Pa[p]er X parses <em>Subject → Unit → Topic</em>, fetches trusted
-                        sources, and
-                        crafts structured notes with diagrams, tables, flashcards, and citations—backed by responsible
-                        AI.</p>
-                    <div class="mt-7 flex flex-wrap gap-3">
-                        <a href="#demo"
-                            class="inline-flex items-center gap-2 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-night-900 px-5 py-3 shadow-glow">
-                            Launch Demo
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3Z" />
-                            </svg>
-                        </a>
-                        <a href="#features"
-                            class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-5 py-3 hover:border-brand-400/60">Explore
-                            Features</a>
-                    </div>
-                    <div class="mt-6 flex items-center gap-6 text-xs text-slate-500 dark:text-slate-400">
-                        <div class="flex items-center gap-2"><svg class="h-4 w-4" viewBox="0 0 24 24"
-                                fill="currentColor">
-                                <path d="M12 2 1 21h22L12 2Zm0 4.84L19.53 19H4.47L12 6.84Z" />
-                            </svg> Transparent citations</div>
-                        <div class="flex items-center gap-2"><svg class="h-4 w-4" viewBox="0 0 24 24"
-                                fill="currentColor">
-                                <path d="M4 12h16v2H4v-2Zm0-4h16v2H4V8Zm0 8h10v2H4v-2Z" />
-                            </svg> Structured notes</div>
-                        <div class="flex items-center gap-2"><svg class="h-4 w-4" viewBox="0 0 24 24"
-                                fill="currentColor">
-                                <path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7V3Z" />
-                            </svg> Offline-first</div>
-                    </div>
-                </div>
-                <div class="lg:col-span-6">
-                    <!-- Futuristic product mockup card -->
-                    <div class="relative rounded-2xl glass glass-dark p-4 md:p-6 shadow-neon border border-white/10">
-                        <div
-                            class="absolute -inset-0.5 -z-10 rounded-2xl bg-gradient-to-r from-brand-500/30 via-fuchsia-500/20 to-emerald-500/20 blur-2xl">
-                        </div>
-                        <div class="rounded-xl bg-black/60 text-slate-100 p-4 md:p-6 border border-white/10">
-                            <div class="flex items-center justify-between text-xs text-slate-400">
-                                <span>Note Composer (AI)</span>
-                                <span class="rounded-md border border-white/10 px-2 py-0.5">Unit 3 • DBMS</span>
-                            </div>
-                            <div class="mt-3 grid gap-3">
-                                <div class="rounded-lg bg-white/5 border border-white/10 p-3">
-                                    <p class="text-xs uppercase tracking-wide text-slate-400">Prompt</p>
-                                    <p class="mt-1 text-sm">Generate structured notes for <strong>Normalization</strong>
-                                        with definitions,
-                                        examples, diagrams, pros/cons, TL;DR. Cite GeeksforGeeks and textbook.</p>
-                                </div>
-                                <div class="rounded-lg bg-white/5 border border-white/10 p-3">
-                                    <p class="text-xs uppercase tracking-wide text-slate-400">Preview • 12 sources
-                                        checked</p>
-                                    <div class="mt-2 grid gap-2 text-sm">
-                                        <div class="flex items-center gap-2"><span
-                                                class="h-2 w-2 rounded-full bg-emerald-400"></span>
-                                            <span>Intro & Definitions</span>
-                                        </div>
-                                        <div class="flex items-center gap-2"><span
-                                                class="h-2 w-2 rounded-full bg-blue-400"></span>
-                                            <span>Examples & Diagrams</span>
-                                        </div>
-                                        <div class="flex items-center gap-2"><span
-                                                class="h-2 w-2 rounded-full bg-fuchsia-400"></span>
-                                            <span>Applications & TL;DR</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div
-                                    class="rounded-lg bg-gradient-to-r from-brand-500/10 to-fuchsia-500/10 border border-white/10 p-3">
-                                    <p class="text-xs uppercase tracking-wide text-slate-300">Citation Snippets</p>
-                                    <div class="mt-2 text-xs text-slate-300/90">[1] gfg/normalization • [2] Korth DBMS
-                                        Ch. 15 • [3]
-                                        tpointtech • [4] wiki</div>
-                                </div>
-                                <div class="flex justify-end gap-2 mt-2">
-                                    <button
-                                        class="rounded-lg border border-white/10 px-3 py-1.5 text-sm hover:border-emerald-400/50">Refine</button>
-                                    <button
-                                        class="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm text-black hover:opacity-90">Save</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <p class="mt-3 text-center text-xs text-slate-500">Mock UI for illustration</p>
-                </div>
-            </div>
+    <!-- Demo body content -->
+    <main class="container px-4">
+        <div class="py-16 text-center">
+            <h1 class="text-3xl font-extrabold tracking-tight gradient-hero-text">Paper X Mega Menu Demo</h1>
+            <p class="mt-3 text-neutral-600 dark:text-white/60">Hover or focus <strong>Products</strong> to open the
+                mega menu. Fully responsive, accessible, and theme aware.</p>
         </div>
+        <div class="h-[70vh]"></div>
+    </main>
 
-        <!-- Scrolling marquee -->
-        <div class="relative overflow-hidden border-y border-black/5 dark:border-white/5">
-            <div class="whitespace-nowrap">
-                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
-                        class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> GeeksforGeeks</span>
-                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
-                        class="h-1.5 w-1.5 rounded-full bg-blue-400"></span> Tutorialspoint</span>
-                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
-                        class="h-1.5 w-1.5 rounded-full bg-fuchsia-400"></span> Wikipedia</span>
-                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
-                        class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span> Scaler</span>
-                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
-                        class="h-1.5 w-1.5 rounded-full bg-amber-400"></span> TPointTech</span>
-                <span class="mx-8 inline-flex items-center gap-2 text-xs text-slate-500"><span
-                        class="h-1.5 w-1.5 rounded-full bg-teal-400"></span> Textbooks</span>
-            </div>
-        </div>
-    </section>
-
-    <!-- FEATURES -->
-    <section id="features" class="py-20">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="text-center max-w-2xl mx-auto">
-                <h2 class="text-3xl sm:text-4xl font-bold">Everything students need. Everything faculty trusts.</h2>
-                <p class="mt-3 text-slate-600 dark:text-slate-300">Multi‑agent retrieval, structured outputs, and a
-                    syllabus‑aware pipeline to reduce hallucinations.</p>
-            </div>
-            <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                <!-- Card -->
-                <div
-                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
-                    <div
-                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-brand-400 to-indigo-500 text-white grid place-items-center shadow-neon">
-                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M4 6h16v2H4V6Zm0 5h10v2H4v-2Zm0 5h16v2H4v-2Z" />
-                        </svg>
-                    </div>
-                    <h3 class="mt-4 text-lg font-semibold">Syllabus Parser</h3>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Subject → Unit → Topic mapping with
-                        college/branch/semester presets and CSV/PDF import.</p>
-                </div>
-                <div
-                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
-                    <div
-                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 text-white grid place-items-center shadow-neon">
-                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 3l9 4.5v9L12 21 3 16.5v-9L12 3Z" />
-                        </svg>
-                    </div>
-                    <h3 class="mt-4 text-lg font-semibold">Structured Notes</h3>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Intro, definitions, examples,
-                        applications,
-                        pros/cons, TL;DR—always with citations.</p>
-                </div>
-                <div
-                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
-                    <div
-                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-fuchsia-400 to-pink-500 text-white grid place-items-center shadow-neon">
-                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M7 4h10v2H7V4ZM5 8h14v2H5V8Zm2 4h10v2H7v-2Zm-2 4h14v2H5v-2Z" />
-                        </svg>
-                    </div>
-                    <h3 class="mt-4 text-lg font-semibold">Images, Tables & Diagrams</h3>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Auto‑generate and embed visuals; export
-                        to PDF/PNG
-                        with captions and alt‑text.</p>
-                </div>
-                <div
-                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
-                    <div
-                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 text-white grid place-items-center shadow-neon">
-                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M17 4H7v2h10V4ZM5 8h14v2H5V8Zm2 4h10v2H7v-2Zm-2 4h14v2H5v-2Z" />
-                        </svg>
-                    </div>
-                    <h3 class="mt-4 text-lg font-semibold">Flashcards & Spaced Repetition</h3>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Auto‑convert notes into decks with
-                        Leitner
-                        scheduling and study streaks.</p>
-                </div>
-                <div
-                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
-                    <div
-                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-400 to-indigo-500 text-white grid place-items-center shadow-neon">
-                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path
-                                d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z" />
-                        </svg>
-                    </div>
-                    <h3 class="mt-4 text-lg font-semibold">Community Notes & Faculty Review</h3>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Peer notes with upvotes, rubric grading,
-                        and
-                        faculty verification badges.</p>
-                </div>
-                <div
-                    class="group rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60 hover:shadow-glow transition">
-                    <div
-                        class="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-400 to-sky-500 text-white grid place-items-center shadow-neon">
-                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M4 7h16v2H4V7Zm0 4h10v2H4v-2Zm0 4h16v2H4v-2Z" />
-                        </svg>
-                    </div>
-                    <h3 class="mt-4 text-lg font-semibold">Responsible AI</h3>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Transparent citations, source
-                        cross‑checks, safety
-                        filters, and human‑in‑loop.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- TABS: Personas -->
-    <section class="py-20 bg-gradient-to-b from-slate-50 to-white dark:from-night-800/60 dark:to-night-900">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="grid lg:grid-cols-12 gap-10 items-start">
-                <div class="lg:col-span-5">
-                    <h2 class="text-3xl font-bold">Built for students, faculty, and campuses</h2>
-                    <p class="mt-3 text-slate-600 dark:text-slate-300">Switch views to see what each persona gets out of
-                        Pa[p]er
-                        X.</p>
-                    <div
-                        class="mt-6 inline-flex rounded-xl border border-slate-200/60 dark:border-white/10 p-1 bg-white/60 dark:bg-night-800/60">
-                        <button data-tab="student"
-                            class="tab-btn rounded-lg px-3 py-1.5 text-sm bg-brand-500 text-white">Student</button>
-                        <button data-tab="faculty" class="tab-btn rounded-lg px-3 py-1.5 text-sm">Faculty</button>
-                        <button data-tab="institution"
-                            class="tab-btn rounded-lg px-3 py-1.5 text-sm">Institution</button>
-                    </div>
-                </div>
-                <div class="lg:col-span-7">
-                    <div class="rounded-2xl glass glass-dark p-6 border border-white/10">
-                        <div id="tab-student" class="tab-panel grid gap-4">
-                            <h3 class="text-xl font-semibold">Student Dashboard</h3>
-                            <ul class="grid sm:grid-cols-2 gap-3 text-sm">
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Smart syllabus import</li>
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Notes with diagrams & TL;DR
-                                </li>
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Flashcards & spaced
-                                    repetition</li>
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Offline sync & PDF export
-                                </li>
-                            </ul>
-                        </div>
-                        <div id="tab-faculty" class="tab-panel hidden grid gap-4">
-                            <h3 class="text-xl font-semibold">Faculty Console</h3>
-                            <ul class="grid sm:grid-cols-2 gap-3 text-sm">
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Syllabus approvals &
-                                    versioning</li>
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Rubric‑based evaluation
-                                </li>
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Plagiarism & safety checks
-                                </li>
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">LMS / Google Drive / Notion
-                                    integrations
-                                </li>
-                            </ul>
-                        </div>
-                        <div id="tab-institution" class="tab-panel hidden grid gap-4">
-                            <h3 class="text-xl font-semibold">Institution Analytics</h3>
-                            <ul class="grid sm:grid-cols-2 gap-3 text-sm">
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Cohort progress & gaps</li>
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Outcome metrics & heatmaps
-                                </li>
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Usage & engagement reports
-                                </li>
-                                <li class="rounded-lg bg-white/5 border border-white/10 p-3">Campus licensing controls
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- HOW IT WORKS -->
-    <section id="how" class="py-20">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <h2 class="text-3xl sm:text-4xl font-bold text-center">From syllabus to mastery in 4 steps</h2>
-            <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <div
-                    class="rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60">
-                    <div class="text-sm text-slate-500">Step 1</div>
-                    <h3 class="font-semibold mt-1">Ingest</h3>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Upload syllabus/PDF or search college →
-                        branch →
-                        semester. Parse Subject → Unit → Topic.</p>
-                </div>
-                <div
-                    class="rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60">
-                    <div class="text-sm text-slate-500">Step 2</div>
-                    <h3 class="font-semibold mt-1">Retrieve</h3>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Multi‑agent retrieval with
-                        domain‑whitelists,
-                        reranking, and cross‑checks.</p>
-                </div>
-                <div
-                    class="rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60">
-                    <div class="text-sm text-slate-500">Step 3</div>
-                    <h3 class="font-semibold mt-1">Compose</h3>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Structured notes with diagrams, tables,
-                        examples,
-                        applications, pros/cons, TL;DR.</p>
-                </div>
-                <div
-                    class="rounded-2xl p-6 border border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-night-800/60">
-                    <div class="text-sm text-slate-500">Step 4</div>
-                    <h3 class="font-semibold mt-1">Revise</h3>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Flashcards, practice questions,
-                        analytics, and
-                        faculty‑verified notes.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- DEMO CALL TO ACTION -->
-    <section id="demo" class="py-20 bg-gradient-to-br from-brand-500/10 via-indigo-500/10 to-fuchsia-500/10">
-        <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div
-                class="rounded-3xl p-8 md:p-12 border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 shadow-glow">
-                <div class="grid md:grid-cols-2 gap-8 items-center">
-                    <div>
-                        <h3 class="text-2xl font-bold">Experience Pa[p]er X</h3>
-                        <p class="mt-2 text-slate-600 dark:text-slate-300">Try a guided flow: pick a subject, watch the
-                            pipeline
-                            fetch sources, produce notes, and export flashcards.</p>
-                        <div class="mt-5 flex gap-3">
-                            <a href="#"
-                                class="rounded-xl bg-slate-900 text-white dark:bg-white dark:text-night-900 px-5 py-3 shadow-glow">Start
-                                Guided Demo</a>
-                            <a href="#"
-                                class="rounded-xl border border-slate-200/60 dark:border-white/10 px-5 py-3">View API
-                                Docs</a>
-                        </div>
-                    </div>
-                    <div>
-                        <div class="rounded-2xl bg-black/70 text-slate-100 p-5 border border-white/10">
-                            <div class="text-xs text-slate-400">Console • agent logs</div>
-                            <pre class="mt-2 text-xs overflow-auto leading-relaxed"><code>$ ingest syllabus.pdf
-✔ parsed 5 subjects, 25 units, 142 topics
-$ retrieve --trusted "gfg,tpoint,wiki,textbook"
-✔ 48 sources found • 16 selected • 6 cross‑checks passed
-$ compose --unit 3 --topic normalization --visuals
-✔ structured notes + 2 diagrams + 10 flashcards
-$ export --format pdf,apkg
-✔ saved to /downloads/DBMS_U3_Normalization.pdf
-</code></pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ANALYTICS PREVIEW -->
-    <section class="py-20">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="grid lg:grid-cols-12 gap-10 items-center">
-                <div class="lg:col-span-6 order-2 lg:order-1">
-                    <div class="rounded-2xl glass glass-dark p-6 border border-white/10">
-                        <div class="grid sm:grid-cols-2 gap-4">
-                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                                <div class="text-xs text-slate-400">Study Streak</div>
-                                <div class="text-3xl font-bold mt-2">14 days</div>
-                            </div>
-                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                                <div class="text-xs text-slate-400">Flashcards Reviewed</div>
-                                <div class="text-3xl font-bold mt-2">1,240</div>
-                            </div>
-                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                                <div class="text-xs text-slate-400">Topics Mastered</div>
-                                <div class="text-3xl font-bold mt-2">86%</div>
-                            </div>
-                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                                <div class="text-xs text-slate-400">Confidence Gain</div>
-                                <div class="text-3xl font-bold mt-2">+23%</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="lg:col-span-6 order-1 lg:order-2">
-                    <h2 class="text-3xl font-bold">Analytics that motivate and guide</h2>
-                    <p class="mt-3 text-slate-600 dark:text-slate-300">Personalized dashboards show strengths, gaps, and
-                        suggested
-                        next steps—built for adaptive learning at scale.</p>
-                    <ul class="mt-5 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                        <li class="flex items-start gap-2"><span
-                                class="mt-1 h-2 w-2 rounded-full bg-emerald-400"></span> Heatmaps
-                            by unit/topic with mastery thresholds</li>
-                        <li class="flex items-start gap-2"><span class="mt-1 h-2 w-2 rounded-full bg-brand-400"></span>
-                            Flashcard
-                            decay curves & spaced repetition timing</li>
-                        <li class="flex items-start gap-2"><span
-                                class="mt-1 h-2 w-2 rounded-full bg-fuchsia-400"></span> Cohort
-                            comparisons for campuses and faculty</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- PRICING -->
-    <section id="pricing"
-        class="py-20 bg-gradient-to-b from-slate-50 to-white dark:from-night-800/60 dark:to-night-900">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="text-center max-w-2xl mx-auto">
-                <h2 class="text-3xl sm:text-4xl font-bold">Simple, student‑friendly pricing</h2>
-                <p class="mt-3 text-slate-600 dark:text-slate-300">Start free. Upgrade when you need advanced exports,
-                    longer
-                    context, and campus features.</p>
-            </div>
-            <div class="mt-10 grid gap-6 md:grid-cols-3">
-                <div
-                    class="rounded-2xl border border-slate-200/60 dark:border-white/10 p-6 bg-white/70 dark:bg-night-800/70">
-                    <h3 class="text-lg font-semibold">Free</h3>
-                    <div class="mt-2 text-3xl font-bold">₹0</div>
-                    <ul class="mt-4 text-sm space-y-2">
-                        <li>• 3 subjects / sem</li>
-                        <li>• Structured notes + citations</li>
-                        <li>• 200 flashcards</li>
-                        <li>• PDF export (basic)</li>
-                    </ul>
-                    <a href="#"
-                        class="mt-6 inline-flex rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2">Get
-                        started</a>
-                </div>
-                <div class="relative rounded-2xl border-2 border-brand-400 p-6 bg-white shadow-glow dark:bg-night-800">
-                    <div
-                        class="absolute -top-3 right-6 text-xs rounded-full bg-brand-500 text-white px-2 py-0.5 shadow-neon">
-                        Popular</div>
-                    <h3 class="text-lg font-semibold">Pro</h3>
-                    <div class="mt-2 text-3xl font-bold">₹199<span
-                            class="text-base font-normal text-slate-500">/mo</span></div>
-                    <ul class="mt-4 text-sm space-y-2">
-                        <li>• Unlimited subjects</li>
-                        <li>• Advanced visuals (tables/diagrams)</li>
-                        <li>• Spaced repetition & analytics</li>
-                        <li>• Offline packs</li>
-                    </ul>
-                    <a href="#"
-                        class="mt-6 inline-flex rounded-xl bg-brand-500 px-4 py-2 text-white shadow-neon">Upgrade</a>
-                </div>
-                <div
-                    class="rounded-2xl border border-slate-200/60 dark:border-white/10 p-6 bg-white/70 dark:bg-night-800/70">
-                    <h3 class="text-lg font-semibold">Campus</h3>
-                    <div class="mt-2 text-3xl font-bold">Custom</div>
-                    <ul class="mt-4 text-sm space-y-2">
-                        <li>• Faculty console</li>
-                        <li>• Institution analytics</li>
-                        <li>• SSO & LMS integrations</li>
-                        <li>• Dedicated onboarding</li>
-                    </ul>
-                    <a href="#"
-                        class="mt-6 inline-flex rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2">Contact
-                        sales</a>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- FAQ -->
-    <section id="faq" class="py-20">
-        <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-            <h2 class="text-3xl font-bold text-center">Frequently asked questions</h2>
-            <div class="mt-10 divide-y divide-slate-200/60 dark:divide-white/10">
-                <details class="group py-4">
-                    <summary class="flex cursor-pointer list-none items-center justify-between text-lg font-medium">
-                        How do you reduce hallucinations?
-                        <span class="transition group-open:rotate-180">▾</span>
-                    </summary>
-                    <p class="mt-2 text-slate-600 dark:text-slate-300">We use trusted‑source retrieval, reranking, and
-                        cross‑checks; every note block carries citations. Faculty can verify content via the console.
-                    </p>
-                </details>
-                <details class="group py-4">
-                    <summary class="flex cursor-pointer list-none items-center justify-between text-lg font-medium">
-                        Can I study offline?
-                        <span class="transition group-open:rotate-180">▾</span>
-                    </summary>
-                    <p class="mt-2 text-slate-600 dark:text-slate-300">Yes—download offline packs with notes, diagrams,
-                        and
-                        flashcards. Progress syncs when you're back online.</p>
-                </details>
-                <details class="group py-4">
-                    <summary class="flex cursor-pointer list-none items-center justify-between text-lg font-medium">
-                        Does it support my language?
-                        <span class="transition group-open:rotate-180">▾</span>
-                    </summary>
-                    <p class="mt-2 text-slate-600 dark:text-slate-300">We support English and are rolling out
-                        multilingual packs
-                        (Hindi, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali) based on demand.</p>
-                </details>
-            </div>
-        </div>
-    </section>
-
-    <!-- FOOTER -->
-    <footer class="border-t border-black/5 dark:border-white/5">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
-            <div class="grid md:grid-cols-2 gap-8 items-start">
-                <div>
-                    <div class="flex items-center gap-3">
-                        <div
-                            class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
-                            PX</div>
-                        <div>
-                            <p class="font-semibold">Pa[p]er X</p>
-                            <p class="text-xs text-slate-500 dark:text-slate-400 -mt-0.5">Learning that adapts to your
-                                syllabus</p>
-                        </div>
-                    </div>
-                    <p class="mt-4 text-sm text-slate-600 dark:text-slate-300 max-w-md">Made for Indian engineering &
-                        science
-                        students. Built with responsible AI, human‑in‑loop, and open integrations.</p>
-                </div>
-                <div class="grid sm:grid-cols-3 gap-6 text-sm">
-                    <div>
-                        <p class="font-semibold">Product</p>
-                        <ul class="mt-3 space-y-2 text-slate-600 dark:text-slate-300">
-                            <li><a href="#features" class="hover:text-brand-600">Features</a></li>
-                            <li><a href="#demo" class="hover:text-brand-600">Demo</a></li>
-                            <li><a href="#pricing" class="hover:text-brand-600">Pricing</a></li>
-                        </ul>
-                    </div>
-                    <div>
-                        <p class="font-semibold">For</p>
-                        <ul class="mt-3 space-y-2 text-slate-600 dark:text-slate-300">
-                            <li><a href="#" class="hover:text-brand-600">Students</a></li>
-                            <li><a href="staff_profile.html" class="hover:text-brand-600">Faculty</a></li>
-                            <li><a href="#" class="hover:text-brand-600">Institutions</a></li>
-                        </ul>
-                    </div>
-                    <div>
-                        <p class="font-semibold">Legal</p>
-                        <ul class="mt-3 space-y-2 text-slate-600 dark:text-slate-300">
-                            <li><a href="#" class="hover:text-brand-600">Privacy</a></li>
-                            <li><a href="#" class="hover:text-brand-600">Terms</a></li>
-                            <li><a href="#" class="hover:text-brand-600">Contact</a></li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            <div
-                class="mt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-                <p>© <span id="yr"></span> Pa[p]er X. All rights reserved.</p>
-                <div class="flex items-center gap-4">
-                    <a href="#" class="hover:text-brand-600">Twitter</a>
-                    <a href="#" class="hover:text-brand-600">GitHub</a>
-                    <a href="#" class="hover:text-brand-600">Discord</a>
-                </div>
-            </div>
-        </div>
-    </footer>
-
-    <!-- Scripts -->
+    <script>
+        function headerMenu() {
+            return {
+                active: null,
+                mobileOpen: false,
+                solutions: [
+                    { icon: 'diversity_2', label: 'Sales Development Reps', href: '#' },
+                    { icon: 'group', label: 'Account Executives', href: '#' },
+                    { icon: 'military_tech', label: 'VP of Sales', href: '#' },
+                    { icon: 'monitoring', label: 'Revenue Operations', href: '#' },
+                    { icon: 'rocket_launch', label: 'Founders', href: '#' },
+                    { icon: 'campaign', label: 'Marketing', href: '#' },
+                    { icon: 'handshake', label: 'Customer Success', href: '#' },
+                    { icon: 'badge', label: 'Recruiting', href: '#' },
+                ],
+                isOpen(key) { return this.active === key },
+                open(key) { this.active = key },
+                close(key) { if (this.active === key) { this.active = null } },
+                toggle(key) { this.active = this.active === key ? null : key },
+                closeAll() { this.active = null }
+            }
+        }
+    </script>
+    <script>
+        /* Mega menu component (imported from test3.html) */
+        function megaNav() {
+            return {
+                /* start closed by default */
+                active: null,
+                mobileOpen: false,
+                current: 0, // Chemistry index
+                visibleCount: 4,
+                pageStart: 0,
+                categories: [
+                    {
+                        id: 'proj',
+                        title: 'Project Hub',
+                        subtitle: 'Core Platform Navigation',
+                        cta: { label: 'Go to Projects Hub', href: '#' },
+                        brands: [
+                            { name: 'Postings', tag: 'Module', img: 'paper/assets/img/nav/nav1.png', href: '#' },
+                            { name: 'Create a Project', tag: 'Action', img: 'paper/assets/img/nav/nav2.png', href: '#' },
+                            { name: 'Test Portal', tag: 'Lab', img: 'paper/assets/img/nav/nav5.png', href: '#' },
+                            { name: 'My Applications', tag: 'Dashboard', img: 'paper/assets/img/nav/nav4.png', href: '#' },
+                            { name: 'Incoming Requests', tag: 'Queue', img: 'paper/assets/img/nav/nav3.png', href: '#' },
+                        ]
+                    },
+                    {
+                        id: 'story',
+                        title: 'BuBu Tales',
+                        subtitle: 'Delivering Exceptional Performance',
+                        cta: { label: 'See all Equipment', href: '#' },
+                        brands: [
+                            { name: 'Romantasy', tag: 'System', img: 'paper/assets/img/tale/tale1.png', href: '#' },
+                            { name: 'Thriller / Mystery', tag: 'System', img: 'paper/assets/img/tale/tale2.png', href: '#' },
+                            { name: 'Webtoons', tag: 'System', img: 'paper/assets/img/tale/tale3.png', href: '#' },
+                        ]
+                    },
+                    {
+                        id: 'clg',
+                        title: 'Institution',
+                        subtitle: 'Embracing the Future',
+                        cta: { label: 'See all Digital tools', href: '#' },
+                        brands: [
+                            { name: 'Institutions', tag: 'System', img: 'paper/assets/img/clg.png', href: '#' },
+                        ]
+                    },
+                    {
+                        id: 'ai',
+                        title: 'AI Services',
+                        subtitle: 'For Our Direct‑to‑Market Regions',
+                        cta: { label: 'See all Services', href: '#' },
+                        brands: [
+                            { name: 'Pro Install', tag: 'Service', href: '#' },
+                            { name: 'Field Support', tag: 'Service', href: '#' },
+                            { name: 'Training', tag: 'Academy', href: '#' },
+                        ]
+                    },
+                    {
+                        id: 'market',
+                        title: 'Marketplace',
+                        subtitle: 'For Our Direct‑to‑Market Regions',
+                        cta: { label: 'See all Services', href: '#' },
+                        brands: [
+                            { name: 'Pro Install', tag: 'Service', href: '#' },
+                            { name: 'Field Support', tag: 'Service', href: '#' },
+                            { name: 'Training', tag: 'Academy', href: '#' },
+                        ]
+                    },
+                ],
+                get totalItems() { return this.categories[this.current].brands.length },
+                get canNext() { return this.pageStart + this.visibleCount < this.totalItems },
+                get canPrev() { return this.pageStart > 0 },
+                get currentPage() { return Math.floor(this.pageStart / this.visibleCount) },
+                get totalPages() { return Math.ceil(this.totalItems / this.visibleCount) },
+                isOpen(key) { return this.active === key },
+                open(key) { this.active = key },
+                close(key) { if (this.active === key) this.active = null },
+                toggle(key) { this.active = this.active === key ? null : key },
+                select(index) { this.current = index; this.pageStart = 0; },
+                next() { if (this.canNext) this.pageStart += this.visibleCount; },
+                prev() { if (this.canPrev) this.pageStart -= this.visibleCount; }
+            }
+        }
+    </script>
     <script>
         // Theme toggle
-        const themeToggle = document.getElementById('themeToggle');
-        const root = document.documentElement;
-        const stored = localStorage.getItem('theme');
-        if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            root.classList.add('dark');
-        }
-        themeToggle?.addEventListener('click', () => {
-            root.classList.toggle('dark');
-            localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light');
+        document.addEventListener('DOMContentLoaded', () => {
+            const toggleBtns = document.querySelectorAll('[data-theme-toggle]');
+            const apply = () => {
+                const dark = document.documentElement.classList.contains('dark');
+                toggleBtns.forEach(btn => {
+                    const icon = btn.querySelector('.material-symbols-rounded');
+                    if (icon) icon.textContent = dark ? 'light_mode' : 'dark_mode';
+                });
+            };
+            toggleBtns.forEach(btn => btn.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                localStorage.setItem('px_theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+                apply();
+            }));
+            apply();
         });
 
-        // Tabs
-        const tabBtns = document.querySelectorAll('.tab-btn');
-        const panels = document.querySelectorAll('.tab-panel');
-        tabBtns.forEach(btn => btn.addEventListener('click', () => {
-            tabBtns.forEach(b => b.classList.remove('bg-brand-500', 'text-white'));
-            panels.forEach(p => p.classList.add('hidden'));
-            btn.classList.add('bg-brand-500', 'text-white');
-            document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
-        }));
-
-        // Year
-        document.getElementById('yr').textContent = new Date().getFullYear();
-
-        // If logged in: hide Sign in/Sign up (all breakpoints), show avatar and sign-out
+        // Project Portal dropdown (adapted from index)
         (function () {
-            const t = localStorage.getItem('px_token');
-            const navProfile = document.getElementById('navProfile');
-            const navProfileImg = document.getElementById('navProfileImg');
-            const navProfileInitial = document.getElementById('navProfileInitial');
-            const navSignOut = document.getElementById('navSignOut');
-            if (!t) return;
-            document.querySelectorAll('a[href="login.html"], a[href="signup.html"]').forEach(a => {
-                a.classList.add('hidden', 'sm:hidden', 'md:hidden', 'lg:hidden', 'xl:hidden', '2xl:hidden');
-                a.style.display = 'none';
-            });
-            if (navProfile) navProfile.classList.remove('hidden');
-            if (navSignOut) {
-                navSignOut.classList.remove('hidden');
-                navSignOut.onclick = () => { try { localStorage.removeItem('px_token'); } catch { } window.location.href = 'login.html'; };
+            const wrap = document.getElementById('navProjectsWrap');
+            if (!wrap) return; const btn = document.getElementById('navProjectsBtn');
+            const menu = document.getElementById('navProjectsMenu');
+            const caret = btn && btn.querySelector('[data-projects-caret]');
+            const items = () => Array.from(menu.querySelectorAll('[data-menu-item]'));
+            let open = false; let closeTimer = null;
+            function applyState() {
+                if (open) {
+                    menu.setAttribute('data-open', 'true');
+                    btn.setAttribute('aria-expanded', 'true');
+                    wrap.dataset.open = 'true';
+                    if (caret) caret.textContent = 'expand_less';
+                    setTimeout(() => { items()[0]?.focus(); }, 60);
+                } else {
+                    menu.removeAttribute('data-open');
+                    btn.setAttribute('aria-expanded', 'false');
+                    wrap.dataset.open = 'false';
+                    if (caret) caret.textContent = 'expand_more';
+                }
             }
-            const API = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
-            fetch(`${API}/api/me`, { headers: { Authorization: `Bearer ${t}` } })
-                .then(r => r.ok ? r.json() : null)
-                .then(d => {
-                    const p = d?.profile;
-                    if (!p) return;
-                    let initials = 'ME';
-                    if (p.name) initials = p.name.split(' ').filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0, 2).join('');
-                    if (navProfileInitial) navProfileInitial.textContent = initials;
-                    if (p.profile_image_url && navProfileImg) {
-                        navProfileImg.src = p.profile_image_url;
-                        navProfileImg.classList.remove('hidden');
-                        if (navProfileInitial) navProfileInitial.classList.add('hidden');
-                    }
-                })
-                .catch(() => { /* ignore */ });
+            function setState(n) { if (n === open) return; open = n; applyState(); }
+            function toggle() { setState(!open); }
+            function close() { setState(false); }
+            btn?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); toggle(); });
+            wrap.addEventListener('mouseenter', () => { if (window.matchMedia('(min-width: 1024px)').matches) setState(true); });
+            wrap.addEventListener('mouseleave', () => { if (window.matchMedia('(min-width: 1024px)').matches) closeTimer = setTimeout(close, 120); });
+            wrap.addEventListener('mousemove', () => { if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; } });
+            document.addEventListener('click', e => { if (!open) return; if (!wrap.contains(e.target)) close(); });
+            document.addEventListener('keydown', e => {
+                if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
+                    if (document.activeElement === btn) { e.preventDefault(); setState(true); return; }
+                }
+                if (!open) return;
+                const list = items();
+                const currentIndex = list.indexOf(document.activeElement);
+                if (e.key === 'Escape') { close(); btn?.focus(); }
+                else if (e.key === 'ArrowDown') { e.preventDefault(); (list[currentIndex + 1] || list[0])?.focus(); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); (list[currentIndex - 1] || list[list.length - 1])?.focus(); }
+                else if (e.key === 'Home') { e.preventDefault(); list[0]?.focus(); }
+                else if (e.key === 'End') { e.preventDefault(); list[list.length - 1]?.focus(); }
+                else if (e.key === 'Tab') { close(); }
+            });
         })();
-
-        // Project Portal dropdown is handled by config.js (setupNavDropdown)
     </script>
 </body>
 

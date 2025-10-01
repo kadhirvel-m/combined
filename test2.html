@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>distbit — Mega menú (Tailwind + Alpine)</title>
+    <meta name="description"
+        content="Mega menú estilo cripto como la maqueta: tarjetas de productos a la izquierda y panel destacado a la derecha. Accesible, responsivo." />
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#F2F2FF',
+                            100: '#EAE9FF',
+                            200: '#D9D6FF',
+                            300: '#B8B2FF',
+                            400: '#9A8CFF',
+                            500: '#7D66FF', // botón principal
+                            600: '#6B55F6',
+                            700: '#5A47D6',
+                            800: '#483AB0',
+                            900: '#362C8A'
+                        },
+                        sunshine: '#FDF0B3',
+                        stoneTint: '#F6F7FB'
+                    },
+                    boxShadow: {
+                        ring: '0 1px 2px 0 rgb(16 24 40 / 0.06), 0 1px 3px 0 rgb(16 24 40 / 0.12)'
+                    },
+                    borderRadius: { '4xl': '2rem' }
+                }
+            }
+        }
+    </script>
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:wght@400;600;700" rel="stylesheet" />
+    <style>
+        .material-symbols-rounded {
+            font-variation-settings: 'FILL' 0, 'wght' 600, 'GRAD' 0, 'opsz' 24
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none
+        }
+
+        .no-scrollbar {
+            scrollbar-width: none;
+            -ms-overflow-style: none
+        }
+    </style>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body class="min-h-screen bg-gradient-to-b from-[#E9F4E8] via-white to-[#EEF1FF] text-slate-900 antialiased">
+
+    <!-- Page container with soft rounded corners like the mockup -->
+    <div class="mx-auto max-w-[1180px] rounded-3xl bg-white shadow-ring mt-6 md:mt-8">
+
+        <!-- Header / Navbar -->
+        <header x-data="distbitNav()" class="relative z-50">
+            <div class="flex items-center justify-between gap-4 px-4 py-4 md:px-6">
+                <!-- Brand -->
+                <a href="#" class="flex items-center gap-2">
+                    <span class="inline-grid h-9 w-9 place-items-center rounded-xl bg-brand-100 shadow-ring">
+                        <!-- hexagon-ish mark -->
+                        <svg viewBox="0 0 24 24" class="h-6 w-6 text-brand-700" fill="currentColor">
+                            <path
+                                d="M11.2 2.5a2 2 0 0 1 1.6 0l6.6 3.1a2 2 0 0 1 1.1 1.8v9.2a2 2 0 0 1-1.1 1.8l-6.6 3.1a2 2 0 0 1-1.6 0l-6.6-3.1a2 2 0 0 1-1.1-1.8V7.4a2 2 0 0 1 1.1-1.8l6.6-3.1Z" />
+                        </svg>
+                    </span>
+                    <span class="text-xl font-bold tracking-tight">distbit</span>
+                </a>
+
+                <!-- Desktop nav -->
+                <nav class="hidden md:flex items-center gap-2">
+                    <div class="relative" @mouseenter="open('productos')" @mouseleave="close('productos')">
+                        <button @click="toggle('productos')" :aria-expanded="isOpen('productos')"
+                            class="group inline-flex items-center gap-1 rounded-full px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
+                            Productos
+                            <span class="material-symbols-rounded text-base transition-transform"
+                                :class="{ 'rotate-180' : isOpen('productos') }">expand_more</span>
+                        </button>
+
+                        <!-- Mega Menu Panel -->
+                        <div x-cloak x-show="isOpen('productos')" x-transition:enter="transition ease-out duration-150"
+                            x-transition:enter-start="opacity-0 -translate-y-1"
+                            x-transition:enter-end="opacity-100 translate-y-0"
+                            x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100"
+                            x-transition:leave-end="opacity-0" @click.outside="close('productos')"
+                            class="absolute left-1/2 mt-3 w-[980px] -translate-x-1/2">
+                            <div class="rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                                <div class="grid grid-cols-[1fr,360px] gap-6 p-6">
+                                    <!-- Left: Products grid -->
+                                    <div>
+                                        <h3 class="mb-4 text-lg font-bold tracking-tight">Productos</h3>
+                                        <ul class="grid grid-cols-5 gap-3">
+                                            <!-- Card 1 -->
+                                            <li>
+                                                <a href="#"
+                                                    class="group flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
+                                                    <span class="flex items-center justify-between">
+                                                        <span
+                                                            class="material-symbols-rounded text-brand-600">account_balance_wallet</span>
+                                                    </span>
+                                                    <div class="mt-4">
+                                                        <p class="text-sm font-semibold">Distbit wallet</p>
+                                                        <p class="mt-1 text-xs leading-snug text-slate-600">Controle sus
+                                                            activos desde una sola app.</p>
+                                                    </div>
+                                                </a>
+                                            </li>
+                                            <!-- Card 2 (highlighted) -->
+                                            <li>
+                                                <a href="#"
+                                                    class="group relative flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-brand-50 p-4 shadow-sm ring-1 ring-brand-200 transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
+                                                    <span class="flex items-center justify-between">
+                                                        <span
+                                                            class="material-symbols-rounded text-brand-600">sync_alt</span>
+                                                        <span
+                                                            class="material-symbols-rounded text-slate-400 group-hover:text-slate-600 text-sm">open_in_new</span>
+                                                    </span>
+                                                    <div class="mt-4">
+                                                        <p class="text-sm font-semibold">Distbit payment</p>
+                                                        <p class="mt-1 text-xs leading-snug text-slate-600">Realiza
+                                                            transferencias y pagos en efectivo.</p>
+                                                    </div>
+                                                </a>
+                                            </li>
+                                            <!-- Card 3 -->
+                                            <li>
+                                                <a href="#"
+                                                    class="group flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
+                                                    <span class="flex items-center justify-between">
+                                                        <span
+                                                            class="material-symbols-rounded text-brand-600">account_balance</span>
+                                                    </span>
+                                                    <div class="mt-4">
+                                                        <p class="text-sm font-semibold">Distbit finance</p>
+                                                        <p class="mt-1 text-xs leading-snug text-slate-600">Dile adiós a
+                                                            los bancos y hola a la finanza libre.</p>
+                                                    </div>
+                                                </a>
+                                            </li>
+                                            <!-- Card 4 -->
+                                            <li>
+                                                <a href="#"
+                                                    class="group flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
+                                                    <span class="flex items-center justify-between">
+                                                        <span
+                                                            class="material-symbols-rounded text-brand-600">payments</span>
+                                                    </span>
+                                                    <div class="mt-4">
+                                                        <p class="text-sm font-semibold">Distbit fiat</p>
+                                                        <p class="mt-1 text-xs leading-snug text-slate-600">Adquiere
+                                                            bienes y servicios.</p>
+                                                    </div>
+                                                </a>
+                                            </li>
+                                            <!-- Card 5 -->
+                                            <li>
+                                                <a href="#"
+                                                    class="group flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
+                                                    <span class="flex items-center justify-between">
+                                                        <span
+                                                            class="material-symbols-rounded text-brand-600">collections_bookmark</span>
+                                                    </span>
+                                                    <div class="mt-4">
+                                                        <p class="text-sm font-semibold">Distbit Art (NFTs)</p>
+                                                        <p class="mt-1 text-xs leading-snug text-slate-600">Conéctate al
+                                                            arte digital moderno.</p>
+                                                    </div>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <!-- Right: Promo card + Empresas -->
+                                    <aside class="flex flex-col gap-3">
+                                        <!-- Phone promo -->
+                                        <div
+                                            class="relative overflow-hidden rounded-2xl border border-slate-200 bg-sunshine p-4 shadow-sm">
+                                            <div class="flex items-start gap-3">
+                                                <!-- Simple phone mock -->
+                                                <div class="relative isolate">
+                                                    <div class="h-28 w-16 rounded-xl bg-slate-900 p-2">
+                                                        <div
+                                                            class="h-full rounded-md bg-white/90 grid place-items-center">
+                                                            <!-- fake QR -->
+                                                            <div class="grid grid-cols-4 gap-0.5">
+                                                                <template x-for="i in 16">
+                                                                    <div class="h-1.5 w-1.5"
+                                                                        :class="(i%3==0||i%5==0)?'bg-slate-900':'bg-slate-300'">
+                                                                    </div>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <!-- coins -->
+                                                    <span
+                                                        class="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-orange-400 text-white text-xs font-bold">₿</span>
+                                                    <span
+                                                        class="absolute -right-3 bottom-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-white text-xs font-bold">₮</span>
+                                                </div>
+                                                <div class="text-sm">
+                                                    <p class="font-semibold">Escanea y paga</p>
+                                                    <p class="text-slate-700">Ahorra tiempo con QR y monedas estables.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Empresas links -->
+                                        <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                            <p class="text-sm font-bold">Empresas</p>
+                                            <ul class="mt-2 space-y-1 text-sm">
+                                                <li><a href="#"
+                                                        class="group flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-50"><span>Soluciones
+                                                            B2B</span><span
+                                                            class="material-symbols-rounded text-slate-400 group-hover:text-slate-600">chevron_right</span></a>
+                                                </li>
+                                                <li><a href="#"
+                                                        class="group flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-50"><span>Referidos</span><span
+                                                            class="material-symbols-rounded text-slate-400 group-hover:text-slate-600">chevron_right</span></a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </aside>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <a href="#"
+                        class="rounded-full px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">Contacto</a>
+                    <a href="#"
+                        class="rounded-full px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">Blog</a>
+                    <a href="#"
+                        class="rounded-full px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">Ayuda</a>
+                </nav>
+
+                <!-- Right actions -->
+                <div class="hidden md:flex items-center gap-2">
+                    <a href="#"
+                        class="rounded-full px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Iniciar
+                        sesión</a>
+                    <a href="#"
+                        class="inline-flex items-center justify-center rounded-full bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-ring hover:bg-brand-700">Registrarse</a>
+                </div>
+
+                <!-- Mobile trigger -->
+                <button @click="mobileOpen=true"
+                    class="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-ring"><span
+                        class="material-symbols-rounded">menu</span></button>
+            </div>
+
+            <!-- Mobile sheet -->
+            <div x-cloak x-show="mobileOpen" x-transition.opacity class="fixed inset-0 z-50 md:hidden">
+                <div class="absolute inset-0 bg-slate-900/40" @click="mobileOpen=false"></div>
+                <div class="ml-auto flex h-full w-[92%] max-w-sm flex-col rounded-l-2xl bg-white shadow-2xl">
+                    <div class="flex items-center justify-between p-4">
+                        <div class="flex items-center gap-2 font-bold text-lg"><span
+                                class="inline-grid h-9 w-9 place-items-center rounded-xl bg-brand-100">🔷</span> distbit
+                        </div>
+                        <button @click="mobileOpen=false" class="rounded-lg border border-slate-200 p-2"><span
+                                class="material-symbols-rounded">close</span></button>
+                    </div>
+                    <div class="border-y border-slate-200 p-2 overflow-y-auto no-scrollbar">
+                        <details class="group" open>
+                            <summary
+                                class="flex cursor-pointer list-none items-center justify-between rounded-lg px-2 py-2 text-sm font-semibold hover:bg-slate-50">
+                                Productos <span
+                                    class="material-symbols-rounded transition-transform group-open:rotate-180">expand_more</span>
+                            </summary>
+                            <div class="mt-2 rounded-2xl border border-slate-200 p-3 space-y-3">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <a href="#" class="rounded-2xl border border-slate-200 p-3">
+                                        <div class="material-symbols-rounded text-brand-600">account_balance_wallet
+                                        </div>
+                                        <div class="mt-2 text-sm font-medium">Distbit wallet</div>
+                                        <p class="text-xs text-slate-600">Controle sus activos desde una sola app.</p>
+                                    </a>
+                                    <a href="#"
+                                        class="rounded-2xl border border-slate-200 bg-brand-50 ring-1 ring-brand-200 p-3">
+                                        <div class="material-symbols-rounded text-brand-600">sync_alt</div>
+                                        <div class="mt-2 text-sm font-medium">Distbit payment</div>
+                                        <p class="text-xs text-slate-600">Realiza transferencias y pagos en efectivo.
+                                        </p>
+                                    </a>
+                                    <a href="#" class="rounded-2xl border border-slate-200 p-3">
+                                        <div class="material-symbols-rounded text-brand-600">account_balance</div>
+                                        <div class="mt-2 text-sm font-medium">Distbit finance</div>
+                                        <p class="text-xs text-slate-600">Finanza libre para todos.</p>
+                                    </a>
+                                    <a href="#" class="rounded-2xl border border-slate-200 p-3">
+                                        <div class="material-symbols-rounded text-brand-600">payments</div>
+                                        <div class="mt-2 text-sm font-medium">Distbit fiat</div>
+                                        <p class="text-xs text-slate-600">Compra bienes y servicios.</p>
+                                    </a>
+                                    <a href="#" class="rounded-2xl border border-slate-200 p-3">
+                                        <div class="material-symbols-rounded text-brand-600">collections_bookmark</div>
+                                        <div class="mt-2 text-sm font-medium">Distbit Art (NFTs)</div>
+                                        <p class="text-xs text-slate-600">Arte digital moderno.</p>
+                                    </a>
+                                </div>
+                                <div class="rounded-2xl border border-slate-200 p-3">
+                                    <div class="text-sm font-bold">Empresas</div>
+                                    <a href="#"
+                                        class="mt-2 block rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50">Soluciones
+                                        B2B</a>
+                                    <a href="#"
+                                        class="block rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50">Referidos</a>
+                                </div>
+                            </div>
+                        </details>
+                        <a href="#"
+                            class="block rounded-lg px-2 py-2 text-sm font-medium hover:bg-slate-50">Contacto</a>
+                        <a href="#" class="block rounded-lg px-2 py-2 text-sm font-medium hover:bg-slate-50">Blog</a>
+                        <a href="#" class="block rounded-lg px-2 py-2 text-sm font-medium hover:bg-slate-50">Ayuda</a>
+                    </div>
+                    <div class="p-4 flex items-center gap-2">
+                        <a href="#"
+                            class="flex-1 rounded-full border border-slate-200 px-3 py-2 text-center text-sm font-semibold">Iniciar
+                            sesión</a>
+                        <a href="#"
+                            class="flex-1 rounded-full bg-brand-600 px-3 py-2 text-center text-sm font-semibold text-white">Registrarse</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Placeholder content below header to show dropdown overlap -->
+        <section class="px-6 pb-12 pt-6">
+            <div class="rounded-3xl border border-slate-200 bg-stoneTint p-6 text-center text-slate-600">
+                Hero / contenido de ejemplo (el mega menú aparece sobre esta sección)
+            </div>
+        </section>
+    </div>
+
+    <script>
+        function distbitNav() {
+            return {
+                active: null,
+                mobileOpen: false,
+                isOpen(key) { return this.active === key },
+                open(key) { this.active = key },
+                close(key) { if (this.active === key) this.active = null },
+                toggle(key) { this.active = this.active === key ? null : key }
+            }
+        }
+    </script>
+</body>
+
+</html>
