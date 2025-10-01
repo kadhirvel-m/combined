@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X — Romantasy Realms (Optimized)</title>
+    <meta name="description" content="Magical romantasy story realms within Paper X." />
+    <link rel="icon" type="image/x-icon" href="paper/assets/img/favicon.svg">
+
+    <!-- Fonts: swap for faster paint -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0&display=swap"
+        rel="stylesheet">
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' },
+                        aurora: { 400: '#C272F3' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Alpine cloak to avoid FOUC */
+        [x-cloak] {
+            display: none
+        }
+
+        .material-symbols-rounded {
+            vertical-align: -6px
+        }
+
+        .gradient-title {
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #C272F3, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradientMove 8s ease-in-out infinite;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent
+        }
+
+        .dark .gradient-title {
+            background-image: linear-gradient(90deg, #EECBF3, #DDA5FB, #FFFFFF, #EECBF3, #C272F3, #9E4BCE)
+        }
+
+        @keyframes gradientMove {
+            0% {
+                background-position: 0 50%
+            }
+
+            50% {
+                background-position: 100% 50%
+            }
+
+            100% {
+                background-position: 0 50%
+            }
+        }
+
+        /* Lightweight background (replaces heavy orbs/parallax/blur) */
+        .bg-realm-light {
+            background: radial-gradient(60rem 40rem at 15% -10%, #E7D0E4 12%, transparent 60%), linear-gradient(#FFFFFF, #FBF8FC)
+        }
+
+        .dark .bg-realm-light {
+            background: radial-gradient(60rem 40rem at 15% -10%, rgba(158, 75, 138, .25) 12%, transparent 60%), linear-gradient(#1E1E2F, #141321)
+        }
+
+        /* Scrollbar */
+        .fancy-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(158, 75, 138, .5) transparent
+        }
+
+        .fancy-scroll::-webkit-scrollbar {
+            width: 8px
+        }
+
+        .fancy-scroll::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #C272F3, #9E4BCE);
+            border-radius: 8px
+        }
+
+        /* Motion reduction */
+        @media (prefers-reduced-motion: reduce) {
+            .gradient-title {
+                animation: none
+            }
+        }
+    </style>
+
+    <!-- Theme boot (no layout thrash) -->
+    <script>(() => { const s = localStorage.getItem('px_theme'); const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches; const dark = s ? s === 'dark' : prefers; if (dark) document.documentElement.classList.add('dark'); })();</script>
+
+    <!-- Alpine -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body x-data="romantasyApp()" x-init="init()"
+    class="min-h-screen font-sans antialiased bg-realm-light text-brandlt-900 dark:text-white overflow-x-hidden">
+
+    <!-- Header -->
+    <header
+        class="sticky top-0 z-20 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:backdrop-blur border-b border-black/5 dark:border-white/10">
+        <nav class="container flex items-center justify-between py-4">
+            <a href="paper/ui/index.html" class="flex items-center gap-3 group" aria-label="Paper X Home">
+                <img src="paper/assets/img/logo-light.svg" class="h-8 w-auto dark:hidden" alt="Paper X" />
+                <img src="paper/assets/img/logo-dark.svg" class="h-8 w-auto hidden dark:block" alt="Paper X" />
+                <span
+                    class="text-xs font-semibold tracking-wide text-brand-700 dark:text-brandlt-200 group-hover:text-brand-900 dark:group-hover:text-white">Return</span>
+            </a>
+            <button @click="toggleTheme"
+                class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ring-1 ring-black/10 dark:ring-white/15 hover:bg-white/50 dark:hover:bg-white/10 transition">
+                <span class="material-symbols-rounded" x-text="isDark ? 'light_mode':'dark_mode'"></span>
+                <span class="hidden sm:block" x-text="isDark ? 'Light' : 'Dark'"></span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- Hero -->
+    <section class="relative pt-12 md:pt-16 pb-6 md:pb:10">
+        <div class="container max-w-7xl">
+            <h1 class="text-5xl md:text-7xl font-extrabold gradient-title leading-[1.04] tracking-tight">Romantasy
+                Realms</h1>
+            <p class="mt-4 md:mt-6 text-neutral-600 dark:text-white/70 text-base md:text-lg max-w-2xl">
+                Choose your narrative vector across velvet courts, rune sonatas, oath‑thorns and star‑laced rebellions.
+            </p>
+        </div>
+    </section>
+
+    <!-- 3-Panel Layout (lighter effects) -->
+    <main
+        class="relative max-w-[1900px] mx-auto px-5 lg:px-10 pb-16 grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
+
+        <!-- Left: Controls -->
+        <aside class="space-y-6 lg:sticky lg:top-20 self-start order-last lg:order-first">
+            <div class="rounded-2xl p-5 bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10">
+                <h2
+                    class="text-[11px] font-semibold tracking-[0.15em] uppercase text-neutral-500 dark:text-white/40 mb-3">
+                    Navigate</h2>
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button type="button"
+                        class="px-3 py-1.5 rounded-full text-[12px] ring-1 ring-black/10 dark:ring-white/10"
+                        :class="viewMode==='grid' ? 'bg-brandlt-200 text-brand-900 dark:text-white' : 'bg-white/60 dark:bg-white/5'"
+                        @click="viewMode='grid'" aria-label="Uniform Grid"><span
+                            class="material-symbols-rounded text-base">grid_view</span></button>
+                    <button type="button"
+                        class="px-3 py-1.5 rounded-full text-[12px] ring-1 ring-black/10 dark:ring-white/10"
+                        :class="viewMode==='mosaic' ? 'bg-brandlt-200 text-brand-900 dark:text-white' : 'bg-white/60 dark:bg-white/5'"
+                        @click="viewMode='mosaic'" aria-label="Mosaic Layout"><span
+                            class="material-symbols-rounded text-base">view_quilt</span></button>
+                    <button type="button"
+                        class="px-3 py-1.5 rounded-full text-[12px] ring-1 ring-black/10 dark:ring-white/10"
+                        :class="viewMode==='list' ? 'bg-brandlt-200 text-brand-900 dark:text-white' : 'bg-white/60 dark:bg-white/5'"
+                        @click="viewMode='list'" aria-label="List Layout"><span
+                            class="material-symbols-rounded text-base">view_agenda</span></button>
+                </div>
+                <div class="relative mb-4">
+                    <input x-model="search" type="text" placeholder="Search realms..."
+                        class="w-full rounded-xl bg-white/80 dark:bg-white/10 px-4 py-2.5 text-sm ring-1 ring-black/10 dark:ring-white/10 focus:outline-none focus:ring-brand-500/60 placeholder:text-neutral-500 dark:placeholder:text-white/50" />
+                    <span
+                        class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-white/40 text-base">search</span>
+                </div>
+                <div>
+                    <h3
+                        class="text-[11px] font-semibold tracking-wide uppercase text-neutral-500 dark:text-white/40 mb-2">
+                        Genres</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button @click="activeFilter='all'" :class="filterBtnClass('all')">All</button>
+                        <template x-for="f in filters" :key="f">
+                            <button @click="activeFilter=f" x-text="f" :class="filterBtnClass(f)"></button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+            <div
+                class="rounded-2xl p-4 text-[12px] bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10">
+                Favorited items persist this session only.
+            </div>
+        </aside>
+
+        <!-- Center: Stories -->
+        <section class="space-y-8 order-first lg:order-none" aria-label="Story Realms">
+
+            <!-- Grid -->
+            <div x-show="viewMode==='grid'" x-transition.opacity.duration.200ms>
+                <div class="grid gap-6 md:gap-8 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" role="list"
+                    x-id="['storycard']">
+                    <template x-for="s in filteredStories()" :key="s.id">
+                        <article role="listitem" data-focusable @click="openStory(s)" :id="$id('storycard', s.id)"
+                            tabindex="0" @keydown.enter.prevent="openStory(s)"
+                            class="group relative cursor-pointer rounded-2xl p-[1px] overflow-hidden bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10">
+                            <div class="relative h-full rounded-[inherit] flex flex-col">
+                                <figure class="relative aspect-[4/3] w-full overflow-hidden rounded-xl m-3 mb-2">
+                                    <img :src="s.cover" :alt="s.title + ' cover'" loading="lazy" decoding="async"
+                                        sizes="(max-width: 768px) 100vw, 33vw" class="w-full h-full object-cover" />
+                                    <div
+                                        class="absolute inset-0 bg-gradient-to-t from-brand-900/60 via-transparent to-transparent">
+                                    </div>
+                                    <div class="absolute bottom-2 left-2 flex flex-wrap gap-1">
+                                        <template x-for="g in s.genres" :key="g"><span
+                                                class="text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-1 bg-brand-500 text-white/95">{{g}}</span></template>
+                                    </div>
+                                    <button @click.stop="toggleFav(s)" :aria-pressed="s.fav"
+                                        :title="s.fav? 'Unfavorite':'Favorite'"
+                                        class="absolute top-2 right-2 rounded-full bg-white/80 dark:bg-white/10 px-2 py-2 text-brand-700 dark:text-white/80"><span
+                                            class="material-symbols-rounded text-base"
+                                            x-text="s.fav? 'favorite':'favorite_border'"></span></button>
+                                </figure>
+                                <div class="px-5 pb-5 flex flex-col flex-1">
+                                    <h3
+                                        class="text-base md:text-lg font-bold leading-snug text-brand-900 dark:text-white/90">
+                                        {{s.title}}</h3>
+                                    <p class="mt-1 text-[13px] text-neutral-600 dark:text-white/60 line-clamp-3">
+                                        {{s.tagline}}</p>
+                                    <div class="mt-3">
+                                        <div class="h-1.5 rounded-full bg-brandlt-100 dark:bg-white/10 overflow-hidden">
+                                            <div class="h-full rounded-full bg-brand-500"
+                                                :style="'width:' + s.progress + '%' "></div>
+                                        </div>
+                                        <div
+                                            class="mt-1 flex items-center justify-between text-[11px] text-neutral-500 dark:text-white/40">
+                                            <span x-text="s.progress + '% Read'"></span><span
+                                                x-text="s.chapters + ' ch'"></span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-auto pt-4 flex items-center justify-between">
+                                        <button @click.stop="openStory(s)"
+                                            class="inline-flex items-center gap-1 text-[12px] font-semibold uppercase text-brand-700 dark:text-brandlt-200">Enter
+                                            <span class="material-symbols-rounded text-sm">north_east</span></button>
+                                        <button @click.stop="queueStory(s)"
+                                            class="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-3 py-1.5 bg-brandlt-200/60 dark:bg-white/5">Queue</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </article>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Mosaic (kept, but deterministic + light) -->
+            <div x-show="viewMode==='mosaic'" x-transition.opacity.duration.200ms>
+                <div class="grid [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))] gap-6 auto-rows-[200px]"
+                    role="list" x-id="['storycardM']">
+                    <template x-for="s in filteredStories()" :key="s.id">
+                        <article role="listitem" data-focusable @click="openStory(s)" :id="$id('storycardM', s.id)"
+                            tabindex="0" @keydown.enter.prevent="openStory(s)"
+                            :class="'group relative cursor-pointer rounded-2xl overflow-hidden ring-1 ring-black/10 dark:ring-white/10 p-[1px] bg-white/70 dark:bg-white/5 ' + computeSpan(s)">
+                            <figure class="relative w-full h-full overflow-hidden rounded-[inherit]">
+                                <img :src="s.cover" :alt="s.title + ' cover'" loading="lazy" decoding="async"
+                                    class="absolute inset-0 w-full h-full object-cover" />
+                                <div
+                                    class="absolute inset-0 bg-gradient-to-t from-brand-900/60 via-transparent to-transparent">
+                                </div>
+                                <div class="absolute top-3 left-3 flex flex-wrap gap-1 max-w-[70%]">
+                                    <template x-for="g in s.genres" :key="g"><span
+                                            class="text-[9px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 bg-brand-500 text-white/95">{{g}}</span></template>
+                                </div>
+                                <button @click.stop="toggleFav(s)" :aria-pressed="s.fav"
+                                    class="absolute top-2 right-2 rounded-full bg-white/80 dark:bg-white/10 px-2 py-2 text-brand-700 dark:text-white/80"><span
+                                        class="material-symbols-rounded text-base"
+                                        x-text="s.fav? 'favorite':'favorite_border'"></span></button>
+                                <div class="absolute bottom-0 left-0 right-0 p-3">
+                                    <h3 class="text-sm md:text-base font-bold leading-snug text-white">{{s.title}}</h3>
+                                    <p class="mt-1 text-[11px] text-white/80 line-clamp-2">{{s.tagline}}</p>
+                                    <div class="mt-2 h-1 rounded-full bg-white/30 overflow-hidden">
+                                        <div class="h-full bg-brand-500" :style="'width:' + s.progress + '%' "></div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </article>
+                    </template>
+                </div>
+            </div>
+
+            <!-- List -->
+            <div x-show="viewMode==='list'" x-transition.opacity.duration.200ms>
+                <div class="flex flex-col gap-6" role="list" x-id="['storycardL']">
+                    <template x-for="s in filteredStories()" :key="s.id">
+                        <article role="listitem" data-focusable @click="openStory(s)" :id="$id('storycardL', s.id)"
+                            tabindex="0" @keydown.enter.prevent="openStory(s)"
+                            class="group relative cursor-pointer rounded-2xl overflow-hidden ring-1 ring-black/10 dark:ring-white/10 flex flex-row h-56 p-[1px] bg-white/70 dark:bg-white/5">
+                            <figure class="relative w-64 h-full overflow-hidden m-3 rounded-xl flex-shrink-0">
+                                <img :src="s.cover" :alt="s.title + ' cover'" loading="lazy" decoding="async"
+                                    class="w-full h-full object-cover" />
+                                <div
+                                    class="absolute inset-0 bg-gradient-to-t from-brand-900/60 via-transparent to-transparent">
+                                </div>
+                                <button @click.stop="toggleFav(s)" :aria-pressed="s.fav"
+                                    class="absolute top-2 right-2 rounded-full bg-white/80 dark:bg-white/10 px-2 py-2 text-brand-700 dark:text-white/80"><span
+                                        class="material-symbols-rounded text-base"
+                                        x-text="s.fav? 'favorite':'favorite_border'"></span></button>
+                            </figure>
+                            <div class="flex flex-col flex-1 pr-6 py-6">
+                                <h3 class="text-lg font-bold leading-snug text-brand-900 dark:text-white/90">{{s.title}}
+                                </h3>
+                                <p class="mt-2 text-[13px] text-neutral-600 dark:text-white/60 line-clamp-3 max-w-3xl">
+                                    {{s.tagline}}</p>
+                                <div class="mt-3 w-72">
+                                    <div class="h-1.5 rounded-full bg-brandlt-100 dark:bg-white/10 overflow-hidden">
+                                        <div class="h-full rounded-full bg-brand-500"
+                                            :style="'width:' + s.progress + '%' "></div>
+                                    </div>
+                                    <div
+                                        class="mt-1 flex items-center justify-between text-[11px] text-neutral-500 dark:text-white/40">
+                                        <span x-text="s.progress + '% Read'"></span><span
+                                            x-text="s.chapters + ' ch'"></span></div>
+                                </div>
+                                <div class="mt-auto pt-4 flex items-center gap-4">
+                                    <button @click.stop="queueStory(s)"
+                                        class="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-3 py-1.5 bg-brandlt-200/60 dark:bg-white/5">Queue</button>
+                                    <button @click.stop="openStory(s)"
+                                        class="inline-flex items-center gap-1 text-[11px] font-semibold uppercase text-brand-700 dark:text-brandlt-200">Enter
+                                        <span class="material-symbols-rounded text-sm">north_east</span></button>
+                                </div>
+                            </div>
+                        </article>
+                    </template>
+                </div>
+            </div>
+
+            <div x-show="filteredStories().length===0"
+                class="mt-10 text-center text-sm text-neutral-600 dark:text-white/50">No matching tales. Try a different
+                search/filter.</div>
+        </section>
+
+        <!-- Right: Favorites -->
+        <aside class="space-y-6 lg:sticky lg:top-20 self-start">
+            <div class="rounded-2xl p-5 bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10">
+                <h2
+                    class="text-xs font-semibold tracking-[0.15em] uppercase text-neutral-500 dark:text-white/40 mb-3 flex items-center gap-2">
+                    <span class="material-symbols-rounded text-base">favorite</span> Favorites</h2>
+                <template x-if="favorites().length === 0">
+                    <p class="text-[12px] text-neutral-500 dark:text-white/40">No favorited realms yet.</p>
+                </template>
+                <ul class="space-y-3 max-h-[400px] overflow-auto pr-1 fancy-scroll">
+                    <template x-for="f in favorites()" :key="f.id">
+                        <li
+                            class="group relative rounded-xl p-3 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5">
+                            <div class="flex items-start gap-3">
+                                <div class="w-14 h-14 rounded-lg overflow-hidden relative flex-shrink-0">
+                                    <img :src="f.cover" :alt="f.title + ' thumb'" loading="lazy" decoding="async"
+                                        class="w-full h-full object-cover" />
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-[12px] font-semibold text-brand-700 dark:text-white/80 truncate"
+                                        x-text="f.title"></p>
+                                    <div class="mt-1 h-1 rounded-full bg-brandlt-100 dark:bg-white/10 overflow-hidden">
+                                        <div class="h-full bg-brand-500" :style="'width:' + f.progress + '%' "></div>
+                                    </div>
+                                    <div
+                                        class="mt-1 flex items-center justify-between text-[10px] text-neutral-500 dark:text-white/40">
+                                        <span x-text="f.progress + '%' "></span><span
+                                            x-text="f.chapters + ' ch'"></span></div>
+                                </div>
+                                <button @click="toggleFav(f)"
+                                    class="rounded-full p-1.5 text-neutral-500 dark:text-white/50 hover:text-brand-700 dark:hover:text-white"><span
+                                        class="material-symbols-rounded text-sm">close</span></button>
+                            </div>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Modal (unchanged structure, lighter styles) -->
+    <div x-cloak x-show="modalOpen" x-transition.opacity
+        class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="closeModal"></div>
+        <div x-trap.noscroll.inert="modalOpen"
+            class="relative w-full max-w-3xl rounded-2xl overflow-hidden ring-1 ring-white/15 bg-white dark:bg-brand-900 text-brand-900 dark:text-white"
+            x-transition.scale>
+            <div class="flex flex-col md:flex-row">
+                <div class="relative md:w-1/2 aspect-[4/5] overflow-hidden">
+                    <img :src="activeStory?.cover" class="absolute inset-0 w-full h-full object-cover object-center"
+                        :alt="activeStory?.title + ' cover large'" />
+                    <div class="absolute inset-0 bg-gradient-to-t from-brand-900/60 via-transparent to-transparent">
+                    </div>
+                </div>
+                <div class="md:w-1/2 p-6 md:p-8 flex flex-col">
+                    <div class="flex items-start justify-between gap-4">
+                        <h2 class="text-2xl font-extrabold leading-tight">{{activeStory?.title}}</h2>
+                        <button @click="closeModal"
+                            class="rounded-full p-2 text-neutral-500 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/10"><span
+                                class="material-symbols-rounded">close</span></button>
+                    </div>
+                    <p class="mt-3 text-sm text-neutral-700 dark:text-white/70 leading-relaxed"
+                        x-text="activeStory?.description"></p>
+                    <div class="mt-5 grid grid-cols-3 gap-3 text-center text-[11px] font-medium">
+                        <div class="rounded-xl bg-white/80 dark:bg-white/5 p-3 ring-1 ring-black/5 dark:ring-white/10">
+                            <span class="block text-base font-bold" x-text="activeStory?.chapters"></span>Chapters</div>
+                        <div class="rounded-xl bg-white/80 dark:bg-white/5 p-3 ring-1 ring-black/5 dark:ring-white/10">
+                            <span class="block text-base font-bold"
+                                x-text="activeStory?.progress + '%' "></span>Progress</div>
+                        <div class="rounded-xl bg-white/80 dark:bg-white/5 p-3 ring-1 ring-black/5 dark:ring-white/10">
+                            <span class="block text-base font-bold" x-text="activeStory?.rating"></span>Rating</div>
+                    </div>
+                    <div class="mt-6 flex flex-wrap gap-3">
+                        <button @click="toggleFav(activeStory)"
+                            class="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold bg-brand-500 text-white">
+                            <span class="material-symbols-rounded text-base"
+                                x-text="activeStory?.fav? 'favorite':'favorite_border'"></span>
+                            <span x-text="activeStory?.fav? 'Favorited':'Favorite'"></span>
+                        </button>
+                        <button @click="queueStory(activeStory)"
+                            class="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-brandlt-300/60 dark:ring-white/15">
+                            <span class="material-symbols-rounded text-base">playlist_add</span> Queue
+                        </button>
+                        <button
+                            class="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold bg-brand-700 text-white">
+                            <span class="material-symbols-rounded text-base">auto_stories</span> Continue
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer
+        class="border-t border-black/5 dark:border-white/10 py-10 text-center text-[11px] text-neutral-500 dark:text-white/40">
+        Crafted for imagination • <a href="paper/ui/index.html"
+            class="underline hover:text-brand-700 dark:hover:text-white">Back to Platform</a></footer>
+
+    <script>
+        function romantasyApp() {
+            return {
+                isDark: document.documentElement.classList.contains('dark'),
+                stories: [
+                    { id: 1, title: 'Moonlit Treaty', tagline: 'A runaway heir & a winged guardian bound by a blood‑lune pact.', genres: ['Fae', 'Court'], cover: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=900&q=60', chapters: 46, progress: 32, rating: '4.8', fav: false, description: 'When a fragile truce between dawn and dusk courts fractures, Elira forges a forbidden bond with a cursed winged guardian. Their alliance may rewrite the Astral Accord—or end both realms.' },
+                    { id: 2, title: 'Embers & Velvet', tagline: 'Alchemy guild rivalries ignite a slow‑burn alliance.', genres: ['Alchemy', 'Guild'], cover: 'https://images.unsplash.com/photo-1583136192161-438d058e3d0a?auto=format&fit=crop&w=900&q=60', chapters: 38, progress: 54, rating: '4.6', fav: true, description: 'In a city built on layered sigils, rival alchemists decode a forgotten velvet catalyst that amplifies emotion. Each experiment pulls them deeper into a conspiracy of erased archives.' },
+                    { id: 3, title: 'Starlace Rebellion', tagline: 'A masked insurgent & a celestial archivist decode fate threads.', genres: ['Rebellion', 'Celestial'], cover: 'https://images.unsplash.com/photo-1508261303786-0e0a9272d552?auto=format&fit=crop&w=900&q=60', chapters: 52, progress: 12, rating: '4.7', fav: false, description: 'The Constellarium weaves destinies—until fissures appear. A rebel lace‑weaver and an oath‑bound archivist unravel patterns of control spun across generations.' },
+                    { id: 4, title: 'Gilded Thorn Oath', tagline: 'Poison garden trials awaken forbidden empathy.', genres: ['Trials', 'Dark Bloom'], cover: 'https://images.unsplash.com/photo-1508612761958-e931b53f1e7f?auto=format&fit=crop&w=900&q=60', chapters: 29, progress: 67, rating: '4.5', fav: false, description: 'Success in the Thorn Conservatory demands emotional suppression. A candidate whose empathy cannot be muted discovers sentient flora reacting to suppressed memories.' },
+                    { id: 5, title: 'Silent Rune Sonata', tagline: 'Runic music binds fractured realms through dissonant chords.', genres: ['Runes', 'Music'], cover: 'https://images.unsplash.com/photo-1471444928139-48c5bf5173f8?auto=format&fit=crop&w=900&q=60', chapters: 41, progress: 0, rating: '4.4', fav: false, description: 'Illicit performances awaken dormant sigil resonance. Two composers decode harmonic sequences that might retune collapsing border veils.' },
+                    { id: 6, title: 'Ivory Relic Pact', tagline: 'A relic chooses partners who already broke destiny.', genres: ['Relic', 'Prophecy'], cover: 'https://images.unsplash.com/photo-1499260164903-6be9eb3c261e?auto=format&fit=crop&w=900&q=60', chapters: 34, progress: 83, rating: '4.9', fav: true, description: 'An artifact forged from extinct fractal bone rejects every legacy bearer—until two outcasts trigger divergent echo memories inside its lattice.' },
+                    { id: 7, title: 'Warden of Lumen Spires', tagline: 'Lightbound towers flicker when a forbidden vow forms.', genres: ['Vows', 'Arc Light'], cover: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=900&q=60', chapters: 55, progress: 21, rating: '4.6', fav: false, description: 'A vowforged sentinel and a memory‑fractured cartographer ascend crystalline spires to stabilize auric conduits destabilized by longing.' },
+                    { id: 8, title: 'Ashfall Serenade', tagline: 'Volcanic glass harps echo feelings unsung.', genres: ['Elemental', 'Song'], cover: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=900&q=60', chapters: 27, progress: 9, rating: '4.3', fav: false, description: 'In a caldera settlement, resonant glass forms melodic fractures. A composer decodes ashfall cadence patterns revealing suppressed political grief.' }
+                ],
+                filters: ['Fae', 'Court', 'Alchemy', 'Guild', 'Rebellion', 'Celestial', 'Trials', 'Runes', 'Music', 'Relic', 'Prophecy', 'Vows', 'Elemental', 'Song'],
+                activeFilter: 'all',
+                search: '',
+                modalOpen: false,
+                activeStory: null,
+                viewMode: 'grid',
+                init() { },
+                filteredStories() {
+                    const term = this.search.trim().toLowerCase();
+                    return this.stories.filter(s => {
+                        const fOk = this.activeFilter === 'all' || s.genres.includes(this.activeFilter);
+                        const tOk = !term || s.title.toLowerCase().includes(term) || s.tagline.toLowerCase().includes(term);
+                        return fOk && tOk;
+                    });
+                },
+                favorites() { return this.stories.filter(s => s.fav) },
+                computeSpan(s) {
+                    // Deterministic: id mod yields layout
+                    const n = s.id % 6; // 0..5
+                    if (n === 0) return 'row-span-2 col-span-2 min-h-[410px]';
+                    if (n === 1) return 'row-span-2';
+                    if (n === 2) return 'col-span-2';
+                    return '';
+                },
+                filterBtnClass(f) {
+                    const active = this.activeFilter === f;
+                    return 'rounded-full px-3 py-1.5 text-[12px] font-medium ring-1 ' + (active ? 'bg-brandlt-200 text-brand-900 dark:text-white ring-brandlt-300' : 'bg-white/60 dark:bg-white/5 ring-black/10 dark:ring-white/10 text-neutral-600 dark:text-white/60');
+                },
+                toggleFav(s) { s.fav = !s.fav },
+                queueStory(s) { s.queued = true },
+                openStory(s) { this.activeStory = s; this.modalOpen = true },
+                closeModal() { this.modalOpen = false; this.activeStory = null },
+                toggleTheme() { document.documentElement.classList.toggle('dark'); this.isDark = document.documentElement.classList.contains('dark'); localStorage.setItem('px_theme', this.isDark ? 'dark' : 'light') }
+            }
+        }
+    </script>
+</body>
+
+</html>
