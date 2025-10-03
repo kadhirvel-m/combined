@@ -1,3 +1,49 @@
+# Notes Marketplace (New Feature)
+
+This release adds a basic Notes Marketplace under the `paper` app:
+
+Features:
+- Upload & share notes (PDF / MD / image) – free or paid (mock payment; records purchase only)
+- Listing with filters (search text, subject, exam type, price range)
+- Per-note detail page with download or purchase button
+- Ratings & Reviews (1 per user, editable)
+- Simple aggregate rating (stored on note row)
+
+API Endpoints (prefix `/api/marketplace`):
+- `POST /notes` multipart form (auth required)
+- `GET /notes` list with optional filters (q, subject, exam_type, min_price, max_price)
+- `GET /notes/{id}` detail (includes reviews, has_access flag)
+- `GET /notes/{id}/download` (requires access)
+- `POST /notes/{id}/purchase` (mock purchase, creates record for non-free note)
+- `POST /notes/{id}/review` (rating/comment add or update)
+- `DELETE /notes/{id}` owner delete
+
+Database (conceptual schema added in `db.sql`):
+- `marketplace_notes` – core metadata & aggregates
+- `marketplace_purchases` – one row per buyer per note
+- `marketplace_reviews` – rating/comment per user per note
+
+Storage:
+- Files saved under `paper/assets/notes_marketplace/` with randomized prefix.
+
+UI Pages (`paper/ui`):
+- `notes_marketplace.html` – browse & filter
+- `upload_note.html` – uploader form
+- `note_detail.html` – detail + download/purchase + reviews
+- Added nav links into `notes_generator.html` header
+
+Auth:
+- Uses existing Supabase bearer token (expects stored in localStorage as `sb-access-token`).
+
+Future Enhancements (suggested):
+- Full-text search via PostgreSQL or external index
+- Tag auto-complete & facets
+- Pagination / infinite scroll
+- File preview (render first page of PDF)
+- Earnings dashboard + real payment integration
+- Admin moderation / report abuse
+- Caching layer for list queries
+
 # PaperX - Advanced Academic Research & Collaboration Platform
 
 ## ⚠️ PROPRIETARY SOFTWARE - STRICTLY CONFIDENTIAL

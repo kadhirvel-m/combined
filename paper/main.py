@@ -4796,6 +4796,22 @@ def list_colleges():
     res = supabase.table("colleges").select("id,name,logo_url").order("name").execute()
     return [{"id": row["id"], "name": row["name"], "logo_url": row.get("logo_url")} for row in (res.data or [])]
 
+@academics_router.get(
+    "/api/colleges/{college_id}/degrees",
+    response_model=List[DegreeOut],
+    summary="List degrees for a college (with departments & batches)",
+)
+def list_degrees_for_college(college_id: uuid.UUID):
+    """Return the degrees for a college.
+
+    Reuses the existing get_college_full aggregation logic so each DegreeOut
+    includes its departments (with batches) consistent with other responses.
+    This complements the existing POST /api/colleges/{college_id}/degrees which creates a degree.
+    """
+    data = get_college_full(college_id)
+    degrees: List[DegreeOut] = data["degrees"]
+    return degrees
+
 
 @academics_router.post(
     "/api/colleges/{college_id}/degrees",
@@ -5955,6 +5971,448 @@ def upload_profile_asset(
 
 notes_router = APIRouter()
 
+# --- Notes Marketplace API ---
+marketplace_router = APIRouter()
+
+# Storage directory for uploaded marketplace note files (PDF, images, etc.)
+MARKETPLACE_STORAGE = Path(__file__).resolve().parent / "assets" / "notes_marketplace"
+MARKETPLACE_STORAGE.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_NOTE_EXTENSIONS = {".pdf", ".md", ".txt", ".png", ".jpg", ".jpeg"}
+MAX_NOTE_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
+
+
+def _require_auth_user_id(token: Optional[str]) -> str:
+    """Resolve auth user id from bearer token using Supabase anon client."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid auth token")
+    anon = get_anon_client()
+    if not anon:
+        raise HTTPException(status_code=500, detail="Anon client not configured")
+    try:
+        user = anon.auth.get_user(token)  # type: ignore[attr-defined]
+        uid = _get_user_id_from_auth_response(user)
+        if not uid:
+            raise HTTPException(status_code=401, detail="Invalid auth user")
+        return uid
+    except Exception:
+        raise HTTPException(status_code=401, detail="Auth validation failed")
+
+
+def _sanitize_filename(name: str) -> str:
+    base = re.sub(r"[^a-zA-Z0-9_.-]+", "_", name.strip())[:120]
+    return base or "note"
+
+
+def _store_marketplace_file(upload: UploadFile) -> tuple[str, int, str]:
+    suffix = Path(upload.filename or "").suffix.lower()
+    if suffix not in ALLOWED_NOTE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+    # Read into memory (size limit) then write
+    content = upload.file.read()
+    size = len(content)
+    if size > MAX_NOTE_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large (>25MB)")
+    rand = uuid.uuid4().hex
+    safe_name = _sanitize_filename(Path(upload.filename or "uploaded").name)
+    stored_name = f"{rand}-{safe_name}"
+    stored_path = MARKETPLACE_STORAGE / stored_name
+    with open(stored_path, "wb") as f:
+        f.write(content)
+    return stored_name, size, (upload.content_type or "application/octet-stream")
+
+
+@marketplace_router.post("/api/marketplace/notes", summary="Upload a note to marketplace")
+def mp_upload_note(
+    title: str = Form(..., min_length=1, max_length=256),
+    description: str = Form(""),
+    subject: str = Form(""),
+    unit: str = Form(""),
+    exam_type: str = Form(""),
+    categories: str = Form(""),  # comma separated
+    price_cents: int = Form(0, ge=0),
+    college_id: Optional[str] = Form(None),
+    degree_id: Optional[str] = Form(None),
+    department_id: Optional[str] = Form(None),
+    batch_id: Optional[str] = Form(None),
+    semester: Optional[int] = Form(None),
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    user_id = _require_auth_user_id(token)
+    stored_name, size, mime = _store_marketplace_file(file)
+    cats = [c.strip() for c in (categories or "").split(",") if c.strip()]
+    supabase = get_service_client()
+    row = {
+        "owner_user_id": user_id,
+        "title": title.strip(),
+        "description": description.strip() or None,
+        "subject": subject.strip() or None,
+        "unit": unit.strip() or None,
+        "exam_type": exam_type.strip() or None,
+        "categories": cats,
+        "price_cents": price_cents,
+        "original_filename": file.filename,
+        "stored_path": stored_name,
+        "mime_type": mime,
+        "file_size": size,
+    }
+    # Attach academic linkage if provided (light validation)
+    if college_id:
+        row["college_id"] = college_id
+    if degree_id:
+        row["degree_id"] = degree_id
+    if department_id:
+        row["department_id"] = department_id
+    if batch_id:
+        row["batch_id"] = batch_id
+    if semester is not None:
+        if semester < 1 or semester > 12:
+            raise HTTPException(status_code=400, detail="semester must be between 1 and 12")
+        row["semester"] = semester
+    res = supabase.table("marketplace_notes").insert(row).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (insert note): {res.error}")
+    return {"note": res.data[0] if res.data else row}
+
+
+@marketplace_router.get("/api/marketplace/notes", summary="List marketplace notes")
+def mp_list_notes(
+    q: Optional[str] = Query(None),
+    subject: Optional[str] = Query(None),
+    exam_type: Optional[str] = Query(None),
+    min_price: Optional[int] = Query(None, ge=0),
+    max_price: Optional[int] = Query(None, ge=0),
+    college_id: Optional[str] = Query(None),
+    degree_id: Optional[str] = Query(None),
+    department_id: Optional[str] = Query(None),
+    batch_id: Optional[str] = Query(None),
+    semester: Optional[int] = Query(None, ge=1, le=12),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    supabase = get_service_client()
+    query = supabase.table("marketplace_notes").select("*").order("created_at", desc=True)
+    # Basic filters happen client-side after fetch because supabase python client has limited chaining w/ dynamic filters.
+    res = query.execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list notes): {res.error}")
+    items = res.data or []
+    # Collect unique owner_user_id values to enrich with profile display fields.
+    owner_ids = sorted({r.get("owner_user_id") for r in items if r.get("owner_user_id")})
+    profiles_map: dict[str, dict] = {}
+    if owner_ids:
+        CHUNK = 40
+        for i in range(0, len(owner_ids), CHUNK):
+            chunk = owner_ids[i:i+CHUNK]
+            # user_profiles uses auth_user_id as foreign key to auth users (see public profile endpoint)
+            try:
+                prof_res = (
+                    supabase.table("user_profiles")
+                    .select("auth_user_id,name,profile_image_url")
+                    .in_("auth_user_id", chunk)
+                    .execute()
+                )
+            except Exception:  # pragma: no cover
+                prof_res = None
+            if prof_res and getattr(prof_res, "data", None):
+                for pr in prof_res.data:
+                    pid = pr.get("auth_user_id")
+                    if pid:
+                        profiles_map[pid] = pr
+    # Enrich each note with seller fields (short form) for UI consumption.
+    for r in items:
+        oid = r.get("owner_user_id")
+        prof = profiles_map.get(oid) if oid else None
+        if prof:
+            # Use name from user_profiles (postings style); fallback masked id
+            disp = prof.get("name") or (oid[:6] + "…" if oid else "")
+            r["seller"] = {
+                "id": oid,
+                "name": disp,
+                "avatar_url": prof.get("profile_image_url"),
+            }
+        else:
+            if oid:
+                r["seller"] = {"id": oid, "name": oid[:6] + "…", "avatar_url": None}
+    
+    def _match(row: dict) -> bool:
+        if q:
+            txt = " ".join(str(row.get(k, "")) for k in ["title", "description", "subject", "unit"]).lower()
+            if q.lower() not in txt:
+                return False
+        if subject and (row.get("subject") or "") != subject:
+            return False
+        if exam_type and (row.get("exam_type") or "") != exam_type:
+            return False
+        if college_id and (row.get("college_id") or "") != college_id:
+            return False
+        if degree_id and (row.get("degree_id") or "") != degree_id:
+            return False
+        if department_id and (row.get("department_id") or "") != department_id:
+            return False
+        if batch_id and (row.get("batch_id") or "") != batch_id:
+            return False
+        if semester is not None and row.get("semester") != semester:
+            return False
+        price = int(row.get("price_cents") or 0)
+        if min_price is not None and price < min_price:
+            return False
+        if max_price is not None and price > max_price:
+            return False
+        return True
+    filtered = [r for r in items if _match(r)]
+    total = len(filtered)
+    paged = filtered[offset: offset + limit]
+    return {"items": paged, "total": total, "limit": limit, "offset": offset}
+
+
+@marketplace_router.get("/api/marketplace/notes/{note_id}", summary="Get marketplace note detail")
+def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(default=None), token: Optional[str] = Query(None)):
+    header_token = _parse_bearer_token(authorization)
+    token = token or header_token
+    supabase = get_service_client()
+    res = supabase.table("marketplace_notes").select("*").eq("id", str(note_id)).limit(1).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get note): {res.error}")
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    note = res.data[0]
+    # Determine if user has access (owner or purchased or free)
+    user_id = None
+    if token:
+        try:
+            user_id = _require_auth_user_id(token)
+        except HTTPException:
+            user_id = None
+    has_access = False
+    if note.get("price_cents", 0) == 0:
+        has_access = True
+    elif user_id and user_id == note.get("owner_user_id"):
+        has_access = True
+    elif user_id:
+        pur = (
+            supabase.table("marketplace_purchases")
+            .select("id")
+            .eq("note_id", str(note_id))
+            .eq("buyer_user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if getattr(pur, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (check purchase): {pur.error}")
+        if pur.data:
+            has_access = True
+    # Reviews
+    rev = (
+        supabase.table("marketplace_reviews")
+        .select("id,reviewer_user_id,rating,comment,created_at")
+        .eq("note_id", str(note_id))
+        .order("created_at", desc=True)
+        .execute()
+    )
+    reviews = rev.data or []
+    # Collect user ids for enrichment (owner + reviewers)
+    user_ids: set[str] = set()
+    owner_id = note.get("owner_user_id")
+    if owner_id:
+        user_ids.add(owner_id)
+    for r in reviews:
+        rid = r.get("reviewer_user_id")
+        if rid:
+            user_ids.add(rid)
+    profiles_map: dict[str, dict] = {}
+    if user_ids:
+        # Fetch profiles from user_profiles (auth_user_id mapping)
+        try:
+            prof_res = (
+                supabase.table("user_profiles")
+                .select("auth_user_id,name,profile_image_url")
+                .in_("auth_user_id", list(user_ids))
+                .execute()
+            )
+            if not getattr(prof_res, "error", None):
+                for row in prof_res.data or []:
+                    uid = row.get("auth_user_id")
+                    if uid:
+                        profiles_map[uid] = row
+        except Exception:
+            pass
+    # Attach seller
+    if owner_id and owner_id in profiles_map:
+        prow = profiles_map[owner_id]
+        note["seller"] = {
+            "id": owner_id,
+            "name": prow.get("name") or owner_id[:6] + "…",
+            "avatar_url": prow.get("profile_image_url"),
+        }
+    # Enrich each review
+    for r in reviews:
+        rid = r.get("reviewer_user_id")
+        prow = profiles_map.get(rid)
+        if prow:
+            r["reviewer"] = {
+                "id": rid,
+                "name": prow.get("name") or (rid[:6] + "…" if rid else None),
+                "avatar_url": prow.get("profile_image_url"),
+            }
+    return {"note": note, "has_access": has_access, "reviews": reviews}
+
+
+@marketplace_router.get("/api/marketplace/notes/{note_id}/download", summary="Download note file (public)")
+def mp_download_note(note_id: uuid.UUID):
+    """Serve the note file publicly (purchase no longer required)."""
+    supabase = get_service_client()
+    res = supabase.table("marketplace_notes").select("stored_path").eq("id", str(note_id)).limit(1).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get note): {res.error}")
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    stored = res.data[0].get("stored_path")
+    if not stored:
+        raise HTTPException(status_code=500, detail="File missing")
+    file_path = MARKETPLACE_STORAGE / stored
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found on server")
+    return FileResponse(str(file_path), filename=stored)
+
+
+@marketplace_router.post("/api/marketplace/notes/{note_id}/purchase", summary="Purchase a paid note (mock payment)")
+def mp_purchase_note(note_id: uuid.UUID, authorization: Optional[str] = Header(default=None), token: Optional[str] = Query(None)):
+    header_token = _parse_bearer_token(authorization)
+    token = token or header_token
+    user_id = _require_auth_user_id(token)
+    supabase = get_service_client()
+    note_res = supabase.table("marketplace_notes").select("price_cents,owner_user_id").eq("id", str(note_id)).limit(1).execute()
+    if getattr(note_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get note): {note_res.error}")
+    if not note_res.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    note = note_res.data[0]
+    if note.get("owner_user_id") == user_id:
+        raise HTTPException(status_code=400, detail="Cannot purchase your own note")
+    price = int(note.get("price_cents") or 0)
+    if price == 0:
+        return {"status": "free", "message": "Note is free"}
+    # Mock payment success: just record purchase if not exists
+    existing = (
+        supabase.table("marketplace_purchases")
+        .select("id")
+        .eq("note_id", str(note_id))
+        .eq("buyer_user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find purchase): {existing.error}")
+    if existing.data:
+        return {"status": "ok", "message": "Already purchased"}
+    ins = supabase.table("marketplace_purchases").insert({
+        "note_id": str(note_id),
+        "buyer_user_id": user_id,
+        "amount_cents": price,
+    }).execute()
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (insert purchase): {ins.error}")
+    return {"status": "ok", "purchase": ins.data[0] if ins.data else None}
+
+
+@marketplace_router.post("/api/marketplace/notes/{note_id}/review", summary="Add or update a review")
+def mp_review_note(
+    note_id: uuid.UUID,
+    rating: int = Form(..., ge=1, le=5),
+    comment: str = Form(""),
+    authorization: Optional[str] = Header(default=None),
+    token: Optional[str] = Query(None),
+):
+    header_token = _parse_bearer_token(authorization)
+    token = token or header_token
+    user_id = _require_auth_user_id(token)
+    supabase = get_service_client()
+    # Ensure note exists (access no longer required for reviews; any authenticated user may review)
+    note_res = supabase.table("marketplace_notes").select("price_cents,owner_user_id").eq("id", str(note_id)).limit(1).execute()
+    if getattr(note_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get note): {note_res.error}")
+    if not note_res.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    note = note_res.data[0]
+    # Access rule relaxed: we no longer gate by purchase/free. Still only one review per user.
+    # Upsert (one per user per note)
+    existing = (
+        supabase.table("marketplace_reviews")
+        .select("id")
+        .eq("note_id", str(note_id))
+        .eq("reviewer_user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find review): {existing.error}")
+    now = datetime.utcnow().isoformat()
+    if existing.data:
+        rid = existing.data[0]["id"]
+        upd = (
+            supabase.table("marketplace_reviews")
+            .update({"rating": rating, "comment": comment.strip() or None, "updated_at": now})
+            .eq("id", rid)
+            .execute()
+        )
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (update review): {upd.error}")
+    else:
+        ins = supabase.table("marketplace_reviews").insert({
+            "note_id": str(note_id),
+            "reviewer_user_id": user_id,
+            "rating": rating,
+            "comment": comment.strip() or None,
+        }).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert review): {ins.error}")
+    # Recompute aggregates
+    agg = supabase.rpc("exec", params={}).execute() if False else None  # placeholder for future RPC
+    # manual aggregate
+    revs = (
+        supabase.table("marketplace_reviews").select("rating").eq("note_id", str(note_id)).execute()
+    )
+    if not getattr(revs, "error", None):
+        ratings = [int(r.get("rating") or 0) for r in (revs.data or [])]
+        if ratings:
+            avg_rating = round(sum(ratings) / len(ratings), 2)
+            supabase.table("marketplace_notes").update({
+                "avg_rating": avg_rating,
+                "rating_count": len(ratings),
+                "updated_at": datetime.utcnow().isoformat(),
+            }).eq("id", str(note_id)).execute()
+    return {"status": "ok"}
+
+
+@marketplace_router.delete("/api/marketplace/notes/{note_id}", summary="Delete own note")
+def mp_delete_note(note_id: uuid.UUID, authorization: Optional[str] = Header(default=None), token: Optional[str] = Query(None)):
+    header_token = _parse_bearer_token(authorization)
+    token = token or header_token
+    user_id = _require_auth_user_id(token)
+    supabase = get_service_client()
+    note_res = supabase.table("marketplace_notes").select("owner_user_id,stored_path").eq("id", str(note_id)).limit(1).execute()
+    if getattr(note_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get note): {note_res.error}")
+    if not note_res.data:
+        raise HTTPException(status_code=404, detail="Not found")
+    note = note_res.data[0]
+    if note.get("owner_user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not owner")
+    del_res = supabase.table("marketplace_notes").delete().eq("id", str(note_id)).execute()
+    if getattr(del_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete note): {del_res.error}")
+    # remove file silently
+    try:
+        fp = MARKETPLACE_STORAGE / (note.get("stored_path") or "")
+        if fp.is_file():
+            fp.unlink()
+    except Exception:
+        pass
+    return {"status": "deleted"}
+
 
 def _openai_client():
     """Return OpenAI client (1.x) or raise. Supports legacy 0.x fallback."""
@@ -6227,6 +6685,7 @@ def create_app() -> FastAPI:
     app.include_router(projects_router)
     app.include_router(notes_router)
     app.include_router(academics_router)
+    app.include_router(marketplace_router)
 
     @app.get("/")
     def root():

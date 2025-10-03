@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X — Note Detail</title>
+    <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography,forms,line-clamp"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
+                    },
+                    boxShadow: { card: '0 6px 24px rgba(0,0,0,.12)', glow: '0 8px 30px rgba(158,75,138,0.35)' },
+                    keyframes: {
+                        shimmer: { '0%': { backgroundPosition: '-1000px 0' }, '100%': { backgroundPosition: '1000px 0' } }
+                    },
+                    animation: { shimmer: 'shimmer 1.6s infinite linear' }
+                }
+            }
+        };
+    </script>
+
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, .72);
+            backdrop-filter: blur(12px)
+        }
+
+        .dark .glass {
+            background: rgba(30, 30, 47, .55)
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, rgba(0, 0, 0, .06) 25%, rgba(0, 0, 0, .12) 37%, rgba(0, 0, 0, .06) 63%);
+            background-size: 1000px 100%
+        }
+
+        .dark .skeleton {
+            background: linear-gradient(90deg, rgba(255, 255, 255, .06) 25%, rgba(255, 255, 255, .12) 37%, rgba(255, 255, 255, .06) 63%)
+        }
+
+        .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06)
+        }
+
+        .dark .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
+        }
+    </style>
+
+    <!-- Theme boot BEFORE anything else -->
+    <script>
+        (() => {
+            const s = localStorage.getItem('px_theme');
+            const m = matchMedia('(prefers-color-scheme: dark)').matches;
+            const d = s ? s === 'dark' : m;
+            if (d) document.documentElement.classList.add('dark');
+        })();
+    </script>
+
+    <!-- Config first -->
+    <script src="../../config.js"></script>
+    <script src="../../auth.js" defer></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+    <!-- GLOBAL HEADER (same as other PaperX pages) -->
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3">
+            <a href="../../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="../../assets/img/logo-light.svg" alt="Paper X" class="h-9 w-auto dark:hidden">
+                <img src="../../assets/img/logo-dark.svg" alt="Paper X" class="h-9 w-auto hidden dark:block">
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="./notes_marketplace.html">Marketplace</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="./upload_note.html">Upload</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="../../collage/clg_info.html">Colleges</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="../../help.html">Help</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="../../staff_profile.html">Profile</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">
+                    <span class="material-symbols-rounded text-base">dark_mode</span>
+                </button>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                        class="material-symbols-rounded">dark_mode</span></button>
+                <a href="./notes_marketplace.html"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15"
+                    title="Back"><span class="material-symbols-rounded">arrow_back</span></a>
+            </div>
+        </div>
+        <!-- Secondary bar -->
+        <div class="border-t border-black/5 dark:border-white/10 bg-white/60 dark:bg-brand-900/40">
+            <div class="container py-2 flex items-center gap-3 text-xs text-neutral-600 dark:text-white/70">
+                <a href="./notes_marketplace.html" class="inline-flex items-center gap-1 hover:underline"><span
+                        class="material-symbols-rounded text-sm">arrow_back</span>Back to marketplace</a>
+                <span class="opacity-60">/</span>
+                <span id="crumbTitle" class="truncate">Loading…</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="container py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- MAIN COLUMN -->
+        <section class="lg:col-span-8 space-y-6">
+            <!-- Title + meta card -->
+            <div class="glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                <div class="flex items-start gap-4">
+                    <div id="sellerAvatarWrap"
+                        class="shrink-0 w-12 h-12 rounded-full overflow-hidden ring-2 ring-white/50 dark:ring-black/30 bg-brand-500/10 grid place-items-center skeleton animate-shimmer">
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h1 id="noteTitle" class="text-2xl md:text-3xl font-extrabold tracking-tight mb-1">Loading…</h1>
+                        <div id="metaChips"
+                            class="flex flex-wrap gap-2 text-[11px] text-neutral-600 dark:text-white/70"></div>
+                    </div>
+                    <div class="text-right">
+                        <div id="priceChip"
+                            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-500/10 text-brand-700 dark:text-fuchsia-200 text-sm font-semibold skeleton animate-shimmer">
+                             </div>
+                        <div id="ratingSummary" class="text-xs text-amber-500 mt-1"> </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview -->
+            <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 shadow-card overflow-hidden">
+                <div class="p-4 flex items-center justify-between">
+                    <h2 class="text-sm font-semibold">Preview</h2>
+                    <div class="flex items-center gap-2 text-xs">
+                        <button id="openInNew"
+                            class="inline-flex items-center gap-1 px-3 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                                class="material-symbols-rounded text-sm">open_in_new</span>Open</button>
+                        <button id="copyLink"
+                            class="inline-flex items-center gap-1 px-3 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                                class="material-symbols-rounded text-sm">share</span>Share</button>
+                    </div>
+                </div>
+                <div id="previewArea"
+                    class="bg-white/70 dark:bg-white/5 border-t border-black/5 dark:border-white/10 grid place-items-center min-h-[220px]">
+                    <div
+                        class="w-full max-w-3xl aspect-[3/2] rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-gradient-to-br from-brand-500/10 to-brand-700/10 grid place-items-center">
+                        <span class="material-symbols-rounded text-4xl opacity-50">picture_as_pdf</span>
+                    </div>
+                </div>
+                <div id="thumbStrip" class="p-3 overflow-x-auto flex gap-2"></div>
+            </div>
+
+            <!-- What's inside -->
+            <div id="outlineCard"
+                class="hidden glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                <h2 class="text-sm font-semibold mb-3">What’s inside</h2>
+                <ul id="outlineList" class="space-y-2 text-sm text-neutral-700 dark:text-white/80"></ul>
+            </div>
+
+            <!-- Description -->
+            <article
+                class="prose prose-sm dark:prose-invert max-w-none glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                <h2 class="text-sm font-semibold mb-2">Description</h2>
+                <p id="noteDesc" class="whitespace-pre-wrap">Loading…</p>
+            </article>
+
+            <!-- Seller card -->
+            <div class="glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                <div class="flex items-start gap-3">
+                    <div id="sellerAvatar"
+                        class="w-12 h-12 rounded-full overflow-hidden bg-brand-500/10 grid place-items-center"></div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <h3 id="sellerName" class="text-sm font-semibold">—</h3>
+                            <span id="sellerBadge"
+                                class="hidden text-[11px] inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 ring-black/10 dark:ring-white/15"><span
+                                    class="material-symbols-rounded text-sm">verified</span>Verified</span>
+                        </div>
+                        <div id="sellerMeta" class="text-xs text-neutral-600 dark:text-white/70"> </div>
+                        <div class="mt-2 flex items-center gap-2">
+                            <a id="sellerProfile" href="#"
+                                class="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                                    class="material-symbols-rounded text-sm">person</span>Visit profile</a>
+                            <button id="contactSeller"
+                                class="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                                    class="material-symbols-rounded text-sm">mail</span>Contact</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reviews -->
+            <section id="reviewsSection" class="space-y-4">
+                <div class="glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                    <div class="flex items-center gap-4">
+                        <h2 class="text-sm font-semibold">Reviews</h2>
+                        <div id="ratingBig" class="ml-auto text-right"></div>
+                    </div>
+                    <div id="ratingBars" class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                    <div class="mt-4" id="reviewsList"></div>
+                    <div class="mt-4">
+                        <button id="addReviewBtn"
+                            class="text-xs bg-brand-500 hover:bg-brand-600 text-white px-3 py-1.5 rounded">Add / Update
+                            Review</button>
+                    </div>
+                </div>
+
+                <form id="reviewForm"
+                    class="hidden glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card space-y-4">
+                    <div class="flex items-center gap-3">
+                        <label class="text-sm font-medium">Your rating</label>
+                        <div id="starPicker" class="inline-flex items-center gap-1 text-amber-500 cursor-pointer"
+                            aria-label="Pick rating"></div>
+                    </div>
+                    <textarea name="comment" rows="3"
+                        class="w-full rounded-md border px-3 py-2 text-sm bg-white/90 dark:bg-white/10"
+                        placeholder="Share your thoughts…"></textarea>
+                    <div class="flex items-center gap-4">
+                        <button
+                            class="bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-1.5 rounded-md text-sm"
+                            type="submit">Submit Review</button>
+                        <button id="cancelReview" type="button" class="text-xs text-gray-500">Cancel</button>
+                        <p id="reviewStatus" class="text-xs text-gray-600"></p>
+                    </div>
+                    <input type="hidden" name="rating" value="5" />
+                </form>
+            </section>
+        </section>
+
+        <!-- ASIDE / PURCHASE -->
+        <aside class="lg:col-span-4">
+            <div class="sticky top-24 space-y-4">
+                <div class="glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card" id="purchaseCard">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs text-neutral-600 dark:text-white/70">Price</div>
+                            <div id="pricePrimary" class="text-2xl font-extrabold">—</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-neutral-600 dark:text-white/70">Rating</div>
+                            <div id="asideRating" class="text-sm text-amber-500">—</div>
+                        </div>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-neutral-700 dark:text-white/80" id="fileMeta">
+                    </div>
+                    <div class="mt-4 flex flex-col gap-2">
+                        <a id="primaryCta" href="#"
+                            class="inline-flex items-center justify-center gap-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg">
+                            <span class="material-symbols-rounded">download</span>
+                            <span id="ctaText">Download</span>
+                        </a>
+                        <button id="saveBtn"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg ring-1 ring-black/10 dark:ring-white/15 px-4 py-2 text-sm">
+                            <span class="material-symbols-rounded">bookmark_add</span>Save to wishlist
+                        </button>
+                        <button id="reportBtn"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg ring-1 ring-black/10 dark:ring-white/15 px-4 py-2 text-sm">
+                            <span class="material-symbols-rounded">flag</span>Report
+                        </button>
+                    </div>
+                </div>
+
+                <div class="glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                    <h3 class="text-sm font-semibold mb-2">Details</h3>
+                    <dl id="detailsList"
+                        class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-neutral-700 dark:text-white/80"></dl>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- MOBILE BOTTOM BAR -->
+    <div id="mobileBar" class="lg:hidden fixed inset-x-0 bottom-2 z-40 px-3">
+        <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 shadow-card p-2 flex items-center gap-3">
+            <div class="text-sm font-semibold" id="mobilePrice">—</div>
+            <a id="mobileCta" href="#"
+                class="ml-auto inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg">
+                <span class="material-symbols-rounded">download</span>
+                <span>Get</span>
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Utilities
+        const el = (sel, root = document) => root.querySelector(sel);
+        const els = (sel, root = document) => [...root.querySelectorAll(sel)];
+        const formatCurrency = v => (v || 0) === 0 ? 'Free' : `₹${(v / 100).toFixed(0)}`;
+        const escapeHtml = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // Theme toggle
+        document.addEventListener('click', e => {
+            const t = e.target.closest('[data-theme-toggle]'); if (!t) return;
+            const root = document.documentElement; const next = root.classList.contains('dark') ? 'light' : 'dark';
+            root.classList.toggle('dark', next === 'dark'); localStorage.setItem('px_theme', next);
+            document.querySelectorAll('[data-theme-toggle] .material-symbols-rounded').forEach(ic => ic.textContent = next === 'dark' ? 'light_mode' : 'dark_mode');
+        });
+
+        // API helpers
+        async function resolveApiBase(retries = 10) {
+            const base = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, ''); if (base) return base;
+            if (retries <= 0) return ''; return new Promise(r => setTimeout(() => r(resolveApiBase(retries - 1)), 100));
+        }
+        function getToken() { const keys = ['px_token', 'sb-access-token', 'supabase.auth.token']; for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } } return '' }
+
+        // Page state
+        const params = new URLSearchParams(location.search); const noteId = params.get('id');
+        let apiBase; let detail = {};
+
+        // Fetch detail
+        async function fetchDetail() {
+            if (!apiBase) apiBase = await resolveApiBase();
+            const token = getToken();
+            let resp; try { resp = await fetch(`${apiBase}/api/marketplace/notes/${noteId}`, { cache: 'no-store', headers: token ? { Authorization: 'Bearer ' + token } : {} }); } catch (e) { console.error(e); return; }
+            let data = {}; try { data = await resp.json(); } catch { }
+            if (!resp.ok) { console.warn(data.detail || 'Failed'); return; }
+            detail = data; renderAll();
+        }
+
+        // Render
+        function renderAll() {
+            const n = detail.note || {};
+            el('#crumbTitle').textContent = n.title || 'Note';
+            el('#noteTitle').textContent = n.title || '—';
+            el('#noteDesc').textContent = n.description || '—';
+
+            // Chips
+            el('#metaChips').innerHTML = [n.subject, n.unit, n.exam_type].filter(Boolean)
+                .map(x => `<span class="px-2 py-0.5 rounded-full ring-1 ring-black/10 dark:ring-white/15">${escapeHtml(x)}</span>`).join('');
+
+            // Price & rating
+            el('#priceChip').textContent = formatCurrency(n.price_cents);
+            el('#pricePrimary').textContent = formatCurrency(n.price_cents);
+            el('#mobilePrice').textContent = formatCurrency(n.price_cents);
+            const ratingTxt = n.rating_count ? `★ ${Number(n.avg_rating).toFixed(1)} (${n.rating_count})` : 'No ratings';
+            el('#ratingSummary').textContent = ratingTxt; el('#asideRating').textContent = ratingTxt;
+
+            // Seller
+            const s = n.seller || {};
+            const profUrl = `../../staff_profile.html?user=${encodeURIComponent(s.id || '')}`;
+            el('#sellerProfile').href = profUrl;
+            el('#sellerName').textContent = s.name || 'Unknown Seller';
+            el('#sellerMeta').textContent = s.college ? s.college : '';
+            if (s.verified) el('#sellerBadge').classList.remove('hidden');
+            el('#sellerAvatar').innerHTML = s.avatar_url
+                ? `<img src="${s.avatar_url}" class="w-full h-full object-cover" alt="">`
+                : `<div class="w-full h-full grid place-items-center text-xs font-medium text-brand-700 dark:text-fuchsia-200 bg-gradient-to-br from-brand-500/30 to-brand-500/10">${escapeHtml((s.name || 'U').charAt(0).toUpperCase())}</div>`;
+            el('#sellerAvatarWrap').innerHTML = el('#sellerAvatar').innerHTML;
+
+            // File meta / details
+            const mgrid = el('#fileMeta'); mgrid.innerHTML = '';
+            const push = (label, val) => mgrid.insertAdjacentHTML('beforeend', `<div class="px-2 py-1 rounded ring-1 ring-black/10 dark:ring-white/15 bg-white/60 dark:bg-white/5"><div class="text-[11px] opacity-60">${label}</div><div class="text-xs">${val || '—'}</div></div>`);
+            push('Type', (n.file_type || 'PDF').toUpperCase());
+            push('Pages', n.pages || '—');
+            push('Size', n.file_size || '—');
+            push('Updated', n.updated_at ? new Date(n.updated_at).toLocaleDateString() : '—');
+
+            const dlist = el('#detailsList'); dlist.innerHTML = '';
+            const row = (k, v) => dlist.insertAdjacentHTML('beforeend', `<dt class="opacity-70">${k}</dt><dd>${escapeHtml(String(v || '—'))}</dd>`);
+            row('Subject', n.subject); row('Unit', n.unit); row('Exam', n.exam_type);
+            if (n.college_name) row('College', n.college_name);
+            if (n.degree_name) row('Degree', n.degree_name);
+            if (n.department_name) row('Department', n.department_name);
+            if (n.semester) row('Semester', n.semester);
+            if (Array.isArray(n.tags)) row('Tags', n.tags.join(', '));
+
+            // Outline
+            if (Array.isArray(n.outline) && n.outline.length) {
+                el('#outlineCard').classList.remove('hidden');
+                el('#outlineList').innerHTML = n.outline.map((it, i) => `<li class="flex items-start gap-2"><span class="material-symbols-rounded text-sm mt-0.5">check_circle</span><span>${escapeHtml(typeof it === 'string' ? it : it.title || ('Item ' + (i + 1)))}</span></li>`).join('');
+            }
+
+            // Preview thumbs
+            const strip = el('#thumbStrip'); strip.innerHTML = '';
+            const thumbs = Array.isArray(n.preview_images) ? n.preview_images.slice(0, 12) : [];
+            thumbs.forEach((u, idx) => {
+                const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.className = 'shrink-0 w-24 h-16 rounded-lg overflow-hidden ring-1 ring-black/10 dark:ring-white/15 bg-white/50 dark:bg-white/10';
+                a.innerHTML = `<img src="${u}" class="w-full h-full object-cover" alt="Page ${idx + 1}">`;
+                strip.appendChild(a);
+            });
+            el('#openInNew').onclick = () => { if (n.preview_url) window.open(n.preview_url, '_blank'); else window.open(`./note_detail.html?id=${noteId}`, '_blank'); };
+            el('#copyLink').onclick = async () => {
+                const url = location.href; try { if (navigator.share) await navigator.share({ title: n.title || 'Note', url }); else { await navigator.clipboard.writeText(url); } } catch { }
+            };
+
+            // CTA wiring
+            const cta = el('#primaryCta'); const mobileCta = el('#mobileCta');
+            const hasAccess = !!detail.has_access || (n.price_cents || 0) === 0;
+            const downloadUrl = `${apiBase}/api/marketplace/notes/${n.id}/download`;
+            const purchaseUrl = `${apiBase}/api/marketplace/notes/${n.id}/purchase`;
+            const setCtas = () => {
+                if (hasAccess) {
+                    el('#ctaText').textContent = 'Download'; cta.href = downloadUrl; mobileCta.href = downloadUrl;
+                    cta.onclick = mobileCta.onclick = null;
+                } else {
+                    el('#ctaText').textContent = `Purchase ${formatCurrency(n.price_cents)}`; cta.href = '#'; mobileCta.href = '#';
+                    const handler = async (e) => {
+                        e.preventDefault(); const token = getToken(); const btn = e.currentTarget; const old = btn.innerHTML; btn.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span><span>Processing…</span>';
+                        let r; try { r = await fetch(purchaseUrl, { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {} }); } catch { btn.innerHTML = old; return; }
+                        if (r && r.ok) { location.reload(); } else { btn.innerHTML = old; }
+                    };
+                    cta.onclick = handler; mobileCta.onclick = handler;
+                }
+            };
+            setCtas();
+
+            // Wishlist
+            const key = 'px_wishlist';
+            const getWL = () => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } };
+            const setWL = (a) => { localStorage.setItem(key, JSON.stringify(a)); };
+            const isSaved = () => getWL().some(x => x === n.id);
+            const saveBtn = el('#saveBtn'); const refreshSave = () => saveBtn.innerHTML = (isSaved() ? '<span class="material-symbols-rounded">bookmark_added</span>Saved' : '<span class="material-symbols-rounded">bookmark_add</span>Save to wishlist');
+            refreshSave();
+            saveBtn.onclick = () => { const a = getWL(); if (isSaved()) { setWL(a.filter(x => x !== n.id)); } else { a.push(n.id); setWL(a); } refreshSave(); };
+
+            // Reviews
+            renderReviews(detail.reviews || [], n);
+        }
+
+        function renderReviews(list, n) {
+            const reviewsList = el('#reviewsList'); const bars = el('#ratingBars'); const big = el('#ratingBig');
+            reviewsList.innerHTML = ''; bars.innerHTML = ''; big.innerHTML = '';
+            const counts = [0, 0, 0, 0, 0];
+            list.forEach(r => { const v = Math.max(1, Math.min(5, parseInt(r.rating || 0))); counts[v - 1]++; });
+            const total = list.length || 0; const avg = total ? (list.reduce((s, r) => s + (parseFloat(r.rating) || 0), 0) / total) : 0;
+            big.innerHTML = `<div class="text-2xl font-extrabold">${avg ? avg.toFixed(1) : '—'}</div><div class="text-xs text-amber-500">${total ? `★ ${avg.toFixed(1)} (${total})` : 'No reviews yet'}</div>`;
+            for (let i = 5; i >= 1; i--) {
+                const c = counts[i - 1]; const pct = total ? Math.round((c / total) * 100) : 0;
+                bars.insertAdjacentHTML('beforeend', `<div class="flex items-center gap-2 text-xs">
+          <span class="w-8 text-right">${i}★</span>
+          <div class="flex-1 h-2 rounded bg-black/5 dark:bg-white/10 overflow-hidden"><div style="width:${pct}%" class="h-full bg-amber-500"></div></div>
+          <span class="w-10 text-right opacity-70">${pct}%</span>
+        </div>`);
+            }
+
+            if (!total) { reviewsList.innerHTML = '<p class="text-sm text-neutral-600 dark:text-white/70">Be the first to review.</p>'; }
+            list.forEach(r => {
+                const u = r.reviewer || {}; const av = u.avatar_url
+                    ? `<img src="${u.avatar_url}" class="w-8 h-8 rounded-full object-cover ring-1 ring-black/5 dark:ring-white/10">`
+                    : `<div class="w-8 h-8 rounded-full bg-brand-500/80 text-[11px] font-medium flex items-center justify-center text-white">${(u.name || 'U')[0] || 'U'}</div>`;
+                const item = document.createElement('div'); item.className = 'p-4 rounded-lg border border-black/5 dark:border-white/10 bg-white/60 dark:bg-white/5';
+                item.innerHTML = `<div class="flex items-start gap-3">${av}<div class="flex-1"><div class="flex items-center gap-2 mb-1"><span class="text-xs font-medium">★ ${r.rating}</span><span class="text-[11px] opacity-60">${r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span><span class="text-[11px] text-neutral-600 dark:text-white/70">${escapeHtml(u.name || '')}</span></div><p class="text-xs whitespace-pre-wrap">${escapeHtml(r.comment || '')}</p></div></div>`;
+                reviewsList.appendChild(item);
+            });
+
+            // Add/Update review
+            const addBtn = el('#addReviewBtn'); const form = el('#reviewForm'); const status = el('#reviewStatus'); const starPicker = el('#starPicker');
+            addBtn.onclick = () => { form.classList.remove('hidden'); addBtn.classList.add('hidden'); };
+            el('#cancelReview').onclick = () => { form.classList.add('hidden'); addBtn.classList.remove('hidden'); };
+            // Star picker UI
+            let current = 5; const renderStars = (v) => { starPicker.innerHTML = Array.from({ length: 5 }, (_, i) => `<span data-v="${i + 1}" class="material-symbols-rounded">${i + 1 <= v ? 'star' : 'star_border'}</span>`).join(''); el('input[name="rating"]', form).value = v; };
+            starPicker.addEventListener('click', e => { const s = e.target.closest('[data-v]'); if (!s) return; current = +s.dataset.v; renderStars(current); });
+            renderStars(current);
+            form.addEventListener('submit', async e => {
+                e.preventDefault(); status.textContent = 'Submitting…';
+                const fd = new FormData(form); const token = getToken(); let resp; try { resp = await fetch(`${apiBase}/api/marketplace/notes/${n.id}/review`, { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {}, body: fd }); } catch { status.textContent = 'Network error'; return; }
+                let data = {}; try { data = await resp.json(); } catch { }
+                if (!resp.ok) { status.textContent = data.detail || 'Error'; return; }
+                status.textContent = 'Saved'; setTimeout(() => { status.textContent = ''; form.classList.add('hidden'); addBtn.classList.remove('hidden'); fetchDetail(); }, 500);
+            });
+        }
+
+        // Boot
+        document.addEventListener('DOMContentLoaded', fetchDetail);
+    </script>
+</body>
+
+</html>
