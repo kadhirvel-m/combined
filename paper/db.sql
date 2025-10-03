@@ -353,6 +353,10 @@ CREATE TABLE public.marketplace_reviews (
   CONSTRAINT marketplace_reviews_unique UNIQUE (note_id, reviewer_user_id)
 );
 
+-- Migration: add optional cover image path for marketplace notes
+-- Run (once) in your database:
+-- ALTER TABLE public.marketplace_notes ADD COLUMN IF NOT EXISTS cover_path text; -- stores filename in assets/notes_marketplace
+
 -- (Optional) Simple materialized view idea (not executed here) for fast listing with aggregates:
 -- CREATE VIEW public.marketplace_notes_with_stats AS
 -- SELECT n.*, COALESCE(AVG(r.rating),0) AS live_avg_rating, COUNT(r.id) AS live_rating_count

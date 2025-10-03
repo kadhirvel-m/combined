@@ -90,8 +90,8 @@
         class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
         <div class="container flex items-center justify-between py-3">
             <a href="../../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
-                <img src="../../assets/img/logo-light.svg" alt="Paper X" class="h-9 w-auto dark:hidden">
-                <img src="../../assets/img/logo-dark.svg" alt="Paper X" class="h-9 w-auto hidden dark:block">
+                <img src="../../../assets/img/logo-light.svg" alt="Paper X" class="h-9 w-auto dark:hidden">
+                <img src="../../../assets/img/logo-dark.svg" alt="Paper X" class="h-9 w-auto hidden dark:block">
             </a>
             <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
                 <a class="hover:text-brandlt-900 dark:hover:text-white" href="./notes_marketplace.html">Marketplace</a>
@@ -150,8 +150,8 @@
             </div>
 
             <!-- Preview -->
-            <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 shadow-card overflow-hidden">
-                <div class="p-4 flex items-center justify-between">
+            <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 shadow-card overflow-hidden" id="previewCard">
+                <div class="px-4 py-2 flex items-center justify-between">
                     <h2 class="text-sm font-semibold">Preview</h2>
                     <div class="flex items-center gap-2 text-xs">
                         <button id="openInNew"
@@ -163,13 +163,13 @@
                     </div>
                 </div>
                 <div id="previewArea"
-                    class="bg-white/70 dark:bg-white/5 border-t border-black/5 dark:border-white/10 grid place-items-center min-h-[220px]">
-                    <div
+                    class="bg-white/70 dark:bg-white/5 border-t border-black/5 dark:border-white/10 grid place-items-center min-h-[170px]">
+                    <div id="previewPlaceholder"
                         class="w-full max-w-3xl aspect-[3/2] rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-gradient-to-br from-brand-500/10 to-brand-700/10 grid place-items-center">
                         <span class="material-symbols-rounded text-4xl opacity-50">picture_as_pdf</span>
                     </div>
                 </div>
-                <div id="thumbStrip" class="p-3 overflow-x-auto flex gap-2"></div>
+                <div id="thumbStrip" class="px-3 pb-3 pt-2 overflow-x-auto flex gap-2"></div>
             </div>
 
             <!-- What's inside -->
@@ -279,6 +279,7 @@
                             class="inline-flex items-center justify-center gap-2 rounded-lg ring-1 ring-black/10 dark:ring-white/15 px-4 py-2 text-sm">
                             <span class="material-symbols-rounded">flag</span>Report
                         </button>
+                        <p id="purchaseStatus" class="text-xs text-red-500 min-h-[1.1rem]"></p>
                     </div>
                 </div>
 
@@ -380,9 +381,11 @@
             const dlist = el('#detailsList'); dlist.innerHTML = '';
             const row = (k, v) => dlist.insertAdjacentHTML('beforeend', `<dt class="opacity-70">${k}</dt><dd>${escapeHtml(String(v || '—'))}</dd>`);
             row('Subject', n.subject); row('Unit', n.unit); row('Exam', n.exam_type);
+            // Academic details (conditionally added)
             if (n.college_name) row('College', n.college_name);
             if (n.degree_name) row('Degree', n.degree_name);
             if (n.department_name) row('Department', n.department_name);
+            if (n.batch_range) row('Batch', n.batch_range);
             if (n.semester) row('Semester', n.semester);
             if (Array.isArray(n.tags)) row('Tags', n.tags.join(', '));
 
@@ -395,36 +398,124 @@
             // Preview thumbs
             const strip = el('#thumbStrip'); strip.innerHTML = '';
             const thumbs = Array.isArray(n.preview_images) ? n.preview_images.slice(0, 12) : [];
+            const previewArea = el('#previewArea');
+            const showImage = (url) => {
+                previewArea.innerHTML = `<img src="${url}" alt="Preview" class="max-h-[60vh] w-auto max-w-full object-contain mx-auto transition-opacity duration-200 opacity-0" onload="this.style.opacity=1">`;
+            };
+            const showPdf = (url) => {
+                previewArea.innerHTML = `<div class='w-full max-w-3xl mx-auto aspect-[3/2] bg-white/40 dark:bg-white/5 rounded-lg ring-1 ring-black/10 dark:ring-white/15 overflow-hidden flex flex-col'>
+ <iframe src='${url}#view=fitH' class='w-full h-full' title='PDF preview' loading='lazy'></iframe>
+ <a href='${url}' target='_blank' class='text-[11px] px-2 py-1 bg-black/5 dark:bg-white/10 text-center'>Open full PDF</a>
+</div>`;
+            };
+            const derivedDownloadUrl = apiBase && n.id ? `${apiBase}/api/marketplace/notes/${n.id}/download` : '';
+            const inlinePreviewUrl = apiBase && n.id ? `${apiBase}/api/marketplace/notes/${n.id}/preview` : '';
+            const tryPrimaryPreview = () => {
+                // 0. Dedicated backend inline preview endpoint
+                if (inlinePreviewUrl && (n.mime_type || n.original_filename)) {
+                    const m = (n.mime_type || '').toLowerCase();
+                    const fname = (n.original_filename || '').toLowerCase();
+                    const canInline = m.startsWith('image/') || m === 'application/pdf' || /\.(pdf|png|jpe?g|webp|gif)$/.test(fname);
+                    if (canInline) {
+                        if (m === 'application/pdf' || fname.endsWith('.pdf')) { showPdf(inlinePreviewUrl); return true; }
+                        showImage(inlinePreviewUrl); return true;
+                    }
+                }
+                // 1. Explicit preview_url
+                if (n.preview_url) {
+                    const lower = n.preview_url.split('?')[0].toLowerCase();
+                    if (/(\.pdf)$/.test(lower)) { showPdf(n.preview_url); return true; }
+                    if (/(\.png|\.jpe?g|\.webp|\.gif)$/.test(lower)) { showImage(n.preview_url); return true; }
+                }
+                // 2. Explicit cover_path
+                if (n.cover_path && apiBase && n.id) {
+                    const coverUrl = `${apiBase}/api/marketplace/notes/${n.id}/cover`;
+                    showImage(coverUrl); return true;
+                }
+                // 3. Thumbs array
+                if (thumbs.length) { showImage(thumbs[0]); return true; }
+                // 4. Derive from original/stored file
+                const nameForExt = (n.original_filename || n.stored_path || '').toLowerCase();
+                const mime = (n.mime_type || '').toLowerCase();
+                if (nameForExt || mime) {
+                    const isPdf = nameForExt.endsWith('.pdf') || mime === 'application/pdf';
+                    const isImg = /\.(png|jpe?g|webp|gif)$/i.test(nameForExt) || mime.startsWith('image/');
+                    if (derivedDownloadUrl && (isPdf || isImg)) {
+                        if (isPdf) { showPdf(derivedDownloadUrl); return true; }
+                        if (isImg) { showImage(derivedDownloadUrl); return true; }
+                    }
+                }
+                return false;
+            };
+            if (!tryPrimaryPreview()) {
+                previewArea.innerHTML = `<div class="py-14 text-xs opacity-70">No preview available.<br><span class='opacity-50'>Type: ${(n.mime_type||'n/a')} File: ${(n.original_filename||n.stored_path||'n/a')}</span></div>`;
+            }
             thumbs.forEach((u, idx) => {
-                const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.className = 'shrink-0 w-24 h-16 rounded-lg overflow-hidden ring-1 ring-black/10 dark:ring-white/15 bg-white/50 dark:bg-white/10';
-                a.innerHTML = `<img src="${u}" class="w-full h-full object-cover" alt="Page ${idx + 1}">`;
-                strip.appendChild(a);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'shrink-0 w-20 h-14 rounded-md overflow-hidden ring-1 ring-black/10 dark:ring-white/15 bg-white/50 dark:bg-white/10 hover:ring-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500';
+                btn.innerHTML = `<img src="${u}" class="w-full h-full object-cover" alt="Page ${idx + 1}">`;
+                btn.addEventListener('click', () => showImage(u));
+                strip.appendChild(btn);
             });
-            el('#openInNew').onclick = () => { if (n.preview_url) window.open(n.preview_url, '_blank'); else window.open(`./note_detail.html?id=${noteId}`, '_blank'); };
+            el('#openInNew').onclick = () => {
+                if (inlinePreviewUrl) { window.open(inlinePreviewUrl, '_blank', 'noopener'); return; }
+                if (n.preview_url) { window.open(n.preview_url, '_blank', 'noopener'); return; }
+                if (thumbs[0]) { window.open(thumbs[0], '_blank', 'noopener'); return; }
+                if (derivedDownloadUrl) { window.open(derivedDownloadUrl, '_blank', 'noopener'); return; }
+                window.open(`./note_detail.html?id=${noteId}`, '_blank');
+            };
             el('#copyLink').onclick = async () => {
                 const url = location.href; try { if (navigator.share) await navigator.share({ title: n.title || 'Note', url }); else { await navigator.clipboard.writeText(url); } } catch { }
             };
 
             // CTA wiring
-            const cta = el('#primaryCta'); const mobileCta = el('#mobileCta');
+            const cta = el('#primaryCta'); const mobileCta = el('#mobileCta'); const statusEl = el('#purchaseStatus');
             const hasAccess = !!detail.has_access || (n.price_cents || 0) === 0;
             const downloadUrl = `${apiBase}/api/marketplace/notes/${n.id}/download`;
             const purchaseUrl = `${apiBase}/api/marketplace/notes/${n.id}/purchase`;
-            const setCtas = () => {
-                if (hasAccess) {
-                    el('#ctaText').textContent = 'Download'; cta.href = downloadUrl; mobileCta.href = downloadUrl;
-                    cta.onclick = mobileCta.onclick = null;
+            async function doDownload() {
+                const token = getToken();
+                try {
+                    const r = await fetch(downloadUrl, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+                    if (!r.ok) {
+                        let msg = 'Download failed';
+                        try { const j = await r.json(); msg = j.detail || msg; } catch { }
+                        statusEl.textContent = msg; return;
+                    }
+                    const blob = await r.blob();
+                    const a = document.createElement('a');
+                    const url = URL.createObjectURL(blob);
+                    a.href = url; a.download = (n.title || 'note') + (n.file_type ? '.' + n.file_type.toLowerCase() : '');
+                    document.body.appendChild(a); a.click(); a.remove();
+                    setTimeout(() => URL.revokeObjectURL(url), 4000);
+                } catch (e) { statusEl.textContent = 'Network error'; }
+            }
+            async function doPurchase(btn) {
+                const token = getToken(); if (!token) { statusEl.textContent = 'Login required'; return; }
+                const old = btn.innerHTML; btn.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span><span>Processing…</span>';
+                statusEl.textContent = '';
+                let r; try { r = await fetch(purchaseUrl, { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); } catch { btn.innerHTML = old; statusEl.textContent = 'Network error'; return; }
+                if (r && r.ok) {
+                    btn.innerHTML = old; statusEl.textContent = 'Purchased. Starting download…';
+                    // refetch to update access
+                    detail.has_access = true; setTimeout(doDownload, 600);
+                    el('#ctaText').textContent = 'Download';
+                    cta.onclick = (e) => { e.preventDefault(); doDownload(); };
+                    mobileCta.onclick = (e) => { e.preventDefault(); doDownload(); };
                 } else {
-                    el('#ctaText').textContent = `Purchase ${formatCurrency(n.price_cents)}`; cta.href = '#'; mobileCta.href = '#';
-                    const handler = async (e) => {
-                        e.preventDefault(); const token = getToken(); const btn = e.currentTarget; const old = btn.innerHTML; btn.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span><span>Processing…</span>';
-                        let r; try { r = await fetch(purchaseUrl, { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {} }); } catch { btn.innerHTML = old; return; }
-                        if (r && r.ok) { location.reload(); } else { btn.innerHTML = old; }
-                    };
-                    cta.onclick = handler; mobileCta.onclick = handler;
+                    btn.innerHTML = old; let msg = 'Purchase failed'; try { const j = await r.json(); msg = j.detail || msg; } catch { } statusEl.textContent = msg;
                 }
-            };
-            setCtas();
+            }
+            if (hasAccess) {
+                el('#ctaText').textContent = 'Download'; cta.href = '#'; mobileCta.href = '#';
+                cta.onclick = (e) => { e.preventDefault(); doDownload(); };
+                mobileCta.onclick = (e) => { e.preventDefault(); doDownload(); };
+            } else {
+                el('#ctaText').textContent = `Purchase ${formatCurrency(n.price_cents)}`; cta.href = '#'; mobileCta.href = '#';
+                const purchaseHandler = (e) => { e.preventDefault(); doPurchase(e.currentTarget); };
+                cta.onclick = purchaseHandler; mobileCta.onclick = purchaseHandler;
+            }
 
             // Wishlist
             const key = 'px_wishlist';

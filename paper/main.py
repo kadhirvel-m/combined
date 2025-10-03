@@ -6037,11 +6037,28 @@ def mp_upload_note(
     batch_id: Optional[str] = Form(None),
     semester: Optional[int] = Form(None),
     file: UploadFile = File(...),
+    cover: Optional[UploadFile] = File(None),
     authorization: Optional[str] = Header(default=None),
 ):
     token = _parse_bearer_token(authorization)
     user_id = _require_auth_user_id(token)
     stored_name, size, mime = _store_marketplace_file(file)
+    cover_name: Optional[str] = None
+    if cover and cover.filename:
+        try:
+            # Reuse storage but restrict to image types
+            ext = Path(cover.filename).suffix.lower()
+            if ext not in {'.png', '.jpg', '.jpeg', '.webp', '.gif'}:
+                raise HTTPException(status_code=400, detail="Unsupported cover image type")
+            content = cover.file.read()
+            if len(content) > 5 * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="Cover image too large (>5MB)")
+            cover_name = f"cover-{uuid.uuid4().hex}{ext}"
+            (MARKETPLACE_STORAGE / cover_name).write_bytes(content)
+        except HTTPException:
+            raise
+        except Exception as e:  # pragma: no cover
+            raise HTTPException(status_code=500, detail=f"Failed to store cover: {e}")
     cats = [c.strip() for c in (categories or "").split(",") if c.strip()]
     supabase = get_service_client()
     row = {
@@ -6071,6 +6088,8 @@ def mp_upload_note(
         if semester < 1 or semester > 12:
             raise HTTPException(status_code=400, detail="semester must be between 1 and 12")
         row["semester"] = semester
+    if cover_name:
+        row["cover_path"] = cover_name
     res = supabase.table("marketplace_notes").insert(row).execute()
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (insert note): {res.error}")
@@ -6257,6 +6276,51 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
                 "name": prow.get("name") or (rid[:6] + "…" if rid else None),
                 "avatar_url": prow.get("profile_image_url"),
             }
+    # --- Academic metadata enrichment (names) ---
+    # If the note row has academic foreign keys, attempt to resolve human-readable names.
+    # This keeps the base schema flexible while giving the UI friendly labels.
+    academic_name_map: dict[str, Optional[str]] = {
+        "college_name": None,
+        "degree_name": None,
+        "department_name": None,
+        "batch_range": None,
+    }
+    try:
+        # We collect the needed ids first to minimize queries.
+        college_id = note.get("college_id")
+        degree_id = note.get("degree_id")
+        department_id = note.get("department_id")
+        batch_id = note.get("batch_id")
+        # For each present id we fetch its table (single row).
+        if college_id:
+            rcol = supabase.table("colleges").select("id,name").eq("id", college_id).limit(1).execute()
+            if not getattr(rcol, "error", None) and rcol.data:
+                academic_name_map["college_name"] = rcol.data[0].get("name")
+        if degree_id:
+            rdeg = supabase.table("degrees").select("id,name").eq("id", degree_id).limit(1).execute()
+            if not getattr(rdeg, "error", None) and rdeg.data:
+                academic_name_map["degree_name"] = rdeg.data[0].get("name")
+        if department_id:
+            rdep = supabase.table("departments").select("id,name").eq("id", department_id).limit(1).execute()
+            if not getattr(rdep, "error", None) and rdep.data:
+                academic_name_map["department_name"] = rdep.data[0].get("name")
+        if batch_id:
+            rbat = supabase.table("batches").select("id,from_year,to_year").eq("id", batch_id).limit(1).execute()
+            if not getattr(rbat, "error", None) and rbat.data:
+                b = rbat.data[0]
+                fy = b.get("from_year")
+                ty = b.get("to_year")
+                if fy and ty:
+                    academic_name_map["batch_range"] = f"{fy}-{ty}"
+                elif fy:
+                    academic_name_map["batch_range"] = str(fy)
+    except Exception:
+        # Silently ignore enrichment errors; we don't want to block detail retrieval.
+        pass
+    # Attach only non-null values to the note object so the front-end can conditionally render.
+    for k, v in academic_name_map.items():
+        if v:
+            note[k] = v
     return {"note": note, "has_access": has_access, "reviews": reviews}
 
 
@@ -6276,6 +6340,59 @@ def mp_download_note(note_id: uuid.UUID):
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found on server")
     return FileResponse(str(file_path), filename=stored)
+
+@marketplace_router.get("/api/marketplace/notes/{note_id}/preview", summary="Inline preview for PDF or image")
+def mp_preview_note(note_id: uuid.UUID):
+    """Serve the note file with Content-Disposition inline for browser preview.
+
+    Falls back to normal download if type unsupported.
+    """
+    supabase = get_service_client()
+    res = supabase.table("marketplace_notes").select("stored_path,mime_type,original_filename").eq("id", str(note_id)).limit(1).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get note): {res.error}")
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    row = res.data[0]
+    stored = row.get("stored_path")
+    if not stored:
+        raise HTTPException(status_code=500, detail="File missing")
+    file_path = MARKETPLACE_STORAGE / stored
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found on server")
+    mime = (row.get("mime_type") or "application/octet-stream").lower()
+    # Allow inline only for pdf / images
+    allow_inline = mime.startswith("image/") or mime == "application/pdf"
+    headers = {}
+    if allow_inline:
+        # Force inline
+        headers["Content-Disposition"] = f"inline; filename={stored}"
+    return FileResponse(str(file_path), filename=stored, media_type=mime, headers=headers)
+
+@marketplace_router.get("/api/marketplace/notes/{note_id}/cover", summary="Get cover image for a note")
+def mp_cover_image(note_id: uuid.UUID):
+    supabase = get_service_client()
+    res = supabase.table("marketplace_notes").select("cover_path").eq("id", str(note_id)).limit(1).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get cover): {res.error}")
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    cover = res.data[0].get("cover_path")
+    if not cover:
+        raise HTTPException(status_code=404, detail="No cover set")
+    file_path = MARKETPLACE_STORAGE / cover
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Cover not found")
+    # Guess mime
+    ext = file_path.suffix.lower()
+    mime = "image/jpeg"
+    if ext == ".png":
+        mime = "image/png"
+    elif ext == ".webp":
+        mime = "image/webp"
+    elif ext == ".gif":
+        mime = "image/gif"
+    return FileResponse(str(file_path), filename=cover, media_type=mime, headers={"Content-Disposition": f"inline; filename={cover}"})
 
 
 @marketplace_router.post("/api/marketplace/notes/{note_id}/purchase", summary="Purchase a paid note (mock payment)")
