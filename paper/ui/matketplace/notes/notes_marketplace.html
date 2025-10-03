@@ -27,6 +27,10 @@
                         brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
                         brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
                     },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+                    },
                     boxShadow: { card: '0 6px 24px rgba(0,0,0,.12)', glow: '0 8px 30px rgba(158,75,138,0.35)' },
                     keyframes: {
                         shimmer: { '0%': { backgroundPosition: '-1000px 0' }, '100%': { backgroundPosition: '1000px 0' } }
@@ -51,6 +55,12 @@
 
         .dark .glass {
             background: rgba(30, 30, 47, 0.55);
+        }
+        /* Dark theme page background gradient (from index.html) */
+        .dark body {
+            background-image: linear-gradient(to left top, #1e1e2f, #242138, #2b2440, #332649, #3d2850, #3f254a, #402244, #401f3e, #34182d, #26131e, #190b11, #000000);
+            background-repeat: no-repeat;
+            background-size: cover;
         }
 
         html:not(.dark) h1,
@@ -106,13 +116,13 @@
         }
     </style>
 
-    <!-- Theme boot BEFORE anything else -->
+    <!-- Theme boot BEFORE anything else (same snippet as index/about) -->
     <script>
-        (() => {
-            const s = localStorage.getItem('px_theme');
-            const m = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            const d = s ? s === 'dark' : m;
-            if (d) document.documentElement.classList.add('dark');
+        (function() {
+            const stored = localStorage.getItem('px_theme');
+            const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const mode = stored ? stored : (prefers ? 'dark' : 'light');
+            if (mode === 'dark') document.documentElement.classList.add('dark');
         })();
     </script>
 
@@ -372,7 +382,7 @@
             </div>
             <div class="p-4 flex flex-col gap-3 flex-1">
                 <div class="flex items-start gap-2">
-                    <h3 class="font-semibold text-sm leading-5 line-clamp-2 group-hover:text-brand-600 title"></h3>
+                    <h3 class="font-semibold text-sm leading-5 line-clamp-2 title text-neutral-900 dark:text-neutral-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors"></h3>
                     <span class="ml-auto priceChip"></span>
                 </div>
                 <p class="text-xs text-gray-600 dark:text-gray-300 line-clamp-3 desc"></p>
@@ -401,7 +411,7 @@
         <article class="p-4 flex items-start gap-4" role="listitem">
             <div class="flex-1 min-w-0">
                 <div class="flex items-start gap-2">
-                    <h3 class="font-semibold text-sm line-clamp-1 title"></h3>
+                    <h3 class="font-semibold text-sm line-clamp-1 title text-neutral-900 dark:text-neutral-100 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"></h3>
                     <span class="ml-auto priceChip"></span>
                 </div>
                 <p class="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mt-1 desc"></p>
@@ -430,16 +440,16 @@
         const el = (sel, root = document) => root.querySelector(sel);
         const els = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-        // Theme toggle (unchanged logic)
-        document.addEventListener('click', e => {
-            const t = e.target.closest('[data-theme-toggle]');
-            if (!t) return;
+        // Unified theme toggle (mirrors index/about)
+        (function(){
             const root = document.documentElement;
-            const next = root.classList.contains('dark') ? 'light' : 'dark';
-            root.classList.toggle('dark', next === 'dark');
-            localStorage.setItem('px_theme', next);
-            document.querySelectorAll('[data-theme-toggle] .material-symbols-rounded').forEach(ic => ic.textContent = next === 'dark' ? 'light_mode' : 'dark_mode');
-        });
+            const toggles = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+            const updateIcons = (mode) => toggles().forEach(btn => { const ic = btn.querySelector('.material-symbols-rounded'); if (ic) ic.textContent = mode==='dark' ? 'light_mode' : 'dark_mode'; });
+            const setTheme = (mode) => { mode==='dark'?root.classList.add('dark'):root.classList.remove('dark'); localStorage.setItem('px_theme', mode); updateIcons(mode); };
+            // Initialize icon state
+            setTheme(root.classList.contains('dark') ? 'dark' : 'light');
+            document.addEventListener('click', e => { const t = e.target.closest('[data-theme-toggle]'); if(!t) return; setTheme(root.classList.contains('dark') ? 'light' : 'dark'); });
+        })();
 
         // API base resolver
         async function resolveApiBase(retries = 10) {
