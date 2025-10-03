@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X — Romantasy Realms · HoloGrid</title>
+    <meta name="description" content="A modern, futuristic romantasy explorer built for speed." />
+    <link rel="icon" type="image/x-icon" href="paper/assets/img/favicon.svg">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0&display=swap"
+        rel="stylesheet">
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        accent: { 400: '#C272F3', 300: '#9E4BCE' },
+                    },
+                    boxShadow: {
+                        glow: '0 10px 30px -8px rgba(194,114,243,.45)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        [x-cloak] {
+            display: none
+        }
+
+        :root {
+            --grid: linear-gradient(transparent 98%, rgba(158, 75, 138, .08) 99%), linear-gradient(90deg, transparent 98%, rgba(158, 75, 138, .08) 99%)
+        }
+
+        /* Background: fast, futuristic, zero jank */
+        .bg-holo {
+            background:
+                radial-gradient(60rem 40rem at 12% -10%, rgba(194, 114, 243, .20), transparent 60%),
+                radial-gradient(50rem 30rem at 88% 110%, rgba(76, 42, 89, .25), transparent 60%),
+                linear-gradient(#0f0f18, #161429 40%, #0f0f18);
+            position: relative
+        }
+
+        .bg-holo:after {
+            /* ultra‑light scanlines */
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(180deg, rgba(255, 255, 255, .04) 0 1px, transparent 1px 3px);
+            mix-blend-mode: overlay;
+            opacity: .35
+        }
+
+        .material-symbols-rounded {
+            vertical-align: -6px
+        }
+
+        /* Gradient hero text (copied from index.html for consistency) */
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            -webkit-box-decoration-break: clone;
+            box-decoration-break: clone;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%
+            }
+
+            50% {
+                background-position: 100% 50%
+            }
+
+            100% {
+                background-position: 0% 50%
+            }
+        }
+
+        /* Rail dots */
+        .rail-dot {
+            box-shadow: 0 0 0 2px rgba(158, 75, 138, .18), 0 8px 18px -6px rgba(194, 114, 243, .55)
+        }
+
+        /* Holo card edge */
+        .holo-edge {
+            position: relative
+        }
+
+        .holo-edge:before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 1rem;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, .35), rgba(158, 75, 138, .35));
+            -webkit-mask:
+                linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude
+        }
+
+        /* Angular mask for hero */
+        .clip-hero {
+            clip-path: polygon(0 0, 100% 0, 100% 85%, 65% 100%, 0 100%)
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .title-prism {
+                animation: none
+            }
+        }
+    </style>
+
+    <script>(() => { const s = localStorage.getItem('px_theme'); const prefers = matchMedia('(prefers-color-scheme: dark)').matches; const dark = s ? s === 'dark' : prefers; if (dark) document.documentElement.classList.add('dark'); })();</script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body x-data="romantasyApp()" x-init="init()" class="min-h-screen font-sans antialiased text-white bg-holo">
+
+    <!-- Left Neon Rail -->
+    <aside class="fixed left-4 top-1/2 -translate-y-1/2 z-30 hidden md:block">
+        <div class="flex flex-col items-center gap-4">
+            <button @click="viewMode='grid'"
+                :class="'w-3.5 h-3.5 rounded-full bg-white/70 rail-dot '+(viewMode==='grid'?'ring-2 ring-accent-400':'opacity-60')"
+                aria-label="Grid"></button>
+            <button @click="viewMode='mosaic'"
+                :class="'w-3.5 h-3.5 rounded-full bg-white/70 rail-dot '+(viewMode==='mosaic'?'ring-2 ring-accent-400':'opacity-60')"
+                aria-label="Mosaic"></button>
+            <button @click="viewMode='list'"
+                :class="'w-3.5 h-3.5 rounded-full bg-white/70 rail-dot '+(viewMode==='list'?'ring-2 ring-accent-400':'opacity-60')"
+                aria-label="List"></button>
+            <div class="w-px h-20 bg-gradient-to-b from-white/40 to-transparent"></div>
+            <button @click="toggleTheme()" class="p-2 rounded-full bg-white/10 hover:bg-white/20"><span
+                    class="material-symbols-rounded">contrast</span></button>
+        </div>
+    </aside>
+
+    <!-- Header (floating) -->
+    <header class="sticky top-0 z-20 backdrop-blur bg-[#0f0f18]/60 border-b border-white/10">
+        <nav class="container flex items-center justify-between py-3">
+            <div class="flex items-center gap-3">
+                <img src="paper/assets/img/logo-dark.svg" class="h-8 w-auto" alt="Paper X" />
+                <span class="text-xs tracking-wider text-white/70">Romantasy</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="relative">
+                    <input x-model="search" placeholder="Search realms…"
+                        class="w-56 md:w-72 rounded-full bg-white/10 pl-10 pr-4 py-2 text-sm placeholder:text-white/50 outline-none ring-1 ring-white/10 focus:ring-accent-400/60" />
+                    <span
+                        class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-white/60">search</span>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Hero Prism Panel -->
+    <section class="container pt-8 md:pt-14 pb-6">
+        <div class="grid md:grid-cols-[1.35fr,1fr] gap-6 items-stretch">
+            <div class="clip-hero rounded-2xl holo-edge bg-white/[.04] ring-1 ring-white/10 p-6 md:p-8">
+                <h1 class="gradient-hero-text text-5xl md:text-7xl font-extrabold leading-[1.02]">Romantasy Realms</h1>
+                <p class="mt-4 md:mt-6 text-white/70 max-w-xl">Pick a realm, break a vow, remix fate. Minimal motion,
+                    maximal vibe. Built for performance on low‑end machines.</p>
+                <div class="mt-6 flex flex-wrap gap-2">
+                    <button @click="activeFilter='all'" :class="chip('all')">All</button>
+                    <template x-for="f in filters" :key="f"><button @click="activeFilter=f" x-text="f"
+                            :class="chip(f)"></button></template>
+                </div>
+            </div>
+            <div class="rounded-2xl holo-edge bg-white/[.04] ring-1 ring-white/10 p-0 overflow-hidden">
+                <!-- Feature Highlight: top pick -->
+                <template x-if="stories[1]">
+                    <div class="relative h-full">
+                        <img :src="stories[1].cover" class="absolute inset-0 w-full h-full object-cover" alt="feature"
+                            loading="lazy" decoding="async">
+                        <div class="absolute inset-0 bg-gradient-to-t from-[#0f0f18] via-[#0f0f18]/30 to-transparent">
+                        </div>
+                        <div class="relative p-6">
+                            <span class="text-[11px] uppercase tracking-widest text-white/60">Featured</span>
+                            <h3 class="mt-2 text-2xl font-bold">{{stories[1].title}}</h3>
+                            <p class="text-white/70 text-sm max-w-md line-clamp-3">{{stories[1].tagline}}</p>
+                            <button @click="openStory(stories[1])"
+                                class="mt-4 inline-flex items-center gap-1 rounded-full bg-accent-300/90 text-black font-semibold text-sm px-4 py-2 shadow-glow">Open
+                                <span class="material-symbols-rounded text-sm">north_east</span></button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </section>
+
+    <!-- HoloGrid Lanes -->
+    <main class="container pb-16">
+        <div x-show="viewMode==='grid'" x-transition.opacity.duration.150ms class="grid md:grid-cols-12 gap-6">
+            <!-- Lane A (wide) -->
+            <section class="md:col-span-7 space-y-6">
+                <template x-for="s in filteredStories().slice(0,4)" :key="s.id">
+                    <article @click="openStory(s)"
+                        class="cursor-pointer rounded-2xl holo-edge bg-white/[.04] ring-1 ring-white/10 overflow-hidden">
+                        <div class="grid grid-cols-3 gap-0">
+                            <figure class="col-span-1 aspect-[4/3] overflow-hidden"><img :src="s.cover"
+                                    class="w-full h-full object-cover" loading="lazy" decoding="async" alt="cover">
+                            </figure>
+                            <div class="col-span-2 p-5 flex flex-col">
+                                <h3 class="text-xl font-bold">{{s.title}}</h3>
+                                <p class="mt-1 text-sm text-white/70 line-clamp-2">{{s.tagline}}</p>
+                                <div class="mt-auto pt-4">
+                                    <div class="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                        <div class="h-full bg-accent-300" :style="'width:'+s.progress+'%'"></div>
+                                    </div>
+                                    <div class="mt-1 text-[11px] text-white/50 flex justify-between"><span
+                                            x-text="s.progress+'%'"></span><span x-text="s.chapters+' ch'"></span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                </template>
+            </section>
+
+            <!-- Lane B (stack + tiles) -->
+            <section class="md:col-span-5 space-y-6">
+                <template x-for="s in filteredStories().slice(4,6)" :key="s.id">
+                    <article @click="openStory(s)"
+                        class="cursor-pointer rounded-2xl holo-edge bg-white/[.04] ring-1 ring-white/10 overflow-hidden">
+                        <div class="relative aspect-[16/9]">
+                            <img :src="s.cover" class="absolute inset-0 w-full h-full object-cover" loading="lazy"
+                                decoding="async" alt="cover">
+                            <div
+                                class="absolute inset-0 bg-gradient-to-t from-[#0f0f18] via-transparent to-transparent">
+                            </div>
+                            <div class="absolute bottom-0 p-5">
+                                <h3 class="text-lg font-bold">{{s.title}}</h3>
+                                <p class="text-white/70 text-xs line-clamp-2">{{s.tagline}}</p>
+                            </div>
+                        </div>
+                    </article>
+                </template>
+
+                <div class="grid grid-cols-2 gap-6">
+                    <template x-for="s in filteredStories().slice(6,10)" :key="s.id">
+                        <article @click="openStory(s)"
+                            class="cursor-pointer rounded-2xl holo-edge bg-white/[.04] ring-1 ring-white/10 overflow-hidden">
+                            <figure class="aspect-[4/3]"><img :src="s.cover" class="w-full h-full object-cover"
+                                    loading="lazy" decoding="async" alt="cover"></figure>
+                            <div class="p-4">
+                                <h4 class="font-semibold text-sm">{{s.title}}</h4>
+                                <p class="text-[12px] text-white/60 line-clamp-2">{{s.tagline}}</p>
+                            </div>
+                        </article>
+                    </template>
+                </div>
+            </section>
+        </div>
+
+        <!-- Mosaic -->
+        <section x-show="viewMode==='mosaic'" x-transition.opacity.duration.150ms
+            class="grid [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))] auto-rows-[200px] gap-6">
+            <template x-for="s in filteredStories()" :key="s.id">
+                <article @click="openStory(s)"
+                    :class="'cursor-pointer rounded-2xl holo-edge bg-white/[.04] ring-1 ring-white/10 overflow-hidden '+span(s)">
+                    <figure class="relative w-full h-full">
+                        <img :src="s.cover" class="absolute inset-0 w-full h-full object-cover" loading="lazy"
+                            decoding="async" alt="cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-[#0f0f18] via-transparent to-transparent">
+                        </div>
+                        <div class="absolute bottom-0 p-3">
+                            <h4 class="font-semibold">{{s.title}}</h4>
+                            <p class="text-[12px] text-white/70 line-clamp-2">{{s.tagline}}</p>
+                        </div>
+                    </figure>
+                </article>
+            </template>
+        </section>
+
+        <!-- List -->
+        <section x-show="viewMode==='list'" x-transition.opacity.duration.150ms class="flex flex-col gap-4">
+            <template x-for="s in filteredStories()" :key="s.id">
+                <article @click="openStory(s)"
+                    class="cursor-pointer rounded-xl holo-edge bg-white/[.04] ring-1 ring-white/10 overflow-hidden flex">
+                    <figure class="w-56 aspect-[4/3] overflow-hidden"><img :src="s.cover"
+                            class="w-full h-full object-cover" loading="lazy" decoding="async" alt="cover"></figure>
+                    <div class="p-4 pr-6 flex-1">
+                        <h4 class="text-lg font-semibold">{{s.title}}</h4>
+                        <p class="text-sm text-white/70 line-clamp-2 max-w-3xl">{{s.tagline}}</p>
+                        <div class="mt-3 w-64">
+                            <div class="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                <div class="h-full bg-accent-300" :style="'width:'+s.progress+'%'"></div>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </template>
+        </section>
+
+        <!-- Empty -->
+        <p x-show="filteredStories().length===0" class="text-center text-white/60 mt-12">No realms match. Try a
+            different filter.</p>
+    </main>
+
+    <!-- Drawer: Favorites (right) -->
+    <aside class="fixed right-4 bottom-4 z-20 w-[320px] hidden lg:block">
+        <div class="rounded-2xl holo-edge bg-white/[.06] ring-1 ring-white/10 p-4 max-h-[70vh] overflow-auto">
+            <h3 class="text-xs uppercase tracking-widest text-white/60 mb-3 flex items-center gap-2"><span
+                    class="material-symbols-rounded text-base">favorite</span> Favorites</h3>
+            <template x-if="favorites().length===0">
+                <p class="text-[12px] text-white/60">No favorited realms yet.</p>
+            </template>
+            <ul class="space-y-3">
+                <template x-for="f in favorites()" :key="f.id">
+                    <li class="flex gap-3 items-center">
+                        <figure class="w-12 h-12 rounded-md overflow-hidden flex-shrink-0"><img :src="f.cover"
+                                class="w-full h-full object-cover" loading="lazy" alt="thumb"></figure>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-[12px] font-semibold truncate">{{f.title}}</p>
+                            <div class="mt-1 h-1 rounded-full bg-white/10 overflow-hidden">
+                                <div class="h-full bg-accent-300" :style="'width:'+f.progress+'%'"></div>
+                            </div>
+                        </div>
+                        <button @click="toggleFav(f)" class="p-1.5 rounded-full bg-white/10"><span
+                                class="material-symbols-rounded text-sm">close</span></button>
+                    </li>
+                </template>
+            </ul>
+        </div>
+    </aside>
+
+    <!-- Modal -->
+    <div x-cloak x-show="modalOpen" x-transition.opacity
+        class="fixed inset-0 z-40 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/60" @click="closeModal"></div>
+        <div x-trap.noscroll.inert="modalOpen"
+            class="relative w-full max-w-3xl rounded-2xl overflow-hidden ring-1 ring-white/15 bg-[#0f0f18]"
+            x-transition.scale>
+            <div class="flex flex-col md:flex-row">
+                <div class="relative md:w-1/2 aspect-[4/5] overflow-hidden">
+                    <img :src="activeStory?.cover" class="absolute inset-0 w-full h-full object-cover object-center"
+                        :alt="activeStory?.title + ' cover large'" />
+                    <div class="absolute inset-0 bg-gradient-to-t from-[#0f0f18] via-transparent to-transparent"></div>
+                </div>
+                <div class="md:w-1/2 p-6 md:p-8 text-white">
+                    <div class="flex items-start justify-between gap-4">
+                        <h2 class="text-2xl font-extrabold leading-tight">{{activeStory?.title}}</h2>
+                        <button @click="closeModal" class="rounded-full p-2 bg-white/10 hover:bg-white/20"><span
+                                class="material-symbols-rounded">close</span></button>
+                    </div>
+                    <p class="mt-3 text-sm text-white/80" x-text="activeStory?.description"></p>
+                    <div class="mt-5 grid grid-cols-3 gap-3 text-center text-[11px] font-medium">
+                        <div class="rounded-xl bg-white/10 p-3"><span class="block text-base font-bold"
+                                x-text="activeStory?.chapters"></span>Chapters</div>
+                        <div class="rounded-xl bg-white/10 p-3"><span class="block text-base font-bold"
+                                x-text="activeStory?.progress + '%' "></span>Progress</div>
+                        <div class="rounded-xl bg-white/10 p-3"><span class="block text-base font-bold"
+                                x-text="activeStory?.rating"></span>Rating</div>
+                    </div>
+                    <div class="mt-6 flex flex-wrap gap-3">
+                        <button @click="toggleFav(activeStory)"
+                            class="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold bg-accent-300 text-black shadow-glow">
+                            <span class="material-symbols-rounded text-base"
+                                x-text="activeStory?.fav? 'favorite':'favorite_border'"></span>
+                            <span x-text="activeStory?.fav? 'Favorited':'Favorite'"></span>
+                        </button>
+                        <button @click="queueStory(activeStory)"
+                            class="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-white/20">
+                            <span class="material-symbols-rounded text-base">playlist_add</span> Queue</button>
+                        <button
+                            class="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold bg-brand-700 text-white">
+                            <span class="material-symbols-rounded text-base">auto_stories</span> Continue</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="py-10 text-center text-[11px] text-white/50">Arcane narrative © Paper X Demo</footer>
+
+    <script>
+        function romantasyApp() {
+            return {
+                isDark: document.documentElement.classList.contains('dark'),
+                stories: [
+                    { id: 1, title: 'Moonlit Treaty', tagline: 'A runaway heir & a winged guardian bound by a blood‑lune pact.', genres: ['Fae', 'Court'], cover: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1000&q=60', chapters: 46, progress: 32, rating: '4.8', fav: false, description: 'When a fragile truce between dawn and dusk courts fractures, Elira forges a forbidden bond with a cursed winged guardian. Their alliance may rewrite the Astral Accord—or end both realms.' },
+                    { id: 2, title: 'Embers & Velvet', tagline: 'Alchemy guild rivalries ignite a slow‑burn alliance.', genres: ['Alchemy', 'Guild'], cover: 'https://images.unsplash.com/photo-1583136192161-438d058e3d0a?auto=format&fit=crop&w=1000&q=60', chapters: 38, progress: 54, rating: '4.6', fav: true, description: 'In a city built on layered sigils, rival alchemists decode a forgotten velvet catalyst that amplifies emotion. Each experiment pulls them deeper into a conspiracy of erased archives.' },
+                    { id: 3, title: 'Starlace Rebellion', tagline: 'A masked insurgent & a celestial archivist decode fate threads.', genres: ['Rebellion', 'Celestial'], cover: 'https://images.unsplash.com/photo-1508261303786-0e0a9272d552?auto=format&fit=crop&w=1000&q=60', chapters: 52, progress: 12, rating: '4.7', fav: false, description: 'The Constellarium weaves destinies—until fissures appear. A rebel lace‑weaver and an oath‑bound archivist unravel patterns of control spun across generations.' },
+                    { id: 4, title: 'Gilded Thorn Oath', tagline: 'Poison garden trials awaken forbidden empathy.', genres: ['Trials', 'Dark Bloom'], cover: 'https://images.unsplash.com/photo-1508612761958-e931b53f1e7f?auto=format&fit=crop&w=1000&q=60', chapters: 29, progress: 67, rating: '4.5', fav: false, description: 'Success in the Thorn Conservatory demands emotional suppression. A candidate whose empathy cannot be muted discovers sentient flora reacting to suppressed memories.' },
+                    { id: 5, title: 'Silent Rune Sonata', tagline: 'Runic music binds fractured realms through dissonant chords.', genres: ['Runes', 'Music'], cover: 'https://images.unsplash.com/photo-1471444928139-48c5bf5173f8?auto=format&fit=crop&w=1000&q=60', chapters: 41, progress: 0, rating: '4.4', fav: false, description: 'Illicit performances awaken dormant sigil resonance. Two composers decode harmonic sequences that might retune collapsing border veils.' },
+                    { id: 6, title: 'Ivory Relic Pact', tagline: 'A relic chooses partners who already broke destiny.', genres: ['Relic', 'Prophecy'], cover: 'https://images.unsplash.com/photo-1499260164903-6be9eb3c261e?auto=format&fit=crop&w=1000&q=60', chapters: 34, progress: 83, rating: '4.9', fav: true, description: 'An artifact forged from extinct fractal bone rejects every legacy bearer—until two outcasts trigger divergent echo memories inside its lattice.' },
+                    { id: 7, title: 'Warden of Lumen Spires', tagline: 'Lightbound towers flicker when a forbidden vow forms.', genres: ['Vows', 'Arc Light'], cover: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1000&q=60', chapters: 55, progress: 21, rating: '4.6', fav: false, description: 'A vowforged sentinel and a memory‑fractured cartographer ascend crystalline spires to stabilize auric conduits destabilized by longing.' },
+                    { id: 8, title: 'Ashfall Serenade', tagline: 'Volcanic glass harps echo feelings unsung.', genres: ['Elemental', 'Song'], cover: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1000&q=60', chapters: 27, progress: 9, rating: '4.3', fav: false, description: 'In a caldera settlement, resonant glass forms melodic fractures. A composer decodes ashfall cadence patterns revealing suppressed political grief.' }
+                ],
+                filters: ['Fae', 'Court', 'Alchemy', 'Guild', 'Rebellion', 'Celestial', 'Trials', 'Runes', 'Music', 'Relic', 'Prophecy', 'Vows', 'Elemental', 'Song'],
+                activeFilter: 'all',
+                search: '',
+                modalOpen: false,
+                activeStory: null,
+                viewMode: 'grid',
+                init() { },
+                filteredStories() {
+                    const term = this.search.trim().toLowerCase();
+                    return this.stories.filter(s => {
+                        const fOk = this.activeFilter === 'all' || s.genres.includes(this.activeFilter);
+                        const tOk = !term || s.title.toLowerCase().includes(term) || s.tagline.toLowerCase().includes(term);
+                        return fOk && tOk;
+                    });
+                },
+                favorites() { return this.stories.filter(s => s.fav) },
+                span(s) { const n = s.id % 6; if (n === 0) return 'row-span-2 col-span-2 min-h-[410px]'; if (n === 1) return 'row-span-2'; if (n === 2) return 'col-span-2'; return '' },
+                chip(f) { const a = this.activeFilter === f; return 'px-3 py-1.5 rounded-full text-[12px] ring-1 ' + (a ? 'bg-accent-300 text-black ring-white/10' : 'bg-white/10 text-white/80 ring-white/15 hover:bg-white/15') },
+                toggleFav(s) { s.fav = !s.fav },
+                queueStory(s) { s.queued = true },
+                openStory(s) { this.activeStory = s; this.modalOpen = true },
+                closeModal() { this.modalOpen = false; this.activeStory = null },
+                toggleTheme() { document.documentElement.classList.toggle('dark'); this.isDark = document.documentElement.classList.contains('dark'); localStorage.setItem('px_theme', this.isDark ? 'dark' : 'light') }
+            }
+        }
+    </script>
+</body>
+
+</html>

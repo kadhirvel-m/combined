@@ -297,3 +297,172 @@ CREATE TABLE public.user_topic_progress (
   CONSTRAINT user_topic_progress_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_topic_progress_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
 );
+
+-- =============================================
+-- Notes Marketplace / Wallet Extension (PaperX)
+-- =============================================
+-- Tables introduced:
+--   note_subjects (optional taxonomy bridge to syllabus_courses)
+--   marketplace_notes (core note metadata)
+--   marketplace_note_files (original + preview assets)
+--   marketplace_note_purchases (transactional purchases)
+--   marketplace_note_ratings (1..5 star + review)
+--   marketplace_note_reports (quality / abuse reports)
+--   user_wallets (aggregated balance)
+--   user_wallet_transactions (ledger entries)
+--   faculty_verifications (faculty status + approved subjects)
+-- All FK user references go to auth.users or user_profiles depending on existing pattern.
+
+CREATE TABLE public.note_subjects (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  syllabus_course_id uuid, -- optional link to an existing syllabus course
+  subject_code text,
+  title text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT note_subjects_pkey PRIMARY KEY (id),
+  CONSTRAINT note_subjects_course_fkey FOREIGN KEY (syllabus_course_id) REFERENCES public.syllabus_courses(id)
+);
+
+CREATE TABLE public.marketplace_notes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  uploader_user_id uuid NOT NULL, -- auth.users.id
+  subject_id uuid,                 -- FK into note_subjects
+  college_id uuid,                 -- for scoping / filtering
+  degree_id uuid,
+  department_id uuid,
+  batch_id uuid,
+  semester integer CHECK (semester >= 1 AND semester <= 12),
+  title text NOT NULL,
+  description text,
+  is_paid boolean NOT NULL DEFAULT false,
+  price_cents integer CHECK (price_cents >= 0), -- store smallest unit (INR paise)
+  file_type text,             -- pdf, docx, md, zip
+  pages integer,
+  content_hash text,
+  preview_ready boolean DEFAULT false,
+  faculty_verified boolean DEFAULT false, -- snapshot flag (denormalized)
+  avg_rating numeric(3,2) DEFAULT 0,
+  ratings_count integer DEFAULT 0,
+  downloads_count integer DEFAULT 0,
+  purchase_count integer DEFAULT 0,
+  status text NOT NULL DEFAULT 'active', -- active|disabled|under_review
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT marketplace_notes_pkey PRIMARY KEY (id),
+  CONSTRAINT marketplace_notes_uploader_fkey FOREIGN KEY (uploader_user_id) REFERENCES auth.users(id),
+  CONSTRAINT marketplace_notes_subject_fkey FOREIGN KEY (subject_id) REFERENCES public.note_subjects(id),
+  CONSTRAINT marketplace_notes_college_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
+  CONSTRAINT marketplace_notes_degree_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id),
+  CONSTRAINT marketplace_notes_department_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT marketplace_notes_batch_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id)
+);
+
+CREATE INDEX marketplace_notes_subject_idx ON public.marketplace_notes(subject_id);
+CREATE INDEX marketplace_notes_filters_idx ON public.marketplace_notes(college_id, degree_id, department_id, batch_id, semester);
+CREATE INDEX marketplace_notes_paid_idx ON public.marketplace_notes(is_paid, status);
+
+CREATE TABLE public.marketplace_note_files (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  note_id uuid NOT NULL,
+  file_role text NOT NULL, -- original|preview|watermark|extra
+  storage_path text NOT NULL,
+  file_size bigint,
+  mime_type text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT marketplace_note_files_pkey PRIMARY KEY (id),
+  CONSTRAINT marketplace_note_files_note_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id) ON DELETE CASCADE
+);
+CREATE INDEX marketplace_note_files_note_idx ON public.marketplace_note_files(note_id);
+
+CREATE TABLE public.marketplace_note_purchases (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  note_id uuid NOT NULL,
+  buyer_user_id uuid NOT NULL,
+  uploader_user_id uuid NOT NULL,
+  amount_cents integer NOT NULL CHECK (amount_cents >= 0),
+  platform_fee_cents integer NOT NULL DEFAULT 0,
+  currency text NOT NULL DEFAULT 'INR',
+  status text NOT NULL DEFAULT 'completed', -- completed|refunded|pending
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT marketplace_note_purchases_pkey PRIMARY KEY (id),
+  CONSTRAINT marketplace_note_purchases_note_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id),
+  CONSTRAINT marketplace_note_purchases_buyer_fkey FOREIGN KEY (buyer_user_id) REFERENCES auth.users(id),
+  CONSTRAINT marketplace_note_purchases_uploader_fkey FOREIGN KEY (uploader_user_id) REFERENCES auth.users(id)
+);
+CREATE INDEX marketplace_note_purchases_buyer_idx ON public.marketplace_note_purchases(buyer_user_id);
+CREATE INDEX marketplace_note_purchases_note_idx ON public.marketplace_note_purchases(note_id);
+
+CREATE TABLE public.marketplace_note_ratings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  note_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  review text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT marketplace_note_ratings_pkey PRIMARY KEY (id),
+  CONSTRAINT marketplace_note_ratings_note_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id) ON DELETE CASCADE,
+  CONSTRAINT marketplace_note_ratings_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT marketplace_note_ratings_unique UNIQUE (note_id, user_id)
+);
+CREATE INDEX marketplace_note_ratings_note_idx ON public.marketplace_note_ratings(note_id);
+
+CREATE TABLE public.marketplace_note_reports (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  note_id uuid NOT NULL,
+  reporter_user_id uuid NOT NULL,
+  reason text NOT NULL,
+  status text NOT NULL DEFAULT 'open', -- open|reviewed|dismissed
+  created_at timestamptz NOT NULL DEFAULT now(),
+  resolved_at timestamptz,
+  CONSTRAINT marketplace_note_reports_pkey PRIMARY KEY (id),
+  CONSTRAINT marketplace_note_reports_note_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id) ON DELETE CASCADE,
+  CONSTRAINT marketplace_note_reports_reporter_fkey FOREIGN KEY (reporter_user_id) REFERENCES auth.users(id)
+);
+CREATE INDEX marketplace_note_reports_note_idx ON public.marketplace_note_reports(note_id);
+
+CREATE TABLE public.user_wallets (
+  user_id uuid PRIMARY KEY, -- auth.users.id
+  balance_cents bigint NOT NULL DEFAULT 0 CHECK (balance_cents >= 0),
+  pending_cents bigint NOT NULL DEFAULT 0 CHECK (pending_cents >= 0),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT user_wallets_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+
+CREATE TABLE public.user_wallet_transactions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  note_id uuid, -- optional link if derived from a note sale
+  purchase_id uuid, -- optional link to purchase
+  type text NOT NULL, -- credit|debit|hold|release
+  amount_cents bigint NOT NULL CHECK (amount_cents >= 0),
+  balance_after_cents bigint,
+  description text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT user_wallet_transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT user_wallet_transactions_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT user_wallet_transactions_note_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id),
+  CONSTRAINT user_wallet_transactions_purchase_fkey FOREIGN KEY (purchase_id) REFERENCES public.marketplace_note_purchases(id)
+);
+CREATE INDEX user_wallet_tx_user_idx ON public.user_wallet_transactions(user_id);
+
+CREATE TABLE public.faculty_verifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL, -- auth.users.id
+  verified boolean NOT NULL DEFAULT false,
+  verification_note text,
+  subjects jsonb, -- list of subject_ids or codes authorized
+  expires_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT faculty_verifications_pkey PRIMARY KEY (id),
+  CONSTRAINT faculty_verifications_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT faculty_verifications_unique UNIQUE (user_id)
+);
+
+-- Suggested materialized view (not created here) for fast search:
+-- CREATE MATERIALIZED VIEW public.mv_marketplace_note_search AS
+--   SELECT n.id, setweight(to_tsvector('english', coalesce(n.title,'')), 'A') ||
+--          setweight(to_tsvector('english', coalesce(n.description,'')), 'B') AS doc
+--   FROM public.marketplace_notes n WHERE n.status='active';
