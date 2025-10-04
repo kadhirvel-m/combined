@@ -363,3 +363,19 @@ CREATE TABLE public.marketplace_reviews (
 -- FROM public.marketplace_notes n
 -- LEFT JOIN public.marketplace_reviews r ON r.note_id = n.id
 -- GROUP BY n.id;
+
+-- Administrative roles & permissions
+-- Stores role assignments separate from user_profiles to avoid polluting profile schema.
+-- role options (convention): 'admin','teacher','student','moderator'
+-- permissions is a flexible JSONB document for fine-grained overrides.
+CREATE TABLE IF NOT EXISTS public.admin_roles (
+  auth_user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  role text NOT NULL DEFAULT 'student',
+  permissions jsonb DEFAULT '{}'::jsonb,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT admin_roles_role_check CHECK (role IN ('admin','teacher','student','moderator'))
+);
+
+-- Helpful index for querying by role
+CREATE INDEX IF NOT EXISTS admin_roles_role_idx ON public.admin_roles(role);

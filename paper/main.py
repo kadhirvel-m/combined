@@ -4661,6 +4661,288 @@ def parse_syllabus_text(payload: ParseSyllabusIn):
     return parse_syllabus(payload)
 
 
+# ---------------- Admin: List Users -----------------
+
+def _is_admin_user(user_id: Optional[str], email: Optional[str]) -> bool:
+    """Basic admin gating: match against comma-separated ADMIN_USER_IDS or ADMIN_EMAILS env vars.
+
+    Falls back to allowing emails ending with domains in ADMIN_EMAIL_DOMAINS (comma-separated) if provided.
+    """
+    if not user_id and not email:
+        return False
+    ids = {s.strip() for s in os.getenv("ADMIN_USER_IDS", "").split(",") if s.strip()}
+    if user_id and user_id in ids:
+        return True
+    emails = {s.strip().lower() for s in os.getenv("ADMIN_EMAILS", "").split(",") if s.strip()}
+    if email and email.lower() in emails:
+        return True
+    domains = {s.strip().lower() for s in os.getenv("ADMIN_EMAIL_DOMAINS", "").split(",") if s.strip()}
+    if email and domains:
+        try:
+            domain = email.split("@",1)[1].lower()
+            if domain in domains:
+                return True
+        except Exception:
+            pass
+    # Database role check (admin_roles table) if we have a service client and user id
+    try:
+        if user_id:
+            supabase = get_service_client()
+            if supabase:
+                resp = supabase.table("admin_roles").select("role").eq("auth_user_id", user_id).limit(1).execute()
+                data = getattr(resp, "data", []) or []
+                if data and (data[0].get("role") == "admin"):
+                    return True
+    except Exception:
+        # Silent fail: do not block auth if table missing or permission issue
+        pass
+    return False
+
+
+@academics_router.get("/api/admin/users", summary="Admin: list user profiles")
+def list_admin_users(authorization: Optional[str] = Header(default=None), limit: int = Query(default=500, ge=1, le=2000)):
+    token = _parse_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Auth disabled (no anon client)")
+    try:
+        auth_user = anon_client.auth.get_user(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user_obj = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+    user_id = None
+    email = None
+    if user_obj:
+        user_id = getattr(user_obj, "id", None) or (user_obj.get("id") if isinstance(user_obj, dict) else None)
+        email = getattr(user_obj, "email", None) or (user_obj.get("email") if isinstance(user_obj, dict) else None)
+    if not _is_admin_user(user_id, email):
+        raise HTTPException(status_code=403, detail="Not an admin user")
+
+    supabase = get_service_client()
+    # Core fields; attempt extended (with department_id/batch_id). Fallback if columns absent (42703).
+    base_cols = [
+        "id","auth_user_id","email","name","gender","phone","semester","regno",
+        "profile_image_url","verification_score","updated_at","created_at","linkedin","github",
+        "leetcode","skills","technologies","specializations"
+    ]
+    extended_cols = base_cols + ["department_id","batch_id"]
+    use_extended = True
+    rows: List[dict] = []
+    for attempt in (1,2):
+        select_cols = ",".join(extended_cols if use_extended else base_cols)
+        try:
+            res = (
+                supabase.table("user_profiles")
+                .select(select_cols)
+                .order("updated_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+        except Exception as e:  # Catch APIError directly (column missing)
+            msg = str(e)
+            if use_extended and ("department_id" in msg or "batch_id" in msg):
+                use_extended = False
+                continue
+            raise HTTPException(status_code=500, detail=f"Supabase error (list users) exec: {msg}")
+
+        err = getattr(res, "error", None)
+        if err:
+            # Some errors might still surface here (non-column related)
+            raise HTTPException(status_code=500, detail=f"Supabase error (list users): {err}")
+        rows = getattr(res, "data", []) or []
+        break
+
+    have_dept_batch = use_extended  # only true if extended columns succeeded
+
+    # Preload department + batch info to enrich output
+    dept_ids = {r.get("department_id") for r in rows if have_dept_batch and r.get("department_id")}
+    batch_ids = {r.get("batch_id") for r in rows if have_dept_batch and r.get("batch_id")}
+    dept_map: Dict[str, dict] = {}
+    batch_map: Dict[str, dict] = {}
+    role_map: Dict[str, str] = {}
+    if dept_ids:
+        dres = supabase.table("departments").select("id,name").in_("id", list(dept_ids)).execute()
+        if not getattr(dres, "error", None):
+            for d in dres.data or []:
+                dept_map[d.get("id")] = d
+    if batch_ids:
+        bres = supabase.table("batches").select("id,from_year,to_year").in_("id", list(batch_ids)).execute()
+        if not getattr(bres, "error", None):
+            for b in bres.data or []:
+                batch_map[b.get("id")] = b
+    # Load roles for all involved auth_user_ids in one query
+    try:
+        auth_ids = [r.get("auth_user_id") for r in rows if r.get("auth_user_id")]
+        uniq_ids = list({i for i in auth_ids if i})
+        if uniq_ids:
+            rres = supabase.table("admin_roles").select("auth_user_id,role").in_("auth_user_id", uniq_ids).execute()
+            if not getattr(rres, "error", None):
+                for rr in (rres.data or []):
+                    rid = rr.get("auth_user_id")
+                    if rid:
+                        role_map[rid] = rr.get("role") or "student"
+    except Exception:
+        pass
+
+    out: List[dict] = []
+    for r in rows:
+        dept = dept_map.get(r.get("department_id")) if have_dept_batch else {}
+        batch = batch_map.get(r.get("batch_id")) if have_dept_batch else {}
+        out.append({
+            "profile_id": r.get("id"),
+            "user_id": r.get("auth_user_id"),
+            "name": r.get("name"),
+            "email": r.get("email"),
+            "role": role_map.get(r.get("auth_user_id"), "student"),
+            "semester": r.get("semester"),
+            "regno": r.get("regno"),
+            "department": dept.get("name") if dept else None,
+            "batch_from": batch.get("from_year") if batch else None,
+            "batch_to": batch.get("to_year") if batch else None,
+            "batch_range": (f"{batch.get('from_year')}-{batch.get('to_year')}" if batch and batch.get('from_year') and batch.get('to_year') else None),
+            "profile_image_url": r.get("profile_image_url"),
+            "verification_score": r.get("verification_score"),
+            "linkedin": r.get("linkedin"),
+            "github": r.get("github"),
+            "leetcode": r.get("leetcode"),
+            "skills": r.get("skills") or [],
+            "technologies": r.get("technologies") or [],
+            "specializations": r.get("specializations") or [],
+            "updated_at": r.get("updated_at"),
+            "created_at": r.get("created_at"),
+        })
+    return {"users": out, "count": len(out)}
+
+
+@academics_router.get("/api/admin/self-check", summary="Admin: verify current token admin status")
+def admin_self_check(authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Auth disabled (no anon client)")
+    try:
+        auth_user = anon_client.auth.get_user(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user_obj = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+    user_id = getattr(user_obj, "id", None) if user_obj else None
+    email = getattr(user_obj, "email", None) if user_obj else None
+    is_admin = _is_admin_user(user_id, email)
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Not an admin user")
+    return {"ok": True, "user_id": user_id, "email": email, "admin": True}
+
+
+class RoleUpdateIn(BaseModel):
+    role: str
+
+
+def _get_auth_user(authorization: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    token = _parse_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Auth disabled (no anon client)")
+    try:
+        auth_user = anon_client.auth.get_user(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user_obj = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+    if not user_obj:
+        raise HTTPException(status_code=401, detail="Invalid auth context")
+    user_id = getattr(user_obj, "id", None) or (user_obj.get("id") if isinstance(user_obj, dict) else None)
+    email = getattr(user_obj, "email", None) or (user_obj.get("email") if isinstance(user_obj, dict) else None)
+    return user_id, email
+
+
+def _require_admin(authorization: Optional[str]):
+    uid, em = _get_auth_user(authorization)
+    if not _is_admin_user(uid, em):
+        raise HTTPException(status_code=403, detail="Not an admin user")
+    return uid, em
+
+
+def _count_admins(supabase) -> int:
+    try:
+        resp = supabase.table("admin_roles").select("role", count='exact').eq("role", "admin").execute()
+        # Some supabase libs embed count differently; attempt both
+        if hasattr(resp, 'count') and resp.count is not None:
+            return resp.count
+        data = getattr(resp, 'data', []) or []
+        return len([r for r in data if r.get('role') == 'admin'])
+    except Exception:
+        return 0
+
+
+VALID_ROLES = {"admin","teacher","student","moderator"}
+
+
+@academics_router.post("/api/admin/users/{auth_user_id}/role", summary="Admin: update a user's role")
+def update_user_role(auth_user_id: str, payload: RoleUpdateIn, authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    desired = payload.role.lower().strip()
+    if desired not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role '{desired}'")
+    supabase = get_service_client()
+    if desired == 'admin':
+        # Upsert row
+        res = supabase.table('admin_roles').upsert({"auth_user_id": auth_user_id, "role": "admin"}).execute()
+        if getattr(res, 'error', None):
+            raise HTTPException(status_code=500, detail=f"Role upsert failed: {res.error}")
+    else:
+        # If demoting from admin ensure not last admin
+        # Check if currently admin
+        existing = supabase.table('admin_roles').select('role').eq('auth_user_id', auth_user_id).limit(1).execute()
+        is_admin_now = False
+        if not getattr(existing, 'error', None):
+            rows = getattr(existing, 'data', []) or []
+            is_admin_now = bool(rows and rows[0].get('role') == 'admin')
+        if is_admin_now:
+            admin_count = _count_admins(supabase)
+            if admin_count <= 1:
+                raise HTTPException(status_code=400, detail="Cannot demote the last admin")
+            del_res = supabase.table('admin_roles').delete().eq('auth_user_id', auth_user_id).execute()
+            if getattr(del_res, 'error', None):
+                raise HTTPException(status_code=500, detail=f"Role demote failed: {del_res.error}")
+        # For non-admin roles we can store or remove row (choose store for teacher/moderator custom permissions)
+        if desired in {"teacher","moderator"}:
+            up_res = supabase.table('admin_roles').upsert({"auth_user_id": auth_user_id, "role": desired}).execute()
+            if getattr(up_res, 'error', None):
+                raise HTTPException(status_code=500, detail=f"Role update failed: {up_res.error}")
+        elif desired == 'student':
+            # Remove row if not needed
+            supabase.table('admin_roles').delete().eq('auth_user_id', auth_user_id).execute()
+    return {"ok": True, "auth_user_id": auth_user_id, "role": desired}
+
+
+@academics_router.delete("/api/admin/users/{auth_user_id}", summary="Admin: delete a user (profile + role)")
+def delete_user(auth_user_id: str, authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    # Prevent deleting last admin if target is sole admin
+    existing_role = supabase.table('admin_roles').select('role').eq('auth_user_id', auth_user_id).limit(1).execute()
+    target_is_admin = False
+    if not getattr(existing_role, 'error', None):
+        rows = getattr(existing_role, 'data', []) or []
+        target_is_admin = bool(rows and rows[0].get('role') == 'admin')
+    if target_is_admin:
+        admin_count = _count_admins(supabase)
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot delete the last admin")
+    # Delete profile first (soft cascade pattern) then role row
+    prof_del = supabase.table('user_profiles').delete().eq('auth_user_id', auth_user_id).execute()
+    if getattr(prof_del, 'error', None):
+        raise HTTPException(status_code=500, detail=f"Profile delete failed: {prof_del.error}")
+    supabase.table('admin_roles').delete().eq('auth_user_id', auth_user_id).execute()
+    # NOTE: We are NOT deleting from auth.users here (would require service role elevated call). Document manual removal if needed.
+    return {"ok": True, "deleted_auth_user_id": auth_user_id}
+
+
 def _asset_debug(msg: str, **extra):  # lightweight conditional debug
     if os.getenv("ASSET_DEBUG"):
         try:

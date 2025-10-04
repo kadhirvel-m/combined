@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Paper X — Admin Users</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+  <script>
+    tailwind.config = {
+      darkMode:'class',
+      theme:{
+        extend:{
+          fontFamily:{ sans:['Inter','ui-sans-serif','system-ui','sans-serif'] },
+          colors:{ brand:{900:'#1E1E2F',700:'#4C2A59',500:'#9E4B8A'}, magenta:'#9E4B8A'},
+          boxShadow:{ glass:'0 8px 28px -6px rgba(30,30,47,.55),0 2px 6px rgba(0,0,0,.3)', neon:'0 0 0 1px rgba(255,255,255,.08), 0 4px 14px -2px rgba(158,75,138,.55), 0 18px 48px -8px rgba(76,42,89,.55)' }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-rounded{vertical-align:-5px}
+    html.dark body{background:radial-gradient(circle at 25% 15%,#4C2A59 0%,rgba(30,30,47,0) 55%),linear-gradient(135deg,#1E1E2F 0%,#221B38 40%,#141321 100%)}
+    body{background:linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 50%,#F7F2F9 100%)}
+    .glass-panel{background:linear-gradient(135deg,rgba(255,255,255,.72),rgba(255,255,255,.55));backdrop-filter:saturate(1.35) blur(14px);-webkit-backdrop-filter:saturate(1.35) blur(14px)}
+    .dark .glass-panel{background:linear-gradient(135deg,rgba(40,28,55,.75),rgba(30,24,47,.65))}
+  /* Unified gradient text style (synced with index.html) */
+  .gradient-text {display:inline-block;background-image:linear-gradient(90deg,#1E1E2F,#4C2A59,#9E4B8A,#4C2A59,#1E1E2F);background-size:200% 200%;animation:gradient-shift 4s ease-in-out infinite;color:transparent;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+  .dark .gradient-text {background-image:linear-gradient(90deg,#EFA3DC,#CA6CB3,#FFFFFF,#CA6CB3,#EFA3DC)}
+  @keyframes gradient-shift {0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+    @keyframes shift{0%{background-position:0 50%}50%{background-position:100% 50%}100%{background-position:0 50%}}
+    .table-grid tr{transition:background .25s ease}
+    .table-grid tr:hover{background:rgba(158,75,138,.06)}
+    .dark .table-grid tr:hover{background:rgba(158,75,138,.18)}
+    .avatar-ring{box-shadow:0 0 0 1.5px rgba(255,255,255,.85),0 0 0 3px rgba(158,75,138,.35)}
+    .dark .avatar-ring{box-shadow:0 0 0 1.5px rgba(255,255,255,.25),0 0 0 3px rgba(158,75,138,.55)}
+    .chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:500;line-height:1;background:rgba(158,75,138,.12);color:#4C2A59}
+    .dark .chip{background:rgba(158,75,138,.22);color:#EFA3DC}
+    .status-pill{padding:4px 10px;font-size:11px;font-weight:600;border-radius:8px;display:inline-flex;align-items:center;gap:4px;letter-spacing:.5px;text-transform:uppercase}
+    .pill-active{background:linear-gradient(135deg,#4C2A59,#9E4B8A);color:#fff}
+    .pill-new{background:linear-gradient(135deg,#9E4B8A,#FF7FD1);color:#fff}
+    .loader-dots span{width:6px;height:6px;border-radius:50%;background:#9E4B8A;display:inline-block;animation:bounce 1s infinite ease-in-out}
+    .loader-dots span:nth-child(2){animation-delay:.2s}.loader-dots span:nth-child(3){animation-delay:.4s}
+    @keyframes bounce{0%,80%,100%{transform:scale(.4);opacity:.45}40%{transform:scale(1);opacity:1}}
+    .layout-toggle button.active{background:linear-gradient(135deg,#9E4B8A,#4C2A59);color:#fff}
+    .grid-card{background:linear-gradient(135deg,rgba(255,255,255,.75),rgba(255,255,255,.55));backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+    .dark .grid-card{background:linear-gradient(135deg,rgba(40,28,55,.72),rgba(30,24,47,.55))}
+  </style>
+  <script>(()=>{const stored=localStorage.getItem('px_theme');const prefers=window.matchMedia('(prefers-color-scheme:dark)').matches;const dark=stored?stored==='dark':prefers;if(dark)document.documentElement.classList.add('dark');})();</script>
+</head>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
+  <header class="sticky top-0 z-30 backdrop-blur bg-white/70 dark:bg-brand-900/70 border-b border-black/5 dark:border-white/10">
+    <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+      <a href="index.html" class="flex items-center gap-2 font-bold tracking-tight text-lg"><img src="../assets/img/logo-light.svg" class="h-8 w-auto dark:hidden"/><img src="../assets/img/logo-dark.svg" class="h-8 w-auto hidden dark:block"/><span class="gradient-text hidden sm:inline">Admin • Users</span></a>
+      <div class="flex items-center gap-2">
+        <button id="themeToggle" class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition material-symbols-rounded" title="Toggle theme">dark_mode</button>
+        <a href="profile.html" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium bg-brand-500 text-white hover:shadow-neon">Profile</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-10 space-y-8">
+    <section class="flex flex-col lg:flex-row lg:items-end gap-6">
+      <div class="flex-1 space-y-3">
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight gradient-text">User Directory</h1>
+        <p class="text-sm md:text-base text-neutral-600 dark:text-white/60 max-w-2xl">Search, filter and inspect every registered profile. This dashboard surfaces core academic + social indicators to help moderation, curation and growth analytics.</p>
+        <div id="stats" class="flex flex-wrap items-center gap-3 text-xs"></div>
+      </div>
+      <div class="w-full max-w-md glass-panel rounded-2xl p-5 ring-1 ring-black/10 dark:ring-white/10 shadow-glass">
+        <form id="filterForm" class="space-y-4" autocomplete="off">
+          <div class="flex gap-3">
+            <div class="flex-1 relative">
+              <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-white/40 text-[20px]">search</span>
+              <input id="searchInput" type="text" placeholder="Search name, email, regno, skill…" class="w-full rounded-xl pl-10 pr-3 py-2.5 bg-white/80 dark:bg-white/10 border border-black/10 dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/60" />
+            </div>
+            <div class="flex items-center gap-1 layout-toggle">
+              <button type="button" data-view="table" class="h-10 w-10 rounded-xl flex items-center justify-center bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 text-neutral-600 dark:text-white/70 hover:bg-white dark:hover:bg-white/20 material-symbols-rounded" title="Table view">table</button>
+              <button type="button" data-view="grid" class="h-10 w-10 rounded-xl flex items-center justify-center bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 text-neutral-600 dark:text-white/70 hover:bg-white dark:hover:bg-white/20 material-symbols-rounded" title="Grid view">grid_view</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px]">
+            <select id="semesterFilter" class="rounded-xl bg-white/80 dark:bg-white/10 border border-black/10 dark:border-white/10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/50"><option value="">Semester</option></select>
+            <select id="batchFilter" class="rounded-xl bg-white/80 dark:bg-white/10 border border-black/10 dark:border-white/10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/50"><option value="">Batch</option></select>
+            <select id="deptFilter" class="rounded-xl bg-white/80 dark:bg-white/10 border border-black/10 dark:border-white/10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/50"><option value="">Department</option></select>
+            <select id="sortSelect" class="rounded-xl bg-white/80 dark:bg-white/10 border border-black/10 dark:border-white/10 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/50">
+              <option value="">Sort: Default</option>
+              <option value="name">Name A→Z</option>
+              <option value="semester">Semester ↓</option>
+              <option value="created_desc">Newest</option>
+              <option value="verification">Verification Score ↓</option>
+            </select>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="resultsWrapper" class="space-y-4">
+      <div id="loadingState" class="flex items-center gap-3 text-sm text-brand-500 dark:text-magenta"><div class="loader-dots"><span></span><span></span><span></span></div><span>Loading users…</span></div>
+      <div id="errorState" class="hidden text-sm text-red-600 dark:text-red-400 font-medium"></div>
+      <div id="tableView" class="overflow-x-auto hidden">
+        <table class="w-full text-sm table-grid">
+          <thead class="text-left text-[11px] uppercase tracking-wide text-neutral-500 dark:text-white/40">
+            <tr class="border-b border-black/5 dark:border-white/10">
+              <th class="py-2 pr-3 font-semibold">User</th>
+              <th class="py-2 pr-3 font-semibold">Academic</th>
+              <th class="py-2 pr-3 font-semibold">Contacts</th>
+              <th class="py-2 pr-3 font-semibold">Skills</th>
+              <th class="py-2 pr-3 font-semibold">Verification</th>
+              <th class="py-2 pr-3 font-semibold">Role</th>
+              <th class="py-2 pr-3 font-semibold">Updated</th>
+              <th class="py-2 pr-3 font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="userRows" class="align-top divide-y divide-black/5 dark:divide-white/10"></tbody>
+        </table>
+      </div>
+      <div id="gridView" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 hidden"></div>
+      <div id="emptyState" class="hidden text-center py-12 text-sm text-neutral-500 dark:text-white/40">No users match current filters.</div>
+    </section>
+  </main>
+
+  <template id="rowTemplate">
+    <tr>
+      <td class="py-3 pr-3">
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <img data-avatar class="h-12 w-12 rounded-xl object-cover avatar-ring bg-neutral-200 dark:bg-white/10" alt="avatar"/>
+            <span data-initial class="absolute inset-0 flex items-center justify-center text-xs font-semibold tracking-wide text-neutral-700 dark:text-white/70"></span>
+          </div>
+          <div>
+            <div class="font-semibold leading-tight" data-name></div>
+            <div class="text-[11px] opacity-70" data-email></div>
+            <div class="mt-1 flex flex-wrap gap-1" data-status></div>
+          </div>
+        </div>
+      </td>
+      <td class="py-3 pr-3 text-[12px]">
+        <div data-academic class="space-y-1"></div>
+      </td>
+      <td class="py-3 pr-3 text-[12px]">
+        <div class="space-y-1" data-links></div>
+      </td>
+      <td class="py-3 pr-3 text-[11px]" data-skills></td>
+      <td class="py-3 pr-3" data-verify></td>
+      <td class="py-3 pr-3 text-[11px]" data-role></td>
+      <td class="py-3 pr-3 text-[11px] opacity-60" data-updated></td>
+      <td class="py-3 pr-3 text-[11px]" data-actions></td>
+    </tr>
+  </template>
+
+  <template id="cardTemplate">
+    <article class="grid-card rounded-2xl ring-1 ring-black/10 dark:ring-white/10 p-4 hover:shadow-neon transition relative overflow-hidden">
+      <div class="flex items-start gap-3">
+        <div class="relative">
+          <img data-avatar class="h-14 w-14 rounded-xl object-cover avatar-ring bg-neutral-200 dark:bg-white/10" alt="avatar"/>
+          <span data-initial class="absolute inset-0 flex items-center justify-center text-sm font-semibold tracking-wide text-neutral-700 dark:text-white/70"></span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="font-semibold leading-snug truncate" data-name></h3>
+          <p class="text-[11px] opacity-70 truncate" data-email></p>
+          <div class="mt-1 flex flex-wrap gap-1" data-status></div>
+        </div>
+        <div class="text-[11px] opacity-60" data-verify></div>
+      </div>
+      <div class="mt-3 space-y-2 text-[11px]">
+        <div data-academic class="flex flex-wrap gap-2"></div>
+        <div data-skills class="flex flex-wrap gap-1"></div>
+        <div data-links class="flex flex-wrap gap-1 pt-1"></div>
+      </div>
+      <div class="mt-3 flex items-center justify-between gap-2 text-[10px] opacity-50"><span data-updated></span>
+        <div class="flex gap-1" data-actions-card>
+          <button class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white/60 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 transition" data-view-profile title="View profile"><span class="material-symbols-rounded text-xs">open_in_new</span></button>
+          <button class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/80 text-white hover:bg-red-600 transition" data-delete-user title="Delete user"><span class="material-symbols-rounded text-xs">delete</span></button>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+    const $ = (sel, ctx=document) => ctx.querySelector(sel);
+    const API = (window.API_BASE||'').replace(/\/$/,'');
+    const state = { raw:[], filtered:[], view: localStorage.getItem('admin_users_view')||'table' };
+
+    function fmtDate(ts){ if(!ts) return ''; try { return new Date(ts).toLocaleDateString(undefined,{month:'short',day:'numeric'}); } catch(_) { return ''; } }
+    function initials(name){ if(!name) return ''; return name.split(/\s+/).map(p=>p[0]).slice(0,2).join('').toUpperCase(); }
+
+    function computeStats(){ const total = state.raw.length; const semesters = new Set(); const depts = new Set(); state.raw.forEach(u=>{ if(u.semester) semesters.add(u.semester); if(u.department) depts.add(u.department); }); return { total, semesters: semesters.size, depts: depts.size }; }
+
+    function renderStats(){ const s = computeStats(); const el = $('#stats'); if(!el) return; el.innerHTML = [ ['Users',s.total], ['Semesters',s.semesters], ['Departments',s.depts] ].map(([k,v])=>`<span class="chip">${k}: <strong>${v}</strong></span>`).join(''); }
+
+    function buildFilters(){ const semesters = [...new Set(state.raw.map(u=>u.semester).filter(Boolean))].sort((a,b)=>a-b); const semesterSel = $('#semesterFilter'); semesters.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent='Sem '+s; semesterSel.appendChild(o); }); const batches=[...new Set(state.raw.map(u=>u.batch_range).filter(Boolean))]; const batchSel=$('#batchFilter'); batches.forEach(r=>{ const o=document.createElement('option'); o.value=r; o.textContent=r; batchSel.appendChild(o); }); const depts=[...new Set(state.raw.map(u=>u.department).filter(Boolean))].sort(); const deptSel=$('#deptFilter'); depts.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; deptSel.appendChild(o); }); }
+
+    function applyFilters(){ const q=($('#searchInput').value||'').toLowerCase(); const sem=$('#semesterFilter').value; const batch=$('#batchFilter').value; const dept=$('#deptFilter').value; state.filtered = state.raw.filter(u=>{ if(q){ const hay=[u.name,u.email,u.regno,(u.skills||[]).join(','),(u.specializations||[]).join(',')].join(' ').toLowerCase(); if(!hay.includes(q)) return false; } if(sem && String(u.semester)!==sem) return false; if(batch && u.batch_range!==batch) return false; if(dept && u.department!==dept) return false; return true; }); sortData(); render(); }
+
+    function sortData(){ const sort = $('#sortSelect').value; if(!sort) return; const arr = state.filtered; const collator = new Intl.Collator(undefined,{sensitivity:'base'}); switch(sort){ case 'name': arr.sort((a,b)=>collator.compare(a.name||'',b.name||'')); break; case 'semester': arr.sort((a,b)=> (b.semester||0)-(a.semester||0)); break; case 'created_desc': arr.sort((a,b)=> new Date(b.created_at).getTime()-new Date(a.created_at).getTime()); break; case 'verification': arr.sort((a,b)=> (b.verification_score||0)-(a.verification_score||0)); break; } }
+
+    function setView(v){ state.view=v; localStorage.setItem('admin_users_view',v); $('#tableView').classList.toggle('hidden', v!=='table'); $('#gridView').classList.toggle('hidden', v!=='grid'); $$('.layout-toggle button').forEach(btn=> btn.classList.toggle('active', btn.dataset.view===v)); }
+
+    function render(){ const rowsEl=$('#userRows'); const gridEl=$('#gridView'); if(!rowsEl||!gridEl) return; rowsEl.innerHTML=''; gridEl.innerHTML=''; const data=state.filtered; $('#emptyState').classList.toggle('hidden', data.length!==0); data.forEach(u=>{ const rowT=$('#rowTemplate').content.firstElementChild.cloneNode(true); fillEntry(rowT,u); rowsEl.appendChild(rowT); const cardT=$('#cardTemplate').content.firstElementChild.cloneNode(true); fillEntry(cardT,u); gridEl.appendChild(cardT); }); }
+
+    function fillEntry(node,u){ const avatar=node.querySelector('[data-avatar]'); const init=node.querySelector('[data-initial]'); if(avatar){ if(u.profile_image_url){ avatar.src=u.profile_image_url; init.textContent=''; } else { avatar.removeAttribute('src'); init.textContent=initials(u.name||u.email||''); } }
+      const nameEl=node.querySelector('[data-name]'); if(nameEl) nameEl.textContent=u.name || '(no name)'; const emailEl=node.querySelector('[data-email]'); if(emailEl) emailEl.textContent=u.email || ''; const statusEl=node.querySelector('[data-status]'); if(statusEl){ statusEl.innerHTML=''; if(u.semester) statusEl.innerHTML += `<span class="chip">Sem ${u.semester}</span>`; if(u.department) statusEl.innerHTML += `<span class="chip">${u.department}</span>`; if(u.batch_range) statusEl.innerHTML += `<span class="chip">${u.batch_range}</span>`; }
+      const academic=node.querySelector('[data-academic]'); if(academic){ academic.innerHTML=''; if(u.regno) academic.innerHTML += `<div><span class="font-medium">Reg:</span> ${u.regno}</div>`; if(u.semester) academic.innerHTML += `<div><span class="font-medium">Sem:</span> ${u.semester}</div>`; if(u.batch_range) academic.innerHTML += `<div><span class="font-medium">Batch:</span> ${u.batch_range}</div>`; }
+      const links=node.querySelector('[data-links]'); if(links){ const mk=(icon,label,url)=>`<a href="${url}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 text-[10px]"><span class="material-symbols-rounded text-xs">${icon}</span>${label}</a>`; links.innerHTML=''; if(u.linkedin) links.innerHTML += mk('work','LinkedIn',u.linkedin); if(u.github) links.innerHTML += mk('code','GitHub',u.github); if(u.leetcode) links.innerHTML += mk('developer_mode','LeetCode',u.leetcode); }
+      const skills=node.querySelector('[data-skills]'); if(skills){ const list=[...(u.skills||[]),...(u.technologies||[])].slice(0,6); skills.innerHTML=list.map(s=>`<span class="chip">${s}</span>`).join(''); }
+      const verify=node.querySelector('[data-verify]'); if(verify){ const v=u.verification_score||0; verify.innerHTML = v? `<span class="status-pill pill-active"><span class="material-symbols-rounded text-[14px]">verified</span>${v.toFixed(0)}</span>`: '<span class="status-pill pill-new">NEW</span>'; }
+      const updated=node.querySelector('[data-updated]'); if(updated) updated.textContent = fmtDate(u.updated_at||u.created_at);
+      const vp=node.querySelector('[data-view-profile]'); if(vp) vp.addEventListener('click',()=> window.open(`profile_public.html?u=${encodeURIComponent(u.user_id||u.auth_user_id||'')}`,'_blank'));
+      const roleCell=node.querySelector('[data-role]');
+      const actionsCell=node.querySelector('[data-actions]');
+      const actionsCard=node.querySelector('[data-actions-card]');
+      if(roleCell){ roleCell.innerHTML = roleSelectHTML(u); }
+      if(actionsCell){ actionsCell.innerHTML = deleteBtnHTML(u); }
+      if(actionsCard){ const delBtn=actionsCard.querySelector('[data-delete-user]'); if(delBtn) attachDeleteHandler(delBtn,u); }
+      // Attach role change if present
+      const sel = node.querySelector('select[data-role-select]'); if(sel){ attachRoleChange(sel,u); }
+      const delBtnRow = node.querySelector('[data-delete-user]'); if(delBtnRow) attachDeleteHandler(delBtnRow,u);
+    }
+
+    const ROLE_OPTIONS = ['admin','teacher','moderator','student'];
+    function roleSelectHTML(u){
+      return `<select data-role-select class="rounded-md bg-white/70 dark:bg-white/10 border border-black/10 dark:border-white/10 px-2 py-1 text-[11px] focus:outline-none">
+        ${ROLE_OPTIONS.map(r=>`<option value="${r}" ${ (u.role||'student')===r? 'selected':''}>${r}</option>`).join('')}
+      </select>`;
+    }
+    function deleteBtnHTML(u){
+      return `<button data-delete-user title="Delete user" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-red-500/80 hover:bg-red-600 text-white text-[11px]">
+        <span class="material-symbols-rounded text-[14px]">delete</span>
+      </button>`;
+    }
+    async function apiUpdateRole(user,uRole){
+      const token = await getAccessToken();
+      const res = await fetch(`${API}/api/admin/users/${encodeURIComponent(user.user_id)}/role`, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body: JSON.stringify({role:uRole}) });
+      if(!res.ok){ throw new Error(`Role update failed: ${res.status}`); }
+      return res.json();
+    }
+    async function apiDeleteUser(user){
+      const token = await getAccessToken();
+      const res = await fetch(`${API}/api/admin/users/${encodeURIComponent(user.user_id)}`, { method:'DELETE', headers:{'Authorization':'Bearer '+token} });
+      if(!res.ok){ const txt = await res.text(); throw new Error(`Delete failed: ${res.status} ${txt}`); }
+      return res.json();
+    }
+    function attachRoleChange(sel,u){ sel.addEventListener('change', async ()=>{
+        const newRole = sel.value;
+        const prev = u.role;
+        sel.disabled = true; sel.classList.add('opacity-60');
+        try { await apiUpdateRole(u,newRole); u.role = newRole; }
+        catch(err){ console.error(err); alert(err.message || 'Role update error'); sel.value = prev; }
+        finally { sel.disabled=false; sel.classList.remove('opacity-60'); }
+    }); }
+    function attachDeleteHandler(btn,u){ btn.addEventListener('click', async ()=>{
+        if(!confirm(`Delete user ${u.name||u.email}? This cannot be undone (profile only).`)) return;
+        btn.disabled=true; btn.classList.add('opacity-60');
+        try { await apiDeleteUser(u); state.raw = state.raw.filter(x=>x.user_id!==u.user_id); applyFilters(); }
+        catch(err){ console.error(err); alert(err.message || 'Delete failed'); }
+        finally { btn.disabled=false; btn.classList.remove('opacity-60'); }
+    }); }
+
+    async function getAccessToken(){
+      // Primary token per auth.js
+      try { const t = localStorage.getItem('px_token'); if(t) return t; } catch(_){}
+      // Supabase session (if client injected somewhere else)
+      try { if(window.supabase && supabase.auth){ const { data } = await supabase.auth.getSession(); const tk = data?.session?.access_token; if(tk) return tk; } } catch(_){ }
+      // Fallback keys (legacy / experiments)
+      const fallbacks=['access_token','auth_token','sb-access-token'];
+      for(const k of fallbacks){ try { const v = localStorage.getItem(k); if(v) return v; } catch(_){} }
+      return null;
+    }
+
+    async function adminSelfCheck(){
+      const token = await getAccessToken();
+      if(!token) throw new Error('No auth token (px_token) found — please login');
+      const res = await fetch(API + '/api/admin/self-check', { headers:{'Authorization':'Bearer '+token} });
+      if(res.status === 401) throw new Error('401 Unauthorized – token invalid or expired');
+      if(res.status === 403) throw new Error('Not an admin — access denied');
+      if(!res.ok) throw new Error('Self-check failed: '+res.status);
+      return res.json();
+    }
+
+    function showNotAdmin(){
+      $('#resultsWrapper').innerHTML = `<div class="p-10 text-center space-y-4 glass-panel rounded-2xl">
+        <div class="mx-auto w-14 h-14 rounded-full flex items-center justify-center bg-red-500/10 text-red-600 dark:text-red-400"><span class="material-symbols-rounded">block</span></div>
+        <h2 class="text-xl font-bold">Admin Access Required</h2>
+        <p class="text-sm opacity-70 max-w-md mx-auto">Your account does not have administrator privileges. Contact an existing admin to grant the <code class='px-1 py-0.5 rounded bg-black/5 dark:bg-white/10 text-xs'>admin</code> role.</p>
+      </div>`;
+    }
+
+    async function fetchUsers(){
+      $('#loadingState').classList.remove('hidden');
+      $('#errorState').classList.add('hidden');
+      try {
+        await adminSelfCheck();
+        const token = await getAccessToken();
+        const res = await fetch(API + '/api/admin/users', { headers: { 'Authorization': 'Bearer ' + token }});
+        if(res.status === 401){ throw new Error('401 Unauthorized – token invalid or expired'); }
+        if(res.status === 403){ showNotAdmin(); return; }
+        if(!res.ok){ throw new Error('Request failed: '+res.status); }
+        const data = await res.json();
+        state.raw = (data.users||data||[]).map(row=>({ ...row, batch_range: row.batch_from && row.batch_to ? `${row.batch_from}-${row.batch_to}`: (row.batch_range||'') }));
+        renderStats();
+        buildFilters();
+        applyFilters();
+      } catch(err){
+        const msg = err?.message || 'Error loading users';
+        console.warn('[admin] fetch error', err);
+        if(/Not an admin/i.test(msg)){ showNotAdmin(); return; }
+        $('#errorState').textContent = msg;
+        $('#errorState').classList.remove('hidden');
+        if(/No auth token/i.test(msg)){
+          setTimeout(()=>{ location.href='login.html?next='+encodeURIComponent(location.pathname); }, 1200);
+        }
+      } finally {
+        $('#loadingState').classList.add('hidden');
+        setView(state.view);
+      }
+    }
+
+    document.addEventListener('input', e=>{ if(e.target.matches('#searchInput')) applyFilters(); });
+    document.addEventListener('change', e=>{ if(e.target.matches('#semesterFilter,#batchFilter,#deptFilter,#sortSelect')) applyFilters(); });
+    document.addEventListener('click', e=>{ const btn = e.target.closest('.layout-toggle button'); if(btn){ setView(btn.dataset.view); } if(e.target.id==='themeToggle'){ const root=document.documentElement; const dark=root.classList.toggle('dark'); localStorage.setItem('px_theme', dark? 'dark':'light'); e.target.textContent = dark? 'light_mode':'dark_mode'; }});
+
+    fetchUsers();
+  </script>
+</body>
+</html>
