@@ -4,177 +4,310 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>College Navigator · Subjects</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Paper X — Subjects</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
+                container: { center: true, padding: '1rem' },
                 extend: {
-                    fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
                     colors: {
-                        brand: { 50: '#f0f7ff', 100: '#e0efff', 200: '#b9dbff', 300: '#8ac4ff', 400: '#59a9ff', 500: '#2b8cff', 600: '#116fe6', 700: '#0a57b4', 800: '#0b4890', 900: '#0d3a73' },
-                        night: { 900: '#0a0c10', 800: '#0f131a', 700: '#141a22', 600: '#1a2230' }
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' },
+                        ink: '#1E1E2F',
+                        plum: '#4C2A59',
+                        orchid: '#9E4B8A'
                     },
                     boxShadow: {
-                        glow: '0 0 0 1px rgba(59,130,246,.2), 0 8px 40px rgba(59,130,246,.15)',
-                        neon: '0 0 25px rgba(43,140,255,.35), 0 0 60px rgba(43,140,255,.25)'
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 24px 60px rgba(30,30,47,0.25)'
                     },
                     backgroundImage: {
-                        'grid-radial': 'radial-gradient(circle at 20% 10%, rgba(43,140,255,.25), transparent 35%), radial-gradient(circle at 80% 20%, rgba(168,85,247,.2), transparent 35%), radial-gradient(circle at 50% 80%, rgba(16,185,129,.2), transparent 35%)'
+                        'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 45%,#F7F2F9 100%)',
+                        'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg,#1E1E2F 0%,#201934 35%,#141321 100%)'
                     }
                 }
             }
         };
     </script>
-    <script src="../config.js"></script>
-    <script src="helpers.js"></script>
     <style>
-        .glass {
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+        .material-symbols-rounded {
+            vertical-align: -6px
         }
 
-        .glass-dark {
-            background: rgba(20, 24, 32, 0.55);
-            border-color: rgba(255, 255, 255, 0.08);
+        .gradient-hero-text {
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC)
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%
+            }
+
+            50% {
+                background-position: 100% 50%
+            }
+
+            100% {
+                background-position: 0% 50%
+            }
+        }
+
+        .hero-aurora::before {
+            content: "";
+            position: absolute;
+            inset: -30% -5% auto -30%;
+            height: 420px;
+            background: radial-gradient(circle at top, rgba(158, 75, 138, .45), transparent 60%);
+            filter: blur(60px);
+            opacity: .65;
+            pointer-events: none
+        }
+
+        .hero-aurora::after {
+            content: "";
+            position: absolute;
+            inset: auto -25% -35% 30%;
+            height: 380px;
+            background: radial-gradient(circle at bottom, rgba(76, 42, 89, .45), transparent 60%);
+            filter: blur(60px);
+            opacity: .55;
+            pointer-events: none
+        }
+
+        .dark .hero-aurora::before,
+        .dark .hero-aurora::after {
+            opacity: .8
+        }
+
+        #mobileNavBackdrop {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s ease
+        }
+
+        #mobileNavPanel {
+            opacity: 0;
+            transform: translateY(-12px);
+            pointer-events: none;
+            transition: opacity .25s ease, transform .25s ease
+        }
+
+        #mobileNavBackdrop[data-open="true"],
+        #mobileNavBackdrop.open {
+            opacity: 1;
+            pointer-events: auto
+        }
+
+        #mobileNavPanel[data-open="true"],
+        #mobileNavPanel.open {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto
         }
     </style>
+    <script>
+        (() => {
+            const s = localStorage.getItem('px_theme');
+            const p = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const d = s ? s === 'dark' : p;
+            if (d) document.documentElement.classList.add('dark');
+        })();
+    </script>
+    <script src="../config.js" defer></script>
+    <script src="helpers.js" defer></script>
 </head>
 
 <body
-    class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200 selection:bg-brand-200 selection:text-slate-900">
-    <div aria-hidden="true" class="fixed inset-0 -z-10 bg-grid-radial opacity-70 dark:opacity-50"></div>
-
+    class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors">
     <header
-        class="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-night-900/60 border-b border-black/5 dark:border-white/5">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="flex h-16 items-center justify-between">
-                <a href="../index.html" class="flex items-center gap-3 group">
-                    <div
-                        class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
-                        PX</div>
-                    <div>
-                        <p class="text-lg font-semibold leading-tight group-hover:text-brand-600">Pa[p]er X</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 -mt-1">Agentic AI for Indian syllabi</p>
-                    </div>
-                </a>
-                <a id="backLink" href="batches.html"
-                    class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-3 py-1.5 text-sm hover:border-brand-400/60 transition"
-                    title="Back to batches">
-                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fill-rule="evenodd"
-                            d="M12.707 15.707a1 1 0 01-1.414 0L5.586 10l5.707-5.707a1 1 0 011.414 1.414L8.414 10l4.293 4.293a1 1 0 010 1.414z"
-                            clip-rule="evenodd"></path>
-                    </svg>
-                    Back
-                </a>
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-4">
+            <a href="../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="../../assets/img/logo-light.svg" class="h-10 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../assets/img/logo-dark.svg" class="h-10 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../index.html">Home</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../about.html">About</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../contact.html">Contact</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../help.html">Help</a>
+                <a class="inline-flex items-center gap-1 rounded-full bg-brandlt-200/70 px-3 py-1.5 text-brand-700 dark:bg-white/10 dark:text-white"
+                    href="clg_info.html"><span>Collages</span><span
+                        class="material-symbols-rounded text-base">hub</span></a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"
+                    aria-label="Toggle theme"><span class="material-symbols-rounded">dark_mode</span><span
+                        class="hidden sm:block">Theme</span></button>
+                <a href="../login.html"
+                    class="text-sm text-neutral-700 dark:text-white/85 hover:text-brandlt-900 dark:hover:text-white px-3 py-2 rounded-full transition">Log
+                    in</a>
+                <a href="../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"><span
+                        class="material-symbols-rounded">dark_mode</span></button>
+                <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"><span
+                        class="sr-only">Toggle navigation</span><span class="material-symbols-rounded"
+                        data-icon>menu</span></button>
             </div>
         </div>
     </header>
-
-    <main class="relative">
-        <section class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
-            <div class="flex flex-col gap-6">
-                <div class="flex flex-col gap-2">
+    <div id="mobileNavBackdrop" aria-hidden="true"
+        class="md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+    <nav id="mobileNavPanel" aria-hidden="true"
+        class="md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_1.5rem_4rem_-1.5rem_rgba(30,30,47,0.75)] backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+        <div class="flex flex-col gap-2 text-sm text-neutral-700 dark:text-white/80">
+            <a href="../index.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Home</a>
+            <a href="../about.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">About</a>
+            <a href="../contact.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Contact</a>
+            <a href="../help.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Help</a>
+            <a href="clg_info.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 bg-brandlt-200/70 dark:bg-white/10 text-brand-700 dark:text-white transition">Collages</a>
+        </div>
+        <div class="flex flex-col gap-3 border-t border-black/5 dark:border-white/10 pt-4">
+            <a href="../login.html" data-close-mobile-nav
+                class="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">Log
+                in</a>
+            <a href="../signup.html" data-close-mobile-nav
+                class="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)] transition">Sign
+                up</a>
+        </div>
+    </nav>
+    <main>
+        <section class="relative overflow-hidden border-b border-black/5 dark:border-white/10 hero-aurora">
+            <div aria-hidden="true" class="absolute inset-0">
+                <div class="absolute -top-36 right-10 h-80 w-80 rounded-full bg-brand-500/20 blur-3xl"></div>
+                <div class="absolute bottom-[-8rem] left-10 h-72 w-72 rounded-full bg-brand-700/25 blur-3xl"></div>
+            </div>
+            <div class="relative container max-w-6xl py-8">
+                <div class="flex flex-col gap-6">
                     <nav id="breadcrumbs"
-                        class="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400"
-                        aria-label="breadcrumb"></nav>
-                    <div>
-                        <h1 id="pageTitle" class="text-3xl sm:text-4xl font-bold leading-tight">Subjects</h1>
-                        <p id="pageSubtitle" class="mt-2 text-slate-600 dark:text-slate-300">Loading subjects…</p>
+                        class="flex flex-wrap items-center gap-2 text-xs md:text-sm font-medium text-neutral-500 dark:text-white/70"
+                        aria-label="Breadcrumb"></nav>
+                    <div class="space-y-3">
+                        <h1 id="pageTitle" class="text-2xl md:text-4xl font-bold gradient-hero-text">Subjects</h1>
+                        <p id="pageSubtitle" class="text-neutral-600 dark:text-white/65">Loading subjects…</p>
+                    </div>
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p id="batchDetails" class="text-sm text-neutral-600 dark:text-white/65"></p>
+                        <div class="flex items-center gap-3">
+                            <label class="flex items-center gap-3 text-sm text-neutral-600 dark:text-white/65">
+                                <span
+                                    class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/50">Semester</span>
+                                <select id="semesterFilter"
+                                    class="rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40">
+                                    <option value="">All</option>
+                                </select>
+                            </label>
+                            <button id="addSubjectBtn" type="button"
+                                class="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(158,75,138,0.35)] hover:shadow-[0_14px_34px_rgba(158,75,138,0.45)] transition">
+                                <span class="material-symbols-rounded text-base">add</span>
+                                Add subject
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex">
+                        <a id="backLink" href="batches.html"
+                            class="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3 py-1.5 text-xs md:text-sm text-neutral-700 dark:text-white/70 hover:border-brand-500/50 transition"
+                            title="Back to batches"><span
+                                class="material-symbols-rounded text-base">arrow_back</span>Back</a>
                     </div>
                 </div>
             </div>
-
-            <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <p id="batchDetails" class="text-sm text-slate-600 dark:text-slate-300"></p>
-                <div class="flex items-center gap-3">
-                    <label class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                        <span class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter by
-                            semester</span>
-                        <select id="semesterFilter"
-                            class="rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/60">
-                            <option value="">All semesters</option>
-                        </select>
-                    </label>
-                    <button id="addSubjectBtn" type="button"
-                        class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 hover:shadow-glow transition">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fill-rule="evenodd"
-                                d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                                clip-rule="evenodd"></path>
-                        </svg>
-                        Add subject
-                    </button>
-                </div>
+        </section>
+        <section class="py-14">
+            <div class="container max-w-6xl">
+                <div id="results" class="grid gap-6 sm:grid-cols-2 xl:grid-cols-3"></div>
             </div>
-
-            <div id="results" class="mt-10 grid gap-6 sm:grid-cols-2 xl:grid-cols-3"></div>
         </section>
     </main>
-
     <div id="subjectModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
         role="dialog" aria-modal="true" aria-labelledby="subjectModalTitle">
-        <div id="subjectModalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div id="subjectModalBackdrop" class="fixed inset-0 bg-brand-900/70 dark:bg-black/70 backdrop-blur-sm"></div>
         <div
-            class="relative w-full max-w-2xl rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/90 dark:bg-night-900/90 shadow-xl">
-            <div
-                class="flex items-start justify-between gap-4 border-b border-slate-200/60 dark:border-white/10 px-6 py-5">
+            class="relative w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)]">
+            <div class="flex items-start justify-between gap-4 border-b border-black/5 dark:border-white/10 px-6 py-5">
                 <div>
-                    <h2 id="subjectModalTitle" class="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a
-                        new
+                    <h2 id="subjectModalTitle" class="text-xl font-semibold text-neutral-900 dark:text-white">Add a new
                         subject</h2>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Define the course code, title, and
-                        semester
-                        for this syllabus course.</p>
+                    <p class="mt-1 text-sm text-neutral-600 dark:text-white/70">Define the course code, title and
+                        semester.</p>
                 </div>
                 <button id="subjectModalClose" type="button"
-                    class="rounded-lg border border-transparent p-2 text-slate-500 hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60">
-                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fill-rule="evenodd"
-                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                            clip-rule="evenodd"></path>
-                    </svg>
-                </button>
+                    class="rounded-full border border-transparent p-2 text-neutral-500 hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"><span
+                        class="material-symbols-rounded text-lg">close</span></button>
             </div>
             <form id="subjectForm" class="space-y-5 px-6 py-6">
                 <div class="grid gap-4 sm:grid-cols-2">
-                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
-                        Course code
-                        <input id="subjectCourseCode" name="course_code" type="text" required
-                            class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
-                            placeholder="e.g. CS301" maxlength="64" />
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Course code
+                        <input id="subjectCourseCode" name="course_code" type="text" required maxlength="64"
+                            class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                            placeholder="e.g. CS301" />
                     </label>
-                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
-                        Semester
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Semester
                         <select id="subjectSemester" name="semester" required
-                            class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60">
-                        </select>
+                            class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"></select>
                     </label>
                 </div>
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
-                    Subject title
-                    <input id="subjectTitle" name="title" type="text" required
-                        class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
-                        placeholder="e.g. Data Structures" maxlength="256" />
+                <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Subject title
+                    <input id="subjectTitle" name="title" type="text" required maxlength="256"
+                        class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                        placeholder="e.g. Data Structures" />
+                </label>
+                <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Credits (optional)
+                    <input id="subjectCredits" name="credits" type="number" min="0" max="100"
+                        class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                        placeholder="3" />
                 </label>
                 <p id="subjectModalMessage" class="hidden text-sm text-red-500"></p>
                 <div class="flex items-center justify-end gap-3">
                     <button id="subjectModalCancel" type="button"
-                        class="rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:border-brand-400/60 transition">Cancel</button>
+                        class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">Cancel</button>
                     <button id="subjectSubmitBtn" type="submit"
-                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-neon hover:opacity-95 transition">Save
-                        subject</button>
+                        class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition"><span
+                            class="material-symbols-rounded text-base">save</span>Save subject</button>
                 </div>
             </form>
         </div>
     </div>
-
+    <!-- Keep existing logic but adapt styling references -->
     <script>
-        const params = Collage.parseQuery();
+        const params = (window.Collage && typeof window.Collage.parseQuery === 'function') ? window.Collage.parseQuery() : (() => {
+            const q = {};
+            const s = window.location.search || '';
+            if (!s) return q;
+            const usp = new URLSearchParams(s);
+            usp.forEach((v, k) => q[k] = v);
+            return q;
+        })();
         const collegeId = params.collegeId;
         const collegeName = params.collegeName ? decodeURIComponent(params.collegeName) : '';
         const degreeId = params.degreeId;
@@ -187,230 +320,157 @@
         const titleEl = document.getElementById('pageTitle');
         const subtitleEl = document.getElementById('pageSubtitle');
         const breadcrumbsEl = document.getElementById('breadcrumbs');
-        const backLink = document.getElementById('backLink');
         const batchDetails = document.getElementById('batchDetails');
         const semesterFilter = document.getElementById('semesterFilter');
         const addSubjectBtn = document.getElementById('addSubjectBtn');
         const subjectModal = document.getElementById('subjectModal');
         const subjectModalBackdrop = document.getElementById('subjectModalBackdrop');
         const subjectModalTitle = document.getElementById('subjectModalTitle');
-        const subjectForm = document.getElementById('subjectForm');
-        const subjectCourseCodeInput = document.getElementById('subjectCourseCode');
-        const subjectSemesterInput = document.getElementById('subjectSemester');
-        const subjectTitleInput = document.getElementById('subjectTitle');
         const subjectModalMessage = document.getElementById('subjectModalMessage');
         const subjectModalCancel = document.getElementById('subjectModalCancel');
         const subjectModalClose = document.getElementById('subjectModalClose');
         const subjectSubmitBtn = document.getElementById('subjectSubmitBtn');
+        const subjectForm = document.getElementById('subjectForm');
+        const subjectCourseCodeInput = document.getElementById('subjectCourseCode');
+        const subjectSemesterSelect = document.getElementById('subjectSemester');
+        const subjectTitleInput = document.getElementById('subjectTitle');
+        const subjectCreditsInput = document.getElementById('subjectCredits');
+        const backLink = document.getElementById('backLink');
 
-        let coursesCache = [];
+        let subjectsCache = [];
         let subjectModalMode = 'add';
-        let editingCourseId = null;
-
-        if (semesterFilter) {
-            for (let i = 1; i <= 12; i += 1) {
-                const option = document.createElement('option');
-                option.value = String(i);
-                option.textContent = `Semester ${i}`;
-                semesterFilter.appendChild(option);
-            }
-        }
-
-        if (subjectSemesterInput) {
-            const placeholderOption = document.createElement('option');
-            placeholderOption.value = '';
-            placeholderOption.textContent = 'Select semester';
-            subjectSemesterInput.appendChild(placeholderOption);
-            for (let i = 1; i <= 12; i += 1) {
-                const option = document.createElement('option');
-                option.value = String(i);
-                option.textContent = `Semester ${i}`;
-                subjectSemesterInput.appendChild(option);
-            }
-            subjectSemesterInput.value = '';
-        }
-
-        if (backLink && collegeId && degreeId) {
-            backLink.href = `batches.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
-        }
+        let editingSubjectId = null;
+        const semesterOptions = [1, 2, 3, 4, 5, 6, 7, 8];
 
         function makeBreadcrumb(items) {
             if (!Array.isArray(items)) return '';
             return items.map((item, idx) => {
                 if (!item) return '';
                 if (item.href && idx !== items.length - 1) {
-                    return `<a href="${item.href}" class="hover:text-brand-600">${Collage.escapeHtml(item.label || item.text || '')}</a>`;
+                    return `<a href="${item.href}" class="hover:text-brand-500 dark:hover:text-white">${Collage.escapeHtml(item.label || item.text || '')}</a>`;
                 }
-                return `<span class="text-slate-700 dark:text-slate-200">${Collage.escapeHtml(item.label || item.text || '')}</span>`;
-            }).filter(Boolean).join('<span class="text-slate-400 dark:text-slate-500">/</span>');
+                return `<span class="text-neutral-900 dark:text-white font-medium">${Collage.escapeHtml(item.label || item.text || '')}</span>`;
+            }).filter(Boolean).join('<span class="text-neutral-400 dark:text-white/40">/</span>');
+        }
+
+        function populateSemesterFilter() {
+            semesterFilter.innerHTML = '<option value="">All</option>' + semesterOptions.map(n => `<option value="${n}">Sem ${n}</option>`).join('');
+            subjectSemesterSelect.innerHTML =
+                semesterOptions.map(n => `<option value="${n}">Semester ${n}</option>`).join('');
         }
 
         function showLoader() {
-            results.innerHTML = `
-        <div class="col-span-full flex items-center justify-center py-16">
-          <div class="h-12 w-12 animate-spin rounded-full border-2 border-brand-400 border-t-transparent"></div>
-        </div>`;
+            results.innerHTML = `<div class=\"col-span-full flex items-center justify-center py-16\"><div class=\"h-12 w-12 animate-spin rounded-full border-2 border-brand-500/30 border-t-transparent\"></div></div>`;
         }
 
         function showError(message) {
-            results.innerHTML = `
-        <div class="col-span-full rounded-2xl border border-red-500/40 bg-red-50/90 dark:bg-red-500/10 dark:border-red-400/30 p-6 shadow">
-          <h2 class="text-lg font-semibold text-red-700 dark:text-red-200">Unable to load subjects</h2>
-          <p class="mt-2 text-sm text-red-600/80 dark:text-red-200/80">${Collage.escapeHtml(message || 'Please check the batch reference and try again.')}</p>
-        </div>`;
+            results.innerHTML = `<div class=\"col-span-full rounded-3xl border border-red-400/35 bg-red-100/70 dark:bg-red-500/10 dark:border-red-400/25 p-8 shadow-soft\"><h2 class=\"text-lg font-semibold text-red-700 dark:text-red-200\">Unable to load subjects</h2><p class=\"mt-2 text-sm text-red-600/85 dark:text-red-200/80\">${Collage.escapeHtml(message || 'Please verify parameters and try again.')}</p></div>`;
         }
 
         function showEmpty() {
-            results.innerHTML = `
-        <div class="col-span-full rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow">
-          <h2 class="text-lg font-semibold">No subjects recorded</h2>
-          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Use the “Add subject” button to record syllabus courses for this batch.</p>
-        </div>`;
+            results.innerHTML = `<div class=\"col-span-full rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur p-8 text-sm text-neutral-600 dark:text-white/65\"><h2 class=\"text-lg font-semibold text-neutral-900 dark:text-white\">No subjects yet</h2><p class=\"mt-2\">Add subjects for this batch to continue creating the syllabus hierarchy.</p></div>`;
         }
 
         function resetSubjectModal() {
             subjectForm?.reset();
-            if (subjectSemesterInput) {
-                subjectSemesterInput.value = '';
-            }
             subjectModalMessage.textContent = '';
             subjectModalMessage.classList.add('hidden');
             subjectModalMode = 'add';
-            editingCourseId = null;
-            if (subjectSubmitBtn) {
-                subjectSubmitBtn.disabled = false;
-                subjectSubmitBtn.textContent = 'Save subject';
-            }
+            editingSubjectId = null;
+            subjectSubmitBtn.innerHTML = '<span class="material-symbols-rounded text-base">save</span>Save subject';
         }
 
         function setSubjectModalLoading(isLoading) {
-            if (!subjectSubmitBtn) return;
             subjectSubmitBtn.disabled = isLoading;
-            subjectSubmitBtn.textContent = isLoading
-                ? 'Saving…'
-                : (subjectModalMode === 'edit' ? 'Save changes' : 'Save subject');
+            subjectSubmitBtn.innerHTML = isLoading
+                ? '<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Saving…'
+                : (subjectModalMode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save subject');
         }
 
         function closeSubjectModal() {
-            subjectModal?.classList.add('hidden');
+            subjectModal.classList.add('hidden');
             document.body.classList.remove('overflow-hidden');
             resetSubjectModal();
         }
 
-        function openSubjectModal(mode = 'add', course) {
+        function openSubjectModal(mode = 'add', subject) {
             if (!batchId) return;
             resetSubjectModal();
             subjectModalMode = mode;
-
-            let defaultSemester = semesterFilter?.value ? Number(semesterFilter.value) : null;
-
-            if (mode === 'edit' && course) {
-                editingCourseId = course.id;
-                subjectCourseCodeInput.value = course.course_code || '';
-                subjectTitleInput.value = course.title || '';
-                if (course.semester) {
-                    defaultSemester = course.semester;
-                }
+            if (mode === 'edit' && subject) {
+                editingSubjectId = subject.id;
+                subjectCourseCodeInput.value = subject.course_code || '';
+                subjectTitleInput.value = subject.title || '';
+                subjectSemesterSelect.value = subject.semester || '';
+                subjectCreditsInput.value = subject.credits != null ? subject.credits : '';
             }
 
-            if (subjectSemesterInput) {
-                const targetValue = defaultSemester ? String(defaultSemester) : '';
-                if (targetValue && subjectSemesterInput.querySelector(`option[value="${targetValue}"]`)) {
-                    subjectSemesterInput.value = targetValue;
-                } else if (subjectSemesterInput.querySelector('option[value="1"]')) {
-                    subjectSemesterInput.value = '1';
-                } else {
-                    subjectSemesterInput.value = '';
-                }
-            }
-
-            const batchLabel = batchRange || 'this batch';
-            subjectModalTitle.textContent = mode === 'edit'
-                ? 'Edit subject'
-                : `Add a new subject for ${batchLabel}`;
-            subjectSubmitBtn.textContent = mode === 'edit' ? 'Save changes' : 'Save subject';
-
+            subjectModalTitle.textContent = mode === 'edit' ? 'Edit subject' : 'Add a new subject';
+            subjectSubmitBtn.innerHTML = mode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save subject';
             subjectModal.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
             setTimeout(() => {
-                subjectCourseCodeInput?.focus();
-                if (mode === 'edit') {
-                    subjectCourseCodeInput?.select();
-                }
-            }, 100);
+                (mode === 'edit' ? subjectCourseCodeInput : subjectCourseCodeInput)?.focus();
+            }, 80);
         }
 
-        async function handleSubjectSubmit(event) {
-            event.preventDefault();
+        async function handleSubjectSubmit(e) {
+            e.preventDefault();
             if (!batchId) {
-                subjectModalMessage.textContent = 'Missing batch context. Please navigate from the batches page again.';
+                subjectModalMessage.textContent = 'Missing batch context.';
                 subjectModalMessage.classList.remove('hidden');
                 return;
             }
-
-            const rawCode = subjectCourseCodeInput.value.trim();
-            const semesterValue = subjectSemesterInput.value;
-            const rawTitle = subjectTitleInput.value.trim();
-            const semesterNumber = Number.parseInt(semesterValue, 10);
-
-            if (!rawCode) {
-                subjectModalMessage.textContent = 'Enter a course code.';
+            const course_code = (subjectCourseCodeInput.value || '').trim();
+            const title = (subjectTitleInput.value || '').trim();
+            const semesterRaw = subjectSemesterSelect.value;
+            const creditsRaw = subjectCreditsInput.value;
+            if (!course_code || !title || !semesterRaw) {
+                subjectModalMessage.textContent = 'Fill all required fields.';
                 subjectModalMessage.classList.remove('hidden');
-                subjectCourseCodeInput.focus();
                 return;
             }
-            if (!semesterValue || Number.isNaN(semesterNumber)) {
-                subjectModalMessage.textContent = 'Select a valid semester.';
-                subjectModalMessage.classList.remove('hidden');
-                subjectSemesterInput.focus();
-                return;
-            }
-            if (!rawTitle) {
-                subjectModalMessage.textContent = 'Enter a subject title.';
-                subjectModalMessage.classList.remove('hidden');
-                subjectTitleInput.focus();
-                return;
-            }
-
-            subjectModalMessage.classList.add('hidden');
 
             const payload = {
-                course_code: rawCode.toUpperCase(),
-                semester: semesterNumber,
-                title: rawTitle,
+                course_code,
+                title,
+                semester: Number(semesterRaw)
             };
+            if (creditsRaw) {
+                const c = parseInt(creditsRaw, 10);
+                if (!Number.isNaN(c)) payload.credits = c;
+            }
 
             setSubjectModalLoading(true);
+            subjectModalMessage.classList.add('hidden');
 
             try {
-                if (subjectModalMode === 'edit' && editingCourseId) {
-                    await Collage.fetchJson(`/api/syllabus/courses/${editingCourseId}`, {
+                if (subjectModalMode === 'edit' && editingSubjectId) {
+                    await Collage.fetchJson(`/api/courses/${editingSubjectId}`, {
                         method: 'PUT',
                         body: payload,
-                        skipAuth: true,
+                        skipAuth: true
                     });
                 } else {
                     await Collage.fetchJson(`/api/batches/${batchId}/courses`, {
                         method: 'POST',
                         body: payload,
-                        skipAuth: true,
+                        skipAuth: true
                     });
                 }
                 closeSubjectModal();
                 await loadSubjects();
             } catch (error) {
-                let message = error?.message ?? 'Unable to save subject. Please try again.';
-                if (typeof message !== 'string') {
+                let m = error?.message ?? 'Unable to save subject.';
+                if (typeof m !== 'string') {
                     try {
-                        message = JSON.stringify(message);
+                        m = JSON.stringify(m);
                     } catch (_) {
-                        message = 'Unable to save subject. Please try again.';
+                        m = 'Unable to save subject.';
                     }
                 }
-                if (message === '[object Object]') {
-                    message = 'Unexpected response from server. Please try again.';
-                }
-                subjectModalMessage.textContent = message;
+                if (m === '[object Object]') m = 'Unexpected response.';
+                subjectModalMessage.textContent = m;
                 subjectModalMessage.classList.remove('hidden');
                 console.error(error);
             } finally {
@@ -429,136 +489,209 @@
             subjectModalClose?.addEventListener('click', closeSubjectModal);
             subjectModalBackdrop?.addEventListener('click', closeSubjectModal);
             subjectForm?.addEventListener('submit', handleSubjectSubmit);
-            document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && !subjectModal.classList.contains('hidden')) {
+            document.addEventListener('keydown', e => {
+                if (e.key === 'Escape' && !subjectModal.classList.contains('hidden')) {
                     closeSubjectModal();
                 }
             });
         }
 
-        function attachSubjectEditHandlers() {
-            const editButtons = results.querySelectorAll('[data-course-edit]');
-            editButtons.forEach((button) => {
-                button.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const id = button.getAttribute('data-course-edit');
-                    const course = coursesCache.find((item) => String(item.id) === String(id));
-                    if (course) {
-                        openSubjectModal('edit', course);
-                    }
+        function attachEditHandlers() {
+            results.querySelectorAll('[data-subject-edit]').forEach(btn => {
+                btn.addEventListener('click', e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const id = btn.getAttribute('data-subject-edit');
+                    const subj = subjectsCache.find(s => String(s.id) === String(id));
+                    if (subj) openSubjectModal('edit', subj);
                 });
             });
         }
 
-        function attachSubjectCardNavigation() {
-            const cards = results.querySelectorAll('[data-course-card]');
-            cards.forEach((card) => {
-                const href = card.getAttribute('data-course-card');
+        function attachCardNavigation() {
+            results.querySelectorAll('[data-subject-card]').forEach(card => {
+                const href = card.getAttribute('data-subject-card');
                 if (!href) return;
-                card.addEventListener('click', (event) => {
-                    if (event.target.closest('[data-course-edit]')) {
-                        return;
-                    }
-                    if (event.target.closest('a')) {
-                        return;
-                    }
+                card.addEventListener('click', e => {
+                    if (e.target.closest('[data-subject-edit]')) return;
+                    if (e.target.closest('a')) return;
                     window.location.href = href;
                 });
-                card.addEventListener('keydown', (event) => {
-                    if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('[data-course-edit]')) {
-                        event.preventDefault();
+                card.addEventListener('keydown', e => {
+                    if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-subject-edit]')) {
+                        e.preventDefault();
                         window.location.href = href;
                     }
                 });
             });
         }
 
+        function filterAndRender() {
+            const semVal = semesterFilter.value;
+            const list = semVal ? subjectsCache.filter(s => String(s.semester) === semVal) : subjectsCache.slice();
+            renderSubjects(list);
+        }
+
+        function renderSubjects(list) {
+            if (!list.length) {
+                showEmpty();
+                return;
+            }
+            const accentPalette = [
+                'from-brand-500/70 via-brandlt-300/60 to-brand-700/80',
+                'from-[#FF7FD1]/55 via-[#B06AB3]/60 to-brand-700/80',
+                'from-brandlt-200/60 via-white/40 to-brand-500/65',
+                'from-[#7F57D1]/55 via-brand-500/60 to-brand-700/80',
+                'from-brand-700/65 via-brandlt-400/55 to-brand-500/70'
+            ];
+            results.innerHTML = list.map((subject, index) => {
+                const accent = accentPalette[index % accentPalette.length];
+                const syllabusLink = `syllabus.html?courseId=${encodeURIComponent(subject.id)}&courseCode=${encodeURIComponent(subject.course_code || '')}&courseTitle=${encodeURIComponent(subject.title || '')}&semester=${encodeURIComponent(subject.semester || '')}&batchId=${encodeURIComponent(batchId || '')}&batchRange=${encodeURIComponent(batchRange || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
+                return `<article class=\"group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition hover:shadow-glow focus-within:shadow-glow cursor-pointer\" data-subject-card=\"${syllabusLink}\" tabindex=\"0\"><div class=\"absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accent} opacity-20 blur-3xl\"></div><button type=\"button\" data-subject-edit=\"${subject.id}\" aria-label=\"Edit subject ${Collage.escapeHtml(subject.course_code || '')}\" class=\"absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition\"><span class=\"material-symbols-rounded text-base\">edit</span></button><div class=\"relative flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-white/70\"><span class=\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\">Sem ${Collage.escapeHtml(String(subject.semester || ''))}</span>${subject.credits != null ? `<span class=\\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\\">${subject.credits} cr</span>` : ''}</div><h2 class=\"relative mt-6 text-xl font-semibold text-neutral-900 dark:text-white group-hover:text-brand-500\"><a href=\"${syllabusLink}\" class=\"inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900\">${Collage.escapeHtml(subject.course_code || 'COURSE')}<span class=\"material-symbols-rounded text-base text-brand-500 opacity-0 group-hover:opacity-100 transition\">north_east</span></a></h2><p class=\"relative mt-2 text-sm text-neutral-600 dark:text-white/65\">${Collage.escapeHtml(subject.title || 'Untitled subject')}</p><a href=\"${syllabusLink}\" class=\"relative mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85\">View syllabus<span class=\"material-symbols-rounded text-base transition group-hover:translate-x-1\">arrow_forward</span></a></article>`;
+            }).join('');
+            attachEditHandlers();
+            attachCardNavigation();
+        }
+
         async function loadSubjects() {
             if (!batchId) {
-                showError('Missing batchId in URL.');
+                showError('Missing batchId.');
                 return;
             }
             showLoader();
-            const selectedSemester = semesterFilter?.value ? Number(semesterFilter.value) : null;
             try {
-                const query = selectedSemester ? `?semester=${selectedSemester}` : '';
-                const data = await Collage.fetchJson(`/api/batches/${batchId}/courses${query}`, { skipAuth: true });
+                // NOTE: Backend provides GET /api/batches/{batchId}/courses (optionally ?semester=) — the previous '/full' path caused 404
+                // If server-side filtering desired, append `?semester=${semesterFilter.value}` when a value is selected.
+                const baseUrl = `/api/batches/${batchId}/courses`;
+                const url = baseUrl; // could be `${baseUrl}?semester=${semesterFilter.value}` if we want server filtering
+                const data = await Collage.fetchJson(url, { skipAuth: true });
                 const list = Array.isArray(data) ? data : [];
-                coursesCache = list.map((course) => ({
-                    id: course.id,
-                    batch_id: course.batch_id,
-                    semester: Number(course.semester),
-                    course_code: course.course_code || '',
-                    title: course.title || '',
+                subjectsCache = list.map(s => ({
+                    id: s.id,
+                    course_code: s.course_code,
+                    title: s.title,
+                    semester: Number(s.semester),
+                    credits: s.credits != null ? Number(s.credits) : null
                 }));
-                titleEl.textContent = `Subjects for ${departmentName || 'Department'} · ${batchRange || batchId}`;
-                subtitleEl.textContent = `${list.length} subject${list.length === 1 ? '' : 's'} found${selectedSemester ? ` in semester ${selectedSemester}` : ''}.`;
-                batchDetails.textContent = `${collegeName || 'College'} • ${degreeName || 'Degree'} • ${departmentName || 'Department'} • ${batchRange || ''}`;
+                titleEl.innerHTML = `Subjects <span class=\"opacity-70\">· ${Collage.escapeHtml(batchRange || 'Batch')}</span>`;
+                subtitleEl.textContent = `${subjectsCache.length} subject${subjectsCache.length === 1 ? '' : 's'} found.`;
+                batchDetails.textContent = batchRange ? `Batch: ${batchRange}` : '';
                 breadcrumbsEl.innerHTML = makeBreadcrumb([
                     { label: 'Colleges', href: 'clg_info.html' },
                     { label: collegeName || 'College', href: `degrees.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}` },
                     { label: degreeName || 'Degree', href: `departments.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}` },
                     { label: departmentName || 'Department', href: `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}` },
-                    { label: batchRange || 'Batch' }
+                    { label: 'Subjects' }
                 ]);
-                if (!list.length) {
-                    showEmpty();
-                    return;
-                }
-                const accentPalette = [
-                    'from-brand-400 via-brand-500 to-indigo-500',
-                    'from-emerald-400 via-teal-400 to-emerald-600',
-                    'from-fuchsia-400 via-pink-500 to-rose-500',
-                    'from-cyan-400 via-sky-500 to-blue-500',
-                    'from-amber-400 via-orange-500 to-amber-600'
-                ];
-                results.innerHTML = list.map((course, index) => {
-                    const link = `syllabus.html?courseId=${encodeURIComponent(course.id)}&courseCode=${encodeURIComponent(course.course_code || '')}&courseTitle=${encodeURIComponent(course.title || '')}&semester=${encodeURIComponent(course.semester)}&batchRange=${encodeURIComponent(batchRange || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
-                    const accentColor = accentPalette[index % accentPalette.length];
-                    return `
-            <article class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60 hover:shadow-glow focus-within:border-brand-400/60 focus-within:shadow-glow" data-course-card="${link}" tabindex="0">
-              <div class="absolute inset-x-4 top-4 h-28 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
-              <button type="button" data-course-edit="${course.id}" aria-label="Edit subject ${Collage.escapeHtml(course.course_code || 'Course')}"
-                class="absolute top-4 right-4 z-20 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-brand-500 hover:border-brand-400/60 transition">
-                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path d="M17.414 2.586a2 2 0 00-2.828 0L6.414 10.758a2 2 0 00-.516.878l-.8 2.798a1 1 0 001.226 1.226l2.798-.8a2 2 0 00.878-.516l8.172-8.172a2 2 0 000-2.828l-.758-.758zm-3.535 1.414L15 5.536 13.536 7 12 5.464l1.879-1.879zM11.293 6.172L3.707 13.758l-.353 1.237 1.237-.353 7.586-7.586L11.293 6.172z" />
-                </svg>
-              </button>
-              <div class="relative flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">${Collage.escapeHtml(course.course_code || 'Course')}</span>
-                <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">Semester ${course.semester}</span>
-              </div>
-              <h2 class="relative mt-5 text-xl font-semibold text-slate-900 dark:text-white group-hover:text-brand-500">
-                <a href="${link}" class="relative inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-400/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-night-900">
-                  ${Collage.escapeHtml(course.title || 'Untitled subject')}
-                  <svg class="h-4 w-4 text-brand-500 opacity-0 group-hover:opacity-100 transition" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                    <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                  </svg>
-                </a>
-              </h2>
-              <p class="relative mt-3 text-sm text-slate-600 dark:text-slate-300">Open to review the detailed units and topics for this subject.</p>
-              <a class="relative mt-6 inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-300" href="${link}">
-                View syllabus
-                <svg class="h-4 w-4 transition group-hover:translate-x-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                  <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                </svg>
-              </a>
-            </article>`;
-                }).join('');
-                attachSubjectEditHandlers();
-                attachSubjectCardNavigation();
+                filterAndRender();
             } catch (err) {
                 console.error(err);
                 showError(err.message || 'Unexpected error');
             }
         }
 
-        semesterFilter?.addEventListener('change', loadSubjects);
         document.addEventListener('DOMContentLoaded', () => {
+            populateSemesterFilter();
             initSubjectModal();
             loadSubjects();
+            semesterFilter.addEventListener('change', filterAndRender);
+            // Ensure back link preserves navigation context
+            if (backLink) {
+                const backUrl = `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
+                backLink.setAttribute('href', backUrl);
+            }
+            // Persist context so batches.html can recover if user returns without query params
+            try {
+                const ctx = {
+                    collegeId, collegeName, degreeId, degreeName, departmentName
+                };
+                sessionStorage.setItem('px_ctx_batches', JSON.stringify(ctx));
+                // Also persist to localStorage as a longer-lived fallback
+                localStorage.setItem('px_ctx_batches_last', JSON.stringify({ ...ctx, ts: Date.now() }));
+                if (window?.console) console.debug('[subjects] stored context', ctx);
+            } catch (_) { /* ignore storage errors */ }
         });
+    </script>
+    <script>
+        // Theme toggle sync
+        const root = document.documentElement;
+        const themeBtns = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+
+        function updateThemeIcons(mode) {
+            themeBtns().forEach(b => {
+                const ic = b.querySelector('.material-symbols-rounded');
+                if (ic) ic.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+            });
+        }
+
+        function setTheme(mode) {
+            if (mode === 'dark') root.classList.add('dark');
+            else root.classList.remove('dark');
+            localStorage.setItem('px_theme', mode);
+            updateThemeIcons(mode);
+        }
+        setTheme(root.classList.contains('dark') ? 'dark' : 'light');
+
+        document.addEventListener('click', e => {
+            const t = e.target.closest('[data-theme-toggle]');
+            if (!t) return;
+            const next = root.classList.contains('dark') ? 'light' : 'dark';
+            setTheme(next);
+        });
+    </script>
+    <script>
+        // Mobile nav
+        (function () {
+            const toggle = document.getElementById('mobileNavToggle');
+            const panel = document.getElementById('mobileNavPanel');
+            const backdrop = document.getElementById('mobileNavBackdrop');
+            if (!toggle || !panel || !backdrop) return;
+            const icon = toggle.querySelector('[data-icon]');
+            const focusable = 'a[href],button:not([disabled])';
+
+            function openMenu() {
+                panel.setAttribute('data-open', 'true');
+                panel.classList.add('open');
+                panel.setAttribute('aria-hidden', 'false');
+                backdrop.setAttribute('data-open', 'true');
+                backdrop.classList.add('open');
+                backdrop.setAttribute('aria-hidden', 'false');
+                toggle.setAttribute('aria-expanded', 'true');
+                if (icon) icon.textContent = 'close';
+                document.body.classList.add('overflow-hidden');
+                const f = panel.querySelector(focusable);
+                if (f) f.focus();
+            }
+
+            function closeMenu() {
+                panel.removeAttribute('data-open');
+                panel.classList.remove('open');
+                panel.setAttribute('aria-hidden', 'true');
+                backdrop.removeAttribute('data-open');
+                backdrop.classList.remove('open');
+                backdrop.setAttribute('aria-hidden', 'true');
+                toggle.setAttribute('aria-expanded', 'false');
+                if (icon) icon.textContent = 'menu';
+                document.body.classList.remove('overflow-hidden');
+            }
+
+            function toggleMenu() {
+                const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+                (isOpen ? closeMenu : openMenu)();
+            }
+
+            toggle.addEventListener('click', toggleMenu);
+            backdrop.addEventListener('click', closeMenu);
+            panel.addEventListener('click', e => {
+                if (e.target.closest('[data-close-mobile-nav]')) closeMenu();
+            });
+            window.addEventListener('keydown', e => {
+                if (e.key === 'Escape') closeMenu();
+            });
+            window.matchMedia('(min-width:768px)').addEventListener('change', e => {
+                if (e.matches) closeMenu();
+            });
+        })();
     </script>
 </body>
 

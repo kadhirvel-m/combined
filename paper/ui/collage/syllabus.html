@@ -4,175 +4,296 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>College Navigator · Syllabus</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Paper X — Syllabus</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
+                container: { center: true, padding: '1rem' },
                 extend: {
-                    fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
                     colors: {
-                        brand: { 50: '#f0f7ff', 100: '#e0efff', 200: '#b9dbff', 300: '#8ac4ff', 400: '#59a9ff', 500: '#2b8cff', 600: '#116fe6', 700: '#0a57b4', 800: '#0b4890', 900: '#0d3a73' },
-                        night: { 900: '#0a0c10', 800: '#0f131a', 700: '#141a22', 600: '#1a2230' }
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' },
+                        ink: '#1E1E2F',
+                        plum: '#4C2A59',
+                        orchid: '#9E4B8A'
                     },
                     boxShadow: {
-                        glow: '0 0 0 1px rgba(59,130,246,.2), 0 8px 40px rgba(59,130,246,.15)',
-                        neon: '0 0 25px rgba(43,140,255,.35), 0 0 60px rgba(43,140,255,.25)'
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 24px 60px rgba(30,30,47,0.25)'
                     },
                     backgroundImage: {
-                        'grid-radial': 'radial-gradient(circle at 20% 10%, rgba(43,140,255,.25), transparent 35%), radial-gradient(circle at 80% 20%, rgba(168,85,247,.2), transparent 35%), radial-gradient(circle at 50% 80%, rgba(16,185,129,.2), transparent 35%)'
+                        'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 45%,#F7F2F9 100%)',
+                        'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg,#1E1E2F 0%,#201934 35%,#141321 100%)'
                     }
                 }
             }
         };
     </script>
-    <script src="../config.js"></script>
-    <script src="helpers.js"></script>
     <style>
-        .glass {
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+        .material-symbols-rounded {
+            vertical-align: -6px
         }
 
-        .glass-dark {
-            background: rgba(20, 24, 32, 0.55);
-            border-color: rgba(255, 255, 255, 0.08);
+        .gradient-hero-text {
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC)
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%
+            }
+
+            50% {
+                background-position: 100% 50%
+            }
+
+            100% {
+                background-position: 0% 50%
+            }
+        }
+
+        .hero-aurora::before {
+            content: "";
+            position: absolute;
+            inset: -30% -5% auto -30%;
+            height: 420px;
+            background: radial-gradient(circle at top, rgba(158, 75, 138, .45), transparent 60%);
+            filter: blur(60px);
+            opacity: .65;
+            pointer-events: none
+        }
+
+        .hero-aurora::after {
+            content: "";
+            position: absolute;
+            inset: auto -25% -35% 30%;
+            height: 380px;
+            background: radial-gradient(circle at bottom, rgba(76, 42, 89, .45), transparent 60%);
+            filter: blur(60px);
+            opacity: .55;
+            pointer-events: none
+        }
+
+        .dark .hero-aurora::before,
+        .dark .hero-aurora::after {
+            opacity: .8
+        }
+
+        #mobileNavBackdrop {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s ease
+        }
+
+        #mobileNavPanel {
+            opacity: 0;
+            transform: translateY(-12px);
+            pointer-events: none;
+            transition: opacity .25s ease, transform .25s ease
+        }
+
+        #mobileNavBackdrop[data-open="true"],
+        #mobileNavBackdrop.open {
+            opacity: 1;
+            pointer-events: auto
+        }
+
+        #mobileNavPanel[data-open="true"],
+        #mobileNavPanel.open {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto
         }
     </style>
+    <script>
+        (() => {
+            const s = localStorage.getItem('px_theme');
+            const p = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const d = s ? s === 'dark' : p;
+            if (d) document.documentElement.classList.add('dark');
+        })();
+    </script>
+    <script src="../config.js" defer></script>
+    <script src="helpers.js" defer></script>
 </head>
 
 <body
-    class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200 selection:bg-brand-200 selection:text-slate-900">
-    <div aria-hidden="true" class="fixed inset-0 -z-10 bg-grid-radial opacity-70 dark:opacity-50"></div>
-
+    class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors">
     <header
-        class="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-night-900/60 border-b border-black/5 dark:border-white/5">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div class="flex h-16 items-center justify-between">
-                <a href="../index.html" class="flex items-center gap-3 group">
-                    <div
-                        class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 shadow-neon grid place-items-center text-white font-bold tracking-tight">
-                        PX</div>
-                    <div>
-                        <p class="text-lg font-semibold leading-tight group-hover:text-brand-600">Pa[p]er X</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 -mt-1">Agentic AI for Indian syllabi</p>
-                    </div>
-                </a>
-                <a id="backLink" href="subjects.html"
-                    class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-3 py-1.5 text-sm hover:border-brand-400/60 transition"
-                    title="Back to subjects">
-                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fill-rule="evenodd"
-                            d="M12.707 15.707a1 1 0 01-1.414 0L5.586 10l5.707-5.707a1 1 0 011.414 1.414L8.414 10l4.293 4.293a1 1 0 010 1.414z"
-                            clip-rule="evenodd"></path>
-                    </svg>
-                    Back
-                </a>
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-4">
+            <a href="../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="../../assets/img/logo-light.svg" class="h-10 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../assets/img/logo-dark.svg" class="h-10 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../index.html">Home</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../about.html">About</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../contact.html">Contact</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white transition" href="../help.html">Help</a>
+                <a class="inline-flex items-center gap-1 rounded-full bg-brandlt-200/70 px-3 py-1.5 text-brand-700 dark:bg-white/10 dark:text-white"
+                    href="clg_info.html"><span>Collages</span><span
+                        class="material-symbols-rounded text-base">hub</span></a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"
+                    aria-label="Toggle theme"><span class="material-symbols-rounded">dark_mode</span><span
+                        class="hidden sm:block">Theme</span></button>
+                <a href="../login.html"
+                    class="text-sm text-neutral-700 dark:text-white/85 hover:text-brandlt-900 dark:hover:text-white px-3 py-2 rounded-full transition">Log
+                    in</a>
+                <a href="../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"><span
+                        class="material-symbols-rounded">dark_mode</span></button>
+                <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"><span
+                        class="sr-only">Toggle navigation</span><span class="material-symbols-rounded"
+                        data-icon>menu</span></button>
             </div>
         </div>
     </header>
-
-    <main class="relative">
-        <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
-            <div class="flex flex-col gap-6">
-                <div class="flex flex-col gap-2">
+    <div id="mobileNavBackdrop" aria-hidden="true"
+        class="md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+    <nav id="mobileNavPanel" aria-hidden="true"
+        class="md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_1.5rem_4rem_-1.5rem_rgba(30,30,47,0.75)] backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+        <div class="flex flex-col gap-2 text-sm text-neutral-700 dark:text-white/80">
+            <a href="../index.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Home</a>
+            <a href="../about.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">About</a>
+            <a href="../contact.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Contact</a>
+            <a href="../help.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Help</a>
+            <a href="clg_info.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 bg-brandlt-200/70 dark:bg-white/10 text-brand-700 dark:text-white transition">Collages</a>
+        </div>
+        <div class="flex flex-col gap-3 border-t border-black/5 dark:border-white/10 pt-4">
+            <a href="../login.html" data-close-mobile-nav
+                class="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">Log
+                in</a>
+            <a href="../signup.html" data-close-mobile-nav
+                class="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)] transition">Sign
+                up</a>
+        </div>
+    </nav>
+    <main>
+        <section class="relative overflow-hidden border-b border-black/5 dark:border-white/10 hero-aurora">
+            <div aria-hidden="true" class="absolute inset-0">
+                <div class="absolute -top-36 right-10 h-80 w-80 rounded-full bg-brand-500/20 blur-3xl"></div>
+                <div class="absolute bottom-[-8rem] left-10 h-72 w-72 rounded-full bg-brand-700/25 blur-3xl"></div>
+            </div>
+            <div class="relative container max-w-5xl py-8">
+                <div class="flex flex-col gap-6">
                     <nav id="breadcrumbs"
-                        class="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400"
-                        aria-label="breadcrumb"></nav>
-                    <div>
-                        <h1 id="pageTitle" class="text-3xl sm:text-4xl font-bold leading-tight">Subject syllabus</h1>
-                        <p id="pageSubtitle" class="mt-2 text-slate-600 dark:text-slate-300">Loading syllabus…</p>
+                        class="flex flex-wrap items-center gap-2 text-xs md:text-sm font-medium text-neutral-500 dark:text-white/70"
+                        aria-label="Breadcrumb"></nav>
+                    <div class="space-y-3">
+                        <h1 id="pageTitle" class="text-2xl md:text-4xl font-bold gradient-hero-text">Subject syllabus
+                        </h1>
+                        <p id="pageSubtitle" class="text-neutral-600 dark:text-white/65">Loading syllabus…</p>
                     </div>
+                    <div class="flex">
+                        <a id="backLink" href="subjects.html"
+                            class="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3 py-1.5 text-xs md:text-sm text-neutral-700 dark:text-white/70 hover:border-brand-500/50 transition"
+                            title="Back to subjects"><span
+                                class="material-symbols-rounded text-base">arrow_back</span>Back</a>
+                    </div>
+                    <div id="contextPanel"
+                        class="mt-4 rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur p-6 shadow-soft">
+                    </div>
+                    <div class="mt-2 flex justify-end">
+                        <button id="addUnitBtn" type="button"
+                            class="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(158,75,138,0.35)] hover:shadow-[0_14px_34px_rgba(158,75,138,0.45)] transition disabled:opacity-60 disabled:cursor-not-allowed"
+                            disabled><span class="material-symbols-rounded text-base">add</span>Add unit</button>
+                    </div>
+                    <div id="results" class="mt-6 space-y-6"></div>
                 </div>
             </div>
-
-            <div id="contextPanel"
-                class="mt-8 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 shadow p-6">
-            </div>
-
-            <div class="mt-6 flex justify-end">
-                <button id="addUnitBtn" type="button"
-                    class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 hover:shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled>
-                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fill-rule="evenodd"
-                            d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                            clip-rule="evenodd"></path>
-                    </svg>
-                    Add unit
-                </button>
-            </div>
-
-            <div id="results" class="mt-10 space-y-6"></div>
         </section>
     </main>
-
     <div id="unitModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
         role="dialog" aria-modal="true" aria-labelledby="unitModalTitle">
-        <div id="unitModalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div id="unitModalBackdrop" class="fixed inset-0 bg-brand-900/70 dark:bg-black/70 backdrop-blur-sm"></div>
         <div
-            class="relative w-full max-w-2xl rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/90 dark:bg-night-900/90 shadow-xl">
-            <div
-                class="flex items-start justify-between gap-4 border-b border-slate-200/60 dark:border-white/10 px-6 py-5">
+            class="relative w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)]">
+            <div class="flex items-start justify-between gap-4 border-b border-black/5 dark:border-white/10 px-6 py-5">
                 <div>
-                    <h2 id="unitModalTitle" class="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a new
+                    <h2 id="unitModalTitle" class="text-xl font-semibold text-neutral-900 dark:text-white">Add a new
                         unit</h2>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Provide the unit title and list of topics
-                        covered.</p>
+                    <p class="mt-1 text-sm text-neutral-600 dark:text-white/70">Provide the unit title and list of
+                        topics.</p>
                 </div>
                 <button id="unitModalClose" type="button"
-                    class="rounded-lg border border-transparent p-2 text-slate-500 hover:text-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400/60">
-                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fill-rule="evenodd"
-                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                            clip-rule="evenodd"></path>
-                    </svg>
-                </button>
+                    class="rounded-full border border-transparent p-2 text-neutral-500 hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"><span
+                        class="material-symbols-rounded text-lg">close</span></button>
             </div>
             <form id="unitForm" class="space-y-5 px-6 py-6">
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">
-                    Unit title
+                <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Unit title
                     <input id="unitTitle" name="unit_title" type="text" required maxlength="256"
-                        class="mt-2 w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60"
-                        placeholder="e.g. Introduction to Algorithms" />
+                        placeholder="e.g. Introduction to Algorithms"
+                        class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
                 </label>
                 <div class="space-y-3">
                     <div class="flex items-center justify-between">
-                        <span class="text-sm font-medium text-slate-700 dark:text-slate-200">Topics</span>
+                        <span class="text-sm font-medium text-neutral-700 dark:text-white/85">Topics</span>
                         <button id="addTopicRow" type="button"
-                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-100 hover:border-brand-400/60 transition">
-                            <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                <path fill-rule="evenodd"
-                                    d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                                    clip-rule="evenodd"></path>
-                            </svg>
-                            Add topic
-                        </button>
+                            class="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-white/80 hover:border-brand-500/50 transition"><span
+                                class="material-symbols-rounded text-base">add</span>Add topic</button>
                     </div>
                     <div id="topicsContainer" class="space-y-3"></div>
                 </div>
                 <p id="unitModalMessage" class="hidden text-sm text-red-500"></p>
                 <div class="flex items-center justify-end gap-3">
                     <button id="unitModalCancel" type="button"
-                        class="rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:border-brand-400/60 transition">Cancel</button>
+                        class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">Cancel</button>
                     <button id="unitSubmitBtn" type="submit"
-                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-neon hover:opacity-95 transition">Save
-                        unit</button>
+                        class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition"><span
+                            class="material-symbols-rounded text-base">save</span>Save unit</button>
                 </div>
             </form>
         </div>
     </div>
 
     <script>
-        const params = Collage.parseQuery();
+        const params = (window.Collage && typeof window.Collage.parseQuery === 'function') ? window.Collage.parseQuery() : (() => {
+            const q = {};
+            const s = window.location.search || '';
+            if (!s) return q;
+            const usp = new URLSearchParams(s);
+            usp.forEach((v, k) => q[k] = v);
+            return q;
+        })();
         const courseId = params.courseId;
         const courseCode = params.courseCode ? decodeURIComponent(params.courseCode) : '';
         const courseTitle = params.courseTitle ? decodeURIComponent(params.courseTitle) : '';
         const semesterParam = params.semester ? Number(params.semester) : null;
         const batchRange = params.batchRange ? decodeURIComponent(params.batchRange) : '';
+        const batchId = params.batchId ? decodeURIComponent(params.batchId) : '';
         const collegeName = params.collegeName ? decodeURIComponent(params.collegeName) : '';
         const degreeName = params.degreeName ? decodeURIComponent(params.degreeName) : '';
         const departmentName = params.departmentName ? decodeURIComponent(params.departmentName) : '';
@@ -199,270 +320,144 @@
 
         let syllabusCourse = null;
         let unitModalMode = 'add';
-        let editingUnitId = null;
-
-        if (backLink && params.batchId) {
-            backLink.href = `subjects.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(params.degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(params.batchId || '')}&batchRange=${encodeURIComponent(batchRange || '')}`;
-        }
 
         function makeBreadcrumb(items) {
             if (!Array.isArray(items)) return '';
             return items.map((item, idx) => {
                 if (!item) return '';
                 if (item.href && idx !== items.length - 1) {
-                    return `<a href="${item.href}" class="hover:text-brand-600">${Collage.escapeHtml(item.label || item.text || '')}</a>`;
+                    return `<a href="${item.href}" class="hover:text-brand-500 dark:hover:text-white">${Collage.escapeHtml(item.label || item.text || '')}</a>`;
                 }
-                return `<span class="text-slate-700 dark:text-slate-200">${Collage.escapeHtml(item.label || item.text || '')}</span>`;
-            }).filter(Boolean).join('<span class="text-slate-400 dark:text-slate-500">/</span>');
+                return `<span class="text-neutral-900 dark:text-white font-medium">${Collage.escapeHtml(item.label || item.text || '')}</span>`;
+            }).filter(Boolean).join('<span class="text-neutral-400 dark:text-white/40">/</span>');
         }
 
         function showLoader() {
             results.innerHTML = `
-                <div class="flex justify-center py-16">
-                    <div class="h-12 w-12 animate-spin rounded-full border-2 border-brand-400 border-t-transparent"></div>
+                <div class="flex items-center justify-center py-16">
+                    <div class="h-12 w-12 animate-spin rounded-full border-2 border-brand-500/30 border-t-transparent"></div>
                 </div>`;
         }
 
         function showError(message) {
             results.innerHTML = `
-                <div class="rounded-2xl border border-red-500/40 bg-red-50/90 dark:bg-red-500/10 dark:border-red-400/30 p-6 shadow">
+                <div class="rounded-3xl border border-red-400/35 bg-red-100/70 dark:bg-red-500/10 dark:border-red-400/25 p-8 shadow-soft">
                     <h2 class="text-lg font-semibold text-red-700 dark:text-red-200">Unable to load syllabus</h2>
-                    <p class="mt-2 text-sm text-red-600/80 dark:text-red-200/80">${Collage.escapeHtml(message || 'Please check the subject link and try again.')}</p>
+                    <p class="mt-2 text-sm text-red-600/85 dark:text-red-200/80">${Collage.escapeHtml(message || 'Please verify the course context and try again.')}</p>
                 </div>`;
         }
 
         function showEmpty() {
             results.innerHTML = `
-                <div class="rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-6 shadow">
-                    <h2 class="text-lg font-semibold">No units recorded</h2>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Use the “Add unit” button to record units and topics for this course.</p>
+                <div class="rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur p-8 text-sm text-neutral-600 dark:text-white/65">
+                    <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">No units yet</h2>
+                    <p class="mt-2">Add units for this subject to build its syllabus structure.</p>
                 </div>`;
         }
 
-        function renderContext({ title, code, semester, batch }) {
-            const chips = [
-                code ? `<span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200"><svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M12 3h3a1 1 0 011 1v3h-1V5h-2v10h2v-2h1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1V4a1 1 0 011-1zM4 4a1 1 0 00-1 1v3a1 1 0 001 1h2a1 1 0 011 1v1.382l-1.447.724A1 1 0 005 12v2a1 1 0 102 0v-.618l1.447-.724A1 1 0 009 9V6a2 2 0 00-2-2H4z"/></svg>${Collage.escapeHtml(code)}</span>` : '',
-                semester ? `<span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200"><svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 2a2 2 0 0 0-2 2v1H3a1 1 0 0 0 0 2h1v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7h1a1 1 0 1 0 0-2h-1V4a2 2 0 0 0-2-2H6Zm2 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm4 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>Semester ${semester}</span>` : '',
-                batch ? `<span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200"><svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 00-1-1H6zm8 4H6v2h8V6z" clip-rule="evenodd"/></svg>${Collage.escapeHtml(batch)}</span>` : ''
-            ].filter(Boolean).join('');
-
-            const trail = [collegeName, degreeName, departmentName]
-                .filter(Boolean)
-                .map(piece => Collage.escapeHtml(piece))
-                .join(' • ');
-
-            contextPanel.innerHTML = `
-                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="flex flex-wrap gap-3">${chips || '<span class="text-sm text-slate-600 dark:text-slate-400">No additional metadata available.</span>'}</div>
-                    <div class="text-sm text-slate-600 dark:text-slate-300">${trail || ''}</div>
-                </div>`;
-        }
-
-        function attachUnitEditHandlers() {
-            const editButtons = results.querySelectorAll('[data-unit-edit]');
-            editButtons.forEach((button) => {
-                button.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const unitId = button.getAttribute('data-unit-edit');
-                    const unit = (syllabusCourse?.units || []).find((item) => String(item.id) === String(unitId));
-                    if (unit) {
-                        openUnitModal('edit', unit);
-                    }
-                });
-            });
-        }
-
-        function renderUnits(units) {
-            if (!Array.isArray(units) || !units.length) {
-                showEmpty();
-                return;
-            }
-            const accentPalette = [
-                'from-brand-400 via-brand-500 to-indigo-500',
-                'from-emerald-400 via-teal-400 to-emerald-600',
-                'from-fuchsia-400 via-pink-500 to-rose-500',
-                'from-cyan-400 via-sky-500 to-blue-500',
-                'from-amber-400 via-orange-500 to-amber-600'
-            ];
-            results.innerHTML = units.map((unit, index) => {
-                const topics = Array.isArray(unit.topics) ? unit.topics : [];
-                const accentColor = accentPalette[index % accentPalette.length];
-                const orderIndex = Number(unit.order_in_course ?? index) + 1;
-                const topicsMarkup = topics.length
-                    ? `<ol class="mt-4 space-y-2 pl-5 text-sm text-slate-700 dark:text-slate-200 list-decimal">${topics.map((topic) => `<li>${Collage.escapeHtml(topic.topic || '')}</li>`).join('')}</ol>`
-                    : '<p class="mt-4 text-sm text-slate-500 dark:text-slate-400">No topics recorded.</p>';
-
-                return `
-            <article class="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 p-6 shadow transition hover:border-brand-400/60">
-              <div class="absolute inset-x-6 top-4 h-24 rounded-xl bg-gradient-to-r ${accentColor} opacity-20 blur-2xl"></div>
-              <button type="button" data-unit-edit="${unit.id}" aria-label="Edit unit ${Collage.escapeHtml(unit.unit_title || '')}"
-                class="absolute top-4 right-4 z-20 inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-brand-500 hover:border-brand-400/60 transition">
-                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path d="M17.414 2.586a2 2 0 00-2.828 0L6.414 10.758a2 2 0 00-.516.878l-.8 2.798a1 1 0 001.226 1.226l2.798-.8a2 2 0 00.878-.516l8.172-8.172a2 2 0 000-2.828l-.758-.758zm-3.535 1.414L15 5.536 13.536 7 12 5.464l1.879-1.879zM11.293 6.172L3.707 13.758l-.353 1.237 1.237-.353 7.586-7.586L11.293 6.172z" />
-                </svg>
-              </button>
-              <div class="relative inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/40 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">
-                <span class="font-semibold">Unit ${orderIndex}</span>
-                ${topics.length ? `<span class="flex items-center gap-1 text-slate-500 dark:text-slate-300"><svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 000 2h1v8a2 2 0 002 2h7a2 2 0 002-2v-1h2a1 1 0 001-1V9.414a1 1 0 00-.293-.707l-2.414-2.414A1 1 0 0015.586 6H14V4a2 2 0 00-2-2H6z"/></svg>${topics.length} topic${topics.length === 1 ? '' : 's'}</span>` : ''}
-              </div>
-              <h2 class="relative mt-4 text-xl font-semibold text-slate-900 dark:text-white">${Collage.escapeHtml(unit.unit_title || 'Untitled unit')}</h2>
-              ${topicsMarkup}
-            </article>`;
-            }).join('');
-            attachUnitEditHandlers();
-        }
-
-        function setAddUnitAvailability() {
-            if (!addUnitBtn) return;
-            if (courseId) {
-                addUnitBtn.disabled = false;
-            } else {
-                addUnitBtn.disabled = true;
-            }
-        }
-
-        function addTopicRow(value = '') {
-            if (!topicsContainer) return;
-            const row = document.createElement('div');
-            row.className = 'flex items-start gap-3';
-            row.dataset.topicRow = 'true';
-
-            const textarea = document.createElement('textarea');
-            textarea.className = 'flex-1 rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-night-800/70 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300/60';
-            textarea.rows = 2;
-            textarea.placeholder = 'Enter topic';
-            textarea.value = value;
-            row.appendChild(textarea);
-
-            const removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.className = 'mt-1 inline-flex items-center justify-center rounded-lg border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-night-800/70 p-2 text-slate-500 hover:text-red-500 hover:border-red-300/60 transition';
-            removeBtn.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M6.293 6.293a1 1 0 011.414 0L10 8.586l2.293-2.293a1 1 0 111.414 1.414L11.414 10l2.293 2.293a1 1 0 01-1.414 1.414L10 11.414l-2.293 2.293a1 1 0 01-1.414-1.414L8.586 10 6.293 7.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>';
-            removeBtn.addEventListener('click', () => {
-                row.remove();
-                if (!topicsContainer.querySelector('[data-topic-row]')) {
-                    addTopicRow();
-                }
-            });
-            row.appendChild(removeBtn);
-
-            topicsContainer.appendChild(row);
+        function renderContext() {
+            const parts = [
+                courseCode ? `<span class="font-semibold">${Collage.escapeHtml(courseCode)}</span>` : '',
+                courseTitle ? Collage.escapeHtml(courseTitle) : '',
+                semesterParam ? `Semester ${semesterParam}` : '',
+                batchRange ? `Batch ${Collage.escapeHtml(batchRange)}` : ''
+            ].filter(Boolean);
+            contextPanel.innerHTML = parts.length
+                ? `<div class="flex flex-wrap gap-3 text-sm">${parts.map(p => `<span class="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 bg-white/70 dark:bg-white/5 px-3 py-1 text-neutral-700 dark:text-white/80">${p}</span>`).join('')}</div>`
+                : '<p class="text-sm text-neutral-600 dark:text-white/65">Subject context unavailable.</p>';
         }
 
         function resetUnitModal() {
             unitForm?.reset();
-            topicsContainer.innerHTML = '';
             unitModalMessage.textContent = '';
             unitModalMessage.classList.add('hidden');
             unitModalMode = 'add';
-            editingUnitId = null;
+            unitSubmitBtn.innerHTML = '<span class="material-symbols-rounded text-base">save</span>Save unit';
+            topicsContainer.innerHTML = '';
             addTopicRow();
         }
 
-        function openUnitModal(mode = 'add', unit = null) {
-            if (!unitModal || !unitTitleInput) return;
-            resetUnitModal();
-            unitModalMode = mode;
-
-            if (mode === 'edit' && unit) {
-                editingUnitId = unit.id;
-                unitTitleInput.value = unit.unit_title || '';
-                topicsContainer.innerHTML = '';
-                const topicList = Array.isArray(unit.topics) ? unit.topics : [];
-                if (topicList.length) {
-                    topicList.forEach((topic) => addTopicRow(topic.topic || ''));
-                } else {
-                    addTopicRow();
-                }
-                unitModalTitle.textContent = 'Edit unit';
-                unitSubmitBtn.textContent = 'Save changes';
-            } else {
-                unitModalTitle.textContent = 'Add a new unit';
-                unitSubmitBtn.textContent = 'Save unit';
-            }
-
-            unitModal.classList.remove('hidden');
-            document.body.classList.add('overflow-hidden');
-            setTimeout(() => unitTitleInput.focus(), 80);
+        function setUnitModalLoading(isLoading) {
+            unitSubmitBtn.disabled = isLoading;
+            unitSubmitBtn.innerHTML = isLoading
+                ? '<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Saving…'
+                : (unitModalMode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save unit');
         }
 
         function closeUnitModal() {
-            unitModal?.classList.add('hidden');
+            unitModal.classList.add('hidden');
             document.body.classList.remove('overflow-hidden');
             resetUnitModal();
         }
 
-        function setUnitModalLoading(isLoading) {
-            if (!unitSubmitBtn) return;
-            unitSubmitBtn.disabled = isLoading;
-            unitSubmitBtn.textContent = isLoading
-                ? 'Saving…'
-                : (unitModalMode === 'edit' ? 'Save changes' : 'Save unit');
+        function openUnitModal(mode = 'add', unit) {
+            if (!courseId) return;
+            resetUnitModal();
+            unitModalMode = mode;
+
+            if (mode === 'edit' && unit) {
+                unitTitleInput.value = unit.unit_title || '';
+                topicsContainer.innerHTML = '';
+                (unit.topics || []).forEach(t => addTopicRow(t.topic_title || t.topic || ''));
+            }
+
+            unitModalTitle.textContent = mode === 'edit' ? 'Edit unit' : 'Add a new unit';
+            unitSubmitBtn.innerHTML = mode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save unit';
+            unitModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => { unitTitleInput?.focus(); }, 60);
         }
 
-        async function handleUnitSubmit(event) {
-            event.preventDefault();
+        function addTopicRow(value = '') {
+            const id = Math.random().toString(36).slice(2, 9);
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-2';
+            row.innerHTML = `<input type="text" data-topic-input id="topic-${id}" placeholder="Topic title" value="${Collage.escapeHtml(value)}" class="flex-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40" maxlength="256" /> <button type="button" aria-label="Remove topic" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition"><span class="material-symbols-rounded text-base">close</span></button>`;
+            const removeBtn = row.querySelector('button');
+            removeBtn.addEventListener('click', () => {
+                row.remove();
+                if (!topicsContainer.querySelector('[data-topic-input]')) addTopicRow();
+            });
+            topicsContainer.appendChild(row);
+        }
+
+        addTopicRowButton.addEventListener('click', () => addTopicRow());
+
+        async function handleUnitSubmit(e) {
+            e.preventDefault();
             if (!courseId) {
-                unitModalMessage.textContent = 'Missing course context. Please reload the page and try again.';
+                unitModalMessage.textContent = 'Missing course context.';
                 unitModalMessage.classList.remove('hidden');
                 return;
             }
-
-            const title = unitTitleInput.value.trim();
-            if (!title) {
-                unitModalMessage.textContent = 'Enter a unit title.';
+            const unit_title = (unitTitleInput.value || '').trim();
+            if (!unit_title) {
+                unitModalMessage.textContent = 'Enter the unit title.';
                 unitModalMessage.classList.remove('hidden');
                 unitTitleInput.focus();
                 return;
             }
-
-            const topicInputs = topicsContainer.querySelectorAll('textarea');
-            const topics = [];
-            topicInputs.forEach((input) => {
-                const value = input.value.trim();
-                if (value) {
-                    topics.push({ topic: value });
-                }
-            });
-
-            unitModalMessage.classList.add('hidden');
+            const topicInputs = [...topicsContainer.querySelectorAll('[data-topic-input]')];
+            // Backend expects 'topic' field per topic row
+            const topics = topicInputs.map(inp => (inp.value || '').trim()).filter(Boolean).map(t => ({ topic: t }));
+            const payload = { unit_title, topics };
             setUnitModalLoading(true);
-
-            const payload = {
-                unit_title: title,
-                topics,
-            };
-
+            unitModalMessage.classList.add('hidden');
             try {
-                if (unitModalMode === 'edit' && editingUnitId) {
-                    await Collage.fetchJson(`/api/syllabus/units/${editingUnitId}`, {
-                        method: 'PUT',
-                        body: payload,
-                        skipAuth: true,
-                    });
+                if (unitModalMode === 'edit' && syllabusCourse && syllabusCourse.editingUnitId) {
+                    await Collage.fetchJson(`/api/syllabus/units/${syllabusCourse.editingUnitId}`, { method: 'PUT', body: payload, skipAuth: true });
                 } else {
-                    await Collage.fetchJson(`/api/syllabus/courses/${courseId}/units`, {
-                        method: 'POST',
-                        body: payload,
-                        skipAuth: true,
-                    });
+                    await Collage.fetchJson(`/api/syllabus/courses/${courseId}/units`, { method: 'POST', body: payload, skipAuth: true });
                 }
                 closeUnitModal();
                 await loadSyllabus();
             } catch (error) {
-                let message = error?.message ?? 'Unable to save unit. Please try again.';
-                if (typeof message !== 'string') {
-                    try {
-                        message = JSON.stringify(message);
-                    } catch (_) {
-                        message = 'Unable to save unit. Please try again.';
-                    }
+                let m = error?.message ?? 'Unable to save unit.';
+                if (typeof m !== 'string') {
+                    try { m = JSON.stringify(m); } catch (_) { m = 'Unable to save unit.'; }
                 }
-                if (message === '[object Object]') {
-                    message = 'Unexpected response from server. Please try again.';
-                }
-                unitModalMessage.textContent = message;
+                if (m === '[object Object]') m = 'Unexpected response.';
+                unitModalMessage.textContent = m;
                 unitModalMessage.classList.remove('hidden');
                 console.error(error);
             } finally {
@@ -470,70 +465,175 @@
             }
         }
 
-        addUnitBtn?.addEventListener('click', () => openUnitModal('add'));
-        addTopicRowButton?.addEventListener('click', () => addTopicRow());
-        unitModalCancel?.addEventListener('click', closeUnitModal);
-        unitModalClose?.addEventListener('click', closeUnitModal);
-        unitModalBackdrop?.addEventListener('click', closeUnitModal);
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && unitModal && !unitModal.classList.contains('hidden')) {
-                closeUnitModal();
-            }
-        });
-        unitForm?.addEventListener('submit', handleUnitSubmit);
+        unitForm.addEventListener('submit', handleUnitSubmit);
+        unitModalCancel.addEventListener('click', closeUnitModal);
+        unitModalClose.addEventListener('click', closeUnitModal);
+        unitModalBackdrop.addEventListener('click', closeUnitModal);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && !unitModal.classList.contains('hidden')) closeUnitModal(); });
 
-        async function loadSyllabus(showSpinner = true) {
-            if (!courseId) {
-                showError('Missing courseId in URL.');
-                setAddUnitAvailability();
+        function renderUnits(units) {
+            if (!units.length) {
+                showEmpty();
                 return;
             }
-            if (showSpinner) {
-                showLoader();
-            }
-            try {
-                const data = await Collage.fetchJson(`/api/syllabus/courses/${courseId}`, { skipAuth: true });
-                syllabusCourse = data;
-                const title = data?.title || courseTitle || 'Subject syllabus';
-                const code = data?.course_code || courseCode;
-                const semester = data?.semester || semesterParam;
-                const batch = batchRange || data?.batch_id || '';
+            results.innerHTML = units.map(u => {
+                const topics = Array.isArray(u.topics) ? u.topics : [];
+                return `
+          <article class="group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur p-6 shadow-soft">
+            <div class="absolute inset-x-6 top-6 h-24 rounded-3xl bg-gradient-to-r from-brand-500/40 via-brandlt-300/30 to-brand-700/40 opacity-20 blur-2xl"></div>
+            <div class="relative flex items-start justify-between gap-4">
+              <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">${Collage.escapeHtml(u.unit_title || 'Unit')}</h2>
+              <button type="button" data-unit-edit="${u.id}" class="inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition">
+                <span class="material-symbols-rounded text-base">edit</span>
+              </button>
+            </div>
+            <ul class="relative mt-4 space-y-2 text-sm text-neutral-700 dark:text-white/75">
+                            ${topics.map(t => `<li class=\"flex items-start gap-2\"><span class=\"material-symbols-rounded text-base text-brand-500 mt-0.5\">check_small</span><span>${Collage.escapeHtml(t.topic_title || t.topic || '')}</span></li>`).join('') || '<li class=\"italic opacity-70\">No topics recorded.</li>'}
+            </ul>
+          </article>`;
+            }).join('');
+            attachUnitEditHandlers();
+        }
 
-                titleEl.textContent = title;
-                if (semester && batch) {
-                    subtitleEl.textContent = `Semester ${semester} · Batch ${batch}`;
-                } else if (semester) {
-                    subtitleEl.textContent = `Semester ${semester}`;
-                } else if (batch) {
-                    subtitleEl.textContent = `Batch ${batch}`;
-                } else {
-                    subtitleEl.textContent = '';
+        function attachUnitEditHandlers() {
+            results.querySelectorAll('[data-unit-edit]').forEach(btn => {
+                btn.addEventListener('click', e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const id = btn.getAttribute('data-unit-edit');
+                    const u = (syllabusCourse?.units || []).find(x => String(x.id) === String(id));
+                    if (u) {
+                        syllabusCourse.editingUnitId = u.id;
+                        // Normalize topic field to 'topic' for editing convenience
+                        const normalizedTopics = (u.topics || []).map(t => ({ topic: t.topic || t.topic_title || '' }));
+                        openUnitModal('edit', { unit_title: u.unit_title, topics: normalizedTopics });
+                    }
+                });
+            });
+        }
+
+        async function loadSyllabus() {
+            if (!courseId) {
+                showError('Missing courseId.');
+                return;
+            }
+            showLoader();
+            try {
+                // Correct endpoint: backend provides full course (with units & topics) at /api/syllabus/courses/{course_id}
+                const data = await Collage.fetchJson(`/api/syllabus/courses/${courseId}`, { skipAuth: true });
+                // Expected shape (SyllabusCourseOut): { id, batch_id, semester, course_code, title, units:[{id,unit_title,topics:[{id,topic_title,...}]}] }
+                if (!data || data.detail === 'Course not found') {
+                    showError('Syllabus course not found.');
+                    return;
                 }
+                syllabusCourse = {
+                    id: data.id,
+                    course_code: data.course_code,
+                    title: data.title,
+                    semester: data.semester,
+                    units: Array.isArray(data.units) ? data.units : []
+                };
+                titleEl.innerHTML = `Subject syllabus <span class="opacity-70">· ${Collage.escapeHtml(courseCode || '')}</span>`;
+                subtitleEl.textContent = `${syllabusCourse.units.length} unit${syllabusCourse.units.length === 1 ? '' : 's'} defined.`;
                 breadcrumbsEl.innerHTML = makeBreadcrumb([
                     { label: 'Colleges', href: 'clg_info.html' },
-                    collegeName ? { label: collegeName, href: `degrees.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName)}` } : null,
-                    degreeName ? { label: degreeName, href: `departments.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(params.degreeId || '')}&degreeName=${encodeURIComponent(degreeName)}` } : null,
-                    departmentName ? { label: departmentName, href: `batches.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(params.degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName)}` } : null,
-                    batch ? { label: batch, href: `subjects.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(params.degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(params.batchId || '')}&batchRange=${encodeURIComponent(batch)}` } : null,
-                    { label: title }
+                    { label: collegeName || 'College', href: `degrees.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}` },
+                    { label: degreeName || 'Degree', href: `departments.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(params.degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}` },
+                    { label: departmentName || 'Department', href: `batches.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(params.degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}` },
+                    { label: 'Subjects', href: `subjects.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(params.degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchRange=${encodeURIComponent(batchRange || '')}` },
+                    { label: courseCode || 'Syllabus' }
                 ]);
-
-                renderContext({ title, code, semester, batch });
-                setAddUnitAvailability();
-
-                const units = Array.isArray(data?.units) ? data.units : [];
-                syllabusCourse.units = units;
-                renderUnits(units);
+                renderContext();
+                addUnitBtn.disabled = false;
+                // Update back link with full subjects context
+                if (backLink) {
+                    const subjectsUrl = `subjects.html?collegeId=${encodeURIComponent(params.collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(params.degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(batchId || '')}&batchRange=${encodeURIComponent(batchRange || '')}`;
+                    backLink.setAttribute('href', subjectsUrl);
+                }
             } catch (err) {
                 console.error(err);
                 showError(err.message || 'Unexpected error');
             }
+
+            renderUnits(syllabusCourse.units || []);
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            setAddUnitAvailability();
-            loadSyllabus();
+        addUnitBtn.addEventListener('click', () => openUnitModal('add'));
+        document.addEventListener('DOMContentLoaded', () => { loadSyllabus(); });
+    </script>
+    <script>
+        // Theme
+        const root = document.documentElement;
+        const themeBtns = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+
+        function updateThemeIcons(mode) {
+            themeBtns().forEach(b => {
+                const ic = b.querySelector('.material-symbols-rounded');
+                if (ic) ic.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+            });
+        }
+
+        function setTheme(mode) {
+            if (mode === 'dark') root.classList.add('dark');
+            else root.classList.remove('dark');
+            localStorage.setItem('px_theme', mode);
+            updateThemeIcons(mode);
+        }
+        setTheme(root.classList.contains('dark') ? 'dark' : 'light');
+        document.addEventListener('click', e => {
+            const t = e.target.closest('[data-theme-toggle]');
+            if (!t) return;
+            const next = root.classList.contains('dark') ? 'light' : 'dark';
+            setTheme(next);
         });
+    </script>
+    <script>
+        // Mobile nav
+        (function () {
+            const toggle = document.getElementById('mobileNavToggle');
+            const panel = document.getElementById('mobileNavPanel');
+            const backdrop = document.getElementById('mobileNavBackdrop');
+            if (!toggle || !panel || !backdrop) return;
+            const icon = toggle.querySelector('[data-icon]');
+            const focusable = 'a[href],button:not([disabled])';
+
+            function openMenu() {
+                panel.setAttribute('data-open', 'true');
+                panel.classList.add('open');
+                panel.setAttribute('aria-hidden', 'false');
+                backdrop.setAttribute('data-open', 'true');
+                backdrop.classList.add('open');
+                backdrop.setAttribute('aria-hidden', 'false');
+                toggle.setAttribute('aria-expanded', 'true');
+                if (icon) icon.textContent = 'close';
+                document.body.classList.add('overflow-hidden');
+                const f = panel.querySelector(focusable);
+                if (f) f.focus();
+            }
+
+            function closeMenu() {
+                panel.removeAttribute('data-open');
+                panel.classList.remove('open');
+                panel.setAttribute('aria-hidden', 'true');
+                backdrop.removeAttribute('data-open');
+                backdrop.classList.remove('open');
+                backdrop.setAttribute('aria-hidden', 'true');
+                toggle.setAttribute('aria-expanded', 'false');
+                if (icon) icon.textContent = 'menu';
+                document.body.classList.remove('overflow-hidden');
+            }
+
+            function toggleMenu() {
+                const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+                (isOpen ? closeMenu : openMenu)();
+            }
+
+            toggle.addEventListener('click', toggleMenu);
+            backdrop.addEventListener('click', closeMenu);
+            panel.addEventListener('click', e => { if (e.target.closest('[data-close-mobile-nav]')) closeMenu(); });
+            window.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+            window.matchMedia('(min-width:768px)').addEventListener('change', e => { if (e.matches) closeMenu(); });
+        })();
     </script>
 </body>
 

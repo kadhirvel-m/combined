@@ -43,7 +43,14 @@
                         // Added direct aliases for pricing card component
                         ink: '#1E1E2F',
                         plum: '#4C2A59',
-                        orchid: '#9E4B8A'
+                        orchid: '#9E4B8A',
+                        // Additional palette required for mega menus (from test.html)
+                        indigoDark: '#1E1E2F',
+                        deepPurple: '#4C2A59',
+                        magenta: '#9E4B8A',
+                        paper: '#FFFFFF',
+                        stoneTint: '#F6F7FB',
+                        edge: '#E7E9F2'
                     },
                     boxShadow: {
                         glow: '0 8px 30px rgba(158,75,138,0.35)',
@@ -482,6 +489,8 @@
                 if (isDark) document.documentElement.classList.add('dark');
             })();
     </script>
+    <!-- Alpine.js (for mega menus) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 
 <body
@@ -498,110 +507,259 @@
     </div>
 
     <!-- Navbar -->
-    <header
+    <header x-data="headerMenu()"
         class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10 relative">
         <div class="container flex items-center justify-between py-4">
             <a href="index.html" class="flex items-center gap-3" aria-label="Paper X Home">
                 <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
                 <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
             </a>
-            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
-                <a class="hover:text-brandlt-900 dark:hover:text-white" href="index.html">Home</a>
-                <a class="hover:text-brandlt-900 dark:hover:text-white" href="about.html">About</a>
-                <button
-                    class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">Products
-                    <span
-                        class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span></button>
-                <!-- Project Portal dropdown (replaces Solutions) -->
-                <div class="relative" id="navProjectsWrap">
-                    <button type="button" id="navProjectsBtn" aria-haspopup="true" aria-expanded="false"
-                        class="group inline-flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition focus:outline-none focus:ring-2 focus:ring-brand-500/50">
-                        <span
-                            class="material-symbols-rounded text-[18px] leading-none group-hover:scale-110 transition-transform">hub</span>
-                        <span class="font-medium">Project Portal</span>
-                        <span
-                            class="material-symbols-rounded text-base leading-none transition-transform duration-200 group-data-[open=true]:rotate-180"
-                            data-projects-caret>expand_more</span>
+            <nav class="hidden md:flex items-center gap-2 text-sm text-neutral-700 dark:text-white/85">
+                <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="index.html">Home</a>
+                <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="about.html">About</a>
+                <!-- Products Mega Menu trigger (imported) -->
+                <div class="relative" @mouseenter="open('products')" @mouseleave="close('products')">
+                    <button :aria-expanded="isOpen('products')" @click="toggle('products')"
+                        @keydown.escape.window="closeAll()"
+                        class="group inline-flex items-center gap-1 rounded-full px-3 py-2 font-medium hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
+                        Products
+                        <span class="material-symbols-rounded text-base transition-transform"
+                            :class="{ 'rotate-180' : isOpen('products') }">expand_more</span>
                     </button>
-                    <div id="navProjectsMenu" role="menu" aria-label="Project Portal" tabindex="-1"
-                        class="invisible opacity-0 translate-y-1 absolute left-1/2 -translate-x-1/2 mt-2 w-72 rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_8px_28px_-4px_rgba(30,30,47,0.35)] backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10 transition duration-150 ease-out data-[open=true]:visible data-[open=true]:opacity-100 data-[open=true]:translate-y-0">
-                        <div class="p-3 pb-2 border-b border-black/5 dark:border-white/10">
-                            <p
-                                class="text-[11px] uppercase tracking-wide font-semibold text-neutral-500 dark:text-white/40">
-                                Manage</p>
-                        </div>
-                        <ul class="py-1" data-menu-list>
-                            <li role="none">
-                                <a role="menuitem" href="projects/postings.html" data-menu-item
-                                    class="flex items-start gap-3 px-4 py-2.5 text-sm hover:bg-black/5 dark:hover:bg-white/10 focus:bg-black/5 dark:focus:bg-white/10 outline-none rounded-xl group">
-                                    <span
-                                        class="material-symbols-rounded text-[20px] text-brand-500 dark:text-white/80 group-hover:scale-110 transition-transform">folder_open</span>
-                                    <span class="flex flex-col">
-                                        <span class="font-medium">Project Postings</span>
-                                        <span class="text-[11px] text-neutral-500 dark:text-white/40">Browse active
-                                            listings</span>
-                                    </span>
-                                </a>
-                            </li>
-                            <li role="none">
-                                <a role="menuitem" href="projects/project_post.html" data-menu-item
-                                    class="flex items-start gap-3 px-4 py-2.5 text-sm hover:bg-black/5 dark:hover:bg-white/10 focus:bg-black/5 dark:focus:bg-white/10 outline-none rounded-xl group">
-                                    <span
-                                        class="material-symbols-rounded text-[20px] text-brand-500 dark:text-white/80 group-hover:scale-110 transition-transform">add_circle</span>
-                                    <span class="flex flex-col">
-                                        <span class="font-medium">Create Project</span>
-                                        <span class="text-[11px] text-neutral-500 dark:text-white/40">Publish a new
-                                            opportunity</span>
-                                    </span>
-                                </a>
-                            </li>
-                            <li role="none">
-                                <a role="menuitem" href="projects/incoming_requests.html" data-menu-item
-                                    class="flex items-start gap-3 px-4 py-2.5 text-sm hover:bg-black/5 dark:hover:bg-white/10 focus:bg-black/5 dark:focus:bg-white/10 outline-none rounded-xl group">
-                                    <span
-                                        class="material-symbols-rounded text-[20px] text-brand-500 dark:text-white/80 group-hover:scale-110 transition-transform">inbox</span>
-                                    <span class="flex flex-col">
-                                        <span class="font-medium">Incoming Requests</span>
-                                        <span class="text-[11px] text-neutral-500 dark:text-white/40">Review
-                                            collaborator joins</span>
-                                    </span>
-                                </a>
-                            </li>
-                            <li role="none">
-                                <a role="menuitem" href="projects/my_applications.html" data-menu-item
-                                    class="flex items-start gap-3 px-4 py-2.5 text-sm hover:bg-black/5 dark:hover:bg-white/10 focus:bg-black/5 dark:focus:bg-white/10 outline-none rounded-xl group">
-                                    <span
-                                        class="material-symbols-rounded text-[20px] text-brand-500 dark:text-white/80 group-hover:scale-110 transition-transform">assignment_ind</span>
-                                    <span class="flex flex-col">
-                                        <span class="font-medium">My Applications</span>
-                                        <span class="text-[11px] text-neutral-500 dark:text-white/40">Track application
-                                            status</span>
-                                    </span>
-                                </a>
-                            </li>
-                            <li role="none">
-                                <a role="menuitem" href="projects/skill-test.html" data-menu-item
-                                    class="flex items-start gap-3 px-4 py-2.5 text-sm hover:bg-black/5 dark:hover:bg-white/10 focus:bg-black/5 dark:focus:bg-white/10 outline-none rounded-xl group">
-                                    <span
-                                        class="material-symbols-rounded text-[20px] text-brand-500 dark:text-white/80 group-hover:scale-110 transition-transform">verified</span>
-                                    <span class="flex flex-col">
-                                        <span class="font-medium">Skill Test Portal</span>
-                                        <span class="text-[11px] text-neutral-500 dark:text-white/40">Assess & verify
-                                            skills</span>
-                                    </span>
-                                </a>
-                            </li>
-                        </ul>
+                    <div x-cloak x-show="isOpen('products')" x-transition:enter="transition ease-out duration-150"
+                        x-transition:enter-start="opacity-0 -translate-y-1"
+                        x-transition:enter-end="opacity-100 translate-y-0"
+                        x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100"
+                        x-transition:leave-end="opacity-0" @click.outside="close('products')"
+                        class="absolute left-1/2 z-40 mt-2 w-[880px] -translate-x-1/2">
                         <div
-                            class="px-4 py-3 border-t border-black/5 dark:border-white/10 bg-white/70 dark:bg-white/5 rounded-b-2xl flex items-center gap-3 text-xs text-neutral-500 dark:text-white/40">
-                            <span class="material-symbols-rounded text-base">tips_and_updates</span>
-                            <span>Boost collaboration with verified contributors.</span>
+                            class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 backdrop-blur shadow-[0_8px_28px_-4px_rgba(30,30,47,0.35)]">
+                            <div class="grid grid-cols-3 gap-0 p-4">
+                                <div class="col-span-1 border-r border-black/5 dark:border-white/10 pr-4">
+                                    <div
+                                        class="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/40">
+                                        Features</div>
+                                    <ul class="space-y-1.5">
+                                        <li><a href="#"
+                                                class="group flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"><span
+                                                    class="material-symbols-rounded text-brand-500 dark:text-white/80">hub</span><span><span
+                                                        class="block text-sm font-semibold">Platform
+                                                        Overview</span><span
+                                                        class="block text-xs text-neutral-600 dark:text-white/50">Connect
+                                                        directly with your ideal collaborators.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="group flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
+                                                    class="material-symbols-rounded text-brand-500 dark:text-white/80">nest_audio</span><span><span
+                                                        class="block text-sm font-semibold">Pitch
+                                                        Intelligence</span><span
+                                                        class="block text-xs text-neutral-600 dark:text-white/50">Deliver
+                                                        the right message at the right time.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="group flex items-start gap-3 rounded-xl px-2 py-2 bg-brandlt-100 dark:bg-white/5 border border-brandlt-200/70 dark:border-white/10"><span
+                                                    class="material-symbols-rounded text-brand-500 dark:text-white/80">extension</span><span><span
+                                                        class="flex items-center gap-1 text-sm font-semibold">Chrome
+                                                        Extension <span
+                                                            class="ml-1 rounded-full bg-brandlt-200 dark:bg-white/10 px-1.5 text-[10px] font-medium">New</span></span><span
+                                                        class="block text-xs text-neutral-600 dark:text-white/50">Build
+                                                        lists anywhere on the web.</span></span></a></li>
+                                        <li><a href="#"
+                                                class="group flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
+                                                    class="material-symbols-rounded text-brand-500 dark:text-white/80">bolt</span><span><span
+                                                        class="block text-sm font-semibold">Integrations</span><span
+                                                        class="block text-xs text-neutral-600 dark:text-white/50">Export
+                                                        to your existing stack.</span></span></a></li>
+                                    </ul>
+                                </div>
+                                <div class="col-span-1 border-r border-black/5 dark:border-white/10 px-4">
+                                    <div
+                                        class="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/40">
+                                        Premium</div>
+                                    <div class="rounded-xl bg-brandlt-50 dark:bg-white/5 p-3">
+                                        <ul class="space-y-1">
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">database</span><span><span
+                                                            class="block text-sm font-semibold">Data
+                                                            Enrichment</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">Keep
+                                                            data fresh across tools.</span></span></a></li>
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">auto_mode</span><span><span
+                                                            class="block text-sm font-semibold">Autopilot</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">Automate
+                                                            list building workflows.</span></span></a></li>
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">work_update</span><span><span
+                                                            class="block text-sm font-semibold">Job Changes</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">Track
+                                                            key account movement.</span></span></a></li>
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">emoji_objects</span><span><span
+                                                            class="block text-sm font-semibold">Buyer Intent
+                                                            Data</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">Identify
+                                                            ready-to-engage accounts.</span></span></a></li>
+                                            <li><a href="#"
+                                                    class="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-white dark:hover:bg-white/10"><span
+                                                        class="material-symbols-rounded text-brand-700 dark:text-white/80">ink_highlighter</span><span><span
+                                                            class="block text-sm font-semibold">Writer</span><span
+                                                            class="block text-xs text-neutral-600 dark:text-white/50">AI
+                                                            powered messaging.</span></span></a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="col-span-1 pl-4">
+                                    <div
+                                        class="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/40">
+                                        Solutions</div>
+                                    <ul class="space-y-1.5">
+                                        <template x-for="item in solutions" :key="item.label">
+                                            <li>
+                                                <a :href="item.href"
+                                                    class="group flex items-center justify-between gap-3 rounded-xl px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10">
+                                                    <span class="flex items-center gap-3">
+                                                        <span
+                                                            class="material-symbols-rounded text-neutral-700 dark:text-white/70"
+                                                            x-text="item.icon"></span>
+                                                        <span class="text-sm" x-text="item.label"></span>
+                                                    </span>
+                                                    <span
+                                                        class="material-symbols-rounded text-neutral-400 group-hover:text-neutral-600 dark:group-hover:text-white/70">chevron_right</span>
+                                                </a>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                    <a href="#"
+                                        class="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text:[12px] font-medium hover:bg-black/5 dark:hover:bg-white/10">
+                                        All Solutions <span
+                                            class="material-symbols-rounded text-sm">arrow_forward</span>
+                                    </a>
+                                </div>
+                            </div>
+                            <div
+                                class="flex items-center justify-between gap-4 border-t border-black/5 dark:border-white/10 bg-brandlt-50/70 dark:bg-white/5 px-4 py-3 rounded-b-2xl">
+                                <div class="flex items-center gap-2 text-sm text-neutral-700 dark:text-white/70"><span
+                                        class="material-symbols-rounded text-brand-500">chat_add_on</span><span><span
+                                            class="font-semibold">Want Free Leads?</span> Try Paper X Portal</span>
+                                </div>
+                                <a href="#"
+                                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2 hover:shadow-glow">Get
+                                    Started</a>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <a class="hover:text-brandlt-900 dark:hover:text-white" href="contact.html">Contact</a>
-                <a class="hover:text-brandlt-900 dark:hover:text-white" href="help.html">Help</a>
-                <a class="hover:text-brandlt-900 dark:hover:text-white" href="collage/clg_info.html">Collages</a>
+                <!-- Projects Mega Menu (imported) -->
+                <div class="relative" x-data="megaNav()" @mouseenter="open('projects')" @mouseleave="close('projects')">
+                    <button @click="toggle('projects')" :aria-expanded="isOpen('projects')"
+                        class="group inline-flex items-center gap-1 rounded-full px-3 py-2 font-medium text-ink/90 dark:text-white/90 hover:bg-stoneTint dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-magenta">
+                        Projects
+                        <span class="material-symbols-rounded text-base transition-transform"
+                            :class="{ 'rotate-180' : isOpen('projects') }">expand_more</span>
+                    </button>
+                    <div x-cloak x-show="isOpen('projects')" x-transition:enter="transition ease-out duration-150"
+                        x-transition:enter-start="opacity-0 -translate-y-1"
+                        x-transition:enter-end="opacity-100 translate-y-0"
+                        x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100"
+                        x-transition:leave-end="opacity-0" @click.outside="close('projects')"
+                        class="absolute left-1/2 mt-3 w-[1050px] max-w-[95vw] -translate-x-1/2 z-50">
+                        <div
+                            class="rounded-3xl border border-edge dark:border-transparent bg-white dark:bg-brand-900/95 shadow-2xl dark:shadow-[0_8px_32px_-4px_rgba(0,0,0,0.55)] backdrop-blur supports-[backdrop-filter]:bg-white/90 dark:supports-[backdrop-filter]:bg-brand-900/80">
+                            <div class="grid grid-cols-[300px,1fr] gap-0">
+                                <aside
+                                    class="border-r border-edge/80 dark:border-white/10 p-4 bg-white/60 dark:bg-white/5">
+                                    <ul class="space-y-2">
+                                        <template x-for="(c, i) in categories" :key="c.id">
+                                            <li>
+                                                <button @click="select(i)" @mouseenter="select(i)" @focus="select(i)"
+                                                    :aria-current="i===current? 'true':'false'"
+                                                    class="group flex w-full items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-3 text-left transition hover:bg-stoneTint dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-magenta/70 dark:focus-visible:ring-magenta"
+                                                    :class="i===current ? 'bg-white dark:bg-magenta/10 shadow-sm border-edge dark:border-magenta/40' : ''">
+                                                    <span>
+                                                        <span
+                                                            class="block text-[13px] font-bold tracking-wide text-deepPurple dark:text-white uppercase"
+                                                            x-text="c.title"></span>
+                                                        <span
+                                                            class="mt-0.5 block text-[12px] text-ink/70 dark:text-white/50"
+                                                            x-text="c.subtitle"></span>
+                                                    </span>
+                                                    <span
+                                                        class="material-symbols-rounded text-magenta group-hover:translate-x-0.5 transition dark:text-magenta/80">chevron_right</span>
+                                                </button>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </aside>
+                                <section class="p-5">
+                                    <div class="flex items-baseline justify-between">
+                                        <h3
+                                            class="text-[13px] font-bold tracking-[0.12em] text-ink/80 dark:text-white/70 uppercase">
+                                            Featured Pages</h3>
+                                        <div class="hidden sm:flex items-center gap-2">
+                                            <button @click="prev()" :disabled="!canPrev"
+                                                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-edge dark:border-white/15 bg-white dark:bg-white/10 text-ink dark:text-white hover:bg-stoneTint dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"><span
+                                                    class="material-symbols-rounded">chevron_left</span></button>
+                                            <button @click="next()" :disabled="!canNext"
+                                                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-edge dark:border-white/15 bg-white dark:bg-white/10 text-ink dark:text-white hover:bg-stoneTint dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"><span
+                                                    class="material-symbols-rounded">chevron_right</span></button>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <div class="relative w-full max-w-[760px]">
+                                            <div class="flex gap-3" role="list">
+                                                <template x-for="(b, idx) in categories[current].brands" :key="b.name">
+                                                    <template x-if="idx >= pageStart && idx < pageStart + visibleCount">
+                                                        <a :href="b.href" role="listitem"
+                                                            class="group relative flex h-64 w-40 flex-col overflow-hidden rounded-xl border border-edge dark:border-white/15 bg-white dark:bg-white/5 shadow-ring hover:border-magenta/50 dark:hover:border-magenta/60 transition-colors">
+                                                            <template x-if="b.img">
+                                                                <img :src="b.img" :alt="b.name + ' image'"
+                                                                    class="h-48 w-full object-cover opacity-95 group-hover:opacity-100 transition-opacity" />
+                                                            </template>
+                                                            <template x-if="!b.img">
+                                                                <div
+                                                                    class="h-48 w-full bg-stoneTint dark:bg-white/10 flex items-center justify-center text-xs text-ink/60 dark:text-white/50">
+                                                                    No Image</div>
+                                                            </template>
+                                                            <div class="flex flex-1 flex-col px-2 py-2">
+                                                                <div class="text-[10px] font-semibold uppercase tracking-wider text-magenta dark:text-magenta/80"
+                                                                    x-text="b.tag"></div>
+                                                                <div class="mt-0.5 text-sm font-bold leading-snug text-ink dark:text-white"
+                                                                    x-text="b.name"></div>
+                                                            </div>
+                                                        </a>
+                                                    </template>
+                                                </template>
+                                            </div>
+                                            <div class="mt-2 text-[11px] text-ink/60 dark:text-white/50"
+                                                x-show="totalPages > 1">
+                                                <span x-text="currentPage + 1"></span>/<span x-text="totalPages"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 flex items-center">
+                                        <span class="mr-2 h-6 w-1 rounded-full bg-magenta"></span>
+                                        <a :href="categories[current].cta.href"
+                                            class="inline-flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-magenta hover:text-deepPurple dark:hover:text-white dark:text-magenta/90">
+                                            <span x-text="categories[current].cta.label"></span>
+                                            <span class="material-symbols-rounded text-base">chevron_right</span>
+                                        </a>
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="contact.html">Contact</a>
+                <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="help.html">Help</a>
+                <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="collage/clg_info.html">Collages</a>
             </nav>
             <div class="hidden md:flex items-center gap-2">
                 <button id="themeToggle" data-theme-toggle
@@ -642,93 +800,7 @@
         </div>
     </header>
 
-    <script>
-        // Enhanced Project Portal dropdown logic with accessibility & keyboard navigation
-        (function () {
-            const wrap = document.getElementById('navProjectsWrap');
-            if (!wrap) return;
-            const btn = document.getElementById('navProjectsBtn');
-            const menu = document.getElementById('navProjectsMenu');
-            const caret = btn && btn.querySelector('[data-projects-caret]');
-            const items = () => Array.from(menu.querySelectorAll('[data-menu-item]'));
-            let open = false;
-            let closeTimer = null;
-
-            function applyState() {
-                if (open) {
-                    menu.setAttribute('data-open', 'true');
-                    btn.setAttribute('aria-expanded', 'true');
-                    wrap.dataset.open = 'true';
-                    if (caret) caret.textContent = 'expand_less';
-                    // focus first item after short delay to allow transition
-                    setTimeout(() => { items()[0]?.focus(); }, 60);
-                } else {
-                    menu.removeAttribute('data-open');
-                    btn.setAttribute('aria-expanded', 'false');
-                    wrap.dataset.open = 'false';
-                    if (caret) caret.textContent = 'expand_more';
-                }
-            }
-
-            function setState(next) {
-                if (next === open) return;
-                open = next;
-                applyState();
-            }
-
-            function toggle() { setState(!open); }
-            function close() { setState(false); }
-
-            btn?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggle(); });
-
-            // Hover intent (desktop) for quick reveal
-            wrap.addEventListener('mouseenter', () => { if (window.matchMedia('(min-width: 1024px)').matches) setState(true); });
-            wrap.addEventListener('mouseleave', () => { if (window.matchMedia('(min-width: 1024px)').matches) closeTimer = setTimeout(close, 120); });
-            wrap.addEventListener('mousemove', () => { if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; } });
-
-            document.addEventListener('click', (e) => {
-                if (!open) return;
-                if (!wrap.contains(e.target)) close();
-            });
-
-            document.addEventListener('keydown', (e) => {
-                if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
-                    if (document.activeElement === btn) {
-                        e.preventDefault();
-                        setState(true);
-                        return;
-                    }
-                }
-                if (e.key === 'Escape' && open) {
-                    e.stopPropagation();
-                    close();
-                    btn.focus();
-                }
-                if (open) {
-                    const list = items();
-                    const currentIndex = list.indexOf(document.activeElement);
-                    if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        const next = currentIndex < 0 ? 0 : (currentIndex + 1) % list.length;
-                        list[next].focus();
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        const prev = currentIndex < 0 ? list.length - 1 : (currentIndex - 1 + list.length) % list.length;
-                        list[prev].focus();
-                    } else if (e.key === 'Home') {
-                        e.preventDefault(); list[0]?.focus();
-                    } else if (e.key === 'End') {
-                        e.preventDefault(); list[list.length - 1]?.focus();
-                    }
-                }
-            });
-
-            // Initial state attributes
-            wrap.dataset.open = 'false';
-            btn.setAttribute('aria-expanded', 'false');
-            btn.setAttribute('aria-controls', 'navProjectsMenu');
-        })();
-    </script>
+    <!-- Removed old Project Portal script (replaced by Alpine mega menus) -->
 
     <!-- Mobile navigation (drawer) -->
     <div id="mobileNavBackdrop" aria-hidden="true"
@@ -1620,6 +1692,110 @@
     </script>
     <!-- Auth dynamic navbar script -->
     <script src="auth.js"></script>
+    <!-- Alpine component logic for mega menus -->
+    <script>
+        function headerMenu() {
+            return {
+                active: null,
+                mobileOpen: false,
+                solutions: [
+                    { icon: 'diversity_2', label: 'Sales Development Reps', href: '#' },
+                    { icon: 'group', label: 'Account Executives', href: '#' },
+                    { icon: 'military_tech', label: 'VP of Sales', href: '#' },
+                    { icon: 'monitoring', label: 'Revenue Operations', href: '#' },
+                    { icon: 'rocket_launch', label: 'Founders', href: '#' },
+                    { icon: 'campaign', label: 'Marketing', href: '#' },
+                    { icon: 'handshake', label: 'Customer Success', href: '#' },
+                    { icon: 'badge', label: 'Recruiting', href: '#' },
+                ],
+                isOpen(key) { return this.active === key },
+                open(key) { this.active = key },
+                close(key) { if (this.active === key) { this.active = null } },
+                toggle(key) { this.active = this.active === key ? null : key },
+                closeAll() { this.active = null }
+            }
+        }
+        function megaNav() {
+            return {
+                active: null,
+                mobileOpen: false,
+                current: 0,
+                visibleCount: 4,
+                pageStart: 0,
+                categories: [
+                    {
+                        id: 'proj',
+                        title: 'Project Hub',
+                        subtitle: 'Core Platform Navigation',
+                        cta: { label: 'Go to Projects Hub', href: '#' },
+                        brands: [
+                            { name: 'Postings', tag: 'Module', img: '../assets/img/nav/project/project1.png', href: 'projects/postings.html' },
+                            { name: 'Create a Project', tag: 'Action', img: '../assets/img/nav/project/project2.png', href: 'projects/project_post.html' },
+                            { name: 'Test Portal', tag: 'Lab', img: '../assets/img/nav/project/project5.png', href: '#' },
+                            { name: 'My Applications', tag: 'Dashboard', img: '../assets/img/nav/project/project4.png', href: 'projects/my_applications.html' },
+                            { name: 'Incoming Requests', tag: 'Queue', img: '../assets/img/nav/project/project3.png', href: 'projects/incoming_requests.html' },
+                        ]
+                    },
+                    {
+                        id: 'story',
+                        title: 'BuBu Tales',
+                        subtitle: 'Delivering Exceptional Performance',
+                        cta: { label: 'See all Equipment', href: '#' },
+                        brands: [
+                            { name: 'Romantasy', tag: 'System', img: '../assets/img/nav/tale/tale1.png', href: 'tales/romantasy.html' },
+                            { name: 'Thriller / Mystery', tag: 'System', img: '../assets/img/nav/tale/tale2.png', href: '#' },
+                            { name: 'Webtoons', tag: 'System', img: '../assets/img/nav/tale/tale3.png', href: '#' },
+                        ]
+                    },
+                    {
+                        id: 'clg',
+                        title: 'Institution',
+                        subtitle: 'Embracing the Future',
+                        cta: { label: 'See all Digital tools', href: '#' },
+                        brands: [
+                            { name: 'Institutions', tag: 'System', img: '../assets/img/nav/clg/clg.png', href: 'collage/clg_info.html' },
+                        ]
+                    },
+                    {
+                        id: 'ai',
+                        title: 'AI Services',
+                        subtitle: 'For Our Direct‑to‑Market Regions',
+                        cta: { label: 'See all Services', href: '#' },
+                        brands: [
+                            { name: 'Agentic AI Tutor', tag: 'TutorX', img: '../assets/img/nav/ai/ai1.png', href: '#' },
+                            { name: 'AI Research Paper', tag: 'PaperGen', img: '../assets/img/nav/ai/ai2.png', href: '#' },
+                            { name: 'Portfolio Builder', tag: 'DeckX', img: '../assets/img/nav/ai/ai3.png', href: '#' },
+                            { name: 'Flashcard & Revision', tag: 'FlashMind', img: '../assets/img/nav/ai/ai4.png', href: '#' },
+                            { name: 'Learning Insights AI', tag: 'InsightX', img: '../assets/img/nav/ai/ai5.png', href: '#' },
+                        ]
+                    },
+                    {
+                        id: 'market',
+                        title: 'Marketplace',
+                        subtitle: 'For Our Direct‑to‑Market Regions',
+                        cta: { label: 'See all Services', href: '#' },
+                        brands: [
+                            { name: 'Notes Market', tag: 'NoteHub', img: '../assets/img/nav/market/market1.png', href: 'matketplace/notes/notes_marketplace.html' },
+                            { name: 'Project Market', tag: 'ProjectXchange', img: '../assets/img/nav/market/market2.png', href: '#' },
+                            { name: 'Tutoring', tag: 'SkillShareX', img: '../assets/img/nav/market/market3.png', href: '#' },
+                        ]
+                    },
+                ],
+                get totalItems() { return this.categories[this.current].brands.length },
+                get canNext() { return this.pageStart + this.visibleCount < this.totalItems },
+                get canPrev() { return this.pageStart > 0 },
+                get currentPage() { return Math.floor(this.pageStart / this.visibleCount) },
+                get totalPages() { return Math.ceil(this.totalItems / this.visibleCount) },
+                isOpen(key) { return this.active === key },
+                open(key) { this.active = key },
+                close(key) { if (this.active === key) this.active = null },
+                toggle(key) { this.active = this.active === key ? null : key },
+                select(index) { this.current = index; this.pageStart = 0; },
+                next() { if (this.canNext) this.pageStart += this.visibleCount; },
+                prev() { if (this.canPrev) this.pageStart -= this.visibleCount; }
+            }
+        }
+    </script>
 </body>
 
 </html>
