@@ -379,3 +379,57 @@ CREATE TABLE IF NOT EXISTS public.admin_roles (
 
 -- Helpful index for querying by role
 CREATE INDEX IF NOT EXISTS admin_roles_role_idx ON public.admin_roles(role);
+
+-- ===================== Teacher Feature Tables =====================
+-- Stores teacher signup applications awaiting admin approval.
+-- A teacher is considered active only after an admin sets status='approved' AND
+-- an entry with role='teacher' exists (or is upserted) in admin_roles.
+CREATE TABLE IF NOT EXISTS public.teacher_applications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  email text NOT NULL,
+  name text,
+  college_id uuid REFERENCES public.colleges(id),
+  department_id uuid REFERENCES public.departments(id),
+  subjects text[] DEFAULT '{}',                 -- free-form subject labels supplied on signup
+  id_card_front_path text,                      -- relative path to stored front image (assets/teacher_ids)
+  id_card_back_path text,                       -- relative path to stored back image
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  notes text,                                   -- optional admin review notes
+  reviewed_by uuid REFERENCES auth.users(id),
+  reviewed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS teacher_applications_status_idx ON public.teacher_applications(status);
+CREATE UNIQUE INDEX IF NOT EXISTS teacher_applications_auth_user_id_uidx ON public.teacher_applications(auth_user_id);
+
+-- Normalized peer connection table between two approved teachers.
+-- teacher_a < teacher_b lexicographically (enforced in application logic) to guarantee uniqueness.
+CREATE TABLE IF NOT EXISTS public.teacher_connections (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  teacher_a uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  teacher_b uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT teacher_connections_distinct CHECK (teacher_a <> teacher_b),
+  CONSTRAINT teacher_connections_unique_pair UNIQUE (teacher_a, teacher_b)
+);
+CREATE INDEX IF NOT EXISTS teacher_connections_teacher_a_idx ON public.teacher_connections(teacher_a);
+CREATE INDEX IF NOT EXISTS teacher_connections_teacher_b_idx ON public.teacher_connections(teacher_b);
+
+-- Messages within a teacher connection (simple polling API; can be upgraded to realtime later).
+CREATE TABLE IF NOT EXISTS public.teacher_messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  connection_id uuid NOT NULL REFERENCES public.teacher_connections(id) ON DELETE CASCADE,
+  sender_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  content text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS teacher_messages_connection_created_idx ON public.teacher_messages(connection_id, created_at);
+
+-- (Optional) simple view idea for last message per connection (documented, not executed here):
+-- CREATE VIEW public.teacher_connection_last_message AS
+--   SELECT DISTINCT ON (m.connection_id) m.connection_id, m.id AS message_id, m.content, m.created_at
+--   FROM public.teacher_messages m
+--   ORDER BY m.connection_id, m.created_at DESC;
+

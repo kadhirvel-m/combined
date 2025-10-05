@@ -819,3 +819,34 @@ cp .env.example .env  # Configure your API keys
 **© 2024 PaperX. All Rights Reserved. Proprietary and Confidential.**
 
 **This software contains trade secrets and proprietary information. Unauthorized reproduction or distribution is strictly prohibited.**
+
+---
+
+## 👩‍🏫 Teacher Module (Added Oct 2025)
+
+Moderated teacher onboarding & collaboration:
+
+Workflow:
+1. Application: `POST /api/teacher/signup` inserts row in `teacher_applications` (status `pending`).
+2. Admin Review: list via `GET /api/teacher/applications`, approve/reject with `POST /api/teacher/applications/{id}/review`.
+3. Approval: grants `teacher` role (upsert into `admin_roles`).
+4. Client Poll: `GET /api/teacher/me/status` until approved & role becomes teacher.
+5. Directory: `GET /api/teachers` (public) lists approved teachers.
+6. Connections: `POST /api/teacher/connect/{other_user_id}` creates canonical pair in `teacher_connections`.
+7. Messaging: Poll endpoints `GET/POST /api/teacher/connections/{connection_id}/messages`.
+8. Notes Upload: reuse `/api/marketplace/notes/upload`; dynamic metadata via `GET /api/teacher/notes/upload-meta`; list own via `GET /api/teacher/notes/mine`.
+
+Database Additions:
+- `teacher_applications`
+- `teacher_connections`
+- `teacher_messages`
+
+Frontend Pages (`ui/teachers/`):
+- `teacher_signup.html`, `teacher_login.html`, `teacher_connect.html`, `teacher_notes.html`.
+
+Security:
+- `_require_teacher()` + `_require_admin()` gating.
+- Membership verification for connection/message routes.
+
+Planned Enhancements:
+- WebSocket real-time chat; teacher profile enrichment; message moderation & reporting; pagination & search filters.

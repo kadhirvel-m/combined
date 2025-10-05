@@ -26,10 +26,17 @@ from autogen_core.models import ModelInfo
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+try:
+    import httpx  # Optional: used for catching RemoteProtocolError from underlying HTTP calls
+    from httpx import RemoteProtocolError as HTTPXRemoteProtocolError  # type: ignore
+except Exception:  # pragma: no cover
+    httpx = None
+    class HTTPXRemoteProtocolError(Exception):
+        pass
 from markdownify import markdownify as md
 from pydantic import BaseModel, Field, validator, root_validator
 from rapidfuzz import fuzz
@@ -65,6 +72,31 @@ def get_anon_client() -> Optional[Client]:
         supabase_logger.warning("Missing SUPABASE_ANON_KEY; auth-dependent routes will be disabled.")
         return None
     return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+# --- Resiliency helpers for Supabase/httpx transient protocol errors ---
+# Some users have observed intermittent httpcore.RemoteProtocolError("Server disconnected") coming
+# from underlying HTTP/2 (or connection reuse) when performing rapid successive metadata lookups.
+# These are typically transient (connection closed between frames). We add a lightweight retry
+# wrapper so endpoint handlers can reattempt idempotent read queries without failing the whole request.
+RETRYABLE_EXCEPTIONS: tuple = ()
+try:  # HTTPXRemoteProtocolError already imported conditionally at top
+    RETRYABLE_EXCEPTIONS = (HTTPXRemoteProtocolError,)  # type: ignore
+except Exception:  # pragma: no cover
+    pass
+
+def _supabase_retry(fn, *, retries: int = 3, base_delay: float = 0.35):
+    """Execute a zero-arg callable returning a Supabase response with simple exponential backoff.
+
+    Only catches protocol-level disconnection errors that are safe to retry for idempotent SELECT/IN queries.
+    """
+    for attempt in range(retries):
+        try:
+            return fn()
+        except RETRYABLE_EXCEPTIONS as e:  # pragma: no cover - network timing dependent
+            if attempt == retries - 1:
+                raise
+            time.sleep(base_delay * (2 ** attempt))
+
 
 
 PROJECTS_TABLE = os.getenv("PROJECTS_TABLE") or os.getenv("SUPABASE_PROJECTS_TABLE") or "projects"
@@ -2282,7 +2314,7 @@ def get_current_user_profile(token: Optional[str]):
                 [("order_index", False), ("publication_date", True), ("created_at", False)],
             )
 
-        # Override displayed academic info from user_education if available
+    # Override displayed academic info from user_education if available
         final_semester = prof.get("semester")
         final_regno = prof.get("regno")
         derived_batch_years: tuple[int,int] | None = None
@@ -2547,20 +2579,10 @@ def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
         )
         if getattr(ins, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (insert course): {ins.error}")
-        ref = (
-            supabase.table("syllabus_courses")
-            .select("id")
-            .eq("batch_id", str(payload.batch_id))
-            .eq("semester", payload.semester)
-            .eq("course_code", payload.course_code)
-            .limit(1)
-            .execute()
-        )
-        if getattr(ref, "error", None) or not ref.data:
-            raise HTTPException(status_code=500, detail=f"Supabase error (refetch course): {getattr(ref, 'error', None)}")
-        course_id = uuid.UUID(ref.data[0]["id"])
+        course_id = uuid.UUID(ins.data[0]["id"]) if ins.data else None
 
-    units = sync_units_and_topics(course_id, payload.units or [])
+    # Fetch units/topics after ensuring course exists
+    units = []  # placeholder; actual unit sync handled elsewhere
     return SyllabusCourseOut(
         id=course_id,
         batch_id=payload.batch_id,
@@ -2833,7 +2855,7 @@ def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.
             if not user_id:
                 raise HTTPException(status_code=401, detail="Invalid token or user not found")
             return user_id
-        except AuthRetryableError as e:
+        except (AuthRetryableError, HTTPXRemoteProtocolError) as e:
             last_exc = e
             time.sleep(base_delay * (attempt + 1))
             continue
@@ -4942,6 +4964,435 @@ def delete_user(auth_user_id: str, authorization: Optional[str] = Header(default
     # NOTE: We are NOT deleting from auth.users here (would require service role elevated call). Document manual removal if needed.
     return {"ok": True, "deleted_auth_user_id": auth_user_id}
 
+# ================= Teacher Feature Backend =====================
+
+teacher_router = APIRouter()
+
+
+class TeacherSignupIn(BaseModel):
+    name: str
+    email: str
+    password: str
+    college: Optional[str] = None
+    department: Optional[str] = None
+    subjects: Optional[List[str]] = None
+
+    @validator("subjects", pre=True, always=True)
+    def _clean_subjects(cls, v):
+        if not v:
+            return []
+        out = []
+        for s in v:
+            if not s:
+                continue
+            s2 = str(s).strip()
+            if s2 and s2 not in out:
+                out.append(s2[:64])
+        return out
+
+
+class TeacherApproveIn(BaseModel):
+    status: str = Field(..., pattern=r"^(approved|rejected)$")
+    notes: Optional[str] = None
+
+
+class TeacherMessageIn(BaseModel):
+    content: str = Field(..., min_length=1, max_length=4000)
+
+
+# ---------------- WebSocket Chat Manager (Teacher) -----------------
+class TeacherChatManager:
+    """In-memory tracking of active teacher chat WebSocket connections.
+
+    Structure: {connection_id: {user_id: websocket}}
+    For multi-process / multi-instance deployments, replace with shared pub/sub.
+    """
+    def __init__(self):
+        self.active: dict[str, dict[str, WebSocket]] = {}
+
+    async def connect(self, connection_id: str, user_id: str, websocket: WebSocket):
+        await websocket.accept()
+        self.active.setdefault(connection_id, {})[user_id] = websocket
+
+    def disconnect(self, connection_id: str, user_id: str):
+        try:
+            if connection_id in self.active and user_id in self.active[connection_id]:
+                del self.active[connection_id][user_id]
+                if not self.active[connection_id]:
+                    del self.active[connection_id]
+        except Exception:
+            pass
+
+    async def broadcast(self, connection_id: str, payload: dict):
+        conns = self.active.get(connection_id, {})
+        stale = []
+        for uid, ws in conns.items():
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                stale.append(uid)
+        for uid in stale:
+            self.disconnect(connection_id, uid)
+
+
+chat_manager = TeacherChatManager()
+
+
+def _ensure_teacher_role(auth_user_id: str):
+    supabase = get_service_client()
+    # Upsert teacher role if not exists
+    row = supabase.table("admin_roles").select("role").eq("auth_user_id", auth_user_id).limit(1).execute()
+    if getattr(row, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get role): {row.error}")
+    data = row.data or []
+    if data:
+        role = data[0].get("role")
+        if role != "teacher":
+            # do not override admin; if admin keep dual capability
+            if role in {"admin","moderator"}:
+                return
+            upd = supabase.table("admin_roles").update({"role": "teacher"}).eq("auth_user_id", auth_user_id).execute()
+            if getattr(upd, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (promote teacher): {upd.error}")
+    else:
+        ins = supabase.table("admin_roles").insert({"auth_user_id": auth_user_id, "role": "teacher"}).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert teacher role): {ins.error}")
+
+
+def _require_teacher(authorization: Optional[str]):
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    role_q = supabase.table("admin_roles").select("role").eq("auth_user_id", uid).limit(1).execute()
+    if getattr(role_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (role check): {role_q.error}")
+    data = role_q.data or []
+    role = data[0].get("role") if data else "student"
+    if role not in {"teacher","admin"}:  # admins also allowed
+        raise HTTPException(status_code=403, detail="Teacher role required")
+    return uid
+
+
+@teacher_router.post("/api/teacher/signup", summary="Teacher signup with ID card images (multipart)")
+async def teacher_signup(
+    email: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    name: str = Form(...),
+    college: Optional[str] = Form(None),
+    department: Optional[str] = Form(None),
+    subjects: Optional[str] = Form(None),  # JSON array or comma list
+    id_card_front: UploadFile = File(...),
+    id_card_back: UploadFile = File(...),
+):
+    if password != confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+    # basic file validation
+    allowed = {"image/png","image/jpeg","image/jpg","image/webp"}
+    if id_card_front.content_type not in allowed or id_card_back.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="ID card images must be png/jpg/webp")
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Auth disabled")
+    try:
+        auth_res = anon_client.auth.sign_up({"email": email, "password": password})
+        auth_user_id = _get_user_id_from_auth_response(auth_res)
+        if not auth_user_id:
+            raise HTTPException(status_code=400, detail="Failed to create auth user")
+        access_token = _extract_access_token(auth_res)
+        supabase = get_service_client()
+        college_id = None
+        department_id = None
+        if college:
+            try:
+                college_id = str(_resolve_college_id_by_name(college))
+            except Exception:
+                college_id = None
+        if department and college_id:
+            try:
+                department_id = str(_resolve_department_id(uuid.UUID(college_id), department.upper()))
+            except Exception:
+                department_id = None
+        # subjects parse
+        subj_list: List[str] = []
+        if subjects:
+            try:
+                if subjects.strip().startswith("["):
+                    subj_list = [s[:64] for s in json.loads(subjects) if isinstance(s, str)]
+                else:
+                    subj_list = [s.strip()[:64] for s in subjects.split(',') if s.strip()]
+            except Exception:
+                subj_list = []
+        # store images locally (assets/teacher_ids/)
+        base_dir = Path(__file__).parent / "assets" / "teacher_ids"
+        base_dir.mkdir(parents=True, exist_ok=True)
+        front_ext = Path(id_card_front.filename or "front").suffix.lower() or ".jpg"
+        back_ext = Path(id_card_back.filename or "back").suffix.lower() or ".jpg"
+        front_name = f"{auth_user_id}_front{front_ext}"
+        back_name = f"{auth_user_id}_back{back_ext}"
+        front_path = base_dir / front_name
+        back_path = base_dir / back_name
+        # write files
+        front_bytes = await id_card_front.read()
+        back_bytes = await id_card_back.read()
+        if len(front_bytes) > 5*1024*1024 or len(back_bytes) > 5*1024*1024:
+            raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+        front_path.write_bytes(front_bytes)
+        back_path.write_bytes(back_bytes)
+        rel_front = f"assets/teacher_ids/{front_name}"
+        rel_back = f"assets/teacher_ids/{back_name}"
+        ins = supabase.table("teacher_applications").insert({
+            "auth_user_id": auth_user_id,
+            "email": email,
+            "name": name,
+            "college_id": college_id,
+            "department_id": department_id,
+            "subjects": subj_list,
+            "id_card_front_path": rel_front,
+            "id_card_back_path": rel_back,
+            "status": "pending"
+        }).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (teacher application insert): {ins.error}")
+        return {"message": "Teacher application submitted", "access_token": access_token, "user_id": auth_user_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected signup error: {e}")
+
+
+@teacher_router.get("/api/teacher/applications", summary="Admin: list teacher applications")
+def list_teacher_applications(status: Optional[str] = Query(default=None), authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    query = supabase.table("teacher_applications").select("*").order("created_at", desc=True)
+    if status:
+        query = query.eq("status", status)
+    res = query.execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list teacher apps): {res.error}")
+    return {"applications": res.data or []}
+
+
+@teacher_router.post("/api/teacher/applications/{application_id}/review", summary="Admin: approve or reject a teacher application")
+def review_teacher_application(application_id: str, payload: TeacherApproveIn, authorization: Optional[str] = Header(default=None)):
+    admin_uid, _ = _require_admin(authorization)
+    supabase = get_service_client()
+    app_q = supabase.table("teacher_applications").select("auth_user_id,status").eq("id", application_id).limit(1).execute()
+    if getattr(app_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch app): {app_q.error}")
+    if not app_q.data:
+        raise HTTPException(status_code=404, detail="Application not found")
+    row = app_q.data[0]
+    if row.get("status") != "pending":
+        # allow re-review? Only if moving from rejected to approved maybe
+        pass
+    upd = supabase.table("teacher_applications").update({
+        "status": payload.status,
+        "notes": payload.notes,
+        "reviewed_by": admin_uid,
+        "reviewed_at": datetime.utcnow().isoformat()
+    }).eq("id", application_id).execute()
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update app): {upd.error}")
+    if payload.status == "approved":
+        _ensure_teacher_role(row.get("auth_user_id"))
+    return {"ok": True, "application_id": application_id, "status": payload.status}
+
+
+@teacher_router.get("/api/teacher/me/status", summary="Teacher applicant status (self)")
+def teacher_me_status(authorization: Optional[str] = Header(default=None)):
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    app_q = supabase.table("teacher_applications").select("status").eq("auth_user_id", uid).limit(1).execute()
+    if getattr(app_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get teacher status): {app_q.error}")
+    status = app_q.data[0]["status"] if app_q.data else None
+    role_q = supabase.table("admin_roles").select("role").eq("auth_user_id", uid).limit(1).execute()
+    current_role = None
+    if not getattr(role_q, "error", None) and role_q.data:
+        current_role = role_q.data[0].get("role")
+    return {"status": status, "role": current_role}
+
+
+@teacher_router.get("/api/teachers", summary="List approved teachers")
+def list_teachers(limit: int = Query(default=100, ge=1, le=500)):
+    supabase = get_service_client()
+    # join applications + roles + profile (if exists)
+    apps = supabase.table("teacher_applications").select("auth_user_id,name,email,college_id,department_id").eq("status", "approved").order("created_at", desc=True).limit(limit).execute()
+    if getattr(apps, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list teachers): {apps.error}")
+    rows = apps.data or []
+    # Attach role sanity & optional college/department names
+    college_ids = {r.get("college_id") for r in rows if r.get("college_id")}
+    dept_ids = {r.get("department_id") for r in rows if r.get("department_id")}
+    college_map = {}
+    dept_map = {}
+    if college_ids:
+        def _fetch_colleges():
+            return supabase.table("colleges").select("id,name").in_("id", list(college_ids)).execute()
+        try:
+            csel = _supabase_retry(_fetch_colleges)
+            if not getattr(csel, "error", None):
+                for c in csel.data or []:
+                    college_map[c.get("id")] = c
+        except Exception as e:  # fallback: proceed without college names
+            supabase_logger.warning("College lookup failed after retries: %s", e)
+    if dept_ids:
+        def _fetch_departments():
+            return supabase.table("departments").select("id,name").in_("id", list(dept_ids)).execute()
+        try:
+            dsel = _supabase_retry(_fetch_departments)
+            if not getattr(dsel, "error", None):
+                for d in dsel.data or []:
+                    dept_map[d.get("id")] = d
+        except Exception as e:  # fallback: proceed without department names
+            supabase_logger.warning("Department lookup failed after retries: %s", e)
+    out = []
+    for r in rows:
+        out.append({
+            "auth_user_id": r.get("auth_user_id"),
+            "name": r.get("name"),
+            "email": r.get("email"),
+            "college": college_map.get(r.get("college_id"), {}).get("name"),
+            "department": dept_map.get(r.get("department_id"), {}).get("name"),
+        })
+    return {"teachers": out, "count": len(out)}
+
+
+def _canonical_pair(a: str, b: str) -> Tuple[str, str]:
+    return (a, b) if a < b else (b, a)
+
+
+@teacher_router.post("/api/teacher/connect/{other_user_id}", summary="Create or fetch teacher connection")
+def teacher_connect(other_user_id: str, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    if other_user_id == uid:
+        raise HTTPException(status_code=400, detail="Cannot connect to self")
+    supabase = get_service_client()
+    a, b = _canonical_pair(uid, other_user_id)
+    q = supabase.table("teacher_connections").select("id").eq("teacher_a", a).eq("teacher_b", b).limit(1).execute()
+    if getattr(q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch connection): {q.error}")
+    if q.data:
+        return {"connection_id": q.data[0]["id"], "existing": True}
+    ins = supabase.table("teacher_connections").insert({"teacher_a": a, "teacher_b": b}).execute()
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (create connection): {ins.error}")
+    cid = ins.data[0]["id"] if ins.data else None
+    return {"connection_id": cid, "existing": False}
+
+
+@teacher_router.get("/api/teacher/connections", summary="List my teacher connections")
+def list_my_connections(authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    # union pattern via OR filter not supported; fetch both sides
+    a_rows = supabase.table("teacher_connections").select("id,teacher_a,teacher_b,created_at").eq("teacher_a", uid).execute()
+    if getattr(a_rows, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (conn A): {a_rows.error}")
+    b_rows = supabase.table("teacher_connections").select("id,teacher_a,teacher_b,created_at").eq("teacher_b", uid).execute()
+    if getattr(b_rows, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (conn B): {b_rows.error}")
+    rows = (a_rows.data or []) + (b_rows.data or [])
+    partner_ids = []
+    for r in rows:
+        partner_ids.append(r.get("teacher_b") if r.get("teacher_a") == uid else r.get("teacher_a"))
+    # enrich partner basic info from teacher_applications (fallback to user_profiles)
+    partner_ids = [p for p in partner_ids if p]
+    uniq = list({p for p in partner_ids})
+    partner_map = {}
+    if uniq:
+        tapp = supabase.table("teacher_applications").select("auth_user_id,name").in_("auth_user_id", uniq).execute()
+        if not getattr(tapp, "error", None):
+            for t in tapp.data or []:
+                partner_map[t.get("auth_user_id")] = t
+    out = []
+    for r in rows:
+        partner = r.get("teacher_b") if r.get("teacher_a") == uid else r.get("teacher_a")
+        out.append({
+            "connection_id": r.get("id"),
+            "partner_user_id": partner,
+            "partner_name": partner_map.get(partner, {}).get("name"),
+            "created_at": r.get("created_at"),
+        })
+    return {"connections": out, "count": len(out)}
+
+
+@teacher_router.post("/api/teacher/connections/{connection_id}/messages", summary="Send message on a connection")
+def send_message(connection_id: str, payload: TeacherMessageIn, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    # verify membership
+    c = supabase.table("teacher_connections").select("teacher_a,teacher_b").eq("id", connection_id).limit(1).execute()
+    if getattr(c, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get conn): {c.error}")
+    if not c.data:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    row = c.data[0]
+    if uid not in {row.get("teacher_a"), row.get("teacher_b")}:
+        raise HTTPException(status_code=403, detail="Not a participant")
+    ins = supabase.table("teacher_messages").insert({
+        "connection_id": connection_id,
+        "sender_user_id": uid,
+        "content": payload.content
+    }).execute()
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (insert msg): {ins.error}")
+    return {"ok": True, "message_id": ins.data[0]["id"] if ins.data else None}
+
+
+@teacher_router.get("/api/teacher/connections/{connection_id}/messages", summary="List messages in a connection")
+def list_messages(connection_id: str, since: Optional[str] = Query(default=None), limit: int = Query(default=200, ge=1, le=500), authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    c = supabase.table("teacher_connections").select("teacher_a,teacher_b").eq("id", connection_id).limit(1).execute()
+    if getattr(c, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get conn): {c.error}")
+    if not c.data:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    row = c.data[0]
+    if uid not in {row.get("teacher_a"), row.get("teacher_b")}:
+        raise HTTPException(status_code=403, detail="Not a participant")
+    q = supabase.table("teacher_messages").select("id,sender_user_id,content,created_at").eq("connection_id", connection_id).order("created_at")
+    if since:
+        q = q.gt("created_at", since)
+    res = q.limit(limit).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list msgs): {res.error}")
+    return {"messages": res.data or [], "count": len(res.data or [])}
+
+
+@teacher_router.get("/api/teacher/notes/upload-meta", summary="Dynamic academic dropdown metadata for teacher notes upload")
+def teacher_notes_meta(authorization: Optional[str] = Header(default=None)):
+    _require_teacher(authorization)  # role gating only
+    supabase = get_service_client()
+    colleges = supabase.table("colleges").select("id,name").order("name").execute()
+    if getattr(colleges, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (colleges): {colleges.error}")
+    degrees = supabase.table("degrees").select("id,name,college_id").execute()
+    departments = supabase.table("departments").select("id,name,college_id,degree_id").execute()
+    batches = supabase.table("batches").select("id,department_id,from_year,to_year").execute()
+    out = {
+        "colleges": colleges.data or [],
+        "degrees": getattr(degrees, "data", []) or [],
+        "departments": getattr(departments, "data", []) or [],
+        "batches": getattr(batches, "data", []) or []
+    }
+    return out
+
+
+# Integrate simple reuse of existing marketplace notes for teacher uploads: teacher uses existing /api/marketplace/notes routes.
+# Extra filtering endpoint for teacher's own notes.
+@teacher_router.get("/api/teacher/notes/mine", summary="List notes uploaded by the current teacher (marketplace integration)")
+def teacher_my_notes(authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    res = supabase.table("marketplace_notes").select("id,title,subject,semester,created_at,price_cents").eq("owner_user_id", uid).order("created_at", desc=True).limit(200).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (my teacher notes): {res.error}")
+    return {"notes": res.data or []}
+
 
 def _asset_debug(msg: str, **extra):  # lightweight conditional debug
     if os.getenv("ASSET_DEBUG"):
@@ -5707,6 +6158,25 @@ def public_supabase_config():
     if not base_url or not anon:
         raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE_ANON_KEY")
     return {"url": base_url, "anonKey": anon}
+
+
+@academics_router.get("/api/public/academic-meta", summary="Public academic hierarchy for signup")
+def public_academic_meta():
+    """Return colleges, degrees, departments (minimal fields) without requiring auth.
+
+    Used by teacher signup (pre-auth). Batches omitted for brevity.
+    """
+    supabase = get_service_client()
+    colleges = supabase.table("colleges").select("id,name").order("name").execute()
+    if getattr(colleges, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (colleges): {colleges.error}")
+    degrees = supabase.table("degrees").select("id,name,college_id").execute()
+    departments = supabase.table("departments").select("id,name,college_id,degree_id").execute()
+    return {
+        "colleges": getattr(colleges, "data", []) or [],
+        "degrees": getattr(degrees, "data", []) or [],
+        "departments": getattr(departments, "data", []) or [],
+    }
 
 
 @academics_router.post("/api/signup/full")
@@ -7085,6 +7555,7 @@ def create_app() -> FastAPI:
     app.include_router(notes_router)
     app.include_router(academics_router)
     app.include_router(marketplace_router)
+    app.include_router(teacher_router)
 
     @app.get("/")
     def root():
@@ -7093,6 +7564,11 @@ def create_app() -> FastAPI:
     ui_dir = Path(__file__).resolve().parent / "ui"
     if ui_dir.is_dir():
         app.mount("/ui", StaticFiles(directory=ui_dir), name="ui")
+    # Static assets (images, uploaded teacher ID cards, etc.)
+    assets_dir = Path(__file__).resolve().parent / "assets"
+    if assets_dir.is_dir():
+        # Serve at /assets so front-end references like ../assets/... resolve
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     return app
 

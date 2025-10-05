@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Teacher Login — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' }, brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }, ink: '#1E1E2F', plum: '#4C2A59', orchid: '#9E4B8A' }, boxShadow: { glow: '0 8px 30px rgba(158,75,138,0.35)', card: '0 24px 60px rgba(30,30,47,0.35)' }, backgroundImage: { 'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)', 'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)' } } } }
+    </script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px
+        }
+    </style>
+    <script>(() => { const s = localStorage.getItem('px_theme'); const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches; const dark = s ? s === 'dark' : prefers; if (dark) document.documentElement.classList.add('dark'); })();</script>
+</head>
+
+<body
+    class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark flex items-center justify-center px-4 py-16 relative overflow-x-hidden">
+    <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
+        <div
+            class="absolute -top-20 -left-24 w-[420px] h-[420px] rounded-full bg-brand-500/15 blur-[110px] dark:bg-brand-500/30">
+        </div>
+        <div
+            class="absolute top-[55%] -right-24 w-[380px] h-[380px] rounded-full bg-brand-700/15 blur-[120px] dark:bg-brand-700/35">
+        </div>
+    </div>
+    <div
+        class="w-full max-w-md rounded-2xl bg-white/80 dark:bg-brand-900/60 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 shadow-card p-8">
+        <div class="mb-6 text-center">
+            <h1 class="text-2xl font-bold gradient-hero-text">Teacher Login</h1>
+            <p class="text-sm text-neutral-600 dark:text-white/60 mt-2">Access your teacher collaboration tools.</p>
+        </div>
+        <form id="loginForm" class="space-y-5">
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide mb-1">Email</label>
+                <input type="email" name="email" required
+                    class="w-full rounded-lg border-neutral-300 dark:border-white/15 bg-white/80 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500" />
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide mb-1">Password</label>
+                <input type="password" name="password" required
+                    class="w-full rounded-lg border-neutral-300 dark:border-white/15 bg-white/80 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500" />
+            </div>
+            <button type="submit"
+                class="w-full rounded-full bg-brand-500 text-white font-semibold py-3 hover:shadow-glow transition flex items-center justify-center gap-2">Login<span
+                    class="material-symbols-rounded text-base">arrow_forward</span></button>
+        </form>
+        <div id="status" class="mt-4 text-sm font-medium"></div>
+        <p class="mt-6 text-xs text-neutral-600 dark:text-white/50 text-center">No account? <a
+                href="teacher_signup.html" class="text-brand-500 hover:underline">Apply as Teacher</a></p>
+    </div>
+    <script>
+        // Dynamic API base detection similar to signup page
+        let API_BASE = window.API_BASE || '';
+        (function resolveApiBase() {
+            if (API_BASE) return;
+            const origin = location.origin;
+            if (location.port === '8000') { API_BASE = origin; return; }
+            const host = location.hostname;
+            const candidates = [origin, `http://${host}:8000`, `https://${host}:8000`];
+            (async () => {
+                for (const c of candidates) {
+                    try { const r = await fetch(c + '/api/public/academic-meta', { method: 'GET' }); if (r.ok) { API_BASE = c.replace(/\/$/, ''); return; } } catch (_) { }
+                }
+                API_BASE = origin;
+            })();
+        })();
+
+        const form = document.getElementById('loginForm');
+        const statusEl = document.getElementById('status');
+        function friendlyError(msg) { statusEl.innerHTML = '<span style="color:#f87171">' + msg + '</span>'; }
+        async function safeJson(res) {
+            const ct = res.headers.get('content-type') || '';
+            let text = '';
+            try { text = await res.text(); } catch (_) { return {}; }
+            if (!text) { return {}; }
+            if (!/json|javascript/i.test(ct)) {
+                console.warn('[login] Non-JSON response', { status: res.status, ct, sample: text.slice(0, 120) });
+                try { return JSON.parse(text); } catch { return { raw: text }; }
+            }
+            try { return JSON.parse(text); }
+            catch (err) { console.warn('[login] JSON parse error', err, { sample: text.slice(0, 120) }); return {}; }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            statusEl.textContent = 'Logging in...';
+            const fd = new FormData(form);
+            const body = { email: (fd.get('email') || '').trim(), password: fd.get('password') };
+            if (!body.email || !body.password) { friendlyError('Email & password required'); return; }
+            try {
+                // Wait briefly if API_BASE resolving
+                let tries = 0; while (!API_BASE && tries < 10) { await new Promise(r => setTimeout(r, 100)); tries++; }
+                const base = (API_BASE || location.origin).replace(/\/$/, '');
+                const res = await fetch(base + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                const data = await safeJson(res);
+                if (!res.ok) { throw new Error(data.detail || data.error || 'Login failed (' + res.status + ')'); }
+                if (!data.access_token) { throw new Error('No access token returned'); }
+                localStorage.setItem('teacherToken', data.access_token || '');
+                statusEl.textContent = 'Login success. Checking role...';
+                const st = await fetch(base + '/api/teacher/me/status', { headers: { 'Authorization': 'Bearer ' + data.access_token } });
+                if (!st.ok) {
+                    console.warn('[login] status check failed', st.status);
+                    friendlyError('Could not verify role (status ' + st.status + ').');
+                    return;
+                }
+                const sdata = await safeJson(st);
+                const role = sdata.role; const tstatus = sdata.status;
+                if (role === 'teacher' && tstatus === 'approved') {
+                    statusEl.innerHTML = '<span style="color:#22c55e">Approved Teacher. Redirecting...</span>';
+                    setTimeout(() => location.href = 'teacher_connect.html', 1200);
+                } else if (tstatus) {
+                    statusEl.innerHTML = '<span style="color:#fbbf24">Application status: ' + tstatus + '. Awaiting approval.</span>';
+                } else {
+                    statusEl.innerHTML = '<span style="color:#fbbf24">Logged in. Application not found / pending.</span>';
+                }
+            } catch (err) { friendlyError(err.message || 'Unexpected error'); }
+        });
+    </script>
+</body>
+
+</html>
