@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Teacher Connect — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
+                    },
+                    boxShadow: { glow: '0 8px 30px rgba(158,75,138,0.35)', card: '0 24px 60px rgba(30,30,47,0.22)' },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+                    },
+                    keyframes: {
+                        shimmer: { '0%': { backgroundPosition: '-1000px 0' }, '100%': { backgroundPosition: '1000px 0' } },
+                        pop: { '0%': { transform: 'scale(.96)', opacity: .0 }, '100%': { transform: 'scale(1)', opacity: 1 } }
+                    },
+                    animation: { shimmer: 'shimmer 1.6s linear infinite', pop: 'pop .18s ease-out' }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, .72);
+            backdrop-filter: blur(12px)
+        }
+
+        .dark .glass {
+            background: rgba(30, 30, 47, .55)
+        }
+
+        .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08)
+        }
+
+        .dark .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
+        }
+
+        .bubble {
+            max-width: 72%;
+            border-radius: 20px;
+            padding: .625rem .875rem;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, .08)
+        }
+
+        .bubble.me {
+            background: #9E4B8A;
+            color: #fff
+        }
+
+        .bubble.them {
+            background: rgba(255, 255, 255, .92)
+        }
+
+        .dark .bubble.them {
+            background: rgba(255, 255, 255, .08);
+            color: rgba(255, 255, 255, .88)
+        }
+
+        .bubble-continued {
+            margin-top: .25rem
+        }
+
+        .date-chip {
+            font-size: .68rem;
+            padding: .25rem .5rem;
+            border-radius: 9999px
+        }
+
+        .presence-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%
+        }
+
+        .scroll-shadow-top {
+            box-shadow: inset 0 12px 16px -16px rgba(0, 0, 0, .25)
+        }
+
+        .scroll-shadow-bottom {
+            box-shadow: inset 0 -12px 16px -16px rgba(0, 0, 0, .25)
+        }
+    </style>
+
+    <!-- Extra futuristic overrides -->
+    <style>
+        /* Ambient background grid + glows */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: -20vh -20vw;
+            pointer-events: none;
+            background:
+                radial-gradient(60rem 30rem at 110% -10%, rgba(158, 75, 138, .12), transparent 55%),
+                radial-gradient(50rem 25rem at -10% 110%, rgba(76, 42, 89, .12), transparent 55%),
+                repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0 1px, transparent 1px 40px),
+                repeating-linear-gradient(0deg, rgba(255,255,255,.04) 0 1px, transparent 1px 40px);
+            z-index: 0;
+        }
+
+        /* Enhanced glass effect */
+        .glass { backdrop-filter: blur(14px) saturate(1.2); box-shadow: 0 10px 40px rgba(30,30,47,.05) }
+
+        /* Modern message bubbles */
+        .bubble { border-radius: 18px; padding: .7rem .9rem; line-height: 1.35; overflow-wrap: anywhere; position: relative }
+        .bubble.me { background: linear-gradient(135deg, #9E4B8A, #7f3a74); color: #fff; box-shadow: 0 12px 28px rgba(158,75,138,.35); border: 1px solid rgba(255,255,255,.18) }
+        .bubble.me::after { content: ""; position: absolute; right: -6px; bottom: 10px; width: 10px; height: 10px; background: inherit; transform: rotate(45deg); border-radius: 2px }
+        .bubble.them { background: rgba(255,255,255,.9); border: 1px solid rgba(0,0,0,.06) }
+        .dark .bubble.them { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12) }
+        .bubble.them::before { content: ""; position: absolute; left: -6px; bottom: 10px; width: 10px; height: 10px; background: inherit; transform: rotate(45deg); border-radius: 2px }
+
+        /* Presence pulse */
+        .presence-dot { box-shadow: 0 0 0 0 rgba(16,185,129,.7) }
+        .presence-pulse { animation: presence 1.8s ease-out infinite }
+        @keyframes presence { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,.6) } 70% { box-shadow: 0 0 0 8px rgba(16,185,129,0) } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0) } }
+
+        /* Polished list rows */
+        #teacherList > button, #connectionList > button { border-radius: 12px; margin: 6px 8px; background: rgba(255,255,255,.5) }
+        .dark #teacherList > button, .dark #connectionList > button { background: rgba(255,255,255,.06) }
+        #teacherList > button:hover, #connectionList > button:hover { box-shadow: 0 24px 60px rgba(30,30,47,.22) }
+
+        /* Pretty scrollbars */
+        #listsScroll::-webkit-scrollbar, #messages::-webkit-scrollbar { width: 10px; height: 10px }
+        #listsScroll::-webkit-scrollbar-thumb, #messages::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(158,75,138,.5), rgba(76,42,89,.5)); border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box }
+        #listsScroll::-webkit-scrollbar-track, #messages::-webkit-scrollbar-track { background: transparent }
+
+        /* Shimmer skeletons */
+        .skeleton { position: relative; overflow: hidden; background: linear-gradient(90deg, rgba(255,255,255,.06) 25%, rgba(255,255,255,.18) 37%, rgba(255,255,255,.06) 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite }
+    </style>
+
+    <!-- Theme boot BEFORE anything else -->
+    <script>
+            (() => { const s = localStorage.getItem('px_theme'); const prefers = matchMedia('(prefers-color-scheme: dark)').matches; const d = s ? s === 'dark' : prefers; if (d) document.documentElement.classList.add('dark'); })();
+    </script>
+
+    <!-- Config first -->
+    <script src="../../config.js"></script>
+    <script src="../../auth.js" defer></script>
+</head>
+
+<body
+    class="font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark min-h-screen flex flex-col overflow-hidden">
+    <!-- Header -->
+    <header
+        class="shrink-0 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3">
+            <div class="flex items-center gap-3">
+                <button id="openLeft"
+                    class="md:hidden inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15"><span
+                        class="material-symbols-rounded">menu</span></button>
+                <a href="../index.html" class="flex items-center gap-2">
+                    <img src="../../assets/img/logo-light.svg" class="h-8 dark:hidden" alt="Paper X" />
+                    <img src="../../assets/img/logo-dark.svg" class="h-8 hidden dark:block" alt="Paper X" />
+                </a>
+                <h1 class="text-lg font-semibold tracking-tight hidden sm:block">Teacher Connect</h1>
+            </div>
+            <nav class="hidden md:flex items-center gap-5 text-sm text-neutral-700 dark:text-white/80">
+                <a href="teacher_notes.html" class="hover:text-brandlt-900 dark:hover:text-white">Notes</a>
+                <a href="teacher_signup.html" class="hover:text-brandlt-900 dark:hover:text-white">Signup</a>
+                <a href="teacher_login.html" class="hover:text-brandlt-900 dark:hover:text-white">Login</a>
+            </nav>
+            <div class="flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme"><span class="material-symbols-rounded text-base">dark_mode</span><span
+                        class="hidden sm:block">Theme</span></button>
+                <button id="logoutBtn" title="Logout"
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium bg-rose-500/90 text-white hover:bg-rose-600"><span
+                        class="material-symbols-rounded text-base">logout</span><span
+                        class="hidden sm:block">Logout</span></button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main 3‑pane layout -->
+    <main class="flex-1 grid grid-cols-1 md:grid-cols-[22rem_minmax(0,1fr)_24rem] min-h-0">
+        <!-- LEFT: People / Conversations -->
+        <aside id="leftPane"
+            class="glass ring-1 ring-black/10 dark:ring-white/15 md:border-r md:border-black/5 md:dark:border-white/10 md:static fixed inset-y-0 left-0 w-full md:w-auto z-40 hidden md:block">
+            <div class="h-full flex flex-col">
+                <div class="p-4 border-b border-black/5 dark:border-white/10">
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1 relative">
+                            <span
+                                class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">search</span>
+                            <input id="peopleSearch" placeholder="Search teachers & chats"
+                                class="w-full rounded-xl pl-11 pr-3 py-2.5 text-sm bg-white/80 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15" />
+                        </div>
+                        <button id="refreshLists"
+                            class="size-10 grid place-items-center rounded-xl ring-1 ring-black/10 dark:ring-white/15"><span
+                                class="material-symbols-rounded">sync</span></button>
+                    </div>
+                    <div class="mt-3 inline-flex items-center gap-1 p-1 rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/10"
+                        role="tablist">
+                        <button
+                            class="tabBtn px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500/10 text-brand-700 dark:text-fuchsia-200"
+                            data-tab="teachers"><span class="material-symbols-rounded text-sm">verified</span>
+                            Teachers</button>
+                        <button class="tabBtn px-3 py-1.5 rounded-lg text-xs font-medium" data-tab="convos"><span
+                                class="material-symbols-rounded text-sm">chat</span> Connections</button>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto" id="listsScroll">
+                    <div id="teachersWrap" class="divide-y divide-black/5 dark:divide-white/10">
+                        <div id="teacherList" class="text-sm"></div>
+                    </div>
+                    <div id="convosWrap" class="hidden divide-y divide-black/5 dark:divide-white/10">
+                        <div id="connectionList" class="text-sm"></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- CENTER: Chat -->
+        <section class="flex flex-col min-h-0">
+            <!-- Chat header -->
+            <div id="convHeader"
+                class="glass ring-1 ring-black/10 dark:ring-white/15 px-4 py-3 flex items-center gap-3 border-b border-black/5 dark:border-white/10 sticky top-0 z-10">
+                <div class="flex items-center gap-3 min-w-0">
+                    <button id="openLeft2"
+                        class="md:hidden size-10 grid place-items-center rounded-full ring-1 ring-black/10 dark:ring-white/15"><span
+                            class="material-symbols-rounded">chevron_left</span></button>
+                    <div id="partnerAvatar"
+                        class="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500/30 to-brand-500/10 ring-1 ring-black/10 dark:ring-white/15 grid place-items-center font-semibold">
+                        ?</div>
+                    <div class="min-w-0">
+                        <div class="font-semibold text-sm truncate" id="partnerName">Select a teacher to start chatting
+                        </div>
+                        <div class="text-[11px] text-neutral-600 dark:text-white/70 flex items-center gap-2"><span
+                                class="presence-dot bg-neutral-300" id="presenceDot"></span><span
+                                id="presenceText">—</span></div>
+                    </div>
+                </div>
+                <div class="ml-auto flex items-center gap-1">
+                    <button class="size-9 grid place-items-center rounded-lg ring-1 ring-black/10 dark:ring-white/15"
+                        id="openRight" title="Details"><span class="material-symbols-rounded">info</span></button>
+                    <a href="../../collage/clg_info.html"
+                        class="size-9 grid place-items-center rounded-lg ring-1 ring-black/10 dark:ring-white/15"
+                        title="Colleges"><span class="material-symbols-rounded">school</span></a>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            <div id="messages"
+                class="flex-1 overflow-y-auto px-4 py-6 bg-gradient-to-b from-white/60 to-white/20 dark:from-brand-900/40 dark:to-brand-900/10 relative">
+            </div>
+
+            <!-- Composer -->
+            <form id="sendForm"
+                class="hidden glass ring-1 ring-black/10 dark:ring-white/15 px-3 py-3 flex items-end gap-3 border-t border-black/5 dark:border-white/10 sticky bottom-0">
+                <button type="button"
+                    class="size-10 grid place-items-center rounded-full ring-1 ring-black/10 dark:ring-white/15"
+                    id="attachBtn" title="Attach"><span class="material-symbols-rounded">attach_file</span></button>
+                <div class="flex-1">
+                    <textarea name="content" id="composer"
+                        placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+                        class="w-full resize-none rounded-xl border-0 ring-1 ring-black/10 dark:ring-white/15 bg-white/90 dark:bg-white/10 p-3 text-sm h-14 max-h-40"></textarea>
+                </div>
+                <button type="submit"
+                    class="inline-flex items-center gap-2 rounded-full bg-brand-500 text-white font-semibold px-5 py-3 text-sm hover:shadow-glow transition"><span
+                        class="material-symbols-rounded text-base">send</span><span
+                        class="hidden sm:inline">Send</span></button>
+            </form>
+
+            <!-- Jump to latest -->
+            <button id="jumpLatest"
+                class="hidden absolute bottom-28 right-6 md:right-8 z-10 px-3 py-1.5 rounded-full bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 text-xs"><span
+                    class="material-symbols-rounded text-sm">arrow_downward</span> New messages</button>
+        </section>
+
+        <!-- RIGHT PANE REMOVED -->
+    </main>
+
+    <!-- Toasts -->
+    <div id="toastHost" class="fixed inset-0 pointer-events-none flex flex-col items-end gap-2 p-4 z-50"></div>
+
+    <script>
+        // ===== Helpers =====
+        const el = (s, r = document) => r.querySelector(s), els = (s, r = document) => [...r.querySelectorAll(s)];
+        const showToast = (msg, type = 'info', opts = {}) => { const host = el('#toastHost'); const d = document.createElement('div'); d.className = `pointer-events-auto select-none text-sm rounded-lg shadow-lg px-4 py-3 flex items-center gap-2 border backdrop-blur-sm ${type === 'success' ? 'bg-emerald-500/90 text-white border-emerald-400/50' : type === 'error' ? 'bg-rose-600/90 text-white border-rose-400/50' : 'bg-black/80 text-white border-white/10'}`; d.innerHTML = `<span class="material-symbols-rounded text-base">${type === 'success' ? 'check_circle' : (type === 'error' ? 'error' : 'info')}</span><span>${msg}</span>`; host.appendChild(d); setTimeout(() => { d.classList.add('opacity-0', 'translate-y-1'); setTimeout(() => d.remove(), 300); }, opts.ttl || 2200); };
+
+        // Theme toggle
+        document.addEventListener('click', e => { const t = e.target.closest('[data-theme-toggle]'); if (!t) return; const root = document.documentElement; const next = root.classList.contains('dark') ? 'light' : 'dark'; root.classList.toggle('dark', next === 'dark'); localStorage.setItem('px_theme', next); document.querySelectorAll('[data-theme-toggle] .material-symbols-rounded').forEach(ic => ic.textContent = next === 'dark' ? 'light_mode' : 'dark_mode'); });
+
+        // ===== API base resolve =====
+        let API_BASE = '';
+        (function resolveApiBase() { if (API_BASE) return; const origin = location.origin; if (location.port === '8000') { API_BASE = origin; return; } const host = location.hostname; const candidates = [origin, `http://${host}:8000`, `https://${host}:8000`]; (async () => { for (const c of candidates) { try { const r = await fetch(c + '/api/public/academic-meta'); if (r.ok) { API_BASE = c.replace(/\/$/, ''); return; } } catch { } } API_BASE = origin; })(); })();
+
+        const token = localStorage.getItem('teacherToken');
+        if (!token) { alert('Login required. Redirecting…'); location.href = 'teacher_login.html'; }
+
+        const teacherList = el('#teacherList');
+        const connectionList = el('#connectionList');
+        const messagesEl = el('#messages');
+        const sendForm = el('#sendForm');
+        const partnerNameEl = el('#partnerName');
+        const partnerAvatar = el('#partnerAvatar');
+        const presenceDot = el('#presenceDot');
+        const presenceText = el('#presenceText');
+
+        let currentConnection = null; // {id, partner_user_id, partner_name}
+        let lastMessageTs = null; let ws = null; let userId = null;
+
+        function authHeader() { return token ? { 'Authorization': 'Bearer ' + token } : {} }
+        async function fetchJSON(url, opts = {}) { const r = await fetch(url, opts); const ct = r.headers.get('content-type') || ''; const t = await r.text().catch(() => ""); let d = {}; if (t) { if (/json|javascript/i.test(ct)) { try { d = JSON.parse(t); } catch { d = { raw: t } } } else d = { raw: t }; } if (!r.ok) { const msg = d.detail || d.error || r.status + ' ' + (t.slice(0, 120) || ''); const e = new Error(msg); e.status = r.status; e.data = d; throw e; } return d; }
+
+        // ===== Left lists =====
+        async function loadTeachers() { await waitApi(); try { const data = await fetchJSON((API_BASE || location.origin) + '/api/teachers'); renderTeacherList(data.teachers || []); } catch (e) { teacherList.innerHTML = `<div class="px-3 py-2 text-[12px] text-rose-600">Failed to load teachers: ${e.message}</div>`; } }
+        async function loadConnections() { if (!token) { connectionList.innerHTML = '<div class="px-3 py-2 text-[12px]">Not logged in.</div>'; return; } await waitApi(); try { const data = await fetchJSON((API_BASE || location.origin) + '/api/teacher/connections', { headers: authHeader() }); renderConnList(data.connections || []); } catch (e) { if (e.status === 403) connectionList.innerHTML = '<div class="px-3 py-2 text-[12px] text-amber-600">Not approved yet.</div>'; else connectionList.innerHTML = `<div class="px-3 py-2 text-[12px] text-rose-600">Error: ${e.message}</div>`; } }
+
+        function renderTeacherList(arr) { const q = el('#peopleSearch').value?.toLowerCase() || ''; const list = arr.filter(t => !q || (t.name || '').toLowerCase().includes(q) || (t.department || '').toLowerCase().includes(q)); teacherList.innerHTML = ''; if (!list.length) { teacherList.innerHTML = '<div class="px-3 py-2 text-[12px] opacity-60">No approved teachers.</div>'; return; } list.forEach(t => { const row = document.createElement('button'); row.type = 'button'; row.className = 'w-full text-left px-4 py-3 hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-3'; const initial = (t.name || 'U').charAt(0).toUpperCase(); row.innerHTML = `<div class="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500/30 to-brand-500/10 ring-1 ring-black/10 dark:ring-white/15 grid place-items-center text-sm font-semibold">${initial}</div><div class="min-w-0"><div class="font-medium text-sm truncate">${t.name || '(no name)'}</div><div class="text-[11px] opacity-60 truncate">${t.department || ''}</div></div><span class="ml-auto material-symbols-rounded text-base opacity-60">chevron_right</span>`; row.onclick = () => connectOrOpen(t.auth_user_id, t.name || '(no name)'); teacherList.appendChild(row); }); }
+
+        function renderConnList(arr) { const q = el('#peopleSearch').value?.toLowerCase() || ''; const list = arr.filter(c => !q || (c.partner_name || '').toLowerCase().includes(q)); connectionList.innerHTML = ''; if (!list.length) { connectionList.innerHTML = '<div class="px-3 py-2 text-[12px] opacity-60">No connections yet.</div>'; return; } list.forEach(c => { const row = document.createElement('button'); row.type = 'button'; row.className = 'w-full text-left px-4 py-3 hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-3'; const initial = (c.partner_name || 'U').charAt(0).toUpperCase(); row.innerHTML = `<div class="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500/30 to-brand-500/10 ring-1 ring-black/10 dark:ring-white/15 grid place-items-center text-sm font-semibold">${initial}</div><div class="min-w-0"><div class="font-medium text-sm truncate">${c.partner_name || c.partner_user_id.substring(0, 8) + '…'}</div><div class="text-[11px] opacity-60">${new Date(c.created_at).toLocaleDateString()}</div></div><span class="ml-auto material-symbols-rounded text-base opacity-60">chevron_right</span>`; row.onclick = () => openConnection(c); connectionList.appendChild(row); }); }
+
+        el('#peopleSearch').addEventListener('input', () => { // live filter
+            els('#teachersWrap, #convosWrap').forEach(w => w.classList.toggle('hidden', !w.classList.contains(activeTab)));
+            loadTeachers(); loadConnections();
+        });
+        el('#refreshLists').addEventListener('click', () => { loadTeachers(); loadConnections(); showToast('Lists refreshed', 'success'); });
+
+        let activeTab = 'teachers';
+        els('.tabBtn').forEach(b => b.addEventListener('click', () => { activeTab = b.dataset.tab; els('.tabBtn').forEach(x => x.classList.toggle('bg-brand-500/10', x === b)); el('#teachersWrap').classList.toggle('hidden', activeTab !== 'teachers'); el('#convosWrap').classList.toggle('hidden', activeTab !== 'convos'); }));
+
+        // ===== Connections & WS =====
+        async function connectOrOpen(otherId, name) { if (!token) { alert('Login required'); location.href = 'teacher_login.html'; return; } try { await waitApi(); const data = await fetchJSON((API_BASE || location.origin) + `/api/teacher/connect/${otherId}`, { method: 'POST', headers: authHeader() }); await loadConnections(); openConnection({ connection_id: data.connection_id, partner_user_id: otherId, partner_name: name }); } catch (e) { if (e.status === 403) alert('You are not yet an approved teacher.'); else alert('Connect failed: ' + (e.message || 'error')); } }
+
+        function openConnection(c) { currentConnection = { id: c.connection_id, partner_user_id: c.partner_user_id, partner_name: c.partner_name }; partnerNameEl.textContent = c.partner_name || ''; partnerAvatar.textContent = (c.partner_name || '?')[0]?.toUpperCase() || '?'; presence('connecting'); messagesEl.innerHTML = ''; lastMessageTs = null; sendForm.classList.remove('hidden'); openWebSocket(); closeLeftPane(); }
+
+        function openWebSocket() {
+            if (!currentConnection) return; if (ws) { try { ws.close(); } catch { } ws = null; } const base = API_BASE || location.origin; const loc = new URL(base); const url = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + `/api/teacher/connections/${currentConnection.id}/ws?token=` + encodeURIComponent(token); ws = new WebSocket(url); ws.onopen = () => { presence('online'); }; ws.onclose = () => { presence('offline'); startPollingFallback(); }; ws.onerror = () => { presence('offline'); };
+            ws.onmessage = (ev) => { try { const msg = JSON.parse(ev.data); handleWsEvent(msg); } catch { } }
+        }
+
+        function handleWsEvent(evt) { if (evt.type === 'init') { messagesEl.innerHTML = ''; (evt.messages || []).forEach(addMessage); if (evt.messages?.length) { lastMessageTs = evt.messages[evt.messages.length - 1].created_at; } scrollToBottom(true); return; } if (evt.type === 'message') { addMessage(evt); lastMessageTs = evt.created_at; maybeShowJump(); return; } if (evt.type === 'error') { console.warn('WS error', evt.detail); } }
+
+        function startPollingFallback() { pollMessages(); }
+        async function pollMessages() { if (ws && ws.readyState === WebSocket.OPEN) return; if (!currentConnection) return; try { let url = API_BASE + `/api/teacher/connections/${currentConnection.id}/messages?limit=200`; if (lastMessageTs) url += `&since=${encodeURIComponent(lastMessageTs)}`; const data = await fetchJSON(url, { headers: authHeader() }); if (data.messages) { data.messages.forEach(addMessage); if (data.messages.length) { lastMessageTs = data.messages[data.messages.length - 1].created_at; maybeShowJump(); } } } catch { } setTimeout(pollMessages, 4000); }
+
+        function addMessage(m) {
+            const mine = m.sender_user_id === getUserIdFromToken(); const at = new Date(m.created_at); // date chip
+            if (shouldInsertDate(at)) insertDateChip(at);
+            // grouping
+            const last = messagesEl.lastElementChild?.dataset || {}; const continued = last.sender === String(m.sender_user_id) && last.min === String(at.getMinutes()) && last.hr === String(at.getHours());
+            const wrap = document.createElement('div'); wrap.className = `w-full flex ${mine ? 'justify-end' : 'justify-start'} animate-pop`; wrap.dataset.sender = String(m.sender_user_id); wrap.dataset.hr = String(at.getHours()); wrap.dataset.min = String(at.getMinutes());
+            const bubble = document.createElement('div'); bubble.className = `bubble ${mine ? 'me' : 'them'} ${continued ? 'bubble-continued' : ''}`; bubble.textContent = m.content; wrap.appendChild(bubble); messagesEl.appendChild(wrap);
+        }
+
+        let lastDateStr = ''; function shouldInsertDate(d) { const s = d.toDateString(); if (s !== lastDateStr) { lastDateStr = s; return true; } return false; }
+        function insertDateChip(d) { const chip = document.createElement('div'); chip.className = 'w-full flex items-center justify-center my-2'; chip.innerHTML = `<span class="date-chip ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10">${d.toLocaleDateString()}</span>`; messagesEl.appendChild(chip); }
+
+        function getUserIdFromToken() { if (userId) return userId; try { const parts = token.split('.')[1]; userId = JSON.parse(atob(parts)).sub; return userId; } catch { return null; } }
+
+        // Presence UI
+        function presence(state) { const map = { online: { dot: 'bg-emerald-500', txt: 'Connected' }, offline: { dot: 'bg-neutral-400', txt: 'Idle' }, connecting: { dot: 'bg-amber-500', txt: 'Connecting…' } }; const p = map[state] || map.offline; presenceDot.className = 'presence-dot ' + p.dot; presenceText.textContent = p.txt; }
+
+        // Composer
+        const composer = el('#composer'); composer.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendForm.requestSubmit(); } }); composer.addEventListener('input', () => { composer.style.height = 'auto'; composer.style.height = Math.min(composer.scrollHeight, 160) + 'px'; });
+        sendForm.addEventListener('submit', async e => { e.preventDefault(); const fd = new FormData(sendForm); const content = (fd.get('content') || '').toString().trim(); if (!content) return; try { if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ action: 'send', content })); } else { await fetchJSON(API_BASE + `/api/teacher/connections/${currentConnection.id}/messages`, { method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) }); } sendForm.reset(); composer.style.height = '3.5rem'; } catch { showToast('Send failed', 'error'); } });
+
+        // Scroll helpers
+        function nearBottom() { return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 120; }
+        function scrollToBottom(force) { if (force || nearBottom()) messagesEl.scrollTop = messagesEl.scrollHeight; }
+        function maybeShowJump() { if (nearBottom()) scrollToBottom(true); else el('#jumpLatest').classList.remove('hidden'); }
+        messagesEl.addEventListener('scroll', () => { const btn = el('#jumpLatest'); if (nearBottom()) btn.classList.add('hidden'); });
+        el('#jumpLatest').addEventListener('click', () => { scrollToBottom(true); el('#jumpLatest').classList.add('hidden'); });
+
+        // Info panel removed
+
+        // Panels toggles (mobile)
+        function openLeftPane() { el('#leftPane').classList.remove('hidden'); }
+        function closeLeftPane() { el('#leftPane').classList.add('hidden'); }
+        el('#openLeft').addEventListener('click', openLeftPane); el('#openLeft2').addEventListener('click', openLeftPane);
+        // Right pane toggle removed
+        document.addEventListener('click', (e) => { if (e.target.matches('[data-theme-toggle]')) { const root = document.documentElement; const dark = root.classList.toggle('dark'); localStorage.setItem('px_theme', dark ? 'dark' : 'light'); } });
+
+        // Logout
+        el('#logoutBtn').addEventListener('click', () => { if (ws) { try { ws.close(); } catch { } } try { ['teacherToken', 'px_token', 'access_token', 'auth_token', 'sb-access-token'].forEach(k => localStorage.removeItem(k)); } catch { } location.href = 'teacher_login.html'; });
+
+        // Misc actions
+        // Copy link button removed
+
+        async function waitApi() { let tries = 0; while (!API_BASE && tries < 20) { await new Promise(r => setTimeout(r, 100)); tries++; } }
+
+        // Boot
+        (async () => { await waitApi(); loadTeachers(); loadConnections(); setInterval(loadConnections, 15000); })();
+    </script>
+    <script>
+        // UI polish without changing existing logic
+        (function () {
+            try {
+                const convHeader = document.getElementById('convHeader');
+                if (convHeader) convHeader.classList.add('sticky', 'top-0', 'z-10');
+                const sendForm = document.getElementById('sendForm');
+                if (sendForm) sendForm.classList.add('sticky', 'bottom-0');
+                const messages = document.getElementById('messages');
+                if (messages) messages.classList.add('py-6');
+
+                // Improve placeholder typography
+                const comp = document.getElementById('composer');
+                if (comp) comp.placeholder = 'Type a message… (Enter to send, Shift+Enter for new line)';
+
+                // Override presence mapping for nicer text + pulse
+                const dot = document.getElementById('presenceDot');
+                const txt = document.getElementById('presenceText');
+                if (dot && txt) {
+                    window.presence = function (state) {
+                        const map = {
+                            online: { dot: 'bg-emerald-500 presence-pulse', txt: 'Connected' },
+                            offline: { dot: 'bg-neutral-400', txt: 'Idle' },
+                            connecting: { dot: 'bg-amber-500', txt: 'Connecting…' },
+                        };
+                        const p = map[state] || map.offline;
+                        dot.className = 'presence-dot ' + p.dot;
+                        txt.textContent = p.txt;
+                    }
+                }
+            } catch {}
+        })();
+    </script>
+</body>
+
+</html>
