@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Teachers Notes — Paper X</title>
+  <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+    rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+  <!-- Force correct API base (backend FastAPI default) BEFORE loading shared config -->
+  <script>window.API_BASE = window.API_BASE || 'http://127.0.0.1:8000';</script>
+  <!-- Correct relative path (this file is /paper/ui/teachers/notes/, config lives at /paper/ui/) -->
+  <script src="../../config.js"></script>
+  <script>tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' }, brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }, ink: '#1E1E2F', plum: '#4C2A59', orchid: '#9E4B8A' }, boxShadow: { glow: '0 8px 30px rgba(158,75,138,0.35)', card: '0 24px 60px rgba(30,30,47,0.35)' }, backgroundImage: { 'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)', 'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)' } } } }</script>
+  <style>
+    .material-symbols-rounded {
+      vertical-align: -6px
+    }
+  </style>
+  <script>(() => { const s = localStorage.getItem('px_theme'); const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches; const dark = s ? s === 'dark' : prefers; if (dark) document.documentElement.classList.add('dark'); })();</script>
+</head>
+
+<body
+  class="font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark min-h-screen flex flex-col overflow-x-hidden">
+  <header class="bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container flex items-center justify-between py-3">
+      <div class="flex items-center gap-3">
+        <a href="../index.html" class="flex items-center gap-2">
+          <img src="../../assets/img/logo-light.svg" class="h-8 dark:hidden" alt="Paper X" />
+          <img src="../../assets/img/logo-dark.svg" class="h-8 hidden dark:block" alt="Paper X" />
+        </a>
+        <h1 class="text-lg font-semibold tracking-tight hidden sm:block">Teachers Notes</h1>
+      </div>
+      <nav class="hidden md:flex items-center gap-5 text-sm text-neutral-700 dark:text-white/80">
+        <a href="../teacher_notes.html" class="hover:text-brandlt-900 dark:hover:text-white">Upload</a>
+        <a href="../teacher_connect.html" class="hover:text-brandlt-900 dark:hover:text-white">Connect</a>
+      </nav>
+      <div class="flex items-center gap-2">
+        <input id="searchInput" type="text" placeholder="Search..."
+          class="hidden md:block text-sm rounded-full px-3 py-2 bg-white/80 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none" />
+        <button data-theme-toggle
+          class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+          aria-label="Toggle theme"><span class="material-symbols-rounded text-base">dark_mode</span></button>
+      </div>
+    </div>
+  </header>
+  <main class="flex-1">
+    <div class="container py-8 grid lg:grid-cols-12 gap-8">
+      <!-- Filters -->
+      <aside class="lg:col-span-3 space-y-6">
+        <div
+          class="rounded-2xl bg-white/80 dark:bg-brand-900/50 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Filters</h2>
+            <button id="resetFilters" class="text-xs text-brand-500 hover:underline">Reset</button>
+          </div>
+          <div class="space-y-4 text-sm max-h-[70vh] overflow-y-auto pr-1" id="filtersContainer">
+            <div>
+              <label class="block text-[10px] uppercase font-semibold mb-1">Subject</label>
+              <select id="filterSubject"
+                class="w-full rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10"></select>
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-semibold mb-1">Exam Type</label>
+              <select id="filterExamType"
+                class="w-full rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10"></select>
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-semibold mb-1">Semester</label>
+              <select id="filterSemester"
+                class="w-full rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10"></select>
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-semibold mb-1">Category</label>
+              <select id="filterCategory"
+                class="w-full rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10"></select>
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-semibold mb-1">Seller</label>
+              <select id="filterSeller"
+                class="w-full rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10"></select>
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-semibold mb-1">Price (₹)</label>
+              <div class="flex items-center gap-2">
+                <input id="minPrice" type="number" min="0"
+                  class="w-1/2 rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10 px-2 py-1"
+                  placeholder="Min" />
+                <input id="maxPrice" type="number" min="0"
+                  class="w-1/2 rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10 px-2 py-1"
+                  placeholder="Max" />
+              </div>
+              <div id="priceRangeHint" class="mt-1 text-[11px] text-neutral-500 dark:text-white/50"></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Results -->
+      <section class="lg:col-span-9 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-semibold">Results <span id="resultsCount"
+              class="text-sm font-medium text-neutral-500 dark:text-white/50"></span></h2>
+          <div class="flex items-center gap-3 md:hidden w-full">
+            <input id="searchInputMobile" type="text" placeholder="Search..."
+              class="flex-1 text-sm rounded-full px-3 py-2 bg-white/80 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none" />
+          </div>
+        </div>
+        <div id="loadingState" class="text-sm text-neutral-500 dark:text-white/50 py-10 hidden">Loading…</div>
+        <div id="emptyState" class="text-sm text-neutral-500 dark:text-white/50 py-10 hidden">No notes match your
+          filters.</div>
+        <div id="errorState" class="text-sm text-red-600 dark:text-red-400 py-6 hidden"></div>
+        <div id="notesGrid" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+      </section>
+    </div>
+  </main>
+  <footer class="py-8 text-center text-xs text-neutral-500 dark:text-white/40">© Paper X</footer>
+  <script>
+    const API_BASE = (window.API_BASE || location.origin);
+    const token = localStorage.getItem('teacherToken') || localStorage.getItem('userToken') || null;
+    const els = {
+      search: document.getElementById('searchInput'),
+      searchMobile: document.getElementById('searchInputMobile'),
+      notesGrid: document.getElementById('notesGrid'),
+      resultsCount: document.getElementById('resultsCount'),
+      loading: document.getElementById('loadingState'),
+      empty: document.getElementById('emptyState'),
+      error: document.getElementById('errorState'),
+      priceRangeHint: document.getElementById('priceRangeHint')
+    };
+    const filterEls = {
+      subject: document.getElementById('filterSubject'),
+      examType: document.getElementById('filterExamType'),
+      semester: document.getElementById('filterSemester'),
+      category: document.getElementById('filterCategory'),
+      seller: document.getElementById('filterSeller'),
+      minPrice: document.getElementById('minPrice'),
+      maxPrice: document.getElementById('maxPrice')
+    };
+    let metaCache = null; let debounceTimer = null;
+
+    function opt(label, value = '') { const o = document.createElement('option'); o.value = value; o.textContent = label; return o; }
+    function clearOptions(sel) { while (sel.firstChild) sel.removeChild(sel.firstChild); }
+    function setStatus(state) {
+      els.loading.classList.toggle('hidden', state !== 'loading');
+      els.empty.classList.add('hidden');
+      els.error.classList.add('hidden');
+      if (state === 'error') els.error.classList.remove('hidden');
+      if (state === 'empty') els.empty.classList.remove('hidden');
+    }
+
+    async function fetchJSON(url, opts = {}) { const res = await fetch(url, opts); const txt = await res.text(); let data = {}; try { data = txt ? JSON.parse(txt) : {}; } catch { data = { detail: txt }; } if (!res.ok) { const err = new Error(data.detail || 'Request failed'); err.status = res.status; err.data = data; throw err; } return data; }
+
+    function populateFilters(meta) {
+      clearOptions(filterEls.subject); filterEls.subject.appendChild(opt('Any', ''));
+      meta.subjects.forEach(s => filterEls.subject.appendChild(opt(s, s)));
+      clearOptions(filterEls.examType); filterEls.examType.appendChild(opt('Any', ''));
+      meta.exam_types.forEach(s => filterEls.examType.appendChild(opt(s, s)));
+      clearOptions(filterEls.semester); filterEls.semester.appendChild(opt('Any', ''));
+      meta.semesters.forEach(s => filterEls.semester.appendChild(opt(String(s), String(s))));
+      clearOptions(filterEls.category); filterEls.category.appendChild(opt('Any', ''));
+      meta.categories.forEach(s => filterEls.category.appendChild(opt(s, s)));
+      clearOptions(filterEls.seller); filterEls.seller.appendChild(opt('Any', ''));
+      meta.sellers.forEach(s => filterEls.seller.appendChild(opt(s.name, s.id)));
+      if (meta.price_range) { els.priceRangeHint.textContent = `Range: ₹${meta.price_range.min} - ₹${meta.price_range.max}`; filterEls.minPrice.placeholder = meta.price_range.min; filterEls.maxPrice.placeholder = meta.price_range.max; }
+    }
+
+    function buildQuery() { const p = new URLSearchParams(); p.set('teachers_only', '1'); const q = (els.search.value || els.searchMobile.value || '').trim(); if (q) p.set('q', q); const map = [['subject', filterEls.subject.value], ['exam_type', filterEls.examType.value], ['semester', filterEls.semester.value], ['min_price', filterEls.minPrice.value], ['max_price', filterEls.maxPrice.value]]; map.forEach(([k, v]) => { if (v) p.set(k, v); }); return p.toString(); }
+
+    async function loadNotes() { setStatus('loading'); els.notesGrid.innerHTML = ''; try { const qs = buildQuery(); const data = await fetchJSON(`${API_BASE}/api/marketplace/notes${qs ? `?${qs}` : ''}`); renderNotes(data.items || []); if (!data.items?.length) { setStatus('empty'); } else { setStatus('loaded'); } els.resultsCount.textContent = `(${data.total})`; } catch (e) { els.error.textContent = e.message; setStatus('error'); } }
+
+    function renderNotes(items) {
+      els.notesGrid.innerHTML = ''; items.forEach(n => {
+        const card = document.createElement('a'); card.href = `../matketplace/notes/note_detail.html?id=${encodeURIComponent(n.id)}`; card.className = 'group block rounded-2xl bg-white/80 dark:bg-brand-900/50 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-4 hover:shadow-glow transition relative'; const price = (n.price_cents || 0) > 0 ? `<span class="text-xs font-semibold text-brand-500">₹${(n.price_cents / 100).toFixed(0)}</span>` : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 ring-1 ring-emerald-500/30">Free</span>`; const seller = n.seller ? `<span class="text-[11px] text-neutral-500 dark:text-white/40">${n.seller.name}</span>` : ''; card.innerHTML = `<div class="flex flex-col h-full">
+  <div class="flex-1">
+    <h3 class="font-semibold text-sm leading-snug mb-1 line-clamp-2">${escapeHtml(n.title || 'Untitled')}</h3>
+    <p class="text-[11px] text-neutral-600 dark:text-white/50 line-clamp-2 mb-2">${escapeHtml(n.description || '')}</p>
+  </div>
+  <div class="flex items-center justify-between mt-2">${price}${seller}</div>
+  <div class="mt-1 flex flex-wrap gap-1">${badge(n.subject)}${badge(n.exam_type)}${badge(n.semester ? `Sem ${n.semester}` : '')}</div>
+</div>`; els.notesGrid.appendChild(card);
+      });
+    }
+
+    function badge(txt) { if (!txt) return ''; return `<span class="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-700 dark:text-brandlt-200 ring-1 ring-brand-500/20">${escapeHtml(txt)}</span>`; }
+    function escapeHtml(s) { return (s || '').replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])); }
+
+    async function init() {
+      try { metaCache = await fetchJSON(`${API_BASE}/api/marketplace/notes/meta?teachers_only=1`); populateFilters(metaCache); } catch (e) { console.warn('meta failed', e); }
+      loadNotes();
+    }
+
+    ['change', 'input'].forEach(ev => { Object.values(filterEls).forEach(el => el.addEventListener(ev, () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadNotes, ev === 'input' ? 400 : 0); })); });
+    [els.search, els.searchMobile].forEach(inp => inp && inp.addEventListener('input', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadNotes, 350); }));
+
+    document.getElementById('resetFilters').addEventListener('click', () => { Object.values(filterEls).forEach(el => { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = ''; }); els.search.value = ''; if (els.searchMobile) els.searchMobile.value = ''; loadNotes(); });
+
+    document.addEventListener('click', e => { if (e.target.matches('[data-theme-toggle]')) { const root = document.documentElement; const dark = root.classList.toggle('dark'); localStorage.setItem('px_theme', dark ? 'dark' : 'light'); } });
+
+    init();
+  </script>
+</body>
+
+</html>

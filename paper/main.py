@@ -5367,19 +5367,42 @@ def list_messages(connection_id: str, since: Optional[str] = Query(default=None)
 def teacher_notes_meta(authorization: Optional[str] = Header(default=None)):
     _require_teacher(authorization)  # role gating only
     supabase = get_service_client()
-    colleges = supabase.table("colleges").select("id,name").order("name").execute()
-    if getattr(colleges, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (colleges): {colleges.error}")
-    degrees = supabase.table("degrees").select("id,name,college_id").execute()
-    departments = supabase.table("departments").select("id,name,college_id,degree_id").execute()
-    batches = supabase.table("batches").select("id,department_id,from_year,to_year").execute()
-    out = {
-        "colleges": colleges.data or [],
-        "degrees": getattr(degrees, "data", []) or [],
-        "departments": getattr(departments, "data", []) or [],
-        "batches": getattr(batches, "data", []) or []
+
+    def _safe_select(table: str, columns: str, order: Optional[str] = None):
+        try:
+            q = supabase.table(table).select(columns)
+            if order:
+                q = q.order(order)
+            res = q.execute()
+            if getattr(res, "error", None):
+                # Best-effort: return empty list on transient failures
+                try:
+                    supabase_logger.warning(f"Teacher meta query error: {table}: {res.error}")
+                except Exception:
+                    pass
+                return []
+            return res.data or []
+        except Exception as e:  # network/protocol errors
+            try:
+                supabase_logger.exception(f"Teacher meta exception on {table}")
+            except Exception:
+                pass
+            return []
+
+    colleges = _safe_select("colleges", "id,name", order="name")
+    degrees = _safe_select("degrees", "id,name,college_id")
+    departments = _safe_select("departments", "id,name,college_id,degree_id")
+    batches = _safe_select("batches", "id,department_id,from_year,to_year")
+
+    if not (colleges or degrees or departments or batches):
+        raise HTTPException(status_code=500, detail="Supabase unavailable for teacher meta")
+
+    return {
+        "colleges": colleges,
+        "degrees": degrees,
+        "departments": departments,
+        "batches": batches,
     }
-    return out
 
 
 # Integrate simple reuse of existing marketplace notes for teacher uploads: teacher uses existing /api/marketplace/notes routes.
@@ -6860,6 +6883,7 @@ def mp_list_notes(
     department_id: Optional[str] = Query(None),
     batch_id: Optional[str] = Query(None),
     semester: Optional[int] = Query(None, ge=1, le=12),
+    teachers_only: Optional[bool] = Query(False, description="If true, restrict to notes whose owners have role=teacher"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
@@ -6892,6 +6916,26 @@ def mp_list_notes(
                     pid = pr.get("auth_user_id")
                     if pid:
                         profiles_map[pid] = pr
+    # Optionally restrict to teacher owners (role table lookup)
+    if teachers_only:
+        teacher_ids: set[str] = set()
+        try:
+            role_res = (
+                supabase.table("admin_roles")
+                .select("auth_user_id,role")
+                .eq("role", "teacher")
+                .execute()
+            )
+            if not getattr(role_res, "error", None):
+                for r in role_res.data or []:
+                    uid = r.get("auth_user_id")
+                    if uid:
+                        teacher_ids.add(uid)
+        except Exception:
+            teacher_ids = set()
+        if teacher_ids:
+            items = [r for r in items if r.get("owner_user_id") in teacher_ids]
+
     # Enrich each note with seller fields (short form) for UI consumption.
     for r in items:
         oid = r.get("owner_user_id")
@@ -6937,6 +6981,98 @@ def mp_list_notes(
     total = len(filtered)
     paged = filtered[offset: offset + limit]
     return {"items": paged, "total": total, "limit": limit, "offset": offset}
+
+
+@marketplace_router.get("/api/marketplace/notes/meta", summary="Distinct filter metadata for marketplace notes")
+def mp_notes_meta(teachers_only: Optional[bool] = Query(False, description="If true, restrict to notes whose owners have role=teacher")):
+    """Return distinct values useful for building client-side filters.
+
+    This performs a single select * (bounded) and derives sets in app code because
+    the Supabase python client lacks a simple DISTINCT helper across many columns.
+    If the table grows large, replace with server-side RPC or dedicated materialized view.
+    """
+    supabase = get_service_client()
+    # Fetch a reasonable window (latest 1000) – adjust as needed or paginate later.
+    res = supabase.table("marketplace_notes").select("*").order("created_at", desc=True).limit(1000).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (notes meta): {res.error}")
+    rows: List[dict] = res.data or []
+    if teachers_only:
+        # build teacher id set
+        try:
+            role_res = supabase.table("admin_roles").select("auth_user_id,role").eq("role", "teacher").execute()
+            if not getattr(role_res, "error", None):
+                teacher_ids = {r.get("auth_user_id") for r in (role_res.data or []) if r.get("auth_user_id")}
+                if teacher_ids:
+                    rows = [r for r in rows if r.get("owner_user_id") in teacher_ids]
+        except Exception:
+            pass
+    subjects: set[str] = set()
+    exam_types: set[str] = set()
+    semesters: set[int] = set()
+    categories: set[str] = set()
+    college_ids: set[str] = set()
+    degree_ids: set[str] = set()
+    department_ids: set[str] = set()
+    batch_ids: set[str] = set()
+    seller_ids: set[str] = set()
+    prices: List[int] = []
+    for r in rows:
+        if r.get("subject"): subjects.add(str(r.get("subject")))
+        if r.get("exam_type"): exam_types.add(str(r.get("exam_type")))
+        if r.get("semester") is not None:
+            try:
+                semesters.add(int(r.get("semester")))
+            except Exception:
+                pass
+        if isinstance(r.get("categories"), list):
+            for c in r.get("categories"):
+                if c: categories.add(str(c))
+        if r.get("college_id"): college_ids.add(str(r.get("college_id")))
+        if r.get("degree_id"): degree_ids.add(str(r.get("degree_id")))
+        if r.get("department_id"): department_ids.add(str(r.get("department_id")))
+        if r.get("batch_id"): batch_ids.add(str(r.get("batch_id")))
+        if r.get("owner_user_id"): seller_ids.add(str(r.get("owner_user_id")))
+        try:
+            prices.append(int(r.get("price_cents") or 0))
+        except Exception:
+            pass
+    # Enrich seller short names (best-effort)
+    seller_map: Dict[str, Dict[str, Optional[str]]] = {}
+    if seller_ids:
+        try:
+            prof = (
+                supabase.table("user_profiles")
+                .select("auth_user_id,name,profile_image_url")
+                .in_("auth_user_id", list(seller_ids))
+                .execute()
+            )
+            if not getattr(prof, "error", None):
+                for row in prof.data or []:
+                    uid = row.get("auth_user_id")
+                    if uid:
+                        seller_map[uid] = {
+                            "id": uid,
+                            "name": row.get("name") or uid[:6] + "…",
+                            "avatar_url": row.get("profile_image_url"),
+                        }
+        except Exception:
+            pass
+    price_min = min(prices) if prices else 0
+    price_max = max(prices) if prices else 0
+    return {
+        "subjects": sorted(subjects),
+        "exam_types": sorted(exam_types),
+        "semesters": sorted(semesters),
+        "categories": sorted(categories),
+        "college_ids": sorted(college_ids),
+        "degree_ids": sorted(degree_ids),
+        "department_ids": sorted(department_ids),
+        "batch_ids": sorted(batch_ids),
+        "sellers": list(seller_map.values()),
+        "price_range": {"min": price_min, "max": price_max},
+        "count": len(rows),
+    }
 
 
 @marketplace_router.get("/api/marketplace/notes/{note_id}", summary="Get marketplace note detail")
@@ -7018,6 +7154,31 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
             "name": prow.get("name") or owner_id[:6] + "…",
             "avatar_url": prow.get("profile_image_url"),
         }
+    elif owner_id and owner_id not in profiles_map:
+        # Fallback minimal seller object if profile missing
+        note["seller"] = {"id": owner_id, "name": owner_id[:6] + "…", "avatar_url": None}
+
+    # Determine if owner has teacher role (verification badge)
+    is_teacher_owner = False
+    try:
+        if owner_id:
+            role_res = (
+                supabase.table("admin_roles")
+                .select("role")
+                .eq("auth_user_id", owner_id)
+                .eq("role", "teacher")
+                .limit(1)
+                .execute()
+            )
+            if not getattr(role_res, "error", None) and role_res.data:
+                is_teacher_owner = True
+    except Exception:
+        # Non-fatal; silently ignore role lookup issues
+        pass
+    if note.get("seller"):
+        note["seller"]["verified"] = is_teacher_owner
+        note["seller"]["is_teacher"] = is_teacher_owner
+    note["is_teacher_owner"] = is_teacher_owner
     # Enrich each review
     for r in reviews:
         rid = r.get("reviewer_user_id")
@@ -7543,9 +7704,12 @@ def api_pdf_from_markdown(payload: dict):
 def create_app() -> FastAPI:
     app = FastAPI(title="PaperX Unified API", version="1.0.0")
 
+    # CORS: allow dev origins and support Authorization header
+    # Note: Using allow_origin_regex to correctly echo Origin when credentials are enabled.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[],
+        allow_origin_regex=r".*",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

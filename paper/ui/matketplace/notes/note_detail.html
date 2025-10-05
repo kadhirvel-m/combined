@@ -71,6 +71,7 @@
         .dark .ring-soft {
             box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
         }
+
         /* Dark theme page background gradient (from index.html) */
         .dark body {
             background-image: linear-gradient(to left top, #1e1e2f, #242138, #2b2440, #332649, #3d2850, #3f254a, #402244, #401f3e, #34182d, #26131e, #190b11, #000000);
@@ -81,11 +82,11 @@
 
     <!-- Theme boot BEFORE anything else (unified with index/about) -->
     <script>
-        (function(){
+        (function () {
             const stored = localStorage.getItem('px_theme');
             const prefers = matchMedia('(prefers-color-scheme: dark)').matches;
             const mode = stored ? stored : (prefers ? 'dark' : 'light');
-            if(mode==='dark') document.documentElement.classList.add('dark');
+            if (mode === 'dark') document.documentElement.classList.add('dark');
         })();
     </script>
 
@@ -146,7 +147,13 @@
                         class="shrink-0 w-12 h-12 rounded-full overflow-hidden ring-2 ring-white/50 dark:ring-black/30 bg-brand-500/10 grid place-items-center skeleton animate-shimmer">
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h1 id="noteTitle" class="text-2xl md:text-3xl font-extrabold tracking-tight mb-1">Loading…</h1>
+                        <h1 id="noteTitle"
+                            class="text-2xl md:text-3xl font-extrabold tracking-tight mb-1 flex items-center gap-2">
+                            Loading… <span id="titleTeacherBadge"
+                                class="hidden inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/30"><span
+                                    class="material-symbols-rounded text-sm">verified</span><span
+                                    class="hidden sm:inline">Uploaded by Teacher</span><span
+                                    class="sm:hidden">Teacher</span></span></h1>
                         <div id="metaChips"
                             class="flex flex-wrap gap-2 text-[11px] text-neutral-600 dark:text-white/70"></div>
                     </div>
@@ -160,7 +167,8 @@
             </div>
 
             <!-- Preview -->
-            <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 shadow-card overflow-hidden" id="previewCard">
+            <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 shadow-card overflow-hidden"
+                id="previewCard">
                 <div class="px-4 py-2 flex items-center justify-between">
                     <h2 class="text-sm font-semibold">Preview</h2>
                     <div class="flex items-center gap-2 text-xs">
@@ -205,8 +213,10 @@
                         <div class="flex items-center gap-2">
                             <h3 id="sellerName" class="text-sm font-semibold">—</h3>
                             <span id="sellerBadge"
-                                class="hidden text-[11px] inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 ring-black/10 dark:ring-white/15"><span
-                                    class="material-symbols-rounded text-sm">verified</span>Verified</span>
+                                class="hidden text-[11px] inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 ring-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><span
+                                    class="material-symbols-rounded text-sm">verified</span><span
+                                    class="hidden sm:inline">Uploaded by Teacher</span><span
+                                    class="sm:hidden">Teacher</span></span>
                         </div>
                         <div id="sellerMeta" class="text-xs text-neutral-600 dark:text-white/70"> </div>
                         <div class="mt-2 flex items-center gap-2">
@@ -322,13 +332,13 @@
         const escapeHtml = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         // Unified theme toggle (same as index/about)
-        (function(){
+        (function () {
             const root = document.documentElement;
             const toggles = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
-            const updateIcons = (mode) => toggles().forEach(btn => { const ic = btn.querySelector('.material-symbols-rounded'); if(ic) ic.textContent = mode==='dark' ? 'light_mode' : 'dark_mode'; });
-            const setTheme = (mode) => { mode==='dark'?root.classList.add('dark'):root.classList.remove('dark'); localStorage.setItem('px_theme', mode); updateIcons(mode); };
+            const updateIcons = (mode) => toggles().forEach(btn => { const ic = btn.querySelector('.material-symbols-rounded'); if (ic) ic.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode'; });
+            const setTheme = (mode) => { mode === 'dark' ? root.classList.add('dark') : root.classList.remove('dark'); localStorage.setItem('px_theme', mode); updateIcons(mode); };
             setTheme(root.classList.contains('dark') ? 'dark' : 'light');
-            document.addEventListener('click', e => { const t = e.target.closest('[data-theme-toggle]'); if(!t) return; setTheme(root.classList.contains('dark') ? 'light' : 'dark'); });
+            document.addEventListener('click', e => { const t = e.target.closest('[data-theme-toggle]'); if (!t) return; setTheme(root.classList.contains('dark') ? 'light' : 'dark'); });
         })();
 
         // API helpers
@@ -376,7 +386,10 @@
             el('#sellerProfile').href = profUrl;
             el('#sellerName').textContent = s.name || 'Unknown Seller';
             el('#sellerMeta').textContent = s.college ? s.college : '';
-            if (s.verified) el('#sellerBadge').classList.remove('hidden');
+            if (s.verified) {
+                el('#sellerBadge').classList.remove('hidden');
+                el('#titleTeacherBadge').classList.remove('hidden');
+            }
             el('#sellerAvatar').innerHTML = s.avatar_url
                 ? `<img src="${s.avatar_url}" class="w-full h-full object-cover" alt="">`
                 : `<div class="w-full h-full grid place-items-center text-xs font-medium text-brand-700 dark:text-fuchsia-200 bg-gradient-to-br from-brand-500/30 to-brand-500/10">${escapeHtml((s.name || 'U').charAt(0).toUpperCase())}</div>`;
@@ -460,7 +473,7 @@
                 return false;
             };
             if (!tryPrimaryPreview()) {
-                previewArea.innerHTML = `<div class="py-14 text-xs opacity-70">No preview available.<br><span class='opacity-50'>Type: ${(n.mime_type||'n/a')} File: ${(n.original_filename||n.stored_path||'n/a')}</span></div>`;
+                previewArea.innerHTML = `<div class="py-14 text-xs opacity-70">No preview available.<br><span class='opacity-50'>Type: ${(n.mime_type || 'n/a')} File: ${(n.original_filename || n.stored_path || 'n/a')}</span></div>`;
             }
             thumbs.forEach((u, idx) => {
                 const btn = document.createElement('button');
