@@ -15,7 +15,9 @@
     <script>tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' } } } } };</script>
     <script>(() => { const s = localStorage.getItem('px_theme'); const p = matchMedia('(prefers-color-scheme: dark)').matches; const m = s ? s : (p ? 'dark' : 'light'); if (m === 'dark') document.documentElement.classList.add('dark'); })();</script>
     <script src="./config.js"></script>
-    <script>if (!window.API_BASE) window.API_BASE = 'http://127.0.0.1:8000';</script>
+    <script>// Hard-set API base to FastAPI dev server; adjust for prod deploy
+        window.API_BASE = 'http://127.0.0.1:8000';
+    </script>
     <style>
         .material-symbols-rounded {
             vertical-align: -5px
@@ -45,6 +47,44 @@
         <form id="profileForm" class="space-y-8">
             <section
                 class="rounded-2xl bg-white/80 dark:bg-white/5 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-6 space-y-6">
+                <div class="flex flex-col md:flex-row gap-6 items-start">
+                    <div class="w-32 h-32 rounded-2xl overflow-hidden ring-2 ring-black/10 dark:ring-white/15 bg-black/5 dark:bg-white/10 flex items-center justify-center relative"
+                        id="avatarPreview">
+                        <span class="text-xs opacity-60">No Avatar</span>
+                        <img id="avatarImg" class="hidden w-full h-full object-cover" alt="Avatar" />
+                        <button type="button" id="changeAvatarBtn"
+                            class="absolute bottom-1 right-1 px-2 py-0.5 text-[10px] rounded bg-brand-500 text-white shadow hover:bg-brand-600">Change</button>
+                        <input type="file" id="avatarFile" accept="image/*" class="hidden" />
+                    </div>
+                    <div class="grid md:grid-cols-2 gap-6 flex-1 w-full">
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Name</label>
+                            <input name="name" type="text"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
+                                placeholder="Display name" />
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Email</label>
+                            <input name="email" type="email"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
+                                placeholder="teacher@example.com" />
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">College
+                                ID</label>
+                            <input name="college_id" type="text"
+                                class="font-mono text-xs w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
+                                placeholder="UUID" />
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Department
+                                ID</label>
+                            <input name="department_id" type="text"
+                                class="font-mono text-xs w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
+                                placeholder="UUID" />
+                        </div>
+                    </div>
+                </div>
                 <div class="grid md:grid-cols-2 gap-6">
                     <div>
                         <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Headline</label>
@@ -114,11 +154,79 @@
         async function fetchMe() { const tk = getToken(); if (!tk) { return null; } try { const r = await fetch(API_BASE + '/api/me', { headers: { Authorization: 'Bearer ' + tk } }); if (!r.ok) return null; const j = await r.json(); return j?.profile || null; } catch { return null } }
         function setThemeToggle() { document.addEventListener('click', e => { if (e.target.closest('[data-theme-toggle]')) { const root = document.documentElement; const d = root.classList.toggle('dark'); localStorage.setItem('px_theme', d ? 'dark' : 'light') } }) }
         function fillForm(p) { if (!p) return; const f = document.getElementById('profileForm'); f.headline.value = p.headline || ''; f.bio.value = p.bio || ''; f.qualification.value = p.qualification || ''; f.years_experience.value = p.years_experience || ''; f.specialization.value = (p.specialization || []).join(', '); f.availability.value = p.availability ? JSON.stringify(p.availability, null, 2) : ''; f.social.value = p.social ? JSON.stringify(p.social, null, 2) : ''; }
+        function fillIdentity(p) { const f = document.getElementById('profileForm'); f.name.value = p.name || ''; f.email.value = p.email || ''; f.college_id.value = p.college_id || ''; f.department_id.value = p.department_id || ''; if (p.avatar_url || p.profile_image_url) { const img = document.getElementById('avatarImg'); img.src = p.avatar_url || p.profile_image_url; img.classList.remove('hidden'); document.querySelector('#avatarPreview span')?.classList.add('hidden'); } }
+        async function fetchProfileDirect() {
+            const tk = getToken();
+            if (!tk) return null;
+            try {
+                const r = await fetch(`${API_BASE}/api/teacher/profile/me`, { headers: { Authorization: 'Bearer ' + tk } });
+                if (!r.ok) return null;
+                const j = await r.json();
+                // Support both possible response shapes: { teacher: {...} } or direct profile
+                return j.teacher || j.profile || j || null;
+            } catch (err) {
+                console.debug('[EDIT_PROFILE] fetchProfileDirect error', err);
+                return null;
+            }
+        }
         async function load() {
-            setThemeToggle(); const prof = await fetchMe(); if (!prof) { document.getElementById('status').textContent = 'Login required'; return; } try { const r = await fetch(`${API_BASE}/api/teacher/profile/${encodeURIComponent(prof.auth_user_id || 'me')}`); if (r.ok) { const d = await r.json(); fillForm(d.teacher || {}); } } catch { }
+            setThemeToggle();
+            const statusEl = document.getElementById('status');
+            const token = getToken();
+            if (!token) {
+                statusEl.textContent = 'Login required (no token found)';
+                return;
+            }
+            // Try direct secure fetch first
+            let prof = await fetchProfileDirect();
+            if (!prof) {
+                // Fallback: attempt legacy /api/me then fetch by id if available
+                const me = await fetchMe();
+                if (me?.auth_user_id) {
+                    try {
+                        const r = await fetch(`${API_BASE}/api/teacher/profile/${encodeURIComponent(me.auth_user_id)}`, { headers: { Authorization: 'Bearer ' + token } });
+                        if (r.ok) {
+                            const j = await r.json();
+                            prof = j.teacher || j.profile || j || null;
+                        }
+                    } catch (e) { console.debug('[EDIT_PROFILE] secondary fetch error', e); }
+                }
+            }
+            if (!prof) {
+                statusEl.textContent = 'Login required (profile not accessible)';
+                return;
+            }
+            fillForm(prof);
+            fillIdentity(prof);
+            statusEl.textContent = 'Profile loaded';
         }
         document.getElementById('resetBtn').addEventListener('click', async () => { document.getElementById('status').textContent = 'Resetting...'; await load(); document.getElementById('status').textContent = 'Reset to loaded values.' });
-        document.getElementById('profileForm').addEventListener('submit', async e => { e.preventDefault(); const f = e.target; const tk = getToken(); if (!tk) { alert('Login required'); return; } const statusEl = document.getElementById('status'); statusEl.textContent = 'Saving...'; let availability = null, social = null; try { availability = f.availability.value ? JSON.parse(f.availability.value) : null; } catch { statusEl.textContent = 'Invalid JSON in availability'; return; } try { social = f.social.value ? JSON.parse(f.social.value) : null; } catch { statusEl.textContent = 'Invalid JSON in social'; return; } const body = { headline: f.headline.value || null, bio: f.bio.value || null, qualification: f.qualification.value || null, years_experience: f.years_experience.value ? Number(f.years_experience.value) : null, specialization: f.specialization.value ? f.specialization.value.split(',').map(s => s.trim()).filter(Boolean) : null, availability: availability, social: social }; try { const r = await fetch(API_BASE + '/api/teacher/profile/me', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Save failed'); statusEl.textContent = 'Saved ✔'; } catch (err) { statusEl.textContent = 'Error: ' + err.message; } });
+        document.getElementById('profileForm').addEventListener('submit', async e => { e.preventDefault(); const f = e.target; const tk = getToken(); if (!tk) { alert('Login required'); return; } const statusEl = document.getElementById('status'); statusEl.textContent = 'Saving...'; let availability = null, social = null; try { availability = f.availability.value ? JSON.parse(f.availability.value) : null; } catch { statusEl.textContent = 'Invalid JSON in availability'; return; } try { social = f.social.value ? JSON.parse(f.social.value) : null; } catch { statusEl.textContent = 'Invalid JSON in social'; return; } const body = { headline: f.headline.value || null, bio: f.bio.value || null, qualification: f.qualification.value || null, years_experience: f.years_experience.value ? Number(f.years_experience.value) : null, specialization: f.specialization.value ? f.specialization.value.split(',').map(s => s.trim()).filter(Boolean) : null, availability, social, name: f.name.value || null, email: f.email.value || null, college_id: f.college_id.value || null, department_id: f.department_id.value || null }; try { const r = await fetch(API_BASE + '/api/teacher/profile/me', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Save failed'); statusEl.textContent = 'Saved ✔'; } catch (err) { statusEl.textContent = 'Error: ' + err.message; } });
+        // Avatar change
+        document.getElementById('changeAvatarBtn').addEventListener('click', () => document.getElementById('avatarFile').click());
+        document.getElementById('avatarFile').addEventListener('change', async e => {
+            const file = e.target.files[0]; if (!file) return;
+            const tk = getToken(); if (!tk) { alert('Login required'); return; }
+            const statusEl = document.getElementById('status'); statusEl.textContent = 'Uploading avatar...';
+            const form = new FormData(); form.append('file', file);
+            // Try primary alt endpoint first, fallback to original if 405/404
+            const endpoints = ['/api/teacher/profile/me/avatar', '/api/teacher/profile/avatar'];
+            let success = false, lastErr = null;
+            for (const ep of endpoints) {
+                try {
+                    const r = await fetch(API_BASE + ep, { method: 'POST', headers: { Authorization: 'Bearer ' + tk }, body: form });
+                    console.debug('[AVATAR_UPLOAD] attempt', ep, r.status);
+                    const j = await r.json().catch(() => ({}));
+                    if (!r.ok) { throw new Error(j.detail || ('Upload failed ' + r.status)); }
+                    const img = document.getElementById('avatarImg');
+                    img.src = j.profile_image_url; img.classList.remove('hidden');
+                    document.querySelector('#avatarPreview span')?.classList.add('hidden');
+                    statusEl.textContent = 'Avatar updated ✔';
+                    success = true; break;
+                } catch (err) { lastErr = err; statusEl.textContent = 'Trying fallback...'; }
+            }
+            if (!success) { statusEl.textContent = 'Avatar error: ' + (lastErr ? lastErr.message : 'Unknown'); }
+        });
         load();
     </script>
 </body>

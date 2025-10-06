@@ -65,8 +65,8 @@
     <script src="./config.js"></script>
     <script src="./auth.js" defer></script>
     <script>
-        // Ensure API base is defined early (fallback to dev default if not set anywhere else)
-        if (!window.API_BASE) { window.API_BASE = 'http://127.0.0.1:8000'; }
+        // Force API base to backend dev server; prevents accidental use of static server origin
+        window.API_BASE = 'http://127.0.0.1:8000';
     </script>
 </head>
 
@@ -191,22 +191,9 @@
         let targetUser = originalUserParam || 'me';
 
         function noAuthForMe() {
-            const container = $('#classesGroups');
-            $('#tName').childNodes[0].textContent = 'Teacher Profile';
-            $('#tHeadline').textContent = '';
-            $('#tMeta').innerHTML = '';
-            container.innerHTML = `<div class="space-y-4">
-      <div class='text-sm text-amber-600 dark:text-amber-400'>Authentication required to view your own profile (user=me).</div>
-      <div class='glass rounded-xl p-4 ring-1 ring-black/5 dark:ring-white/10 space-y-3 max-w-md'>
-        <p class='text-xs opacity-70'>You can either sign in (so a token is stored) or load a public teacher profile by entering an auth user id below.</p>
-        <form id='switchUserForm' class='flex gap-2 text-xs'>
-          <input type='text' name='user' placeholder='Teacher auth user id' class='flex-1 px-2 py-1 rounded-md bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500'>
-          <button class='px-3 py-1 rounded-md bg-brand-500 text-white hover:bg-brand-600'>Load</button>
-        </form>
-      </div>
-    </div>`;
-            const f = document.getElementById('switchUserForm');
-            f?.addEventListener('submit', e => { e.preventDefault(); const val = new FormData(f).get('user'); if (val) { params.set('user', val); history.replaceState(null, '', '?' + params.toString()); targetUser = val; loadProfile(); } });
+            // Redirect immediately to teacher login with return URL
+            const ret = encodeURIComponent(location.pathname + location.search);
+            location.href = `./teachers/teacher_login.html?redirect=${ret}`;
         }
 
         async function resolveMeToId() {
@@ -236,14 +223,20 @@
             const base = await resolveApi();
             let res;
             // In dynamic self mode always hit /me variant so switching accounts (storage event) refreshes automatically
+            const strictParam = 'strict=1'; // instruct backend to use only teacher_profiles (implement server-side if not present)
             if (dynamicSelfMode) {
                 if (!token) { noAuthForMe(); return; }
-                try { res = await fetch(`${base}/api/teacher/profile/me`, { headers: { Authorization: 'Bearer ' + token } }); } catch (e) { console.error(e); renderError('Network error'); return; }
+                const url = `${base}/api/teacher/profile/me?${strictParam}`;
+                try { res = await fetch(url, { headers: { Authorization: 'Bearer ' + token, 'X-TeacherProfile-Strict': 'true' } }); } catch (e) { console.error(e); renderError('Network error'); return; }
             } else {
-                try { res = await fetch(`${base}/api/teacher/profile/${encodeURIComponent(targetUser)}`, { headers: token ? { Authorization: 'Bearer ' + token } : {} }); } catch (e) { console.error(e); renderError('Network error'); return; }
+                const url = `${base}/api/teacher/profile/${encodeURIComponent(targetUser)}?${strictParam}`;
+                try { res = await fetch(url, { headers: token ? { Authorization: 'Bearer ' + token, 'X-TeacherProfile-Strict': 'true' } : { 'X-TeacherProfile-Strict': 'true' } }); } catch (e) { console.error(e); renderError('Network error'); return; }
             }
             let data = {}; try { data = await res.json(); } catch { }
-            if (!res.ok) { renderError(data.detail || 'Failed to load'); return; }
+            if (!res.ok) {
+                if (dynamicSelfMode && res.status === 401) { noAuthForMe(); return; }
+                renderError(data.detail || 'Failed to load'); return;
+            }
             renderProfile(data);
             // Show self action buttons if this profile belongs to viewer
             if (dynamicSelfMode) {
@@ -290,7 +283,7 @@
         }
 
         function classCard(c) {
-            const tags = []; if (c.batch_range) tags.push(c.batch_range); if (c.section) tags.push('Sec ' + c.section); if (c.weekly_hours != null) tags.push(c.weekly_hours + 'h/w');
+            const tags = []; if (c.batch_range) tags.push(c.batch_range); if (c.section) tags.push('Sec ' + c.section);
             return `<div class='group relative rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 p-4 hover:shadow-card transition-shadow'>
       <div class='flex items-start gap-3'>
         <div class='w-10 h-10 rounded-lg bg-gradient-to-br from-brand-500/30 to-brand-700/20 grid place-items-center text-sm font-bold text-brand-700 dark:text-fuchsia-200'>${esc((c.subject || 'S').charAt(0).toUpperCase())}</div>

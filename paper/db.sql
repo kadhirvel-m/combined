@@ -287,6 +287,7 @@ CREATE TABLE public.teacher_profiles (
   qualification text,
   availability jsonb DEFAULT '{}'::jsonb,
   social jsonb DEFAULT '{}'::jsonb,
+  profile_image_url text,    -- uploaded avatar (supabase storage)
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT teacher_profiles_pkey PRIMARY KEY (auth_user_id),
@@ -304,6 +305,7 @@ CREATE TABLE public.teacher_profiles (
 --   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS email text;
 --   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS college_id uuid REFERENCES public.colleges(id);
 --   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS department_id uuid REFERENCES public.departments(id);
+--   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS profile_image_url text;
 -- Bulk backfill / upsert from approved applications:
 --   INSERT INTO public.teacher_profiles(auth_user_id,name,email,college_id,department_id)
 --   SELECT auth_user_id,name,email,college_id,department_id

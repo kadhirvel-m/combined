@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import enum
 import io
 import json
 import logging
@@ -16,6 +17,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, date
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, Iterator, List, Optional, Tuple
@@ -72,6 +74,34 @@ def get_anon_client() -> Optional[Client]:
         supabase_logger.warning("Missing SUPABASE_ANON_KEY; auth-dependent routes will be disabled.")
         return None
     return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+
+def _to_supabase_json(value: Any) -> Any:
+    """Recursively coerce common Python types (UUID, datetime, set, etc.) into JSON-serializable forms."""
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, enum.Enum):
+        return value.value
+    if isinstance(value, BaseModel):
+        return _to_supabase_json(value.dict(exclude_none=True))
+    if isinstance(value, set):
+        return [_to_supabase_json(v) for v in value]
+    if isinstance(value, (list, tuple)):
+        return [_to_supabase_json(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _to_supabase_json(v) for k, v in value.items() if v is not None}
+    return value
+
+
+def _supabase_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a JSON-serializable dict suitable for Supabase from a Pydantic .dict() payload."""
+    return {k: _to_supabase_json(v) for k, v in raw.items() if v is not None}
 
 # --- Resiliency helpers for Supabase/httpx transient protocol errors ---
 # Some users have observed intermittent httpcore.RemoteProtocolError("Server disconnected") coming
@@ -5447,32 +5477,47 @@ def teacher_my_notes(authorization: Optional[str] = Header(default=None)):
 def _fetch_teacher_core(supabase: Client, teacher_user_id: str) -> Dict[str, Any]:
     """Fetch teacher core info from teacher_applications + admin_roles + user_profiles + teacher_profiles."""
     core: Dict[str, Any] = {"auth_user_id": teacher_user_id}
-    # Application (approved)
+    # Extended teacher profile (now primary source for identity & academic linkage)
+    tprof = supabase.table("teacher_profiles").select("name,email,college_id,department_id,headline,bio,specialization,years_experience,qualification,availability,social,profile_image_url").eq("auth_user_id", teacher_user_id).limit(1).execute()
+    if not getattr(tprof, "error", None) and tprof.data:
+        rowp = tprof.data[0]
+        # Identity / academic fields preferred from teacher_profiles first
+        for k in ["name","email","college_id","department_id"]:
+            if rowp.get(k):
+                core[k] = rowp.get(k)
+        core.update({k: rowp.get(k) for k in ["headline","bio","specialization","years_experience","qualification","availability","social"] if k in rowp})
+        if rowp.get("profile_image_url"):
+            core["avatar_url"] = rowp.get("profile_image_url")
+    # Application (fallback / supplemental for subjects & status & missing identity)
     app = supabase.table("teacher_applications").select("name,email,college_id,department_id,subjects,status").eq("auth_user_id", teacher_user_id).limit(1).execute()
     if getattr(app, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (teacher application): {app.error}")
     if app.data:
-        core.update({k: app.data[0].get(k) for k in ["name","email","college_id","department_id","subjects","status"]})
+        arow = app.data[0]
+        # subjects and status always sourced from application
+        for k in ["subjects","status"]:
+            if arow.get(k) is not None:
+                core[k] = arow.get(k)
+        # Only fill identity if still missing
+        for k in ["name","email","college_id","department_id"]:
+            if not core.get(k) and arow.get(k):
+                core[k] = arow.get(k)
     # Role
     role_res = supabase.table("admin_roles").select("role").eq("auth_user_id", teacher_user_id).limit(1).execute()
     if not getattr(role_res, "error", None) and role_res.data:
         core["role"] = role_res.data[0].get("role")
-    # Profile (avatar + optional fields)
+    # User profile (legacy avatar/headline/bio fallback)
     prof = supabase.table("user_profiles").select("name,profile_image_url,headline,bio,semester,batch_from,batch_to").eq("auth_user_id", teacher_user_id).limit(1).execute()
     if not getattr(prof, "error", None) and prof.data:
         row = prof.data[0]
-        core.setdefault("name", row.get("name"))
-        core["avatar_url"] = row.get("profile_image_url")
-        core.setdefault("headline", row.get("headline"))
-        core.setdefault("bio", row.get("bio"))
-    # Extended teacher profile (now also caches identity + academic linkage)
-    tprof = supabase.table("teacher_profiles").select("name,email,college_id,department_id,headline,bio,specialization,years_experience,qualification,availability,social").eq("auth_user_id", teacher_user_id).limit(1).execute()
-    if not getattr(tprof, "error", None) and tprof.data:
-        # only copy identity/academic fields if missing from application (or application absent)
-        rowp = tprof.data[0]
-        for k in ["name","email","college_id","department_id"]:
-            core.setdefault(k, rowp.get(k))
-        core.update({k: rowp.get(k) for k in ["headline","bio","specialization","years_experience","qualification","availability","social"] if k in rowp})
+        if not core.get("name") and row.get("name"):
+            core["name"] = row.get("name")
+        if not core.get("avatar_url") and row.get("profile_image_url"):
+            core["avatar_url"] = row.get("profile_image_url")
+        if not core.get("headline") and row.get("headline"):
+            core["headline"] = row.get("headline")
+        if not core.get("bio") and row.get("bio"):
+            core["bio"] = row.get("bio")
     return core
 
 def _sync_teacher_profile_from_application(supabase: Client, auth_user_id: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -5499,13 +5544,13 @@ def _sync_teacher_profile_from_application(supabase: Client, auth_user_id: Optio
             try: print(f"[TPROF_DEBUG] Application not approved status={row.get('status')}")
             except Exception: pass
         return {"profile_sync": "no-op", "reason": "not approved"}
-    payload = {
-        "auth_user_id": auth_user_id,
+    payload = _supabase_payload({
+        "auth_user_id": str(auth_user_id) if auth_user_id else None,
         "name": row.get("name"),
         "email": row.get("email"),
         "college_id": row.get("college_id"),
         "department_id": row.get("department_id"),
-    }
+    })
     existing = supabase.table("teacher_profiles").select("auth_user_id").eq("auth_user_id", auth_user_id).limit(1).execute()
     if getattr(existing, "error", None):
         if debug:
@@ -5513,7 +5558,8 @@ def _sync_teacher_profile_from_application(supabase: Client, auth_user_id: Optio
             except Exception: pass
         return {"profile_sync": "error", "error": str(existing.error)}
     if existing.data:
-        upd = supabase.table("teacher_profiles").update({k: v for k,v in payload.items() if k != "auth_user_id"}).eq("auth_user_id", auth_user_id).execute()
+        upd_payload = {k: v for k, v in payload.items() if k != "auth_user_id"}
+        upd = supabase.table("teacher_profiles").update(upd_payload).eq("auth_user_id", auth_user_id).execute()
         if getattr(upd, "error", None):
             err_txt = str(upd.error)
             if debug:
@@ -5567,13 +5613,20 @@ def admin_backfill_teacher_profiles(authorization: Optional[str] = Header(defaul
         uid = r.get("auth_user_id")
         if not uid:
             continue
-        payload = {"auth_user_id": uid, "name": r.get("name"), "email": r.get("email"), "college_id": r.get("college_id"), "department_id": r.get("department_id")}
+        payload = _supabase_payload({
+            "auth_user_id": str(uid) if uid else None,
+            "name": r.get("name"),
+            "email": r.get("email"),
+            "college_id": r.get("college_id"),
+            "department_id": r.get("department_id"),
+        })
         existing = supabase.table("teacher_profiles").select("auth_user_id").eq("auth_user_id", uid).limit(1).execute()
         if getattr(existing, "error", None):
             errors.append({"user": uid, "error": str(existing.error)})
             continue
         if existing.data:
-            upd = supabase.table("teacher_profiles").update({k:v for k,v in payload.items() if k != "auth_user_id"}).eq("auth_user_id", uid).execute()
+            upd_payload = {k: v for k, v in payload.items() if k != "auth_user_id"}
+            upd = supabase.table("teacher_profiles").update(upd_payload).eq("auth_user_id", uid).execute()
             if getattr(upd, "error", None):
                 errors.append({"user": uid, "error": str(upd.error)})
             else:
@@ -5623,7 +5676,7 @@ def _enrich_academics(supabase: Client, core: Dict[str, Any]):
                 core["degree_name"] = deg.data[0].get("name")
 
 def _fetch_teacher_classes(supabase: Client, teacher_user_id: str) -> List[Dict[str, Any]]:
-    cls = supabase.table("teacher_classes").select("id,batch_id,semester,subject,section,degree_id,department_id,college_id,weekly_hours,starts_on,ends_on,created_at").eq("teacher_user_id", teacher_user_id).order("created_at", desc=True).limit(500).execute()
+    cls = supabase.table("teacher_classes").select("id,batch_id,semester,subject,section,degree_id,department_id,college_id,created_at").eq("teacher_user_id", teacher_user_id).order("created_at", desc=True).limit(500).execute()
     if getattr(cls, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (teacher classes): {cls.error}")
     classes = cls.data or []
@@ -5714,6 +5767,12 @@ class TeacherProfileUpsertIn(BaseModel):
     qualification: Optional[str] = None
     availability: Optional[Dict[str, Any]] = None
     social: Optional[Dict[str, Any]] = None
+    # Allow editing identity/academic linkage if needed (optional; admin may validate externally)
+    name: Optional[str] = None
+    email: Optional[str] = None
+    college_id: Optional[uuid.UUID] = None
+    department_id: Optional[uuid.UUID] = None
+    profile_image_url: Optional[str] = None  # normally set via upload endpoint
 
 # ================= Teacher Classes CRUD Models ==================
 class TeacherClassIn(BaseModel):
@@ -5724,10 +5783,7 @@ class TeacherClassIn(BaseModel):
     college_id: Optional[uuid.UUID] = None
     degree_id: Optional[uuid.UUID] = None
     department_id: Optional[uuid.UUID] = None
-    weekly_hours: Optional[int] = Field(None, ge=0, le=60)
     notes: Optional[str] = None
-    starts_on: Optional[date] = None
-    ends_on: Optional[date] = None
 
 class TeacherClassUpdate(BaseModel):
     subject: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -5737,10 +5793,7 @@ class TeacherClassUpdate(BaseModel):
     college_id: Optional[uuid.UUID] = None
     degree_id: Optional[uuid.UUID] = None
     department_id: Optional[uuid.UUID] = None
-    weekly_hours: Optional[int] = Field(None, ge=0, le=60)
     notes: Optional[str] = None
-    starts_on: Optional[date] = None
-    ends_on: Optional[date] = None
 
 class TeacherClassOut(BaseModel):
     id: uuid.UUID
@@ -5752,10 +5805,7 @@ class TeacherClassOut(BaseModel):
     college_id: Optional[uuid.UUID] = None
     degree_id: Optional[uuid.UUID] = None
     department_id: Optional[uuid.UUID] = None
-    weekly_hours: Optional[int] = None
     notes: Optional[str] = None
-    starts_on: Optional[date] = None
-    ends_on: Optional[date] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -5770,10 +5820,7 @@ def _map_teacher_class_row(row: Dict[str, Any]) -> TeacherClassOut:
         college_id=uuid.UUID(row["college_id"]) if row.get("college_id") else None,
         degree_id=uuid.UUID(row["degree_id"]) if row.get("degree_id") else None,
         department_id=uuid.UUID(row["department_id"]) if row.get("department_id") else None,
-        weekly_hours=row.get("weekly_hours"),
-        notes=row.get("notes"),
-        starts_on=row.get("starts_on"),
-        ends_on=row.get("ends_on"),
+    notes=row.get("notes"),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
@@ -5782,10 +5829,11 @@ def _map_teacher_class_row(row: Dict[str, Any]) -> TeacherClassOut:
 def upsert_teacher_profile(payload: TeacherProfileUpsertIn, authorization: Optional[str] = Header(default=None)):
     uid = _require_teacher(authorization)
     supabase = get_service_client()
-    row = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
+    row = _supabase_payload(payload.dict(exclude_unset=True))
     if not row:
         return {"ok": True, "updated": False}
-    row["auth_user_id"] = uid
+    row["auth_user_id"] = str(uid)
+    row = _supabase_payload(row)
     # Try update first
     existing = supabase.table("teacher_profiles").select("auth_user_id").eq("auth_user_id", uid).limit(1).execute()
     if getattr(existing, "error", None):
@@ -5799,6 +5847,185 @@ def upsert_teacher_profile(payload: TeacherProfileUpsertIn, authorization: Optio
         if getattr(ins, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (insert teacher profile): {ins.error}")
     return {"ok": True, "updated": True}
+
+@teacher_router.post("/api/teacher/profile/avatar", summary="Upload/replace teacher profile avatar (stores public URL in teacher_profiles)")
+async def upload_teacher_avatar(file: UploadFile = File(...), authorization: Optional[str] = Header(default=None)):
+    """Store teacher avatar in a Supabase Storage bucket and persist the public URL.
+
+    Env vars consulted (first found wins):
+      SUPABASE_TEACHER_AVATARS_BUCKET | SUPABASE_AVATARS_BUCKET | SUPABASE_PUBLIC_BUCKET | (fallback) 'teacher-avatars'
+    Object key pattern: teacher_avatars/<auth_user_id><ext>
+    """
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    debug = bool(os.getenv("TEACHER_PROFILE_DEBUG"))
+    filename = file.filename or "avatar.jpg"
+    ext = (Path(filename).suffix or ".jpg").lower()
+    allowed = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported image type")
+    data = await file.read()
+    if len(data) > 3 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 3MB)")
+    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}
+    content_type = mime_map.get(ext, "application/octet-stream")
+    bucket = (
+        os.getenv("SUPABASE_TEACHER_AVATARS_BUCKET")
+        or os.getenv("SUPABASE_AVATARS_BUCKET")
+        or os.getenv("SUPABASE_BUCKET")  # generic project bucket key you provided
+        or os.getenv("SUPABASE_PUBLIC_BUCKET")
+        or "teacher-avatars"
+    )
+    object_path = f"teacher_avatars/{uid}{ext}"
+    try:
+        # Ensure bucket exists (service role key has permission)
+        try:
+            buckets = supabase.storage.list_buckets()
+            names = {b.get('name') for b in (buckets or []) if isinstance(b, dict)}
+            if bucket not in names:
+                if debug:
+                    try: print(f"[TPROF_DEBUG] Creating missing bucket {bucket}")
+                    except Exception: pass
+                supabase.storage.create_bucket(bucket, public=True)
+        except Exception as be:
+            if debug:
+                try: print(f"[TPROF_DEBUG] Bucket check/create error={be}")
+                except Exception: pass
+            # Continue; upload may still work if race condition
+        storage = supabase.storage.from_(bucket)
+        # Supabase python client expects header values as str; use 'true' not True
+        file_opts = {
+            "content-type": content_type,
+            "upsert": "true",  # critical: must be string
+            "cache-control": "86400",
+        }
+        upload_res = storage.upload(object_path, data, file_opts)
+        if debug:
+            try: print(f"[TPROF_DEBUG] Avatar upload result bucket={bucket} path={object_path} res={upload_res}")
+            except Exception: pass
+    except Exception as e:
+        msg = str(e)
+        if debug:
+            try: print(f"[TPROF_DEBUG] Avatar upload exception msg={msg}")
+            except Exception: pass
+        if "Header value" in msg and "bool" in msg:
+            msg += " (probable cause: boolean value in file options; fixed to string but please retry)"
+        raise HTTPException(status_code=500, detail=f"Failed to upload avatar: {msg}")
+    # Obtain public URL
+    try:
+        pub = storage.get_public_url(object_path)
+        # supabase-py returns dict with publicUrl key
+        if isinstance(pub, dict):
+            public_url = pub.get("publicUrl") or pub.get("public_url") or pub.get("data") or ""
+        else:
+            public_url = str(pub)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get public URL: {e}")
+    if not public_url:
+        raise HTTPException(status_code=500, detail="Public URL empty after upload")
+    # Update / upsert teacher_profiles
+    existing = supabase.table("teacher_profiles").select("auth_user_id").eq("auth_user_id", uid).limit(1).execute()
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get teacher profile for avatar): {existing.error}")
+    payload = {"profile_image_url": public_url}
+    if existing.data:
+        upd = supabase.table("teacher_profiles").update(payload).eq("auth_user_id", uid).execute()
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (update avatar): {upd.error}")
+    else:
+        payload["auth_user_id"] = uid
+        ins = supabase.table("teacher_profiles").insert(payload).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert avatar profile): {ins.error}")
+    return {"ok": True, "profile_image_url": public_url, "avatar_url": public_url, "bucket": bucket, "path": object_path}
+
+@teacher_router.post("/api/teacher/profile/me/avatar", summary="Upload/replace my teacher profile avatar (alt path)")
+async def upload_teacher_avatar_alt(file: UploadFile = File(...), authorization: Optional[str] = Header(default=None)):
+    # Reuse logic by calling original function
+    return await upload_teacher_avatar(file=file, authorization=authorization)
+
+# ================= Teacher Academics Options (college/departments/batches) ==================
+@teacher_router.get("/api/teacher/academics/mine", summary="Return teacher's academic linkage and available departments + batches")
+def get_teacher_academics_mine(authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    # Resolve college / department primarily from teacher_profiles then fallback application
+    prof = supabase.table("teacher_profiles").select("college_id,department_id").eq("auth_user_id", uid).limit(1).execute()
+    college_id = department_id = None
+    if not getattr(prof, "error", None) and prof.data:
+        row = prof.data[0]
+        college_id = row.get("college_id") or None
+        department_id = row.get("department_id") or None
+    if not college_id or not department_id:
+        app = supabase.table("teacher_applications").select("college_id,department_id").eq("auth_user_id", uid).limit(1).execute()
+        if not getattr(app, "error", None) and app.data:
+            arow = app.data[0]
+            college_id = college_id or arow.get("college_id") or None
+            department_id = department_id or arow.get("department_id") or None
+    departments: List[Dict[str, Any]] = []
+    batches: List[Dict[str, Any]] = []
+    degrees: List[Dict[str, Any]] = []
+    degree_id: Optional[str] = None
+    if college_id:
+        # Departments for college
+        dres = supabase.table("departments").select("id,name,degree_id").eq("college_id", str(college_id)).order("name").execute()
+        if getattr(dres, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (departments): {dres.error}")
+        departments = dres.data or []
+        # Degrees for college (only those referenced by departments for efficiency)
+        deg_ids = sorted({d.get("degree_id") for d in departments if d.get("degree_id")})
+        if deg_ids:
+            deg_res = supabase.table("degrees").select("id,name").in_("id", deg_ids).execute()
+            if not getattr(deg_res, "error", None):
+                degrees = deg_res.data or []
+        # Determine teacher's degree id via their department row
+        if department_id:
+            for d in departments:
+                if d.get("id") == department_id:
+                    degree_id = d.get("degree_id")
+                    break
+        # Batches (filtered later by department client-side)
+        bres = supabase.table("batches").select("id,department_id,from_year,to_year").eq("college_id", str(college_id)).order("from_year").execute()
+        if getattr(bres, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (batches): {bres.error}")
+        raw_batches = bres.data or []
+        for b in raw_batches:
+            fy = b.get("from_year"); ty = b.get("to_year")
+            b["label"] = f"{fy}-{ty}" if fy and ty else "Batch"
+            batches.append(b)
+    return {
+        "college_id": college_id,
+        "department_id": department_id,
+        "degree_id": degree_id,
+        "departments": departments,
+        "batches": batches,
+        "degrees": degrees,
+    }
+# ================= Debug Helpers (can be removed in production) ==================
+@teacher_router.get("/api/debug/teacher-routes", summary="Debug: list registered teacher routes")
+def debug_list_teacher_routes():
+    from fastapi.routing import APIRoute
+    routes = []
+    for r in teacher_router.routes:  # only teacher_router scope
+        if isinstance(r, APIRoute):
+            routes.append({
+                "path": r.path,
+                "methods": sorted(list(r.methods - {"HEAD"})),
+                "name": r.name,
+            })
+    return {"routes": routes}
+
+@teacher_router.get("/api/debug/teacher-avatar-route", summary="Debug: confirm avatar route present")
+def debug_avatar_route_presence():
+    from fastapi.routing import APIRoute
+    present = False
+    methods: List[str] = []
+    for r in teacher_router.routes:
+        if isinstance(r, APIRoute) and r.path == "/api/teacher/profile/avatar":
+            present = True
+            methods = sorted(list(r.methods - {"HEAD"}))
+            break
+    return {"avatar_route_present": present, "methods": methods}
 
 # ================= Teacher Classes CRUD Endpoints ==================
 @teacher_router.get("/api/teacher/classes/mine", response_model=List[TeacherClassOut], summary="List my teacher classes")
@@ -5815,8 +6042,9 @@ def list_my_teacher_classes(authorization: Optional[str] = Header(default=None))
 def create_teacher_class(payload: TeacherClassIn, authorization: Optional[str] = Header(default=None)):
     uid = _require_teacher(authorization)
     supabase = get_service_client()
-    row = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
-    row["teacher_user_id"] = uid
+    row = _supabase_payload(payload.dict(exclude_unset=True))
+    row["teacher_user_id"] = str(uid)
+    row = _supabase_payload(row)
     ins = supabase.table("teacher_classes").insert(row).execute()
     if getattr(ins, "error", None):
         err_txt = str(ins.error)
@@ -5838,7 +6066,7 @@ def update_teacher_class(class_id: uuid.UUID, payload: TeacherClassUpdate, autho
         raise HTTPException(status_code=404, detail="Class not found")
     if existing.data[0].get("teacher_user_id") != uid:
         raise HTTPException(status_code=403, detail="Cannot modify another teacher's class")
-    updates = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
+    updates = _supabase_payload(payload.dict(exclude_unset=True))
     if not updates:
         row_res = supabase.table("teacher_classes").select("*").eq("id", str(class_id)).limit(1).execute()
         if getattr(row_res, "error", None):
