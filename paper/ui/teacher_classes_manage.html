@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Manage Classes — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' } }, boxShadow: { card: '0 4px 20px rgba(0,0,0,.12)' } } } };</script>
+    <script>(() => { const s = localStorage.getItem('px_theme'); const p = matchMedia('(prefers-color-scheme: dark)').matches; const m = s ? s : (p ? 'dark' : 'light'); if (m === 'dark') document.documentElement.classList.add('dark'); })();</script>
+    <script src="./config.js"></script>
+    <script>if (!window.API_BASE) window.API_BASE = 'http://127.0.0.1:8000';</script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -5px
+        }
+    </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased bg-white dark:bg-[#12121a] text-neutral-900 dark:text-white">
+    <header class="bg-white/70 dark:bg-[#1E1E2F]/70 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3">
+            <a href="./teacher_profile.html?user=me" class="flex items-center gap-2">
+                <img src="../assets/img/logo-light.svg" class="h-9 dark:hidden" alt="Paper X">
+                <img src="../assets/img/logo-dark.svg" class="h-9 hidden dark:block" alt="Paper X">
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm">
+                <a href="./teacher_profile_edit.html" class="hover:text-brand-500">Edit Profile</a>
+            </nav>
+            <button data-theme-toggle
+                class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                    class="material-symbols-rounded text-base">dark_mode</span></button>
+        </div>
+    </header>
+    <main class="container py-8 max-w-6xl space-y-10">
+        <div class="flex items-center justify-between">
+            <h1 class="text-2xl font-bold tracking-tight">Manage Classes</h1>
+            <a href="./teacher_profile.html?user=me" class="text-sm text-brand-500 hover:underline">Back to Profile</a>
+        </div>
+        <section class="grid lg:grid-cols-3 gap-10">
+            <div class="lg:col-span-1 space-y-6">
+                <form id="classForm"
+                    class="space-y-5 rounded-2xl bg-white/80 dark:bg-white/5 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-6">
+                    <h2 class="text-sm font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Add /
+                        Edit Class</h2>
+                    <input type="hidden" name="class_id" />
+                    <div>
+                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Subject</label>
+                        <input name="subject" required
+                            class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-3 py-2"
+                            placeholder="Subject name" />
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Semester</label>
+                            <input name="semester" type="number" min="1" max="12"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-3 py-2" />
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Section</label>
+                            <input name="section"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-3 py-2"
+                                placeholder="A" />
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Weekly
+                                Hours</label>
+                            <input name="weekly_hours" type="number" min="0" max="60"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-3 py-2" />
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Starts</label>
+                            <input name="starts_on" type="date"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-3 py-2" />
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Ends</label>
+                            <input name="ends_on" type="date"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-3 py-2" />
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Notes</label>
+                        <textarea name="notes" rows="3"
+                            class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-3 py-2"
+                            placeholder="Optional details"></textarea>
+                    </div>
+                    <div class="flex items-center justify-between gap-3">
+                        <button type="button" id="resetBtn"
+                            class="px-4 py-2 rounded-lg bg-black/5 dark:bg-white/10 text-sm hover:bg-black/10 dark:hover:bg-white/15">Clear</button>
+                        <button type="submit"
+                            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600"><span
+                                class="material-symbols-rounded text-base">save</span><span id="submitLabel">Add
+                                Class</span></button>
+                    </div>
+                    <div id="formStatus" class="text-xs font-medium"></div>
+                </form>
+            </div>
+            <div class="lg:col-span-2 space-y-6">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">My
+                        Classes</h2>
+                    <input id="filterInput" placeholder="Filter subject"
+                        class="text-sm px-3 py-2 rounded-full bg-white/80 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500" />
+                </div>
+                <div id="classesEmpty" class="hidden text-sm opacity-60 py-6">No classes added yet.</div>
+                <div id="classesError" class="hidden text-sm text-red-600 dark:text-red-400 py-6"></div>
+                <div id="classesGrid" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+            </div>
+        </section>
+    </main>
+    <script>
+        const API_BASE = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+        function getToken() { const keys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token']; for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } } return '' }
+        function setThemeToggle() { document.addEventListener('click', e => { if (e.target.closest('[data-theme-toggle]')) { const r = document.documentElement; const d = r.classList.toggle('dark'); localStorage.setItem('px_theme', d ? 'dark' : 'light') } }) }
+        function esc(s = '') { return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])) }
+        const els = { grid: document.getElementById('classesGrid'), empty: document.getElementById('classesEmpty'), err: document.getElementById('classesError'), form: document.getElementById('classForm'), status: document.getElementById('formStatus'), filter: document.getElementById('filterInput'), submitLabel: document.getElementById('submitLabel') };
+        async function fetchJSON(u, opts = {}) { const r = await fetch(u, opts); const t = await r.text(); let d = {}; try { d = t ? JSON.parse(t) : {}; } catch { d = { detail: t } } if (!r.ok) { const e = new Error(d.detail || 'Request failed'); e.status = r.status; e.data = d; throw e; } return d; }
+        async function loadClasses() { els.grid.innerHTML = ''; els.empty.classList.add('hidden'); els.err.classList.add('hidden'); try { const data = await fetchJSON(API_BASE + '/api/teacher/classes/mine', { headers: { Authorization: 'Bearer ' + getToken() } }); const filter = (els.filter.value || '').toLowerCase(); const list = data.filter(c => !filter || (c.subject || '').toLowerCase().includes(filter)); if (!list.length) { els.empty.classList.remove('hidden'); return; } list.forEach(c => { els.grid.insertAdjacentHTML('beforeend', classCard(c)); }); } catch (e) { els.err.textContent = e.message; els.err.classList.remove('hidden'); } }
+        function classCard(c) {
+            const meta = [c.semester ? ('Sem ' + c.semester) : '', c.section ? ('Sec ' + esc(c.section)) : '', (c.weekly_hours != null ? (c.weekly_hours + 'h/w') : '')].filter(Boolean).join(' • '); return `<div class='group relative rounded-2xl ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/5 p-4 flex flex-col gap-3'>
+  <div class='flex-1 min-w-0'>
+    <h3 class='font-semibold text-sm leading-snug line-clamp-2 mb-1'>${esc(c.subject || 'Subject')}</h3>
+    <p class='text-[11px] text-neutral-600 dark:text-white/50 min-h-[16px]'>${esc(meta)}</p>
+    <p class='text-[11px] text-neutral-500 dark:text-white/40 line-clamp-3'>${esc(c.notes || '')}</p>
+  </div>
+  <div class='flex items-center justify-between text-[11px] opacity-70'>
+    <span>${c.starts_on ? esc(c.starts_on) : ''}</span>
+    <div class='flex items-center gap-2'>
+      <button data-edit='${c.id}' class='px-2 py-1 rounded-md bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15'>Edit</button>
+      <button data-del='${c.id}' class='px-2 py-1 rounded-md bg-red-500/15 text-red-600 dark:text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/25'>Del</button>
+    </div>
+  </div>
+</div>`}
+        function formToPayload(f) { return ['subject', 'semester', 'section', 'weekly_hours', 'notes', 'starts_on', 'ends_on'].reduce((o, k) => { let v = f[k].value.trim(); if (!v) { o[k] = null; return o; } if (['semester', 'weekly_hours'].includes(k)) v = Number(v); o[k] = v; return o; }, {}) }
+        els.form.addEventListener('submit', async e => { e.preventDefault(); const tk = getToken(); if (!tk) { alert('Login required'); return; } const id = els.form.class_id.value || null; els.status.textContent = 'Saving...'; const payload = formToPayload(els.form); try { let r; if (id) { r = await fetch(API_BASE + '/api/teacher/classes/' + encodeURIComponent(id), { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } else { r = await fetch(API_BASE + '/api/teacher/classes', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Save failed'); els.status.textContent = 'Saved ✔'; els.form.reset(); els.submitLabel.textContent = 'Add Class'; loadClasses(); } catch (err) { els.status.textContent = 'Error: ' + err.message; } });
+        document.addEventListener('click', e => {
+            if (e.target.matches('[data-edit]')) {
+                const card = e.target.closest('.group'); const id = e.target.getAttribute('data-edit'); // fetch latest row before editing
+                (async () => { try { const rows = await fetchJSON(API_BASE + '/api/teacher/classes/mine', { headers: { Authorization: 'Bearer ' + getToken() } }); const row = rows.find(r => r.id === id); if (!row) return; els.form.class_id.value = row.id; els.form.subject.value = row.subject || ''; els.form.semester.value = row.semester || ''; els.form.section.value = row.section || ''; els.form.weekly_hours.value = row.weekly_hours || ''; els.form.notes.value = row.notes || ''; els.form.starts_on.value = row.starts_on || ''; els.form.ends_on.value = row.ends_on || ''; els.submitLabel.textContent = 'Update Class'; window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { } })();
+            }
+            if (e.target.matches('[data-del]')) { const id = e.target.getAttribute('data-del'); if (!confirm('Delete this class?')) return; (async () => { els.status.textContent = 'Deleting...'; try { const r = await fetch(API_BASE + '/api/teacher/classes/' + encodeURIComponent(id), { method: 'DELETE', headers: { Authorization: 'Bearer ' + getToken() } }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Delete failed'); els.status.textContent = 'Deleted'; loadClasses(); } catch (err) { els.status.textContent = 'Error: ' + err.message; } })(); }
+        }
+        );
+        els.filter.addEventListener('input', () => { loadClasses() });
+        document.getElementById('resetBtn').addEventListener('click', () => { els.form.reset(); els.form.class_id.value = ''; els.submitLabel.textContent = 'Add Class'; els.status.textContent = '' });
+        loadClasses(); setThemeToggle();
+    </script>
+</body>
+
+</html>

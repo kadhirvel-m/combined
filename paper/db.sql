@@ -1,6 +1,15 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+CREATE TABLE public.admin_roles (
+  auth_user_id uuid NOT NULL,
+  role text NOT NULL DEFAULT 'student'::text,
+  permissions jsonb DEFAULT '{}'::jsonb,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT admin_roles_pkey PRIMARY KEY (auth_user_id),
+  CONSTRAINT admin_roles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.batches (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   college_id uuid NOT NULL,
@@ -38,6 +47,61 @@ CREATE TABLE public.departments (
   CONSTRAINT departments_pkey PRIMARY KEY (id),
   CONSTRAINT departments_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
   CONSTRAINT departments_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id)
+);
+CREATE TABLE public.marketplace_notes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  owner_user_id uuid NOT NULL,
+  title text NOT NULL,
+  description text,
+  subject text,
+  unit text,
+  exam_type text,
+  categories ARRAY DEFAULT '{}'::text[],
+  price_cents integer NOT NULL DEFAULT 0 CHECK (price_cents >= 0),
+  original_filename text,
+  stored_path text,
+  mime_type text,
+  file_size bigint,
+  downloads integer NOT NULL DEFAULT 0,
+  purchases integer NOT NULL DEFAULT 0,
+  avg_rating numeric DEFAULT 0,
+  rating_count integer DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  college_id uuid,
+  degree_id uuid,
+  department_id uuid,
+  batch_id uuid,
+  semester integer CHECK (semester >= 1 AND semester <= 12),
+  cover_path text,
+  CONSTRAINT marketplace_notes_pkey PRIMARY KEY (id),
+  CONSTRAINT marketplace_notes_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES auth.users(id),
+  CONSTRAINT marketplace_notes_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
+  CONSTRAINT marketplace_notes_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id),
+  CONSTRAINT marketplace_notes_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT marketplace_notes_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id)
+);
+CREATE TABLE public.marketplace_purchases (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  note_id uuid NOT NULL,
+  buyer_user_id uuid NOT NULL,
+  amount_cents integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT marketplace_purchases_pkey PRIMARY KEY (id),
+  CONSTRAINT marketplace_purchases_note_id_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id),
+  CONSTRAINT marketplace_purchases_buyer_user_id_fkey FOREIGN KEY (buyer_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.marketplace_reviews (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  note_id uuid NOT NULL,
+  reviewer_user_id uuid NOT NULL,
+  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT marketplace_reviews_pkey PRIMARY KEY (id),
+  CONSTRAINT marketplace_reviews_note_id_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id),
+  CONSTRAINT marketplace_reviews_reviewer_user_id_fkey FOREIGN KEY (reviewer_user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.project_applications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -112,7 +176,7 @@ CREATE TABLE public.skill_verifications (
   attempts integer DEFAULT 0,
   status text DEFAULT 'needs_review'::text,
   updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT skill_verifications_pkey PRIMARY KEY (skill, user_id),
+  CONSTRAINT skill_verifications_pkey PRIMARY KEY (user_id, skill),
   CONSTRAINT skill_verifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.syllabus_courses (
@@ -146,6 +210,110 @@ CREATE TABLE public.syllabus_units (
   CONSTRAINT syllabus_units_pkey PRIMARY KEY (id),
   CONSTRAINT syllabus_units_course_id_fkey FOREIGN KEY (course_id) REFERENCES public.syllabus_courses(id)
 );
+CREATE TABLE public.teacher_applications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL,
+  email text NOT NULL,
+  name text,
+  college_id uuid,
+  department_id uuid,
+  subjects ARRAY DEFAULT '{}'::text[],
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])),
+  notes text,
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  id_card_front_path text,
+  id_card_back_path text,
+  CONSTRAINT teacher_applications_pkey PRIMARY KEY (id),
+  CONSTRAINT teacher_applications_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT teacher_applications_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
+  CONSTRAINT teacher_applications_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT teacher_applications_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES auth.users(id)
+);
+CREATE TABLE public.teacher_classes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  teacher_user_id uuid NOT NULL,
+  batch_id uuid,
+  semester integer CHECK (semester >= 1 AND semester <= 12),
+  subject text NOT NULL,
+  section text,
+  degree_id uuid,
+  department_id uuid,
+  college_id uuid,
+  weekly_hours integer CHECK (weekly_hours >= 0 AND weekly_hours <= 60),
+  notes text,
+  starts_on date,
+  ends_on date,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT teacher_classes_pkey PRIMARY KEY (id),
+  CONSTRAINT teacher_classes_teacher_user_id_fkey FOREIGN KEY (teacher_user_id) REFERENCES auth.users(id),
+  CONSTRAINT teacher_classes_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id),
+  CONSTRAINT teacher_classes_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id),
+  CONSTRAINT teacher_classes_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT teacher_classes_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id)
+);
+CREATE TABLE public.teacher_connections (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  teacher_a uuid NOT NULL,
+  teacher_b uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT teacher_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT teacher_connections_teacher_a_fkey FOREIGN KEY (teacher_a) REFERENCES auth.users(id),
+  CONSTRAINT teacher_connections_teacher_b_fkey FOREIGN KEY (teacher_b) REFERENCES auth.users(id)
+);
+CREATE TABLE public.teacher_messages (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  connection_id uuid NOT NULL,
+  sender_user_id uuid NOT NULL,
+  content text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT teacher_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT teacher_messages_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.teacher_connections(id),
+  CONSTRAINT teacher_messages_sender_user_id_fkey FOREIGN KEY (sender_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.teacher_profiles (
+  auth_user_id uuid NOT NULL,
+  name text,                 -- cached identity (sync from teacher_applications)
+  email text,
+  college_id uuid,
+  department_id uuid,
+  headline text,
+  bio text,
+  specialization text[],     -- corrected explicit array type
+  years_experience integer CHECK (years_experience >= 0 AND years_experience <= 80),
+  qualification text,
+  availability jsonb DEFAULT '{}'::jsonb,
+  social jsonb DEFAULT '{}'::jsonb,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT teacher_profiles_pkey PRIMARY KEY (auth_user_id),
+  CONSTRAINT teacher_profiles_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
+  CONSTRAINT teacher_profiles_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT teacher_profiles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
+);
+
+-- MIGRATION NOTES (run manually if table already exists):
+-- If specialization column was created as an untyped ARRAY (invalid) drop & recreate:
+--   ALTER TABLE public.teacher_profiles DROP COLUMN IF EXISTS specialization;
+--   ALTER TABLE public.teacher_profiles ADD COLUMN specialization text[];
+-- Ensure identity columns exist:
+--   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS name text;
+--   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS email text;
+--   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS college_id uuid REFERENCES public.colleges(id);
+--   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS department_id uuid REFERENCES public.departments(id);
+-- Bulk backfill / upsert from approved applications:
+--   INSERT INTO public.teacher_profiles(auth_user_id,name,email,college_id,department_id)
+--   SELECT auth_user_id,name,email,college_id,department_id
+--   FROM public.teacher_applications ta
+--   WHERE ta.status='approved'
+--   ON CONFLICT (auth_user_id) DO UPDATE SET
+--      name=EXCLUDED.name,
+--      email=EXCLUDED.email,
+--      college_id=EXCLUDED.college_id,
+--      department_id=EXCLUDED.department_id;
 CREATE TABLE public.user_certifications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_profile_id uuid NOT NULL,
@@ -297,139 +465,3 @@ CREATE TABLE public.user_topic_progress (
   CONSTRAINT user_topic_progress_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_topic_progress_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
 );
-
--- Notes Marketplace Tables (conceptual, for integration with FastAPI routes)
--- Core note listing: supports free or paid notes uploaded by users.
-CREATE TABLE public.marketplace_notes (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  owner_user_id uuid NOT NULL REFERENCES auth.users(id),
-  title text NOT NULL,
-  description text,
-  subject text,
-  unit text,
-  exam_type text,
-  categories text[] DEFAULT '{}',
-  -- Academic linkage (conceptual; add via ALTER TABLE in a real migration)
-  college_id uuid REFERENCES public.colleges(id),
-  degree_id uuid REFERENCES public.degrees(id),
-  department_id uuid REFERENCES public.departments(id),
-  batch_id uuid REFERENCES public.batches(id),
-  semester integer CHECK (semester >=1 AND semester <= 12),
-  price_cents integer NOT NULL DEFAULT 0 CHECK (price_cents >= 0),
-  original_filename text,
-  stored_path text,         -- server-side relative storage path for file
-  mime_type text,
-  file_size bigint,
-  downloads integer NOT NULL DEFAULT 0,
-  purchases integer NOT NULL DEFAULT 0,
-  avg_rating numeric DEFAULT 0,
-  rating_count integer DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT marketplace_notes_pkey PRIMARY KEY (id)
-);
-
--- Purchases (one per buyer per note)
-CREATE TABLE public.marketplace_purchases (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  note_id uuid NOT NULL REFERENCES public.marketplace_notes(id) ON DELETE CASCADE,
-  buyer_user_id uuid NOT NULL REFERENCES auth.users(id),
-  amount_cents integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT marketplace_purchases_pkey PRIMARY KEY (id),
-  CONSTRAINT marketplace_purchases_unique UNIQUE (note_id, buyer_user_id)
-);
-
--- Reviews (rating 1-5 per user per note)
-CREATE TABLE public.marketplace_reviews (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  note_id uuid NOT NULL REFERENCES public.marketplace_notes(id) ON DELETE CASCADE,
-  reviewer_user_id uuid NOT NULL REFERENCES auth.users(id),
-  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 5),
-  comment text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT marketplace_reviews_pkey PRIMARY KEY (id),
-  CONSTRAINT marketplace_reviews_unique UNIQUE (note_id, reviewer_user_id)
-);
-
--- Migration: add optional cover image path for marketplace notes
--- Run (once) in your database:
--- ALTER TABLE public.marketplace_notes ADD COLUMN IF NOT EXISTS cover_path text; -- stores filename in assets/notes_marketplace
-
--- (Optional) Simple materialized view idea (not executed here) for fast listing with aggregates:
--- CREATE VIEW public.marketplace_notes_with_stats AS
--- SELECT n.*, COALESCE(AVG(r.rating),0) AS live_avg_rating, COUNT(r.id) AS live_rating_count
--- FROM public.marketplace_notes n
--- LEFT JOIN public.marketplace_reviews r ON r.note_id = n.id
--- GROUP BY n.id;
-
--- Administrative roles & permissions
--- Stores role assignments separate from user_profiles to avoid polluting profile schema.
--- role options (convention): 'admin','teacher','student','moderator'
--- permissions is a flexible JSONB document for fine-grained overrides.
-CREATE TABLE IF NOT EXISTS public.admin_roles (
-  auth_user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  role text NOT NULL DEFAULT 'student',
-  permissions jsonb DEFAULT '{}'::jsonb,
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT admin_roles_role_check CHECK (role IN ('admin','teacher','student','moderator'))
-);
-
--- Helpful index for querying by role
-CREATE INDEX IF NOT EXISTS admin_roles_role_idx ON public.admin_roles(role);
-
--- ===================== Teacher Feature Tables =====================
--- Stores teacher signup applications awaiting admin approval.
--- A teacher is considered active only after an admin sets status='approved' AND
--- an entry with role='teacher' exists (or is upserted) in admin_roles.
-CREATE TABLE IF NOT EXISTS public.teacher_applications (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  auth_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  email text NOT NULL,
-  name text,
-  college_id uuid REFERENCES public.colleges(id),
-  department_id uuid REFERENCES public.departments(id),
-  subjects text[] DEFAULT '{}',                 -- free-form subject labels supplied on signup
-  id_card_front_path text,                      -- relative path to stored front image (assets/teacher_ids)
-  id_card_back_path text,                       -- relative path to stored back image
-  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
-  notes text,                                   -- optional admin review notes
-  reviewed_by uuid REFERENCES auth.users(id),
-  reviewed_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS teacher_applications_status_idx ON public.teacher_applications(status);
-CREATE UNIQUE INDEX IF NOT EXISTS teacher_applications_auth_user_id_uidx ON public.teacher_applications(auth_user_id);
-
--- Normalized peer connection table between two approved teachers.
--- teacher_a < teacher_b lexicographically (enforced in application logic) to guarantee uniqueness.
-CREATE TABLE IF NOT EXISTS public.teacher_connections (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  teacher_a uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  teacher_b uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT teacher_connections_distinct CHECK (teacher_a <> teacher_b),
-  CONSTRAINT teacher_connections_unique_pair UNIQUE (teacher_a, teacher_b)
-);
-CREATE INDEX IF NOT EXISTS teacher_connections_teacher_a_idx ON public.teacher_connections(teacher_a);
-CREATE INDEX IF NOT EXISTS teacher_connections_teacher_b_idx ON public.teacher_connections(teacher_b);
-
--- Messages within a teacher connection (simple polling API; can be upgraded to realtime later).
-CREATE TABLE IF NOT EXISTS public.teacher_messages (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  connection_id uuid NOT NULL REFERENCES public.teacher_connections(id) ON DELETE CASCADE,
-  sender_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  content text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS teacher_messages_connection_created_idx ON public.teacher_messages(connection_id, created_at);
-
--- (Optional) simple view idea for last message per connection (documented, not executed here):
--- CREATE VIEW public.teacher_connection_last_message AS
---   SELECT DISTINCT ON (m.connection_id) m.connection_id, m.id AS message_id, m.content, m.created_at
---   FROM public.teacher_messages m
---   ORDER BY m.connection_id, m.created_at DESC;
-

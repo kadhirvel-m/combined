@@ -714,7 +714,27 @@
         body: JSON.stringify({ status, notes: notes || '' })
       });
       if (!res.ok) throw new Error(`Review failed: ${res.status}`);
-      return res.json();
+      const payload = await res.json();
+      // Debug group for teacher profile sync diagnostics
+      console.groupCollapsed('%cTeacher Approval', 'color:#16a34a;font-weight:bold');
+      console.log('Application ID:', app.id);
+      console.log('User ID:', app.auth_user_id);
+      console.log('Requested status:', status);
+      console.log('Review response:', payload);
+      if (payload && payload.status === 'approved' && app.auth_user_id) {
+        try {
+          const raw = await fetch(`${API}/api/admin/teacher-profiles/${encodeURIComponent(app.auth_user_id)}`, { headers: { 'Authorization': 'Bearer ' + token } });
+          const rawJson = await raw.json();
+          console.log('Raw teacher_profiles row:', rawJson);
+          if (!rawJson.row) {
+            console.warn('teacher_profiles row missing. If profile_sync=error check migrations.');
+          }
+        } catch (e) {
+          console.error('Error fetching raw teacher profile row', e);
+        }
+      }
+      console.groupEnd();
+      return payload;
     }
 
     function attachTeacherAppHandlers(card, app) {

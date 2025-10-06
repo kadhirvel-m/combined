@@ -5178,12 +5178,23 @@ def list_teacher_applications(status: Optional[str] = Query(default=None), autho
 def review_teacher_application(application_id: str, payload: TeacherApproveIn, authorization: Optional[str] = Header(default=None)):
     admin_uid, _ = _require_admin(authorization)
     supabase = get_service_client()
+    debug = bool(os.getenv("TEACHER_PROFILE_DEBUG"))
+    if debug:
+        try:
+            print(f"[TPROF_DEBUG] Review start application_id={application_id} target_status={payload.status} admin={admin_uid}")
+        except Exception:
+            pass
     app_q = supabase.table("teacher_applications").select("auth_user_id,status").eq("id", application_id).limit(1).execute()
     if getattr(app_q, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (fetch app): {app_q.error}")
     if not app_q.data:
         raise HTTPException(status_code=404, detail="Application not found")
     row = app_q.data[0]
+    if debug:
+        try:
+            print(f"[TPROF_DEBUG] Existing application status={row.get('status')} auth_user_id={row.get('auth_user_id')}")
+        except Exception:
+            pass
     if row.get("status") != "pending":
         # allow re-review? Only if moving from rejected to approved maybe
         pass
@@ -5195,9 +5206,24 @@ def review_teacher_application(application_id: str, payload: TeacherApproveIn, a
     }).eq("id", application_id).execute()
     if getattr(upd, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (update app): {upd.error}")
+    sync_result: Dict[str, Any] = {"profile_sync": "skipped"}
     if payload.status == "approved":
         _ensure_teacher_role(row.get("auth_user_id"))
-    return {"ok": True, "application_id": application_id, "status": payload.status}
+        try:
+            sync_result = _sync_teacher_profile_from_application(supabase, row.get("auth_user_id")) or {"profile_sync": "no-op"}
+            if debug:
+                try:
+                    print(f"[TPROF_DEBUG] Sync result: {sync_result}")
+                except Exception:
+                    pass
+        except Exception as e:
+            # Non-fatal: surface minimal info
+            sync_result = {"profile_sync": "error", "error": str(e)}
+            try:
+                supabase_logger.exception(f"Teacher profile sync failed on approval: {e}")
+            except Exception:
+                pass
+    return {"ok": True, "application_id": application_id, "status": payload.status, **sync_result}
 
 
 @teacher_router.get("/api/teacher/me/status", summary="Teacher applicant status (self)")
@@ -5415,6 +5441,435 @@ def teacher_my_notes(authorization: Optional[str] = Header(default=None)):
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (my teacher notes): {res.error}")
     return {"notes": res.data or []}
+
+# ---------------- Teacher Profile & Classes Aggregation ----------------
+
+def _fetch_teacher_core(supabase: Client, teacher_user_id: str) -> Dict[str, Any]:
+    """Fetch teacher core info from teacher_applications + admin_roles + user_profiles + teacher_profiles."""
+    core: Dict[str, Any] = {"auth_user_id": teacher_user_id}
+    # Application (approved)
+    app = supabase.table("teacher_applications").select("name,email,college_id,department_id,subjects,status").eq("auth_user_id", teacher_user_id).limit(1).execute()
+    if getattr(app, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (teacher application): {app.error}")
+    if app.data:
+        core.update({k: app.data[0].get(k) for k in ["name","email","college_id","department_id","subjects","status"]})
+    # Role
+    role_res = supabase.table("admin_roles").select("role").eq("auth_user_id", teacher_user_id).limit(1).execute()
+    if not getattr(role_res, "error", None) and role_res.data:
+        core["role"] = role_res.data[0].get("role")
+    # Profile (avatar + optional fields)
+    prof = supabase.table("user_profiles").select("name,profile_image_url,headline,bio,semester,batch_from,batch_to").eq("auth_user_id", teacher_user_id).limit(1).execute()
+    if not getattr(prof, "error", None) and prof.data:
+        row = prof.data[0]
+        core.setdefault("name", row.get("name"))
+        core["avatar_url"] = row.get("profile_image_url")
+        core.setdefault("headline", row.get("headline"))
+        core.setdefault("bio", row.get("bio"))
+    # Extended teacher profile (now also caches identity + academic linkage)
+    tprof = supabase.table("teacher_profiles").select("name,email,college_id,department_id,headline,bio,specialization,years_experience,qualification,availability,social").eq("auth_user_id", teacher_user_id).limit(1).execute()
+    if not getattr(tprof, "error", None) and tprof.data:
+        # only copy identity/academic fields if missing from application (or application absent)
+        rowp = tprof.data[0]
+        for k in ["name","email","college_id","department_id"]:
+            core.setdefault(k, rowp.get(k))
+        core.update({k: rowp.get(k) for k in ["headline","bio","specialization","years_experience","qualification","availability","social"] if k in rowp})
+    return core
+
+def _sync_teacher_profile_from_application(supabase: Client, auth_user_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Idempotently upsert identity & academic linkage fields from approved teacher_application into teacher_profiles.
+
+    Returns a dict with keys: profile_sync (insert|update|no-op|error), and maybe details.
+    Silent no-op if application missing or not approved.
+    """
+    debug = bool(os.getenv("TEACHER_PROFILE_DEBUG"))
+    if not auth_user_id:
+        if debug:
+            try: print("[TPROF_DEBUG] No auth_user_id passed to sync")
+            except Exception: pass
+        return {"profile_sync": "no-op", "reason": "missing auth_user_id"}
+    app = supabase.table("teacher_applications").select("name,email,college_id,department_id,status").eq("auth_user_id", auth_user_id).limit(1).execute()
+    if getattr(app, "error", None) or not app.data:
+        if debug:
+            try: print(f"[TPROF_DEBUG] Application missing or error error={getattr(app,'error',None)}")
+            except Exception: pass
+        return {"profile_sync": "no-op", "reason": "application missing"}
+    row = app.data[0]
+    if row.get("status") != "approved":
+        if debug:
+            try: print(f"[TPROF_DEBUG] Application not approved status={row.get('status')}")
+            except Exception: pass
+        return {"profile_sync": "no-op", "reason": "not approved"}
+    payload = {
+        "auth_user_id": auth_user_id,
+        "name": row.get("name"),
+        "email": row.get("email"),
+        "college_id": row.get("college_id"),
+        "department_id": row.get("department_id"),
+    }
+    existing = supabase.table("teacher_profiles").select("auth_user_id").eq("auth_user_id", auth_user_id).limit(1).execute()
+    if getattr(existing, "error", None):
+        if debug:
+            try: print(f"[TPROF_DEBUG] Existing profile lookup error={existing.error}")
+            except Exception: pass
+        return {"profile_sync": "error", "error": str(existing.error)}
+    if existing.data:
+        upd = supabase.table("teacher_profiles").update({k: v for k,v in payload.items() if k != "auth_user_id"}).eq("auth_user_id", auth_user_id).execute()
+        if getattr(upd, "error", None):
+            err_txt = str(upd.error)
+            if debug:
+                try: print(f"[TPROF_DEBUG] Update error err={err_txt}")
+                except Exception: pass
+            return {"profile_sync": "error", "error": err_txt}
+        if debug:
+            try: print("[TPROF_DEBUG] Profile updated")
+            except Exception: pass
+        return {"profile_sync": "update"}
+    ins = supabase.table("teacher_profiles").insert(payload).execute()
+    if getattr(ins, "error", None):
+        err_txt = str(ins.error)
+        if debug:
+            try: print(f"[TPROF_DEBUG] Insert error err={err_txt}")
+            except Exception: pass
+        # Common cause: migration not applied (new columns absent)
+        return {"profile_sync": "error", "error": err_txt, "hint": "Run ALTER TABLE statements from db.sql migration note"}
+    if debug:
+        try: print("[TPROF_DEBUG] Profile inserted")
+        except Exception: pass
+    return {"profile_sync": "insert"}
+
+@teacher_router.post("/api/admin/teacher/profile/resync/{user_id}", summary="Admin: force resync teacher profile from application")
+def admin_resync_teacher_profile(user_id: str, authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    result = _sync_teacher_profile_from_application(supabase, user_id)
+    return {"ok": True, **(result or {"profile_sync": "no-op"})}
+
+@teacher_router.get("/api/admin/teacher-profiles/{user_id}", summary="Admin: fetch raw teacher_profiles row")
+def admin_get_teacher_profile_row(user_id: str, authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    res = supabase.table("teacher_profiles").select("*").eq("auth_user_id", user_id).limit(1).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get teacher profile raw): {res.error}")
+    return {"row": (res.data or [None])[0]}
+
+@teacher_router.post("/api/admin/teacher-profiles/backfill", summary="Admin: backfill all approved teacher applications into teacher_profiles")
+def admin_backfill_teacher_profiles(authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    # Fetch all approved applications
+    apps = supabase.table("teacher_applications").select("auth_user_id,name,email,college_id,department_id,status").eq("status","approved").execute()
+    if getattr(apps, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch approved apps): {apps.error}")
+    rows = apps.data or []
+    inserted = 0; updated = 0; errors = []
+    for r in rows:
+        uid = r.get("auth_user_id")
+        if not uid:
+            continue
+        payload = {"auth_user_id": uid, "name": r.get("name"), "email": r.get("email"), "college_id": r.get("college_id"), "department_id": r.get("department_id")}
+        existing = supabase.table("teacher_profiles").select("auth_user_id").eq("auth_user_id", uid).limit(1).execute()
+        if getattr(existing, "error", None):
+            errors.append({"user": uid, "error": str(existing.error)})
+            continue
+        if existing.data:
+            upd = supabase.table("teacher_profiles").update({k:v for k,v in payload.items() if k != "auth_user_id"}).eq("auth_user_id", uid).execute()
+            if getattr(upd, "error", None):
+                errors.append({"user": uid, "error": str(upd.error)})
+            else:
+                updated += 1
+        else:
+            ins = supabase.table("teacher_profiles").insert(payload).execute()
+            if getattr(ins, "error", None):
+                errors.append({"user": uid, "error": str(ins.error)})
+            else:
+                inserted += 1
+    return {"ok": True, "inserted": inserted, "updated": updated, "errors": errors, "total_approved": len(rows)}
+
+@teacher_router.get("/api/admin/teacher-profiles/diagnostics", summary="Admin: diagnostics counts for teacher profiles vs applications")
+def admin_teacher_profiles_diagnostics(authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    apps = supabase.table("teacher_applications").select("auth_user_id,status").execute()
+    if getattr(apps, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (apps diag): {apps.error}")
+    profs = supabase.table("teacher_profiles").select("auth_user_id").execute()
+    if getattr(profs, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (profiles diag): {profs.error}")
+    app_rows = apps.data or []
+    prof_rows = profs.data or []
+    approved_set = {r.get("auth_user_id") for r in app_rows if r.get("status") == "approved" and r.get("auth_user_id")}
+    profile_set = {r.get("auth_user_id") for r in prof_rows if r.get("auth_user_id")}
+    missing = sorted(list(approved_set - profile_set))
+    extra = sorted(list(profile_set - approved_set))
+    return {"approved_count": len(approved_set), "profile_count": len(profile_set), "missing_profiles_for_approved": missing, "profiles_without_approved_app": extra}
+
+def _enrich_academics(supabase: Client, core: Dict[str, Any]):
+    college_id = core.get("college_id")
+    dept_id = core.get("department_id")
+    if college_id:
+        c = supabase.table("colleges").select("name").eq("id", college_id).limit(1).execute()
+        if not getattr(c, "error", None) and c.data:
+            core["college_name"] = c.data[0].get("name")
+    if dept_id:
+        d = supabase.table("departments").select("name,degree_id").eq("id", dept_id).limit(1).execute()
+        degree_id = None
+        if not getattr(d, "error", None) and d.data:
+            core["department_name"] = d.data[0].get("name")
+            degree_id = d.data[0].get("degree_id")
+        if degree_id:
+            deg = supabase.table("degrees").select("name").eq("id", degree_id).limit(1).execute()
+            if not getattr(deg, "error", None) and deg.data:
+                core["degree_name"] = deg.data[0].get("name")
+
+def _fetch_teacher_classes(supabase: Client, teacher_user_id: str) -> List[Dict[str, Any]]:
+    cls = supabase.table("teacher_classes").select("id,batch_id,semester,subject,section,degree_id,department_id,college_id,weekly_hours,starts_on,ends_on,created_at").eq("teacher_user_id", teacher_user_id).order("created_at", desc=True).limit(500).execute()
+    if getattr(cls, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (teacher classes): {cls.error}")
+    classes = cls.data or []
+    # Collect IDs for enrichment
+    batch_ids = {c.get("batch_id") for c in classes if c.get("batch_id")}
+    degree_ids = {c.get("degree_id") for c in classes if c.get("degree_id")}
+    dept_ids = {c.get("department_id") for c in classes if c.get("department_id")}
+    college_ids = {c.get("college_id") for c in classes if c.get("college_id")}
+    batch_map: Dict[str, Any] = {}
+    def _sel(table, ids, cols):
+        if not ids:
+            return {}
+        res = supabase.table(table).select(cols).in_("id", list(ids)).execute()
+        out = {}
+        if not getattr(res, "error", None):
+            for r in res.data or []:
+                out[r.get("id")] = r
+        return out
+    batch_map = _sel("batches", batch_ids, "id,from_year,to_year")
+    degree_map = _sel("degrees", degree_ids, "id,name")
+    dept_map = _sel("departments", dept_ids, "id,name")
+    college_map = _sel("colleges", college_ids, "id,name")
+    for c in classes:
+        bid = c.get("batch_id"); b = batch_map.get(bid)
+        if b:
+            c["batch_range"] = f"{b.get('from_year')}-{b.get('to_year')}" if b.get('from_year') and b.get('to_year') else None
+        if c.get("degree_id"):
+            c["degree_name"] = degree_map.get(c.get("degree_id"), {}).get("name")
+        if c.get("department_id"):
+            c["department_name"] = dept_map.get(c.get("department_id"), {}).get("name")
+        if c.get("college_id"):
+            c["college_name"] = college_map.get(c.get("college_id"), {}).get("name")
+        # Label for UI
+        sem = c.get("semester")
+        subj = c.get("subject")
+        c["label"] = f"Sem {sem}: {subj}" if sem and subj else (subj or "Class")
+    return classes
+
+def _group_classes(classes: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for c in classes:
+        sem = c.get("semester") or 0
+        key = f"Semester {sem}" if sem else "Unassigned"
+        groups.setdefault(key, []).append(c)
+    # Sort within groups by subject
+    for g in groups.values():
+        g.sort(key=lambda x: (x.get("subject") or "").lower())
+    # Order groups numerically
+    ordered = dict(sorted(groups.items(), key=lambda kv: int(re.sub(r"[^0-9]", "", kv[0]) or 0)))
+    return ordered
+
+@teacher_router.get("/api/teacher/profile/{user_id}", summary="Get teacher profile (public)")
+def get_teacher_profile(user_id: str, authorization: Optional[str] = Header(default=None)):
+    supabase = get_service_client()
+    # Resolve 'me'
+    if user_id == "me":
+        try:
+            uid, _ = _get_auth_user(authorization)
+            user_id = uid
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Authentication required for 'me'")
+    core = _fetch_teacher_core(supabase, user_id)
+    if core.get("role") not in {"teacher", "admin"} and core.get("status") != "approved":
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    _enrich_academics(supabase, core)
+    classes = _fetch_teacher_classes(supabase, user_id)
+    notes_count = 0
+    try:
+        nres = supabase.table("marketplace_notes").select("id", count="exact").eq("owner_user_id", user_id).execute()
+        if not getattr(nres, "error", None):
+            notes_count = getattr(nres, "count", 0) or 0
+    except Exception:
+        pass
+    subjects = sorted({c.get("subject") for c in classes if c.get("subject")})
+    grouped = _group_classes(classes)
+    stats = {
+        "notes_count": notes_count,
+        "classes_count": len(classes),
+        "subjects_count": len(subjects),
+    }
+    return {"teacher": core, "classes": classes, "grouped_classes": grouped, "subjects": subjects, "stats": stats}
+
+class TeacherProfileUpsertIn(BaseModel):
+    headline: Optional[str] = None
+    bio: Optional[str] = None
+    specialization: Optional[List[str]] = None
+    years_experience: Optional[int] = Field(None, ge=0, le=80)
+    qualification: Optional[str] = None
+    availability: Optional[Dict[str, Any]] = None
+    social: Optional[Dict[str, Any]] = None
+
+# ================= Teacher Classes CRUD Models ==================
+class TeacherClassIn(BaseModel):
+    subject: str = Field(..., min_length=1, max_length=255)
+    semester: Optional[int] = Field(None, ge=1, le=12)
+    batch_id: Optional[uuid.UUID] = None
+    section: Optional[str] = Field(None, max_length=32)
+    college_id: Optional[uuid.UUID] = None
+    degree_id: Optional[uuid.UUID] = None
+    department_id: Optional[uuid.UUID] = None
+    weekly_hours: Optional[int] = Field(None, ge=0, le=60)
+    notes: Optional[str] = None
+    starts_on: Optional[date] = None
+    ends_on: Optional[date] = None
+
+class TeacherClassUpdate(BaseModel):
+    subject: Optional[str] = Field(None, min_length=1, max_length=255)
+    semester: Optional[int] = Field(None, ge=1, le=12)
+    batch_id: Optional[uuid.UUID] = None
+    section: Optional[str] = Field(None, max_length=32)
+    college_id: Optional[uuid.UUID] = None
+    degree_id: Optional[uuid.UUID] = None
+    department_id: Optional[uuid.UUID] = None
+    weekly_hours: Optional[int] = Field(None, ge=0, le=60)
+    notes: Optional[str] = None
+    starts_on: Optional[date] = None
+    ends_on: Optional[date] = None
+
+class TeacherClassOut(BaseModel):
+    id: uuid.UUID
+    teacher_user_id: uuid.UUID
+    subject: str
+    semester: Optional[int] = None
+    batch_id: Optional[uuid.UUID] = None
+    section: Optional[str] = None
+    college_id: Optional[uuid.UUID] = None
+    degree_id: Optional[uuid.UUID] = None
+    department_id: Optional[uuid.UUID] = None
+    weekly_hours: Optional[int] = None
+    notes: Optional[str] = None
+    starts_on: Optional[date] = None
+    ends_on: Optional[date] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+def _map_teacher_class_row(row: Dict[str, Any]) -> TeacherClassOut:
+    return TeacherClassOut(
+        id=uuid.UUID(row["id"]),
+        teacher_user_id=uuid.UUID(row["teacher_user_id"]),
+        subject=row.get("subject") or "",
+        semester=row.get("semester"),
+        batch_id=uuid.UUID(row["batch_id"]) if row.get("batch_id") else None,
+        section=row.get("section"),
+        college_id=uuid.UUID(row["college_id"]) if row.get("college_id") else None,
+        degree_id=uuid.UUID(row["degree_id"]) if row.get("degree_id") else None,
+        department_id=uuid.UUID(row["department_id"]) if row.get("department_id") else None,
+        weekly_hours=row.get("weekly_hours"),
+        notes=row.get("notes"),
+        starts_on=row.get("starts_on"),
+        ends_on=row.get("ends_on"),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+    )
+
+@teacher_router.put("/api/teacher/profile/me", summary="Upsert my extended teacher profile")
+def upsert_teacher_profile(payload: TeacherProfileUpsertIn, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    row = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
+    if not row:
+        return {"ok": True, "updated": False}
+    row["auth_user_id"] = uid
+    # Try update first
+    existing = supabase.table("teacher_profiles").select("auth_user_id").eq("auth_user_id", uid).limit(1).execute()
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get teacher profile): {existing.error}")
+    if existing.data:
+        upd = supabase.table("teacher_profiles").update(row).eq("auth_user_id", uid).execute()
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (update teacher profile): {upd.error}")
+    else:
+        ins = supabase.table("teacher_profiles").insert(row).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert teacher profile): {ins.error}")
+    return {"ok": True, "updated": True}
+
+# ================= Teacher Classes CRUD Endpoints ==================
+@teacher_router.get("/api/teacher/classes/mine", response_model=List[TeacherClassOut], summary="List my teacher classes")
+def list_my_teacher_classes(authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    res = supabase.table("teacher_classes").select("*").eq("teacher_user_id", uid).order("updated_at", desc=True).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list classes): {res.error}")
+    rows = res.data or []
+    return [_map_teacher_class_row(r) for r in rows]
+
+@teacher_router.post("/api/teacher/classes", response_model=TeacherClassOut, summary="Create a teacher class")
+def create_teacher_class(payload: TeacherClassIn, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    row = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
+    row["teacher_user_id"] = uid
+    ins = supabase.table("teacher_classes").insert(row).execute()
+    if getattr(ins, "error", None):
+        err_txt = str(ins.error)
+        if "duplicate key value" in err_txt or "unique" in err_txt.lower():
+            raise HTTPException(status_code=409, detail="Class already exists for subject + batch + semester + section")
+        raise HTTPException(status_code=500, detail=f"Supabase error (insert class): {ins.error}")
+    created = (ins.data or [])[0]
+    return _map_teacher_class_row(created)
+
+@teacher_router.put("/api/teacher/classes/{class_id}", response_model=TeacherClassOut, summary="Update a teacher class")
+def update_teacher_class(class_id: uuid.UUID, payload: TeacherClassUpdate, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    # Ensure ownership
+    existing = supabase.table("teacher_classes").select("id,teacher_user_id").eq("id", str(class_id)).limit(1).execute()
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get class): {existing.error}")
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if existing.data[0].get("teacher_user_id") != uid:
+        raise HTTPException(status_code=403, detail="Cannot modify another teacher's class")
+    updates = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
+    if not updates:
+        row_res = supabase.table("teacher_classes").select("*").eq("id", str(class_id)).limit(1).execute()
+        if getattr(row_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (reload class): {row_res.error}")
+        return _map_teacher_class_row(row_res.data[0])
+    upd = supabase.table("teacher_classes").update(updates).eq("id", str(class_id)).execute()
+    if getattr(upd, "error", None):
+        err_txt = str(upd.error)
+        if "duplicate key value" in err_txt or "unique" in err_txt.lower():
+            raise HTTPException(status_code=409, detail="Another class with same keys exists")
+        raise HTTPException(status_code=500, detail=f"Supabase error (update class): {upd.error}")
+    row_res = supabase.table("teacher_classes").select("*").eq("id", str(class_id)).limit(1).execute()
+    if getattr(row_res, "error", None) or not row_res.data:
+        raise HTTPException(status_code=500, detail="Failed to reload updated class")
+    return _map_teacher_class_row(row_res.data[0])
+
+@teacher_router.delete("/api/teacher/classes/{class_id}", summary="Delete a teacher class")
+def delete_teacher_class(class_id: uuid.UUID, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    existing = supabase.table("teacher_classes").select("id,teacher_user_id").eq("id", str(class_id)).limit(1).execute()
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get class): {existing.error}")
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if existing.data[0].get("teacher_user_id") != uid:
+        raise HTTPException(status_code=403, detail="Cannot delete another teacher's class")
+    del_res = supabase.table("teacher_classes").delete().eq("id", str(class_id)).execute()
+    if getattr(del_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete class): {del_res.error}")
+    return {"ok": True, "deleted": True, "id": str(class_id)}
 
 
 def _asset_debug(msg: str, **extra):  # lightweight conditional debug
