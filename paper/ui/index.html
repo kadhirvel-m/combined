@@ -69,6 +69,8 @@
         }
     </script>
     <style>
+        /* Prevent flicker of cloaked elements before Alpine initializes */
+        [x-cloak] { display: none !important; }
         /* Smooth icon alignment */
         .material-symbols-rounded {
             vertical-align: -6px;
@@ -520,7 +522,7 @@
                 <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
                     href="about.html">About</a>
                 <!-- Products Mega Menu trigger (imported) -->
-                <div class="relative" @mouseenter="open('products')" @mouseleave="close('products')">
+                <div class="relative" @mouseenter="cancelClose(); open('products')" @mouseleave="closeWithDelay('products')">
                     <button :aria-expanded="isOpen('products')" @click="toggle('products')"
                         @keydown.escape.window="closeAll()"
                         class="group inline-flex items-center gap-1 rounded-full px-3 py-2 font-medium hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
@@ -667,7 +669,7 @@
                     </div>
                 </div>
                 <!-- Projects Mega Menu (imported) -->
-                <div class="relative" x-data="megaNav()" @mouseenter="open('projects')" @mouseleave="close('projects')">
+                <div class="relative" x-data="megaNav()" @mouseenter="cancelClose(); open('projects')" @mouseleave="closeWithDelay('projects')">
                     <button @click="toggle('projects')" :aria-expanded="isOpen('projects')"
                         class="group inline-flex items-center gap-1 rounded-full px-3 py-2 font-medium text-ink/90 dark:text-white/90 hover:bg-stoneTint dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-magenta">
                         Projects
@@ -776,7 +778,7 @@
             </nav>
             <div class="hidden md:flex items-center gap-2">
                 <button id="themeToggle" data-theme-toggle
-                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg:white/5"
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
                     aria-label="Toggle theme">
                     <span class="material-symbols-rounded">dark_mode</span>
                     <span class="hidden sm:block">Theme</span>
@@ -805,7 +807,7 @@
                     <span class="material-symbols-rounded">dark_mode</span>
                 </button>
                 <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
-                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg:white/5 transition">
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
                     <span class="sr-only">Toggle navigation</span>
                     <span class="material-symbols-rounded" data-icon>menu</span>
                 </button>
@@ -1707,6 +1709,7 @@
             return {
                 active: null,
                 mobileOpen: false,
+                closeTimeout: null,
                 solutions: [
                     { icon: 'diversity_2', label: 'Sales Development Reps', href: '#' },
                     { icon: 'group', label: 'Account Executives', href: '#' },
@@ -1721,13 +1724,19 @@
                 open(key) { this.active = key },
                 close(key) { if (this.active === key) { this.active = null } },
                 toggle(key) { this.active = this.active === key ? null : key },
-                closeAll() { this.active = null }
+                closeAll() { this.active = null },
+                closeWithDelay(key) {
+                    clearTimeout(this.closeTimeout);
+                    this.closeTimeout = setTimeout(() => { if (this.active === key) this.active = null }, 120);
+                },
+                cancelClose() { clearTimeout(this.closeTimeout); }
             }
         }
         function megaNav() {
             return {
                 active: null,
                 mobileOpen: false,
+                closeTimeout: null,
                 current: 0,
                 visibleCount: 4,
                 pageStart: 0,
@@ -1801,7 +1810,12 @@
                 toggle(key) { this.active = this.active === key ? null : key },
                 select(index) { this.current = index; this.pageStart = 0; },
                 next() { if (this.canNext) this.pageStart += this.visibleCount; },
-                prev() { if (this.canPrev) this.pageStart -= this.visibleCount; }
+                prev() { if (this.canPrev) this.pageStart -= this.visibleCount; },
+                closeWithDelay(key) {
+                    clearTimeout(this.closeTimeout);
+                    this.closeTimeout = setTimeout(() => { if (this.active === key) this.active = null }, 120);
+                },
+                cancelClose() { clearTimeout(this.closeTimeout); }
             }
         }
     </script>

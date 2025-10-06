@@ -55,6 +55,14 @@
                     </div>
                     <form id="uploadForm"
                         class="space-y-6 rounded-2xl bg-white/80 dark:bg-brand-900/50 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-6 shadow-soft">
+                        <div class="space-y-2" id="classPickerWrap">
+                            <div class="flex items-center justify-between">
+                                <label class="block text-xs font-semibold uppercase tracking-wide">Select Class (Handled)</label>
+                                <button type="button" id="toggleManualBtn" class="text-[10px] font-medium px-2 py-1 rounded bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15">Manual Mode</button>
+                            </div>
+                            <div id="classesList" class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"></div>
+                            <div id="noClassesMsg" class="hidden text-[11px] text-neutral-500 dark:text-white/50">No classes found. Use manual mode.</div>
+                        </div>
                         <div>
                             <label class="block text-xs font-semibold uppercase tracking-wide mb-1">Title</label>
                             <input type="text" name="title" required
@@ -66,6 +74,7 @@
                                 class="w-full min-h-[90px] resize-y rounded-lg border-neutral-300 dark:border-white/15 bg-white/90 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500"
                                 placeholder="Short description"></textarea>
                         </div>
+                        <div id="manualFields" class="hidden">
                         <div class="grid sm:grid-cols-2 gap-5">
                             <div>
                                 <label class="block text-xs font-semibold uppercase tracking-wide mb-1">College</label>
@@ -111,6 +120,13 @@
                                 </select>
                             </div>
                         </div>
+                        </div>
+                        <input type="hidden" name="college_id" id="hCollege" />
+                        <input type="hidden" name="degree_id" id="hDegree" />
+                        <input type="hidden" name="department_id" id="hDepartment" />
+                        <input type="hidden" name="batch_id" id="hBatch" />
+                        <input type="hidden" name="semester" id="hSemester" />
+                        <input type="hidden" name="subject" id="hSubject" />
                         <div>
                             <label class="block text-xs font-semibold uppercase tracking-wide mb-1">Attach File (PDF /
                                 DOC / PPT / ZIP)</label>
@@ -155,6 +171,15 @@
         const departmentSelect = document.getElementById('departmentSelect');
         const batchSelect = document.getElementById('batchSelect');
         const subjectSelect = document.getElementById('subjectSelect');
+        const hidden = {
+            college: document.getElementById('hCollege'),
+            degree: document.getElementById('hDegree'),
+            department: document.getElementById('hDepartment'),
+            batch: document.getElementById('hBatch'),
+            semester: document.getElementById('hSemester'),
+            subject: document.getElementById('hSubject')
+        };
+        let selectedClassId = null; let classCache = [];
         const notesTbody = document.querySelector('#notesTable tbody');
         const uploadStatus = document.getElementById('uploadStatus');
 
@@ -279,6 +304,15 @@
             e.preventDefault();
             uploadStatus.textContent = 'Uploading...';
             const fd = new FormData(e.target);
+            // If a class is selected, override with hidden academic fields
+            if (selectedClassId) {
+                fd.set('college_id', hidden.college.value || '');
+                if (hidden.degree.value) fd.set('degree_id', hidden.degree.value);
+                if (hidden.department.value) fd.set('department_id', hidden.department.value);
+                if (hidden.batch.value) fd.set('batch_id', hidden.batch.value);
+                if (hidden.semester.value) fd.set('semester', hidden.semester.value);
+                if (hidden.subject.value) fd.set('subject', hidden.subject.value);
+            }
             // convert to marketplace payload fields
             fd.append('price_cents', '0');
             try {
@@ -304,6 +338,52 @@
                 populateSubjects();
             }
         });
+        function renderClasses() {
+            const wrap = document.getElementById('classesList');
+            const noMsg = document.getElementById('noClassesMsg');
+            wrap.innerHTML = '';
+            if (!classCache.length) { noMsg.classList.remove('hidden'); return; }
+            noMsg.classList.add('hidden');
+            classCache.forEach(c => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'text-left p-3 rounded-xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition flex flex-col gap-1';
+                btn.dataset.classId = c.id;
+                btn.innerHTML = `<span class='text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-white/40'>Sem ${c.semester || '-'}${c.section ? ' • Sec ' + c.section : ''}</span><span class='text-sm font-semibold line-clamp-2'>${(c.subject || 'Untitled')}</span><span class='text-[10px] text-neutral-500 dark:text-white/40'>${c.batch_range || ''}</span>`;
+                btn.addEventListener('click', () => selectClass(c.id));
+                wrap.appendChild(btn);
+            });
+        }
+        function selectClass(id) {
+            selectedClassId = id; const cls = classCache.find(c => c.id === id);
+            document.querySelectorAll('#classesList button').forEach(b => { if (b.dataset.classId === id) { b.classList.add('ring-brand-500','bg-brand-500/10'); } else { b.classList.remove('ring-brand-500','bg-brand-500/10'); } });
+            if (!cls) return;
+            // Fill hidden fields
+            hidden.college.value = cls.college_id || '';
+            hidden.degree.value = cls.degree_id || '';
+            hidden.department.value = cls.department_id || '';
+            hidden.batch.value = cls.batch_id || '';
+            hidden.semester.value = cls.semester || '';
+            hidden.subject.value = cls.subject || '';
+            // Clear manual selects for clarity (optional)
+            collegeSelect.value = ''; degreeSelect.value=''; departmentSelect.value=''; batchSelect.value=''; document.getElementById('semesterSelect').value=''; subjectSelect.value='';
+        }
+        async function loadClasses() {
+            try {
+                const d = await fetchJSON(API_BASE + '/api/teacher/profile/me?strict=1', { headers: { 'Authorization': 'Bearer ' + token } });
+                const payload = d.teacher ? d : { teacher: d.teacher, classes: d.classes };
+                classCache = (d.classes || []).sort((a,b)=> (a.semester||0)-(b.semester||0));
+                renderClasses();
+            } catch (e) { console.warn('classes load failed', e); }
+        }
+        // Manual mode toggle
+        const toggleBtn = document.getElementById('toggleManualBtn');
+        toggleBtn.addEventListener('click', () => {
+            const manual = document.getElementById('manualFields');
+            if (manual.classList.contains('hidden')) { manual.classList.remove('hidden'); toggleBtn.textContent='Class Mode'; }
+            else { manual.classList.add('hidden'); toggleBtn.textContent='Manual Mode'; }
+        });
+        loadClasses();
         loadMeta();
         loadMyNotes();
         document.addEventListener('click', (e) => { if (e.target.matches('[data-theme-toggle]')) { const root = document.documentElement; const dark = root.classList.toggle('dark'); localStorage.setItem('px_theme', dark ? 'dark' : 'light'); } });
