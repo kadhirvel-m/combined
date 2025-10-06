@@ -5729,8 +5729,19 @@ def _group_classes(classes: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, An
     return ordered
 
 @teacher_router.get("/api/teacher/profile/{user_id}", summary="Get teacher profile (public)")
-def get_teacher_profile(user_id: str, authorization: Optional[str] = Header(default=None)):
+async def get_teacher_profile(
+    user_id: str,
+    authorization: Optional[str] = Header(default=None),
+    strict_q: Optional[str] = Query(default=None, alias="strict"),
+    x_strict: Optional[str] = Header(default=None, alias="X-TeacherProfile-Strict"),
+):
+    """Optimized variant that:
+    - Resolves 'me' and then performs concurrent Supabase reads
+    - Honors `strict` flag (query or header) to avoid legacy fallbacks for faster response
+    - Uses estimated count for notes to reduce DB cost
+    """
     supabase = get_service_client()
+
     # Resolve 'me'
     if user_id == "me":
         try:
@@ -5738,18 +5749,159 @@ def get_teacher_profile(user_id: str, authorization: Optional[str] = Header(defa
             user_id = uid
         except HTTPException:
             raise HTTPException(status_code=401, detail="Authentication required for 'me'")
-    core = _fetch_teacher_core(supabase, user_id)
+
+    def _is_truthy(val: Optional[str]) -> bool:
+        if val is None:
+            return False
+        v = str(val).strip().lower()
+        return v in {"1", "true", "yes", "on"}
+
+    strict = _is_truthy(strict_q) or _is_truthy(x_strict)
+
+    # --- Concurrent fetches: core, classes, and notes count ---
+    async def fetch_core():
+        # Parallelize core sources: teacher_profiles, teacher_applications, admin_roles, user_profiles (if not strict)
+        loop = asyncio.get_running_loop()
+        tprof_fut = loop.run_in_executor(None, lambda: supabase.table("teacher_profiles").select(
+            "name,email,college_id,department_id,headline,bio,specialization,years_experience,qualification,availability,social,profile_image_url"
+        ).eq("auth_user_id", user_id).limit(1).execute())
+        tapp_fut = loop.run_in_executor(None, lambda: supabase.table("teacher_applications").select(
+            "name,email,college_id,department_id,subjects,status"
+        ).eq("auth_user_id", user_id).limit(1).execute())
+        role_fut = loop.run_in_executor(None, lambda: supabase.table("admin_roles").select("role").eq("auth_user_id", user_id).limit(1).execute())
+        prof_fut = None
+        if not strict:
+            prof_fut = loop.run_in_executor(None, lambda: supabase.table("user_profiles").select(
+                "name,profile_image_url,headline,bio,semester,batch_from,batch_to"
+            ).eq("auth_user_id", user_id).limit(1).execute())
+
+        tprof, tapp, role_res, prof = await asyncio.gather(
+            tprof_fut, tapp_fut, role_fut, prof_fut if prof_fut is not None else asyncio.sleep(0, result=None)
+        )
+
+        if getattr(tapp, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (teacher application): {tapp.error}")
+
+        core: Dict[str, Any] = {"auth_user_id": user_id}
+        if not getattr(tprof, "error", None) and getattr(tprof, "data", None):
+            rowp = tprof.data[0]
+            for k in ["name", "email", "college_id", "department_id"]:
+                if rowp.get(k):
+                    core[k] = rowp.get(k)
+            core.update({k: rowp.get(k) for k in ["headline", "bio", "specialization", "years_experience", "qualification", "availability", "social"] if k in rowp})
+            if rowp.get("profile_image_url"):
+                core["avatar_url"] = rowp.get("profile_image_url")
+
+        if getattr(tapp, "data", None):
+            arow = tapp.data[0]
+            for k in ["subjects", "status"]:
+                if arow.get(k) is not None:
+                    core[k] = arow.get(k)
+            for k in ["name", "email", "college_id", "department_id"]:
+                if not core.get(k) and arow.get(k):
+                    core[k] = arow.get(k)
+
+        if not getattr(role_res, "error", None) and getattr(role_res, "data", None):
+            core["role"] = role_res.data[0].get("role")
+
+        if (not strict) and prof is not None and (not getattr(prof, "error", None)) and getattr(prof, "data", None):
+            row = prof.data[0]
+            if not core.get("name") and row.get("name"):
+                core["name"] = row.get("name")
+            if not core.get("avatar_url") and row.get("profile_image_url"):
+                core["avatar_url"] = row.get("profile_image_url")
+            if not core.get("headline") and row.get("headline"):
+                core["headline"] = row.get("headline")
+            if not core.get("bio") and row.get("bio"):
+                core["bio"] = row.get("bio")
+
+        return core
+
+    async def fetch_classes():
+        # Fetch classes, then enrich lookups concurrently
+        loop = asyncio.get_running_loop()
+        cls = await loop.run_in_executor(None, lambda: supabase.table("teacher_classes").select(
+            "id,batch_id,semester,subject,section,degree_id,department_id,college_id,created_at"
+        ).eq("teacher_user_id", user_id).order("created_at", desc=True).limit(500).execute())
+        if getattr(cls, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (teacher classes): {cls.error}")
+        classes = cls.data or []
+        batch_ids = {c.get("batch_id") for c in classes if c.get("batch_id")}
+        degree_ids = {c.get("degree_id") for c in classes if c.get("degree_id")}
+        dept_ids = {c.get("department_id") for c in classes if c.get("department_id")}
+        college_ids = {c.get("college_id") for c in classes if c.get("college_id")}
+
+        def _sel(table, ids, cols):
+            if not ids:
+                return {}
+            res = supabase.table(table).select(cols).in_("id", list(ids)).execute()
+            out = {}
+            if not getattr(res, "error", None):
+                for r in res.data or []:
+                    out[r.get("id")] = r
+            return out
+
+        # Run the 4 lookups concurrently
+        batch_fut = asyncio.to_thread(_sel, "batches", batch_ids, "id,from_year,to_year")
+        degree_fut = asyncio.to_thread(_sel, "degrees", degree_ids, "id,name")
+        dept_fut = asyncio.to_thread(_sel, "departments", dept_ids, "id,name")
+        college_fut = asyncio.to_thread(_sel, "colleges", college_ids, "id,name")
+        batch_map, degree_map, dept_map, college_map = await asyncio.gather(batch_fut, degree_fut, dept_fut, college_fut)
+
+        for c in classes:
+            bid = c.get("batch_id"); b = batch_map.get(bid)
+            if b:
+                c["batch_range"] = f"{b.get('from_year')}-{b.get('to_year')}" if b.get('from_year') and b.get('to_year') else None
+            if c.get("degree_id"):
+                c["degree_name"] = degree_map.get(c.get("degree_id"), {}).get("name")
+            if c.get("department_id"):
+                c["department_name"] = dept_map.get(c.get("department_id"), {}).get("name")
+            if c.get("college_id"):
+                c["college_name"] = college_map.get(c.get("college_id"), {}).get("name")
+            sem = c.get("semester"); subj = c.get("subject")
+            c["label"] = f"Sem {sem}: {subj}" if sem and subj else (subj or "Class")
+        return classes
+
+    async def enrich_academics(core: Dict[str, Any]):
+        # Resolve college/department names; do department & college in parallel, then maybe degree
+        loop = asyncio.get_running_loop()
+        college_id = core.get("college_id")
+        dept_id = core.get("department_id")
+        if not college_id and not dept_id:
+            return
+        college_fut = loop.run_in_executor(None, lambda: supabase.table("colleges").select("name").eq("id", college_id).limit(1).execute()) if college_id else asyncio.sleep(0, result=None)
+        dept_fut = loop.run_in_executor(None, lambda: supabase.table("departments").select("name,degree_id").eq("id", dept_id).limit(1).execute()) if dept_id else asyncio.sleep(0, result=None)
+        college_res, dept_res = await asyncio.gather(college_fut, dept_fut)
+        degree_id = None
+        if college_res and not getattr(college_res, "error", None) and getattr(college_res, "data", None):
+            core["college_name"] = college_res.data[0].get("name")
+        if dept_res and not getattr(dept_res, "error", None) and getattr(dept_res, "data", None):
+            core["department_name"] = dept_res.data[0].get("name")
+            degree_id = dept_res.data[0].get("degree_id")
+        if degree_id:
+            deg = await loop.run_in_executor(None, lambda: supabase.table("degrees").select("name").eq("id", degree_id).limit(1).execute())
+            if not getattr(deg, "error", None) and getattr(deg, "data", None):
+                core["degree_name"] = deg.data[0].get("name")
+
+    async def fetch_notes_count():
+        loop = asyncio.get_running_loop()
+        try:
+            # estimated is much cheaper than exact for counts
+            nres = await loop.run_in_executor(None, lambda: supabase.table("marketplace_notes").select("id", count="estimated").eq("owner_user_id", user_id).execute())
+            if not getattr(nres, "error", None):
+                return getattr(nres, "count", 0) or 0
+        except Exception:
+            return 0
+        return 0
+
+    core, classes, notes_count = await asyncio.gather(fetch_core(), fetch_classes(), fetch_notes_count())
+
     if core.get("role") not in {"teacher", "admin"} and core.get("status") != "approved":
         raise HTTPException(status_code=404, detail="Teacher not found")
-    _enrich_academics(supabase, core)
-    classes = _fetch_teacher_classes(supabase, user_id)
-    notes_count = 0
-    try:
-        nres = supabase.table("marketplace_notes").select("id", count="exact").eq("owner_user_id", user_id).execute()
-        if not getattr(nres, "error", None):
-            notes_count = getattr(nres, "count", 0) or 0
-    except Exception:
-        pass
+
+    # Enrich academics after core is fetched
+    await enrich_academics(core)
+
     subjects = sorted({c.get("subject") for c in classes if c.get("subject")})
     grouped = _group_classes(classes)
     stats = {

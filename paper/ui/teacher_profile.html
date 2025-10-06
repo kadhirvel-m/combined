@@ -218,6 +218,7 @@
 
         let resolvingMe = false;
         let selfUserId = null;
+        let lastPayload = null; // cache to avoid refetch on client-only filters
         async function loadProfile() {
             const token = getToken();
             const base = await resolveApi();
@@ -237,6 +238,7 @@
                 if (dynamicSelfMode && res.status === 401) { noAuthForMe(); return; }
                 renderError(data.detail || 'Failed to load'); return;
             }
+            lastPayload = data;
             renderProfile(data);
             // Show self action buttons if this profile belongs to viewer
             if (dynamicSelfMode) {
@@ -272,11 +274,14 @@
             // Classes grouped
             const container = $('#classesGroups'); container.innerHTML = '';
             const filterVal = $('#filterSubject').value.trim().toLowerCase();
+            const yearLabelForSem = (semNum)=>{ const s = parseInt(semNum,10); if(!s||s<1) return ''; const year = Math.floor((s-1)/2)+1; const ord={1:'First',2:'Second',3:'Third',4:'Fourth',5:'Fifth',6:'Sixth'}; return ord[year]?ord[year]+' Year':''; };
             Object.entries(grouped_classes).forEach(([group, list]) => {
                 const filt = list.filter(c => !filterVal || (c.subject || '').toLowerCase().includes(filterVal));
                 if (!filt.length) return;
+                // Derive semester number from group label like 'Semester 3'
+                let semMatch = group.match(/Semester\s+(\d+)/i); let semNum = semMatch?parseInt(semMatch[1],10):null; let yearLbl = semNum?yearLabelForSem(semNum):'';
                 const cards = filt.map(c => classCard(c)).join('');
-                container.insertAdjacentHTML('beforeend', `<div class='space-y-3'> <h3 class='text-sm font-semibold tracking-wide uppercase text-neutral-500 dark:text-white/50 flex items-center gap-2'>${esc(group)} <span class='text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10'>${filt.length}</span></h3> <div class='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>${cards}</div></div>`);
+                container.insertAdjacentHTML('beforeend', `<div class='space-y-3'> <h3 class='text-sm font-semibold tracking-wide uppercase text-neutral-500 dark:text-white/50 flex flex-wrap items-center gap-2'>${esc(group)} ${yearLbl?`<span class='text-[10px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-700 dark:text-fuchsia-200 ring-1 ring-brand-500/20'>${esc(yearLbl)}</span>`:''} <span class='text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10'>${filt.length}</span></h3> <div class='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>${cards}</div></div>`);
             });
             if (!classes.length) { container.innerHTML = `<div class='text-sm opacity-70'>No classes added yet.</div>`; }
             $('#classesCount').textContent = classes.length ? `${classes.length} classes` : '';
@@ -299,7 +304,7 @@
     </div>`;
         }
 
-        $('#filterSubject').addEventListener('input', () => loadProfile());
+        $('#filterSubject').addEventListener('input', () => { if (lastPayload) renderProfile(lastPayload); });
 
         // Scroll top button
         const st = $('#scrollTop'); window.addEventListener('scroll', () => { if (scrollY > 400) st.classList.remove('hidden'); else st.classList.add('hidden'); }); st.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
