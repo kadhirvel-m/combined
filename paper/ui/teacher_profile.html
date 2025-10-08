@@ -201,6 +201,13 @@
             if (!token) return null;
             try {
                 const base = await resolveApi();
+                // If teacher session, ask backend to resolve via teacher/me
+                if (localStorage.getItem('teacherToken')) {
+                    const r = await fetch(`${base}/api/teacher/profile/me`, { headers: { Authorization: 'Bearer ' + token } });
+                    if (!r.ok) return null;
+                    const j = await r.json();
+                    return j?.auth_user_id || j?.teacher?.auth_user_id || j?.profile?.auth_user_id || null;
+                }
                 const r = await fetch(`${base}/api/me`, { headers: { Authorization: 'Bearer ' + token } });
                 if (!r.ok) return null;
                 const j = await r.json();

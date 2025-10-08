@@ -171,7 +171,17 @@
         const API_BASE = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
         function getToken() { const keys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token']; for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } } return '' }
         function decodeJwtUserId(t) { try { const p = t.split('.')[1]; if (!p) return null; return JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))).sub || null; } catch { return null } }
-        async function fetchMe() { const tk = getToken(); if (!tk) { return null; } try { const r = await fetch(API_BASE + '/api/me', { headers: { Authorization: 'Bearer ' + tk } }); if (!r.ok) return null; const j = await r.json(); return j?.profile || null; } catch { return null } }
+        async function fetchMe() {
+            // If we are in a teacher session, skip /api/me entirely (teacher tokens are not Supabase JWTs)
+            try { if (localStorage.getItem('teacherToken')) return null; } catch {}
+            const tk = getToken(); if (!tk) { return null; }
+            try {
+                const r = await fetch(API_BASE + '/api/me', { headers: { Authorization: 'Bearer ' + tk } });
+                if (!r.ok) return null;
+                const j = await r.json();
+                return j?.profile || null;
+            } catch { return null }
+        }
         function setThemeToggle() { document.addEventListener('click', e => { if (e.target.closest('[data-theme-toggle]')) { const root = document.documentElement; const d = root.classList.toggle('dark'); localStorage.setItem('px_theme', d ? 'dark' : 'light') } }) }
         function fillForm(p) { if (!p) return; const f = document.getElementById('profileForm'); f.headline.value = p.headline || ''; f.bio.value = p.bio || ''; f.qualification.value = p.qualification || ''; f.years_experience.value = p.years_experience || ''; f.specialization.value = (p.specialization || []).join(', '); f.availability.value = p.availability ? JSON.stringify(p.availability, null, 2) : ''; f.social.value = p.social ? JSON.stringify(p.social, null, 2) : ''; }
         function fillIdentity(p) { const f = document.getElementById('profileForm'); f.name.value = p.name || ''; f.email.value = p.email || ''; f.college_id.value = p.college_id || ''; f.department_id.value = p.department_id || ''; if (p.avatar_url || p.profile_image_url) { const img = document.getElementById('avatarImg'); img.src = p.avatar_url || p.profile_image_url; img.classList.remove('hidden'); document.querySelector('#avatarPreview span')?.classList.add('hidden'); } }
@@ -203,7 +213,7 @@
             // Try direct secure fetch first
             let prof = await fetchProfileDirect();
             if (!prof) {
-                // Fallback: attempt legacy /api/me then fetch by id if available
+                // Fallback: attempt legacy /api/me only if not a teacher session
                 const me = await fetchMe();
                 if (me?.auth_user_id) {
                     try {

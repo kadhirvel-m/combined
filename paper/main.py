@@ -2566,6 +2566,10 @@ def get_current_user_profile(token: Optional[str]):
     except HTTPException:
         raise
     except Exception as e:
+        # Convert malformed/invalid token errors to 401 rather than 500
+        msg = f"{e}".lower()
+        if "invalid jwt" in msg or "token is malformed" in msg or "unable to parse" in msg:
+            raise HTTPException(status_code=401, detail="Invalid or malformed token")
         supabase_logger.exception("/api/me error")
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
 

@@ -524,7 +524,11 @@
           return;
         }
         if (out.access_token) {
-          try { localStorage.setItem('px_token', out.access_token); } catch { }
+          try {
+            localStorage.setItem('px_token', out.access_token);
+            // Enforce single active session: clear teacher session if any
+            localStorage.removeItem('teacherToken');
+          } catch { }
         }
         status.textContent = '✔ Signed in. Redirecting…';
         setTimeout(() => { window.location.href = 'profile.html'; }, 400);

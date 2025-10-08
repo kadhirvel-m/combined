@@ -27,14 +27,25 @@
  */
 (function() {
   const API = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
-  const tokenKey = 'px_token';
-  const token = safeGet(tokenKey);
+  const USER_TOKEN_KEY = 'px_token';
+  const TEACHER_TOKEN_KEY = 'teacherToken';
+  const tokenUser = safeGet(USER_TOKEN_KEY);
+  const tokenTeacher = safeGet(TEACHER_TOKEN_KEY);
 
   function safeGet(k){ try { return localStorage.getItem(k); } catch(_) { return null; } }
   function safeSet(k,v){ try { localStorage.setItem(k,v); } catch(_) { } }
   function safeRemove(k){ try { localStorage.removeItem(k); } catch(_) { } }
 
   const el = (id) => document.getElementById(id);
+
+  function resolveUiRoot(){
+    try {
+      var p = location.pathname || '';
+      var i = p.indexOf('/ui/');
+      if (i >= 0) return p.slice(0, i + 4); // include '/ui/'
+    } catch(_){ }
+    return '/ui/';
+  }
 
   function deriveInitials(name){
     if(!name) return 'ME';
@@ -49,23 +60,47 @@
     const navProfileMobile = el('navProfileMobile');
     const navProfileMobileLabel = navProfileMobile ? navProfileMobile.querySelector('[data-profile-name]') : null;
 
-    let initials = deriveInitials(profile.name);
+    let initials = deriveInitials(profile.name || profile.full_name || profile.username || '');
     if(navProfileInitial){ navProfileInitial.textContent = initials; navProfileInitial.classList.remove('hidden'); }
-    if(profile.profile_image_url && navProfileImg){
-      navProfileImg.src = profile.profile_image_url;
+    const avatar = profile.profile_image_url || profile.avatar_url;
+    if(avatar && navProfileImg){
+      navProfileImg.src = avatar;
       navProfileImg.classList.remove('hidden');
       if(navProfileInitial) navProfileInitial.classList.add('hidden');
     } else if(navProfileImg){
       navProfileImg.classList.add('hidden');
     }
-    if(navProfile){ navProfile.classList.remove('hidden'); navProfile.setAttribute('title', profile.name || 'Profile'); }
+    const titleName = profile.name || profile.full_name || 'Profile';
+    if(navProfile){ navProfile.classList.remove('hidden'); navProfile.setAttribute('title', titleName); }
     if(navProfileMobile){
       navProfileMobile.classList.remove('hidden');
       if(navProfileMobileLabel){
-        const first = (profile.name||'').split(/\s+/).filter(Boolean)[0];
+        const first = (titleName||'').split(/\s+/).filter(Boolean)[0];
         navProfileMobileLabel.textContent = first ? `Hi, ${first}` : 'My profile';
       }
     }
+  }
+
+  function activeSession(){
+    // If both exist, prefer teacher session and clear user token
+    var tUser = safeGet('px_token');
+    var tTeach = safeGet('teacherToken');
+    if (tTeach && tUser) {
+      try { localStorage.removeItem('px_token'); } catch {}
+    }
+    if (tTeach) return { kind: 'teacher', token: tTeach };
+    if (tUser) return { kind: 'user', token: tUser };
+    return { kind: null, token: null };
+  }
+
+  function setProfileLinks(){
+    const root = resolveUiRoot();
+    const session = activeSession();
+    const href = session.kind === 'teacher' ? (root + 'teacher_profile.html?user=me') : (root + 'profile.html');
+    const a1 = el('navProfile');
+    const a2 = el('navProfileMobile');
+    if (a1 && a1.tagName === 'A') a1.href = href;
+    if (a2 && a2.tagName === 'A') a2.href = href;
   }
 
   window.__PX_NAV_APPLY = applyNavProfile; // expose globally so profile page can re-use
@@ -103,7 +138,9 @@
 
   function handleSignOut(ev){
     if(ev) ev.preventDefault();
-    safeRemove(tokenKey);
+    // Clear both possible sessions to enforce exclusivity
+    safeRemove(USER_TOKEN_KEY);
+    safeRemove(TEACHER_TOKEN_KEY);
     if(typeof window.__PX_CLOSE_MOBILE_NAV === 'function'){ window.__PX_CLOSE_MOBILE_NAV(); }
     window.location.href = 'login.html';
   }
@@ -117,20 +154,29 @@
 
   async function fetchProfile(){
     try {
-      const res = await fetch(`${API}/api/me`, { headers: { Authorization: `Bearer ${token}` }});
-      if(res.status === 401){ safeRemove(tokenKey); showAuthButtons(); hideSessionUI(); return; }
-      const data = await res.json();
-      const profile = data?.profile || {};
+      const session = activeSession();
+      if (!session.token) { showAuthButtons(); hideSessionUI(); return; }
+      let url = `${API}/api/me`;
+      if (session.kind === 'teacher') url = `${API}/api/teacher/profile/me`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${session.token}` }});
+      if(res.status === 401){ safeRemove(USER_TOKEN_KEY); safeRemove(TEACHER_TOKEN_KEY); showAuthButtons(); hideSessionUI(); return; }
+      const data = await res.json().catch(()=>({}));
+      const profile = session.kind === 'teacher'
+        ? ((data && (data.teacher || data.profile || data)) || {})
+        : ((data && (data.profile || data)) || {});
       window.__PX_PROFILE_SNAPSHOT = profile;
       applyNavProfile(profile);
+      setProfileLinks();
     } catch(e){ /* swallow network errors silently */ }
   }
 
   function init(){
-    if(token){
+    const session = activeSession();
+    if(session.token){
       hideAuthButtons();
       showSessionUI();
       attachSignOutHandlers();
+      setProfileLinks();
       if(window.__PX_PROFILE_SNAPSHOT){
         applyNavProfile(window.__PX_PROFILE_SNAPSHOT);
       } else {
