@@ -13,7 +13,7 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
         rel="stylesheet">
     <!-- Removed line-clamp plugin (already bundled in v3.3+) to silence console warning -->
-    <script src="https://cdn.tailwindcss.com?plugins=typography,forms"></script>
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
     <script>
         tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' }, brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' } }, backgroundImage: { 'hero-dark': 'radial-gradient(900px 600px at 50% -10%, rgba(158,75,138,.30), transparent 60%), linear-gradient(180deg,#1E1E2F,#201934 35%,#141321 100%)', 'hero-light': 'radial-gradient(900px 600px at 50% -10%, rgba(158,75,138,.20), transparent 60%), linear-gradient(180deg,#FFFFFF,#FBF8FC 45%,#F7F2F9 100%)' }, boxShadow: { card: '0 6px 24px rgba(0,0,0,.10)', glow: '0 8px 30px rgba(158,75,138,.35)' }, } } };
     </script>
@@ -274,14 +274,14 @@
             // Classes grouped
             const container = $('#classesGroups'); container.innerHTML = '';
             const filterVal = $('#filterSubject').value.trim().toLowerCase();
-            const yearLabelForSem = (semNum)=>{ const s = parseInt(semNum,10); if(!s||s<1) return ''; const year = Math.floor((s-1)/2)+1; const ord={1:'First',2:'Second',3:'Third',4:'Fourth',5:'Fifth',6:'Sixth'}; return ord[year]?ord[year]+' Year':''; };
+            const yearLabelForSem = (semNum) => { const s = parseInt(semNum, 10); if (!s || s < 1) return ''; const year = Math.floor((s - 1) / 2) + 1; const ord = { 1: 'First', 2: 'Second', 3: 'Third', 4: 'Fourth', 5: 'Fifth', 6: 'Sixth' }; return ord[year] ? ord[year] + ' Year' : ''; };
             Object.entries(grouped_classes).forEach(([group, list]) => {
                 const filt = list.filter(c => !filterVal || (c.subject || '').toLowerCase().includes(filterVal));
                 if (!filt.length) return;
                 // Derive semester number from group label like 'Semester 3'
-                let semMatch = group.match(/Semester\s+(\d+)/i); let semNum = semMatch?parseInt(semMatch[1],10):null; let yearLbl = semNum?yearLabelForSem(semNum):'';
+                let semMatch = group.match(/Semester\s+(\d+)/i); let semNum = semMatch ? parseInt(semMatch[1], 10) : null; let yearLbl = semNum ? yearLabelForSem(semNum) : '';
                 const cards = filt.map(c => classCard(c)).join('');
-                container.insertAdjacentHTML('beforeend', `<div class='space-y-3'> <h3 class='text-sm font-semibold tracking-wide uppercase text-neutral-500 dark:text-white/50 flex flex-wrap items-center gap-2'>${esc(group)} ${yearLbl?`<span class='text-[10px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-700 dark:text-fuchsia-200 ring-1 ring-brand-500/20'>${esc(yearLbl)}</span>`:''} <span class='text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10'>${filt.length}</span></h3> <div class='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>${cards}</div></div>`);
+                container.insertAdjacentHTML('beforeend', `<div class='space-y-3'> <h3 class='text-sm font-semibold tracking-wide uppercase text-neutral-500 dark:text-white/50 flex flex-wrap items-center gap-2'>${esc(group)} ${yearLbl ? `<span class='text-[10px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-700 dark:text-fuchsia-200 ring-1 ring-brand-500/20'>${esc(yearLbl)}</span>` : ''} <span class='text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10'>${filt.length}</span></h3> <div class='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>${cards}</div></div>`);
             });
             if (!classes.length) { container.innerHTML = `<div class='text-sm opacity-70'>No classes added yet.</div>`; }
             $('#classesCount').textContent = classes.length ? `${classes.length} classes` : '';

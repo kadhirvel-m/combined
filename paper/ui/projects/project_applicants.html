@@ -1,50 +1,83 @@
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>TuNe X — Project Applicants</title>
   <meta name="description" content="View applicants for your project and review their profiles." />
-  <script src="https://cdn.tailwindcss.com?plugins=typography,forms,line-clamp"></script>
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
   <script>
-    tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { display: ['Inter','ui-sans-serif','system-ui','-apple-system','Segoe UI','Roboto','Ubuntu','Cantarell','Noto Sans','sans-serif'] }, colors: { brand: { 50:'#eef4ff',100:'#d9e6ff',200:'#b3ccff',300:'#88adff',400:'#628fff',500:'#3f6fff',600:'#2f56e6',700:'#2846bb',800:'#223a95',900:'#1c2f78' }, ink: { 50:'#f7f7f9', 900:'#0c0f14' } }, boxShadow: { 'brand-lg': '0 10px 30px rgba(63,111,255,.25)', 'soft': '0 6px 20px rgba(0,0,0,.08)' }, borderRadius: { '3xl': '1.5rem' } } } }
+    tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { display: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Ubuntu', 'Cantarell', 'Noto Sans', 'sans-serif'] }, colors: { brand: { 50: '#eef4ff', 100: '#d9e6ff', 200: '#b3ccff', 300: '#88adff', 400: '#628fff', 500: '#3f6fff', 600: '#2f56e6', 700: '#2846bb', 800: '#223a95', 900: '#1c2f78' }, ink: { 50: '#f7f7f9', 900: '#0c0f14' } }, boxShadow: { 'brand-lg': '0 10px 30px rgba(63,111,255,.25)', 'soft': '0 6px 20px rgba(0,0,0,.08)' }, borderRadius: { '3xl': '1.5rem' } } } }
   </script>
   <script>
     const initTheme = () => { const stored = localStorage.getItem('cx-theme'); const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches; if ((stored === 'dark') || (!stored && prefersDark)) document.documentElement.classList.add('dark'); }; initTheme();
     const toggleTheme = () => { const isDark = document.documentElement.classList.toggle('dark'); localStorage.setItem('cx-theme', isDark ? 'dark' : 'light'); };
   </script>
   <script src="config.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap" rel="stylesheet">
-  <style>.icon{font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}.lift{transition:transform .25s ease, box-shadow .25s ease}.lift:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(0,0,0,.12)}</style>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
+    rel="stylesheet">
+  <style>
+    .icon {
+      font-family: 'Material Symbols Outlined';
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24
+    }
+
+    .lift {
+      transition: transform .25s ease, box-shadow .25s ease
+    }
+
+    .lift:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, .12)
+    }
+  </style>
 </head>
+
 <body class="bg-ink-50 dark:bg-[#0a0d12] text-[#0d1117] dark:text-zinc-100">
-  <header class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-black/30 border-b border-black/5 dark:border-white/10">
+  <header
+    class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-black/30 border-b border-black/5 dark:border-white/10">
     <nav class="container flex items-center gap-3 py-3">
       <a href="index.html" class="flex items-center gap-2 font-semibold tracking-tight">
-        <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white shadow-brand-lg">CX</span>
+        <span
+          class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white shadow-brand-lg">CX</span>
         <span class="hidden sm:inline">TuNe X</span>
       </a>
       <div class="ml-auto hidden md:flex items-center gap-6 text-sm">
         <a href="profile.html" class="hover:text-brand-600 dark:hover:text-brand-300">Profile</a>
         <a href="project_post.html" class="hover:text-brand-600 dark:hover:text-brand-300">Create Project</a>
         <!-- Profile avatar (shown when logged in) -->
-        <a id="navProfile" href="profile.html" title="Profile" class="hidden inline-flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
+        <a id="navProfile" href="profile.html" title="Profile"
+          class="hidden inline-flex items-center justify-center w-9 h-9 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/60">
           <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
           <span id="navProfileInitial" class="text-xs font-semibold">Me</span>
         </a>
-        <button onclick="toggleTheme()" class="rounded-xl border border-black/10 dark:border-white/10 px-3 py-2"><span class="icon">dark_mode</span></button>
+        <button onclick="toggleTheme()" class="rounded-xl border border-black/10 dark:border-white/10 px-3 py-2"><span
+            class="icon">dark_mode</span></button>
         <div class="relative" id="navProjectsWrap">
-          <button type="button" id="navProjectsBtn" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition">
+          <button type="button" id="navProjectsBtn"
+            class="inline-flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition">
             <span class="icon text-base leading-none">hub</span>
             <span>Project Portal</span>
             <span class="icon text-base leading-none">expand_more</span>
           </button>
-          <div id="navProjectsMenu" class="absolute right-0 mt-2 w-60 rounded-xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-zinc-900/95 shadow-lg backdrop-blur hidden">
-            <a href="postings.html" class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 rounded-t-xl"><span class="icon text-base leading-none">folder_open</span>Project Postings</a>
-            <a href="project_post.html" class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span class="icon text-base leading-none">add_circle</span>Create Project</a>
-            <a href="incoming_requests.html" class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span class="icon text-base leading-none">inbox</span>Incoming Requests</a>
-            <a href="my_applications.html" class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span class="icon text-base leading-none">assignment_ind</span>My Applications</a>
-            <a href="skill-test.html" class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 rounded-b-xl"><span class="icon text-base leading-none">verified</span>Skill Test Portal</a>
+          <div id="navProjectsMenu"
+            class="absolute right-0 mt-2 w-60 rounded-xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-zinc-900/95 shadow-lg backdrop-blur hidden">
+            <a href="postings.html"
+              class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 rounded-t-xl"><span
+                class="icon text-base leading-none">folder_open</span>Project Postings</a>
+            <a href="project_post.html"
+              class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
+                class="icon text-base leading-none">add_circle</span>Create Project</a>
+            <a href="incoming_requests.html"
+              class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
+                class="icon text-base leading-none">inbox</span>Incoming Requests</a>
+            <a href="my_applications.html"
+              class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
+                class="icon text-base leading-none">assignment_ind</span>My Applications</a>
+            <a href="skill-test.html"
+              class="flex items-center gap-2 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 rounded-b-xl"><span
+                class="icon text-base leading-none">verified</span>Skill Test Portal</a>
           </div>
         </div>
         <a href="login.html" class="hover:text-brand-600 dark:hover:text-brand-300" id="signInLink">Sign in</a>
@@ -75,7 +108,7 @@
     const status = el('status');
     const cards = el('cards');
 
-    const esc = (s) => (s ?? '').toString().replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+    const esc = (s) => (s ?? '').toString().replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
     const fetchApplicants = async () => {
       status.textContent = 'Loading applicants…';
@@ -96,7 +129,7 @@
           const headline = esc(p.headline || '');
           const image = p.profile_image_url ? `<img src="${esc(p.profile_image_url)}" class="w-12 h-12 rounded-full object-cover" alt="avatar"/>` : `<div class="w-12 h-12 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center">${name.charAt(0) || '?'}</div>`;
           const profileHref = `public_profile.html?user_id=${encodeURIComponent(r.applicant_user_id)}&project_id=${encodeURIComponent(projectId || '')}&application_id=${encodeURIComponent(r.id)}`;
-          const isPending = String(r.status||'').toLowerCase() === 'pending';
+          const isPending = String(r.status || '').toLowerCase() === 'pending';
           const actions = isPending ? `<a class="inline-flex items-center gap-1 text-brand-600" href="${profileHref}"><span class="icon text-sm">open_in_new</span>Review</a>` : `<a class="inline-flex items-center gap-1 text-brand-600" href="${profileHref}"><span class="icon text-sm">open_in_new</span>View</a>`;
           return `
           <article class="lift rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-900/70 p-5 space-y-3">
@@ -123,7 +156,7 @@
     fetchApplicants();
 
     // Auth-aware navbar avatar
-    (function(){
+    (function () {
       const token = localStorage.getItem('px_token');
       if (!token) return;
       document.getElementById('signInLink')?.classList.add('hidden');
@@ -137,13 +170,14 @@
         .then(p => {
           if (!p) return;
           let initials = 'ME';
-          if (p.name) initials = p.name.split(' ').filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0,2).join('');
+          if (p.name) initials = p.name.split(' ').filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0, 2).join('');
           if (navProfileInitial) navProfileInitial.textContent = initials;
           if (p.profile_image_url) {
             if (navProfileImg) { navProfileImg.src = p.profile_image_url; navProfileImg.classList.remove('hidden'); if (navProfileInitial) navProfileInitial.classList.add('hidden'); }
           }
-        }).catch(()=>{});
+        }).catch(() => { });
     })();
   </script>
 </body>
+
 </html>
