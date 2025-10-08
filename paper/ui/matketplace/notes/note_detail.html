@@ -17,28 +17,33 @@
     <!-- Tailwind -->
     <link rel="stylesheet" href="../../assets/css/tailwind.css" />
     <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                container: { center: true, padding: '1rem' },
-                extend: {
-                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
-                    colors: {
-                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
-                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
-                    },
-                    backgroundImage: {
-                        'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
-                        'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
-                    },
-                    boxShadow: { card: '0 6px 24px rgba(0,0,0,.12)', glow: '0 8px 30px rgba(158,75,138,0.35)' },
-                    keyframes: {
-                        shimmer: { '0%': { backgroundPosition: '-1000px 0' }, '100%': { backgroundPosition: '1000px 0' } }
-                    },
-                    animation: { shimmer: 'shimmer 1.6s infinite linear' }
-                }
+        // Guard tailwind assignment in case Tailwind runtime isn't exposed (precompiled CSS only scenario)
+        try {
+            if (window.tailwind) {
+                tailwind.config = {
+                    darkMode: 'class',
+                    theme: {
+                        container: { center: true, padding: '1rem' },
+                        extend: {
+                            fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                            colors: {
+                                brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                                brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
+                            },
+                            backgroundImage: {
+                                'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+                                'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+                            },
+                            boxShadow: { card: '0 6px 24px rgba(0,0,0,.12)', glow: '0 8px 30px rgba(158,75,138,0.35)' },
+                            keyframes: {
+                                shimmer: { '0%': { backgroundPosition: '-1000px 0' }, '100%': { backgroundPosition: '1000px 0' } }
+                            },
+                            animation: { shimmer: 'shimmer 1.6s infinite linear' }
+                        }
+                    }
+                };
             }
-        };
+        } catch (e) { console.warn('Tailwind config skip (not available):', e?.message); }
     </script>
 
     <style>
@@ -149,11 +154,14 @@
                     <div class="flex-1 min-w-0">
                         <h1 id="noteTitle"
                             class="text-2xl md:text-3xl font-extrabold tracking-tight mb-1 flex items-center gap-2">
-                            Loading… <span id="titleTeacherBadge"
-                                class="hidden inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/30"><span
-                                    class="material-symbols-rounded text-sm">verified</span><span
-                                    class="hidden sm:inline">Uploaded by Teacher</span><span
-                                    class="sm:hidden">Teacher</span></span></h1>
+                            <span id="noteTitleText">Loading…</span>
+                            <span id="titleTeacherBadge"
+                                class="hidden inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/30">
+                                <span class="material-symbols-rounded text-sm">verified</span>
+                                <span class="hidden sm:inline">Uploaded by Teacher</span>
+                                <span class="sm:hidden">Teacher</span>
+                            </span>
+                        </h1>
                         <div id="metaChips"
                             class="flex flex-wrap gap-2 text-[11px] text-neutral-600 dark:text-white/70"></div>
                     </div>
@@ -365,8 +373,10 @@
         // Render
         function renderAll() {
             const n = detail.note || {};
+            // Defensive element lookups to avoid null classList errors under SES restrictions
+            if (!el('#noteTitle')) { console.warn('Required DOM nodes missing; abort render.'); return; }
             el('#crumbTitle').textContent = n.title || 'Note';
-            el('#noteTitle').textContent = n.title || '—';
+            const titleTextEl = el('#noteTitleText'); if (titleTextEl) titleTextEl.textContent = n.title || '—';
             el('#noteDesc').textContent = n.description || '—';
 
             // Chips
@@ -382,18 +392,20 @@
 
             // Seller
             const s = n.seller || {};
-            const profUrl = `../../staff_profile.html?user=${encodeURIComponent(s.id || '')}`;
+            // Use backend-provided profile_href if present (teacher), else fallback to staff profile.
+            const profUrl = s.profile_href ? (s.profile_href.startsWith('http') ? s.profile_href : (`..${s.profile_href.startsWith('/ui') ? '/..' : '/'}${s.profile_href.replace(/^\/ui\//, '')}`)) : (s.is_teacher && s.id ? `../../teacher_profile.html?user=${encodeURIComponent(s.id)}` : `../../staff_profile.html?user=${encodeURIComponent(s.id || '')}`);
             el('#sellerProfile').href = profUrl;
             el('#sellerName').textContent = s.name || 'Unknown Seller';
-            el('#sellerMeta').textContent = s.college ? s.college : '';
-            if (s.verified) {
-                el('#sellerBadge').classList.remove('hidden');
-                el('#titleTeacherBadge').classList.remove('hidden');
+            el('#sellerMeta').textContent = s.college_name || s.college || '';
+            if (s.verified || s.is_teacher) {
+                const sb = el('#sellerBadge'); if (sb) sb.classList.remove('hidden');
+                const tb = el('#titleTeacherBadge'); if (tb) tb.classList.remove('hidden');
             }
-            el('#sellerAvatar').innerHTML = s.avatar_url
+            const avatarMarkup = s.avatar_url
                 ? `<img src="${s.avatar_url}" class="w-full h-full object-cover" alt="">`
                 : `<div class="w-full h-full grid place-items-center text-xs font-medium text-brand-700 dark:text-fuchsia-200 bg-gradient-to-br from-brand-500/30 to-brand-500/10">${escapeHtml((s.name || 'U').charAt(0).toUpperCase())}</div>`;
-            el('#sellerAvatarWrap').innerHTML = el('#sellerAvatar').innerHTML;
+            el('#sellerAvatar').innerHTML = avatarMarkup;
+            el('#sellerAvatarWrap').innerHTML = avatarMarkup;
 
             // File meta / details
             const mgrid = el('#fileMeta'); mgrid.innerHTML = '';
@@ -405,18 +417,18 @@
 
             const dlist = el('#detailsList'); dlist.innerHTML = '';
             const row = (k, v) => dlist.insertAdjacentHTML('beforeend', `<dt class="opacity-70">${k}</dt><dd>${escapeHtml(String(v || '—'))}</dd>`);
-            row('Subject', n.subject); row('Unit', n.unit); row('Exam', n.exam_type);
-            // Academic details (conditionally added)
-            if (n.college_name) row('College', n.college_name);
+            // Custom ordered academic/metadata rows (remove Unit & Exam)
+            row('Subject', n.subject);
             if (n.degree_name) row('Degree', n.degree_name);
             if (n.department_name) row('Department', n.department_name);
             if (n.batch_range) row('Batch', n.batch_range);
             if (n.semester) row('Semester', n.semester);
+            if (n.college_name) row('College', n.college_name);
             if (Array.isArray(n.tags)) row('Tags', n.tags.join(', '));
 
             // Outline
             if (Array.isArray(n.outline) && n.outline.length) {
-                el('#outlineCard').classList.remove('hidden');
+                const oc = el('#outlineCard'); if (oc) oc.classList.remove('hidden');
                 el('#outlineList').innerHTML = n.outline.map((it, i) => `<li class="flex items-start gap-2"><span class="material-symbols-rounded text-sm mt-0.5">check_circle</span><span>${escapeHtml(typeof it === 'string' ? it : it.title || ('Item ' + (i + 1)))}</span></li>`).join('');
             }
 
@@ -459,7 +471,13 @@
                 }
                 // 3. Thumbs array
                 if (thumbs.length) { showImage(thumbs[0]); return true; }
-                // 4. Derive from original/stored file
+                // 4. Remote stored_path (Supabase/public URL) fallback
+                if (n.stored_path && /^https?:\/\//i.test(n.stored_path)) {
+                    const lower = n.stored_path.split('?')[0].toLowerCase();
+                    if (/(\.pdf)$/.test(lower)) { showPdf(n.stored_path); return true; }
+                    if (/(\.png|\.jpe?g|\.webp|\.gif)$/.test(lower)) { showImage(n.stored_path); return true; }
+                }
+                // 5. Derive from original/stored filename when served locally
                 const nameForExt = (n.original_filename || n.stored_path || '').toLowerCase();
                 const mime = (n.mime_type || '').toLowerCase();
                 if (nameForExt || mime) {

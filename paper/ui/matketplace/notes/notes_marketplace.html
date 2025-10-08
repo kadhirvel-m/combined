@@ -364,29 +364,17 @@
         <article
             class="note-card group rounded-2xl border border-black/5 dark:border-white/10 shadow-card bg-white/80 dark:bg-[#1f1f2d]/70 backdrop-blur flex flex-col hover:shadow-lg transition"
             role="listitem">
-            <div class="relative note-thumb rounded-t-2xl overflow-hidden">
-                <img data-thumb class="w-full h-full object-cover hidden" alt="Preview thumbnail" loading="lazy" />
-                <div class="absolute top-2 left-2 flex gap-1">
-                    <span
-                        class="px-2 py-0.5 text-[10px] rounded-full bg-brand-500/15 text-brand-700 dark:text-fuchsia-200 ring-soft"
-                        data-filetype></span>
-                    <span class="px-2 py-0.5 text-[10px] rounded-full bg-white/70 dark:bg-white/10 ring-soft"
-                        data-tag></span>
-                </div>
-                <div class="absolute top-2 right-2 flex gap-2">
-                    <button
-                        class="size-9 grid place-items-center rounded-xl bg-white/80 dark:bg-white/10 ring-soft hover:scale-105 transition"
-                        title="Save"><span class="material-symbols-rounded text-base">bookmark_add</span></button>
-                    <a class="size-9 grid place-items-center rounded-xl bg-white/80 dark:bg-white/10 ring-soft hover:scale-105 transition detailsLink"
-                        href="#" title="Open"><span class="material-symbols-rounded text-base">open_in_new</span></a>
-                </div>
-            </div>
+            <div class="relative rounded-t-2xl overflow-hidden h-2"></div>
             <div class="p-4 flex flex-col gap-3 flex-1">
                 <div class="flex items-start gap-2">
                     <h3
                         class="font-semibold text-sm leading-5 line-clamp-2 title text-neutral-900 dark:text-neutral-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
                     </h3>
                     <span class="ml-auto priceChip"></span>
+                    <a class="detailsIconLink inline-flex items-center justify-center size-7 rounded-md ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                        href="#" title="Open details" aria-label="Open note details">
+                        <span class="material-symbols-rounded text-[18px] leading-none">open_in_new</span>
+                    </a>
                 </div>
                 <p class="text-xs text-gray-600 dark:text-gray-300 line-clamp-3 desc"></p>
                 <div class="flex flex-wrap gap-1 text-[10px] meta"></div>
@@ -576,13 +564,11 @@
                 const priceEl = q('.priceChip'); if (priceEl) priceEl.textContent = priceText;
                 const descEl = q('.desc, .note-desc'); if (descEl) descEl.textContent = n.description || '';
                 // Cover image
-                if (n.cover_path && apiBase) {
-                    const imgEl = q('img[data-thumb]');
-                    if (imgEl) { imgEl.src = `${apiBase}/api/marketplace/notes/${n.id}/cover`; imgEl.classList.remove('hidden'); }
-                }
+                // Cover image intentionally removed per requirement; placeholder height kept minimal.
                 const metaEl = q('.meta, .metaTags'); if (metaEl) metaEl.innerHTML = subjHtml;
                 const ratingEl = q('.rating'); if (ratingEl) ratingEl.textContent = ratingTxt;
                 const detailsEl = q('.detailsLink'); if (detailsEl) detailsEl.href = detailsHref;
+                const iconLink = q('.detailsIconLink'); if (iconLink) iconLink.href = detailsHref;
                 const acadEl = q('.academicChips'); if (acadEl) {
                     const chips = [];
                     if (n.college_code || n.college_abbrev) chips.push(n.college_code || n.college_abbrev);
@@ -599,10 +585,15 @@
                         const nameLink = sellerWrap.querySelector('[data-profile-link-name]');
                         const avatar = sellerWrap.querySelector('[data-avatar]');
                         const initial = sellerWrap.querySelector('[data-initial]');
-                        const profUrl = `../../staff_profile.html?user=${encodeURIComponent(n.seller.id)}`;
-                        if (nameLink) { nameLink.href = profUrl; nameLink.textContent = n.seller.name || 'User'; }
-                        if (initial) initial.textContent = (n.seller.name || 'U').trim().charAt(0).toUpperCase() || 'U';
-                        if (n.seller.avatar_url && avatar) { avatar.src = n.seller.avatar_url; avatar.classList.remove('hidden'); if (initial) initial.classList.add('hidden'); }
+                        const s = n.seller;
+                        const profUrl = s.profile_href ? (s.profile_href.startsWith('http') ? s.profile_href : `../../teacher_profile.html?user=${encodeURIComponent(s.id)}`) : (s.is_teacher ? `../../teacher_profile.html?user=${encodeURIComponent(s.id)}` : `../../staff_profile.html?user=${encodeURIComponent(s.id)}`);
+                        if (nameLink) { nameLink.href = profUrl; nameLink.textContent = s.name || 'User'; }
+                        if (initial) initial.textContent = (s.name || 'U').trim().charAt(0).toUpperCase() || 'U';
+                        if (s.avatar_url && avatar) { avatar.src = s.avatar_url; avatar.classList.remove('hidden'); if (initial) initial.classList.add('hidden'); }
+                        // Teacher badge with text
+                        if (s.is_teacher && nameLink && !sellerWrap.querySelector('.teacher-badge')) {
+                            nameLink.insertAdjacentHTML('afterend', '<span class="teacher-badge inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 ring-1 ring-emerald-500/30"><span class="material-symbols-rounded text-[13px] leading-none">verified</span><span>Teacher</span></span>');
+                        }
                     }
                 }
                 grid.appendChild(frag);

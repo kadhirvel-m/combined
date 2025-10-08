@@ -225,13 +225,38 @@
             let res;
             // In dynamic self mode always hit /me variant so switching accounts (storage event) refreshes automatically
             const strictParam = 'strict=1'; // instruct backend to use only teacher_profiles (implement server-side if not present)
-            if (dynamicSelfMode) {
-                if (!token) { noAuthForMe(); return; }
-                const url = `${base}/api/teacher/profile/me?${strictParam}`;
-                try { res = await fetch(url, { headers: { Authorization: 'Bearer ' + token, 'X-TeacherProfile-Strict': 'true' } }); } catch (e) { console.error(e); renderError('Network error'); return; }
-            } else {
-                const url = `${base}/api/teacher/profile/${encodeURIComponent(targetUser)}?${strictParam}`;
-                try { res = await fetch(url, { headers: token ? { Authorization: 'Bearer ' + token, 'X-TeacherProfile-Strict': 'true' } : { 'X-TeacherProfile-Strict': 'true' } }); } catch (e) { console.error(e); renderError('Network error'); return; }
+            async function fetchWithRetry(url, hdrs, attempts = 4, baseDelay = 180) {
+                let lastErr; for (let i = 0; i < attempts; i++) {
+                    try {
+                        const r = await fetch(url, { headers: hdrs, cache: 'no-store' });
+                        if (!r.ok && r.status >= 500 && r.status < 600) throw new Error('Server ' + r.status);
+                        return r;
+                    } catch (e) {
+                        lastErr = e; const isLast = i === attempts - 1;
+                        const jitter = Math.random() * 60;
+                        await new Promise(r => setTimeout(r, baseDelay * (i + 1) + jitter));
+                        if (isLast) throw e;
+                    }
+                }
+                throw lastErr;
+            }
+            const makeUrl = dynamicSelfMode ? `${base}/api/teacher/profile/me?${strictParam}` : `${base}/api/teacher/profile/${encodeURIComponent(targetUser)}?${strictParam}`;
+            const headers = dynamicSelfMode
+                ? (token ? { Authorization: 'Bearer ' + token, 'X-TeacherProfile-Strict': 'true' } : { 'X-TeacherProfile-Strict': 'true' })
+                : (token ? { Authorization: 'Bearer ' + token, 'X-TeacherProfile-Strict': 'true' } : { 'X-TeacherProfile-Strict': 'true' });
+            if (dynamicSelfMode && !token) { noAuthForMe(); return; }
+            try {
+                res = await fetchWithRetry(makeUrl, headers);
+            } catch (e) {
+                console.error('Profile fetch retries exhausted', e);
+                if (dynamicSelfMode) {
+                    // Automatic sign-out (clear known tokens) and redirect to login
+                    ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'].forEach(k => { try { localStorage.removeItem(k); } catch { } });
+                    noAuthForMe();
+                    return;
+                }
+                renderError('Network error – please refresh');
+                return;
             }
             let data = {}; try { data = await res.json(); } catch { }
             if (!res.ok) {

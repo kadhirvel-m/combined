@@ -5759,21 +5759,34 @@ async def get_teacher_profile(
     strict = _is_truthy(strict_q) or _is_truthy(x_strict)
 
     # --- Concurrent fetches: core, classes, and notes count ---
+    def _retry_blocking(fn, *a, retries=3, base_delay=0.15, **kw):
+        last_exc = None
+        for attempt in range(retries):
+            try:
+                return fn(*a, **kw)
+            except RETRYABLE_EXCEPTIONS as e:  # type: ignore
+                last_exc = e
+                time.sleep(base_delay * (attempt + 1))
+                continue
+        if last_exc:
+            supabase_logger.warning("teacher_profile core fetch retry exhausted: %s", last_exc)
+        return fn(*a, **kw)  # final attempt, let exception propagate
+
     async def fetch_core():
         # Parallelize core sources: teacher_profiles, teacher_applications, admin_roles, user_profiles (if not strict)
         loop = asyncio.get_running_loop()
-        tprof_fut = loop.run_in_executor(None, lambda: supabase.table("teacher_profiles").select(
+        tprof_fut = loop.run_in_executor(None, lambda: _retry_blocking(lambda: supabase.table("teacher_profiles").select(
             "name,email,college_id,department_id,headline,bio,specialization,years_experience,qualification,availability,social,profile_image_url"
-        ).eq("auth_user_id", user_id).limit(1).execute())
-        tapp_fut = loop.run_in_executor(None, lambda: supabase.table("teacher_applications").select(
+        ).eq("auth_user_id", user_id).limit(1).execute()))
+        tapp_fut = loop.run_in_executor(None, lambda: _retry_blocking(lambda: supabase.table("teacher_applications").select(
             "name,email,college_id,department_id,subjects,status"
-        ).eq("auth_user_id", user_id).limit(1).execute())
-        role_fut = loop.run_in_executor(None, lambda: supabase.table("admin_roles").select("role").eq("auth_user_id", user_id).limit(1).execute())
+        ).eq("auth_user_id", user_id).limit(1).execute()))
+        role_fut = loop.run_in_executor(None, lambda: _retry_blocking(lambda: supabase.table("admin_roles").select("role").eq("auth_user_id", user_id).limit(1).execute()))
         prof_fut = None
         if not strict:
-            prof_fut = loop.run_in_executor(None, lambda: supabase.table("user_profiles").select(
+            prof_fut = loop.run_in_executor(None, lambda: _retry_blocking(lambda: supabase.table("user_profiles").select(
                 "name,profile_image_url,headline,bio,semester,batch_from,batch_to"
-            ).eq("auth_user_id", user_id).limit(1).execute())
+            ).eq("auth_user_id", user_id).limit(1).execute()))
 
         tprof, tapp, role_res, prof = await asyncio.gather(
             tprof_fut, tapp_fut, role_fut, prof_fut if prof_fut is not None else asyncio.sleep(0, result=None)
@@ -5820,9 +5833,9 @@ async def get_teacher_profile(
     async def fetch_classes():
         # Fetch classes, then enrich lookups concurrently
         loop = asyncio.get_running_loop()
-        cls = await loop.run_in_executor(None, lambda: supabase.table("teacher_classes").select(
+        cls = await loop.run_in_executor(None, lambda: _retry_blocking(lambda: supabase.table("teacher_classes").select(
             "id,batch_id,semester,subject,section,degree_id,department_id,college_id,created_at"
-        ).eq("teacher_user_id", user_id).order("created_at", desc=True).limit(500).execute())
+        ).eq("teacher_user_id", user_id).order("created_at", desc=True).limit(500).execute()))
         if getattr(cls, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (teacher classes): {cls.error}")
         classes = cls.data or []
@@ -5834,7 +5847,9 @@ async def get_teacher_profile(
         def _sel(table, ids, cols):
             if not ids:
                 return {}
-            res = supabase.table(table).select(cols).in_("id", list(ids)).execute()
+            def _do():
+                return supabase.table(table).select(cols).in_("id", list(ids)).execute()
+            res = _retry_blocking(_do)
             out = {}
             if not getattr(res, "error", None):
                 for r in res.data or []:
@@ -5869,8 +5884,8 @@ async def get_teacher_profile(
         dept_id = core.get("department_id")
         if not college_id and not dept_id:
             return
-        college_fut = loop.run_in_executor(None, lambda: supabase.table("colleges").select("name").eq("id", college_id).limit(1).execute()) if college_id else asyncio.sleep(0, result=None)
-        dept_fut = loop.run_in_executor(None, lambda: supabase.table("departments").select("name,degree_id").eq("id", dept_id).limit(1).execute()) if dept_id else asyncio.sleep(0, result=None)
+        college_fut = loop.run_in_executor(None, lambda: _retry_blocking(lambda: supabase.table("colleges").select("name").eq("id", college_id).limit(1).execute())) if college_id else asyncio.sleep(0, result=None)
+        dept_fut = loop.run_in_executor(None, lambda: _retry_blocking(lambda: supabase.table("departments").select("name,degree_id").eq("id", dept_id).limit(1).execute())) if dept_id else asyncio.sleep(0, result=None)
         college_res, dept_res = await asyncio.gather(college_fut, dept_fut)
         degree_id = None
         if college_res and not getattr(college_res, "error", None) and getattr(college_res, "data", None):
@@ -5879,7 +5894,7 @@ async def get_teacher_profile(
             core["department_name"] = dept_res.data[0].get("name")
             degree_id = dept_res.data[0].get("degree_id")
         if degree_id:
-            deg = await loop.run_in_executor(None, lambda: supabase.table("degrees").select("name").eq("id", degree_id).limit(1).execute())
+            deg = await loop.run_in_executor(None, lambda: _retry_blocking(lambda: supabase.table("degrees").select("name").eq("id", degree_id).limit(1).execute()))
             if not getattr(deg, "error", None) and getattr(deg, "data", None):
                 core["degree_name"] = deg.data[0].get("name")
 
@@ -5972,7 +5987,7 @@ def _map_teacher_class_row(row: Dict[str, Any]) -> TeacherClassOut:
         college_id=uuid.UUID(row["college_id"]) if row.get("college_id") else None,
         degree_id=uuid.UUID(row["degree_id"]) if row.get("degree_id") else None,
         department_id=uuid.UUID(row["department_id"]) if row.get("department_id") else None,
-    notes=row.get("notes"),
+        notes=row.get("notes"),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
@@ -6384,8 +6399,43 @@ def create_college_simple(payload: CollegeNameOnlyIn):
 @academics_router.get("/api/colleges", response_model=List[College], summary="List all colleges (id & name)")
 def list_colleges():
     supabase = get_service_client()
-    res = supabase.table("colleges").select("id,name,logo_url").order("name").execute()
-    return [{"id": row["id"], "name": row["name"], "logo_url": row.get("logo_url")} for row in (res.data or [])]
+    # Apply lightweight retry for transient RemoteProtocolError or connection resets
+    import time, logging
+    from httpx import RemoteProtocolError
+    attempts = 0
+    last_exc = None
+    backoffs = [0.0, 0.15, 0.35, 0.75]
+    while attempts < len(backoffs):
+        try:
+            res = supabase.table("colleges").select("id,name,logo_url").order("name").execute()
+            # Some SDK versions expose .error
+            if getattr(res, "error", None):
+                raise RuntimeError(f"Supabase error: {res.error}")
+            return [
+                {"id": row["id"], "name": row["name"], "logo_url": row.get("logo_url")}
+                for row in (res.data or [])
+                if isinstance(row, dict) and row.get("id") and row.get("name")
+            ]
+        except (RemoteProtocolError, ConnectionError) as exc:  # transient network layer
+            last_exc = exc
+            wait = backoffs[attempts]
+            logging.getLogger("academics").warning(
+                "list_colleges transient error attempt %s/%s: %s (backing off %.2fs)",
+                attempts + 1,
+                len(backoffs),
+                exc,
+                wait,
+            )
+            time.sleep(wait)
+            attempts += 1
+            continue
+        except Exception as exc:  # non-transient
+            logging.getLogger("academics").exception("list_colleges failed unrecoverably")
+            raise HTTPException(status_code=500, detail=f"Failed to list colleges: {exc}")
+    # Fallback after retries exhausted
+    logging.getLogger("academics").error("list_colleges exhausted retries: %s", last_exc)
+    # Graceful empty list so UI can still render (client can retry separately)
+    return []
 
 @academics_router.get(
     "/api/colleges/{college_id}/degrees",
@@ -7729,14 +7779,16 @@ def mp_list_notes(
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (list notes): {res.error}")
     items = res.data or []
-    # Collect unique owner_user_id values to enrich with profile display fields.
+    # Collect unique owner_user_id values to enrich with profile display fields (user_profiles + teacher_profiles + roles).
     owner_ids = sorted({r.get("owner_user_id") for r in items if r.get("owner_user_id")})
-    profiles_map: dict[str, dict] = {}
+    user_profiles_map: dict[str, dict] = {}
+    teacher_profiles_map: dict[str, dict] = {}
+    teacher_ids_role: set[str] = set()
     if owner_ids:
         CHUNK = 40
         for i in range(0, len(owner_ids), CHUNK):
             chunk = owner_ids[i:i+CHUNK]
-            # user_profiles uses auth_user_id as foreign key to auth users (see public profile endpoint)
+            # Standard user profile enrichment
             try:
                 prof_res = (
                     supabase.table("user_profiles")
@@ -7744,13 +7796,44 @@ def mp_list_notes(
                     .in_("auth_user_id", chunk)
                     .execute()
                 )
+                if not getattr(prof_res, "error", None):
+                    for pr in prof_res.data or []:
+                        pid = pr.get("auth_user_id")
+                        if pid:
+                            user_profiles_map[pid] = pr
             except Exception:  # pragma: no cover
-                prof_res = None
-            if prof_res and getattr(prof_res, "data", None):
-                for pr in prof_res.data:
-                    pid = pr.get("auth_user_id")
-                    if pid:
-                        profiles_map[pid] = pr
+                pass
+            # Teacher profile enrichment (prefer these over user_profiles when present)
+            try:
+                tprof_res = (
+                    supabase.table("teacher_profiles")
+                    .select("auth_user_id,name,profile_image_url,college_id,department_id")
+                    .in_("auth_user_id", chunk)
+                    .execute()
+                )
+                if not getattr(tprof_res, "error", None):
+                    for tr in tprof_res.data or []:
+                        tid = tr.get("auth_user_id")
+                        if tid:
+                            teacher_profiles_map[tid] = tr
+            except Exception:  # pragma: no cover
+                pass
+        # Roles lookup (single query if possible)
+        try:
+            role_res = (
+                supabase.table("admin_roles")
+                .select("auth_user_id,role")
+                .in_("auth_user_id", owner_ids)
+                .eq("role", "teacher")
+                .execute()
+            )
+            if not getattr(role_res, "error", None):
+                for rr in role_res.data or []:
+                    rid = rr.get("auth_user_id")
+                    if rid:
+                        teacher_ids_role.add(rid)
+        except Exception:  # pragma: no cover
+            pass
     # Optionally restrict to teacher owners (role table lookup)
     if teachers_only:
         teacher_ids: set[str] = set()
@@ -7771,21 +7854,30 @@ def mp_list_notes(
         if teacher_ids:
             items = [r for r in items if r.get("owner_user_id") in teacher_ids]
 
-    # Enrich each note with seller fields (short form) for UI consumption.
+    # Enrich each note with seller fields (short form) for UI consumption. Teacher profile takes precedence.
     for r in items:
         oid = r.get("owner_user_id")
-        prof = profiles_map.get(oid) if oid else None
-        if prof:
-            # Use name from user_profiles (postings style); fallback masked id
-            disp = prof.get("name") or (oid[:6] + "…" if oid else "")
-            r["seller"] = {
-                "id": oid,
-                "name": disp,
-                "avatar_url": prof.get("profile_image_url"),
-            }
+        if not oid:
+            continue
+        tprof = teacher_profiles_map.get(oid)
+        uprof = user_profiles_map.get(oid)
+        is_teacher = oid in teacher_ids_role or bool(tprof)
+        seller: dict[str, Any] = {"id": oid}
+        if tprof:
+            seller["name"] = tprof.get("name") or (uprof.get("name") if uprof else oid[:6] + "…")
+            if tprof.get("profile_image_url"):
+                seller["avatar_url"] = tprof.get("profile_image_url")
+        elif uprof:
+            seller["name"] = uprof.get("name") or oid[:6] + "…"
+            if uprof.get("profile_image_url"):
+                seller["avatar_url"] = uprof.get("profile_image_url")
         else:
-            if oid:
-                r["seller"] = {"id": oid, "name": oid[:6] + "…", "avatar_url": None}
+            seller["name"] = oid[:6] + "…"
+        if is_teacher:
+            seller["verified"] = True
+            seller["is_teacher"] = True
+            seller["profile_href"] = f"/ui/teacher_profile.html?user={oid}"
+        r["seller"] = seller
     
     def _match(row: dict) -> bool:
         if q:
@@ -7981,17 +8073,29 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
                         profiles_map[uid] = row
         except Exception:
             pass
-    # Attach seller
-    if owner_id and owner_id in profiles_map:
+    # Attach seller (prefer teacher_profiles for teachers)
+    seller_obj: Dict[str, Any] = {"id": owner_id} if owner_id else {}
+    teacher_profile_row = None
+    if owner_id:
+        try:
+            tprof = supabase.table("teacher_profiles").select("auth_user_id,name,profile_image_url,college_id,department_id").eq("auth_user_id", owner_id).limit(1).execute()
+            if not getattr(tprof, "error", None) and tprof.data:
+                teacher_profile_row = tprof.data[0]
+        except Exception:
+            teacher_profile_row = None
+    if teacher_profile_row:
+        seller_obj["name"] = teacher_profile_row.get("name") or (profiles_map.get(owner_id, {}).get("name") if owner_id in profiles_map else owner_id[:6] + "…")
+        if teacher_profile_row.get("profile_image_url"):
+            seller_obj["avatar_url"] = teacher_profile_row.get("profile_image_url")
+    if owner_id and not teacher_profile_row and owner_id in profiles_map:
         prow = profiles_map[owner_id]
-        note["seller"] = {
-            "id": owner_id,
-            "name": prow.get("name") or owner_id[:6] + "…",
-            "avatar_url": prow.get("profile_image_url"),
-        }
-    elif owner_id and owner_id not in profiles_map:
-        # Fallback minimal seller object if profile missing
-        note["seller"] = {"id": owner_id, "name": owner_id[:6] + "…", "avatar_url": None}
+        seller_obj.setdefault("name", prow.get("name") or owner_id[:6] + "…")
+        if prow.get("profile_image_url"):
+            seller_obj["avatar_url"] = prow.get("profile_image_url")
+    if owner_id and "name" not in seller_obj:
+        seller_obj["name"] = owner_id[:6] + "…"
+    if owner_id:
+        note["seller"] = seller_obj
 
     # Determine if owner has teacher role (verification badge)
     is_teacher_owner = False
@@ -8013,6 +8117,8 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
     if note.get("seller"):
         note["seller"]["verified"] = is_teacher_owner
         note["seller"]["is_teacher"] = is_teacher_owner
+        if is_teacher_owner:
+            note["seller"]["profile_href"] = f"/ui/teacher_profile.html?user={owner_id}" if owner_id else None
     note["is_teacher_owner"] = is_teacher_owner
     # Enrich each review
     for r in reviews:
