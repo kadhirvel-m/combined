@@ -37,8 +37,8 @@
         <h1 class="text-lg font-semibold tracking-tight hidden sm:block">Teachers Notes</h1>
       </div>
       <nav class="hidden md:flex items-center gap-5 text-sm text-neutral-700 dark:text-white/80">
-        <a href="../teacher_notes.html" class="hover:text-brandlt-900 dark:hover:text-white">Upload</a>
-        <a href="../teacher_connect.html" class="hover:text-brandlt-900 dark:hover:text-white">Connect</a>
+        <a href="../teachers/teacher_notes.html" class="hover:text-brandlt-900 dark:hover:text-white">Upload</a>
+        <a href="../teachers/teacher_connect.html" class="hover:text-brandlt-900 dark:hover:text-white">Connect</a>
       </nav>
       <div class="flex items-center gap-2">
         <input id="searchInput" type="text" placeholder="Search..."
@@ -76,26 +76,9 @@
                 class="w-full rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10"></select>
             </div>
             <div>
-              <label class="block text-[10px] uppercase font-semibold mb-1">Category</label>
-              <select id="filterCategory"
+              <label class="block text-[10px] uppercase font-semibold mb-1">College</label>
+              <select id="filterCollege"
                 class="w-full rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10"></select>
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase font-semibold mb-1">Seller</label>
-              <select id="filterSeller"
-                class="w-full rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10"></select>
-            </div>
-            <div>
-              <label class="block text-[10px] uppercase font-semibold mb-1">Price (₹)</label>
-              <div class="flex items-center gap-2">
-                <input id="minPrice" type="number" min="0"
-                  class="w-1/2 rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10 px-2 py-1"
-                  placeholder="Min" />
-                <input id="maxPrice" type="number" min="0"
-                  class="w-1/2 rounded-lg bg-white/90 dark:bg-brand-900/40 ring-1 ring-black/10 dark:ring-white/10 px-2 py-1"
-                  placeholder="Max" />
-              </div>
-              <div id="priceRangeHint" class="mt-1 text-[11px] text-neutral-500 dark:text-white/50"></div>
             </div>
           </div>
         </div>
@@ -130,17 +113,13 @@
       resultsCount: document.getElementById('resultsCount'),
       loading: document.getElementById('loadingState'),
       empty: document.getElementById('emptyState'),
-      error: document.getElementById('errorState'),
-      priceRangeHint: document.getElementById('priceRangeHint')
+      error: document.getElementById('errorState')
     };
     const filterEls = {
       subject: document.getElementById('filterSubject'),
       examType: document.getElementById('filterExamType'),
       semester: document.getElementById('filterSemester'),
-      category: document.getElementById('filterCategory'),
-      seller: document.getElementById('filterSeller'),
-      minPrice: document.getElementById('minPrice'),
-      maxPrice: document.getElementById('maxPrice')
+      college: document.getElementById('filterCollege')
     };
     let metaCache = null; let debounceTimer = null;
 
@@ -163,14 +142,11 @@
       meta.exam_types.forEach(s => filterEls.examType.appendChild(opt(s, s)));
       clearOptions(filterEls.semester); filterEls.semester.appendChild(opt('Any', ''));
       meta.semesters.forEach(s => filterEls.semester.appendChild(opt(String(s), String(s))));
-      clearOptions(filterEls.category); filterEls.category.appendChild(opt('Any', ''));
-      meta.categories.forEach(s => filterEls.category.appendChild(opt(s, s)));
-      clearOptions(filterEls.seller); filterEls.seller.appendChild(opt('Any', ''));
-      meta.sellers.forEach(s => filterEls.seller.appendChild(opt(s.name, s.id)));
-      if (meta.price_range) { els.priceRangeHint.textContent = `Range: ₹${meta.price_range.min} - ₹${meta.price_range.max}`; filterEls.minPrice.placeholder = meta.price_range.min; filterEls.maxPrice.placeholder = meta.price_range.max; }
+      // College filter populated separately with names
+      clearOptions(filterEls.college); filterEls.college.appendChild(opt('Any', ''));
     }
 
-    function buildQuery() { const p = new URLSearchParams(); p.set('teachers_only', '1'); const q = (els.search.value || els.searchMobile.value || '').trim(); if (q) p.set('q', q); const map = [['subject', filterEls.subject.value], ['exam_type', filterEls.examType.value], ['semester', filterEls.semester.value], ['min_price', filterEls.minPrice.value], ['max_price', filterEls.maxPrice.value]]; map.forEach(([k, v]) => { if (v) p.set(k, v); }); return p.toString(); }
+    function buildQuery() { const p = new URLSearchParams(); p.set('teachers_only', '1'); const q = (els.search.value || els.searchMobile.value || '').trim(); if (q) p.set('q', q); const map = [['subject', filterEls.subject.value], ['exam_type', filterEls.examType.value], ['semester', filterEls.semester.value], ['college_id', filterEls.college.value]]; map.forEach(([k, v]) => { if (v) p.set(k, v); }); return p.toString(); }
 
     async function loadNotes() { setStatus('loading'); els.notesGrid.innerHTML = ''; try { const qs = buildQuery(); const data = await fetchJSON(`${API_BASE}/api/marketplace/notes${qs ? `?${qs}` : ''}`); renderNotes(data.items || []); if (!data.items?.length) { setStatus('empty'); } else { setStatus('loaded'); } els.resultsCount.textContent = `(${data.total})`; } catch (e) { els.error.textContent = e.message; setStatus('error'); } }
 
@@ -190,15 +166,28 @@
     function badge(txt) { if (!txt) return ''; return `<span class="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-700 dark:text-brandlt-200 ring-1 ring-brand-500/20">${escapeHtml(txt)}</span>`; }
     function escapeHtml(s) { return (s || '').replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])); }
 
+    async function loadColleges(meta) {
+      try {
+        const all = await fetchJSON(`${API_BASE}/api/colleges`);
+        const allowed = new Set((meta && meta.college_ids) ? meta.college_ids : []);
+        const list = allowed.size ? all.filter(c => allowed.has(c.id)) : all;
+        clearOptions(filterEls.college); filterEls.college.appendChild(opt('Any', ''));
+        list.forEach(c => filterEls.college.appendChild(opt(c.name || c.id, c.id)));
+      } catch (e) {
+        // Fallback to empty/Any only on error
+        clearOptions(filterEls.college); filterEls.college.appendChild(opt('Any', ''));
+      }
+    }
+
     async function init() {
-      try { metaCache = await fetchJSON(`${API_BASE}/api/marketplace/notes/meta?teachers_only=1`); populateFilters(metaCache); } catch (e) { console.warn('meta failed', e); }
+      try { metaCache = await fetchJSON(`${API_BASE}/api/marketplace/notes/meta?teachers_only=1`); populateFilters(metaCache); await loadColleges(metaCache); } catch (e) { console.warn('meta or colleges failed', e); }
       loadNotes();
     }
 
     ['change', 'input'].forEach(ev => { Object.values(filterEls).forEach(el => el.addEventListener(ev, () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadNotes, ev === 'input' ? 400 : 0); })); });
     [els.search, els.searchMobile].forEach(inp => inp && inp.addEventListener('input', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadNotes, 350); }));
 
-    document.getElementById('resetFilters').addEventListener('click', () => { Object.values(filterEls).forEach(el => { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = ''; }); els.search.value = ''; if (els.searchMobile) els.searchMobile.value = ''; loadNotes(); });
+    document.getElementById('resetFilters').addEventListener('click', () => { Object.values(filterEls).forEach(el => { if (el && el.tagName === 'SELECT') el.selectedIndex = 0; else if (el) el.value = ''; }); els.search.value = ''; if (els.searchMobile) els.searchMobile.value = ''; loadNotes(); });
 
     document.addEventListener('click', e => { if (e.target.matches('[data-theme-toggle]')) { const root = document.documentElement; const dark = root.classList.toggle('dark'); localStorage.setItem('px_theme', dark ? 'dark' : 'light'); } });
 

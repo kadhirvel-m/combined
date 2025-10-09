@@ -5348,13 +5348,46 @@ def list_my_connections(authorization: Optional[str] = Header(default=None)):
     uid = _require_teacher(authorization)
     supabase = get_service_client()
     # union pattern via OR filter not supported; fetch both sides
-    a_rows = supabase.table("teacher_connections").select("id,teacher_a,teacher_b,created_at").eq("teacher_a", uid).execute()
-    if getattr(a_rows, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (conn A): {a_rows.error}")
-    b_rows = supabase.table("teacher_connections").select("id,teacher_a,teacher_b,created_at").eq("teacher_b", uid).execute()
-    if getattr(b_rows, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (conn B): {b_rows.error}")
-    rows = (a_rows.data or []) + (b_rows.data or [])
+    # Apply lightweight retry for transient httpx/httpcore protocol disconnects
+    rows_a: List[Dict[str, Any]] = []
+    rows_b: List[Dict[str, Any]] = []
+    try:
+        a_res = _supabase_retry(
+            lambda: (
+                supabase
+                .table("teacher_connections")
+                .select("id,teacher_a,teacher_b,created_at")
+                .eq("teacher_a", uid)
+                .execute()
+            )
+        )
+        if getattr(a_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (conn A): {a_res.error}")
+        rows_a = a_res.data or []
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network timing dependent
+        logging.getLogger("teachers").warning(
+            "list_my_connections transient protocol error on A-side: %s", exc
+        )
+        rows_a = []
+    try:
+        b_res = _supabase_retry(
+            lambda: (
+                supabase
+                .table("teacher_connections")
+                .select("id,teacher_a,teacher_b,created_at")
+                .eq("teacher_b", uid)
+                .execute()
+            )
+        )
+        if getattr(b_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (conn B): {b_res.error}")
+        rows_b = b_res.data or []
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network timing dependent
+        logging.getLogger("teachers").warning(
+            "list_my_connections transient protocol error on B-side: %s", exc
+        )
+        rows_b = []
+    rows = rows_a + rows_b
     partner_ids = []
     for r in rows:
         partner_ids.append(r.get("teacher_b") if r.get("teacher_a") == uid else r.get("teacher_a"))
@@ -5363,10 +5396,23 @@ def list_my_connections(authorization: Optional[str] = Header(default=None)):
     uniq = list({p for p in partner_ids})
     partner_map = {}
     if uniq:
-        tapp = supabase.table("teacher_applications").select("auth_user_id,name").in_("auth_user_id", uniq).execute()
-        if not getattr(tapp, "error", None):
-            for t in tapp.data or []:
-                partner_map[t.get("auth_user_id")] = t
+        try:
+            tapp = _supabase_retry(
+                lambda: (
+                    supabase
+                    .table("teacher_applications")
+                    .select("auth_user_id,name")
+                    .in_("auth_user_id", uniq)
+                    .execute()
+                )
+            )
+            if not getattr(tapp, "error", None):
+                for t in tapp.data or []:
+                    partner_map[t.get("auth_user_id")] = t
+        except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network timing dependent
+            logging.getLogger("teachers").warning(
+                "list_my_connections transient protocol error on partner lookup: %s", exc
+            )
     out = []
     for r in rows:
         partner = r.get("teacher_b") if r.get("teacher_a") == uid else r.get("teacher_a")
@@ -6203,7 +6249,23 @@ def debug_avatar_route_presence():
 def list_my_teacher_classes(authorization: Optional[str] = Header(default=None)):
     uid = _require_teacher(authorization)
     supabase = get_service_client()
-    res = supabase.table("teacher_classes").select("*").eq("teacher_user_id", uid).order("updated_at", desc=True).execute()
+    # Apply lightweight retry for transient protocol disconnections from httpx/httpcore
+    try:
+        res = _supabase_retry(
+            lambda: (
+                supabase
+                .table("teacher_classes")
+                .select("*")
+                .eq("teacher_user_id", uid)
+                .order("updated_at", desc=True)
+                .execute()
+            )
+        )
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network timing dependent
+        logging.getLogger("teachers").warning(
+            "list_my_teacher_classes transient protocol error, returning empty list: %s", exc
+        )
+        return []
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (list classes): {res.error}")
     rows = res.data or []

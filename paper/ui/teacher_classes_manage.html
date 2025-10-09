@@ -50,6 +50,8 @@
                     <h2 class="text-sm font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Add /
                         Edit Class</h2>
                     <input type="hidden" name="class_id" />
+                    <!-- Ensure college_id is captured and sent with create/update -->
+                    <input type="hidden" name="college_id" />
                     <div>
                         <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Subject</label>
                         <input name="subject" required
@@ -146,12 +148,14 @@
     </div>
   </div>
 </div>`}
-        function formToPayload(f) { return ['subject', 'semester', 'section', 'notes', 'batch_id', 'degree_id', 'department_id'].reduce((o, k) => { let el = f[k]; if (!el) return o; let v = (el.value || '').trim(); if (!v) { o[k] = null; return o; } if (['semester'].includes(k)) v = Number(v); o[k] = v; return o; }, {}) }
+        function formToPayload(f) { return ['subject', 'semester', 'section', 'notes', 'batch_id', 'degree_id', 'department_id', 'college_id'].reduce((o, k) => { let el = f[k]; if (!el) return o; let v = (el.value || '').trim(); if (!v) { o[k] = null; return o; } if (['semester'].includes(k)) v = Number(v); o[k] = v; return o; }, {}) }
         async function loadAcademics() {
             const tk = getToken(); if (!tk) return; const selDept = document.getElementById('departmentSelect'); const selBatch = document.getElementById('batchSelect'); const selDegree = document.getElementById('degreeSelect'); selDept.innerHTML = '<option value="">Loading...</option>'; selBatch.innerHTML = '<option value="">Loading...</option>'; selDegree.innerHTML = '<option value="">Loading...</option>';
             try {
                 const data = await fetchJSON(API_BASE + '/api/teacher/academics/mine', { headers: { Authorization: 'Bearer ' + tk } });
-                const { departments = [], batches = [], degrees = [], department_id, degree_id } = data;
+                const { college_id, departments = [], batches = [], degrees = [], department_id, degree_id } = data;
+                // Persist college_id so create/update includes it
+                if (els?.form?.college_id) { els.form.college_id.value = college_id || ''; }
                 selDept.innerHTML = '<option value="">Select</option>' + departments.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
                 if (department_id) selDept.value = department_id;
                 selDegree.innerHTML = '<option value="">(auto)</option>' + degrees.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');

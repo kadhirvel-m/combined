@@ -428,21 +428,60 @@
         async function fetchJSON(url, opts = {}) { const r = await fetch(url, opts); const ct = r.headers.get('content-type') || ''; const t = await r.text().catch(() => ""); let d = {}; if (t) { if (/json|javascript/i.test(ct)) { try { d = JSON.parse(t); } catch { d = { raw: t } } } else d = { raw: t }; } if (!r.ok) { const msg = d.detail || d.error || r.status + ' ' + (t.slice(0, 120) || ''); const e = new Error(msg); e.status = r.status; e.data = d; throw e; } return d; }
 
         // ===== Left lists =====
-        async function loadTeachers() { await waitApi(); try { const data = await fetchJSON((API_BASE || location.origin) + '/api/teachers'); renderTeacherList(data.teachers || []); } catch (e) { teacherList.innerHTML = `<div class="px-3 py-2 text-[12px] text-rose-600">Failed to load teachers: ${e.message}</div>`; } }
-        async function loadConnections() { if (!token) { connectionList.innerHTML = '<div class="px-3 py-2 text-[12px]">Not logged in.</div>'; return; } await waitApi(); try { const data = await fetchJSON((API_BASE || location.origin) + '/api/teacher/connections', { headers: authHeader() }); renderConnList(data.connections || []); } catch (e) { if (e.status === 403) connectionList.innerHTML = '<div class="px-3 py-2 text-[12px] text-amber-600">Not approved yet.</div>'; else connectionList.innerHTML = `<div class="px-3 py-2 text-[12px] text-rose-600">Error: ${e.message}</div>`; } }
+        async function loadTeachers() {
+            await waitApi();
+            try {
+                const data = await fetchJSON((API_BASE || location.origin) + '/api/teachers');
+                // Apply filter locally for immediate feedback
+                renderTeacherList(data.teachers || []);
+            } catch (e) {
+                teacherList.innerHTML = `<div class="px-3 py-2 text-[12px] text-rose-600">Failed to load teachers: ${e.message}</div>`;
+            }
+        }
+        async function loadConnections() {
+            if (!token) { connectionList.innerHTML = '<div class="px-3 py-2 text-[12px]">Not logged in.</div>'; return; }
+            await waitApi();
+            try {
+                const data = await fetchJSON((API_BASE || location.origin) + '/api/teacher/connections', { headers: authHeader() });
+                // Apply filter locally for immediate feedback
+                renderConnList(data.connections || []);
+            } catch (e) {
+                if (e.status === 403) connectionList.innerHTML = '<div class="px-3 py-2 text-[12px] text-amber-600">Not approved yet.</div>';
+                else connectionList.innerHTML = `<div class="px-3 py-2 text-[12px] text-rose-600">Error: ${e.message}</div>`;
+            }
+        }
 
         function renderTeacherList(arr) { const q = el('#peopleSearch').value?.toLowerCase() || ''; const list = arr.filter(t => !q || (t.name || '').toLowerCase().includes(q) || (t.department || '').toLowerCase().includes(q)); teacherList.innerHTML = ''; if (!list.length) { teacherList.innerHTML = '<div class="px-3 py-2 text-[12px] opacity-60">No approved teachers.</div>'; return; } list.forEach(t => { const row = document.createElement('button'); row.type = 'button'; row.className = 'w-full text-left px-4 py-3 hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-3'; const initial = (t.name || 'U').charAt(0).toUpperCase(); row.innerHTML = `<div class="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500/30 to-brand-500/10 ring-1 ring-black/10 dark:ring-white/15 grid place-items-center text-sm font-semibold">${initial}</div><div class="min-w-0"><div class="font-medium text-sm truncate">${t.name || '(no name)'}</div><div class="text-[11px] opacity-60 truncate">${t.department || ''}</div></div><span class="ml-auto material-symbols-rounded text-base opacity-60">chevron_right</span>`; row.onclick = () => connectOrOpen(t.auth_user_id, t.name || '(no name)'); teacherList.appendChild(row); }); }
 
         function renderConnList(arr) { const q = el('#peopleSearch').value?.toLowerCase() || ''; const list = arr.filter(c => !q || (c.partner_name || '').toLowerCase().includes(q)); connectionList.innerHTML = ''; if (!list.length) { connectionList.innerHTML = '<div class="px-3 py-2 text-[12px] opacity-60">No connections yet.</div>'; return; } list.forEach(c => { const row = document.createElement('button'); row.type = 'button'; row.className = 'w-full text-left px-4 py-3 hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-3'; const initial = (c.partner_name || 'U').charAt(0).toUpperCase(); row.innerHTML = `<div class="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500/30 to-brand-500/10 ring-1 ring-black/10 dark:ring-white/15 grid place-items-center text-sm font-semibold">${initial}</div><div class="min-w-0"><div class="font-medium text-sm truncate">${c.partner_name || c.partner_user_id.substring(0, 8) + '…'}</div><div class="text-[11px] opacity-60">${new Date(c.created_at).toLocaleDateString()}</div></div><span class="ml-auto material-symbols-rounded text-base opacity-60">chevron_right</span>`; row.onclick = () => openConnection(c); connectionList.appendChild(row); }); }
 
-        el('#peopleSearch').addEventListener('input', () => { // live filter
-            els('#teachersWrap, #convosWrap').forEach(w => w.classList.toggle('hidden', !w.classList.contains(activeTab)));
-            loadTeachers(); loadConnections();
+        // Debounced live search: refresh only the active list and avoid toggling visibility incorrectly
+        let _searchTimer = null;
+        el('#peopleSearch').addEventListener('input', () => {
+            if (_searchTimer) clearTimeout(_searchTimer);
+            _searchTimer = setTimeout(() => {
+                if (activeTab === 'teachers') {
+                    loadTeachers();
+                } else {
+                    loadConnections();
+                }
+            }, 200);
         });
         el('#refreshLists').addEventListener('click', () => { loadTeachers(); loadConnections(); showToast('Lists refreshed', 'success'); });
 
         let activeTab = 'teachers';
-        els('.tabBtn').forEach(b => b.addEventListener('click', () => { activeTab = b.dataset.tab; els('.tabBtn').forEach(x => x.classList.toggle('bg-brand-500/10', x === b)); el('#teachersWrap').classList.toggle('hidden', activeTab !== 'teachers'); el('#convosWrap').classList.toggle('hidden', activeTab !== 'convos'); }));
+        els('.tabBtn').forEach(b => b.addEventListener('click', () => {
+            activeTab = b.dataset.tab;
+            els('.tabBtn').forEach(x => x.classList.toggle('bg-brand-500/10', x === b));
+            el('#teachersWrap').classList.toggle('hidden', activeTab !== 'teachers');
+            el('#convosWrap').classList.toggle('hidden', activeTab !== 'convos');
+            // Refresh the active list on tab change so current search applies immediately
+            if (activeTab === 'teachers') {
+                loadTeachers();
+            } else {
+                loadConnections();
+            }
+        }));
 
         // ===== Connections & WS =====
         async function connectOrOpen(otherId, name) { if (!token) { alert('Login required'); location.href = 'teacher_login.html'; return; } try { await waitApi(); const data = await fetchJSON((API_BASE || location.origin) + `/api/teacher/connect/${otherId}`, { method: 'POST', headers: authHeader() }); await loadConnections(); openConnection({ connection_id: data.connection_id, partner_user_id: otherId, partner_name: name }); } catch (e) { if (e.status === 403) alert('You are not yet an approved teacher.'); else alert('Connect failed: ' + (e.message || 'error')); } }
