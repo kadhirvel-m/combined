@@ -2254,13 +2254,20 @@ def get_current_user_profile(token: Optional[str]):
         user_id = _get_user_id_with_retry(token)
 
         supabase = get_service_client()
-        prof_q = (
-            supabase.table("user_profiles")
-            .select("*")
-            .eq("auth_user_id", user_id)
-            .limit(1)
-            .execute()
-        )
+        # Primary profile fetch with retry; if transient protocol error persists, surface a 503 so clients can retry
+        try:
+            prof_q = _supabase_retry(
+                lambda: (
+                    supabase.table("user_profiles")
+                    .select("*")
+                    .eq("auth_user_id", user_id)
+                    .limit(1)
+                    .execute()
+                )
+            )
+        except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network dependent
+            supabase_logger.warning("/api/me profile fetch transient protocol error: %s", exc)
+            raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.")
         if getattr(prof_q, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (get profile): {prof_q.error}")
         if not prof_q.data:
@@ -2272,41 +2279,56 @@ def get_current_user_profile(token: Optional[str]):
         batch = None
         # FK-first resolution: rely on IDs; ignore legacy text copies (school/department/batch_range) here.
         if prof.get("college_id"):
-            cq = (
-                supabase.table("colleges")
-                .select("id,name")
-                .eq("id", prof["college_id"])
-                .limit(1)
-                .execute()
-            )
-            if getattr(cq, "error", None):
-                raise HTTPException(status_code=500, detail=f"Supabase error (college): {cq.error}")
-            if cq.data:
-                college = {"id": cq.data[0]["id"], "name": cq.data[0]["name"]}
+            try:
+                cq = _supabase_retry(
+                    lambda: (
+                        supabase.table("colleges")
+                        .select("id,name")
+                        .eq("id", prof["college_id"])
+                        .limit(1)
+                        .execute()
+                    )
+                )
+                if getattr(cq, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (college): {cq.error}")
+                if cq.data:
+                    college = {"id": cq.data[0]["id"], "name": cq.data[0]["name"]}
+            except HTTPXRemoteProtocolError as exc:  # pragma: no cover
+                supabase_logger.warning("/api/me college lookup transient protocol error: %s", exc)
         if prof.get("department_id"):
-            dq = (
-                supabase.table("departments")
-                .select("id,name")
-                .eq("id", prof["department_id"])
-                .limit(1)
-                .execute()
-            )
-            if getattr(dq, "error", None):
-                raise HTTPException(status_code=500, detail=f"Supabase error (department): {dq.error}")
-            if dq.data:
-                department = {"id": dq.data[0]["id"], "name": dq.data[0]["name"]}
+            try:
+                dq = _supabase_retry(
+                    lambda: (
+                        supabase.table("departments")
+                        .select("id,name")
+                        .eq("id", prof["department_id"])
+                        .limit(1)
+                        .execute()
+                    )
+                )
+                if getattr(dq, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (department): {dq.error}")
+                if dq.data:
+                    department = {"id": dq.data[0]["id"], "name": dq.data[0]["name"]}
+            except HTTPXRemoteProtocolError as exc:  # pragma: no cover
+                supabase_logger.warning("/api/me department lookup transient protocol error: %s", exc)
         if prof.get("batch_id"):
-            bq = (
-                supabase.table("batches")
-                .select("id,from_year,to_year")
-                .eq("id", prof["batch_id"])
-                .limit(1)
-                .execute()
-            )
-            if getattr(bq, "error", None):
-                raise HTTPException(status_code=500, detail=f"Supabase error (batch): {bq.error}")
-            if bq.data:
-                batch = {"id": bq.data[0]["id"], "from": bq.data[0]["from_year"], "to": bq.data[0]["to_year"]}
+            try:
+                bq = _supabase_retry(
+                    lambda: (
+                        supabase.table("batches")
+                        .select("id,from_year,to_year")
+                        .eq("id", prof["batch_id"])
+                        .limit(1)
+                        .execute()
+                    )
+                )
+                if getattr(bq, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (batch): {bq.error}")
+                if bq.data:
+                    batch = {"id": bq.data[0]["id"], "from": bq.data[0]["from_year"], "to": bq.data[0]["to_year"]}
+            except HTTPXRemoteProtocolError as exc:  # pragma: no cover
+                supabase_logger.warning("/api/me batch lookup transient protocol error: %s", exc)
 
         # Placeholder; will be recomputed after education override
         syllabus = []
@@ -3425,11 +3447,18 @@ def _sync_profile_collection(profile_id: str, table: str, rows: List[Dict[str, A
 
 def _fetch_profile_related(profile_id: str, table: str, order_by: Optional[List[Tuple[str, bool]]] = None) -> List[Dict[str, Any]]:
     supabase = get_service_client()
-    query = supabase.table(table).select("*").eq("user_profile_id", profile_id)
-    if order_by:
-        for column, desc in order_by:
-            query = query.order(column, desc=bool(desc))
-    res = query.execute()
+    def _build_query():
+        q = supabase.table(table).select("*").eq("user_profile_id", profile_id)
+        if order_by:
+            for column, desc in order_by:
+                q = q.order(column, desc=bool(desc))
+        return q
+    try:
+        res = _supabase_retry(lambda: _build_query().execute())
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network dependent
+        # Treat as empty on transient disconnects so /api/me still works
+        supabase_logger.warning("profile related fetch '%s' transient protocol error: %s", table, exc)
+        res = type("_R", (), {"data": [], "error": None})()
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (fetch {table}): {res.error}")
     items: List[Dict[str, Any]] = []
