@@ -40,8 +40,8 @@
     }
   </script>
 
-  <script src="../config.js"></script>
-  <script src="../auth.js" defer></script>
+  <script src="../../config.js"></script>
+  <script src="../../auth.js" defer></script>
 
   <style>
     .material-symbols-rounded {
@@ -488,14 +488,14 @@
       try {
         if (typeof state === 'undefined' || !state.noteId) return;
         const API = (window.API_BASE || '').replace(/\/$/, '');
-        const r = await fetch(`${API}/api/marketplace/notes/${encodeURIComponent(state.noteId)}`).catch(()=>null);
+        const r = await fetch(`${API}/api/marketplace/notes/${encodeURIComponent(state.noteId)}`).catch(() => null);
         if (!r || !r.ok) return;
-        const j = await r.json().catch(()=>({}));
+        const j = await r.json().catch(() => ({}));
         const n = (j && (j.note || j)) || {};
         if (n.title) { const t = document.getElementById('selDocTitle'); if (t) t.textContent = n.title; const w = document.getElementById('selDocWrap'); w && w.classList.remove('hidden'); }
         const openUrl = `${API}/api/marketplace/notes/${encodeURIComponent(state.noteId)}/download`;
         const a = document.getElementById('selDocOpen'); if (a) a.href = openUrl;
-        if (!state.pages && (n.page_count || n.estimated_pages)) { state.pages = parseInt(n.page_count || n.estimated_pages) || ''; (typeof updateSummary==='function') && updateSummary(); }
+        if (!state.pages && (n.page_count || n.estimated_pages)) { state.pages = parseInt(n.page_count || n.estimated_pages) || ''; (typeof updateSummary === 'function') && updateSummary(); }
         const pv = `${API}/api/marketplace/notes/${encodeURIComponent(state.noteId)}/preview`;
         const wrap = document.getElementById('preview'); if (wrap) {
           wrap.innerHTML = `<div class='w-full max-w-3xl mx-auto aspect-[3/2] bg-white/40 dark:bg-white/5 rounded-lg ring-1 ring-black/10 dark:ring-white/15 overflow-hidden flex flex-col'>
@@ -503,7 +503,7 @@
   <a href='${pv}' target='_blank' class='text-[11px] px-2 py-1 bg-black/5 dark:bg-white/10 text-center'>Open full preview</a>
 </div>`;
         }
-      } catch {}
+      } catch { }
     });
   </script>
 </body>

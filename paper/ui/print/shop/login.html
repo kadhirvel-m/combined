@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shop Login — PaperX</title>
+  <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/tailwind.css" />
+  <script src="../../config.js"></script>
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, .82);
+      backdrop-filter: blur(12px)
+    }
+
+    .dark .glass {
+      background: rgba(30, 30, 47, .55)
+    }
+
+    .material-symbols-rounded {
+      vertical-align: -6px
+    }
+  </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+  <header
+    class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container flex items-center justify-between py-3">
+      <a href="../index.html" class="flex items-center gap-2"><span class="material-symbols-rounded">home</span>Home</a>
+      <h1 class="text-lg font-bold">Shop Login</h1>
+      <a href="./signup.html" class="text-sm hover:underline">Create shop</a>
+    </div>
+  </header>
+  <main class="container py-10 grid place-items-center">
+    <section class="glass rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 w-full max-w-md">
+      <form id="form" class="grid gap-3 text-[13px]">
+        <label>Email <input name="email" type="email" required
+            class="mt-1 w-full px-3 py-2 rounded-md ring-1 ring-black/10 dark:ring-white/15 bg-white/90 dark:bg-white/5"></label>
+        <label>Password <input name="password" type="password" required
+            class="mt-1 w-full px-3 py-2 rounded-md ring-1 ring-black/10 dark:ring-white/15 bg-white/90 dark:bg-white/5"></label>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" id="remember" checked> Remember this
+          device</label>
+        <button id="submit" type="submit"
+          class="px-3 py-2 rounded-md bg-brand-500/90 text-white hover:bg-brand-500 inline-flex items-center gap-2"><span
+            class="material-symbols-rounded">login</span><span>Sign in</span></button>
+        <div id="status" class="text-[12px] opacity-80"></div>
+      </form>
+    </section>
+  </main>
+  <script>
+    const API = (window.API_BASE || '').replace(/\/$/, '');
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.currentTarget);
+      const payload = { email: fd.get('email'), password: fd.get('password') };
+      const status = document.getElementById('status'); status.textContent = '';
+      try {
+        const r = await fetch(`${API}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { status.textContent = j.detail || 'Login failed'; return; }
+        const token = j.access_token; if (!token) { status.textContent = 'Missing token'; return; }
+        localStorage.setItem('px_token', token);
+        // Verify shop exists
+        const r2 = await fetch(`${API}/api/shop/me`, { headers: { Authorization: 'Bearer ' + token } });
+        if (r2.ok) { location.href = './jobs.html'; return; }
+        // No shop yet
+        location.href = './signup.html';
+      } catch { status.textContent = 'Network error'; }
+    });
+  </script>
+</body>
+
+</html>
