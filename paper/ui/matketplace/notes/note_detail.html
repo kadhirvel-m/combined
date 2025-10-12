@@ -180,6 +180,10 @@
                 <div class="px-4 py-2 flex items-center justify-between">
                     <h2 class="text-sm font-semibold">Preview</h2>
                     <div class="flex items-center gap-2 text-xs">
+                        <button id="printBtn"
+                            class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-brand-500/90 text-white hover:bg-brand-500 shadow-glow"><span
+                                class="material-symbols-rounded text-sm">print</span><span>Print</span></button>
+                        <span id="printQuickInfo" class="hidden md:inline text-[11px] opacity-70"></span>
                         <button id="openInNew"
                             class="inline-flex items-center gap-1 px-3 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
                                 class="material-symbols-rounded text-sm">open_in_new</span>Open</button>
@@ -571,6 +575,30 @@
 
             // Reviews
             renderReviews(detail.reviews || [], n);
+
+            // Print CTA wiring (route to Find a Print Shop)
+            try {
+                const printBtn = el('#printBtn');
+                const quick = el('#printQuickInfo');
+                const bytes = n.file_size || n.size || 0;
+                const humanSize = (b) => {
+                    if (!b || b <= 0) return '';
+                    const u = ['B','KB','MB','GB']; let i=0; let v = b;
+                    while (v >= 1024 && i < u.length-1) { v /= 1024; i++; }
+                    return v.toFixed(v>=100||i===0?0:1) + ' ' + u[i];
+                };
+                const pages = n.page_count || n.estimated_pages || '';
+                if (quick) {
+                    quick.textContent = (pages? (pages + ' pages') : '') + (bytes? (pages? ' • ' : '') + humanSize(bytes) : '');
+                    if (quick.textContent) quick.classList.remove('hidden');
+                }
+                if (printBtn) {
+                    printBtn.addEventListener('click', () => {
+                        const url = `../../print/shops.html?noteId=${encodeURIComponent(n.id)}${pages?('&pages='+pages):''}${bytes?('&size='+bytes):''}`;
+                        location.href = url;
+                    });
+                }
+            } catch (_) {}
         }
 
         function renderReviews(list, n) {

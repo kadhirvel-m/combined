@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Configure & Preview — PaperX</title>
+
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Inter + Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+    rel="stylesheet">
+
+  <!-- Runtime Tailwind config (PaperX palette) -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+          colors: {
+            brand: {
+              50: '#F6F5FA', 100: '#EEEAF4', 200: '#D9CCE6', 300: '#C1A3D2',
+              400: '#A574BD', 500: '#9E4B8A', 600: '#6E3868', 700: '#4C2A59',
+              800: '#2C2240', 900: '#1E1E2F'
+            }
+          },
+          boxShadow: {
+            'elev-1': '0 1px 2px rgba(0,0,0,.06), 0 1px 1px rgba(0,0,0,.04)',
+            'elev-2': '0 8px 24px rgba(0,0,0,.12)',
+            'neon': '0 0 0 1px rgba(158,75,138,.25), 0 8px 32px rgba(158,75,138,.25)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <script src="../config.js"></script>
+  <script src="../auth.js" defer></script>
+
+  <style>
+    .material-symbols-rounded {
+      vertical-align: -6px
+    }
+
+    .glass {
+      background: rgba(255, 255, 255, .72);
+      backdrop-filter: blur(12px)
+    }
+
+    .dark .glass {
+      background: rgba(30, 30, 47, .55)
+    }
+
+    .ring-soft {
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08)
+    }
+
+    .dark .ring-soft {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
+    }
+
+    .focus-ring:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(158, 75, 138, .35)
+    }
+  </style>
+</head>
+
+<body
+  class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.18),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(76,42,89,.25),transparent)] dark:bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.22),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(30,30,47,.7),transparent)]">
+
+  <!-- Header -->
+  <header
+    class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <a href="./shops.html" class="inline-flex items-center gap-2">
+        <span class="material-symbols-rounded">arrow_back</span><span class="font-semibold">Back</span>
+      </a>
+      <div class="text-lg font-bold">Configure & Preview</div>
+      <a href="../orders/index.html" class="text-sm hover:underline">My Prints</a>
+    </div>
+  </header>
+
+  <!-- Stepper -->
+  <div class="max-w-6xl mx-auto px-4 mt-6">
+    <ol class="grid grid-cols-3 gap-2 text-[12px]">
+      <li class="flex items-center gap-2 rounded-lg px-3 py-2 bg-brand-500 text-white">
+        <span class="material-symbols-rounded text-base">tune</span> Configure
+      </li>
+      <li class="flex items-center gap-2 rounded-lg px-3 py-2 bg-brand-500/10 ring-1 ring-brand-500/30">
+        <span class="material-symbols-rounded text-base">visibility</span> Preview
+      </li>
+      <li class="flex items-center gap-2 rounded-lg px-3 py-2 bg-brand-500/10 ring-1 ring-brand-500/30">
+        <span class="material-symbols-rounded text-base">check_circle</span> Review
+      </li>
+    </ol>
+  </div>
+
+  <main class="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <!-- Left: Settings -->
+    <section class="lg:col-span-4">
+      <div class="glass rounded-3xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-neon">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-sm font-semibold">Settings</div>
+          <button id="applyDefaults" type="button"
+            class="text-[12px] px-2 py-1 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/5">
+            Reset
+          </button>
+        </div>
+
+        <!-- Presets -->
+        <div class="mb-4">
+          <div class="text-[12px] opacity-75 mb-1">Quick presets</div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button"
+              class="preset px-2 py-1 rounded-full text-[12px] ring-soft hover:bg-black/5 dark:hover:bg-white/5"
+              data-preset="eco">Eco B/W</button>
+            <button type="button"
+              class="preset px-2 py-1 rounded-full text-[12px] ring-soft hover:bg-black/5 dark:hover:bg-white/5"
+              data-preset="handout">Lecture Handout</button>
+            <button type="button"
+              class="preset px-2 py-1 rounded-full text-[12px] ring-soft hover:bg-black/5 dark:hover:bg-white/5"
+              data-preset="poster">Color Poster</button>
+            <button type="button"
+              class="preset px-2 py-1 rounded-full text-[12px] ring-soft hover:bg-black/5 dark:hover:bg-white/5"
+              data-preset="booklet">Booklet</button>
+          </div>
+        </div>
+
+        <form id="cfg" class="grid grid-cols-2 gap-3 text-[13px]">
+          <label class="col-span-2">Copies
+            <input name="copies" type="number" min="1" max="50" value="1"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+          </label>
+
+          <label class="col-span-2">Color Mode
+            <select name="color_mode"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option value="auto">Auto-detect</option>
+              <option value="bw">Force BW</option>
+              <option value="color">Force Color</option>
+            </select>
+          </label>
+
+          <label>Duplex
+            <select name="duplex"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option value="off">Off</option>
+              <option value="long">Long-edge</option>
+              <option value="short">Short-edge</option>
+            </select>
+          </label>
+
+          <label>N-up
+            <select name="n_up"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option>1</option>
+              <option>2</option>
+              <option>4</option>
+              <option>6</option>
+              <option>9</option>
+            </select>
+          </label>
+
+          <label>Paper Size
+            <select name="paper_size"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option>A4</option>
+              <option>A3</option>
+              <option>Letter</option>
+            </select>
+          </label>
+
+          <label>Paper Weight
+            <select name="paper_gsm"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option value="">Default</option>
+              <option>70</option>
+              <option>80</option>
+              <option>100</option>
+            </select>
+          </label>
+
+          <label>Finishing
+            <select name="finishing"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option>none</option>
+              <option>staple</option>
+              <option>spiral</option>
+            </select>
+          </label>
+
+          <label class="col-span-2">Page Range
+            <input name="page_range" placeholder="all or e.g. 1-4,7"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+            <span id="rangeHint" class="block text-[11px] opacity-70 mt-1"></span>
+          </label>
+
+          <label>Fit/Scale
+            <select name="scale"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option value="fit">Fit to page</option>
+              <option value="actual">Actual size</option>
+              <option value="shrink">Shrink only</option>
+            </select>
+          </label>
+
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" name="collate" checked> Collate
+          </label>
+
+          <label class="col-span-2">Notes to shop
+            <textarea name="notes_to_shop" rows="3"
+              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring"
+              placeholder="e.g., print slides 2-up with margin, staple top-left"></textarea>
+          </label>
+        </form>
+
+        <!-- Summary + Continue -->
+        <div class="mt-4 flex items-center justify-between text-[13px]">
+          <div id="summary" class="opacity-80"></div>
+          <a id="continue" href="#"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-500 text-white hover:bg-brand-700 active:scale-[.99] transition shadow-elev-2">
+            <span class="material-symbols-rounded text-base">arrow_forward</span>
+            <span>Continue → Review</span>
+          </a>
+        </div>
+        <div class="mt-2 text-[11px] opacity-70">Tip: Press <b>Ctrl/⌘ + Enter</b> to continue.</div>
+      </div>
+    </section>
+
+    <!-- Right: Preview -->
+    <section class="lg:col-span-8">
+      <div class="glass rounded-3xl p-5 ring-1 ring-black/5 dark:ring-white/10">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-sm font-semibold">Preview</div>
+          <div class="text-[12px] opacity-75" id="shopCapsHint">Loading shop…</div>
+        </div>
+
+        <!-- Selected document info (populated when noteId present) -->
+        <div id="selDocWrap" class="mb-2 text-[13px] hidden">
+          <span class="opacity-70">Selected:</span>
+          <span id="selDocTitle" class="font-medium"></span>
+          <a id="selDocOpen" href="#" target="_blank" class="ml-2 text-brand-600 hover:underline">Open</a>
+        </div>
+
+        <!-- Preview shell (drop real PDF viewer here later) -->
+        <div id="preview"
+          class="min-h-[280px] grid place-items-center bg-white/70 dark:bg-white/5 rounded-xl ring-1 ring-black/10 dark:ring-white/15">
+          <div class="text-center opacity-70 text-sm">
+            <span class="material-symbols-rounded text-4xl">picture_as_pdf</span>
+            <div>Preview placeholder</div>
+            <div id="previewMeta" class="mt-1 text-[12px]"></div>
+          </div>
+        </div>
+
+        <!-- Hints -->
+        <div class="mt-4 grid sm:grid-cols-2 gap-3">
+          <div class="p-4 rounded-2xl bg-white/70 dark:bg-white/5 ring-soft">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="material-symbols-rounded">palette</span>
+              <p class="text-sm font-semibold">Color mode</p>
+            </div>
+            <p class="text-[12px] opacity-80">“Auto” detects color pages and charges color only where needed (if
+              supported by shop).</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-white/70 dark:bg-white/5 ring-soft">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="material-symbols-rounded">compare_arrows</span>
+              <p class="text-sm font-semibold">N-up & Duplex</p>
+            </div>
+            <p class="text-[12px] opacity-80">N-up places multiple pages per side; duplex prints both sides — both
+              reduce sheets.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ---------- State from query ----------
+    const p = new URLSearchParams(location.search);
+    const state = {
+      shopId: p.get('shopId') || '',
+      noteId: p.get('noteId') || '',
+      pages: parseInt(p.get('pages') || '') || '',
+      size: parseInt(p.get('size') || '') || ''
+    };
+
+    // ---------- Helpers ----------
+    const $ = (s) => document.querySelector(s);
+    const $$ = (s) => Array.from(document.querySelectorAll(s));
+    const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
+    const ceil = Math.ceil;
+
+    // Basic page-range validator / counter: returns number of pages selected or null if invalid
+    function parseRange(input, totalPages) {
+      const t = (input || '').trim();
+      if (!t || t.toLowerCase() === 'all') return totalPages || null;
+      let count = 0;
+      const parts = t.split(',').map(s => s.trim()).filter(Boolean);
+      for (const seg of parts) {
+        if (/^\d+$/.test(seg)) { // single
+          const v = parseInt(seg);
+          if (!totalPages || v >= 1 && v <= totalPages) count += 1; else return null;
+        } else if (/^\d+\s*-\s*\d+$/.test(seg)) {
+          const [a, b] = seg.split('-').map(s => parseInt(s.trim()));
+          if (a > b) return null;
+          if (!totalPages || (a >= 1 && b <= totalPages)) count += (b - a + 1); else return null;
+        } else {
+          return null;
+        }
+      }
+      return count;
+    }
+
+    // ---------- Populate preview meta ----------
+    function refreshPreviewMeta() {
+      const f = new FormData($('#cfg'));
+      const copies = clamp(parseInt(f.get('copies') || '1'), 1, 50);
+      const nup = parseInt(f.get('n_up') || '1') || 1;
+      const duplex = f.get('duplex') || 'off';
+      const totalPages = parseInt(state.pages || '') || 0;
+
+      // If page_range reduces page count
+      const rangeText = f.get('page_range');
+      const rangeCount = parseRange(rangeText, totalPages);
+      const pagesUsed = (rangeCount != null) ? rangeCount : totalPages;
+
+      // Effective sheet math
+      const pagesPerSide = Math.max(1, nup);
+      const sidesNeeded = pagesUsed / pagesPerSide;
+      const duplexFactor = (duplex === 'off') ? 1 : 0.5; // 2 sides per sheet if duplex
+      const sheets = ceil(sidesNeeded * duplexFactor);
+      const totalSheets = sheets * copies;
+      const totalLogicalPages = pagesUsed * copies;
+
+      // Summary line
+      $('#summary').textContent =
+        `${pagesUsed ? pagesUsed + ' pages × ' : ''}${copies} copies`
+        + (pagesUsed ? ` → ~${totalLogicalPages} pages, ~${totalSheets} sheet${totalSheets !== 1 ? 's' : ''}` : '');
+
+      // Small meta under preview
+      const cm = f.get('color_mode');
+      const ps = f.get('paper_size');
+      const gsm = f.get('paper_gsm') || 'Default';
+      const up = `${nup}-up`;
+      const dx = duplex === 'off' ? 'Simplex' : `Duplex (${duplex})`;
+      $('#previewMeta').textContent = [
+        state.pages ? `${state.pages} pages total` : null,
+        `Range: ${rangeText || 'all'}`,
+        `Mode: ${cm}`,
+        `${up}, ${dx}`,
+        `Paper: ${ps}, ${gsm} GSM`
+      ].filter(Boolean).join(' • ');
+    }
+
+    // ---------- Presets ----------
+    function applyPreset(which) {
+      const f = $('#cfg');
+      const map = {
+        eco: { color_mode: 'bw', duplex: 'long', n_up: '2', paper_size: 'A4', paper_gsm: '70', finishing: 'none', scale: 'fit' },
+        handout: { color_mode: 'bw', duplex: 'long', n_up: '2', paper_size: 'A4', paper_gsm: '80', finishing: 'staple', scale: 'fit' },
+        poster: { color_mode: 'color', duplex: 'off', n_up: '1', paper_size: 'A3', paper_gsm: '100', finishing: 'none', scale: 'actual' },
+        booklet: { color_mode: 'bw', duplex: 'short', n_up: '2', paper_size: 'A4', paper_gsm: '80', finishing: 'staple', scale: 'shrink' }
+      }[which] || {};
+      Object.entries(map).forEach(([k, v]) => {
+        const el = f.querySelector(`[name="${k}"]`);
+        if (el) el.value = v;
+      });
+      refreshPreviewMeta();
+    }
+
+    // ---------- Capability guard (optional) ----------
+    async function applyShopCapabilities() {
+      const hint = $('#shopCapsHint');
+      if (!state.shopId) { hint.textContent = ''; return; }
+      let r;
+      try { r = await fetch((window.API_BASE || '') + '/api/print/shops'); } catch { hint.textContent = ''; return; }
+      const list = r && r.ok ? ((await r.json()).shops || []) : [];
+      const shop = list.find(s => String(s.id) === String(state.shopId));
+      if (!shop) { hint.textContent = ''; return; }
+
+      const caps = shop.capabilities || {};
+      const msgs = [];
+      // color support
+      if (!caps.color) {
+        const sel = $('#cfg [name="color_mode"]');
+        if (sel && sel.value === 'color') sel.value = 'bw';
+        sel?.querySelector('option[value="color"]')?.setAttribute('disabled', '');
+        msgs.push('Color not supported');
+      }
+      // sizes
+      if (Array.isArray(caps.sizes) && caps.sizes.length) {
+        const sizeSel = $('#cfg [name="paper_size"]');
+        $$(`#cfg [name="paper_size"] option`).forEach(o => {
+          if (!caps.sizes.includes(o.value)) o.setAttribute('disabled', ''); else o.removeAttribute('disabled');
+        });
+        msgs.push(`Sizes: ${caps.sizes.join(', ')}`);
+      }
+      // duplex
+      if (!caps.duplex) {
+        const dx = $('#cfg [name="duplex"]');
+        dx.value = 'off';
+        $$(`#cfg [name="duplex"] option[value="long"], #cfg [name="duplex"] option[value="short"]`).forEach(o => o.setAttribute('disabled', ''));
+        msgs.push('Duplex not supported');
+      }
+      hint.textContent = msgs.length ? msgs.join(' • ') : 'Shop ready';
+    }
+
+    // ---------- Range hint + form reactions ----------
+    function updateRangeHint() {
+      const f = new FormData($('#cfg'));
+      const totalPages = parseInt(state.pages || '') || 0;
+      const res = parseRange(f.get('page_range'), totalPages);
+      const el = $('#rangeHint');
+      if (f.get('page_range') && res == null) {
+        el.textContent = 'Invalid range. Use numbers and ranges like 1-4,7.';
+        el.classList.remove('opacity-70'); el.classList.add('text-red-600');
+      } else if (res != null && totalPages) {
+        el.textContent = `Selected ${res} of ${totalPages} pages.`;
+        el.classList.remove('text-red-600'); el.classList.add('opacity-70');
+      } else {
+        el.textContent = '';
+      }
+    }
+
+    // If n-up > 1 and duplex off? Just allow, but page math handles it.
+    // If n-up > 1 and scale actual may clip — keep as is (shops handle fitting).
+
+    // ---------- Summary init ----------
+    function updateSummary() { refreshPreviewMeta(); updateRangeHint(); }
+
+    // ---------- Continue → Review ----------
+    function goReview(e) {
+      if (e) e.preventDefault();
+      const f = new FormData($('#cfg'));
+      const next = new URL('./review.html', location.href);
+      next.searchParams.set('shopId', state.shopId);
+      if (state.noteId) next.searchParams.set('noteId', state.noteId);
+      if (state.pages) next.searchParams.set('pages', state.pages);
+      if (state.size) next.searchParams.set('size', state.size);
+      const settings = Object.fromEntries(f.entries());
+      next.searchParams.set('settings', encodeURIComponent(JSON.stringify(settings)));
+      location.href = next.toString();
+    }
+
+    // ---------- Defaults / Presets / Events ----------
+    document.addEventListener('DOMContentLoaded', () => {
+      // Put initial summary + meta
+      refreshPreviewMeta();
+      applyShopCapabilities();
+
+      // Wire form reactions
+      $('#cfg').addEventListener('input', updateSummary);
+      $('#cfg').addEventListener('change', updateSummary);
+
+      // Presets
+      $$('.preset').forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+      $('#applyDefaults').addEventListener('click', () => {
+        $('#cfg').reset();
+        updateSummary();
+      });
+
+      // Continue
+      $('#continue').addEventListener('click', goReview);
+
+      // Keyboard shortcut
+      document.addEventListener('keydown', (ev) => {
+        if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') goReview();
+      });
+
+      // Populate preview meta panel header
+      const meta = [];
+      if (state.pages) meta.push(`${state.pages} pages total`);
+      $('#previewMeta').textContent = meta.join(' • ');
+    });
+  </script>
+  <script>
+    // Late loader: pull selected note details and show inline preview
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        if (typeof state === 'undefined' || !state.noteId) return;
+        const API = (window.API_BASE || '').replace(/\/$/, '');
+        const r = await fetch(`${API}/api/marketplace/notes/${encodeURIComponent(state.noteId)}`).catch(()=>null);
+        if (!r || !r.ok) return;
+        const j = await r.json().catch(()=>({}));
+        const n = (j && (j.note || j)) || {};
+        if (n.title) { const t = document.getElementById('selDocTitle'); if (t) t.textContent = n.title; const w = document.getElementById('selDocWrap'); w && w.classList.remove('hidden'); }
+        const openUrl = `${API}/api/marketplace/notes/${encodeURIComponent(state.noteId)}/download`;
+        const a = document.getElementById('selDocOpen'); if (a) a.href = openUrl;
+        if (!state.pages && (n.page_count || n.estimated_pages)) { state.pages = parseInt(n.page_count || n.estimated_pages) || ''; (typeof updateSummary==='function') && updateSummary(); }
+        const pv = `${API}/api/marketplace/notes/${encodeURIComponent(state.noteId)}/preview`;
+        const wrap = document.getElementById('preview'); if (wrap) {
+          wrap.innerHTML = `<div class='w-full max-w-3xl mx-auto aspect-[3/2] bg-white/40 dark:bg-white/5 rounded-lg ring-1 ring-black/10 dark:ring-white/15 overflow-hidden flex flex-col'>
+  <iframe src='${pv}#view=fitH' class='w-full h-full' title='PDF preview' loading='lazy'></iframe>
+  <a href='${pv}' target='_blank' class='text-[11px] px-2 py-1 bg-black/5 dark:bg-white/10 text-center'>Open full preview</a>
+</div>`;
+        }
+      } catch {}
+    });
+  </script>
+</body>
+
+</html>

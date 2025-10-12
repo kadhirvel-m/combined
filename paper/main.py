@@ -140,6 +140,13 @@ PROJECT_MEDIA_EXTENSIONS = {
     "gallery": {".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".mov", ".webm"},
 }
 
+# --- Print/Orders table names ---
+PRINT_SHOPS_TABLE = os.getenv("PRINT_SHOPS_TABLE") or "print_shops"
+PRINT_PRICING_TABLE = os.getenv("PRINT_PRICING_TABLE") or "print_pricing"
+PRINT_PRINTERS_TABLE = os.getenv("PRINT_PRINTERS_TABLE") or "print_printers"
+PRINT_JOBS_TABLE = os.getenv("PRINT_JOBS_TABLE") or "print_jobs"
+PRINT_JOB_EVENTS_TABLE = os.getenv("PRINT_JOB_EVENTS_TABLE") or "print_job_events"
+
 # --- AI model clients ---
 
 openai_model_client = OpenAIChatCompletionClient(
@@ -7726,6 +7733,338 @@ def upload_profile_asset(
 
 notes_router = APIRouter()
 
+# --- Print API ---
+print_router = APIRouter()
+
+# --------- Print/Orders domain models ---------
+
+class ShopCapabilities(BaseModel):
+    color: bool = True
+    duplex: bool = True
+    sizes: List[str] = Field(default_factory=lambda: ["A4"])  # e.g., ["A4","A3","Letter"]
+    bindings: List[str] = Field(default_factory=lambda: ["none", "staple", "spiral"])
+    gsm: List[int] = Field(default_factory=lambda: [70, 80, 100])
+
+
+class PrintShopIn(BaseModel):
+    name: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    hours: Optional[dict] = None
+    capabilities: Optional[ShopCapabilities] = None
+
+
+class PrintSettings(BaseModel):
+    copies: int = Field(default=1, ge=1, le=50)
+    color_mode: str = Field(default="auto", description="auto|bw|color")
+    duplex: str = Field(default="off", description="off|long|short")
+    n_up: int = Field(default=1, description="1|2|4|6|9")
+    paper_size: str = Field(default="A4")
+    paper_gsm: Optional[int] = Field(default=None)
+    finishing: str = Field(default="none")
+    page_range: str = Field(default="all")
+    scale: str = Field(default="fit")
+    collate: bool = Field(default=True)
+    notes_to_shop: Optional[str] = None
+
+
+class CreateJobIn(BaseModel):
+    shop_id: str
+    settings: PrintSettings
+    marketplace_note_id: Optional[str] = None
+    estimated_pages: Optional[int] = None
+    file_size: Optional[int] = None
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    pickup_window: Optional[str] = None
+
+
+def _random_otp() -> str:
+    return f"{random.randint(0, 999999):06d}"
+
+
+def _now_iso() -> str:
+    return datetime.utcnow().isoformat()
+
+
+# --------- Print/Orders endpoints ---------
+
+@print_router.get("/api/print/shops", summary="List print shops with simple filters")
+def list_print_shops(
+    q: Optional[str] = Query(default=None),
+    open_now: Optional[bool] = Query(default=None),
+    color: Optional[bool] = Query(default=None),
+    size: Optional[str] = Query(default=None, description="A4|A3|Letter"),
+    binding: Optional[str] = Query(default=None),
+    sort: Optional[str] = Query(default="nearest"),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    supabase = get_service_client()
+    query = supabase.table(PRINT_SHOPS_TABLE).select("*")
+    try:
+        res = query.execute()
+        data = getattr(res, 'data', []) or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch shops: {e}")
+
+    def match_filters(shop: dict) -> bool:
+        caps = (shop.get("capabilities") or {})
+        if isinstance(caps, str):
+            try:
+                caps = json.loads(caps)
+            except Exception:
+                caps = {}
+        if q:
+            s = (shop.get("name") or '') + ' ' + (shop.get("address") or '')
+            if q.lower() not in s.lower():
+                return False
+        if open_now is True and not shop.get("is_open", False):
+            return False
+        if color is True and not caps.get("color", False):
+            return False
+        if size and size not in (caps.get("sizes") or []):
+            return False
+        if binding and binding not in (caps.get("bindings") or []):
+            return False
+        return True
+
+    filtered = [s for s in data if match_filters(s)]
+    # very rough sort: rating desc for "fastest" else by name
+    if sort == "fastest":
+        filtered.sort(key=lambda s: (-(s.get("rating") or 0), s.get("name") or ""))
+    else:
+        filtered.sort(key=lambda s: s.get("name") or "")
+    return {"shops": filtered[:limit]}
+
+
+@print_router.post("/api/print/jobs", summary="Create a print job (no payment)")
+def create_print_job(payload: CreateJobIn, authorization: Optional[str] = Header(default=None)):
+    try:
+        user_id, _ = _get_auth_user(authorization)
+    except HTTPException:
+        # allow unauth for demo; attribute to null user
+        user_id = None
+    supabase = get_service_client()
+    job_id = str(uuid.uuid4())
+    otp = _random_otp()
+    now = _now_iso()
+    row = {
+        "id": job_id,
+        "user_id": user_id,
+        "shop_id": payload.shop_id,
+        "status": "submitted",
+        "otp": otp,
+        "settings": _supabase_payload(payload.settings.dict()),
+        "estimated_pages": payload.estimated_pages,
+        "file_size": payload.file_size,
+        "marketplace_note_id": payload.marketplace_note_id,
+        "pickup_window": payload.pickup_window,
+        "contact_name": payload.contact_name,
+        "contact_phone": payload.contact_phone,
+        "created_at": now,
+        "updated_at": now,
+    }
+    try:
+        ins = supabase.table(PRINT_JOBS_TABLE).insert(row).execute()
+        if getattr(ins, 'error', None):
+            raise Exception(ins.error)
+        supabase.table(PRINT_JOB_EVENTS_TABLE).insert({
+            "job_id": job_id, "status": "submitted", "note": "Job submitted",
+            "created_at": now
+        }).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create job: {e}")
+    return {"ok": True, "job_id": job_id, "otp": otp}
+
+
+@print_router.get("/api/orders", summary="List my print jobs")
+def list_my_orders(status: Optional[str] = Query(default=None), authorization: Optional[str] = Header(default=None)):
+    try:
+        user_id, _ = _get_auth_user(authorization)
+    except HTTPException:
+        user_id = None
+    supabase = get_service_client()
+    try:
+        q = supabase.table(PRINT_JOBS_TABLE).select("*")
+        if user_id:
+            q = q.eq("user_id", user_id)
+        if status:
+            q = q.eq("status", status)
+        res = q.order("created_at", desc=True).execute()
+        data = getattr(res, 'data', []) or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list orders: {e}")
+    return {"jobs": data}
+
+
+@print_router.get("/api/orders/{job_id}", summary="Get job details")
+def get_order(job_id: str, authorization: Optional[str] = Header(default=None)):
+    supabase = get_service_client()
+    try:
+        job = supabase.table(PRINT_JOBS_TABLE).select("*").eq("id", job_id).limit(1).execute()
+        job_row = (getattr(job, 'data', []) or [{}])[0]
+        ev = supabase.table(PRINT_JOB_EVENTS_TABLE).select("*").eq("job_id", job_id).order("created_at").execute()
+        events = getattr(ev, 'data', []) or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed: {e}")
+    if not job_row:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"job": job_row, "events": events}
+
+
+@print_router.post("/api/orders/{job_id}/cancel", summary="Cancel a job if not accepted")
+def cancel_order(job_id: str, authorization: Optional[str] = Header(default=None)):
+    user_id, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    try:
+        job = supabase.table(PRINT_JOBS_TABLE).select("id,user_id,status").eq("id", job_id).limit(1).execute()
+        row = (getattr(job, 'data', []) or [{}])[0]
+    except Exception:
+        row = {}
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    if row.get("user_id") and user_id and row.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if row.get("status") not in {"submitted"}:
+        raise HTTPException(status_code=400, detail="Cannot cancel now")
+    now = _now_iso()
+    supabase.table(PRINT_JOBS_TABLE).update({"status": "cancelled", "updated_at": now}).eq("id", job_id).execute()
+    supabase.table(PRINT_JOB_EVENTS_TABLE).insert({"job_id": job_id, "status": "cancelled", "note": "Cancelled by student", "created_at": now}).execute()
+    return {"ok": True}
+
+
+@print_router.post("/api/orders/{job_id}/resend-otp", summary="Regenerate OTP")
+def resend_otp(job_id: str, authorization: Optional[str] = Header(default=None)):
+    user_id, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    otp = _random_otp()
+    now = _now_iso()
+    supabase.table(PRINT_JOBS_TABLE).update({"otp": otp, "updated_at": now}).eq("id", job_id).execute()
+    supabase.table(PRINT_JOB_EVENTS_TABLE).insert({"job_id": job_id, "status": "otp", "note": "OTP regenerated", "created_at": now}).execute()
+    return {"ok": True, "otp": otp}
+
+
+# ---- Shop owner endpoints (require token matching owner_user_id) ----
+
+def _require_shop_owner(shop_id: str, authorization: Optional[str]) -> str:
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    res = supabase.table(PRINT_SHOPS_TABLE).select("id,owner_user_id").eq("id", shop_id).limit(1).execute()
+    row = (getattr(res, 'data', []) or [{}])[0]
+    if not row:
+        raise HTTPException(status_code=404, detail="Shop not found")
+    if row.get("owner_user_id") != uid:
+        raise HTTPException(status_code=403, detail="Not your shop")
+    return uid
+
+
+@print_router.post("/api/shop/signup", summary="Create a shop owned by current user")
+def shop_signup(payload: PrintShopIn, authorization: Optional[str] = Header(default=None)):
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    shop_id = str(uuid.uuid4())
+    row = _supabase_payload({
+        "id": shop_id,
+        "owner_user_id": uid,
+        "name": payload.name,
+        "phone": payload.phone,
+        "email": payload.email,
+        "address": payload.address,
+        "lat": payload.lat,
+        "lng": payload.lng,
+        "hours": payload.hours or {},
+        "capabilities": payload.capabilities.dict() if payload.capabilities else {},
+        "is_open": True,
+        "paused": False,
+        "rating": 0,
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    })
+    ins = supabase.table(PRINT_SHOPS_TABLE).insert(row).execute()
+    if getattr(ins, 'error', None):
+        raise HTTPException(status_code=500, detail=f"Failed: {ins.error}")
+    return {"ok": True, "shop_id": shop_id}
+
+
+@print_router.get("/api/shop/me", summary="Get my shop profile")
+def shop_me(authorization: Optional[str] = Header(default=None)):
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    res = supabase.table(PRINT_SHOPS_TABLE).select("*").eq("owner_user_id", uid).limit(1).execute()
+    row = (getattr(res, 'data', []) or [{}])[0]
+    if not row:
+        raise HTTPException(status_code=404, detail="No shop found for user")
+    return row
+
+
+@print_router.get("/api/shop/jobs", summary="List jobs for my shop")
+def shop_jobs(status: Optional[str] = Query(default=None), authorization: Optional[str] = Header(default=None)):
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    shop_res = supabase.table(PRINT_SHOPS_TABLE).select("id").eq("owner_user_id", uid).limit(1).execute()
+    shop = (getattr(shop_res, 'data', []) or [{}])[0]
+    if not shop:
+        raise HTTPException(status_code=404, detail="No shop found")
+    q = supabase.table(PRINT_JOBS_TABLE).select("*").eq("shop_id", shop.get("id"))
+    if status:
+        q = q.eq("status", status)
+    res = q.order("created_at").execute()
+    return {"jobs": getattr(res, 'data', []) or []}
+
+
+def _set_status(job_id: str, new_status: str, note: str, authorization: Optional[str]):
+    supabase = get_service_client()
+    # Fetch job + verify ownership
+    job_q = supabase.table(PRINT_JOBS_TABLE).select("id,shop_id,status,otp").eq("id", job_id).limit(1).execute()
+    job = (getattr(job_q, 'data', []) or [{}])[0]
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _require_shop_owner(job.get("shop_id"), authorization)
+    now = _now_iso()
+    supabase.table(PRINT_JOBS_TABLE).update({"status": new_status, "updated_at": now}).eq("id", job_id).execute()
+    supabase.table(PRINT_JOB_EVENTS_TABLE).insert({"job_id": job_id, "status": new_status, "note": note, "created_at": now}).execute()
+    return {"ok": True}
+
+
+@print_router.post("/api/shop/jobs/{job_id}/accept")
+def shop_accept(job_id: str, authorization: Optional[str] = Header(default=None)):
+    return _set_status(job_id, "accepted", "Accepted", authorization)
+
+
+@print_router.post("/api/shop/jobs/{job_id}/reject")
+def shop_reject(job_id: str, reason: Optional[str] = Form(default=None), authorization: Optional[str] = Header(default=None)):
+    return _set_status(job_id, "cancelled", f"Rejected: {reason or ''}", authorization)
+
+
+@print_router.post("/api/shop/jobs/{job_id}/printing")
+def shop_printing(job_id: str, authorization: Optional[str] = Header(default=None)):
+    return _set_status(job_id, "printing", "Printing", authorization)
+
+
+@print_router.post("/api/shop/jobs/{job_id}/ready")
+def shop_ready(job_id: str, authorization: Optional[str] = Header(default=None)):
+    return _set_status(job_id, "ready", "Ready for pickup", authorization)
+
+
+class ReleaseIn(BaseModel):
+    otp: str
+
+
+@print_router.post("/api/shop/jobs/{job_id}/release")
+def shop_release(job_id: str, body: ReleaseIn, authorization: Optional[str] = Header(default=None)):
+    supabase = get_service_client()
+    job_q = supabase.table(PRINT_JOBS_TABLE).select("id,shop_id,status,otp").eq("id", job_id).limit(1).execute()
+    job = (getattr(job_q, 'data', []) or [{}])[0]
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _require_shop_owner(job.get("shop_id"), authorization)
+    if (job.get("otp") or "").strip() != (body.otp or "").strip():
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+    return _set_status(job_id, "completed", "Released with OTP", authorization)
+
 # --- Notes Marketplace API ---
 marketplace_router = APIRouter()
 
@@ -8753,6 +9092,7 @@ def create_app() -> FastAPI:
 
     app.include_router(projects_router)
     app.include_router(notes_router)
+    app.include_router(print_router)
     app.include_router(academics_router)
     app.include_router(marketplace_router)
     app.include_router(teacher_router)

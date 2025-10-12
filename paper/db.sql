@@ -103,6 +103,70 @@ CREATE TABLE public.marketplace_reviews (
   CONSTRAINT marketplace_reviews_note_id_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id),
   CONSTRAINT marketplace_reviews_reviewer_user_id_fkey FOREIGN KEY (reviewer_user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.print_job_events (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  job_id uuid NOT NULL,
+  status text NOT NULL,
+  note text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT print_job_events_pkey PRIMARY KEY (id),
+  CONSTRAINT print_job_events_job_fkey FOREIGN KEY (job_id) REFERENCES public.print_jobs(id)
+);
+CREATE TABLE public.print_jobs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  shop_id uuid NOT NULL,
+  status text NOT NULL DEFAULT 'submitted'::text,
+  otp text,
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  estimated_pages integer,
+  file_size bigint,
+  marketplace_note_id uuid,
+  pickup_window text,
+  contact_name text,
+  contact_phone text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT print_jobs_pkey PRIMARY KEY (id),
+  CONSTRAINT print_jobs_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT print_jobs_shop_fkey FOREIGN KEY (shop_id) REFERENCES public.print_shops(id)
+);
+CREATE TABLE public.print_pricing (
+  shop_id uuid NOT NULL,
+  price jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT print_pricing_pkey PRIMARY KEY (shop_id),
+  CONSTRAINT print_pricing_shop_fkey FOREIGN KEY (shop_id) REFERENCES public.print_shops(id)
+);
+CREATE TABLE public.print_printers (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  shop_id uuid NOT NULL,
+  nickname text,
+  capabilities jsonb DEFAULT '{}'::jsonb,
+  available boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT print_printers_pkey PRIMARY KEY (id),
+  CONSTRAINT print_printers_shop_fkey FOREIGN KEY (shop_id) REFERENCES public.print_shops(id)
+);
+CREATE TABLE public.print_shops (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  owner_user_id uuid NOT NULL,
+  name text NOT NULL,
+  phone text,
+  email text,
+  address text,
+  lat double precision,
+  lng double precision,
+  hours jsonb DEFAULT '{}'::jsonb,
+  capabilities jsonb DEFAULT '{}'::jsonb,
+  is_open boolean DEFAULT true,
+  paused boolean DEFAULT false,
+  rating numeric DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT print_shops_pkey PRIMARY KEY (id),
+  CONSTRAINT print_shops_owner_fkey FOREIGN KEY (owner_user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.project_applications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL,
@@ -242,10 +306,7 @@ CREATE TABLE public.teacher_classes (
   degree_id uuid,
   department_id uuid,
   college_id uuid,
-  weekly_hours integer CHECK (weekly_hours >= 0 AND weekly_hours <= 60),
   notes text,
-  starts_on date,
-  ends_on date,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT teacher_classes_pkey PRIMARY KEY (id),
@@ -276,46 +337,25 @@ CREATE TABLE public.teacher_messages (
 );
 CREATE TABLE public.teacher_profiles (
   auth_user_id uuid NOT NULL,
-  name text,                 -- cached identity (sync from teacher_applications)
-  email text,
-  college_id uuid,
-  department_id uuid,
   headline text,
   bio text,
-  specialization text[],     -- corrected explicit array type
   years_experience integer CHECK (years_experience >= 0 AND years_experience <= 80),
   qualification text,
   availability jsonb DEFAULT '{}'::jsonb,
   social jsonb DEFAULT '{}'::jsonb,
-  profile_image_url text,    -- uploaded avatar (supabase storage)
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  name text,
+  email text,
+  college_id uuid,
+  department_id uuid,
+  specialization ARRAY,
+  profile_image_url text,
   CONSTRAINT teacher_profiles_pkey PRIMARY KEY (auth_user_id),
   CONSTRAINT teacher_profiles_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
   CONSTRAINT teacher_profiles_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
   CONSTRAINT teacher_profiles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
 );
-
--- MIGRATION NOTES (run manually if table already exists):
--- If specialization column was created as an untyped ARRAY (invalid) drop & recreate:
---   ALTER TABLE public.teacher_profiles DROP COLUMN IF EXISTS specialization;
---   ALTER TABLE public.teacher_profiles ADD COLUMN specialization text[];
--- Ensure identity columns exist:
---   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS name text;
---   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS email text;
---   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS college_id uuid REFERENCES public.colleges(id);
---   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS department_id uuid REFERENCES public.departments(id);
---   ALTER TABLE public.teacher_profiles ADD COLUMN IF NOT EXISTS profile_image_url text;
--- Bulk backfill / upsert from approved applications:
---   INSERT INTO public.teacher_profiles(auth_user_id,name,email,college_id,department_id)
---   SELECT auth_user_id,name,email,college_id,department_id
---   FROM public.teacher_applications ta
---   WHERE ta.status='approved'
---   ON CONFLICT (auth_user_id) DO UPDATE SET
---      name=EXCLUDED.name,
---      email=EXCLUDED.email,
---      college_id=EXCLUDED.college_id,
---      department_id=EXCLUDED.department_id;
 CREATE TABLE public.user_certifications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_profile_id uuid NOT NULL,

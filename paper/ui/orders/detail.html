@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Details — PaperX</title>
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
+  <script src="../config.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js" crossorigin="anonymous"></script>
+</head>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+  <header class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container flex items-center justify-between py-3">
+      <a href="./index.html" class="flex items-center gap-2"><span class="material-symbols-rounded">arrow_back</span>Back</a>
+      <h1 class="text-lg font-bold">Job</h1>
+      <span></span>
+    </div>
+  </header>
+  <main class="container py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <section class="lg:col-span-8 glass rounded-2xl p-4 ring-1 ring-black/5 dark:ring-white/10">
+      <div id="summary" class="text-sm"></div>
+      <div id="events" class="mt-3 space-y-1 text-[13px]"></div>
+    </section>
+    <section class="lg:col-span-4 glass rounded-2xl p-4 ring-1 ring-black/5 dark:ring-white/10 text-center">
+      <div class="text-xs opacity-70">OTP</div>
+      <div id="otp" class="font-mono text-2xl tracking-widest">------</div>
+      <canvas id="qr" class="mt-2 mx-auto"></canvas>
+      <div class="mt-3 flex items-center justify-center gap-2">
+        <button id="show" class="px-3 py-2 rounded-md ring-1 ring-black/10 dark:ring-white/15">Show OTP</button>
+        <button id="directions" class="px-3 py-2 rounded-md ring-1 ring-black/10 dark:ring-white/15">Directions</button>
+      </div>
+    </section>
+  </main>
+  <script>
+    const p = new URLSearchParams(location.search); const jobId = p.get('jobId')||'';
+    function $(s){return document.querySelector(s)}
+    async function load(){
+      const r = await fetch((window.API_BASE||'') + '/api/orders/' + encodeURIComponent(jobId)).catch(()=>null);
+      const j = r&&r.ok ? await r.json() : { job:{}, events:[] };
+      const job = j.job||{};
+      $('#summary').textContent = `${job.status||''} • ${job.created_at?job.created_at.replace('T',' ').slice(0,16):''}`;
+      const ev = $('#events'); ev.innerHTML = (j.events||[]).map(e => `<div>• <b>${e.status}</b> — <span class="opacity-70">${(e.created_at||'').replace('T',' ').slice(0,16)} ${e.note?('— '+e.note):''}</span></div>`).join('');
+      $('#otp').textContent = job.otp || '------';
+      new QRious({ element: document.getElementById('qr'), value: JSON.stringify({ jobId, otp: job.otp||'' }), size: 140 });
+    }
+    document.addEventListener('DOMContentLoaded', load);
+  </script>
+</body></html>
+

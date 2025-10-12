@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Job Submitted — PaperX</title>
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
+  <script src="../config.js"></script>
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, .72);
+      backdrop-filter: blur(12px)
+    }
+
+    .dark .glass {
+      background: rgba(30, 30, 47, .55)
+    }
+
+    .material-symbols-rounded {
+      vertical-align: -6px
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"
+    integrity="sha512-+XgqVYngwR3h9fHjR0ybqgWTR6k+4qQKxHGZNXlQX7P2aWz6Y6K1i9Y2F7o3eDPxJbmx2l5QZc9r0C7R2K0H2A=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+  <header
+    class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container flex items-center justify-between py-3">
+      <a href="../index.html" class="flex items-center gap-2"><span class="material-symbols-rounded">home</span>Home</a>
+      <h1 class="text-lg font-bold">Success</h1>
+      <a href="../orders/index.html" class="text-sm hover:underline">My Prints</a>
+    </div>
+  </header>
+  <main class="container py-10 grid place-items-center">
+    <section class="glass rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 max-w-md w-full text-center">
+      <div class="text-emerald-600 dark:text-emerald-400"><span
+          class="material-symbols-rounded text-5xl">check_circle</span></div>
+      <h2 class="text-xl font-extrabold mt-2">Job Submitted</h2>
+      <p class="text-sm opacity-80">Show this OTP or QR at the shop.</p>
+      <div class="mt-4 font-mono text-2xl tracking-widest" id="otp">000000</div>
+      <canvas id="qr" class="mt-3 mx-auto"></canvas>
+      <div id="job" class="text-[12px] opacity-70 mt-2"></div>
+      <div class="mt-4 flex items-center justify-center gap-2">
+        <a id="viewJob" class="px-3 py-2 rounded-md bg-brand-500/90 text-white hover:bg-brand-500" href="#">View Job</a>
+        <a id="share" class="px-3 py-2 rounded-md ring-1 ring-black/10 dark:ring-white/15" href="#">Share</a>
+      </div>
+    </section>
+  </main>
+  <script>
+    const p = new URLSearchParams(location.search); const jobId = p.get('jobId') || ''; const otp = p.get('otp') || '';
+    document.getElementById('otp').textContent = otp || '------';
+    document.getElementById('job').textContent = 'Job ID: ' + jobId;
+    const qr = new QRious({ element: document.getElementById('qr'), value: JSON.stringify({ jobId, otp }), size: 180 });
+    document.getElementById('viewJob').href = `../orders/detail.html?jobId=${encodeURIComponent(jobId)}`;
+    document.getElementById('share').addEventListener('click', async (e) => {
+      e.preventDefault(); const text = `PaperX Print Job\nJob: ${jobId}\nOTP: ${otp}`;
+      try { await navigator.clipboard.writeText(text); e.currentTarget.textContent = 'Copied'; setTimeout(() => e.currentTarget.textContent = 'Share', 1200); } catch { }
+    });
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Prints — PaperX</title>
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
+  <script src="../config.js"></script>
+</head>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+  <header class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container flex items-center justify-between py-3">
+      <a href="../index.html" class="flex items-center gap-2"><span class="material-symbols-rounded">home</span>Home</a>
+      <h1 class="text-lg font-bold">My Prints</h1>
+      <span></span>
+    </div>
+  </header>
+  <main class="container py-6">
+    <div class="flex items-center gap-2 text-sm mb-3">
+      <button data-s="" class="tab px-3 py-1.5 rounded-md bg-brand-500/90 text-white">Active</button>
+      <button data-s="ready" class="tab px-3 py-1.5 rounded-md ring-1 ring-black/10 dark:ring-white/15">Ready</button>
+      <button data-s="completed" class="tab px-3 py-1.5 rounded-md ring-1 ring-black/10 dark:ring-white/15">Completed</button>
+      <button data-s="cancelled" class="tab px-3 py-1.5 rounded-md ring-1 ring-black/10 dark:ring-white/15">Cancelled</button>
+    </div>
+    <div id="list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    <div id="empty" class="hidden text-sm opacity-70">No orders.</div>
+  </main>
+  <script>
+    function $(s){return document.querySelector(s)}
+    function card(j){
+      const a = document.createElement('a'); a.href = `./detail.html?jobId=${encodeURIComponent(j.id)}`; a.className='group block rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4 hover:shadow-glow';
+      a.innerHTML = `<div class="flex items-start gap-3">
+        <div class="shrink-0 w-10 h-10 rounded-full bg-brand-500/15 grid place-items-center"><span class="material-symbols-rounded">print</span></div>
+        <div class="flex-1 min-w-0"><div class="font-semibold truncate">${j.shop_id || 'Shop'}</div>
+        <div class="text-[12px] opacity-70">${j.status}</div></div>
+        <div class="text-[11px] opacity-70">${(j.created_at||'').slice(0,16).replace('T',' ')}</div>
+      </div>`; return a;
+    }
+    async function load(status){
+      const url = new URL((window.API_BASE||'') + '/api/orders'); if (status) url.searchParams.set('status', status);
+      const r = await fetch(url).catch(()=>null); const j = r&&r.ok? await r.json():{jobs:[]}; const list = j.jobs||[];
+      const wrap = $('#list'); wrap.innerHTML=''; list.forEach(x => wrap.appendChild(card(x))); $('#empty').classList.toggle('hidden', list.length>0);
+    }
+    document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', (e)=>{
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('bg-brand-500/90','text-white'));
+      e.currentTarget.classList.add('bg-brand-500/90','text-white'); load(e.currentTarget.dataset.s);
+    }));
+    document.addEventListener('DOMContentLoaded', ()=> load(''));
+  </script>
+</body></html>
+

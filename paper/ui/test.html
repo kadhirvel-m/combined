@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X — Print Network</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+
+    <!-- Fonts / Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Config (optional) -->
+    <script src="../config.js"></script>
+    <script src="../auth.js" defer></script>
+
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, .78);
+            backdrop-filter: blur(12px)
+        }
+
+        .dark .glass {
+            background: rgba(30, 30, 47, .55)
+        }
+
+        .hero-light {
+            background:
+                radial-gradient(1000px 600px at 50% -10%, rgba(158, 75, 138, 0.18), transparent 60%),
+                linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .hero-dark {
+            background:
+                radial-gradient(1000px 600px at 50% -10%, rgba(158, 75, 138, 0.28), transparent 60%),
+                linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%);
+        }
+
+        .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08)
+        }
+
+        .dark .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
+        }
+
+        .badge {
+            font-size: 10px
+        }
+    </style>
+
+    <!-- Theme boot (no flash) -->
+    <script>
+        (() => {
+            const stored = localStorage.getItem('px_theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = stored ? stored === 'dark' : prefersDark;
+            if (isDark) document.documentElement.classList.add('dark');
+        })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white hero-light dark:hero-dark">
+    <!-- NAV -->
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3">
+            <a href="../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-8 w-auto dark:hidden">
+                <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-8 w-auto hidden dark:block">
+            </a>
+            <nav class="hidden md:flex items-center gap-2 text-sm">
+                <a href="./shops.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">Find
+                    Shops</a>
+                <a href="../orders/index.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">My
+                    Prints</a>
+                <a href="../shop/jobs.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">Jobs
+                    Dashboard</a>
+                <button id="themeToggle"
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 ring-soft hover:bg-black/5 dark:hover:bg-white/5">
+                    <span class="material-symbols-rounded">dark_mode</span><span class="hidden sm:block">Theme</span>
+                </button>
+            </nav>
+            <div class="md:hidden flex items-center gap-2">
+                <a href="../shop/jobs.html"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-soft hover:bg-black/5 dark:hover:bg-white/5"
+                    title="Jobs">
+                    <span class="material-symbols-rounded">assignment</span>
+                </a>
+                <button id="themeToggleSm"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-soft hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="container py-10 md:py-16">
+        <div class="grid lg:grid-cols-2 gap-6 items-stretch">
+            <div
+                class="glass rounded-3xl ring-1 ring-black/5 dark:ring-white/10 p-6 md:p-10 flex flex-col justify-center">
+                <span
+                    class="inline-flex items-center gap-2 badge px-2 py-0.5 rounded-full bg-brand-500/15 text-brand-700 ring-1 ring-brand-500/30 w-max">
+                    <span class="material-symbols-rounded text-sm">storefront</span> Built for Xerox/print shops
+                </span>
+                <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight mt-3">Bring walk-ins online.<br>Get more
+                    orders. No new hardware.</h1>
+                <p class="mt-3 text-neutral-700 dark:text-white/70">List your shop, accept print jobs from students
+                    nearby, and hand over with OTP & QR. Works with the printer you already have.</p>
+                <div class="mt-6 flex flex-wrap items-center gap-3">
+                    <a href="../shop/signup.html"
+                        class="inline-flex items-center gap-2 rounded-xl px-5 py-3 bg-brand-500 text-white font-semibold hover:bg-brand-700 shadow-[0_8px_22px_rgba(158,75,138,0.35)]">
+                        <span class="material-symbols-rounded text-base">how_to_reg</span> Sign up free
+                    </a>
+                    <a href="../shop/login.html"
+                        class="inline-flex items-center gap-2 rounded-xl px-5 py-3 ring-soft hover:bg-black/5 dark:hover:bg-white/10">
+                        <span class="material-symbols-rounded text-base">login</span> Owner login
+                    </a>
+                    <span class="text-[12px] opacity-70">No payments/KYC required (beta)</span>
+                </div>
+                <div class="mt-6 grid grid-cols-3 gap-4 text-center text-sm">
+                    <div class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-3">
+                        <div class="text-xl font-extrabold">0%</div>
+                        <div class="opacity-70">New hardware</div>
+                    </div>
+                    <div class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-3">
+                        <div class="text-xl font-extrabold">OTP</div>
+                        <div class="opacity-70">Secure pickup</div>
+                    </div>
+                    <div class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-3">
+                        <div class="text-xl font-extrabold">5–10km</div>
+                        <div class="opacity-70">Local reach</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass rounded-3xl ring-1 ring-black/5 dark:ring-white/10 overflow-hidden p-0">
+                <!-- Demo visual -->
+                <div class="h-full grid">
+                    <div class="p-5 border-b border-black/5 dark:border-white/10">
+                        <div class="text-sm font-semibold">What you get</div>
+                        <div class="text-[12px] opacity-70">Jobs Board + OTP Ticket + Shop Profile</div>
+                    </div>
+                    <div class="p-5 grow grid lg:grid-rows-2 gap-4">
+                        <div class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4 bg-white/70 dark:bg-white/5">
+                            <div class="text-sm font-semibold mb-2">Jobs Board</div>
+                            <ul class="text-[13px] opacity-90 space-y-1">
+                                <li>• View new jobs with print settings</li>
+                                <li>• Apply settings → Print → Mark Ready</li>
+                                <li>• Pause/Open shop anytime</li>
+                            </ul>
+                        </div>
+                        <div class="grid md:grid-cols-2 gap-4">
+                            <div
+                                class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4 bg-white/70 dark:bg-white/5">
+                                <div class="text-sm font-semibold mb-1">OTP Ticket</div>
+                                <div class="text-[13px] opacity-90">Student shows OTP/QR → you confirm pickup.</div>
+                            </div>
+                            <div
+                                class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4 bg-white/70 dark:bg-white/5">
+                                <div class="text-sm font-semibold mb-1">Shop Profile</div>
+                                <div class="text-[13px] opacity-90">Capabilities, timings, price hints, and address.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-5 border-t border-black/5 dark:border-white/10 flex items-center justify-end gap-2">
+                        <a href="../shop/jobs.html"
+                            class="inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-brand-500 text-white text-sm font-semibold hover:bg-brand-700">
+                            <span class="material-symbols-rounded text-base">assignment</span> Open Jobs Board
+                        </a>
+                        <a href="./shops.html"
+                            class="inline-flex items-center gap-2 rounded-xl px-4 py-2 ring-soft text-sm hover:bg-black/5 dark:hover:bg-white/10">
+                            <span class="material-symbols-rounded text-base">storefront</span> See student view
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- VALUE FOR SHOP OWNERS -->
+    <section class="py-14 border-y border-black/5 dark:border-white/10">
+        <div class="container">
+            <header class="text-center mb-8">
+                <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight">Why shop owners love Paper X Print</h2>
+                <p class="mt-2 text-sm text-neutral-600 dark:text-white/70">More orders, less chaos, same printers.</p>
+            </header>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <article class="rounded-2xl p-5 glass ring-1 ring-black/5 dark:ring-white/10">
+                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-600 mb-2"><span
+                            class="material-symbols-rounded">groups</span></div>
+                    <h3 class="font-semibold">Reach nearby students</h3>
+                    <p class="text-[13px] opacity-90 mt-1">Appear in local search with distance, timings, and
+                        capabilities.</p>
+                </article>
+                <article class="rounded-2xl p-5 glass ring-1 ring-black/5 dark:ring-white/10">
+                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-600 mb-2"><span
+                            class="material-symbols-rounded">task_alt</span></div>
+                    <h3 class="font-semibold">Clear job tickets</h3>
+                    <p class="text-[13px] opacity-90 mt-1">Copies, duplex, GSM, N-up, finishing — everything in one
+                        view.</p>
+                </article>
+                <article class="rounded-2xl p-5 glass ring-1 ring-black/5 dark:ring-white/10">
+                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-600 mb-2"><span
+                            class="material-symbols-rounded">lock</span></div>
+                    <h3 class="font-semibold">Secure handover</h3>
+                    <p class="text-[13px] opacity-90 mt-1">OTP + QR confirms pickup. No confusion, no duplicates.</p>
+                </article>
+                <article class="rounded-2xl p-5 glass ring-1 ring-black/5 dark:ring-white/10">
+                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-600 mb-2"><span
+                            class="material-symbols-rounded">schedule</span></div>
+                    <h3 class="font-semibold">Open / Pause anytime</h3>
+                    <p class="text-[13px] opacity-90 mt-1">Control availability when you’re busy or closed.</p>
+                </article>
+                <article class="rounded-2xl p-5 glass ring-1 ring-black/5 dark:ring-white/10">
+                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-600 mb-2"><span
+                            class="material-symbols-rounded">payments</span></div>
+                    <h3 class="font-semibold">Cash-at-counter</h3>
+                    <p class="text-[13px] opacity-90 mt-1">No online payments/KYC right now — keep your existing flow.
+                    </p>
+                </article>
+                <article class="rounded-2xl p-5 glass ring-1 ring-black/5 dark:ring-white/10">
+                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-600 mb-2"><span
+                            class="material-symbols-rounded">print</span></div>
+                    <h3 class="font-semibold">Works with any printer</h3>
+                    <p class="text-[13px] opacity-90 mt-1">No integrations needed. Use your usual print software.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- BENEFITS FOR STUDENTS -->
+    <section class="py-14">
+        <div class="container">
+            <header class="text-center mb-8">
+                <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight">Students get a smoother experience</h2>
+                <p class="mt-2 text-sm text-neutral-600 dark:text-white/70">Faster turn-around and fewer queues.</p>
+            </header>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <article class="rounded-2xl p-5 glass ring-1 ring-black/5 dark:ring-white/10">
+                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-600 mb-2"><span
+                            class="material-symbols-rounded">travel_explore</span></div>
+                    <h3 class="font-semibold">Find nearby shops</h3>
+                    <p class="text-[13px] opacity-90 mt-1">Search by area/pin, filter by color, sizes, bindings.</p>
+                </article>
+                <article class="rounded-2xl p-5 glass ring-1 ring-black/5 dark:ring-white/10">
+                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-600 mb-2"><span
+                            class="material-symbols-rounded">tune</span></div>
+                    <h3 class="font-semibold">Configure easily</h3>
+                    <p class="text-[13px] opacity-90 mt-1">Copies, duplex, N-up, GSM, page range, finishing.</p>
+                </article>
+                <article class="rounded-2xl p-5 glass ring-1 ring-black/5 dark:ring-white/10">
+                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-600 mb-2"><span
+                            class="material-symbols-rounded">qr_code_2</span></div>
+                    <h3 class="font-semibold">Collect with OTP</h3>
+                    <p class="text-[13px] opacity-90 mt-1">No confusion at counter; shop marks picked.</p>
+                </article>
+            </div>
+            <div class="mt-6 flex items-center justify-center gap-3">
+                <a href="./shops.html"
+                    class="inline-flex items-center gap-2 rounded-xl px-5 py-3 bg-brand-500 text-white font-semibold hover:bg-brand-700">
+                    <span class="material-symbols-rounded text-base">storefront</span> Find shops
+                </a>
+                <a href="../orders/index.html"
+                    class="inline-flex items-center gap-2 rounded-xl px-5 py-3 ring-soft hover:bg-black/5 dark:hover:bg-white/10">
+                    <span class="material-symbols-rounded text-base">receipt_long</span> My prints
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW IT WORKS (for owners) -->
+    <section class="py-16 border-y border-black/5 dark:border-white/10">
+        <div class="container max-w-6xl">
+            <header class="text-center mb-10">
+                <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight">How it works for shop owners</h2>
+                <p class="mt-2 text-sm text-neutral-600 dark:text-white/70">Four steps to start getting online orders.
+                </p>
+            </header>
+            <ol class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <li class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5">
+                    <div class="flex items-center gap-3">
+                        <span
+                            class="size-8 grid place-content-center rounded-full bg-brand-500 text-white text-sm font-bold">1</span>
+                        <h3 class="font-semibold">Create your account</h3>
+                    </div>
+                    <p class="mt-2 text-[13px] opacity-90">Add shop name, address, phone, email, and capabilities.</p>
+                </li>
+                <li class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5">
+                    <div class="flex items-center gap-3">
+                        <span
+                            class="size-8 grid place-content-center rounded-full bg-brand-700 text-white text-sm font-bold">2</span>
+                        <h3 class="font-semibold">Set pricing & hours</h3>
+                    </div>
+                    <p class="mt-2 text-[13px] opacity-90">Configure per-page hints, bindings, GSM; toggle Open/Pause.
+                    </p>
+                </li>
+                <li class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5">
+                    <div class="flex items-center gap-3">
+                        <span
+                            class="size-8 grid place-content-center rounded-full bg-brand-500 text-white text-sm font-bold">3</span>
+                        <h3 class="font-semibold">Process jobs</h3>
+                    </div>
+                    <p class="mt-2 text-[13px] opacity-90">See queued jobs, print, and mark “Ready”.</p>
+                </li>
+                <li class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5">
+                    <div class="flex items-center gap-3">
+                        <span
+                            class="size-8 grid place-content-center rounded-full bg-brand-700 text-white text-sm font-bold">4</span>
+                        <h3 class="font-semibold">Hand over with OTP</h3>
+                    </div>
+                    <p class="mt-2 text-[13px] opacity-90">Verify OTP/QR and mark “Picked”. Done.</p>
+                </li>
+            </ol>
+            <div class="mt-8 flex items-center justify-center gap-3">
+                <a href="../shop/signup.html"
+                    class="inline-flex items-center gap-2 rounded-xl px-5 py-3 bg-brand-500 text-white font-semibold hover:bg-brand-700">
+                    <span class="material-symbols-rounded text-base">rocket_launch</span> Start as shop owner
+                </a>
+                <a href="../shop/jobs.html"
+                    class="inline-flex items-center gap-2 rounded-xl px-5 py-3 ring-soft hover:bg-black/5 dark:hover:bg-white/10">
+                    <span class="material-symbols-rounded text-base">assignment</span> Explore Jobs Board
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ / POLICY -->
+    <section class="py-14">
+        <div class="container max-w-5xl">
+            <header class="text-center mb-8">
+                <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight">FAQs</h2>
+                <p class="mt-2 text-sm text-neutral-600 dark:text-white/70">Everything you need to know.</p>
+            </header>
+            <div class="grid md:grid-cols-2 gap-4">
+                <article class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5">
+                    <h3 class="font-semibold">Do I need special hardware?</h3>
+                    <p class="text-[13px] opacity-90 mt-1">No. Use your current printers and workflow. Paper X only
+                        organizes jobs.</p>
+                </article>
+                <article class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5">
+                    <h3 class="font-semibold">How do students pay?</h3>
+                    <p class="text-[13px] opacity-90 mt-1">Right now, they pay at your counter. Online payments/KYC are
+                        out of scope for beta.</p>
+                </article>
+                <article class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5">
+                    <h3 class="font-semibold">Is pickup secure?</h3>
+                    <p class="text-[13px] opacity-90 mt-1">Yes. Each job generates an OTP and QR; you verify before
+                        handover.</p>
+                </article>
+                <article class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-5">
+                    <h3 class="font-semibold">What about illegal/copyright prints?</h3>
+                    <p class="text-[13px] opacity-90 mt-1">Students must accept terms stating they won’t print
+                        illegal/copyright content.</p>
+                </article>
+            </div>
+            <div class="mt-8 text-center">
+                <a href="../shop/signup.html"
+                    class="inline-flex items-center gap-2 rounded-xl px-5 py-3 bg-brand-500 text-white font-semibold hover:bg-brand-700">
+                    <span class="material-symbols-rounded text-base">how_to_reg</span> Create my shop
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER MINI -->
+    <footer class="border-t border-black/5 dark:border-white/10">
+        <div class="container py-8 text-[13px] flex flex-col md:flex-row items-center justify-between gap-3">
+            <div class="opacity-80">© <span id="y"></span> Paper X • Print Network</div>
+            <div class="flex items-center gap-3">
+                <a href="../index.html" class="hover:underline">Main site</a>
+                <a href="../shop/login.html" class="hover:underline">Owner login</a>
+                <a href="../shop/signup.html" class="hover:underline">Sign up</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Year + Theme toggles
+        const y = document.getElementById('y'); if (y) y.textContent = new Date().getFullYear();
+        const toggles = [document.getElementById('themeToggle'), document.getElementById('themeToggleSm')].filter(Boolean);
+        function syncThemeIcon() {
+            const dark = document.documentElement.classList.contains('dark');
+            toggles.forEach(btn => {
+                const i = btn.querySelector('.material-symbols-rounded');
+                if (i) i.textContent = dark ? 'light_mode' : 'dark_mode';
+            });
+        }
+        toggles.forEach(btn => btn.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+            localStorage.setItem('px_theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+            syncThemeIcon();
+        }));
+        syncThemeIcon();
+    </script>
+</body>
+
+</html>
