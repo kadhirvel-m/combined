@@ -358,6 +358,9 @@
       const color = caps.color ? 'Color' : 'B/W only';
       const sizes = (caps.sizes || []).join(', ') || 'A4';
       const rating = (shop.rating && Number(shop.rating).toFixed(1)) || null;
+      // Try multiple common fields for logo URL from API/db
+      const rawLogo = shop.logo_url || shop.logoUrl || shop.logo || shop.image_url || shop.imageUrl || null;
+      const logoUrl = (typeof rawLogo === 'string' && rawLogo.trim()) ? rawLogo.trim() : null;
 
       let distanceLabel = '';
       if (userPos && typeof shop.lat === 'number' && typeof shop.lng === 'number') {
@@ -399,8 +402,10 @@
       a.className = 'group block rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-4 hover:shadow-neon transition';
       a.innerHTML = `
         <div class="flex items-start gap-3">
-          <div class="shrink-0 w-10 h-10 rounded-full bg-brand-500/15 grid place-items-center">
-            <span class="material-symbols-rounded">local_printshop</span>
+          <div class="shrink-0 w-10 h-10 rounded-full bg-brand-500/15 overflow-hidden grid place-items-center">
+            ${logoUrl
+          ? `<img src="${logoUrl}" alt="${(shop.name || 'Print Shop').replace(/"/g, '&quot;')} logo" class="w-full h-full object-cover" loading="lazy">`
+          : `<span class="material-symbols-rounded">local_printshop</span>`}
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">

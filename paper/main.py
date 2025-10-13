@@ -3564,8 +3564,16 @@ def _storage_upload_bytes(svc_client, bucket: str, dest: str, content: bytes, co
     attempts = []
     # Attempt 1: modern signature
     try:
-        attempts.append("upload(dest, bytes, content-type dict)")
-        result = storage.from_(bucket).upload(dest, content, {"content-type": content_type or "application/octet-stream"})
+        attempts.append("upload(dest, bytes, opts dict upsert)")
+        result = storage.from_(bucket).upload(
+            dest,
+            content,
+            {
+                "content-type": content_type or "application/octet-stream",
+                "upsert": "true",
+                "cache-control": "86400",
+            },
+        )
     except Exception as exc:
         last_err = exc
         result = None
@@ -3595,8 +3603,18 @@ def _storage_upload_bytes(svc_client, bucket: str, dest: str, content: bytes, co
             last_err = exc
             result = None
     if result is None:
-        supabase_logger.error("All upload attempts failed", extra={"bucket": bucket, "dest": dest, "attempts": attempts, "error": str(last_err)})
-        raise HTTPException(status_code=500, detail=f"Upload failed: {last_err}")
+        # Fallback: attempt a remove then a plain upload (handles 409 duplicate when upsert unsupported)
+        try:
+            attempts.append("remove+reupload fallback")
+            try:
+                storage.from_(bucket).remove([dest])
+            except Exception:
+                pass
+            result = storage.from_(bucket).upload(dest, content, {"content-type": content_type or "application/octet-stream"})
+        except Exception as exc:
+            last_err = exc
+            supabase_logger.error("All upload attempts failed", extra={"bucket": bucket, "dest": dest, "attempts": attempts, "error": str(last_err)})
+            raise HTTPException(status_code=500, detail=f"Upload failed: {last_err}")
     if result is None:
         supabase_logger.exception("Upload failed: %s", last_err)
         raise HTTPException(status_code=500, detail=f"Upload failed: {last_err}")
@@ -7783,6 +7801,60 @@ class UpdateShopIn(BaseModel):
     paused: Optional[bool] = None
     price_hint: Optional[str] = None
     pricing: Optional[ShopPricing] = None
+
+
+@print_router.post("/api/shop/logo", summary="Upload or replace shop logo (public URL stored in print_shops.logo_url)")
+async def upload_shop_logo(file: UploadFile = File(...), authorization: Optional[str] = Header(default=None)):
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    # Resolve shop owned by user
+    shop_q = supabase.table(PRINT_SHOPS_TABLE).select("id").eq("owner_user_id", uid).limit(1).execute()
+    shop = (getattr(shop_q, 'data', []) or [{}])[0]
+    if not shop:
+        raise HTTPException(status_code=404, detail="No shop found for user")
+    shop_id = shop.get("id")
+
+    # Validate file
+    filename = file.filename or "logo.png"
+    ext = (Path(filename).suffix or ".png").lower()
+    allowed = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported image type")
+    blob = await file.read()
+    if len(blob) > 4 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 4MB)")
+    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml"}
+    content_type = mime_map.get(ext, "application/octet-stream")
+
+    # Resolve bucket
+    bucket = (
+        os.getenv("SUPABASE_SHOP_ASSETS_BUCKET", "").strip()
+        or os.getenv("SUPABASE_ASSETS_BUCKET", "").strip()
+        or os.getenv("SUPABASE_BUCKET", "").strip()
+        or os.getenv("SUPABASE_PUBLIC_BUCKET", "").strip()
+        or "paperx-assets"
+    )
+    # Key path (use upsert to replace same path for caching simplicity)
+    dest = f"shops/{shop_id}/logo{ext}"
+    try:
+        _storage_upload_bytes(supabase, bucket, dest, blob, content_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+    public_url = _storage_public_url(supabase, bucket, dest)
+    if not public_url:
+        raise HTTPException(status_code=500, detail="Failed to resolve public URL")
+    # Persist to shop row (logo_url text column expected)
+    try:
+        upd = supabase.table(PRINT_SHOPS_TABLE).update({"logo_url": public_url, "updated_at": _now_iso()}).eq("id", shop_id).execute()
+        if getattr(upd, 'error', None):
+            # If column missing, expose clear message
+            msg = str(upd.error)
+            raise HTTPException(status_code=500, detail=f"DB update failed (did you add logo_url column?): {msg}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB update error: {e}")
+    return {"ok": True, "url": public_url, "bucket": bucket, "path": dest}
 
 
 class PrintSettings(BaseModel):
