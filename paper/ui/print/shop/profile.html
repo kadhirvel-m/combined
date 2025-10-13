@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shop Profile — PaperX</title>
+  <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/tailwind.css" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+
+  <script src="../../config.js"></script>
+
+  <style>
+    .material-symbols-rounded { vertical-align: -6px }
+    .glass { background: rgba(255,255,255,.82); backdrop-filter: blur(12px) }
+    .dark .glass { background: rgba(30,30,47,.55) }
+    .ring-soft { box-shadow: inset 0 0 0 1px rgba(0,0,0,.08) }
+    .dark .ring-soft { box-shadow: inset 0 0 0 1px rgba(255,255,255,.12) }
+
+    .surface { background: rgba(255,255,255,.86); backdrop-filter: blur(14px) }
+    .dark .surface { background: rgba(30,30,47,.66) }
+    .surface-elev { box-shadow: 0 1px 2px rgba(0,0,0,.07), 0 8px 28px rgba(0,0,0,.18) }
+    .chip { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .6rem; border-radius:9999px; background: rgba(255,255,255,.7); box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); font-size:12px }
+    .dark .chip { background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12) }
+  </style>
+
+  <script>
+    // Theme boot
+    (() => {
+      const stored = localStorage.getItem('px_theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const isDark = stored ? stored === 'dark' : prefersDark;
+      if (isDark) document.documentElement.classList.add('dark');
+    })();
+  </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.18),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(76,42,89,.25),transparent)] dark:bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.2),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(30,30,47,.7),transparent)]">
+  <!-- App bar -->
+  <header class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container flex items-center justify-between py-3">
+      <a href="../index.html" class="flex items-center gap-2" aria-label="Paper X Home">
+        <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-7 w-auto dark:hidden">
+        <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-7 w-auto hidden dark:block">
+      </a>
+      <nav class="hidden md:flex items-center gap-2 text-sm">
+        <a href="./jobs.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span class="material-symbols-rounded text-base">assignment</span> Jobs</a>
+        <button id="themeToggle" class="inline-flex items-center gap-2 rounded-full px-3 py-2 ring-soft hover:bg-black/5 dark:hover:bg-white/5" aria-label="Toggle theme">
+          <span id="themeIcon" class="material-symbols-rounded">dark_mode</span>
+        </button>
+        <button id="logout" class="inline-flex items-center gap-2 rounded-full px-3 py-2 ring-soft hover:bg-black/5 dark:hover:bg-white/5"><span class="material-symbols-rounded text-base">logout</span>Logout</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container py-6 space-y-6">
+    <!-- Title -->
+    <section class="rounded-3xl surface surface-elev ring-1 ring-black/5 dark:ring-white/10 p-5">
+      <div class="flex flex-wrap items-center gap-3 justify-between">
+        <div>
+          <h1 class="text-xl md:text-2xl font-extrabold tracking-tight">Shop Profile</h1>
+          <p class="text-[13px] opacity-80">Manage your shop details, capabilities, hours, and availability.</p>
+        </div>
+        <div class="flex items-center gap-2 text-[12px] opacity-80">
+          <span class="chip" id="chipShopId"></span>
+          <span class="chip" id="chipStatus"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Profile content grid -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Left column: Core info -->
+      <div class="lg:col-span-2 space-y-6">
+        <!-- Basic info -->
+        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
+          <h2 class="font-semibold mb-3">Basic Information</h2>
+          <form id="formBasics" class="grid sm:grid-cols-2 gap-3 text-[13px]">
+            <label class="grid gap-1">Shop name
+              <input id="name" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" required />
+            </label>
+            <label class="grid gap-1">Contact phone
+              <input id="phone" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+            </label>
+            <label class="sm:col-span-2 grid gap-1">Email (login)
+              <input id="email" class="px-3 py-2 rounded-md ring-soft bg-white/70 dark:bg-white/5 opacity-75" disabled />
+            </label>
+          </form>
+        </section>
+
+        <!-- Address & location -->
+        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold">Address & Location</h2>
+            <button id="useLoc" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/10 text-[13px]"><span class="material-symbols-rounded text-base">my_location</span>Use my location</button>
+          </div>
+          <form id="formAddress" class="grid gap-3 text-[13px]">
+            <label class="grid gap-1">Full address
+              <textarea id="address" rows="3" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5"></textarea>
+            </label>
+            <div class="grid sm:grid-cols-2 gap-3">
+              <label class="grid gap-1">Latitude
+                <input id="lat" type="number" step="0.000001" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+              </label>
+              <label class="grid gap-1">Longitude
+                <input id="lng" type="number" step="0.000001" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+              </label>
+            </div>
+          </form>
+        </section>
+
+        <!-- Capabilities -->
+        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
+          <h2 class="font-semibold mb-3">Capabilities</h2>
+          <form id="formCaps" class="grid gap-3 text-[13px]">
+            <div class="grid sm:grid-cols-3 gap-3">
+              <label class="inline-flex items-center gap-2"><input type="checkbox" id="cap_color"> Color printing</label>
+              <label class="inline-flex items-center gap-2"><input type="checkbox" id="cap_bw"> B/W printing</label>
+              <label class="inline-flex items-center gap-2"><input type="checkbox" id="cap_duplex"> Duplex</label>
+            </div>
+            <div class="grid sm:grid-cols-3 gap-3">
+              <label>Supported sizes
+                <select id="cap_sizes" multiple class="mt-1 w-full px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5">
+                  <option>A4</option>
+                  <option>A3</option>
+                  <option>Letter</option>
+                  <option>Legal</option>
+                </select>
+              </label>
+              <label>Binding
+                <select id="cap_binding" multiple class="mt-1 w-full px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5">
+                  <option>staple</option>
+                  <option>spiral</option>
+                  <option>tape</option>
+                </select>
+              </label>
+              <label>Price hint
+                <input id="price_hint" class="mt-1 w-full px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" placeholder="Eg. A4 B/W from ₹1/page" />
+              </label>
+            </div>
+          </form>
+        </section>
+
+        <!-- Pricing -->
+        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold">Pricing (per page tiers)</h2>
+            <div class="text-[12px] opacity-80">Leave min/upto blank for open-ended</div>
+          </div>
+          <div id="pricingForms" class="grid gap-5 text-[13px]">
+            <!-- Sections rendered by JS: bw_single, bw_duplex, color_single, color_duplex -->
+          </div>
+        </section>
+      </div>
+
+      <!-- Right column: Status & hours -->
+      <div class="space-y-6">
+        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
+          <h2 class="font-semibold mb-3">Status</h2>
+          <div class="flex items-center gap-3">
+            <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="is_open"> Open now</label>
+            <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="paused"> Pause orders</label>
+          </div>
+          <div class="mt-3 text-[12px] opacity-80">Toggle to control availability instantly.</div>
+        </section>
+
+        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
+          <h2 class="font-semibold mb-3">Hours</h2>
+          <form id="formHours" class="grid gap-3 text-[13px]">
+            <label class="grid gap-1">Open time
+              <input id="open_time" type="time" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+            </label>
+            <label class="grid gap-1">Close time
+              <input id="close_time" type="time" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+            </label>
+          </form>
+        </section>
+
+        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
+          <h2 class="font-semibold mb-3">Actions</h2>
+          <div class="grid gap-2">
+            <button id="saveAll" class="inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-brand-500 text-white text-sm font-semibold hover:bg-brand-700"><span class="material-symbols-rounded text-base">save</span> Save changes</button>
+            <a href="./jobs.html" class="inline-flex items-center gap-2 rounded-xl px-4 py-2 ring-soft text-sm hover:bg-black/5 dark:hover:bg-white/10"><span class="material-symbols-rounded text-base">assignment</span> Go to Jobs</a>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 hidden">
+    <div class="px-4 py-2 rounded-xl bg-brand-500 text-white shadow">
+      <span id="toastMsg" class="text-sm"></span>
+    </div>
+  </div>
+
+  <script>
+    // Theme toggle
+    const themeBtn = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const syncIcon = () => { if (!themeIcon) return; themeIcon.textContent = document.documentElement.classList.contains('dark') ? 'light_mode' : 'dark_mode' };
+    themeBtn?.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.setItem('px_theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+      syncIcon();
+    });
+    syncIcon();
+
+    const toast = (msg, ms = 1600) => {
+      const t = document.getElementById('toast'), m = document.getElementById('toastMsg');
+      m.textContent = msg; t.classList.remove('hidden', 'opacity-0');
+      t.classList.add('transition', 'duration-200');
+      setTimeout(() => { t.classList.add('opacity-0'); setTimeout(() => t.classList.add('hidden'), 200); }, ms);
+    };
+
+    const API = (window.API_BASE || '').replace(/\/$/, '');
+    const TOKEN = localStorage.getItem('px_token');
+    const authHeader = TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {};
+
+    // If not logged in, go to login
+    if (!TOKEN) { location.href = './login.html'; }
+
+    // DOM refs
+    const els = {
+      name: document.getElementById('name'),
+      phone: document.getElementById('phone'),
+      email: document.getElementById('email'),
+      address: document.getElementById('address'),
+      lat: document.getElementById('lat'),
+      lng: document.getElementById('lng'),
+      is_open: document.getElementById('is_open'),
+      paused: document.getElementById('paused'),
+      cap_color: document.getElementById('cap_color'),
+      cap_bw: document.getElementById('cap_bw'),
+      cap_duplex: document.getElementById('cap_duplex'),
+      cap_sizes: document.getElementById('cap_sizes'),
+      cap_binding: document.getElementById('cap_binding'),
+      price_hint: document.getElementById('price_hint'),
+      open_time: document.getElementById('open_time'),
+      close_time: document.getElementById('close_time'),
+      chipShopId: document.getElementById('chipShopId'),
+      chipStatus: document.getElementById('chipStatus'),
+    };
+
+    const pricingKeys = [
+      {key: 'bw_single', label: 'B/W — Single side'},
+      {key: 'bw_duplex', label: 'B/W — Double side'},
+      {key: 'color_single', label: 'Color — Single side'},
+      {key: 'color_duplex', label: 'Color — Double side'},
+    ];
+    const pricingEl = document.getElementById('pricingForms');
+    const pricingState = { bw_single: [], bw_duplex: [], color_single: [], color_duplex: [] };
+
+    function renderPricingSection(key, label) {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <div class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4">
+          <div class="font-semibold mb-2">${label}</div>
+          <div class="grid md:grid-cols-3 gap-3" data-key="${key}">
+          </div>
+          <button type="button" class="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/10" data-add="${key}"><span class="material-symbols-rounded text-base">add</span>Add tier</button>
+        </div>`;
+      const grid = wrap.querySelector('div.grid');
+      const add = wrap.querySelector('[data-add]');
+      function addRow(tier={}) {
+        const row = document.createElement('div');
+        row.className = 'grid grid-cols-3 gap-2';
+        row.innerHTML = `
+          <input type="number" placeholder="min" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" value="${tier.min ?? ''}">
+          <input type="number" placeholder="upto" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" value="${tier.upto ?? ''}">
+          <div class="flex gap-2">
+            <input type="number" step="0.01" placeholder="per page (₹)" class="flex-1 px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" value="${tier.per_page ?? ''}">
+            <button type="button" class="px-2 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/10" title="Remove"><span class="material-symbols-rounded text-base">delete</span></button>
+          </div>`;
+        row.querySelector('button').addEventListener('click', () => { row.remove(); });
+        grid.appendChild(row);
+      }
+      (pricingState[key] || []).forEach(addRow);
+      add.addEventListener('click', () => addRow({}));
+      pricingEl.appendChild(wrap);
+    }
+
+    // Load current profile
+    async function loadProfile() {
+      try {
+        const r = await fetch(`${API}/api/shop/me`, { headers: { ...authHeader } });
+        if (r.status === 401) { location.href = './login.html'; return; }
+        const s = await r.json().catch(() => ({}));
+        // Fill fields (guard against missing keys)
+        els.name.value = s.name || '';
+        els.phone.value = s.phone || '';
+        els.email.value = s.email || '';
+        els.address.value = s.address || '';
+        els.lat.value = (typeof s.lat === 'number' ? s.lat : '');
+        els.lng.value = (typeof s.lng === 'number' ? s.lng : '');
+        els.is_open.checked = !!s.is_open;
+        els.paused.checked = !!s.paused;
+        const caps = s.capabilities || {};
+        els.cap_color.checked = !!caps.color;
+        els.cap_bw.checked = !!caps.bw || !caps.color; // assume B/W if color false
+        els.cap_duplex.checked = !!caps.duplex;
+        // multi-select helpers
+        const setMulti = (sel, arr=[]) => { Array.from(sel.options).forEach(o => o.selected = arr?.includes(o.value)); };
+        setMulti(els.cap_sizes, caps.sizes || []);
+        setMulti(els.cap_binding, caps.binding || caps.bindings || []);
+        els.price_hint.value = s.price_hint || '';
+        els.open_time.value = (s.hours && s.hours.open) || '';
+        els.close_time.value = (s.hours && s.hours.close) || '';
+        els.chipShopId.textContent = s.id ? `ID: ${s.id}` : 'ID: —';
+        const opened = s.created_at ? new Date(s.created_at).toLocaleDateString() : '—';
+        els.chipStatus.textContent = (s.paused ? 'Paused' : (s.is_open ? 'Open' : 'Closed')) + ` · Opened ${opened}`;
+
+        // pricing
+        const p = s.pricing || {};
+        pricingState.bw_single = p.bw_single || [];
+        pricingState.bw_duplex = p.bw_duplex || [];
+        pricingState.color_single = p.color_single || [];
+        pricingState.color_duplex = p.color_duplex || [];
+        pricingEl.innerHTML = '';
+        pricingKeys.forEach(({key, label}) => renderPricingSection(key, label));
+      } catch (e) {
+        toast('Failed to load profile');
+      }
+    }
+
+    // Save
+    async function saveProfile() {
+      const getMulti = (sel) => Array.from(sel.selectedOptions).map(o => o.value);
+      // collect pricing tiers
+      const collectPricing = () => {
+        const out = {};
+        pricingKeys.forEach(({key}) => {
+          const sect = pricingEl.querySelector(`[data-key="${key}"]`);
+          if (!sect) { out[key] = []; return; }
+          const rows = Array.from(sect.querySelectorAll(':scope > div.grid'));
+        });
+        // rows are nested in previous create; instead capture inputs directly under data-key container
+        pricingKeys.forEach(({key}) => {
+          const container = pricingEl.querySelector(`[data-key="${key}"]`);
+          if (!container) { out[key] = []; return; }
+          const rows = Array.from(container.querySelectorAll(':scope > div, :scope > .row')).length ? Array.from(container.children) : [];
+          const triplets = Array.from(container.children).filter(el => el.classList.contains('grid'));
+          const tiers = triplets.map(tr => {
+            const [minEl, uptoEl, priceElWrap] = tr.children;
+            const perEl = priceElWrap.querySelector('input[type="number"]');
+            const t = {
+              min: minEl.value ? Number(minEl.value) : undefined,
+              upto: uptoEl.value ? Number(uptoEl.value) : undefined,
+              per_page: perEl.value ? Number(perEl.value) : undefined,
+            };
+            return t;
+          }).filter(t => t.per_page !== undefined);
+          out[key] = tiers;
+        });
+        return out;
+      };
+
+      const payload = {
+        name: els.name.value.trim(),
+        phone: els.phone.value.trim(),
+        address: els.address.value.trim(),
+        lat: els.lat.value ? Number(els.lat.value) : undefined,
+        lng: els.lng.value ? Number(els.lng.value) : undefined,
+        is_open: !!els.is_open.checked,
+        paused: !!els.paused.checked,
+        capabilities: {
+          color: !!els.cap_color.checked,
+          duplex: !!els.cap_duplex.checked,
+          sizes: getMulti(els.cap_sizes),
+          bindings: getMulti(els.cap_binding),
+        },
+        price_hint: els.price_hint.value.trim(),
+        hours: { open: els.open_time.value, close: els.close_time.value },
+        pricing: collectPricing(),
+      };
+      try {
+        const r = await fetch(`${API}/api/shop/me`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...authHeader },
+          body: JSON.stringify(payload)
+        });
+        if (!r.ok) { toast('Save failed'); return; }
+        toast('Profile saved');
+        loadProfile();
+      } catch { toast('Network error'); }
+    }
+
+    document.getElementById('saveAll').addEventListener('click', (e) => { e.preventDefault(); saveProfile(); });
+    document.getElementById('logout').addEventListener('click', () => { localStorage.removeItem('px_token'); location.href = './login.html'; });
+    document.getElementById('useLoc').addEventListener('click', () => {
+      if (!navigator.geolocation) { toast('Geolocation not supported'); return; }
+      navigator.geolocation.getCurrentPosition(pos => {
+        els.lat.value = pos.coords.latitude.toFixed(6);
+        els.lng.value = pos.coords.longitude.toFixed(6);
+        toast('Location set');
+      }, () => toast('Location denied'), { enableHighAccuracy: true, timeout: 10000 });
+    });
+
+    // Init
+    loadProfile();
+  </script>
+</body>
+
+</html>

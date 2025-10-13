@@ -7757,6 +7757,34 @@ class PrintShopIn(BaseModel):
     capabilities: Optional[ShopCapabilities] = None
 
 
+class PriceTier(BaseModel):
+    min: Optional[int] = Field(default=None, ge=0)
+    upto: Optional[int] = Field(default=None, ge=1)
+    per_page: float = Field(description="Price per page for this tier")
+
+
+class ShopPricing(BaseModel):
+    bw_single: List[PriceTier] = Field(default_factory=list)
+    bw_duplex: List[PriceTier] = Field(default_factory=list)
+    color_single: List[PriceTier] = Field(default_factory=list)
+    color_duplex: List[PriceTier] = Field(default_factory=list)
+
+
+class UpdateShopIn(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    hours: Optional[dict] = None
+    capabilities: Optional[ShopCapabilities] = None
+    is_open: Optional[bool] = None
+    paused: Optional[bool] = None
+    price_hint: Optional[str] = None
+    pricing: Optional[ShopPricing] = None
+
+
 class PrintSettings(BaseModel):
     copies: int = Field(default=1, ge=1, le=50)
     color_mode: str = Field(default="auto", description="auto|bw|color")
@@ -7998,6 +8026,51 @@ def shop_me(authorization: Optional[str] = Header(default=None)):
     if not row:
         raise HTTPException(status_code=404, detail="No shop found for user")
     return row
+
+
+@print_router.patch("/api/shop/me", summary="Update my shop profile")
+def shop_me_update(payload: UpdateShopIn, authorization: Optional[str] = Header(default=None)):
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    # Resolve my shop id
+    res = supabase.table(PRINT_SHOPS_TABLE).select("id").eq("owner_user_id", uid).limit(1).execute()
+    row = (getattr(res, 'data', []) or [{}])[0]
+    if not row:
+        raise HTTPException(status_code=404, detail="No shop found for user")
+    shop_id = row.get("id")
+    # Build update dict
+    to_update: Dict[str, Any] = {}
+    if payload.name is not None:
+        to_update["name"] = payload.name
+    if payload.phone is not None:
+        to_update["phone"] = payload.phone
+    if payload.email is not None:
+        to_update["email"] = payload.email
+    if payload.address is not None:
+        to_update["address"] = payload.address
+    if payload.lat is not None:
+        to_update["lat"] = payload.lat
+    if payload.lng is not None:
+        to_update["lng"] = payload.lng
+    if payload.hours is not None:
+        to_update["hours"] = payload.hours
+    if payload.capabilities is not None:
+        to_update["capabilities"] = payload.capabilities.dict()
+    if payload.is_open is not None:
+        to_update["is_open"] = payload.is_open
+    if payload.paused is not None:
+        to_update["paused"] = payload.paused
+    if payload.price_hint is not None:
+        to_update["price_hint"] = payload.price_hint
+    if payload.pricing is not None:
+        to_update["pricing"] = payload.pricing.dict()
+    to_update["updated_at"] = _now_iso()
+    if not to_update:
+        return {"ok": True, "updated": 0}
+    upd = supabase.table(PRINT_SHOPS_TABLE).update(_supabase_payload(to_update)).eq("id", shop_id).execute()
+    if getattr(upd, 'error', None):
+        raise HTTPException(status_code=500, detail=f"Failed to update: {upd.error}")
+    return {"ok": True}
 
 
 @print_router.get("/api/shop/jobs", summary="List jobs for my shop")

@@ -69,6 +69,36 @@
       outline: none;
       box-shadow: 0 0 0 3px rgba(158, 75, 138, .35)
     }
+
+    /* Material-inspired surfaces and chips */
+    .surface {
+      background: rgba(255, 255, 255, .86);
+      backdrop-filter: blur(14px)
+    }
+
+    .dark .surface {
+      background: rgba(30, 30, 47, .66)
+    }
+
+    .surface-elev {
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .07), 0 8px 28px rgba(0, 0, 0, .18)
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      padding: .25rem .6rem;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, .7);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+      font-size: 12px
+    }
+
+    .dark .chip {
+      background: rgba(255, 255, 255, .08);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
+    }
   </style>
 </head>
 
@@ -76,9 +106,8 @@
   class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.18),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(76,42,89,.25),transparent)] dark:bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.2),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(30,30,47,.7),transparent)]">
 
   <!-- Header -->
-  <header
-    class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
-    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+  <header class="sticky top-0 z-50 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
       <a href="../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
         <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-8 w-auto dark:hidden">
         <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-8 w-auto hidden dark:block">
@@ -95,114 +124,149 @@
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-4 py-6 space-y-4">
-    <!-- Title row -->
-    <div class="flex flex-wrap items-center gap-2 text-sm">
-      <a href="#" onclick="history.back();return false;"
-        class="inline-flex items-center gap-1 px-2 py-1 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/5">
-        <span class="material-symbols-rounded text-sm">arrow_back</span>Back
-      </a>
-      <h1 class="text-xl font-bold">Find a Print Shop</h1>
-    </div>
-
-    <!-- Filters -->
-    <section class="glass rounded-2xl p-4 ring-1 ring-black/5 dark:ring-white/10">
-      <form id="filters" class="grid grid-cols-1 md:grid-cols-12 gap-3 text-[13px]">
-        <!-- Search / location -->
-        <div class="md:col-span-5 flex gap-2">
-          <input type="text" id="q" placeholder="Pin/Area (or type College name)"
-            class="flex-1 px-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring">
-          <button type="button" id="useLoc"
-            class="inline-flex items-center gap-1 px-3 py-2 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/5">
-            <span class="material-symbols-rounded text-base">my_location</span><span>Use my location</span>
-          </button>
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <!-- Hero / Title row -->
+    <section class="rounded-3xl surface surface-elev ring-1 ring-black/5 dark:ring-white/10 overflow-hidden">
+      <div class="relative p-5 md:p-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3 text-sm">
+            <a href="#" onclick="history.back();return false;"
+              class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full chip hover:bg-black/10 dark:hover:bg-white/10">
+              <span class="material-symbols-rounded text-sm">arrow_back</span>Back
+            </a>
+            <span class="hidden sm:inline opacity-60">/</span>
+            <h1 class="text-xl md:text-2xl font-extrabold tracking-tight">Find a Print Shop</h1>
+          </div>
+          <div class="hidden md:flex items-center gap-2 opacity-80 text-[12px]">
+            <span class="chip"><span class="material-symbols-rounded text-sm">shield</span>Trusted partners</span>
+            <span class="chip"><span class="material-symbols-rounded text-sm">bolt</span>Fast turnaround</span>
+          </div>
         </div>
-
-        <!-- Radius -->
-        <div class="md:col-span-2">
-          <select id="radius" class="w-full px-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring">
-            <option value="2">2 km</option>
-            <option value="5" selected>5 km</option>
-            <option value="10">10 km</option>
-            <option value="20">20 km</option>
-          </select>
-        </div>
-
-        <!-- Size -->
-        <div class="md:col-span-2">
-          <select id="size" class="w-full px-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring">
-            <option value="">Any size</option>
-            <option>A4</option>
-            <option>A3</option>
-            <option>Letter</option>
-          </select>
-        </div>
-
-        <!-- Binding -->
-        <div class="md:col-span-2">
-          <select id="binding" class="w-full px-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring">
-            <option value="">Binding</option>
-            <option>staple</option>
-            <option>spiral</option>
-          </select>
-        </div>
-
-        <!-- Sort -->
-        <div class="md:col-span-1">
-          <select id="sort" class="w-full px-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring"
-            title="Sort">
-            <option value="">Sort</option>
-            <option value="distance">Nearest</option>
-            <option value="price">Lowest Price</option>
-            <option value="rating">Top Rated</option>
-          </select>
-        </div>
-
-        <!-- Toggles -->
-        <div class="md:col-span-12 flex flex-wrap items-center gap-3 pt-1">
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" id="open_now"> Open now
-          </label>
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" id="color"> Color
-          </label>
-
-          <button type="submit"
-            class="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-md bg-brand-500 text-white hover:bg-brand-700 shadow-elev-1">
-            <span class="material-symbols-rounded text-base">search</span>Search
-          </button>
-          <button type="button" id="clearFilters"
-            class="inline-flex items-center gap-1 px-3 py-2 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/5">
-            <span class="material-symbols-rounded text-base">close</span>Clear
-          </button>
-          <span id="status" class="text-[12px] opacity-70"></span>
-        </div>
-
-        <!-- Active filter chips -->
-        <div id="chips" class="md:col-span-12 hidden flex-wrap gap-2 pt-1"></div>
-      </form>
+        <p class="mt-2 text-sm opacity-80 max-w-2xl">Search nearby print partners, filter by size, color, and binding,
+          and configure your print in a few clicks.</p>
+      </div>
     </section>
 
-    <!-- Results -->
-    <section id="resultsWrap">
-      <div id="skeletonGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <!-- Skeleton cards -->
-        <div class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4 animate-pulse h-32"></div>
-        <div class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4 animate-pulse h-32"></div>
-        <div class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4 animate-pulse h-32"></div>
-      </div>
-
-      <div id="shopList" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
-
-      <div id="emptyState" class="hidden">
-        <div class="rounded-3xl p-8 text-center glass ring-1 ring-black/5 dark:ring-white/10">
-          <div class="mx-auto w-12 h-12 rounded-full bg-white/60 dark:bg-white/10 grid place-items-center mb-3">
-            <span class="material-symbols-rounded">travel_explore</span>
+    <!-- Layout: Filters (left) + Results (right) -->
+    <section class="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <!-- Filters panel -->
+      <aside class="md:col-span-4 lg:col-span-3">
+        <div class="rounded-3xl surface surface-elev ring-1 ring-black/5 dark:ring-white/10 sticky top-20">
+          <div class="p-4 border-b border-black/5 dark:border-white/10 flex items-center justify-between">
+            <h2 class="font-semibold">Filters</h2>
+            <span id="status" class="text-[12px] opacity-70"></span>
           </div>
-          <h3 class="font-semibold">No shops matched your filters</h3>
-          <p class="text-sm opacity-75">Try expanding the radius or clearing a filter.</p>
+          <form id="filters" class="p-4 grid grid-cols-1 gap-3 text-[13px]">
+            <!-- Search / location -->
+            <div class="flex gap-2">
+              <div class="flex-1 relative">
+                <span
+                  class="material-symbols-rounded absolute left-2 top-1/2 -translate-y-1/2 opacity-60 text-base">search</span>
+                <input type="text" id="q" placeholder="Pin/Area or College name"
+                  class="w-full pl-8 pr-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring" />
+              </div>
+              <button type="button" id="useLoc"
+                class="inline-flex items-center gap-1 px-3 py-2 rounded-md ring-soft hover:shadow-elev-1">
+                <span class="material-symbols-rounded text-base">my_location</span><span
+                  class="hidden sm:inline">Use</span>
+              </button>
+            </div>
+
+            <!-- Radius -->
+            <label class="text-[12px] opacity-70">Radius</label>
+            <select id="radius" class="w-full px-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option value="2">2 km</option>
+              <option value="5" selected>5 km</option>
+              <option value="10">10 km</option>
+              <option value="20">20 km</option>
+            </select>
+
+            <!-- Size -->
+            <label class="text-[12px] opacity-70 mt-2">Paper Size</label>
+            <select id="size" class="w-full px-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option value="">Any size</option>
+              <option>A4</option>
+              <option>A3</option>
+              <option>Letter</option>
+            </select>
+
+            <!-- Binding -->
+            <label class="text-[12px] opacity-70 mt-2">Binding</label>
+            <select id="binding" class="w-full px-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option value="">Any</option>
+              <option>staple</option>
+              <option>spiral</option>
+            </select>
+
+            <!-- Toggles -->
+            <div class="flex flex-col gap-2 pt-1">
+              <label class="inline-flex items-center gap-2">
+                <input type="checkbox" id="open_now"> Open now
+              </label>
+              <label class="inline-flex items-center gap-2">
+                <input type="checkbox" id="color"> Color
+              </label>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2 pt-2">
+              <button type="submit"
+                class="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-brand-500 text-white hover:bg-brand-700 shadow-elev-1">
+                <span class="material-symbols-rounded text-base">tune</span>Apply
+              </button>
+              <button type="button" id="clearFilters"
+                class="inline-flex items-center gap-1 px-3 py-2 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/5">
+                <span class="material-symbols-rounded text-base">close</span>Clear
+              </button>
+            </div>
+
+            <!-- Active filter chips -->
+            <div id="chips" class="hidden flex-wrap gap-2 pt-2"></div>
+          </form>
         </div>
-      </div>
+      </aside>
+
+      <!-- Results area -->
+      <section id="resultsWrap" class="md:col-span-8 lg:col-span-9 space-y-4">
+        <!-- Results toolbar -->
+        <div
+          class="rounded-2xl surface ring-1 ring-black/5 dark:ring-white/10 p-3 flex flex-wrap items-center gap-3 justify-between">
+          <div class="flex items-center gap-2 text-[12px] opacity-80">
+            <span class="chip"><span class="material-symbols-rounded text-sm">map</span>Nearby</span>
+            <span class="chip"><span class="material-symbols-rounded text-sm">layers</span>All partners</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="sort" class="text-[12px] opacity-70">Sort</label>
+            <select id="sort" title="Sort"
+              class="px-3 py-2 rounded-md ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              <option value="">Default</option>
+              <option value="distance">Nearest</option>
+              <option value="price">Lowest Price</option>
+              <option value="rating">Top Rated</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Results grid -->
+        <div id="skeletonGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <!-- Skeleton cards -->
+          <div class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5 animate-pulse h-36"></div>
+          <div class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5 animate-pulse h-36"></div>
+          <div class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5 animate-pulse h-36"></div>
+        </div>
+
+        <div id="shopList" class="hidden grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+
+        <div id="emptyState" class="hidden">
+          <div class="rounded-3xl p-10 text-center surface ring-1 ring-black/5 dark:ring-white/10">
+            <div class="mx-auto w-12 h-12 rounded-full bg-white/60 dark:bg-white/10 grid place-items-center mb-3">
+              <span class="material-symbols-rounded">travel_explore</span>
+            </div>
+            <h3 class="font-semibold">No shops matched your filters</h3>
+            <p class="text-sm opacity-75">Try expanding the radius or clearing a filter.</p>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -328,6 +392,31 @@
             <div class="text-[12px] opacity-70 truncate">${shop.address || ''}</div>
             <div class="text-[12px] mt-1">${color} • Sizes: ${sizes}</div>
             ${priceHint ? `<div class="text-[11px] opacity-80 mt-1">${priceHint}</div>` : ''}
+          </div>
+          <span class="material-symbols-rounded opacity-40 group-hover:opacity-80 transition">chevron_right</span>
+        </div>`;
+      // Override to upgraded Material-style card
+      a.className = 'group block rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-4 hover:shadow-neon transition';
+      a.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="shrink-0 w-10 h-10 rounded-full bg-brand-500/15 grid place-items-center">
+            <span class="material-symbols-rounded">local_printshop</span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <h3 class="font-semibold truncate">${shop.name || 'Print Shop'}</h3>
+              ${open
+          ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30">Open</span>'
+          : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-neutral-500/10 text-neutral-600 ring-1 ring-black/10">Closed</span>'}
+              ${rating ? `<span class=\"text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-700 ring-1 ring-yellow-500/30\">★ ${rating}</span>` : ''}
+              ${distanceLabel ? `<span class=\"text-[10px] px-1.5 py-0.5 rounded bg-white/60 dark:bg-white/10 ring-soft\">${distanceLabel}</span>` : ''}
+            </div>
+            <div class="text-[12px] opacity-70 truncate">${shop.address || ''}</div>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <span class="chip">${color}</span>
+              <span class="chip">Sizes: ${sizes}</span>
+              ${priceHint ? `<span class=\"chip\">${priceHint}</span>` : ''}
+            </div>
           </div>
           <span class="material-symbols-rounded opacity-40 group-hover:opacity-80 transition">chevron_right</span>
         </div>`;
