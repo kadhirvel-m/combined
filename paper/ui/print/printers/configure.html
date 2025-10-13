@@ -142,9 +142,8 @@
           <label class="col-span-2">Color Mode
             <select name="color_mode"
               class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
-              <option value="auto">Auto-detect</option>
-              <option value="bw">Force BW</option>
-              <option value="color">Force Color</option>
+              <option value="bw">Black & White</option>
+              <option value="color">Color</option>
             </select>
           </label>
 
@@ -152,12 +151,11 @@
             <select name="duplex"
               class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
               <option value="off">Off</option>
-              <option value="long">Long-edge</option>
-              <option value="short">Short-edge</option>
+              <option value="long">On (long side)</option>
             </select>
           </label>
 
-          <label>N-up
+          <label>Pages per sheet
             <select name="n_up"
               class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
               <option>1</option>
@@ -177,15 +175,7 @@
             </select>
           </label>
 
-          <label>Paper Weight
-            <select name="paper_gsm"
-              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
-              <option value="">Default</option>
-              <option>70</option>
-              <option>80</option>
-              <option>100</option>
-            </select>
-          </label>
+          
 
           <label>Finishing
             <select name="finishing"
@@ -196,11 +186,27 @@
             </select>
           </label>
 
-          <label class="col-span-2">Page Range
-            <input name="page_range" placeholder="all or e.g. 1-4,7"
-              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
-            <span id="rangeHint" class="block text-[11px] opacity-70 mt-1"></span>
-          </label>
+          <fieldset class="col-span-2">
+            <legend class="mb-1">Page Range</legend>
+            <div class="flex flex-col gap-2">
+              <label class="inline-flex items-center gap-2">
+                <input type="radio" name="range_mode" value="all" checked>
+                <span>All pages</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="radio" name="range_mode" value="range">
+                <span>Page range</span>
+                <input name="page_range" placeholder="e.g. 1-4,7" class="flex-1 px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring"
+                       disabled>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="radio" name="range_mode" value="single">
+                <span>Single page</span>
+                <input name="single_page" type="number" min="1" class="w-28 px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring" disabled>
+              </label>
+              <span id="rangeHint" class="block text-[11px] opacity-70"></span>
+            </div>
+          </fieldset>
 
           <label>Fit/Scale
             <select name="scale"
@@ -267,16 +273,14 @@
               <span class="material-symbols-rounded">palette</span>
               <p class="text-sm font-semibold">Color mode</p>
             </div>
-            <p class="text-[12px] opacity-80">“Auto” detects color pages and charges color only where needed (if
-              supported by shop).</p>
+            <p class="text-[12px] opacity-80">Choose Color or Black & White. Auto-detect is disabled.</p>
           </div>
           <div class="p-4 rounded-2xl bg-white/70 dark:bg-white/5 ring-soft">
             <div class="flex items-center gap-2 mb-1">
               <span class="material-symbols-rounded">compare_arrows</span>
-              <p class="text-sm font-semibold">N-up & Duplex</p>
+              <p class="text-sm font-semibold">Pages/Sheet & Duplex</p>
             </div>
-            <p class="text-[12px] opacity-80">N-up places multiple pages per side; duplex prints both sides — both
-              reduce sheets.</p>
+            <p class="text-[12px] opacity-80">Pages per sheet places multiple pages per side; duplex prints both sides — both reduce sheets.</p>
           </div>
         </div>
       </div>
@@ -328,9 +332,22 @@
       const duplex = f.get('duplex') || 'off';
       const totalPages = parseInt(state.pages || '') || 0;
 
-      // If page_range reduces page count
-      const rangeText = f.get('page_range');
-      const rangeCount = parseRange(rangeText, totalPages);
+      // Determine selected pages from range mode
+      const rangeMode = f.get('range_mode') || 'all';
+      let rangeText = 'all';
+      let rangeCount = totalPages;
+      if (rangeMode === 'range') {
+        rangeText = f.get('page_range') || '';
+        rangeCount = parseRange(rangeText, totalPages);
+      } else if (rangeMode === 'single') {
+        const sp = parseInt(f.get('single_page') || '');
+        if (Number.isFinite(sp)) {
+          rangeText = String(sp);
+          rangeCount = (sp >= 1 && (!totalPages || sp <= totalPages)) ? 1 : null;
+        } else {
+          rangeCount = null;
+        }
+      }
       const pagesUsed = (rangeCount != null) ? rangeCount : totalPages;
 
       // Effective sheet math
@@ -348,16 +365,16 @@
 
       // Small meta under preview
       const cm = f.get('color_mode');
+      const cmText = cm === 'bw' ? 'B/W' : (cm === 'color' ? 'Color' : cm);
       const ps = f.get('paper_size');
-      const gsm = f.get('paper_gsm') || 'Default';
       const up = `${nup}-up`;
       const dx = duplex === 'off' ? 'Simplex' : `Duplex (${duplex})`;
       $('#previewMeta').textContent = [
         state.pages ? `${state.pages} pages total` : null,
         `Range: ${rangeText || 'all'}`,
-        `Mode: ${cm}`,
+        `Mode: ${cmText}`,
         `${up}, ${dx}`,
-        `Paper: ${ps}, ${gsm} GSM`
+        `Paper: ${ps}`
       ].filter(Boolean).join(' • ');
     }
 
@@ -365,10 +382,10 @@
     function applyPreset(which) {
       const f = $('#cfg');
       const map = {
-        eco: { color_mode: 'bw', duplex: 'long', n_up: '2', paper_size: 'A4', paper_gsm: '70', finishing: 'none', scale: 'fit' },
-        handout: { color_mode: 'bw', duplex: 'long', n_up: '2', paper_size: 'A4', paper_gsm: '80', finishing: 'staple', scale: 'fit' },
-        poster: { color_mode: 'color', duplex: 'off', n_up: '1', paper_size: 'A3', paper_gsm: '100', finishing: 'none', scale: 'actual' },
-        booklet: { color_mode: 'bw', duplex: 'short', n_up: '2', paper_size: 'A4', paper_gsm: '80', finishing: 'staple', scale: 'shrink' }
+        eco: { color_mode: 'bw', duplex: 'long', n_up: '2', paper_size: 'A4', finishing: 'none', scale: 'fit' },
+        handout: { color_mode: 'bw', duplex: 'long', n_up: '2', paper_size: 'A4', finishing: 'staple', scale: 'fit' },
+        poster: { color_mode: 'color', duplex: 'off', n_up: '1', paper_size: 'A3', finishing: 'none', scale: 'actual' },
+        booklet: { color_mode: 'bw', duplex: 'long', n_up: '2', paper_size: 'A4', finishing: 'staple', scale: 'shrink' }
       }[which] || {};
       Object.entries(map).forEach(([k, v]) => {
         const el = f.querySelector(`[name="${k}"]`);
@@ -408,7 +425,7 @@
       if (!caps.duplex) {
         const dx = $('#cfg [name="duplex"]');
         dx.value = 'off';
-        $$(`#cfg [name="duplex"] option[value="long"], #cfg [name="duplex"] option[value="short"]`).forEach(o => o.setAttribute('disabled', ''));
+        $$(`#cfg [name="duplex"] option[value="long"]`).forEach(o => o.setAttribute('disabled', ''));
         msgs.push('Duplex not supported');
       }
       hint.textContent = msgs.length ? msgs.join(' • ') : 'Shop ready';
@@ -418,10 +435,17 @@
     function updateRangeHint() {
       const f = new FormData($('#cfg'));
       const totalPages = parseInt(state.pages || '') || 0;
-      const res = parseRange(f.get('page_range'), totalPages);
+      const mode = f.get('range_mode') || 'all';
+      let res = totalPages;
+      if (mode === 'range') {
+        res = parseRange(f.get('page_range'), totalPages);
+      } else if (mode === 'single') {
+        const sp = parseInt(f.get('single_page') || '');
+        res = (Number.isFinite(sp) && sp >= 1 && (!totalPages || sp <= totalPages)) ? 1 : null;
+      }
       const el = $('#rangeHint');
-      if (f.get('page_range') && res == null) {
-        el.textContent = 'Invalid range. Use numbers and ranges like 1-4,7.';
+      if ((mode === 'range' || mode === 'single') && res == null) {
+        el.textContent = mode === 'single' ? 'Enter a valid page number.' : 'Invalid range. Use numbers and ranges like 1-4,7.';
         el.classList.remove('opacity-70'); el.classList.add('text-red-600');
       } else if (res != null && totalPages) {
         el.textContent = `Selected ${res} of ${totalPages} pages.`;
@@ -460,6 +484,23 @@
       // Wire form reactions
       $('#cfg').addEventListener('input', updateSummary);
       $('#cfg').addEventListener('change', updateSummary);
+
+      // Enable/disable range inputs based on selection
+      $('#cfg').addEventListener('change', (e) => {
+        if (e.target && e.target.name === 'range_mode') {
+          const mode = e.target.value;
+          const rangeInput = $('#cfg [name="page_range"]');
+          const singleInput = $('#cfg [name="single_page"]');
+          if (mode === 'range') {
+            rangeInput.disabled = false; singleInput.disabled = true; singleInput.value = '';
+          } else if (mode === 'single') {
+            rangeInput.disabled = true; rangeInput.value = ''; singleInput.disabled = false;
+          } else {
+            rangeInput.disabled = true; rangeInput.value = ''; singleInput.disabled = true; singleInput.value = '';
+          }
+          updateSummary();
+        }
+      });
 
       // Presets
       $$('.preset').forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
