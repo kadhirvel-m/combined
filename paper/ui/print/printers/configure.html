@@ -104,7 +104,7 @@
 
   <main class="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
     <!-- Left: Settings -->
-    <section class="lg:col-span-4">
+    <section class="lg:col-span-6">
       <div class="glass rounded-3xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-neon">
         <div class="flex items-center justify-between mb-3">
           <div class="text-sm font-semibold">Settings</div>
@@ -133,13 +133,15 @@
           </div>
         </div>
 
-        <form id="cfg" class="grid grid-cols-2 gap-3 text-[13px]">
-          <label class="col-span-2">Copies
+        <form id="cfg" class="grid grid-cols-2 md:grid-cols-3 gap-3 text-[13px]">
+          <label class="col-span-2 md:col-span-1 inline-flex flex-col">
+            <span class="inline-flex items-center gap-2"><span class="material-symbols-rounded">content_copy</span> Copies</span>
             <input name="copies" type="number" min="1" max="50" value="1"
-              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+              class="mt-1 w-24 px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
           </label>
 
-          <label class="col-span-2">Color Mode
+          <label class="col-span-2 md:col-span-1 inline-flex flex-col">
+            <span class="inline-flex items-center gap-2"><span class="material-symbols-rounded">palette</span> Color Mode</span>
             <select name="color_mode"
               class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
               <option value="bw">Black & White</option>
@@ -147,7 +149,8 @@
             </select>
           </label>
 
-          <label>Duplex
+          <label class="col-span-2 md:col-span-1 inline-flex flex-col">
+            <span class="inline-flex items-center gap-2"><span class="material-symbols-rounded">swap_vert</span> Duplex</span>
             <select name="duplex"
               class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
               <option value="off">Off</option>
@@ -155,18 +158,81 @@
             </select>
           </label>
 
-          <label>Pages per sheet
-            <select name="n_up"
-              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
+          <div class="col-span-2 md:col-span-2 relative" id="nupPicker">
+            <div class="flex items-center justify-between">
+              <label class="inline-flex items-center gap-2">
+                <span class="material-symbols-rounded">view_quilt</span>
+                <span>Pages per sheet</span>
+              </label>
+              <button type="button" id="nupPickerBtn" class="text-[12px] inline-flex items-center gap-1 px-2 py-1 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/5">
+                <span class="material-symbols-rounded text-base">expand_more</span>
+                <span id="nupSelectedLabel">1 per sheet</span>
+              </button>
+            </div>
+            <select name="n_up" id="n_up_select" class="hidden">
               <option>1</option>
               <option>2</option>
               <option>4</option>
               <option>6</option>
               <option>9</option>
             </select>
-          </label>
+            <div id="nupPanel" class="hidden absolute z-20 mt-2 w-[min(28rem,100%)] right-0 p-3 rounded-xl bg-white/95 dark:bg-brand-900/80 ring-1 ring-black/10 dark:ring-white/15 shadow-elev-2">
+              <div class="text-[12px] opacity-70 mb-2">Choose how many pages to place on each sheet.</div>
+              <div class="grid grid-cols-3 gap-3">
+                <button type="button" data-value="1" class="nupTile group rounded-lg ring-soft p-3 hover:bg-black/5 dark:hover:bg-white/5">
+                  <div class="grid grid-cols-1 gap-1 h-20">
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                  </div>
+                  <div class="mt-2 text-center text-[12px] opacity-80">1 per sheet</div>
+                </button>
+                <button type="button" data-value="2" class="nupTile group rounded-lg ring-soft p-3 hover:bg-black/5 dark:hover:bg-white/5">
+                  <div class="grid grid-cols-2 gap-1 h-20">
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                  </div>
+                  <div class="mt-2 text-center text-[12px] opacity-80">2 per sheet</div>
+                </button>
+                <button type="button" data-value="4" class="nupTile group rounded-lg ring-soft p-3 hover:bg-black/5 dark:hover:bg-white/5">
+                  <div class="grid grid-cols-2 gap-1 h-20">
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                  </div>
+                  <div class="mt-2 text-center text-[12px] opacity-80">4 per sheet</div>
+                </button>
+                <button type="button" data-value="6" class="nupTile group rounded-lg ring-soft p-3 hover:bg-black/5 dark:hover:bg-white/5">
+                  <div class="grid grid-cols-3 gap-1 h-20">
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                  </div>
+                  <div class="mt-2 text-center text-[12px] opacity-80">6 per sheet</div>
+                </button>
+                <button type="button" data-value="9" class="nupTile group rounded-lg ring-soft p-3 hover:bg-black/5 dark:hover:bg-white/5">
+                  <div class="grid grid-cols-3 gap-1 h-20">
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                    <div class="bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                  </div>
+                  <div class="mt-2 text-center text-[12px] opacity-80">9 per sheet</div>
+                </button>
+              </div>
+              <div class="mt-3 text-[11px] opacity-70 flex items-center gap-2"><span class="material-symbols-rounded text-base">info</span>Higher pages per sheet reduce paper usage but make text smaller.</div>
+            </div>
+          </div>
 
-          <label>Paper Size
+          <label class="col-span-2 md:col-span-1 inline-flex flex-col">
+            <span class="inline-flex items-center gap-2"><span class="material-symbols-rounded">description</span> Paper Size</span>
             <select name="paper_size"
               class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring">
               <option>A4</option>
@@ -174,6 +240,43 @@
               <option>Letter</option>
             </select>
           </label>
+
+          <div class="col-span-2 relative" id="oriPicker">
+            <div class="flex items-center justify-between">
+              <label class="inline-flex items-center gap-2">
+                <span class="material-symbols-rounded">screen_rotation</span>
+                <span>Orientation</span>
+              </label>
+              <button type="button" id="oriPickerBtn" class="text-[12px] inline-flex items-center gap-1 px-2 py-1 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/5">
+                <span class="material-symbols-rounded text-base">expand_more</span>
+                <span id="oriSelectedLabel">Vertical (default)</span>
+              </button>
+            </div>
+            <select name="orientation" id="orientation_select" class="hidden">
+              <option value="vertical" selected>Vertical (default)</option>
+              <option value="horizontal">Horizontal</option>
+            </select>
+            <div id="oriPanel" class="hidden absolute z-20 mt-2 w-[min(24rem,100%)] right-0 p-3 rounded-xl bg-white/95 dark:bg-brand-900/80 ring-1 ring-black/10 dark:ring-white/15 shadow-elev-2">
+              <div class="text-[12px] opacity-70 mb-2">Choose page orientation for preview.</div>
+              <div class="grid grid-cols-2 gap-3">
+                <!-- Vertical -->
+                <button type="button" data-value="vertical" class="oriTile group rounded-lg ring-soft p-3 hover:bg-black/5 dark:hover:bg-white/5">
+                  <div class="grid place-items-center h-20">
+                    <div class="w-10 h-14 bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                  </div>
+                  <div class="mt-2 text-center text-[12px] opacity-80">Vertical</div>
+                </button>
+                <!-- Horizontal -->
+                <button type="button" data-value="horizontal" class="oriTile group rounded-lg ring-soft p-3 hover:bg-black/5 dark:hover:bg-white/5">
+                  <div class="grid place-items-center h-20">
+                    <div class="w-14 h-10 bg-white dark:bg-white/10 rounded ring-1 ring-black/10 dark:ring-white/15"></div>
+                  </div>
+                  <div class="mt-2 text-center text-[12px] opacity-80">Horizontal</div>
+                </button>
+              </div>
+              <div class="mt-3 text-[11px] opacity-70 flex items-center gap-2"><span class="material-symbols-rounded text-base">info</span>Vertical is portrait; Horizontal rotates to landscape.</div>
+            </div>
+          </div>
 
           
 
@@ -242,7 +345,7 @@
     </section>
 
     <!-- Right: Preview -->
-    <section class="lg:col-span-8">
+    <section class="lg:col-span-6">
       <div class="glass rounded-3xl p-5 ring-1 ring-black/5 dark:ring-white/10">
         <div class="flex items-center justify-between mb-3">
           <div class="text-sm font-semibold">Preview</div>
@@ -303,6 +406,29 @@
     const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
     const ceil = Math.ceil;
 
+    // Expand a range string like "1-3,7" into a sorted unique array of page numbers
+    function expandRange(input, totalPages) {
+      const t = (input || '').trim();
+      if (!t) return [];
+      const set = new Set();
+      const parts = t.split(',').map(s => s.trim()).filter(Boolean);
+      for (const seg of parts) {
+        if (/^\d+$/.test(seg)) {
+          const v = parseInt(seg, 10);
+          if (!totalPages || (v >= 1 && v <= totalPages)) set.add(v); else return [];
+        } else if (/^\d+\s*-\s*\d+$/.test(seg)) {
+          let [a, b] = seg.split('-').map(s => parseInt(s.trim(), 10));
+          if (a > b) return [];
+          const lo = Math.max(1, a);
+          const hi = totalPages ? Math.min(totalPages, b) : b;
+          for (let i = lo; i <= hi; i++) set.add(i);
+        } else {
+          return [];
+        }
+      }
+      return Array.from(set).sort((x, y) => x - y);
+    }
+
     // Basic page-range validator / counter: returns number of pages selected or null if invalid
     function parseRange(input, totalPages) {
       const t = (input || '').trim();
@@ -325,6 +451,7 @@
     }
 
     // ---------- Populate preview meta ----------
+    let previewBaseSrc = '';
     function refreshPreviewMeta() {
       const f = new FormData($('#cfg'));
       const copies = clamp(parseInt(f.get('copies') || '1'), 1, 50);
@@ -376,6 +503,75 @@
         `${up}, ${dx}`,
         `Paper: ${ps}`
       ].filter(Boolean).join(' • ');
+
+      // Update the live preview frame to show selected pages immediately
+      applyPreviewPageFilter({ mode: rangeMode, rangeText, singlePage: f.get('single_page') });
+      // Apply orientation to preview
+      applyPreviewOrientation(f.get('orientation') || 'vertical');
+    }
+
+    function applyPreviewPageFilter({ mode, rangeText, singlePage }) {
+      const wrap = document.getElementById('preview');
+      if (!wrap) return;
+      const iframe = wrap.querySelector('iframe');
+      const badge = document.getElementById('previewRangeBadge');
+      if (!iframe || !previewBaseSrc) return;
+      let firstPage = 1;
+      const totalPages = parseInt(state.pages || '') || 0;
+      if (mode === 'single') {
+        const sp = parseInt(singlePage || '');
+        if (Number.isFinite(sp) && sp >= 1) firstPage = sp;
+      } else if (mode === 'range') {
+        const arr = expandRange(rangeText || '', totalPages);
+        if (arr.length) firstPage = arr[0];
+      }
+      // Compose URL: keep any existing query, set hash to desired view
+      const u = new URL(previewBaseSrc, location.href);
+      if (mode === 'range') {
+        u.searchParams.set('range', (rangeText || '').trim());
+      } else {
+        u.searchParams.delete('range');
+      }
+      // Add a cache-busting param tied to first page to force some viewers to update
+      u.searchParams.set('_p', String(firstPage));
+      // PDF.js understands #page= and #view=fitH. If backend ignores, harmless.
+      const hash = `page=${firstPage}&view=fitH`;
+      const newSrc = u.toString().replace(/(#.*)?$/, '#' + hash);
+      if (iframe.src !== newSrc) iframe.src = newSrc;
+
+      if (badge) {
+        if (mode === 'single' && Number.isFinite(firstPage)) {
+          badge.textContent = `Preview: page ${firstPage}`;
+          badge.classList.remove('hidden');
+        } else if (mode === 'range' && (rangeText || '').trim()) {
+          badge.textContent = `Preview: ${rangeText}`;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      }
+    }
+
+    function applyPreviewOrientation(orientation) {
+      const wrap = document.getElementById('preview');
+      if (!wrap) return;
+      const box = wrap.querySelector('#previewBox');
+      const iframe = wrap.querySelector('iframe');
+      if (!box || !iframe) return;
+      box.classList.remove('aspect-[2/3]');
+      box.classList.add('aspect-[3/2]');
+      iframe.style.transform = '';
+      iframe.style.transformOrigin = '';
+      iframe.style.width = '';
+      iframe.style.height = '';
+      if (orientation === 'horizontal') {
+        box.classList.remove('aspect-[3/2]');
+        box.classList.add('aspect-[2/3]');
+        iframe.style.transform = 'rotate(90deg)';
+        iframe.style.transformOrigin = 'center';
+        iframe.style.width = '150%';
+        iframe.style.height = '150%';
+      }
     }
 
     // ---------- Presets ----------
@@ -509,6 +705,75 @@
         updateSummary();
       });
 
+      // Pages-per-sheet mega dropdown
+      (function initNupPicker() {
+        const btn = document.getElementById('nupPickerBtn');
+        const panel = document.getElementById('nupPanel');
+        const select = document.getElementById('n_up_select');
+        const label = document.getElementById('nupSelectedLabel');
+        if (!btn || !panel || !select || !label) return;
+
+        const setLabel = () => { label.textContent = `${select.value || '1'} per sheet`; };
+        setLabel();
+
+        const open = () => { panel.classList.remove('hidden'); };
+        const close = () => { panel.classList.add('hidden'); };
+        const toggle = () => { panel.classList.toggle('hidden'); };
+        btn.addEventListener('click', toggle);
+        document.addEventListener('click', (e) => {
+          if (!panel.classList.contains('hidden')) {
+            const wrap = document.getElementById('nupPicker');
+            if (wrap && !wrap.contains(e.target)) close();
+          }
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+        panel.querySelectorAll('.nupTile').forEach(el => {
+          el.addEventListener('click', () => {
+            const v = el.getAttribute('data-value');
+            if (v) { select.value = v; setLabel(); updateSummary(); close(); }
+          });
+        });
+
+        // Keep UI in sync when n_up changes programmatically (e.g., preset)
+        select.addEventListener('change', () => { setLabel(); updateSummary(); });
+      })();
+
+      // Orientation mega dropdown
+      (function initOrientationPicker() {
+        const btn = document.getElementById('oriPickerBtn');
+        const panel = document.getElementById('oriPanel');
+        const select = document.getElementById('orientation_select');
+        const label = document.getElementById('oriSelectedLabel');
+        if (!btn || !panel || !select || !label) return;
+
+        const setLabel = () => {
+          label.textContent = select.value === 'horizontal' ? 'Horizontal' : 'Vertical (default)';
+        };
+        setLabel();
+
+        const close = () => panel.classList.add('hidden');
+        const toggle = () => panel.classList.toggle('hidden');
+        btn.addEventListener('click', toggle);
+        document.addEventListener('click', (e) => {
+          if (!panel.classList.contains('hidden')) {
+            const wrap = document.getElementById('oriPicker');
+            if (wrap && !wrap.contains(e.target)) close();
+          }
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+        panel.querySelectorAll('.oriTile').forEach(el => {
+          el.addEventListener('click', () => {
+            const v = el.getAttribute('data-value');
+            if (v) { select.value = v; setLabel(); updateSummary(); close(); }
+          });
+        });
+
+        // Keep UI in sync when selection changes programmatically
+        select.addEventListener('change', () => { setLabel(); updateSummary(); });
+      })();
+
       // Continue
       $('#continue').addEventListener('click', goReview);
 
@@ -538,11 +803,18 @@
         const a = document.getElementById('selDocOpen'); if (a) a.href = openUrl;
         if (!state.pages && (n.page_count || n.estimated_pages)) { state.pages = parseInt(n.page_count || n.estimated_pages) || ''; (typeof updateSummary === 'function') && updateSummary(); }
         const pv = `${API}/api/marketplace/notes/${encodeURIComponent(state.noteId)}/preview`;
+        previewBaseSrc = pv;
         const wrap = document.getElementById('preview'); if (wrap) {
-          wrap.innerHTML = `<div class='w-full max-w-3xl mx-auto aspect-[3/2] bg-white/40 dark:bg-white/5 rounded-lg ring-1 ring-black/10 dark:ring-white/15 overflow-hidden flex flex-col'>
+          wrap.innerHTML = `<div id='previewBox' class='relative w-full max-w-3xl mx-auto aspect-[3/2] bg-white/40 dark:bg-white/5 rounded-lg ring-1 ring-black/10 dark:ring-white/15 overflow-hidden flex flex-col'>
+  <span id='previewRangeBadge' class='pointer-events-none absolute z-10 top-2 right-2 text-[11px] px-2 py-1 rounded-full bg-black/60 text-white hidden'></span>
   <iframe src='${pv}#view=fitH' class='w-full h-full' title='PDF preview' loading='lazy'></iframe>
   <a href='${pv}' target='_blank' class='text-[11px] px-2 py-1 bg-black/5 dark:bg-white/10 text-center'>Open full preview</a>
 </div>`;
+          try {
+            const f = new FormData($('#cfg'));
+            applyPreviewPageFilter({ mode: (f.get('range_mode') || 'all'), rangeText: (f.get('page_range') || ''), singlePage: (f.get('single_page') || '') });
+            applyPreviewOrientation(f.get('orientation') || 'vertical');
+          } catch {}
         }
       } catch { }
     });
