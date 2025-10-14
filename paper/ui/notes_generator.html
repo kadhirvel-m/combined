@@ -317,7 +317,7 @@
           PX</div>
         <div class="min-w-0">
           <h1 class="text-base sm:text-lg font-semibold tracking-tight leading-tight">
-            <a href="/ui/index.html"
+            <a href="index.html"
               class="hover:underline focus:outline-none focus:ring-2 focus:ring-brand-500 rounded-sm cursor-pointer">
               PaperX — Notes Generator
             </a>
@@ -837,34 +837,20 @@
       if (es) { es.close(); es = null; logEvent('Cancelled'); setBusy(false); }
     });
 
-    // Regenerate from current topic or rendered H1
-    $regen.addEventListener('click', () => {
-      const fromTitle = (document.querySelector('#output h1')?.textContent || '').trim();
-      const t = ($topic.value || fromTitle).trim();
+    // Unified generator: supports force to bypass cache
+    function startGeneration(topic, force = false) {
+      const t = (topic || '').trim();
       if (!t) { alert('Enter a topic'); return; }
       if (es) { try { es.close(); } catch { } es = null; }
-      $topic.value = t;
-      clearUI();
-      // delegate to main generator
-      document.getElementById('generateBtn').click();
-    });
-
-    document.getElementById('generateBtn').addEventListener('click', () => {
-      const topic = ($topic.value || '').trim();
-      if (!topic) { alert('Enter a topic'); return; }
-
-      if (es) { try { es.close(); } catch { } es = null; }
-
       clearUI();
       setBusy(true);
-      // Build absolute URL for SSE to avoid origin issues
       const url = new URL(`${apiBase}/generate/stream`);
-      url.searchParams.set('topic', topic);
+      url.searchParams.set('topic', t);
+      if (force) url.searchParams.set('force', 'true');
       es = new EventSource(url.toString());
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
       es.addEventListener('error', () => { logEvent('Stream error'); setBusy(false); es && es.close(); es = null; });
-
       es.addEventListener('close', () => { setBusy(false); es && es.close(); es = null; });
 
       const on = (name, fn) => es.addEventListener(name, (ev) => { try { fn(JSON.parse(ev.data)); setProgress(name); } catch { } });
@@ -891,7 +877,6 @@
       on('error', (d) => { logEvent('Error', d.message); setBusy(false); es && es.close(); es = null; });
       on('final', (d) => {
         renderMarkdown(d.markdown);
-        // reapply emphasis styling after render
         setEmphasis(emphasis);
         if (d.id) {
           currentNoteId = d.id;
@@ -901,6 +886,20 @@
         logEvent('Complete');
         setBusy(false); es && es.close(); es = null;
       });
+    }
+
+    // Regenerate from current topic or rendered H1 (force=true)
+    $regen.addEventListener('click', () => {
+      const fromTitle = (document.querySelector('#output h1')?.textContent || '').trim();
+      const t = ($topic.value || fromTitle).trim();
+      if (!t) { alert('Enter a topic'); return; }
+      $topic.value = t;
+      startGeneration(t, true);
+    });
+
+    document.getElementById('generateBtn').addEventListener('click', () => {
+      const topic = ($topic.value || '').trim();
+      startGeneration(topic, false);
     });
 
     // ===== Toolbar actions =====
@@ -948,7 +947,7 @@
     }
     $expand.addEventListener('click', () => { setFullscreen(!$wrap.classList.contains('fixed')); });
     $fsExit?.addEventListener('click', () => setFullscreen(false));
-    $fsHome?.addEventListener('click', () => { window.location.href = '/ui/index.html'; });
+    $fsHome?.addEventListener('click', () => { window.location.href = 'index.html'; });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $wrap.classList.contains('fixed')) setFullscreen(false); });
 
     // Emphasis toggle
@@ -1150,7 +1149,7 @@
     (function maybeAutoStartFromQuery() {
       if (!queryTopic) return;
       $topic.value = queryTopic;
-      document.getElementById('generateBtn').click();
+      startGeneration(queryTopic, false);
       setTimeout(() => document.getElementById('output')?.scrollIntoView({ behavior: 'smooth' }), 50);
       try { history.replaceState(null, '', window.location.pathname + window.location.hash); } catch { }
       queryTopic = '';

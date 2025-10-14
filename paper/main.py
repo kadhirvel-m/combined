@@ -3540,6 +3540,8 @@ def _update_profile_me(token: Optional[str], fields: dict):
             except APIError as exc:
                 err_code = getattr(exc, "code", None)
                 err_message = getattr(exc, "message", None) or getattr(exc, "details", None) or str(exc)
+                lower_msg = (err_message or "").lower()
+                # If undefined column error, remove potential FK fields and retry.
                 if err_code == "42703":
                     removed = False
                     for key in list(retry_payload.keys()):
@@ -3548,6 +3550,11 @@ def _update_profile_me(token: Optional[str], fields: dict):
                             removed = True
                     if removed:
                         continue
+                # If a DB trigger references a non-existent NEW.department_id (stale trigger), skip base update gracefully.
+                if ("record \"new\" has no field" in lower_msg) or ("record new has no field" in lower_msg):
+                    supabase_logger.warning("Skipping user_profiles update due to trigger missing field: %s", err_message)
+                    retry_payload.clear()
+                    break
                 raise HTTPException(status_code=500, detail=f"Supabase error (update profile): {err_message}")
 
             err_msg = getattr(upd, "error", None)
@@ -3562,6 +3569,10 @@ def _update_profile_me(token: Optional[str], fields: dict):
                             removed = True
                     if removed:
                         continue
+                # Handle stale trigger error pattern on successful call that returned an error payload
+                if ("record \"new\" has no field" in lowered) or ("record new has no field" in lowered):
+                    supabase_logger.warning("Skipping user_profiles update due to trigger missing field: %s", msg)
+                    break
                 raise HTTPException(status_code=500, detail=f"Supabase error (update profile): {msg}")
             break
     if experiences_payload is not None:
