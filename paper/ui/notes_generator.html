@@ -364,6 +364,9 @@
             </button>
           </div>
           <div class="flex items-center gap-2 mt-3">
+            <button id="regenBtn"
+              class="ripple px-3 py-2 rounded-xl border hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              style="border-color: var(--outline)">Regenerate</button>
             <button id="cancelBtn"
               class="ripple px-3 py-2 rounded-xl border hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
               style="border-color: var(--outline)" disabled>Cancel</button>
@@ -619,6 +622,7 @@
     // ===== Elements =====
     const $topic = document.getElementById('topic');
     const $generate = document.getElementById('generateBtn');
+    const $regen = document.getElementById('regenBtn');
     const $cancel = document.getElementById('cancelBtn');
     const $events = document.getElementById('events');
     const $output = document.getElementById('output');
@@ -727,6 +731,7 @@
 
     function setBusy(b) {
       $generate.disabled = b; $cancel.disabled = !b; $topic.disabled = b;
+      if ($regen) $regen.disabled = b;
     }
 
     function postprocessLinks() {
@@ -830,6 +835,18 @@
     // ===== Streaming events =====
     document.getElementById('cancelBtn').addEventListener('click', () => {
       if (es) { es.close(); es = null; logEvent('Cancelled'); setBusy(false); }
+    });
+
+    // Regenerate from current topic or rendered H1
+    $regen.addEventListener('click', () => {
+      const fromTitle = (document.querySelector('#output h1')?.textContent || '').trim();
+      const t = ($topic.value || fromTitle).trim();
+      if (!t) { alert('Enter a topic'); return; }
+      if (es) { try { es.close(); } catch { } es = null; }
+      $topic.value = t;
+      clearUI();
+      // delegate to main generator
+      document.getElementById('generateBtn').click();
     });
 
     document.getElementById('generateBtn').addEventListener('click', () => {

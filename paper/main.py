@@ -44,6 +44,7 @@ from pydantic import BaseModel, Field, validator, root_validator
 from rapidfuzz import fuzz
 from serpapi import GoogleSearch
 from supabase import Client, create_client
+from postgrest.exceptions import APIError
 
 load_dotenv()
 
@@ -3527,9 +3528,42 @@ def _update_profile_me(token: Optional[str], fields: dict):
                 payload["batch_from"] = int(batch_from)
                 payload["batch_to"] = int(batch_to)
 
-    upd = supabase.table("user_profiles").update(payload).eq("id", profile_id).execute()
-    if getattr(upd, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (update profile): {upd.error}")
+    update_payload = _supabase_payload(payload)
+    if update_payload:
+        retry_payload = dict(update_payload)
+        fallback_keys = {"college_id", "department_id", "batch_id", "batch_from", "batch_to"}
+        for attempt in range(3):
+            if not retry_payload:
+                break
+            try:
+                upd = supabase.table("user_profiles").update(retry_payload).eq("id", profile_id).execute()
+            except APIError as exc:
+                err_code = getattr(exc, "code", None)
+                err_message = getattr(exc, "message", None) or getattr(exc, "details", None) or str(exc)
+                if err_code == "42703":
+                    removed = False
+                    for key in list(retry_payload.keys()):
+                        if key in fallback_keys:
+                            retry_payload.pop(key, None)
+                            removed = True
+                    if removed:
+                        continue
+                raise HTTPException(status_code=500, detail=f"Supabase error (update profile): {err_message}")
+
+            err_msg = getattr(upd, "error", None)
+            if err_msg:
+                msg = str(err_msg)
+                lowered = msg.lower()
+                if ("42703" in lowered) or any(field in lowered for field in ("college_id", "department_id", "batch_id")):
+                    removed = False
+                    for key in list(retry_payload.keys()):
+                        if key in fallback_keys:
+                            retry_payload.pop(key, None)
+                            removed = True
+                    if removed:
+                        continue
+                raise HTTPException(status_code=500, detail=f"Supabase error (update profile): {msg}")
+            break
     if experiences_payload is not None:
         prepared = _prepare_experience_rows(experiences_payload if isinstance(experiences_payload, list) else None)
         _sync_profile_collection(profile_id, "user_experiences", prepared)
