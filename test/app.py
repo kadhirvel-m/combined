@@ -5,6 +5,8 @@ from datetime import timedelta
 from flask import Flask, render_template, request, send_file, jsonify, abort
 from werkzeug.utils import secure_filename
 from nup import compose_nup_pdf, render_preview_png
+import math
+import fitz  # PyMuPDF
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
@@ -37,6 +39,19 @@ def _ensure_pdf(file_storage) -> str:
     return stored_name
 
 
+def _auto_orientation(n_up: int, requested: str | None = None) -> str:
+    """Choose orientation based on n_up, with simple rules:
+    - 2 per sheet: landscape
+    - 4 per sheet: portrait
+    - 9 per sheet: portrait
+    For other values, fall back to requested or 'portrait'.
+    """
+    if n_up == 2:
+        return 'landscape'
+    if n_up in (4, 9):
+        return 'portrait'
+    return requested or 'portrait'
+
 @app.route('/', methods=['GET'])
 def index():
     return render_template('index.html')
@@ -60,34 +75,48 @@ def preview():
     file_id = data.get('file_id')
     n_up = int(data.get('n_up', 2))
     page_size = data.get('page_size', 'A4')
-    orientation = data.get('orientation', 'portrait')
+    # Override orientation based on n_up per requested behavior
+    orientation = _auto_orientation(n_up, data.get('orientation'))
     margin = float(data.get('margin', 18))
     gap = float(data.get('gap', 6))
-    sheet_index = int(data.get('sheet_index', 0))
 
     src_path = os.path.join(UPLOAD_DIR, file_id)
     if not os.path.exists(src_path):
         abort(404, description='File not found')
 
-    png = render_preview_png(
-        input_pdf_path=src_path,
-        n_up=n_up,
-        page_size=page_size,
-        orientation=orientation,
-        margin=margin,
-        gap=gap,
-        dpi=130,
-        sheet_index=sheet_index,
-    )
+    # Determine how many composed sheets are needed and render previews for all
+    try:
+        with fitz.open(src_path) as src_doc:
+            total_pages = len(src_doc)
+    except Exception:
+        abort(400, description='Unable to read PDF')
 
-    # Write a temp PNG asset to disk so the browser can cache it by URL
-    token = secrets.token_hex(6)
-    out_name = f"preview_{token}.png"
-    out_path = os.path.join(PREVIEW_DIR, out_name)
-    with open(out_path, 'wb') as fp:
-        fp.write(png)
+    if n_up <= 0:
+        abort(400, description='Invalid n_up')
 
-    return jsonify({'ok': True, 'url': f'/static-preview/{out_name}'})
+    total_sheets = int(math.ceil(total_pages / float(n_up)))
+    urls: list[str] = []
+    for sheet_index in range(total_sheets):
+        png = render_preview_png(
+            input_pdf_path=src_path,
+            n_up=n_up,
+            page_size=page_size,
+            orientation=orientation,
+            margin=margin,
+            gap=gap,
+            dpi=130,
+            sheet_index=sheet_index,
+        )
+
+        # Write a temp PNG asset to disk so the browser can cache it by URL
+        token = secrets.token_hex(6)
+        out_name = f"preview_{token}.png"
+        out_path = os.path.join(PREVIEW_DIR, out_name)
+        with open(out_path, 'wb') as fp:
+            fp.write(png)
+        urls.append(f'/static-preview/{out_name}')
+
+    return jsonify({'ok': True, 'urls': urls, 'total_sheets': total_sheets})
 
 
 @app.route('/static-preview/<name>', methods=['GET'])
@@ -104,7 +133,8 @@ def export():
     file_id = data.get('file_id')
     n_up = int(data.get('n_up', 2))
     page_size = data.get('page_size', 'A4')
-    orientation = data.get('orientation', 'portrait')
+    # Override orientation based on n_up per requested behavior
+    orientation = _auto_orientation(n_up, data.get('orientation'))
     margin = float(data.get('margin', 18))
     gap = float(data.get('gap', 6))
 

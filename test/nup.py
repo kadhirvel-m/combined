@@ -90,12 +90,12 @@ def compose_nup_pdf(input_pdf_path: str, output_pdf_path: str, n_up: int = 2, pa
         i += pack
 
     # Save with compression and xref cleanup to reduce file size
+    # Note: MuPDF / PyMuPDF removed support for linearization; do not set linear=True
     dst.save(
         output_pdf_path,
         deflate=True,   # compress streams
         garbage=4,      # maximum garbage collection / deduplication
-        clean=True,     # rewrite content streams where possible
-        linear=True     # optimize for web (fast first page)
+        clean=True      # rewrite content streams where possible
     )
     dst.close()
     src.close()
