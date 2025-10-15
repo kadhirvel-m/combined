@@ -89,7 +89,14 @@ def compose_nup_pdf(input_pdf_path: str, output_pdf_path: str, n_up: int = 2, pa
             page.show_pdf_page(cell, src, i + k)
         i += pack
 
-    dst.save(output_pdf_path)
+    # Save with compression and xref cleanup to reduce file size
+    dst.save(
+        output_pdf_path,
+        deflate=True,   # compress streams
+        garbage=4,      # maximum garbage collection / deduplication
+        clean=True,     # rewrite content streams where possible
+        linear=True     # optimize for web (fast first page)
+    )
     dst.close()
     src.close()
 
@@ -99,7 +106,8 @@ def render_preview_png(input_pdf_path: str, n_up: int, page_size: str = "A4", or
 
     - sheet_index: which composed sheet to preview (0-based)
     """
-    cols, rows = LAYOUTS[n_up]
+    # LAYOUTS is defined as (rows, cols)
+    rows, cols = LAYOUTS[n_up]
 
     sheet_w, sheet_h = page_size_from_name(page_size)
     if orientation == "landscape":
