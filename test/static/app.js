@@ -12,6 +12,20 @@ const gapEl = document.getElementById('gap');
 const refreshBtn = document.getElementById('refreshBtn');
 const exportBtn = document.getElementById('exportBtn');
 const exportState = document.getElementById('exportState');
+const printerSelect = document.getElementById('printerSelect');
+const refreshPrintersBtn = document.getElementById('refreshPrinters');
+const copiesEl = document.getElementById('copies');
+const duplexModeEl = document.getElementById('duplexMode');
+const colorModeEl = document.getElementById('colorMode');
+const printBtn = document.getElementById('printBtn');
+const printState = document.getElementById('printState');
+// QZ Tray client-print elements
+const qzConnectBtn = document.getElementById('qzConnect');
+const qzStatus = document.getElementById('qzStatus');
+const clientPrinterSelect = document.getElementById('clientPrinterSelect');
+const clientRefreshPrintersBtn = document.getElementById('clientRefreshPrinters');
+const clientPrintBtn = document.getElementById('clientPrintBtn');
+const clientPrintState = document.getElementById('clientPrintState');
 const previewGrid = document.getElementById('previewGrid');
 const zoomOut = document.getElementById('zoomOut');
 const zoomIn = document.getElementById('zoomIn');
@@ -19,6 +33,8 @@ const zoomVal = document.getElementById('zoomVal');
 
 let FILE_ID = null;
 let ZOOM = 1.0;
+let PRINTERS = [];
+let QZ_CONNECTED = false;
 
 function setZoom(val) {
   ZOOM = Math.min(3, Math.max(0.3, val));
@@ -50,6 +66,156 @@ function currentSettings() {
     margin: parseFloat(marginEl.value),
     gap: parseFloat(gapEl.value)
   };
+}
+
+// --- QZ Tray (client printers) ---
+function qzAvailable() {
+  return typeof window.qz !== 'undefined' && window.qz?.websocket;
+}
+
+async function ensureQZConnected() {
+  if (!qzAvailable()) {
+    qzStatus && (qzStatus.textContent = 'QZ Tray not detected. Install QZ Tray.');
+    return false;
+  }
+  if (QZ_CONNECTED && qz.websocket.isActive()) return true;
+  // In development, users may enable "Allow unsigned requests" from QZ Tray settings.
+  try {
+    await qz.websocket.connect();
+    QZ_CONNECTED = true;
+    qzStatus && (qzStatus.textContent = 'Connected');
+    return true;
+  } catch (e) {
+    qzStatus && (qzStatus.textContent = 'Connection failed. Open QZ Tray.');
+    return false;
+  }
+}
+
+async function loadClientPrinters() {
+  if (!clientPrinterSelect) return;
+  clientPrintState && (clientPrintState.textContent = '');
+  clientPrinterSelect.innerHTML = '';
+  const loadingOpt = document.createElement('option');
+  loadingOpt.textContent = 'Loading client printers…';
+  loadingOpt.disabled = true; loadingOpt.selected = true;
+  clientPrinterSelect.appendChild(loadingOpt);
+  const ok = await ensureQZConnected();
+  if (!ok) {
+    clientPrinterSelect.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.textContent = 'QZ Tray not connected';
+    opt.disabled = true; opt.selected = true;
+    clientPrinterSelect.appendChild(opt);
+    clientPrintBtn && (clientPrintBtn.disabled = true);
+    return;
+  }
+  try {
+    const list = await qz.printers.find(); // findAll() in older docs; find() returns array of names
+    clientPrinterSelect.innerHTML = '';
+    if (!list || !list.length) {
+      const opt = document.createElement('option');
+      opt.textContent = 'No client printers';
+      opt.disabled = true; opt.selected = true;
+      clientPrinterSelect.appendChild(opt);
+      clientPrintBtn && (clientPrintBtn.disabled = true);
+      return;
+    }
+    list.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      clientPrinterSelect.appendChild(opt);
+    });
+    clientPrintBtn && (clientPrintBtn.disabled = !FILE_ID);
+  } catch (e) {
+    clientPrinterSelect.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.textContent = 'Failed to list printers';
+    opt.disabled = true; opt.selected = true;
+    clientPrinterSelect.appendChild(opt);
+    clientPrintBtn && (clientPrintBtn.disabled = true);
+    clientPrintState && (clientPrintState.textContent = 'Error: ' + e.message);
+  }
+}
+
+async function clientPrint() {
+  if (!FILE_ID) { alert('Upload a PDF first'); return; }
+  const ok = await ensureQZConnected();
+  if (!ok) return;
+  if (!clientPrinterSelect || !clientPrinterSelect.value) {
+    alert('Select a client printer');
+    return;
+  }
+  clientPrintBtn.disabled = true;
+  clientPrintState.textContent = 'Composing and sending…';
+  try {
+    // Compose n-up PDF on server, then print that PDF locally via QZ
+    const j = await postJSON('/export', currentSettings());
+    const pdfUrl = (new URL(j.url, window.location.origin)).href;
+    const cfg = qz.configs.create(clientPrinterSelect.value, {
+      copies: parseInt(copiesEl.value || '1', 10)
+    });
+    await qz.printFile(cfg, [{ type: 'pdf', data: pdfUrl }]);
+    clientPrintState.textContent = 'Sent to client printer';
+  } catch (e) {
+    clientPrintState.textContent = 'Client print error: ' + e.message;
+  } finally {
+    clientPrintBtn.disabled = false;
+  }
+}
+
+async function loadPrinters() {
+  if (!printerSelect) return;
+  printState && (printState.textContent = '');
+  // Show loading placeholder
+  printerSelect.innerHTML = '';
+  const loadingOpt = document.createElement('option');
+  loadingOpt.textContent = 'Loading printers…';
+  loadingOpt.disabled = true; loadingOpt.selected = true;
+  printerSelect.appendChild(loadingOpt);
+  try {
+    const res = await fetch('/printers');
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.ok === false) {
+      const reason = (j && j.reason) ? j.reason : '';
+      printerSelect.innerHTML = '';
+      const opt = document.createElement('option');
+      opt.textContent = 'Printing unavailable';
+      opt.disabled = true; opt.selected = true;
+      printerSelect.appendChild(opt);
+      printBtn && (printBtn.disabled = true);
+      printState && (printState.textContent = reason || 'Printing is not available');
+      return;
+    }
+    PRINTERS = j.printers || [];
+    printerSelect.innerHTML = '';
+    if (!PRINTERS.length) {
+      const opt = document.createElement('option');
+      opt.textContent = 'No printers found';
+      opt.disabled = true; opt.selected = true;
+      printerSelect.appendChild(opt);
+      printBtn && (printBtn.disabled = true);
+      return;
+    }
+    PRINTERS.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.is_default ? `${p.name} (default)` : p.name;
+      if (p.is_default) opt.selected = true;
+      printerSelect.appendChild(opt);
+    });
+    // Enable print if we also have a file uploaded
+    if (FILE_ID) { printBtn && (printBtn.disabled = false); }
+  } catch (e) {
+    console.warn('Printer list error:', e);
+    printerSelect.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.textContent = 'Failed to load printers';
+    opt.disabled = true; opt.selected = true;
+    printerSelect.appendChild(opt);
+    printBtn && (printBtn.disabled = true);
+    printState && (printState.textContent = 'Failed to load printers');
+  }
 }
 
 async function refreshPreview() {
@@ -87,6 +253,8 @@ uploadForm.addEventListener('submit', async (e) => {
     fileState.textContent = `Uploaded: ${FILE_ID}`;
     refreshBtn.disabled = false;
     exportBtn.disabled = false;
+    await loadPrinters();
+    printBtn && (printBtn.disabled = !printerSelect || !printerSelect.value);
     setZoom(1.0);
     await refreshPreview();
   } catch (e) {
@@ -128,9 +296,68 @@ exportBtn.addEventListener('click', async () => {
   }
 });
 
+async function doPrint() {
+  if (!FILE_ID) return;
+  if (!printerSelect || !printerSelect.value) {
+    alert('Select a printer first');
+    return;
+  }
+  printBtn.disabled = true;
+  printState.textContent = 'Sending to printer…';
+  try {
+    const payload = {
+      ...currentSettings(),
+      printer_name: printerSelect.value,
+      copies: parseInt(copiesEl.value || '1', 10),
+      duplex_mode: duplexModeEl.value,
+      color_mode: colorModeEl.value
+    };
+    const j = await postJSON('/print', payload);
+    if (j.ok) {
+      const extra = j.url ? ` — <a href="${j.url}">Open job PDF</a>` : '';
+      printState.innerHTML = `Printed: ${j.status}${extra}`;
+    } else {
+      printState.textContent = `Print failed: ${j.status || 'unknown error'}`;
+    }
+  } catch (e) {
+    printState.textContent = 'Print error: ' + e.message;
+  } finally {
+    printBtn.disabled = false;
+  }
+}
+
+refreshPrintersBtn && refreshPrintersBtn.addEventListener('click', async () => {
+  await loadPrinters();
+});
+
+printBtn && printBtn.addEventListener('click', async () => {
+  await doPrint();
+});
+
+// Load printers immediately (handles late script load too)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => loadPrinters());
+} else {
+  loadPrinters();
+}
+
 // Auto-set orientation based on n_up selection to reflect backend rules
 nUpEl.addEventListener('change', () => {
   const n = parseInt(nUpEl.value, 10);
   if (n === 2) orientationEl.value = 'landscape';
   if (n === 4 || n === 9) orientationEl.value = 'portrait';
+});
+
+// QZ Tray handlers
+qzConnectBtn && qzConnectBtn.addEventListener('click', async () => {
+  await ensureQZConnected();
+  await loadClientPrinters();
+});
+
+clientRefreshPrintersBtn && clientRefreshPrintersBtn.addEventListener('click', async () => {
+  await loadClientPrinters();
+});
+
+clientPrintBtn && clientPrintBtn.addEventListener('click', async () => {
+  await clientPrint();
 });
