@@ -64,6 +64,7 @@
                                     Mode</button>
                             </div>
                             <div id="classesList" class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"></div>
+                            <div id="selectedClassInfo" class="text-[11px] mt-1 text-neutral-600 dark:text-white/60"></div>
                             <div id="noClassesMsg" class="hidden text-[11px] text-neutral-500 dark:text-white/50">No
                                 classes found. Use manual mode.</div>
                         </div>
@@ -73,10 +74,10 @@
                                 class="w-full rounded-lg border-neutral-300 dark:border-white/15 bg-white/90 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500" />
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold uppercase tracking-wide mb-1">Description</label>
+                            <label class="block text-xs font-semibold uppercase tracking-wide mb-1">Description (optional)</label>
                             <textarea name="description"
                                 class="w-full min-h-[90px] resize-y rounded-lg border-neutral-300 dark:border-white/15 bg-white/90 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500"
-                                placeholder="Short description"></textarea>
+                                placeholder="Short description (optional)"></textarea>
                         </div>
                         <div id="manualFields" class="hidden">
                             <div class="grid sm:grid-cols-2 gap-5">
@@ -136,10 +137,10 @@
                         <input type="hidden" name="batch_id" id="hBatch" />
                         <input type="hidden" name="semester" id="hSemester" />
                         <input type="hidden" name="subject" id="hSubject" />
+                        <input type="hidden" name="subject_id" id="hSubjectId" />
                         <div>
-                            <label class="block text-xs font-semibold uppercase tracking-wide mb-1">Attach File (PDF /
-                                DOC / PPT / ZIP)</label>
-                            <input type="file" name="file" required
+                            <label class="block text-xs font-semibold uppercase tracking-wide mb-1">Attach Files (PDF / DOC / PPT / ZIP)</label>
+                            <input type="file" name="files" multiple required
                                 class="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-brand-500 file:text-white hover:file:bg-brand-700" />
                         </div>
                         <div class="flex justify-end">
@@ -186,7 +187,8 @@
             department: document.getElementById('hDepartment'),
             batch: document.getElementById('hBatch'),
             semester: document.getElementById('hSemester'),
-            subject: document.getElementById('hSubject')
+            subject: document.getElementById('hSubject'),
+            subject_id: document.getElementById('hSubjectId')
         };
         let selectedClassId = null; let classCache = [];
         const notesTbody = document.querySelector('#notesTable tbody');
@@ -284,8 +286,8 @@
                 const subs = await fetchJSON(`${API_BASE}/api/batches/${encodeURIComponent(batchId)}/courses?semester=${encodeURIComponent(semester)}`);
                 (subs || []).forEach(s => {
                     const o = document.createElement('option');
-                    // store subject title as value (upload expects a string)
-                    o.value = s.title || s.course_code || '';
+                    // store subject id as value; display code — title
+                    o.value = s.id || '';
                     o.textContent = (s.course_code ? `${s.course_code} — ` : '') + (s.title || '');
                     subjectSelect.appendChild(o);
                 });
@@ -295,6 +297,11 @@
                 subjectSelect.setAttribute('disabled', 'disabled');
             }
         }
+        subjectSelect.addEventListener('change', () => {
+            const opt = subjectSelect.selectedOptions && subjectSelect.selectedOptions[0];
+            hidden.subject_id.value = subjectSelect.value || '';
+            hidden.subject.value = opt ? (opt.textContent || '').trim() : '';
+        });
 
         async function loadMyNotes() {
             try {
@@ -321,6 +328,7 @@
                 if (hidden.batch.value) fd.set('batch_id', hidden.batch.value);
                 if (hidden.semester.value) fd.set('semester', hidden.semester.value);
                 if (hidden.subject.value) fd.set('subject', hidden.subject.value);
+                if (hidden.subject_id.value) fd.set('subject_id', hidden.subject_id.value);
             }
             // convert to marketplace payload fields
             fd.append('price_cents', '0');
@@ -374,8 +382,18 @@
             hidden.batch.value = cls.batch_id || '';
             hidden.semester.value = cls.semester || '';
             hidden.subject.value = cls.subject || '';
+            hidden.subject_id.value = cls.subject_id || '';
             // Clear manual selects for clarity (optional)
             collegeSelect.value = ''; degreeSelect.value = ''; departmentSelect.value = ''; batchSelect.value = ''; document.getElementById('semesterSelect').value = ''; subjectSelect.value = '';
+            // Show selected class summary
+            const info = document.getElementById('selectedClassInfo');
+            if (info) {
+                const parts = [];
+                if (cls.subject) parts.push(cls.subject);
+                if (cls.semester) parts.push('Sem ' + cls.semester);
+                if (cls.section) parts.push('Sec ' + cls.section);
+                info.textContent = parts.length ? ('Selected: ' + parts.join(' • ')) : 'Selected class';
+            }
         }
         async function loadClasses() {
             try {

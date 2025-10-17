@@ -54,6 +54,8 @@ CREATE TABLE public.marketplace_notes (
   title text NOT NULL,
   description text,
   subject text,
+  subject_id uuid,
+  subject_href text,
   unit text,
   exam_type text,
   categories ARRAY DEFAULT '{}'::text[],
@@ -79,7 +81,8 @@ CREATE TABLE public.marketplace_notes (
   CONSTRAINT marketplace_notes_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
   CONSTRAINT marketplace_notes_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id),
   CONSTRAINT marketplace_notes_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
-  CONSTRAINT marketplace_notes_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id)
+  CONSTRAINT marketplace_notes_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id),
+  CONSTRAINT marketplace_notes_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.syllabus_courses(id)
 );
 CREATE TABLE public.marketplace_purchases (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -302,6 +305,7 @@ CREATE TABLE public.teacher_classes (
   batch_id uuid,
   semester integer CHECK (semester >= 1 AND semester <= 12),
   subject text NOT NULL,
+  subject_id uuid,
   section text,
   degree_id uuid,
   department_id uuid,
@@ -314,6 +318,7 @@ CREATE TABLE public.teacher_classes (
   CONSTRAINT teacher_classes_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id),
   CONSTRAINT teacher_classes_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id),
   CONSTRAINT teacher_classes_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT teacher_classes_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.syllabus_courses(id),
   CONSTRAINT teacher_classes_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id)
 );
 CREATE TABLE public.teacher_connections (
