@@ -6099,6 +6099,7 @@ class TeacherClassIn(BaseModel):
     college_id: Optional[uuid.UUID] = None
     degree_id: Optional[uuid.UUID] = None
     department_id: Optional[uuid.UUID] = None
+    subject_id: Optional[uuid.UUID] = None  # link to syllabus_courses.id
     notes: Optional[str] = None
 
 class TeacherClassUpdate(BaseModel):
@@ -6109,6 +6110,7 @@ class TeacherClassUpdate(BaseModel):
     college_id: Optional[uuid.UUID] = None
     degree_id: Optional[uuid.UUID] = None
     department_id: Optional[uuid.UUID] = None
+    subject_id: Optional[uuid.UUID] = None
     notes: Optional[str] = None
 
 class TeacherClassOut(BaseModel):
@@ -6121,6 +6123,7 @@ class TeacherClassOut(BaseModel):
     college_id: Optional[uuid.UUID] = None
     degree_id: Optional[uuid.UUID] = None
     department_id: Optional[uuid.UUID] = None
+    subject_id: Optional[uuid.UUID] = None
     notes: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -6136,6 +6139,7 @@ def _map_teacher_class_row(row: Dict[str, Any]) -> TeacherClassOut:
         college_id=uuid.UUID(row["college_id"]) if row.get("college_id") else None,
         degree_id=uuid.UUID(row["degree_id"]) if row.get("degree_id") else None,
         department_id=uuid.UUID(row["department_id"]) if row.get("department_id") else None,
+        subject_id=uuid.UUID(row["subject_id"]) if row.get("subject_id") else None,
         notes=row.get("notes"),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
@@ -8262,7 +8266,20 @@ marketplace_router = APIRouter()
 MARKETPLACE_STORAGE = Path(__file__).resolve().parent / "assets" / "notes_marketplace"
 MARKETPLACE_STORAGE.mkdir(parents=True, exist_ok=True)
 
-ALLOWED_NOTE_EXTENSIONS = {".pdf", ".md", ".txt", ".png", ".jpg", ".jpeg"}
+# Allow common document/image/presentation/archive types used for notes
+ALLOWED_NOTE_EXTENSIONS = {
+    ".pdf",
+    ".md",
+    ".txt",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".doc",
+    ".docx",
+    ".ppt",
+    ".pptx",
+    ".zip",
+}
 MAX_NOTE_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
 
 
@@ -8311,6 +8328,7 @@ def mp_upload_note(
     title: str = Form(..., min_length=1, max_length=256),
     description: str = Form(""),
     subject: str = Form(""),
+    subject_id: Optional[str] = Form(None),
     unit: str = Form(""),
     exam_type: str = Form(""),
     categories: str = Form(""),  # comma separated
@@ -8320,13 +8338,20 @@ def mp_upload_note(
     department_id: Optional[str] = Form(None),
     batch_id: Optional[str] = Form(None),
     semester: Optional[int] = Form(None),
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    files: Optional[List[UploadFile]] = File(None),
     cover: Optional[UploadFile] = File(None),
     authorization: Optional[str] = Header(default=None),
 ):
     token = _parse_bearer_token(authorization)
     user_id = _require_auth_user_id(token)
-    stored_name, size, mime = _store_marketplace_file(file)
+    uploads: List[UploadFile] = []
+    if files:
+        uploads.extend([f for f in files if f is not None and getattr(f, 'filename', None)])
+    if file is not None and getattr(file, 'filename', None):
+        uploads.append(file)
+    if not uploads:
+        raise HTTPException(status_code=400, detail="No file(s) provided")
     cover_name: Optional[str] = None
     if cover and cover.filename:
         try:
@@ -8345,39 +8370,54 @@ def mp_upload_note(
             raise HTTPException(status_code=500, detail=f"Failed to store cover: {e}")
     cats = [c.strip() for c in (categories or "").split(",") if c.strip()]
     supabase = get_service_client()
-    row = {
-        "owner_user_id": user_id,
-        "title": title.strip(),
-        "description": description.strip() or None,
-        "subject": subject.strip() or None,
-        "unit": unit.strip() or None,
-        "exam_type": exam_type.strip() or None,
-        "categories": cats,
-        "price_cents": price_cents,
-        "original_filename": file.filename,
-        "stored_path": stored_name,
-        "mime_type": mime,
-        "file_size": size,
-    }
-    # Attach academic linkage if provided (light validation)
-    if college_id:
-        row["college_id"] = college_id
-    if degree_id:
-        row["degree_id"] = degree_id
-    if department_id:
-        row["department_id"] = department_id
-    if batch_id:
-        row["batch_id"] = batch_id
-    if semester is not None:
-        if semester < 1 or semester > 12:
-            raise HTTPException(status_code=400, detail="semester must be between 1 and 12")
-        row["semester"] = semester
-    if cover_name:
-        row["cover_path"] = cover_name
-    res = supabase.table("marketplace_notes").insert(row).execute()
+    def build_row(upload: UploadFile, stored_name: str, size: int, mime: str) -> Dict[str, Any]:
+        r: Dict[str, Any] = {
+            "owner_user_id": user_id,
+            "title": title.strip(),
+            "description": description.strip() or None,
+            "subject": subject.strip() or None,
+            "unit": unit.strip() or None,
+            "exam_type": exam_type.strip() or None,
+            "categories": cats,
+            "price_cents": price_cents,
+            "original_filename": upload.filename,
+            "stored_path": stored_name,
+            "mime_type": mime,
+            "file_size": size,
+        }
+        # Attach academic linkage if provided (light validation)
+        if college_id:
+            r["college_id"] = college_id
+        if degree_id:
+            r["degree_id"] = degree_id
+        if department_id:
+            r["department_id"] = department_id
+        if batch_id:
+            r["batch_id"] = batch_id
+        if semester is not None:
+            if semester < 1 or semester > 12:
+                raise HTTPException(status_code=400, detail="semester must be between 1 and 12")
+            r["semester"] = semester
+        if cover_name:
+            r["cover_path"] = cover_name
+        if subject_id:
+            try:
+                uuid.UUID(str(subject_id))
+                r["subject_id"] = str(subject_id)
+                r["subject_href"] = f"/api/syllabus/courses/{subject_id}"
+            except Exception:
+                pass
+        return r
+
+    rows: List[Dict[str, Any]] = []
+    for up in uploads:
+        stored_name, size, mime = _store_marketplace_file(up)
+        rows.append(build_row(up, stored_name, size, mime))
+    res = supabase.table("marketplace_notes").insert(rows if len(rows) > 1 else rows[0]).execute()
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (insert note): {res.error}")
-    return {"note": res.data[0] if res.data else row}
+    data_rows = res.data if isinstance(res.data, list) else ([res.data] if res.data else rows)
+    return {"notes": data_rows}
 
 
 @marketplace_router.get("/api/marketplace/notes", summary="List marketplace notes")

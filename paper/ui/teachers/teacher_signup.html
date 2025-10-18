@@ -5,14 +5,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Teacher Signup — Paper X</title>
-  <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
     rel="stylesheet">
   <link rel="stylesheet" href="../assets/css/tailwind.css" />
-  <script src="../../config.js"></script>
+  <script src="../config.js"></script>
   <script>
     tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' }, brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }, ink: '#1E1E2F', plum: '#4C2A59', orchid: '#9E4B8A' }, boxShadow: { glow: '0 8px 30px rgba(158,75,138,0.35)', card: '0 24px 60px rgba(30,30,47,0.35)' }, backgroundImage: { 'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)', 'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)' } } } }
   </script>
@@ -108,8 +108,8 @@
     class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
     <div class="container flex items-center justify-between py-4">
       <a href="../index.html" class="flex items-center gap-3">
-        <img src="../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
-        <img src="../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+        <img src="../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+        <img src="../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
       </a>
       <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
         <a href="../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
@@ -265,28 +265,48 @@
     </section>
   </main>
   <script>
-    // Dynamic API base discovery: fall back to :8000 if serving UI from a different static port (e.g. 5500)
-    let API_BASE = window.API_BASE || '';
-    (function resolveApiBase() {
-      if (API_BASE) return; // externally injected
-      const origin = location.origin;
-      // If already on expected API port (8000) or running through backend /ui mount, use origin
-      if (location.port === '8000' || origin.includes('/ui')) { API_BASE = origin; return; }
-      // Try common backend ports (8000) on same host
-      const host = location.hostname;
-      const candidates = [origin, `http://${host}:8000`, `https://${host}:8000`];
-      // Pick first that responds to public health/meta endpoint
+    // Robust API base discovery: actively probe likely backends and await success before first load
+    let API_BASE = (window.API_BASE || '').replace(/\/$/, '');
+    async function resolveApiBase() {
+      const origin = (location && location.origin) ? location.origin.replace(/\/$/, '') : '';
+      const host = (location && location.hostname) || 'localhost';
+      const presets = [];
+      if (API_BASE) presets.push(API_BASE);
+      // Prefer the backend default port on same host
+      presets.push(`http://${host}:8000`);
+      presets.push(`https://${host}:8000`);
+      // Fall back to localhost variants and the current origin
+      presets.push('http://127.0.0.1:8000', 'http://localhost:8000', origin);
+
       const testPath = '/api/public/academic-meta';
-      let tried = 0;
-      function tryNext(i) {
-        if (i >= candidates.length) { console.warn('[api-base] All candidates failed, using current origin'); API_BASE = origin; return; }
-        const base = candidates[i].replace(/\/$/, '');
-        fetch(base + testPath, { method: 'GET' })
-          .then(r => { if (r.ok) { API_BASE = base; } else { tried++; tryNext(i + 1); } })
-          .catch(() => { tried++; tryNext(i + 1); });
+      const TIMEOUT_MS = 2000;
+
+      async function ok(base) {
+        if (!base) return false;
+        const url = base.replace(/\/$/, '') + testPath;
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+        try {
+          const r = await fetch(url, { signal: ctrl.signal });
+          return r && r.ok;
+        } catch (_) {
+          return false;
+        } finally {
+          clearTimeout(t);
+        }
       }
-      tryNext(0);
-    })();
+
+      for (const cand of presets) {
+        const base = (cand || '').replace(/\/$/, '');
+        // Skip obvious non-http values
+        if (!/^https?:\/\//i.test(base)) continue;
+        if (await ok(base)) { API_BASE = base; window.API_BASE = base; return base; }
+      }
+      // Nothing responded; use origin so page still works (will show inline error later)
+      API_BASE = origin || API_BASE || '';
+      window.API_BASE = API_BASE;
+      return API_BASE;
+    }
     const form = document.getElementById('teacherSignupForm');
     const frontInput = form.querySelector('input[name="id_card_front"]');
     const backInput = form.querySelector('input[name="id_card_back"]');
@@ -328,9 +348,8 @@
     let academicMeta = { colleges: [], degrees: [], departments: [] };
     async function loadAcademicOptions() {
       try {
-        // Wait a brief moment if API_BASE still resolving
-        let attempts = 0; while ((!API_BASE || API_BASE === location.origin) && attempts < 5) { await new Promise(r => setTimeout(r, 120)); attempts++; }
-        const url = (API_BASE || location.origin).replace(/\/$/, '') + '/api/public/academic-meta';
+        const base = (API_BASE || location.origin).replace(/\/$/, '');
+        const url = base + '/api/public/academic-meta';
         const res = await fetch(url);
         if (!res.ok) {
           const txt = await res.text().catch(() => '<no body>');
@@ -430,8 +449,12 @@
       setTimeout(pollStatus, 6000);
     }
 
-    loadAcademicOptions();
-    pollStatus();
+    (async () => {
+      // Ensure API_BASE is resolved before first data load
+      try { await resolveApiBase(); } catch (_) {}
+      await loadAcademicOptions();
+      pollStatus();
+    })();
   </script>
 </body>
 

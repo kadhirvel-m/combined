@@ -52,17 +52,38 @@
                     <input type="hidden" name="class_id" />
                     <!-- Ensure college_id is captured and sent with create/update -->
                     <input type="hidden" name="college_id" />
-                    <div>
-                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Subject</label>
-                        <input name="subject" required
-                            class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-3 py-2"
-                            placeholder="Subject name" />
+                    <!-- Department & Batch first -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Department</label>
+                            <select name="department_id" id="departmentSelect"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-2 py-2 text-sm"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Batch</label>
+                            <select name="batch_id" id="batchSelect"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-2 py-2 text-sm"></select>
+                        </div>
                     </div>
+
+                    <!-- Semester (dropdown 1-10) and Section -->
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Semester</label>
-                            <input name="semester" type="number" min="1" max="12"
-                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-3 py-2" />
+                            <select name="semester" id="semesterSelect"
+                                class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-2 py-2 text-sm">
+                                <option value="">Select</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Section</label>
@@ -71,30 +92,18 @@
                                 placeholder="A" />
                         </div>
                     </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <div class="col-span-3 grid grid-cols-3 gap-4">
-                            <div>
-                                <label
-                                    class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Department</label>
-                                <select name="department_id" id="departmentSelect"
-                                    class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-2 py-2 text-sm"></select>
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Batch</label>
-                                <select name="batch_id" id="batchSelect"
-                                    class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-2 py-2 text-sm"></select>
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Degree</label>
-                                <select name="degree_id" id="degreeSelect"
-                                    class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-2 py-2 text-sm"
-                                    disabled></select>
-                            </div>
-                        </div>
-                        <!-- Removed weekly_hours, starts_on, ends_on fields -->
+
+                    <!-- Subject selection (after batch & semester) -->
+                    <div>
+                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Subject</label>
+                        <input type="hidden" name="subject_id" id="subjectId" />
+                        <input type="hidden" name="subject" id="subjectName" />
+                        <select id="subjectSelect"
+                            class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:ring-brand-500 focus:outline-none px-2 py-2 text-sm">
+                            <option value="">Select batch & semester first</option>
+                        </select>
                     </div>
+                    <!-- Removed weekly_hours, starts_on, ends_on fields -->
                     <div>
                         <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Notes</label>
                         <textarea name="notes" rows="3"
@@ -148,34 +157,42 @@
     </div>
   </div>
 </div>`}
-        function formToPayload(f) { return ['subject', 'semester', 'section', 'notes', 'batch_id', 'degree_id', 'department_id', 'college_id'].reduce((o, k) => { let el = f[k]; if (!el) return o; let v = (el.value || '').trim(); if (!v) { o[k] = null; return o; } if (['semester'].includes(k)) v = Number(v); o[k] = v; return o; }, {}) }
+        function formToPayload(f) { return ['subject', 'subject_id', 'semester', 'section', 'notes', 'batch_id', 'department_id', 'college_id'].reduce((o, k) => { let el = f[k]; if (!el) return o; let v = (el.value || '').trim(); if (!v) { o[k] = null; return o; } if (['semester'].includes(k)) v = Number(v); o[k] = v; return o; }, {}) }
         async function loadAcademics() {
-            const tk = getToken(); if (!tk) return; const selDept = document.getElementById('departmentSelect'); const selBatch = document.getElementById('batchSelect'); const selDegree = document.getElementById('degreeSelect'); selDept.innerHTML = '<option value="">Loading...</option>'; selBatch.innerHTML = '<option value="">Loading...</option>'; selDegree.innerHTML = '<option value="">Loading...</option>';
+            const tk = getToken(); if (!tk) return; const selDept = document.getElementById('departmentSelect'); const selBatch = document.getElementById('batchSelect'); const subjSel = document.getElementById('subjectSelect'); selDept.innerHTML = '<option value="">Loading...</option>'; selBatch.innerHTML = '<option value="">Loading...</option>'; subjSel.innerHTML = '<option value="">Select batch & semester first</option>';
             try {
                 const data = await fetchJSON(API_BASE + '/api/teacher/academics/mine', { headers: { Authorization: 'Bearer ' + tk } });
-                const { college_id, departments = [], batches = [], degrees = [], department_id, degree_id } = data;
-                // Persist college_id so create/update includes it
+                const { college_id, departments = [], batches = [], department_id, degree_id } = data;
                 if (els?.form?.college_id) { els.form.college_id.value = college_id || ''; }
-                selDept.innerHTML = '<option value="">Select</option>' + departments.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
-                if (department_id) selDept.value = department_id;
-                selDegree.innerHTML = '<option value="">(auto)</option>' + degrees.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
-                if (degree_id) { selDegree.value = degree_id; }
-                selDegree.disabled = true; // read-only based on department
-                function refreshBatches() {
-                    const dept = selDept.value; const filt = batches.filter(b => !dept || b.department_id === dept); selBatch.innerHTML = '<option value="">Select</option>' + filt.map(b => `<option value="${esc(b.id)}">${esc(b.label)}</option>`).join('');
-                }
+                const filtDeps = degree_id ? (departments || []).filter(d => String(d.degree_id) === String(degree_id)) : (departments || []);
+                selDept.innerHTML = '<option value="">Select</option>' + filtDeps.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+                if (department_id && filtDeps.some(d => d.id === department_id)) selDept.value = department_id;
+                function refreshBatches() { const dept = selDept.value; const filt = (batches || []).filter(b => !dept || String(b.department_id) === String(dept)); selBatch.innerHTML = '<option value="">Select</option>' + filt.map(b => `<option value="${esc(b.id)}">${esc(b.label)}</option>`).join(''); subjSel.innerHTML = '<option value="">Select batch & semester first</option>'; document.getElementById('subjectId').value = ''; document.getElementById('subjectName').value = ''; }
                 refreshBatches();
-                selDept.addEventListener('change', () => {
-                    refreshBatches(); // derive degree_id from departments map
-                    const dept = departments.find(d => d.id === selDept.value); if (dept && dept.degree_id) { selDegree.value = dept.degree_id; }
-                });
-            } catch (e) { selDept.innerHTML = '<option value="">Error</option>'; selBatch.innerHTML = '<option value="">Error</option>'; selDegree.innerHTML = '<option value="">Error</option>'; }
+                selDept.addEventListener('change', () => { refreshBatches(); });
+            } catch (e) { selDept.innerHTML = '<option value="">Error</option>'; selBatch.innerHTML = '<option value="">Error</option>'; subjSel.innerHTML = '<option value="">Error</option>'; }
         }
-        els.form.addEventListener('submit', async e => { e.preventDefault(); const tk = getToken(); if (!tk) { alert('Login required'); return; } const id = els.form.class_id.value || null; els.status.textContent = 'Saving...'; const payload = formToPayload(els.form); try { let r; if (id) { r = await fetch(API_BASE + '/api/teacher/classes/' + encodeURIComponent(id), { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } else { r = await fetch(API_BASE + '/api/teacher/classes', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Save failed'); els.status.textContent = 'Saved ✔'; els.form.reset(); els.submitLabel.textContent = 'Add Class'; loadClasses(); } catch (err) { els.status.textContent = 'Error: ' + err.message; } });
+        async function loadSubjectsForSelection() {
+            const subjSel = document.getElementById('subjectSelect');
+            const batch = document.getElementById('batchSelect').value;
+            const semEl = document.querySelector('[name="semester"]');
+            const sem = ((semEl && semEl.value) || '').trim();
+            if (!batch || !sem) { subjSel.innerHTML = '<option value="">Select batch & semester first</option>'; return; }
+            subjSel.innerHTML = '<option value="">Loading...</option>';
+            try {
+                const items = await fetchJSON(`${API_BASE}/api/batches/${encodeURIComponent(batch)}/courses?semester=${encodeURIComponent(sem)}`);
+                const opts = (items || []).map(c => ({ value: c.id, label: (c.course_code ? (c.course_code + ' — ' + (c.title || '')) : (c.title || 'Subject')), title: c.title || '', code: c.course_code || '' }));
+                subjSel.innerHTML = '<option value="">Select a subject</option>' + opts.map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('');
+            } catch (e) { subjSel.innerHTML = '<option value="">No subjects found</option>'; }
+        }
+        document.getElementById('subjectSelect').addEventListener('change', (e) => { const opt = e.target.selectedOptions && e.target.selectedOptions[0]; document.getElementById('subjectId').value = e.target.value || ''; document.getElementById('subjectName').value = (opt ? (opt.textContent || '').trim() : ''); });
+        document.getElementById('batchSelect').addEventListener('change', loadSubjectsForSelection);
+        (function(){ const semEl = document.querySelector('[name="semester"]'); if (!semEl) return; const handler = () => { clearTimeout(window.__sem_timer); window.__sem_timer = setTimeout(loadSubjectsForSelection, 150); }; semEl.addEventListener('input', handler); semEl.addEventListener('change', handler); })();
+        els.form.addEventListener('submit', async e => { e.preventDefault(); const tk = getToken(); if (!tk) { alert('Login required'); return; } const id = els.form.class_id.value || null; const subjVal = (document.getElementById('subjectId').value || '').trim(); const subjName = (document.getElementById('subjectName').value || '').trim(); if (!subjVal || !subjName) { alert('Please select a subject'); return; } els.status.textContent = 'Saving...'; const payload = formToPayload(els.form); try { let r; if (id) { r = await fetch(API_BASE + '/api/teacher/classes/' + encodeURIComponent(id), { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } else { r = await fetch(API_BASE + '/api/teacher/classes', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Save failed'); els.status.textContent = 'Saved ✔'; els.form.reset(); els.submitLabel.textContent = 'Add Class'; loadClasses(); } catch (err) { els.status.textContent = 'Error: ' + err.message; } });
         document.addEventListener('click', e => {
             if (e.target.matches('[data-edit]')) {
                 const card = e.target.closest('.group'); const id = e.target.getAttribute('data-edit'); // fetch latest row before editing
-                (async () => { try { const rows = await fetchJSON(API_BASE + '/api/teacher/classes/mine', { headers: { Authorization: 'Bearer ' + getToken() } }); const row = rows.find(r => r.id === id); if (!row) return; els.form.class_id.value = row.id; els.form.subject.value = row.subject || ''; els.form.semester.value = row.semester || ''; els.form.section.value = row.section || ''; els.form.notes.value = row.notes || ''; els.submitLabel.textContent = 'Update Class'; window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { } })();
+                (async () => { try { const rows = await fetchJSON(API_BASE + '/api/teacher/classes/mine', { headers: { Authorization: 'Bearer ' + getToken() } }); const row = rows.find(r => r.id === id); if (!row) return; els.form.class_id.value = row.id; els.form.semester.value = row.semester || ''; els.form.section.value = row.section || ''; els.form.notes.value = row.notes || ''; if (row.batch_id && row.semester) { document.getElementById('batchSelect').value = row.batch_id; await loadSubjectsForSelection(); const subjSel = document.getElementById('subjectSelect'); if (row.subject_id) { subjSel.value = row.subject_id; document.getElementById('subjectId').value = row.subject_id; const opt = subjSel.selectedOptions && subjSel.selectedOptions[0]; document.getElementById('subjectName').value = (opt ? (opt.textContent || '').trim() : (row.subject || '')); } else { const opt = document.createElement('option'); opt.value = ''; opt.textContent = row.subject || 'Subject'; opt.selected = true; subjSel.prepend(opt); document.getElementById('subjectId').value = ''; document.getElementById('subjectName').value = row.subject || ''; } } else { document.getElementById('subjectSelect').innerHTML = '<option value="">Select batch & semester first</option>'; } els.submitLabel.textContent = 'Update Class'; window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { } })();
             }
             if (e.target.matches('[data-del]')) { const id = e.target.getAttribute('data-del'); if (!confirm('Delete this class?')) return; (async () => { els.status.textContent = 'Deleting...'; try { const r = await fetch(API_BASE + '/api/teacher/classes/' + encodeURIComponent(id), { method: 'DELETE', headers: { Authorization: 'Bearer ' + getToken() } }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Delete failed'); els.status.textContent = 'Deleted'; loadClasses(); } catch (err) { els.status.textContent = 'Error: ' + err.message; } })(); }
         }
