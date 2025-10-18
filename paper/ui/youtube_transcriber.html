@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paper X — YouTube Transcriber</title>
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+
+  <!-- Inter + Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+
+  <!-- Tailwind build used by PaperX UI -->
+  <link rel="stylesheet" href="assets/css/tailwind.css" />
+  <script>
+    // Use the same theme boot pattern as index.html to avoid flash
+    (() => {
+      const stored = localStorage.getItem('px_theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const isDark = stored ? stored === 'dark' : prefersDark;
+      if (isDark) document.documentElement.classList.add('dark');
+    })();
+  </script>
+  <style>
+    .gradient-hero-text {
+      display: inline-block;
+      background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+      background-size: 200% 200%;
+      animation: gradient-shift 4s ease-in-out infinite;
+      color: transparent;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .dark .gradient-hero-text {
+      background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+    }
+    @keyframes gradient-shift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors">
+  <!-- Header -->
+  <header class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container flex items-center justify-between py-4">
+      <a href="index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+        <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
+        <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
+      </a>
+      <div class="flex items-center gap-2">
+        <a href="index.html" class="inline-flex items-center rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">Home</a>
+        <button id="themeToggle" data-theme-toggle class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10" aria-label="Toggle theme">
+          <span class="material-symbols-rounded">dark_mode</span>
+          <span class="hidden sm:block">Theme</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page -->
+  <main class="relative">
+    <!-- Ambient orbs -->
+    <div aria-hidden="true" class="pointer-events-none absolute -top-24 -right-24 size-[420px] rounded-full bg-brand-500/20 blur-3xl dark:blur-[90px]"></div>
+    <div aria-hidden="true" class="pointer-events-none absolute top-24 -left-24 size-[360px] rounded-full bg-brand-700/20 blur-3xl dark:blur-[90px]"></div>
+
+    <section class="container max-w-7xl py-8 md:py-12">
+      <header class="mb-6 md:mb-8">
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight gradient-hero-text">YouTube → Transcript</h1>
+        <p class="mt-2 text-neutral-600 dark:text-white/70">Paste a YouTube link. Watch on the left, read the cleaned transcript on the right.</p>
+      </header>
+
+      <!-- Input card -->
+      <div class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 backdrop-blur p-4 md:p-5 mb-6">
+        <form id="ytForm" class="grid gap-3 md:grid-cols-[1fr_auto_auto] items-center" onsubmit="return false;">
+          <label for="ytUrl" class="sr-only">YouTube URL</label>
+          <input id="ytUrl" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=..." class="w-full rounded-xl px-4 py-3 ring-1 ring-black/10 dark:ring-white/10 bg-white dark:bg-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50" />
+          <select id="lang" class="rounded-xl px-3 py-3 ring-1 ring-black/10 dark:ring-white/10 bg-white dark:bg-white/10 text-sm">
+            <option value="en" selected>English (en)</option>
+            <option value="en-US">English US (en-US)</option>
+            <option value="en-IN">English India (en-IN)</option>
+            <option value="hi">Hindi (hi)</option>
+            <option value="ta">Tamil (ta)</option>
+          </select>
+          <button id="fetchBtn" type="button" class="inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)]">
+            <span class="material-symbols-rounded text-base mr-1">bolt</span>
+            Fetch Transcript
+          </button>
+        </form>
+        <div id="hint" class="mt-2 text-xs text-neutral-600 dark:text-white/50">
+          Tip: Backend API defaults to <code class="px-1 rounded bg-black/5 dark:bg-white/10">http://127.0.0.1:8000</code>. Override with <code>?api=URL</code> in this page URL.
+        </div>
+      </div>
+
+      <!-- Two column layout -->
+      <div class="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
+        <!-- Left: video -->
+        <section class="group rounded-2xl overflow-hidden ring-1 ring-black/5 dark:ring-white/10 bg-white/60 dark:bg-brand-900/40 backdrop-blur shadow-soft dark:shadow-glow">
+          <div class="aspect-video w-full bg-black/5 dark:bg-black/40 grid place-content-center">
+            <iframe id="player" class="w-full h-full" src="" title="YouTube video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share" allowfullscreen></iframe>
+          </div>
+          <div class="p-4 border-t border-black/5 dark:border-white/10">
+            <div class="flex items-center justify-between gap-3">
+              <div class="truncate text-sm" id="videoTitle">Paste a link to preview the video</div>
+              <a id="openYouTube" href="#" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-500 hover:underline opacity-80 hover:opacity-100">
+                Open on YouTube <span class="material-symbols-rounded text-sm">open_in_new</span>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <!-- Right: transcript -->
+        <aside class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 backdrop-blur p-4 md:p-5 lg:sticky lg:top-24 h-fit">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="font-semibold">Transcript</h2>
+            <div class="flex items-center gap-2">
+              <button id="downloadTxt" class="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full ring-1 ring-black/10 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/10">TXT</button>
+              <button id="downloadSrt" class="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full ring-1 ring-black/10 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/10">SRT</button>
+              <button id="downloadVtt" class="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full ring-1 ring-black/10 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/10">VTT</button>
+            </div>
+          </div>
+          <div id="status" class="mt-2 text-xs text-neutral-600 dark:text-white/50">Awaiting input…</div>
+
+          <div class="mt-4 space-y-4 max-h-[60vh] overflow-y-auto pr-1" id="transcriptPanel">
+            <!-- Filled dynamically -->
+          </div>
+
+          <div class="mt-5">
+            <h3 class="text-sm font-semibold mb-2">Plain text</h3>
+            <textarea id="plainText" class="w-full h-40 rounded-xl px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/10 bg-white dark:bg-white/10" placeholder="Transcript will appear here" readonly></textarea>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer (compact) -->
+  <footer class="mt-10 py-10 text-center text-xs text-neutral-600 dark:text-white/50">
+    <div class="container">
+      <p>© <span id="y"></span> Paper X</p>
+    </div>
+  </footer>
+
+  <!-- Theme + logic -->
+  <script>
+    // theme toggle icon swap (same as index)
+    (function () {
+      const root = document.documentElement;
+      const btns = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+      const update = (mode) => btns().forEach(b => { const i = b.querySelector('.material-symbols-rounded'); if (i) i.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode'; });
+      const set = (mode) => { mode === 'dark' ? root.classList.add('dark') : root.classList.remove('dark'); localStorage.setItem('px_theme', mode); update(mode); };
+      set(root.classList.contains('dark') ? 'dark' : 'light');
+      document.addEventListener('click', (e) => { const t = e.target.closest('[data-theme-toggle]'); if (!t) return; const next = root.classList.contains('dark') ? 'light' : 'dark'; set(next); });
+    })();
+    document.getElementById('y').textContent = new Date().getFullYear();
+  </script>
+
+  <script>
+    // Simple utilities
+    const qs = (s, p = document) => p.querySelector(s);
+    const qsa = (s, p = document) => Array.from(p.querySelectorAll(s));
+
+    function getQueryParam(key) {
+      const url = new URL(location.href);
+      return url.searchParams.get(key);
+    }
+
+    // Backend base
+    const API_BASE = getQueryParam('api') || 'http://127.0.0.1:8000';
+
+    // Extract YT ID (11 chars) from URL or return raw if already ID
+    function extractVideoId(u) {
+      const patterns = [
+        /(?:v=|\/v\/|\/embed\/|\/shorts\/|youtu\.be\/)([A-Za-z0-9_-]{11})/,
+        /^([A-Za-z0-9_-]{11})$/
+      ];
+      for (const pat of patterns) {
+        const m = (u || '').match(pat);
+        if (m) return m[1];
+      }
+      return null;
+    }
+
+    function setPlayer(videoId) {
+      const player = qs('#player');
+      const embed = videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+      player.src = embed;
+      const open = qs('#openYouTube');
+      if (open) open.href = videoId ? `https://www.youtube.com/watch?v=${videoId}` : '#';
+    }
+
+    function renderSegments(segments) {
+      const panel = qs('#transcriptPanel');
+      panel.innerHTML = '';
+      if (!segments || !segments.length) {
+        panel.innerHTML = '<div class="text-sm text-neutral-600 dark:text-white/60">No segments found.</div>';
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      for (const seg of segments) {
+        const start = Number(seg.start || 0);
+        const dur = Number(seg.duration || 0);
+        const end = Math.max(0, start + dur);
+        const mm = (t) => {
+          const h = Math.floor(t / 3600);
+          const m = Math.floor((t % 3600) / 60);
+          const s = Math.floor(t % 60);
+          return h > 0 ? `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        };
+        const item = document.createElement('article');
+        item.className = 'rounded-xl p-3 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5';
+        item.innerHTML = `
+          <div class="flex items-center justify-between gap-3 mb-1 text-[12px] text-neutral-600 dark:text-white/60">
+            <span>${mm(start)} → ${mm(end)}</span>
+          </div>
+          <p class="text-sm leading-relaxed">${escapeHtml(seg.text || '')}</p>
+        `;
+        frag.appendChild(item);
+      }
+      panel.appendChild(frag);
+    }
+
+    function escapeHtml(s) {
+      return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+    }
+
+    async function fetchTranscript(url, lang) {
+      const status = qs('#status');
+      status.textContent = 'Fetching transcript…';
+      const endpoint = `${API_BASE}/transcript?` + new URLSearchParams({ url, lang, format: 'json', fallback_ytdlp: 'true', clean: 'true' });
+      const resp = await fetch(endpoint);
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(text || `Request failed (${resp.status})`);
+      }
+      return resp.json();
+    }
+
+    function setDownloading(buttonId, downloading) {
+      const btn = qs(buttonId);
+      if (!btn) return;
+      btn.disabled = downloading;
+      btn.style.opacity = downloading ? 0.6 : 1;
+    }
+
+    function buildDownloadUrl(fmt) {
+      const url = qs('#ytUrl').value.trim();
+      const lang = qs('#lang').value;
+      return `${API_BASE}/transcript?` + new URLSearchParams({ url, lang, format: fmt, fallback_ytdlp: 'true', clean: 'true' });
+    }
+
+    async function handleFetch() {
+      const url = qs('#ytUrl').value.trim();
+      const lang = qs('#lang').value;
+      const status = qs('#status');
+      const titleEl = qs('#videoTitle');
+      const plain = qs('#plainText');
+      plain.value = '';
+      renderSegments([]);
+
+      const vid = extractVideoId(url);
+      setPlayer(vid);
+      titleEl.textContent = 'Loading video info…';
+
+      try {
+        const data = await fetchTranscript(url, lang);
+        const { title, segments } = data || {};
+        titleEl.textContent = title || 'Video';
+        status.textContent = `Language: ${data?.language || lang}`;
+        renderSegments(segments || []);
+        // build plain text by joining
+        const joined = (segments || []).map(s => (s.text || '').trim()).filter(Boolean).join(' ');
+        plain.value = joined;
+      } catch (err) {
+        console.error(err);
+        status.textContent = `Error: ${err.message || err}`;
+      }
+    }
+
+    // Wire up
+    qs('#fetchBtn').addEventListener('click', handleFetch);
+    qs('#ytUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleFetch(); });
+
+    // Downloads
+    qs('#downloadTxt').addEventListener('click', () => { window.open(buildDownloadUrl('txt'), '_blank'); });
+    qs('#downloadSrt').addEventListener('click', () => { window.open(buildDownloadUrl('srt'), '_blank'); });
+    qs('#downloadVtt').addEventListener('click', () => { window.open(buildDownloadUrl('vtt'), '_blank'); });
+
+    // Optional: prefill from URL param ?url=
+    const presetUrl = getQueryParam('url');
+    if (presetUrl) {
+      qs('#ytUrl').value = presetUrl;
+      handleFetch();
+    }
+  </script>
+</body>
+
+</html>

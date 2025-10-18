@@ -428,6 +428,15 @@
         function initials(name) { if (!name) return 'U'; return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase()).join('') || 'U'; }
         function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
         function authHeaders() { const t = getToken(); return t ? { Authorization: `Bearer ${t}` } : {}; }
+        function escapeHtml(str) {
+            return (str ?? '').toString().replace(/[&<>"']/g, c => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[c]));
+        }
 
         async function fetchJson(url, opts = {}) {
             try {
@@ -452,7 +461,31 @@
             const progressIds = progOut?.data?.completed_topic_ids || []; completedTopicIds.clear(); progressIds.forEach(id => completedTopicIds.add(id));
             const syllabus = meOut?.data?.syllabus || [];
             if (!syllabus.length) { $('#syllabusEmpty').classList.remove('hidden'); }
-            renderSyllabus(syllabus);
+
+            const teacherNotesBySubject = new Map();
+            const subjectIds = new Set();
+            syllabus.forEach(course => {
+                if (course?.id) subjectIds.add(String(course.id));
+                else if (course?.course_id) subjectIds.add(String(course.course_id));
+                else if (course?.subject_id) subjectIds.add(String(course.subject_id));
+            });
+            if (subjectIds.size) {
+                await Promise.all(
+                    Array.from(subjectIds).map(async (sid) => {
+                        const notesRes = await fetchJson(`${API_BASE}/api/marketplace/subjects/${encodeURIComponent(sid)}/teacher-notes`, { headers: authHeaders() });
+                        if (notesRes?.status === 200 && Array.isArray(notesRes.data?.notes) && notesRes.data.notes.length) {
+                            const sorted = [...notesRes.data.notes].sort((a, b) => {
+                                const aDate = Date.parse(a.updated_at || a.created_at || '') || 0;
+                                const bDate = Date.parse(b.updated_at || b.created_at || '') || 0;
+                                return bDate - aDate;
+                            });
+                            teacherNotesBySubject.set(sid, sorted);
+                        }
+                    })
+                );
+            }
+
+            renderSyllabus(syllabus, teacherNotesBySubject);
             computeAggregateStats(syllabus);
         }
 
@@ -478,7 +511,7 @@
             const completion = pct(doneTopics, totalTopics); updateRing(completion); const bar = $('barTopics'); if (bar) { bar.style.width = (completion || 0) + '%'; bar.classList.remove('animate-pulseBar'); }
         }
 
-        function renderSyllabus(list) {
+        function renderSyllabus(list, teacherNotesBySubject = new Map()) {
             const wrap = $('syllabus'); wrap.innerHTML = ''; const cTpl = $('courseCardTpl'); const uTpl = $('unitItemTpl');
             const courseNodes = [];
             list.forEach(c => {
@@ -486,6 +519,8 @@
                 cNode.querySelector('[data-cc]').textContent = c.course_code; cNode.querySelector('[data-title]').textContent = c.title; cNode.querySelector('[data-sem]').textContent = c.semester;
                 unitsWrap.classList.add('hidden'); header.setAttribute('aria-expanded', 'false');
                 header.addEventListener('click', () => { const collapsed = unitsWrap.classList.toggle('hidden'); const expanded = !collapsed; header.setAttribute('aria-expanded', expanded ? 'true' : 'false'); caret.classList.toggle('-rotate-90', !expanded ? true : false); caret.classList.toggle('rotate-0', expanded ? true : false); });
+                const courseId = c.id || c.course_id || c.subject_id;
+                const courseKey = courseId ? String(courseId) : null;
                 const courseCounts = { done: 0, total: 0 };
                 (c.units || []).forEach(u => {
                     const uNode = uTpl.content.cloneNode(true); const uHeader = uNode.querySelector('[data-unit-toggle]'); const uCaret = uNode.querySelector('[data-unit-caret]'); const topicsWrap = uNode.querySelector('[data-topics]'); const unitTitle = uNode.querySelector('[data-unit-title]'); const unitProgBar = uNode.querySelector('[data-unit-progress-bar]'); const unitProgText = uNode.querySelector('[data-unit-progress-text]'); topicsWrap.classList.add('hidden'); uHeader.setAttribute('aria-expanded', 'false');
@@ -502,6 +537,55 @@
                     });
                     courseCounts.total += unitCounts.total; courseCounts.done += unitCounts.done; updateUnitProgress(unitCounts, unitProgBar, unitProgText); updateUnitCompletedStyle(unitCounts, unitTitle); unitsWrap.appendChild(uNode);
                 });
+
+                const subjectNotes = courseKey ? (teacherNotesBySubject.get(courseKey) || []) : [];
+                const notesCard = document.createElement('div');
+                notesCard.className = 'rounded-xl ring-1 ring-brand-500/20 bg-brand-500/5 dark:bg-brand-900/40 overflow-hidden';
+                notesCard.innerHTML = `
+                    <div class="px-4 py-3 flex items-center justify-between text-sm font-semibold text-brand-700 dark:text-brandlt-200 bg-brand-500/10 dark:bg-brand-500/20">
+                        <span class="inline-flex items-center gap-2"><span class="material-symbols-rounded text-base">library_books</span>Teacher Notes</span>
+                        <span class="text-[11px] font-medium">${subjectNotes.length ? subjectNotes.length + ' file' + (subjectNotes.length === 1 ? '' : 's') : 'None yet'}</span>
+                    </div>
+                `;
+                const notesBody = document.createElement('div');
+                notesBody.className = 'px-4 pb-4';
+                if (subjectNotes.length) {
+                    const listEl = document.createElement('ul');
+                    listEl.className = 'divide-y divide-black/5 dark:divide-white/10';
+                    subjectNotes.forEach(note => {
+                        const li = document.createElement('li');
+                        li.className = 'py-2';
+                        const price = Number(note.price_cents || 0);
+                        const priceLabel = price > 0 ? `? ${(price / 100).toFixed(0)}` : 'Free';
+                        const seller = note.seller?.name || 'Teacher';
+                        const updated = note.updated_at || note.created_at;
+                        const formattedDate = updated ? new Date(updated).toLocaleDateString() : '';
+                        const link = document.createElement('a');
+                        link.href = `matketplace/notes/note_detail.html?id=${encodeURIComponent(note.id)}`;
+                        link.target = '_blank';
+                        link.rel = 'noopener';
+                        link.className = 'flex items-center justify-between gap-3 text-sm text-brand-600 dark:text-brand-200 hover:underline';
+                        link.innerHTML = `
+                            <span class="flex-1">${escapeHtml(note.title || 'Untitled note')}</span>
+                            <span class="flex items-center gap-2 text-[11px] text-neutral-500 dark:text-white/60">
+                                <span class="px-2 py-0.5 rounded-full bg-brand-500/15 text-brand-700 dark:text-brandlt-200">${priceLabel}</span>
+                                ${formattedDate ? `<span>${formattedDate}</span>` : ''}
+                                <span>${escapeHtml(seller)}</span>
+                            </span>
+                        `;
+                        li.appendChild(link);
+                        listEl.appendChild(li);
+                    });
+                    notesBody.appendChild(listEl);
+                } else {
+                    const empty = document.createElement('p');
+                    empty.className = 'text-xs text-neutral-500 dark:text-white/60 py-3';
+                    empty.textContent = 'No teacher notes uploaded yet for this subject.';
+                    notesBody.appendChild(empty);
+                }
+                notesCard.appendChild(notesBody);
+                unitsWrap.appendChild(notesCard);
+
                 updateCourseProgress(courseCounts, progBar, progText); wrap.appendChild(cNode); courseNodes.push({ header, unitsWrap });
             });
 
@@ -600,3 +684,4 @@
 </body>
 
 </html>
+
