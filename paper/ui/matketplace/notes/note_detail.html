@@ -16,6 +16,7 @@
 
     <!-- Tailwind -->
     <link rel="stylesheet" href="../../assets/css/tailwind.css" />
+    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
     <script>
         // Guard tailwind assignment in case Tailwind runtime isn't exposed (precompiled CSS only scenario)
         try {
@@ -513,12 +514,58 @@
             };
             const showPdf = (url) => {
                 previewArea.innerHTML = `<div class='w-full max-w-3xl mx-auto aspect-[3/2] bg-white/40 dark:bg-white/5 rounded-lg ring-1 ring-black/10 dark:ring-white/15 overflow-hidden flex flex-col'>
- <iframe src='${url}#view=fitH' class='w-full h-full' title='PDF preview' loading='lazy'></iframe>
- <a href='${url}' target='_blank' class='text-[11px] px-2 py-1 bg-black/5 dark:bg-white/10 text-center'>Open full PDF</a>
+<iframe src='${url}#view=fitH' class='w-full h-full' title='PDF preview' loading='lazy'></iframe>
+<a href='${url}' target='_blank' class='text-[11px] px-2 py-1 bg-black/5 dark:bg-white/10 text-center'>Open full PDF</a>
 </div>`;
             };
-            const derivedDownloadUrl = apiBase && n.id ? `${apiBase}/api/marketplace/notes/${n.id}/download` : '';
+            function attachFallbackDownload() {
+                const fallbackBtn = previewArea.querySelector('[data-role="fallback-download"]');
+                if (fallbackBtn) {
+                    fallbackBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        doDownload();
+                    }, { once: true });
+                }
+            }
+            function renderDownloadFallback(message) {
+                previewArea.innerHTML = `
+                    <div class="py-14 text-sm text-neutral-600 dark:text-white/70 flex flex-col items-center gap-2 text-center">
+                        <span class="text-base font-semibold">Preview unavailable for this file type.</span>
+                        <span class="text-xs opacity-70">${message || `Type: ${(n.mime_type || 'n/a')} | File: ${(n.original_filename || n.stored_path || 'n/a')}`}</span>
+                        <button type="button" data-role="fallback-download"
+                            class="mt-3 inline-flex items-center gap-2 rounded-full bg-brand-500 text-white font-semibold px-4 py-2 text-xs hover:shadow-glow transition">
+                            <span class="material-symbols-rounded text-base">download</span>
+                            Download to view
+                        </button>
+                    </div>
+                `;
+                attachFallbackDownload();
+            }
+            async function showDocx(url) {
+                if (!window.mammoth || typeof window.mammoth.convertToHtml !== 'function') {
+                    renderDownloadFallback(`Type: ${(n.mime_type || 'n/a')} | File: ${(n.original_filename || n.stored_path || 'n/a')}`);
+                    return;
+                }
+                previewArea.innerHTML = `<div class="py-12 text-sm text-neutral-500 dark:text-white/60">Rendering document preview...</div>`;
+                try {
+                    const token = getToken();
+                    const res = await fetch(url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const buffer = await res.arrayBuffer();
+                    const result = await window.mammoth.convertToHtml({ arrayBuffer: buffer });
+                    const html = result.value || '<p>Preview unavailable.</p>';
+                    previewArea.innerHTML = `<div class="docx-preview prose prose-sm max-w-none max-h-[60vh] overflow-y-auto bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 p-4 rounded-xl shadow-sm">${html}<div class="mt-4 flex justify-center"><button type="button" data-role="fallback-download" class="inline-flex items-center gap-2 rounded-full bg-brand-500 text-white font-semibold px-4 py-2 text-xs hover:shadow-glow transition"><span class="material-symbols-rounded text-base">download</span>Download original</button></div></div>`;
+                    attachFallbackDownload();
+                } catch (err) {
+                    console.warn('DOCX preview failed', err);
+                    renderDownloadFallback('Unable to render preview. Please download to view.');
+                }
+            }
+            const downloadUrl = apiBase && n.id ? `${apiBase}/api/marketplace/notes/${n.id}/download` : '';
+            const purchaseUrl = apiBase && n.id ? `${apiBase}/api/marketplace/notes/${n.id}/purchase` : '';
+            const derivedDownloadUrl = downloadUrl;
             const inlinePreviewUrl = apiBase && n.id ? `${apiBase}/api/marketplace/notes/${n.id}/preview` : '';
+            const hasAccess = !!detail.has_access || (n.price_cents || 0) === 0;
             const tryPrimaryPreview = () => {
                 // 0. Dedicated backend inline preview endpoint
                 if (inlinePreviewUrl && (n.mime_type || n.original_filename)) {
@@ -555,15 +602,23 @@
                 if (nameForExt || mime) {
                     const isPdf = nameForExt.endsWith('.pdf') || mime === 'application/pdf';
                     const isImg = /\.(png|jpe?g|webp|gif)$/i.test(nameForExt) || mime.startsWith('image/');
+                    const isDocx = nameForExt.endsWith('.docx') || mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
                     if (derivedDownloadUrl && (isPdf || isImg)) {
                         if (isPdf) { showPdf(derivedDownloadUrl); return true; }
                         if (isImg) { showImage(derivedDownloadUrl); return true; }
+                    }
+                    if (isDocx && derivedDownloadUrl) {
+                        if (!hasAccess) {
+                            return false;
+                        }
+                        showDocx(derivedDownloadUrl);
+                        return true;
                     }
                 }
                 return false;
             };
             if (!tryPrimaryPreview()) {
-                previewArea.innerHTML = `<div class="py-14 text-xs opacity-70">No preview available.<br><span class='opacity-50'>Type: ${(n.mime_type || 'n/a')} File: ${(n.original_filename || n.stored_path || 'n/a')}</span></div>`;
+                renderDownloadFallback(`Type: ${(n.mime_type || 'n/a')} | File: ${(n.original_filename || n.stored_path || 'n/a')}`);
             }
             thumbs.forEach((u, idx) => {
                 const btn = document.createElement('button');
@@ -586,9 +641,6 @@
 
             // CTA wiring
             const cta = el('#primaryCta'); const mobileCta = el('#mobileCta'); const statusEl = el('#purchaseStatus');
-            const hasAccess = !!detail.has_access || (n.price_cents || 0) === 0;
-            const downloadUrl = `${apiBase}/api/marketplace/notes/${n.id}/download`;
-            const purchaseUrl = `${apiBase}/api/marketplace/notes/${n.id}/purchase`;
             async function doDownload() {
                 const token = getToken();
                 try {
@@ -608,11 +660,11 @@
             }
             async function doPurchase(btn) {
                 const token = getToken(); if (!token) { statusEl.textContent = 'Login required'; return; }
-                const old = btn.innerHTML; btn.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span><span>Processing…</span>';
+                const old = btn.innerHTML; btn.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span><span>Processing...</span>';
                 statusEl.textContent = '';
                 let r; try { r = await fetch(purchaseUrl, { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); } catch { btn.innerHTML = old; statusEl.textContent = 'Network error'; return; }
                 if (r && r.ok) {
-                    btn.innerHTML = old; statusEl.textContent = 'Purchased. Starting download…';
+                    btn.innerHTML = old; statusEl.textContent = 'Purchased. Starting download...';
                     // refetch to update access
                     detail.has_access = true; setTimeout(doDownload, 600);
                     el('#ctaText').textContent = 'Download';
@@ -722,3 +774,4 @@
 </body>
 
 </html>
+

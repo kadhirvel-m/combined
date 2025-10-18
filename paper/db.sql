@@ -54,8 +54,6 @@ CREATE TABLE public.marketplace_notes (
   title text NOT NULL,
   description text,
   subject text,
-  subject_id uuid,
-  subject_href text,
   unit text,
   exam_type text,
   categories ARRAY DEFAULT '{}'::text[],
@@ -76,6 +74,8 @@ CREATE TABLE public.marketplace_notes (
   batch_id uuid,
   semester integer CHECK (semester >= 1 AND semester <= 12),
   cover_path text,
+  subject_id uuid,
+  subject_href text,
   CONSTRAINT marketplace_notes_pkey PRIMARY KEY (id),
   CONSTRAINT marketplace_notes_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES auth.users(id),
   CONSTRAINT marketplace_notes_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
@@ -167,6 +167,9 @@ CREATE TABLE public.print_shops (
   rating numeric DEFAULT 0,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  price_hint text,
+  pricing jsonb DEFAULT '{}'::jsonb,
+  logo_url text,
   CONSTRAINT print_shops_pkey PRIMARY KEY (id),
   CONSTRAINT print_shops_owner_fkey FOREIGN KEY (owner_user_id) REFERENCES auth.users(id)
 );
@@ -305,7 +308,6 @@ CREATE TABLE public.teacher_classes (
   batch_id uuid,
   semester integer CHECK (semester >= 1 AND semester <= 12),
   subject text NOT NULL,
-  subject_id uuid,
   section text,
   degree_id uuid,
   department_id uuid,
@@ -313,13 +315,14 @@ CREATE TABLE public.teacher_classes (
   notes text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  subject_id uuid,
   CONSTRAINT teacher_classes_pkey PRIMARY KEY (id),
   CONSTRAINT teacher_classes_teacher_user_id_fkey FOREIGN KEY (teacher_user_id) REFERENCES auth.users(id),
   CONSTRAINT teacher_classes_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id),
   CONSTRAINT teacher_classes_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id),
   CONSTRAINT teacher_classes_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
-  CONSTRAINT teacher_classes_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.syllabus_courses(id),
-  CONSTRAINT teacher_classes_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id)
+  CONSTRAINT teacher_classes_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
+  CONSTRAINT teacher_classes_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.syllabus_courses(id)
 );
 CREATE TABLE public.teacher_connections (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

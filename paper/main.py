@@ -29,7 +29,7 @@ from autogen_core.models import ModelInfo
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -5637,7 +5637,14 @@ def teacher_notes_meta(authorization: Optional[str] = Header(default=None)):
 def teacher_my_notes(authorization: Optional[str] = Header(default=None)):
     uid = _require_teacher(authorization)
     supabase = get_service_client()
-    res = supabase.table("marketplace_notes").select("id,title,subject,semester,created_at,price_cents").eq("owner_user_id", uid).order("created_at", desc=True).limit(200).execute()
+    res = (
+        supabase.table("marketplace_notes")
+        .select("id,title,description,subject,subject_id,semester,created_at,updated_at,price_cents,unit,exam_type,categories,original_filename")
+        .eq("owner_user_id", uid)
+        .order("created_at", desc=True)
+        .limit(200)
+        .execute()
+    )
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (my teacher notes): {res.error}")
     return {"notes": res.data or []}
@@ -5846,7 +5853,7 @@ def _enrich_academics(supabase: Client, core: Dict[str, Any]):
                 core["degree_name"] = deg.data[0].get("name")
 
 def _fetch_teacher_classes(supabase: Client, teacher_user_id: str) -> List[Dict[str, Any]]:
-    cls = supabase.table("teacher_classes").select("id,batch_id,semester,subject,section,degree_id,department_id,college_id,created_at").eq("teacher_user_id", teacher_user_id).order("created_at", desc=True).limit(500).execute()
+    cls = supabase.table("teacher_classes").select("id,batch_id,semester,subject,subject_id,section,degree_id,department_id,college_id,created_at").eq("teacher_user_id", teacher_user_id).order("created_at", desc=True).limit(500).execute()
     if getattr(cls, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (teacher classes): {cls.error}")
     classes = cls.data or []
@@ -6004,7 +6011,7 @@ async def get_teacher_profile(
         # Fetch classes, then enrich lookups concurrently
         loop = asyncio.get_running_loop()
         cls = await loop.run_in_executor(None, lambda: _retry_blocking(lambda: supabase.table("teacher_classes").select(
-            "id,batch_id,semester,subject,section,degree_id,department_id,college_id,created_at"
+            "id,batch_id,semester,subject,subject_id,section,degree_id,department_id,college_id,created_at"
         ).eq("teacher_user_id", user_id).order("created_at", desc=True).limit(500).execute()))
         if getattr(cls, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (teacher classes): {cls.error}")
@@ -9108,6 +9115,125 @@ def mp_review_note(
                 "updated_at": datetime.utcnow().isoformat(),
             }).eq("id", str(note_id)).execute()
     return {"status": "ok"}
+
+
+@marketplace_router.put("/api/marketplace/notes/{note_id}", summary="Update own note metadata")
+def mp_update_note(note_id: uuid.UUID, payload: dict = Body(...), authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    user_id = _require_auth_user_id(token)
+    supabase = get_service_client()
+    note_res = supabase.table("marketplace_notes").select("owner_user_id").eq("id", str(note_id)).limit(1).execute()
+    if getattr(note_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get note for update): {note_res.error}")
+    if not note_res.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    owner_id = note_res.data[0].get("owner_user_id")
+    if owner_id != user_id:
+        raise HTTPException(status_code=403, detail="Not permitted to update this note")
+    allowed_fields = {"title", "description", "subject", "subject_id", "semester", "price_cents", "unit", "exam_type", "categories"}
+    updates: Dict[str, Any] = {}
+    payload = payload or {}
+    for field in allowed_fields:
+        if field in payload:
+            value = payload[field]
+            if field == "categories" and isinstance(value, str):
+                value = [c.strip() for c in value.split(",") if c.strip()]
+            if field == "semester" and value not in (None, ""):
+                try:
+                    ivalue = int(value)
+                    if ivalue < 1 or ivalue > 12:
+                        raise ValueError
+                    value = ivalue
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="semester must be between 1 and 12")
+            if field == "price_cents" and value not in (None, ""):
+                try:
+                    value = int(value)
+                    if value < 0:
+                        raise ValueError
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="price_cents must be a non-negative integer")
+            if field == "subject_id" and value:
+                try:
+                    uuid.UUID(str(value))
+                    value = str(value)
+                except Exception:
+                    raise HTTPException(status_code=400, detail="subject_id must be a valid UUID")
+            updates[field] = value if value != "" else None
+    if not updates:
+        return {"updated": False}
+    updates["updated_at"] = datetime.utcnow().isoformat()
+    upd = (
+        supabase.table("marketplace_notes")
+        .update(updates)
+        .eq("id", str(note_id))
+        .eq("owner_user_id", user_id)
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update note): {upd.error}")
+    data = None
+    if isinstance(upd.data, list) and upd.data:
+        data = upd.data[0]
+    return {"updated": True, "note": data or updates}
+
+
+@marketplace_router.post("/api/marketplace/notes/{note_id}/replace-file", summary="Replace stored file for own note")
+def mp_replace_note_file(
+    note_id: uuid.UUID,
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    user_id = _require_auth_user_id(token)
+    supabase = get_service_client()
+    note_res = (
+        supabase.table("marketplace_notes")
+        .select("owner_user_id,stored_path")
+        .eq("id", str(note_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(note_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get note for replace): {note_res.error}")
+    if not note_res.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    note_row = note_res.data[0]
+    owner_id = note_row.get("owner_user_id")
+    if owner_id != user_id:
+        raise HTTPException(status_code=403, detail="Not permitted to replace this note")
+    old_stored = note_row.get("stored_path")
+    stored_name, size, mime = _store_marketplace_file(file)
+    update_fields = {
+        "stored_path": stored_name,
+        "original_filename": file.filename or "upload",
+        "file_size": size,
+        "mime_type": mime,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    upd = (
+        supabase.table("marketplace_notes")
+        .update(update_fields)
+        .eq("id", str(note_id))
+        .eq("owner_user_id", user_id)
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        try:
+            new_path = MARKETPLACE_STORAGE / stored_name
+            if new_path.is_file():
+                new_path.unlink()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"Supabase error (replace file): {upd.error}")
+    if old_stored and old_stored != stored_name:
+        try:
+            old_path = MARKETPLACE_STORAGE / old_stored
+            if old_path.is_file():
+                old_path.unlink()
+        except Exception:
+            pass
+    return {"updated": True, "stored_path": stored_name}
 
 
 @marketplace_router.delete("/api/marketplace/notes/{note_id}", summary="Delete own note")
