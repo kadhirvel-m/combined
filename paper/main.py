@@ -15,6 +15,7 @@ import sys
 import textwrap
 import time
 import uuid
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, date
 from decimal import Decimal
@@ -39,6 +40,26 @@ except Exception:  # pragma: no cover
     httpx = None
     class HTTPXRemoteProtocolError(Exception):
         pass
+
+try:
+    import fitz  # type: ignore
+except Exception:  # pragma: no cover
+    fitz = None  # type: ignore
+
+try:
+    import docx  # type: ignore
+except Exception:  # pragma: no cover
+    docx = None  # type: ignore
+
+try:
+    from pptx import Presentation  # type: ignore
+except Exception:  # pragma: no cover
+    Presentation = None  # type: ignore
+
+try:
+    import textract  # type: ignore
+except Exception:  # pragma: no cover
+    textract = None  # type: ignore
 from markdownify import markdownify as md
 from pydantic import BaseModel, Field, validator, root_validator
 from rapidfuzz import fuzz
@@ -8305,6 +8326,63 @@ def _sanitize_filename(name: str) -> str:
     return base or "note"
 
 
+def _execute_supabase(builder, retries: int = 2, base_delay: float = 0.2):
+    """Execute a Supabase query builder with simple retry on transport drops."""
+    last_exc: Optional[Exception] = None
+    for attempt in range(retries + 1):
+        try:
+            return builder.execute()
+        except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network dependent
+            last_exc = exc
+            time.sleep(base_delay * (attempt + 1))
+            continue
+    raise HTTPException(status_code=503, detail="Temporary Supabase connection issue. Please retry.") from last_exc
+
+
+def _approximate_pages_from_words(words: int) -> Optional[int]:
+    if words <= 0:
+        return None
+    # assume ~500 words per page, round up
+    return max(1, math.ceil(words / 500))
+
+
+def _compute_page_count(file_path: Path, original_name: Optional[str], mime_type: Optional[str]) -> Optional[int]:
+    """Best-effort page/slide estimate using available libraries; returns None on failure."""
+    if not file_path or not file_path.exists():
+        return None
+    ext = (Path(original_name or file_path.name).suffix or "").lower()
+    if not ext and mime_type:
+        mt = (mime_type or "").lower()
+        if "pdf" in mt:
+            ext = ".pdf"
+        elif "word" in mt or "msword" in mt:
+            ext = ".docx"
+        elif "ppt" in mt:
+            ext = ".pptx"
+    try:
+        if ext == ".pdf" and fitz:
+            with fitz.open(file_path) as pdf:  # type: ignore[attr-defined]
+                return int(pdf.page_count)
+        if ext in {".docx"} and docx:
+            document = docx.Document(str(file_path))
+            words = sum(len((para.text or "").split()) for para in document.paragraphs)
+            return _approximate_pages_from_words(words)
+        if ext in {".pptx"} and Presentation:
+            prs = Presentation(str(file_path))
+            return len(prs.slides)
+        if ext == ".doc" and textract:
+            text = textract.process(str(file_path)).decode("utf-8", errors="ignore")
+            words = len(text.split())
+            return _approximate_pages_from_words(words)
+        if ext == ".ppt" and textract:
+            text = textract.process(str(file_path)).decode("utf-8", errors="ignore")
+            slides = text.count("\f") or text.count("\x0c") or 0
+            return slides or None
+    except Exception:
+        return None
+    return None
+
+
 def _store_marketplace_file(upload: UploadFile) -> tuple[str, int, str]:
     suffix = Path(upload.filename or "").suffix.lower()
     if suffix not in ALLOWED_NOTE_EXTENSIONS:
@@ -8671,12 +8749,21 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
     header_token = _parse_bearer_token(authorization)
     token = token or header_token
     supabase = get_service_client()
-    res = supabase.table("marketplace_notes").select("*").eq("id", str(note_id)).limit(1).execute()
+    note_query = supabase.table("marketplace_notes").select("*").eq("id", str(note_id)).limit(1)
+    res = _execute_supabase(note_query)
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (get note): {res.error}")
     if not res.data:
         raise HTTPException(status_code=404, detail="Note not found")
     note = res.data[0]
+    if not note.get("page_count"):
+        stored_name = note.get("stored_path")
+        if stored_name:
+            file_path = MARKETPLACE_STORAGE / stored_name
+            computed_pages = _compute_page_count(file_path, note.get("original_filename"), note.get("mime_type"))
+            if computed_pages:
+                note["page_count"] = computed_pages
+                note["pages"] = computed_pages
     # Determine if user has access (owner or purchased or free)
     user_id = None
     if token:
@@ -8690,26 +8777,26 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
     elif user_id and user_id == note.get("owner_user_id"):
         has_access = True
     elif user_id:
-        pur = (
+        purchase_query = (
             supabase.table("marketplace_purchases")
             .select("id")
             .eq("note_id", str(note_id))
             .eq("buyer_user_id", user_id)
             .limit(1)
-            .execute()
         )
+        pur = _execute_supabase(purchase_query)
         if getattr(pur, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (check purchase): {pur.error}")
         if pur.data:
             has_access = True
     # Reviews
-    rev = (
+    reviews_query = (
         supabase.table("marketplace_reviews")
         .select("id,reviewer_user_id,rating,comment,created_at")
         .eq("note_id", str(note_id))
         .order("created_at", desc=True)
-        .execute()
     )
+    rev = _execute_supabase(reviews_query)
     reviews = rev.data or []
     # Collect user ids for enrichment (owner + reviewers)
     user_ids: set[str] = set()
@@ -8724,12 +8811,12 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
     if user_ids:
         # Fetch profiles from user_profiles (auth_user_id mapping)
         try:
-            prof_res = (
+            prof_query = (
                 supabase.table("user_profiles")
                 .select("auth_user_id,name,profile_image_url")
                 .in_("auth_user_id", list(user_ids))
-                .execute()
             )
+            prof_res = _execute_supabase(prof_query)
             if not getattr(prof_res, "error", None):
                 for row in prof_res.data or []:
                     uid = row.get("auth_user_id")
@@ -8742,7 +8829,8 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
     teacher_profile_row = None
     if owner_id:
         try:
-            tprof = supabase.table("teacher_profiles").select("auth_user_id,name,profile_image_url,college_id,department_id").eq("auth_user_id", owner_id).limit(1).execute()
+            tprof_query = supabase.table("teacher_profiles").select("auth_user_id,name,profile_image_url,college_id,department_id").eq("auth_user_id", owner_id).limit(1)
+            tprof = _execute_supabase(tprof_query)
             if not getattr(tprof, "error", None) and tprof.data:
                 teacher_profile_row = tprof.data[0]
         except Exception:
@@ -8765,14 +8853,14 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
     is_teacher_owner = False
     try:
         if owner_id:
-            role_res = (
+            role_query = (
                 supabase.table("admin_roles")
                 .select("role")
                 .eq("auth_user_id", owner_id)
                 .eq("role", "teacher")
                 .limit(1)
-                .execute()
             )
+            role_res = _execute_supabase(role_query)
             if not getattr(role_res, "error", None) and role_res.data:
                 is_teacher_owner = True
     except Exception:

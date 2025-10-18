@@ -342,6 +342,16 @@
         const els = (sel, root = document) => [...root.querySelectorAll(sel)];
         const formatCurrency = v => (v || 0) === 0 ? 'Free' : `₹${(v / 100).toFixed(0)}`;
         const escapeHtml = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const formatBytes = (bytes) => {
+            const value = Number(bytes);
+            if (!Number.isFinite(value) || value <= 0) return '';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let unit = 0;
+            let v = value;
+            while (v >= 1024 && unit < units.length - 1) { v /= 1024; unit++; }
+            const rounded = unit === 0 ? Math.round(v) : (v >= 10 ? v.toFixed(1) : v.toFixed(2));
+            return `${rounded} ${units[unit]}`;
+        };
 
         // Unified theme toggle (same as index/about)
         (function () {
@@ -387,15 +397,14 @@
             el('#metaChips').innerHTML = [n.subject, n.unit, n.exam_type].filter(Boolean)
                 .map(x => `<span class="px-2 py-0.5 rounded-full ring-1 ring-black/10 dark:ring-white/15">${escapeHtml(x)}</span>`).join('');
 
-            // Price & rating
+            // Price
             el('#priceChip').textContent = formatCurrency(n.price_cents);
             el('#pricePrimary').textContent = formatCurrency(n.price_cents);
             el('#mobilePrice').textContent = formatCurrency(n.price_cents);
-            const ratingTxt = n.rating_count ? `★ ${Number(n.avg_rating).toFixed(1)} (${n.rating_count})` : 'No ratings';
-            el('#ratingSummary').textContent = ratingTxt; el('#asideRating').textContent = ratingTxt;
 
             // Seller
             const s = n.seller || {};
+            const isTeacherUpload = Boolean(n.is_teacher_owner || s.is_teacher);
             // Use backend-provided profile_href if present (teacher), else fallback to staff profile.
             const profUrl = s.profile_href ? (s.profile_href.startsWith('http') ? s.profile_href : (`..${s.profile_href.startsWith('/ui') ? '/..' : '/'}${s.profile_href.replace(/^\/ui\//, '')}`)) : (s.is_teacher && s.id ? `../../teacher_profile.html?user=${encodeURIComponent(s.id)}` : `../../staff_profile.html?user=${encodeURIComponent(s.id || '')}`);
             el('#sellerProfile').href = profUrl;
@@ -411,12 +420,71 @@
             el('#sellerAvatar').innerHTML = avatarMarkup;
             el('#sellerAvatarWrap').innerHTML = avatarMarkup;
 
+            const attachments = Array.isArray(n.attachments) ? n.attachments : [];
+            const primaryFile = attachments.find(att => att && (att.original_filename || att.stored_path)) || attachments[0] || null;
+            const extractExt = (input) => {
+                if (!input) return '';
+                const cleaned = input.split('/').pop().split('?')[0];
+                const dot = cleaned.lastIndexOf('.');
+                return dot >= 0 ? cleaned.slice(dot + 1).toLowerCase() : '';
+            };
+            const primaryName = primaryFile?.original_filename || n.original_filename || '';
+            const primaryStoredName = primaryFile?.stored_path || n.stored_path || '';
+            const primaryMime = (primaryFile?.mime_type || n.mime_type || '').toLowerCase();
+            const extFromName = extractExt(primaryName) || extractExt(primaryStoredName);
+            let displayType = '';
+            if (primaryMime) {
+                if (primaryMime === 'application/pdf') displayType = 'PDF';
+                else if (primaryMime === 'application/msword') displayType = 'DOC';
+                else if (primaryMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') displayType = 'DOCX';
+                else if (primaryMime === 'application/vnd.ms-powerpoint') displayType = 'PPT';
+                else if (primaryMime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') displayType = 'PPTX';
+                else if (primaryMime.startsWith('image/')) displayType = primaryMime.split('/')[1]?.toUpperCase() || 'IMAGE';
+                else displayType = primaryMime.split('/').pop()?.toUpperCase() || '';
+            }
+            if (!displayType && extFromName) displayType = extFromName.toUpperCase();
+            if (!displayType && n.file_type) displayType = String(n.file_type).toUpperCase();
+            if (!displayType) displayType = '—';
+            const primarySizeBytes = primaryFile?.file_size || n.file_size || n.size || 0;
+            const formattedSize = formatBytes(primarySizeBytes);
+            const metadataObj = (n.metadata && typeof n.metadata === 'object') ? n.metadata : {};
+            const pageCountValue = n.page_count || n.pages || n.estimated_pages || primaryFile?.page_count || metadataObj.page_count || metadataObj.pages || '';
+            const pageCountLabel = pageCountValue ? String(pageCountValue) : '';
+            const suggestedDownloadName = primaryFile?.original_filename || n.original_filename || (n.title ? `${n.title}${extFromName ? `.${extFromName}` : ''}` : 'note');
+
+            const ratingSummaryEl = el('#ratingSummary');
+            const asideRatingEl = el('#asideRating');
+            if (isTeacherUpload) {
+                if (ratingSummaryEl) {
+                    ratingSummaryEl.textContent = '';
+                    ratingSummaryEl.classList.add('hidden');
+                    ratingSummaryEl.classList.remove('text-amber-500');
+                }
+                if (asideRatingEl) {
+                    asideRatingEl.textContent = '';
+                    asideRatingEl.classList.add('hidden');
+                    asideRatingEl.classList.remove('text-amber-500');
+                }
+            } else {
+                const ratingTxt = n.rating_count ? `★ ${Number(n.avg_rating).toFixed(1)} (${n.rating_count})` : 'No ratings';
+                if (ratingSummaryEl) {
+                    ratingSummaryEl.textContent = ratingTxt;
+                    ratingSummaryEl.classList.remove('hidden', 'text-neutral-500', 'dark:text-white/60');
+                    ratingSummaryEl.classList.add('text-amber-500');
+                }
+                if (asideRatingEl) {
+                    asideRatingEl.textContent = ratingTxt;
+                    asideRatingEl.classList.remove('hidden', 'text-neutral-500', 'dark:text-white/60');
+                    asideRatingEl.classList.add('text-amber-500');
+                }
+            }
+
             // File meta / details
             const mgrid = el('#fileMeta'); mgrid.innerHTML = '';
             const push = (label, val) => mgrid.insertAdjacentHTML('beforeend', `<div class="px-2 py-1 rounded ring-1 ring-black/10 dark:ring-white/15 bg-white/60 dark:bg-white/5"><div class="text-[11px] opacity-60">${label}</div><div class="text-xs">${val || '—'}</div></div>`);
-            push('Type', (n.file_type || 'PDF').toUpperCase());
-            push('Pages', n.pages || '—');
-            push('Size', n.file_size || '—');
+            push('Type', displayType);
+            push('Pages', pageCountLabel || '—');
+            push('Size', formattedSize || '—');
             push('Updated', n.updated_at ? new Date(n.updated_at).toLocaleDateString() : '—');
 
             const dlist = el('#detailsList'); dlist.innerHTML = '';
@@ -533,7 +601,7 @@
                     const blob = await r.blob();
                     const a = document.createElement('a');
                     const url = URL.createObjectURL(blob);
-                    a.href = url; a.download = (n.title || 'note') + (n.file_type ? '.' + n.file_type.toLowerCase() : '');
+                    a.href = url; a.download = suggestedDownloadName || n.original_filename || n.title || 'note';
                     document.body.appendChild(a); a.click(); a.remove();
                     setTimeout(() => URL.revokeObjectURL(url), 4000);
                 } catch (e) { statusEl.textContent = 'Network error'; }
@@ -574,22 +642,26 @@
             saveBtn.onclick = () => { const a = getWL(); if (isSaved()) { setWL(a.filter(x => x !== n.id)); } else { a.push(n.id); setWL(a); } refreshSave(); };
 
             // Reviews
-            renderReviews(detail.reviews || [], n);
+            const reviewsSection = el('#reviewsSection');
+            if (isTeacherUpload) {
+                if (reviewsSection) reviewsSection.classList.add('hidden');
+            } else {
+                if (reviewsSection) reviewsSection.classList.remove('hidden');
+                renderReviews(detail.reviews || [], n);
+            }
 
             // Print CTA wiring (route to Find a Print Shop)
             try {
                 const printBtn = el('#printBtn');
                 const quick = el('#printQuickInfo');
-                const bytes = n.file_size || n.size || 0;
-                const humanSize = (b) => {
-                    if (!b || b <= 0) return '';
-                    const u = ['B', 'KB', 'MB', 'GB']; let i = 0; let v = b;
-                    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-                    return v.toFixed(v >= 100 || i === 0 ? 0 : 1) + ' ' + u[i];
-                };
-                const pages = n.page_count || n.estimated_pages || '';
+                const bytes = primarySizeBytes;
+                const pages = pageCountLabel;
+                const sizeLabel = formatBytes(bytes);
                 if (quick) {
-                    quick.textContent = (pages ? (pages + ' pages') : '') + (bytes ? (pages ? ' • ' : '') + humanSize(bytes) : '');
+                    const parts = [];
+                    if (pages) parts.push(`${pages} pages`);
+                    if (sizeLabel) parts.push(sizeLabel);
+                    quick.textContent = parts.join(' • ');
                     if (quick.textContent) quick.classList.remove('hidden');
                 }
                 if (printBtn) {
