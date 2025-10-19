@@ -66,7 +66,16 @@ from rapidfuzz import fuzz
 from serpapi import GoogleSearch
 from supabase import Client, create_client
 from postgrest.exceptions import APIError
-from packages.yt_transcript import router as yt_transcript_router, fetch_transcript_paragraph
+from packages.yt_transcript import (
+    router as yt_transcript_router,
+    fetch_transcript_paragraph,
+    extract_video_id,
+)
+try:
+    # Used for fetching YouTube video metadata (channel, views, etc.)
+    from yt_dlp import YoutubeDL  # type: ignore
+except Exception:  # pragma: no cover
+    YoutubeDL = None  # type: ignore
 
 load_dotenv()
 
@@ -593,6 +602,8 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-2.5-flash")
+MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
 ALLOWED_DOMAINS = [
     "geeksforgeeks.org",
@@ -9521,6 +9532,102 @@ def api_pdf_from_markdown(payload: dict):
 youtube_transcript_router = APIRouter(prefix="/api/transcripts", tags=["youtube transcripts"])
 
 
+def _structured_notes_from_transcript(transcript: str, *, title: str, lang: Optional[str]) -> Tuple[str, bool]:
+    clean_text = (transcript or "").strip()
+    if not clean_text:
+        raise HTTPException(status_code=400, detail="Transcript text is empty.")
+
+    if not GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=501,
+            detail="Gemini API key not configured. Set GEMINI_API_KEY to enable structured notes.",
+        )
+
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise HTTPException(
+            status_code=501,
+            detail=f"Gemini client library missing: {exc}. Install google-generativeai to enable this feature.",
+        ) from exc
+
+    max_chars = max(4000, MAX_TRANSCRIPT_CHARS_FOR_NOTES)
+    truncated = False
+    if len(clean_text) > max_chars:
+        clean_text = clean_text[:max_chars]
+        truncated = True
+
+    notes_prompt = textwrap.dedent(
+        """
+        You are PaperX's academic note composer. Transform the provided YouTube transcript into polished,
+        exam-ready study notes written in Markdown.
+
+        Output requirements:
+        - Start with a single H1 title using the video name.
+        - Include these H2 sections, even if you must acknowledge limited information:
+          1. TL;DR (3-6 terse bullet points)
+          2. Key Takeaways (bullets)
+          3. Detailed Notes (use subsections or numbered steps when flow suggests)
+          4. Examples & Analogies (bullets; add [not mentioned] if absent)
+          5. Frameworks / Processes (tables or lists; include Mermaid diagrams when explaining flows)
+          6. Glossary (term – short definition table or list)
+          7. Reflection Questions
+          8. Action Items or Next Steps
+          9. Further Reading / References (recommend logical follow ups; mark [none] if unavailable)
+        - Bold critical vocabulary and formulas.
+        - Prefer Markdown tables where comparing items.
+        - If the transcript seems partial, state that in TL;DR and continue with available context.
+        - Keep the tone clear, modern, and supportive for self-study.
+        """
+    ).strip()
+
+    context_notice = ""
+    if truncated:
+        context_notice = (
+            f"NOTE: Only the first {max_chars} characters of the transcript were available. "
+            "Flag the notes as partial if key sections appear missing."
+        )
+
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(GEMINI_NOTES_MODEL)
+    payload = [
+        {"text": notes_prompt},
+        {
+            "text": textwrap.dedent(
+                f"""
+                Video title: {title or 'Unknown YouTube Video'}
+                Preferred output language: {lang or 'en'}
+                {context_notice}
+
+                Transcript:
+                {clean_text}
+                """
+            ).strip()
+        },
+    ]
+
+    try:
+        response = model.generate_content(payload)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gemini notes request failed: {exc}",
+        ) from exc
+
+    generated = getattr(response, "text", "") or ""
+    if not generated:
+        try:
+            generated = response.candidates[0].content.parts[0].text  # type: ignore[index]
+        except Exception:
+            generated = ""
+
+    generated = (generated or "").strip()
+    if not generated:
+        raise HTTPException(status_code=502, detail="Gemini did not return any content.")
+
+    return generated, truncated
+
+
 class YouTubeTranscriptRequest(BaseModel):
     url: HttpUrl
     lang: Optional[str] = "en"
@@ -9532,6 +9639,86 @@ class YouTubeTranscriptRequest(BaseModel):
 class YouTubeTranscriptResponse(BaseModel):
     paragraph: str
     source: str
+
+
+class YouTubeTranscriptNotesRequest(BaseModel):
+    url: HttpUrl
+    lang: Optional[str] = "en"
+    fallback_ytdlp: Optional[bool] = True
+    clean: Optional[bool] = True
+
+
+class YouTubeTranscriptNotesResponse(BaseModel):
+    notes_markdown: str
+    model: str
+    truncated: bool
+    transcript_chars: int
+
+
+class YouTubeMetaRequest(BaseModel):
+    url: HttpUrl
+
+
+class YouTubeMetaResponse(BaseModel):
+    video_id: str
+    embed_url: str
+    channel_name: Optional[str] = None
+    upload_date: Optional[str] = None  # ISO date string (YYYY-MM-DD) when available
+    views: Optional[int] = None
+
+
+def _extract_youtube_meta(url: str) -> YouTubeMetaResponse:
+    """Extract basic metadata for a YouTube video using yt-dlp without downloading.
+
+    Returns video_id, embed_url, channel_name, upload_date (YYYY-MM-DD), and views.
+    """
+    if YoutubeDL is None:  # pragma: no cover - optional dependency missing
+        raise HTTPException(status_code=501, detail="yt-dlp is not available on the server.")
+
+    ydl_opts = {
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": False,  # get full metadata for a single video
+    }
+    with YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(str(url), download=False)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not fetch metadata: {exc}") from exc
+
+    vid = str(info.get("id") or "").strip()
+    if not vid:
+        # Fallback to parser if present
+        try:
+            vid = extract_video_id(str(url))
+        except HTTPException:
+            pass
+    if not vid:
+        raise HTTPException(status_code=400, detail="Could not determine YouTube video ID from URL.")
+
+    # Prefer channel name field, fallback to uploader
+    channel_name = info.get("channel") or info.get("uploader") or None
+
+    # upload_date comes as YYYYMMDD; convert to YYYY-MM-DD if present
+    up_raw = info.get("upload_date") or ""
+    upload_date = None
+    if isinstance(up_raw, str) and len(up_raw) == 8 and up_raw.isdigit():
+        upload_date = f"{up_raw[0:4]}-{up_raw[4:6]}-{up_raw[6:8]}"
+
+    views = info.get("view_count")
+    try:
+        views = int(views) if views is not None else None
+    except Exception:
+        views = None
+
+    return YouTubeMetaResponse(
+        video_id=vid,
+        embed_url=f"https://www.youtube.com/embed/{vid}",
+        channel_name=channel_name,
+        upload_date=upload_date,
+        views=views,
+    )
 
 
 @youtube_transcript_router.post("/paragraph", response_model=YouTubeTranscriptResponse)
@@ -9548,10 +9735,90 @@ def api_transcript_paragraph(payload: YouTubeTranscriptRequest) -> YouTubeTransc
     return YouTubeTranscriptResponse(paragraph=text, source=str(payload.url))
 
 
+@youtube_transcript_router.post("/meta", response_model=YouTubeMetaResponse)
+def api_youtube_meta(payload: YouTubeMetaRequest) -> YouTubeMetaResponse:
+    """Return basic metadata (id, channel, upload date, views) for the given YouTube URL."""
+    return _extract_youtube_meta(str(payload.url))
+
+
+@youtube_transcript_router.post("/notes", response_model=YouTubeTranscriptNotesResponse)
+def api_transcript_notes(payload: YouTubeTranscriptNotesRequest) -> YouTubeTranscriptNotesResponse:
+    transcript_text = fetch_transcript_paragraph(
+        url_or_id=str(payload.url),
+        lang=payload.lang or "en",
+        fallback_ytdlp=bool(payload.fallback_ytdlp),
+        use_whisper=False,
+        clean=bool(payload.clean),
+    ).strip()
+    if not transcript_text:
+        raise HTTPException(status_code=404, detail="Transcript is empty.")
+
+    try:
+        video_id = extract_video_id(str(payload.url))
+    except HTTPException:
+        video_id = None
+    video_title = f"YouTube Video {video_id}" if video_id else "YouTube Video"
+
+    notes_markdown, truncated = _structured_notes_from_transcript(
+        transcript_text,
+        title=video_title,
+        lang=payload.lang,
+    )
+    result = YouTubeTranscriptNotesResponse(
+        notes_markdown=notes_markdown,
+        model=GEMINI_NOTES_MODEL,
+        truncated=truncated,
+        transcript_chars=len(transcript_text),
+    )
+
+    # Best-effort: save generated notes for this video to Supabase for caching.
+    try:
+        if video_id:
+            supabase = get_service_client()
+            record = _supabase_payload({
+                "video_id": video_id,
+                "video_url": str(payload.url),
+                "notes_markdown": result.notes_markdown,
+                "model": result.model,
+                "truncated": result.truncated,
+                "transcript_chars": result.transcript_chars,
+            })
+            # Ignore failure; we don't want to block the response on storage errors.
+            _ = supabase.table("youtube_ai_notes").insert(record).execute()
+    except Exception:
+        pass
+
+    return result
+
+
+@youtube_transcript_router.get("/saved/{video_id}")
+def api_youtube_saved(video_id: str):
+    """Return the latest saved notes for a given YouTube video ID if present; else 404."""
+    if not video_id or not re.fullmatch(r"[A-Za-z0-9_-]{6,32}", video_id):
+        raise HTTPException(status_code=400, detail="Invalid video ID.")
+    supabase = get_service_client()
+    try:
+        def _run():
+            return (
+                supabase
+                .table("youtube_ai_notes")
+                .select("video_id,video_url,notes_markdown,model,truncated,transcript_chars,created_at")
+                .eq("video_id", video_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+        res = _supabase_retry(_run)
+        rows = getattr(res, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="No saved notes found for this video.")
+        # Return the row as-is; front-end expects at least notes_markdown and optionally model
+        return rows[0]
+    except APIError as exc:
+        raise HTTPException(status_code=502, detail=f"Storage error: {exc}") from exc
+
+
 # --- FastAPI app ---
-
-
-
 
 def create_app() -> FastAPI:
     app = FastAPI(title="PaperX Unified API", version="1.0.0")

@@ -515,3 +515,14 @@ CREATE TABLE public.user_topic_progress (
   CONSTRAINT user_topic_progress_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_topic_progress_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
 );
+CREATE TABLE public.youtube_ai_notes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  video_id text,
+  video_url text NOT NULL,
+  notes_markdown text NOT NULL,
+  model text,
+  truncated boolean,
+  transcript_chars integer,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
+);

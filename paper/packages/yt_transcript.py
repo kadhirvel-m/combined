@@ -454,7 +454,6 @@ def transcribe_with_whisper(video_id: str, lang_hint: Optional[str] = None) -> s
     text = (result.get("text") or "").strip()
     return compact_repetitions(text)
 
-
 #how to use use this
 # from yt_transcript import router, fetch_transcript_paragraph
 # app = FastAPI()
