@@ -21,7 +21,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, Iterator, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Dict, Iterator, List, Optional, Set, Tuple
 from urllib.parse import quote, urlparse
 
 from autogen_agentchat.agents import AssistantAgent
@@ -8669,6 +8669,137 @@ def mp_list_notes(
     total = len(filtered)
     paged = filtered[offset: offset + limit]
     return {"items": paged, "total": total, "limit": limit, "offset": offset}
+
+
+@marketplace_router.get("/api/marketplace/subjects/{subject_id}/teacher-notes", summary="List teacher marketplace notes for a subject")
+def mp_teacher_notes_by_subject(
+    subject_id: str,
+    limit: int = Query(20, ge=1, le=60),
+    offset: int = Query(0, ge=0),
+):
+    subject_key = (subject_id or "").strip()
+    if not subject_key or subject_key.lower() in {"null", "undefined"}:
+        raise HTTPException(status_code=400, detail="A valid subject_id is required")
+
+    supabase = get_service_client()
+    notes_res = (
+        supabase.table("marketplace_notes")
+        .select("id,title,subject,subject_id,price_cents,owner_user_id,updated_at,created_at,semester,unit,exam_type")
+        .eq("subject_id", subject_key)
+        .order("updated_at", desc=True)
+        .offset(offset)
+        .limit(limit)
+        .execute()
+    )
+    if getattr(notes_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (notes by subject): {notes_res.error}")
+
+    notes: List[Dict[str, Any]] = notes_res.data or []
+    if not notes:
+        return {"notes": []}
+
+    owner_ids = {n.get("owner_user_id") for n in notes if n.get("owner_user_id")}
+    if not owner_ids:
+        return {"notes": []}
+
+    teacher_ids: Set[str] = set()
+    try:
+        role_res = (
+            supabase.table("admin_roles")
+            .select("auth_user_id,role")
+            .in_("auth_user_id", list(owner_ids))
+            .eq("role", "teacher")
+            .execute()
+        )
+        if getattr(role_res, "error", None):
+            teacher_ids = set(owner_ids)  # fall back to include all owners if role lookup fails
+        else:
+            teacher_ids = {row.get("auth_user_id") for row in (role_res.data or []) if row.get("auth_user_id")}
+    except Exception:
+        teacher_ids = set(owner_ids)
+
+    filtered_notes = [row for row in notes if row.get("owner_user_id") in teacher_ids]
+    if not filtered_notes:
+        return {"notes": []}
+
+    seller_ids = {row.get("owner_user_id") for row in filtered_notes if row.get("owner_user_id")}
+    user_profiles_map: Dict[str, Dict[str, Any]] = {}
+    teacher_profiles_map: Dict[str, Dict[str, Any]] = {}
+
+    if seller_ids:
+        try:
+            prof_res = (
+                supabase.table("user_profiles")
+                .select("auth_user_id,name,profile_image_url")
+                .in_("auth_user_id", list(seller_ids))
+                .execute()
+            )
+            if not getattr(prof_res, "error", None):
+                for row in prof_res.data or []:
+                    uid = row.get("auth_user_id")
+                    if uid:
+                        user_profiles_map[uid] = row
+        except Exception:
+            pass
+        try:
+            tprof_res = (
+                supabase.table("teacher_profiles")
+                .select("auth_user_id,name,profile_image_url")
+                .in_("auth_user_id", list(seller_ids))
+                .execute()
+            )
+            if not getattr(tprof_res, "error", None):
+                for row in tprof_res.data or []:
+                    uid = row.get("auth_user_id")
+                    if uid:
+                        teacher_profiles_map[uid] = row
+        except Exception:
+            pass
+
+    enriched: List[Dict[str, Any]] = []
+    for row in filtered_notes:
+        owner_id = row.get("owner_user_id")
+        teacher_profile = teacher_profiles_map.get(owner_id)
+        user_profile = user_profiles_map.get(owner_id)
+        seller_name = None
+        seller_avatar = None
+        if teacher_profile and teacher_profile.get("name"):
+            seller_name = teacher_profile.get("name")
+        elif user_profile and user_profile.get("name"):
+            seller_name = user_profile.get("name")
+        elif owner_id:
+            seller_name = owner_id[:6] + "..."
+        if teacher_profile and teacher_profile.get("profile_image_url"):
+            seller_avatar = teacher_profile.get("profile_image_url")
+        elif user_profile and user_profile.get("profile_image_url"):
+            seller_avatar = user_profile.get("profile_image_url")
+
+        seller = {"id": owner_id, "is_teacher": True, "verified": True}
+        if seller_name:
+            seller["name"] = seller_name
+        if seller_avatar:
+            seller["avatar_url"] = seller_avatar
+        if owner_id:
+            seller["profile_href"] = f"/ui/teacher_profile.html?user={owner_id}"
+
+        enriched.append(
+            {
+                "id": row.get("id"),
+                "title": row.get("title"),
+                "subject": row.get("subject"),
+                "subject_id": row.get("subject_id"),
+                "price_cents": int(row.get("price_cents") or 0),
+                "owner_user_id": owner_id,
+                "updated_at": row.get("updated_at") or row.get("created_at"),
+                "created_at": row.get("created_at"),
+                "semester": row.get("semester"),
+                "unit": row.get("unit"),
+                "exam_type": row.get("exam_type"),
+                "seller": seller,
+            }
+        )
+
+    return {"notes": enriched, "count": len(enriched), "limit": limit, "offset": offset}
 
 
 @marketplace_router.get("/api/marketplace/notes/meta", summary="Distinct filter metadata for marketplace notes")
