@@ -61,11 +61,12 @@ try:
 except Exception:  # pragma: no cover
     textract = None  # type: ignore
 from markdownify import markdownify as md
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, HttpUrl, validator, root_validator
 from rapidfuzz import fuzz
 from serpapi import GoogleSearch
 from supabase import Client, create_client
 from postgrest.exceptions import APIError
+from packages.yt_transcript import router as yt_transcript_router, fetch_transcript_paragraph
 
 load_dotenv()
 
@@ -9515,6 +9516,38 @@ def api_pdf_from_markdown(payload: dict):
     headers = {"Content-Disposition": f"attachment; filename={safe}.pdf"}
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
+# --- YouTube transcript endpoints ---
+
+youtube_transcript_router = APIRouter(prefix="/api/transcripts", tags=["youtube transcripts"])
+
+
+class YouTubeTranscriptRequest(BaseModel):
+    url: HttpUrl
+    lang: Optional[str] = "en"
+    fallback_ytdlp: Optional[bool] = True
+    use_whisper: Optional[bool] = False
+    clean: Optional[bool] = True
+
+
+class YouTubeTranscriptResponse(BaseModel):
+    paragraph: str
+    source: str
+
+
+@youtube_transcript_router.post("/paragraph", response_model=YouTubeTranscriptResponse)
+def api_transcript_paragraph(payload: YouTubeTranscriptRequest) -> YouTubeTranscriptResponse:
+    text = fetch_transcript_paragraph(
+        url_or_id=str(payload.url),
+        lang=payload.lang or "en",
+        fallback_ytdlp=bool(payload.fallback_ytdlp),
+        use_whisper=bool(payload.use_whisper),
+        clean=bool(payload.clean),
+    ).strip()
+    if not text:
+        raise HTTPException(status_code=404, detail="Transcript is empty.")
+    return YouTubeTranscriptResponse(paragraph=text, source=str(payload.url))
+
+
 # --- FastAPI app ---
 
 
@@ -9540,10 +9573,16 @@ def create_app() -> FastAPI:
     app.include_router(academics_router)
     app.include_router(marketplace_router)
     app.include_router(teacher_router)
+    app.include_router(youtube_transcript_router)
+    app.include_router(yt_transcript_router, prefix="/api/youtube", tags=["youtube transcripts (raw)"])
 
     @app.get("/")
     def root():
-        return {"message": "PaperX API running", "ui": "/ui/notes_generator.html"}
+        return {
+            "message": "PaperX API running",
+            "notes_ui": "/ui/notes_generator.html",
+            "transcripts_ui": "/ui/youtube-transcript.html",
+        }
 
     ui_dir = Path(__file__).resolve().parent / "ui"
     if ui_dir.is_dir():
