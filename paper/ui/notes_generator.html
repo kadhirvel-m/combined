@@ -288,6 +288,130 @@
     .citation-item:hover {
       background: color-mix(in oklab, var(--brand-soft) 60%, transparent);
     }
+
+    /* Related videos carousel */
+    .yt-carousel {
+      display: flex;
+      gap: 1.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: thin;
+    }
+
+    .yt-carousel::-webkit-scrollbar {
+      height: 8px;
+    }
+
+    .yt-carousel::-webkit-scrollbar-thumb {
+      background: var(--outline);
+      border-radius: 9999px;
+    }
+
+    .yt-card {
+      flex: 0 0 260px;
+      scroll-snap-align: start;
+      border: 1px solid var(--outline);
+      border-radius: 1rem;
+      overflow: hidden;
+      background: var(--surface);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+      display: flex;
+      flex-direction: column;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .yt-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 28px rgba(37, 99, 235, 0.18);
+    }
+
+    .yt-thumb {
+      position: relative;
+      padding-top: 56.25%;
+      background: #000;
+    }
+
+    .yt-thumb img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .yt-duration {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      padding: 2px 6px;
+      border-radius: 9999px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .yt-body {
+      padding: 0.75rem 0.95rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .yt-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      line-height: 1.3;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .yt-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .yt-channel-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      object-fit: cover;
+      border: 1px solid var(--outline);
+      flex-shrink: 0;
+    }
+
+    .yt-channel-name {
+      font-weight: 600;
+      color: var(--surface-contrast);
+    }
+
+    .yt-views {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .yt-skeleton-grid {
+      display: flex;
+      gap: 1.5rem;
+      overflow: hidden;
+    }
+
+    .yt-skeleton-card {
+      flex: 0 0 260px;
+      height: 180px;
+      border-radius: 1rem;
+      background: rgba(148, 163, 184, 0.2);
+    }
   </style>
 </head>
 
@@ -340,7 +464,41 @@
         </div>
       </div>
     </div>
-  </header>
+</header>
+
+  <!-- Related Videos -->
+  <section id="relatedVideosSection"
+    class="max-w-7xl mx-auto px-4 sm:px-6 mt-6 hidden">
+    <div class="rounded-2xl glass border shadow-glow"
+      style="border-color: var(--outline); background: color-mix(in oklab, var(--surface) 78%, transparent);">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 py-5 border-b"
+        style="border-color: var(--outline)">
+        <div>
+          <h2 class="text-lg font-semibold tracking-tight">Related YouTube Videos</h2>
+          <p id="relatedVideosSummary" class="text-sm text-[var(--muted)]">Enter a topic to discover supporting videos.</p>
+        </div>
+        <button id="refreshVideosBtn"
+          class="ripple inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[var(--brand-soft)] transition"
+          style="border-color: var(--outline)">
+          <span class="material-symbols-outlined text-base">refresh</span>
+          Refresh
+        </button>
+      </div>
+      <div id="relatedVideosSkeleton" class="px-6 py-5">
+        <div class="yt-skeleton-grid">
+          <div class="yt-skeleton-card skeleton"></div>
+          <div class="yt-skeleton-card skeleton"></div>
+          <div class="yt-skeleton-card skeleton"></div>
+        </div>
+      </div>
+      <div id="relatedVideosWrap" class="px-6 py-5 hidden">
+        <div id="relatedVideoCarousel" class="yt-carousel"></div>
+      </div>
+      <div id="relatedVideosEmpty" class="px-6 pb-6 text-sm text-[var(--muted)] hidden">
+        Videos will appear once a topic is generated.
+      </div>
+    </div>
+  </section>
 
 
   <!-- Main layout -->
@@ -620,6 +778,13 @@
     const apiBase = (window.API_BASE || __defaultBase).replace(/\/$/, '');
 
     // ===== Elements =====
+    const $relatedVideosSection = document.getElementById('relatedVideosSection');
+    const $relatedVideosSummary = document.getElementById('relatedVideosSummary');
+    const $relatedVideosSkeleton = document.getElementById('relatedVideosSkeleton');
+    const $relatedVideosWrap = document.getElementById('relatedVideosWrap');
+    const $relatedVideosCarousel = document.getElementById('relatedVideoCarousel');
+    const $relatedVideosEmpty = document.getElementById('relatedVideosEmpty');
+    const $refreshVideos = document.getElementById('refreshVideosBtn');
     const $topic = document.getElementById('topic');
     const $generate = document.getElementById('generateBtn');
     const $regen = document.getElementById('regenBtn');
@@ -645,6 +810,212 @@
     const $fsExit = document.getElementById('fsExitBtn');
     const $fsHome = document.getElementById('fsHomeBtn');
 
+    const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
+    const channelLogoCache = new Map();
+    let relatedVideosAbort = null;
+    let relatedVideosTopic = '';
+    let relatedVideosDebounce = null;
+
+    function getChannelLogoAsync(channelPage) {
+      if (!channelPage) return Promise.resolve('');
+      const cached = channelLogoCache.get(channelPage);
+      if (cached !== undefined) {
+        return cached instanceof Promise ? cached : Promise.resolve(cached);
+      }
+      const request = (async () => {
+        try {
+          const res = await fetch(`${apiBase}/api/youtube/channel-logo?channel_url=${encodeURIComponent(channelPage)}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const logo = typeof data.logo === 'string' ? data.logo.trim() : '';
+          channelLogoCache.set(channelPage, logo);
+          return logo;
+        } catch (error) {
+          console.warn('Channel logo lookup failed:', error);
+          channelLogoCache.set(channelPage, '');
+          return '';
+        }
+      })();
+      channelLogoCache.set(channelPage, request);
+      return request;
+    }
+
+    function hydrateChannelLogo(img, channelPage, shouldAttempt) {
+      if (!img) return;
+      if (channelPage) {
+        img.dataset.channelPage = channelPage;
+      }
+      if (!shouldAttempt || !channelPage) {
+        return;
+      }
+      getChannelLogoAsync(channelPage)
+        .then((logo) => {
+          if (logo && img.dataset.channelPage === channelPage) {
+            img.src = logo;
+            img.dataset.logoLoaded = 'true';
+          }
+        })
+        .catch(() => { /* already logged */ });
+    }
+
+    function createRelatedVideoCard(video) {
+      const anchor = document.createElement('a');
+      const link = (typeof video.link === 'string' && video.link.trim()) || '#';
+      anchor.href = link;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.className = 'yt-card';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'yt-thumb';
+      const thumbImg = document.createElement('img');
+      const videoId = typeof video.id === 'string' ? video.id.trim() : '';
+      const thumbSrc = (typeof video.thumbnail === 'string' && video.thumbnail.trim())
+        || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
+      thumbImg.src = thumbSrc || fallbackChannelLogo;
+      thumbImg.alt = (video.title || 'YouTube video').toString();
+      thumbImg.loading = 'lazy';
+      thumbImg.decoding = 'async';
+      thumb.appendChild(thumbImg);
+      if (video.duration) {
+        const badge = document.createElement('span');
+        badge.className = 'yt-duration';
+        badge.textContent = video.duration;
+        thumb.appendChild(badge);
+      }
+      anchor.appendChild(thumb);
+
+      const body = document.createElement('div');
+      body.className = 'yt-body';
+
+      const titleEl = document.createElement('p');
+      titleEl.className = 'yt-title';
+      const titleText = (typeof video.title === 'string' ? video.title : '').trim() || 'Untitled video';
+      titleEl.textContent = titleText;
+      titleEl.title = titleText;
+      body.appendChild(titleEl);
+
+      const meta = document.createElement('div');
+      meta.className = 'yt-meta';
+
+      const logoImg = document.createElement('img');
+      logoImg.className = 'yt-channel-logo';
+      logoImg.src = (typeof video.channel_logo === 'string' && video.channel_logo.trim()) || fallbackChannelLogo;
+      logoImg.alt = (video.channel || 'Channel').toString();
+      logoImg.loading = 'lazy';
+      logoImg.referrerPolicy = 'no-referrer';
+      meta.appendChild(logoImg);
+
+      const channelName = document.createElement('span');
+      channelName.className = 'yt-channel-name';
+      channelName.textContent = (video.channel || 'YouTube').toString();
+      meta.appendChild(channelName);
+
+      if (video.views) {
+        const views = document.createElement('span');
+        views.className = 'yt-views';
+        views.textContent = video.views;
+        meta.appendChild(views);
+      }
+
+      body.appendChild(meta);
+      anchor.appendChild(body);
+
+      const channelPage = (typeof video.channel_page === 'string' ? video.channel_page : '').trim();
+      const logoIsDefault = Boolean(video.channel_logo_is_default) || !video.channel_logo || video.channel_logo === fallbackChannelLogo;
+      hydrateChannelLogo(logoImg, channelPage, logoIsDefault && !!channelPage);
+
+      return anchor;
+    }
+
+    function renderRelatedVideos(videos, topic) {
+      if (!$relatedVideosWrap || !$relatedVideosCarousel) return;
+      $relatedVideosCarousel.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+      videos.forEach(video => fragment.appendChild(createRelatedVideoCard(video)));
+      $relatedVideosCarousel.appendChild(fragment);
+      $relatedVideosSkeleton?.classList.add('hidden');
+      $relatedVideosEmpty?.classList.add('hidden');
+      $relatedVideosWrap.classList.remove('hidden');
+      if ($relatedVideosSummary) {
+        $relatedVideosSummary.textContent = `Showing videos for "${topic}"`;
+      }
+    }
+
+    async function loadRelatedVideos(topic, options = {}) {
+      const query = (topic || '').trim();
+      const force = Boolean(options.force);
+
+      if (!query) {
+        relatedVideosTopic = '';
+        relatedVideosAbort?.abort();
+        relatedVideosAbort = null;
+        if ($relatedVideosSection) $relatedVideosSection.classList.add('hidden');
+        if ($relatedVideosSummary) {
+          $relatedVideosSummary.textContent = 'Enter a topic to discover supporting videos.';
+        }
+        if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = '';
+        $relatedVideosSkeleton?.classList.add('hidden');
+        $relatedVideosEmpty?.classList.add('hidden');
+        return;
+      }
+
+      if (!force && relatedVideosTopic && relatedVideosTopic.toLowerCase() === query.toLowerCase()) {
+        return;
+      }
+
+      relatedVideosTopic = query;
+      if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
+      if ($relatedVideosSummary) {
+        $relatedVideosSummary.textContent = `Finding videos for "${query}"...`;
+      }
+
+      if (relatedVideosAbort) {
+        relatedVideosAbort.abort();
+      }
+      relatedVideosAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
+      $relatedVideosSkeleton?.classList.remove('hidden');
+      $relatedVideosWrap?.classList.add('hidden');
+      $relatedVideosEmpty?.classList.add('hidden');
+
+      try {
+        const fetchOptions = relatedVideosAbort ? { signal: relatedVideosAbort.signal } : undefined;
+        const response = await fetch(`${apiBase}/api/youtube/search?query=${encodeURIComponent(query)}&num=8`, fetchOptions);
+        if (!response.ok) {
+          throw new Error(`Search failed with status ${response.status}`);
+        }
+        const videos = await response.json();
+        if (!Array.isArray(videos) || videos.length === 0) {
+          $relatedVideosSkeleton?.classList.add('hidden');
+          $relatedVideosWrap?.classList.add('hidden');
+          if ($relatedVideosEmpty) {
+            $relatedVideosEmpty.textContent = 'No related videos found. Try a more specific topic.';
+            $relatedVideosEmpty.classList.remove('hidden');
+          }
+          if ($relatedVideosSummary) {
+            $relatedVideosSummary.textContent = `No videos found for "${query}".`;
+          }
+          return;
+        }
+        renderRelatedVideos(videos.slice(0, 8), query);
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        console.error('Related videos error:', error);
+        $relatedVideosSkeleton?.classList.add('hidden');
+        $relatedVideosWrap?.classList.add('hidden');
+        if ($relatedVideosEmpty) {
+          $relatedVideosEmpty.textContent = 'Unable to load videos right now.';
+          $relatedVideosEmpty.classList.remove('hidden');
+        }
+        if ($relatedVideosSummary) {
+          $relatedVideosSummary.textContent = `Unable to load videos for "${query}".`;
+        }
+      } finally {
+        relatedVideosAbort = null;
+      }
+    }
+
     // ===== State =====
     let es = null;
     let lastMarkdown = '';
@@ -656,8 +1027,35 @@
     document.querySelectorAll('.chip').forEach(ch => {
       ch.className = "ripple px-3 py-1.5 text-xs rounded-full border hover:bg-[var(--brand-soft)]";
       ch.style.borderColor = "var(--outline)";
-      ch.addEventListener('click', () => { $topic.value = ch.dataset.val || ch.textContent; });
+      ch.addEventListener('click', () => {
+        const value = ch.dataset.val || ch.textContent || '';
+        $topic.value = value;
+        loadRelatedVideos(value, { force: true });
+      });
     });
+
+    if ($refreshVideos) {
+      $refreshVideos.addEventListener('click', () => {
+        const current = ($topic.value || relatedVideosTopic || '').trim();
+        loadRelatedVideos(current || relatedVideosTopic, { force: true });
+      });
+    }
+
+    if ($topic) {
+      $topic.addEventListener('input', () => {
+        const query = ($topic.value || '').trim();
+        if (relatedVideosDebounce) {
+          clearTimeout(relatedVideosDebounce);
+        }
+        relatedVideosDebounce = setTimeout(() => {
+          if (!query) {
+            loadRelatedVideos('', { force: true });
+            return;
+          }
+          loadRelatedVideos(query);
+        }, 600);
+      });
+    }
 
     // ===== Ripple =====
     document.addEventListener('click', (e) => {
@@ -841,6 +1239,7 @@
     function startGeneration(topic, force = false) {
       const t = (topic || '').trim();
       if (!t) { alert('Enter a topic'); return; }
+      loadRelatedVideos(t, { force: true });
       if (es) { try { es.close(); } catch { } es = null; }
       clearUI();
       setBusy(true);
