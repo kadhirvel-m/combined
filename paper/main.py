@@ -1582,9 +1582,12 @@ class ParsedSyllabusOut(BaseModel):
 
 
 try:
-    from supabase_auth.errors import AuthRetryableError  # type: ignore
+    from supabase_auth.errors import AuthRetryableError, AuthApiError  # type: ignore
 except Exception:  # pragma: no cover
     class AuthRetryableError(Exception):
+        pass
+
+    class AuthApiError(Exception):
         pass
 
 
@@ -2955,6 +2958,9 @@ def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.
             if not user_id:
                 raise HTTPException(status_code=401, detail="Invalid token or user not found")
             return user_id
+        except AuthApiError as e:
+            msg = getattr(e, "message", None) or str(e) or "Invalid or expired session"
+            raise HTTPException(status_code=401, detail=msg)
         except (AuthRetryableError, HTTPXRemoteProtocolError) as e:
             last_exc = e
             time.sleep(base_delay * (attempt + 1))
