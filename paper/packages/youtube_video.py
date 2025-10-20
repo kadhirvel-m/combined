@@ -1,5 +1,9 @@
-import os, re
-from typing import List, Optional, Dict, Any
+import html
+import re
+import socket
+from typing import Dict, List, Optional
+from urllib.error import URLError, HTTPError
+from urllib.request import Request, urlopen
 from yt_dlp import YoutubeDL
 
 
@@ -48,6 +52,58 @@ def _format_views(views: Optional[int]) -> str:
     elif views >= 1_000:
         return f"{views / 1_000:.1f}K views"
     return f"{views:,} views"
+
+
+_channel_logo_cache: Dict[str, str] = {}
+_DEFAULT_CHANNEL_LOGO = "https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png"
+
+
+def _fetch_channel_logo(channel_page_url: Optional[str]) -> str:
+    """
+    Fetch the channel avatar URL by scraping the channel page's open graph metadata.
+    Results are cached per-channel to avoid repeated network requests.
+    """
+    if not channel_page_url:
+        return ""
+
+    channel_page_url = channel_page_url.strip()
+    if not channel_page_url:
+        return ""
+
+    cached = _channel_logo_cache.get(channel_page_url)
+    if cached is not None:
+        return cached
+
+    try:
+        req = Request(
+            channel_page_url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/116.0 Safari/537.36"
+                )
+            },
+        )
+        with urlopen(req, timeout=6) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            html_text = response.read().decode(charset, errors="ignore")
+    except (ValueError, HTTPError, URLError, TimeoutError, socket.timeout):
+        _channel_logo_cache[channel_page_url] = ""
+        return ""
+
+    logo_match = re.search(
+        r'<meta[^>]+property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']',
+        html_text,
+        flags=re.IGNORECASE,
+    )
+    if not logo_match:
+        _channel_logo_cache[channel_page_url] = ""
+        return ""
+
+    logo_url = html.unescape(logo_match.group(1))
+    _channel_logo_cache[channel_page_url] = logo_url
+    return logo_url
 
 
 def search_youtube_videos(query: str, num: int = 8) -> List[Dict[str, str]]:
@@ -122,14 +178,9 @@ def search_youtube_videos(query: str, num: int = 8) -> List[Dict[str, str]]:
                 if not video_url and video_id:
                     video_url = f"https://www.youtube.com/watch?v={video_id}"
                 
-                # Channel thumbnail/logo (use video thumbnail as fallback)
-                channel_logo = entry.get('channel_url', '')
-                if channel_logo:
-                    # Extract channel ID from URL if possible
-                    channel_id_match = re.search(r'channel/([^/]+)', channel_logo)
-                    if channel_id_match:
-                        channel_id = channel_id_match.group(1)
-                        channel_logo = f"https://www.youtube.com/channel/{channel_id}"
+                # Channel thumbnail/logo (scraped from channel page metadata)
+                channel_page = entry.get('channel_url') or entry.get('uploader_url') or ""
+                channel_logo = _fetch_channel_logo(channel_page) or _DEFAULT_CHANNEL_LOGO
                 
                 # Only add if we have essential data
                 if title and video_url and thumbnail:
@@ -140,7 +191,7 @@ def search_youtube_videos(query: str, num: int = 8) -> List[Dict[str, str]]:
                         "views": views,
                         "duration": duration,
                         "thumbnail": thumbnail,
-                        "channel_logo": channel_logo if isinstance(channel_logo, str) else "",
+                        "channel_logo": channel_logo if isinstance(channel_logo, str) else _DEFAULT_CHANNEL_LOGO,
                     })
     
     except Exception as e:
