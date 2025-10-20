@@ -24,11 +24,16 @@ def _parse_video_id(url: str) -> Optional[str]:
 
 def _format_duration(seconds: Optional[int]) -> str:
     """Format duration in seconds to MM:SS or HH:MM:SS."""
-    if seconds is None or seconds <= 0:
+    if seconds is None:
         return ""
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    secs = seconds % 60
+    try:
+        total_seconds = int(round(float(seconds)))
+    except (TypeError, ValueError):
+        return ""
+    if total_seconds <= 0:
+        return ""
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
     if hours > 0:
         return f"{hours}:{minutes:02d}:{secs:02d}"
     return f"{minutes}:{secs:02d}"
