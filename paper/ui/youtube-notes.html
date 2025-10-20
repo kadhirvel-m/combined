@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
+
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,39 +8,64 @@
     <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
     <link rel="stylesheet" href="assets/css/tailwind.css" />
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
     <style>
-        :root { color-scheme: light; }
+        :root {
+            color-scheme: light;
+            /* Will be updated at runtime to match the fixed header height */
+            --header-h: 80px;
+            --header-gap: 16px;
+            --sticky-top: calc(var(--header-h) + var(--header-gap));
+        }
+
         body {
             min-height: 100vh;
             font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
             background: linear-gradient(180deg, #f7f4fb 0%, #ffffff 30%, #eff1ff 100%);
             transition: background .3s ease, color .3s ease;
         }
+
         body[data-theme="dark"] {
             color-scheme: dark;
-            background: radial-gradient(900px 600px at 65% -150px, rgba(87,232,255,.18), transparent 70%), linear-gradient(180deg, #05070f 0%, #10152b 55%, #0b0e1d 100%);
+            background: radial-gradient(900px 600px at 65% -150px, rgba(87, 232, 255, .18), transparent 70%), linear-gradient(180deg, #05070f 0%, #10152b 55%, #0b0e1d 100%);
         }
-        .notes-grid { display: grid; gap: 2rem; }
+
+        .notes-grid {
+            display: grid;
+            gap: 2rem;
+        }
+
         @media (min-width: 1024px) {
-            .notes-grid { grid-template-columns: 1fr 4fr; }
-            .notes-sidebar { position: sticky; top: 6.75rem; align-self: flex-start; }
+            .notes-grid {
+                grid-template-columns: 1fr 4fr;
+            }
+
+            .notes-sidebar {
+                position: sticky;
+                top: var(--sticky-top, 8.5rem);
+                align-self: flex-start;
+            }
         }
+
         .surface {
-            background: rgba(255,255,255,0.88);
+            background: rgba(255, 255, 255, 0.88);
             border-radius: 24px;
-            border: 1px solid rgba(148,163,184,0.12);
-            box-shadow: 0 24px 60px rgba(15,23,42,0.12);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
             backdrop-filter: blur(18px);
         }
+
         body[data-theme="dark"] .surface {
-            background: rgba(12,19,35,0.78);
-            border: 1px solid rgba(94,234,212,0.14);
-            box-shadow: 0 32px 80px rgba(2,6,23,0.55);
+            background: rgba(12, 19, 35, 0.78);
+            border: 1px solid rgba(94, 234, 212, 0.14);
+            box-shadow: 0 32px 80px rgba(2, 6, 23, 0.55);
         }
+
         .pill {
             display: inline-flex;
             align-items: center;
@@ -48,24 +74,38 @@
             border-radius: 999px;
             font-size: .75rem;
             font-weight: 600;
-            background: rgba(148,163,184,0.16);
-            color: rgba(30,41,59,0.68);
+            background: rgba(148, 163, 184, 0.16);
+            color: rgba(30, 41, 59, 0.68);
         }
-        body[data-theme="dark"] .pill { background: rgba(148,163,184,0.12); color: rgba(226,232,240,0.78); }
+
+        body[data-theme="dark"] .pill {
+            background: rgba(148, 163, 184, 0.12);
+            color: rgba(226, 232, 240, 0.78);
+        }
+
         .notes-scroll {
             max-height: calc(100vh - 12rem);
             overflow-y: auto;
         }
-        .notes-scroll::-webkit-scrollbar { width: 8px; }
+
+        .notes-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+
         .notes-scroll::-webkit-scrollbar-thumb {
-            background: rgba(148,163,184,0.4);
+            background: rgba(148, 163, 184, 0.4);
             border-radius: 999px;
         }
-        body[data-theme="dark"] .notes-scroll::-webkit-scrollbar-thumb { background: rgba(94,234,212,0.35); }
+
+        body[data-theme="dark"] .notes-scroll::-webkit-scrollbar-thumb {
+            background: rgba(94, 234, 212, 0.35);
+        }
     </style>
 </head>
+
 <body data-theme="dark" class="text-slate-900 dark:text-slate-100">
-    <header class="fixed inset-x-0 top-0 z-40 bg-white/95 dark:bg-slate-950 border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm dark:shadow-slate-900/40">
+    <header
+        class="fixed inset-x-0 top-0 z-40 bg-white/95 dark:bg-slate-950 border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm dark:shadow-slate-900/40">
         <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
             <a href="index.html" class="flex items-center gap-3" aria-label="Paper X Home">
                 <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 dark:hidden">
@@ -79,28 +119,37 @@
                 <a href="index.html#pricing" class="transition hover:text-slate-900 dark:hover:text-white">Pricing</a>
             </nav>
             <div class="flex items-center gap-2">
-                <button data-theme-toggle class="inline-flex items-center gap-2 rounded-full border border-slate-200/70 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:text-white">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full border border-slate-200/70 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:text-white">
                     <span class="material-symbols-rounded text-base">dark_mode</span>
                     <span class="hidden sm:block">Theme</span>
                 </button>
-                <a href="login.html" class="hidden rounded-full px-3 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-200 dark:hover:text-white md:inline-flex">Log in</a>
-                <a href="signup.html" class="hidden rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-500/30 transition hover:shadow-purple-500/50 md:inline-flex">Sign up</a>
+                <a href="login.html"
+                    class="hidden rounded-full px-3 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-200 dark:hover:text-white md:inline-flex">Log
+                    in</a>
+                <a href="signup.html"
+                    class="hidden rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-500/30 transition hover:shadow-purple-500/50 md:inline-flex">Sign
+                    up</a>
             </div>
         </div>
     </header>
 
     <main class="relative mx-auto max-w-7xl px-5 pt-36 sm:pt-40 lg:pt-44 pb-16">
-        <div class="notes-grid">
+        <div class="notes-grid mt-6 lg:mt-10">
             <aside class="notes-sidebar space-y-5">
                 <div class="surface overflow-hidden">
                     <div class="aspect-video bg-black">
-                        <iframe id="videoEmbed" title="YouTube video player" class="h-full w-full" allowfullscreen></iframe>
+                        <iframe id="videoEmbed" title="YouTube video player" class="h-full w-full"
+                            allowfullscreen></iframe>
                     </div>
                 </div>
                 <div class="surface p-6 space-y-5">
                     <div class="flex items-center gap-4">
-                        <span class="grid h-14 w-14 place-items-center rounded-2xl bg-white text-lg font-semibold text-slate-900 shadow-inner dark:bg-slate-900 dark:text-slate-100">
-                            <img id="channelAvatar" alt="Channel avatar" referrerpolicy="no-referrer" class="hidden h-full w-full rounded-2xl object-cover ring-1 ring-white/80 dark:ring-slate-800">
+                        <span
+                            class="grid h-14 w-14 place-items-center rounded-2xl bg-white text-lg font-semibold text-slate-900 shadow-inner dark:bg-slate-900 dark:text-slate-100">
+                            <img id="channelAvatar" alt="Channel avatar" referrerpolicy="no-referrer"
+                                class="hidden h-full w-full rounded-2xl object-cover ring-1 ring-white/80 dark:ring-slate-800"
+                                loading="lazy">
                             <span id="channelAvatarFallback" class="text-base font-semibold">P</span>
                         </span>
                         <div class="space-y-1">
@@ -117,8 +166,11 @@
                     </div>
                     <div class="space-y-3">
                         <div>
-                            <p class="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">Source</p>
-                            <a id="openOnYoutube" href="#" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-200/70 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400 dark:hover:text-white">
+                            <p
+                                class="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">
+                                Source</p>
+                            <a id="openOnYoutube" href="#" target="_blank" rel="noopener noreferrer"
+                                class="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-200/70 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400 dark:hover:text-white">
                                 <span class="material-symbols-rounded text-base">open_in_new</span>
                                 Watch on YouTube
                             </a>
@@ -141,15 +193,19 @@
                 <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <h1 class="text-2xl font-semibold tracking-tight lg:text-3xl">Structured Notes</h1>
-                        <p id="notesStatus" class="text-sm font-medium text-slate-500 dark:text-slate-300" role="status">Preparing workspace...</p>
+                        <p id="notesStatus" class="text-sm font-medium text-slate-500 dark:text-slate-300"
+                            role="status">Preparing workspace...</p>
                     </div>
-                    <button id="notesCopyBtn" class="inline-flex items-center gap-2 rounded-full border border-slate-200/70 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400 dark:hover:text-white">
+                    <button id="notesCopyBtn"
+                        class="inline-flex items-center gap-2 rounded-full border border-slate-200/70 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400 dark:hover:text-white">
                         <span class="material-symbols-rounded text-base">content_copy</span>
                         Copy notes
                     </button>
                 </header>
                 <div class="notes-scroll space-y-4 text-base leading-relaxed text-slate-700 dark:text-slate-100">
-                    <div id="notesRendered" class="prose max-w-none prose-headings:mt-6 prose-headings:font-semibold prose-p:mb-4 prose-ul:mb-5 prose-li:marker:text-slate-400 dark:prose-invert"></div>
+                    <div id="notesRendered"
+                        class="prose max-w-none prose-headings:mt-6 prose-headings:font-semibold prose-p:mb-4 prose-ul:mb-5 prose-li:marker:text-slate-400 dark:prose-invert">
+                    </div>
                 </div>
             </section>
         </div>
@@ -167,6 +223,20 @@
             light: { info: '#475569', success: '#0f766e', error: '#dc2626' }
         };
 
+        // Ensure content never hides under the fixed header
+        function applyHeaderOffset() {
+            const headerEl = document.querySelector('header');
+            const mainEl = document.querySelector('main');
+            if (!headerEl || !mainEl) return;
+            const h = headerEl.offsetHeight || 80;
+            root.style.setProperty('--header-h', `${h}px`);
+            root.style.setProperty('--sticky-top', `calc(${h}px + var(--header-gap))`);
+            // Use margin-top to push content below fixed header
+            mainEl.style.marginTop = `calc(${h}px + var(--header-gap))`;
+        }
+        window.addEventListener('load', applyHeaderOffset);
+        window.addEventListener('resize', () => { requestAnimationFrame(applyHeaderOffset); });
+
         const apiBase = (() => {
             const manual = document.body.dataset.apiBase ? document.body.dataset.apiBase.trim() : '';
             if (manual) return manual.replace(/\/$/, '');
@@ -174,6 +244,14 @@
             if (/:(5500|5501)$/i.test(location.origin)) return location.origin.replace(/:(5500|5501)$/i, ':8000');
             return location.origin;
         })();
+
+        function resolveMediaUrl(url) {
+            if (!url) return '';
+            if (/^https?:\/\//i.test(url)) return url;
+            if (url.startsWith('//')) return `${location.protocol}${url}`;
+            const base = apiBase.replace(/\/$/, '');
+            return `${base}/${url.replace(/^\/+/, '')}`;
+        }
 
         const params = new URLSearchParams(location.search);
         const videoUrl = params.get('video') || params.get('url') || '';
@@ -198,7 +276,7 @@
             const resolved = mode === 'light' ? 'light' : 'dark';
             document.body.dataset.theme = resolved;
             root.classList.toggle('dark', resolved === 'dark');
-            try { localStorage.setItem(themeKey, resolved); } catch {}
+            try { localStorage.setItem(themeKey, resolved); } catch { }
             themeButtons().forEach(btn => {
                 const icon = btn.querySelector('.material-symbols-rounded');
                 if (icon) icon.textContent = resolved === 'dark' ? 'light_mode' : 'dark_mode';
@@ -212,7 +290,7 @@
                 const stored = localStorage.getItem(themeKey);
                 if (stored === 'light' || stored === 'dark') start = stored;
                 else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) start = 'light';
-            } catch {}
+            } catch { }
             applyTheme(start);
         }
 
@@ -245,7 +323,7 @@
                 try {
                     const detail = await response.json();
                     text = detail.detail || detail.error || text;
-                } catch {}
+                } catch { }
                 throw new Error(text);
             }
             return response.json();
@@ -269,7 +347,7 @@
                     try {
                         const detail = await res.json();
                         msg = detail.detail || detail.error || msg;
-                    } catch {}
+                    } catch { }
                     throw new Error(msg);
                 }
                 return res.json();
@@ -285,7 +363,7 @@
         }
 
         async function generateNotes(video) {
-            try { if (notesAbortController) notesAbortController.abort(); } catch {}
+            try { if (notesAbortController) notesAbortController.abort(); } catch { }
             notesAbortController = new AbortController();
             setStatus('Composing structured notes with Gemini...', 'info');
             notesRenderedEl.innerHTML = '';
@@ -332,7 +410,8 @@
                 const initial = (meta.channel_name || 'Y').trim().charAt(0).toUpperCase();
                 if (channelAvatarFallback) channelAvatarFallback.textContent = initial || 'Y';
 
-                const avatar = meta.channel_logo || meta.channel_thumbnail || meta.channel_avatar || meta.channel_image || '';
+                const avatarRaw = meta.channel_logo || meta.channel_thumbnail || meta.channel_avatar || meta.channel_image || '';
+                const avatar = resolveMediaUrl(avatarRaw);
                 if (avatar && channelAvatarImg) {
                     const showAvatar = () => {
                         channelAvatarImg.classList.remove('hidden');
@@ -343,6 +422,8 @@
                         channelAvatarImg.removeAttribute('src');
                         channelAvatarFallback?.classList.remove('hidden');
                     };
+                    channelAvatarImg.onload = null;
+                    channelAvatarImg.onerror = null;
                     channelAvatarImg.onload = showAvatar;
                     channelAvatarImg.onerror = showFallback;
                     channelAvatarImg.src = avatar;
@@ -396,4 +477,5 @@
 
     <script src="auth.js"></script>
 </body>
+
 </html>

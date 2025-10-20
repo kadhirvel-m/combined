@@ -546,7 +546,11 @@
             try {
                 const res = await fetch(`${API}/api/profile`, { headers: { Authorization: `Bearer ${token}` } });
                 if (res.status === 401) {
-                    localStorage.removeItem("access_token");
+                    if (window.auth && typeof window.auth.logout === "function") {
+                        await window.auth.logout();
+                    } else {
+                        try { localStorage.removeItem("access_token"); } catch (_) {}
+                    }
                     window.location.href = "signin.html";
                     return;
                 }
@@ -574,8 +578,12 @@
 
         // Buttons
         el("editBtn").onclick = () => { window.location.href = "profile-edit.html"; };
-        el("signOutBtn").onclick = () => {
-            localStorage.removeItem("access_token");
+        el("signOutBtn").onclick = async () => {
+            if (window.auth && typeof window.auth.logout === "function") {
+                await window.auth.logout();
+            } else {
+                try { localStorage.removeItem("access_token"); } catch (_) {}
+            }
             window.location.href = "signin.html";
         };
 

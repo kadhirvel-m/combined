@@ -28,6 +28,146 @@
   } catch (_) {}
 })();
 
+(function(){
+  if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+  var ACCESS_TOKEN_KEY = 'access_token';
+  var originalFetch = window.fetch.bind(window);
+
+  function apiBase(){
+    var base = window.__API_BASE || 'http://127.0.0.1:8000';
+    return (base || 'http://127.0.0.1:8000').replace(/\/$/, '');
+  }
+
+  function getStoredToken(){
+    try { return localStorage.getItem(ACCESS_TOKEN_KEY); }
+    catch (_) { return null; }
+  }
+
+  function setStoredToken(token){
+    try {
+      if (token) localStorage.setItem(ACCESS_TOKEN_KEY, token);
+      else localStorage.removeItem(ACCESS_TOKEN_KEY);
+    } catch (_) {}
+    return token || null;
+  }
+
+  var auth = {
+    refreshPromise: null,
+    getAccessToken: function(){ return getStoredToken(); },
+    setAccessToken: function(token){ return setStoredToken(token); },
+    clearSession: function(){
+      this.refreshPromise = null;
+      setStoredToken(null);
+    },
+    refreshAccessToken: async function(){
+      if (this.refreshPromise) return this.refreshPromise;
+      var self = this;
+      this.refreshPromise = (async function(){
+        try {
+          var resp = await originalFetch(apiBase() + '/api/refresh', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (!resp.ok) throw new Error('Refresh failed');
+          var data = await resp.json().catch(function(){ return {}; });
+          if (data && data.access_token) {
+            self.setAccessToken(data.access_token);
+            return data.access_token;
+          }
+          throw new Error('Missing access token');
+        } catch (err) {
+          self.clearSession();
+          throw err;
+        } finally {
+          self.refreshPromise = null;
+        }
+      })();
+      return this.refreshPromise;
+    },
+    logout: async function(){
+      try {
+        await originalFetch(apiBase() + '/api/logout', {
+          method: 'POST',
+          credentials: 'include'
+        });
+      } catch (_) {}
+      this.clearSession();
+    }
+  };
+
+  window.auth = auth;
+  window.__authClient = auth;
+
+  function prepareInit(init, token){
+    var hadAuth = false;
+    var prepared = init ? Object.assign({}, init) : {};
+    var headers = new Headers(init && init.headers ? init.headers : undefined);
+    var currentAuth = headers.get('Authorization');
+    if (currentAuth && /^Bearer\s+/i.test(currentAuth)) {
+      hadAuth = true;
+      if (token) headers.set('Authorization', 'Bearer ' + token);
+      else headers.delete('Authorization');
+    }
+    prepared.headers = headers;
+    return { init: prepared, hadAuth: hadAuth };
+  }
+
+  function resolveUrl(resource){
+    if (typeof resource === 'string') return resource;
+    if (resource && typeof resource === 'object' && 'url' in resource) return resource.url;
+    return '';
+  }
+
+  function isRefreshRequest(url){
+    return /\/api\/refresh(?:$|\?)/.test(url || '');
+  }
+
+  window.__authFetchOriginal = originalFetch;
+
+  window.fetch = async function(resource, init){
+    var token = auth.getAccessToken();
+    var prepared = prepareInit(init, token);
+    var response = await originalFetch(resource, prepared.init);
+    if (response.status !== 401 || !prepared.hadAuth || !auth.getAccessToken() || isRefreshRequest(resolveUrl(resource))) {
+      return response;
+    }
+    try {
+      await auth.refreshAccessToken();
+    } catch (_) {
+      return response;
+    }
+    var retryPrepared = prepareInit(init, auth.getAccessToken());
+    return originalFetch(resource, retryPrepared.init);
+  };
+
+  /* Example React hook for silent refresh:
+  import { useEffect, useCallback } from 'react';
+
+  export function useTuNeAuth() {
+    useEffect(() => {
+      const interval = setInterval(() => {
+        window.auth?.refreshAccessToken().catch(() => {});
+      }, 5 * 60 * 1000); // proactively refresh every 5 minutes
+      return () => clearInterval(interval);
+    }, []);
+
+    const apiFetch = useCallback((path, options = {}) => {
+      const base = (window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+      const headers = new Headers(options.headers || {});
+      const token = window.auth?.getAccessToken();
+      if (token) headers.set('Authorization', 'Bearer ' + token);
+      return fetch(`${base}${path}`, { ...options, headers });
+    }, []);
+
+    return {
+      apiFetch,
+      logout: () => window.auth?.logout()
+    };
+  }
+  */
+})();
+
 // TuNe AI Chat Widget (global)
 (function(){
   if (!('document' in window)) return;

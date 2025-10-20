@@ -1,12 +1,14 @@
 ﻿import logging
 import os
 import time
+from datetime import datetime, timedelta
 from typing import Optional, List
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, APIRouter
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from supabase import Client, create_client
 from dotenv import load_dotenv
@@ -17,6 +19,7 @@ from typing import Any, Dict
 
 import re
 import requests
+import jwt
 from serpapi import GoogleSearch
 from typing import Iterable, Set
 
@@ -420,6 +423,88 @@ class ProjectOut(ProjectIn):
 
 
 security = HTTPBearer(auto_error=False)
+
+JWT_SECRET = (
+    os.getenv("JWT_SECRET")
+    or os.getenv("JWT_SECRET_KEY")
+    or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    or os.getenv("SUPABASE_JWT_SECRET")
+    or os.getenv("SUPABASE_ANON_KEY")
+)
+if not JWT_SECRET:
+    raise RuntimeError("Missing JWT secret for token signing")
+
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
+REFRESH_TOKEN_COOKIE_NAME = os.getenv("REFRESH_TOKEN_COOKIE_NAME", "tunex_refresh_token")
+REFRESH_COOKIE_SECURE = os.getenv("REFRESH_COOKIE_SECURE", "true").lower() in ("1", "true", "yes")
+REFRESH_COOKIE_SAMESITE = os.getenv("REFRESH_COOKIE_SAMESITE", "lax")
+_ACCESS_EXPIRE_DELTA = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+_REFRESH_EXPIRE_DELTA = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+
+def _create_token(data: Dict[str, Any], expires_delta: timedelta, token_type: str) -> str:
+    payload = data.copy()
+    now = datetime.utcnow()
+    payload.update({"exp": now + expires_delta, "iat": now, "type": token_type})
+    encoded = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return encoded.decode("utf-8") if isinstance(encoded, bytes) else encoded
+
+
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    """Generate a short-lived JWT access token."""
+    return _create_token(data, expires_delta or _ACCESS_EXPIRE_DELTA, "access")
+
+
+def create_refresh_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    """Generate a long-lived JWT refresh token."""
+    return _create_token(data, expires_delta or _REFRESH_EXPIRE_DELTA, "refresh")
+
+
+def _decode_token(token: str, expected_type: str, expired_msg: str, invalid_msg: str) -> Dict[str, Any]:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(401, expired_msg) from exc
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(401, invalid_msg) from exc
+    if payload.get("type") != expected_type:
+        raise HTTPException(401, invalid_msg)
+    return payload
+
+
+def decode_refresh_token(token: str) -> Dict[str, Any]:
+    """Decode and validate a refresh token."""
+    return _decode_token(token, "refresh", "Refresh token expired", "Invalid refresh token")
+
+
+def decode_access_token(token: str) -> Dict[str, Any]:
+    """Decode and validate an access token."""
+    return _decode_token(token, "access", "Access token expired", "Invalid access token")
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    max_age = int(_REFRESH_EXPIRE_DELTA.total_seconds())
+    response.set_cookie(
+        key=REFRESH_TOKEN_COOKIE_NAME,
+        value=token,
+        max_age=max_age,
+        httponly=True,
+        secure=REFRESH_COOKIE_SECURE,
+        samesite=REFRESH_COOKIE_SAMESITE,
+        path="/",
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=REFRESH_TOKEN_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=REFRESH_COOKIE_SECURE,
+        samesite=REFRESH_COOKIE_SAMESITE,
+    )
 
 
 # Skill Test models
@@ -858,15 +943,15 @@ def get_current_user(cred: HTTPAuthorizationCredentials = Depends(security)):
     if not cred:
         raise HTTPException(401, "Missing credentials")
     token = cred.credentials
-    try:
-        user = supabase.auth.get_user(token)
-        if not user or not getattr(user, "user", None):
-            raise HTTPException(401, "Invalid token")
-        if APP_DEBUG:
-            logger.debug("auth user id=%s", user.user.id)
-        return {"id": user.user.id, "email": user.user.email}
-    except Exception:
-        raise HTTPException(401, "Invalid token")
+    if not token:
+        raise HTTPException(401, "Missing credentials")
+    payload = decode_access_token(token)
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(401, "Invalid access token payload")
+    if APP_DEBUG:
+        logger.debug("auth user id=%s", user_id)
+    return {"id": user_id, "email": payload.get("email")}
 
 
 @app.post("/api/signup")
@@ -887,11 +972,54 @@ def signup(body: SignupIn):
 def signin(body: SigninIn):
     try:
         res = supabase.auth.sign_in_with_password({"email": body.email, "password": body.password})
-        if not getattr(res, "session", None):
+        session = getattr(res, "session", None)
+        user = getattr(res, "user", None)
+        if not session or not user:
             raise HTTPException(401, "Invalid credentials")
-        return {"ok": True, "access_token": res.session.access_token}
+        claims = {"sub": user.id, "email": user.email}
+        access_token = create_access_token(claims)
+        refresh_token = create_refresh_token(claims)
+        response = JSONResponse(
+            {
+                "ok": True,
+                "access_token": access_token,
+                "expires_in": int(_ACCESS_EXPIRE_DELTA.total_seconds()),
+            }
+        )
+        _set_refresh_cookie(response, refresh_token)
+        return response
     except Exception as exc:
         raise HTTPException(401, str(exc))
+
+
+@app.post("/api/refresh")
+def refresh_session(request: Request):
+    token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
+    if not token:
+        raise HTTPException(401, "Missing refresh token")
+    payload = decode_refresh_token(token)
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(401, "Invalid refresh token payload")
+    claims = {"sub": user_id, "email": payload.get("email")}
+    access_token = create_access_token(claims)
+    refresh_token = create_refresh_token(claims)
+    response = JSONResponse(
+        {
+            "ok": True,
+            "access_token": access_token,
+            "expires_in": int(_ACCESS_EXPIRE_DELTA.total_seconds()),
+        }
+    )
+    _set_refresh_cookie(response, refresh_token)
+    return response
+
+
+@app.post("/api/logout")
+def logout():
+    response = JSONResponse({"ok": True})
+    _clear_refresh_cookie(response)
+    return response
 
 
 @app.get("/api/profile", response_model=ProfileOut)

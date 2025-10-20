@@ -290,7 +290,11 @@
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (res.status === 401) {
-                    localStorage.removeItem("access_token");
+                    if (window.auth && typeof window.auth.logout === "function") {
+                        await window.auth.logout();
+                    } else {
+                        try { localStorage.removeItem("access_token"); } catch (_) {}
+                    }
                     window.location.href = "signin.html";
                     return null;
                 }
@@ -408,8 +412,12 @@
         cancelBtn.onclick = () => {
             window.location.href = "profile.html";
         };
-        signOutBtn.onclick = () => {
-            localStorage.removeItem("access_token");
+        signOutBtn.onclick = async () => {
+            if (window.auth && typeof window.auth.logout === "function") {
+                await window.auth.logout();
+            } else {
+                try { localStorage.removeItem("access_token"); } catch (_) {}
+            }
             window.location.href = "signin.html";
         };
 

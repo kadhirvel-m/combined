@@ -265,7 +265,11 @@
                 const j = await r.json().catch(() => ({}));
                 if (!r.ok) throw new Error(j.detail || "Sign-in failed");
                 if (!j.access_token) throw new Error("No access token received");
-                localStorage.setItem("access_token", j.access_token);
+                if (window.auth && typeof window.auth.setAccessToken === "function") {
+                    window.auth.setAccessToken(j.access_token);
+                } else {
+                    localStorage.setItem("access_token", j.access_token);
+                }
                 setStatus(msgEmail, "Signed in! Redirecting…", true);
                 setTimeout(redirectAfter, 400);
             } catch (err) {
@@ -338,7 +342,11 @@
                 const j = await r.json().catch(() => ({}));
                 if (!r.ok) throw new Error(j.detail || "OTP verification failed");
                 if (!j.access_token) throw new Error("No access token received");
-                localStorage.setItem("access_token", j.access_token);
+                if (window.auth && typeof window.auth.setAccessToken === "function") {
+                    window.auth.setAccessToken(j.access_token);
+                } else {
+                    localStorage.setItem("access_token", j.access_token);
+                }
                 setStatus(msgPhone, "Verified! Redirecting…", true);
                 setTimeout(redirectAfter, 400);
             } catch (e) {
