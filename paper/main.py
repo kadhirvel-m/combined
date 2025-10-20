@@ -23,6 +23,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, Iterator, List, Optional, Set, Tuple
 from urllib.parse import quote, urlparse
+import threading
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_core.models import ModelInfo
@@ -145,7 +146,10 @@ def _supabase_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
 # wrapper so endpoint handlers can reattempt idempotent read queries without failing the whole request.
 RETRYABLE_EXCEPTIONS: tuple = ()
 try:  # HTTPXRemoteProtocolError already imported conditionally at top
-    RETRYABLE_EXCEPTIONS = (HTTPXRemoteProtocolError,)  # type: ignore
+    if httpx is not None:
+        RETRYABLE_EXCEPTIONS = (HTTPXRemoteProtocolError, httpx.RemoteProtocolError)  # type: ignore
+    else:
+        RETRYABLE_EXCEPTIONS = (HTTPXRemoteProtocolError,)  # type: ignore
 except Exception:  # pragma: no cover
     pass
 
@@ -1018,7 +1022,7 @@ Start with '# {topic}' and then the sections in a logical order.
 
 # ---------------- New: Streaming events generator for UI/API ----------------
 
-def generate_notes_events(topic: str) -> Iterator[Tuple[str, Dict[str, Any]]]:
+def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Yield (event_name, payload) tuples describing real-time progress and final output.
 
     Events emitted in order (names):
@@ -1033,8 +1037,14 @@ def generate_notes_events(topic: str) -> Iterator[Tuple[str, Dict[str, Any]]]:
       - error (early termination on fatal error)
     """
     try:
+        if stop_event and stop_event.is_set():
+            return
         yield ("start", {"topic": topic, "allowed_domains": ALLOWED_DOMAINS})
+        if stop_event and stop_event.is_set():
+            return
         urls = serpapi_search(topic, num=10)
+        if stop_event and stop_event.is_set():
+            return
         if not urls:
             yield ("error", {"message": "No results from allowed domains."})
             return
@@ -1043,6 +1053,8 @@ def generate_notes_events(topic: str) -> Iterator[Tuple[str, Dict[str, Any]]]:
         # Fetch & extract
         pages: List[PageExtract] = []
         for u in urls[:6]:
+            if stop_event and stop_event.is_set():
+                return
             yield ("fetch_start", {"url": u})
             try:
                 html = fetch(u)
@@ -1056,9 +1068,13 @@ def generate_notes_events(topic: str) -> Iterator[Tuple[str, Dict[str, Any]]]:
             yield ("error", {"message": "Failed to extract any pages."})
             return
 
+        if stop_event and stop_event.is_set():
+            return
         merged_titles = unify_section_titles(pages)
         yield ("merged_titles", {"titles": merged_titles})
 
+        if stop_event and stop_event.is_set():
+            return
         context = assemble_context_for_llm(pages, merged_titles, topic)
         yield ("context_ready", {"chars": len(context)})
 
@@ -1078,7 +1094,7 @@ Instructions:
  - Bold important keywords/terms and symbols (e.g., θ, γ, α, ε-greedy, key definitions) with **...** consistently; avoid over-bolding.
 
 Start with '# {topic}' and then the sections in a logical order.
-"""
+        """
         yield ("llm_start", {})
         try:
             # Use safe runner in case we're under FastAPI's loop
@@ -1089,9 +1105,13 @@ Start with '# {topic}' and then the sections in a logical order.
             return
         yield ("llm_done", {"md_chars": len(content)})
 
+        if stop_event and stop_event.is_set():
+            return
         # Images from SERP + pages
         related_pages = urls[:8]
-        image_urls = collect_image_urls(topic, related_pages)
+        image_urls = collect_image_urls(topic, related_pages, stop_event=stop_event)
+        if stop_event and stop_event.is_set():
+            return
         yield ("images", {"count": len(image_urls)})
 
         yield ("final", {"markdown": content, "image_urls": image_urls})
@@ -1100,12 +1120,18 @@ Start with '# {topic}' and then the sections in a logical order.
         yield ("error", {"message": str(e)})
 
 
-def collect_image_urls(topic: str, page_urls: List[str]) -> List[str]:
+def collect_image_urls(topic: str, page_urls: List[str], stop_event: Optional[threading.Event] = None) -> List[str]:
+    if stop_event and stop_event.is_set():
+        return []
     urls: List[str] = []
     # 1) From SerpAPI image search
     urls.extend(serpapi_image_urls(topic, num=12))
+    if stop_event and stop_event.is_set():
+        return urls
     # 2) From parsed webpages
     for u in page_urls[:6]:
+        if stop_event and stop_event.is_set():
+            break
         try:
             html = fetch(u)
         except Exception:
@@ -2950,6 +2976,14 @@ def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.
     if not anon_client:
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
     last_exc: Optional[Exception] = None
+    retryable_auth_errors: tuple[Any, ...] = (AuthRetryableError,)
+    if httpx is not None:
+        retryable_auth_errors = retryable_auth_errors + (httpx.RemoteProtocolError,)  # type: ignore
+        if HTTPXRemoteProtocolError not in retryable_auth_errors:
+            retryable_auth_errors = retryable_auth_errors + (HTTPXRemoteProtocolError,)  # type: ignore
+    else:
+        retryable_auth_errors = retryable_auth_errors + (HTTPXRemoteProtocolError,)
+
     for attempt in range(retries):
         try:
             auth_user = anon_client.auth.get_user(token)
@@ -2961,7 +2995,7 @@ def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.
         except AuthApiError as e:
             msg = getattr(e, "message", None) or str(e) or "Invalid or expired session"
             raise HTTPException(status_code=401, detail=msg)
-        except (AuthRetryableError, HTTPXRemoteProtocolError) as e:
+        except retryable_auth_errors as e:  # type: ignore
             last_exc = e
             time.sleep(base_delay * (attempt + 1))
             continue
@@ -9565,25 +9599,65 @@ async def generate_stream(topic: str, force: bool = False):
                     return
                 except Exception:
                     pass
-        for name, payload in generate_notes_events(topic):
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[Tuple[str, Optional[str], Optional[Dict[str, Any]]]] = asyncio.Queue()
+        stop_event = threading.Event()
+
+        def dispatch(item: Tuple[str, Optional[str], Optional[Dict[str, Any]]]) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, item)
+
+        def worker() -> None:
             try:
-                if name == "final" and isinstance(payload, dict) and payload.get("markdown"):
+                for name, payload in generate_notes_events(topic, stop_event=stop_event):
+                    if stop_event.is_set():
+                        break
+                    dispatch(("event", name, payload))
+                dispatch(("done", None, None))
+            except Exception as exc:
+                dispatch(("error", None, {"message": str(exc)}))
+                dispatch(("done", None, None))
+
+        worker_future = loop.run_in_executor(None, worker)
+
+        try:
+            while True:
+                kind, name, payload = await queue.get()
+                if kind == "event" and name is not None and payload is not None:
                     try:
-                        meta = save_note(topic, payload.get("markdown", ""))
-                        payload["id"] = meta.get("id")
-                        payload["cached"] = False
-                    except Exception:
-                        pass
-                line = f"event: {name}\n".encode("utf-8")
-                data_json = json.dumps(payload, ensure_ascii=False)
-                data = ("data: " + data_json + "\n\n").encode("utf-8")
-                yield line
-                yield data
-            except Exception as e:
-                err = json.dumps({"message": str(e)})
-                yield b"event: error\n"
-                yield ("data: " + err + "\n\n").encode("utf-8")
-                break
+                        if name == "final" and isinstance(payload, dict) and payload.get("markdown"):
+                            try:
+                                meta = save_note(topic, payload.get("markdown", ""))
+                                payload["id"] = meta.get("id")
+                                payload["cached"] = False
+                            except Exception:
+                                pass
+                            finally:
+                                stop_event.set()
+                        line = f"event: {name}\n".encode("utf-8")
+                        data_json = json.dumps(payload, ensure_ascii=False)
+                        data = ("data: " + data_json + "\n\n").encode("utf-8")
+                        yield line
+                        yield data
+                    except Exception as exc:
+                        err = json.dumps({"message": str(exc)}, ensure_ascii=False)
+                        yield b"event: error\n"
+                        yield ("data: " + err + "\n\n").encode("utf-8")
+                elif kind == "error" and payload is not None:
+                    err_json = json.dumps(payload, ensure_ascii=False)
+                    yield b"event: error\n"
+                    yield ("data: " + err_json + "\n\n").encode("utf-8")
+                elif kind == "done":
+                    break
+        except asyncio.CancelledError:
+            stop_event.set()
+            raise
+        finally:
+            stop_event.set()
+            try:
+                await asyncio.wait_for(asyncio.wrap_future(worker_future), timeout=1.0)
+            except Exception:
+                pass
+
         yield b"event: close\n\n"
 
     headers = {
