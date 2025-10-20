@@ -390,6 +390,51 @@
         const $resultsCount = document.getElementById('resultsCount');
         const $snack = document.getElementById('snack');
         const $themeBtn = document.getElementById('themeBtn');
+        const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
+        const channelLogoCache = new Map();
+
+        function getChannelLogoAsync(channelPage) {
+            if (!channelPage || typeof channelPage !== 'string') {
+                return Promise.resolve('');
+            }
+
+            const cached = channelLogoCache.get(channelPage);
+            if (cached !== undefined) {
+                return cached instanceof Promise ? cached : Promise.resolve(cached);
+            }
+
+            const request = (async () => {
+                try {
+                    const response = await fetch(`${apiBase}/api/youtube/channel-logo?channel_url=${encodeURIComponent(channelPage)}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const data = await response.json();
+                    const logo = typeof data.logo === 'string' ? data.logo.trim() : '';
+                    channelLogoCache.set(channelPage, logo);
+                    return logo;
+                } catch (error) {
+                    console.warn('Channel logo fetch failed', error);
+                    channelLogoCache.set(channelPage, '');
+                    return '';
+                }
+            })();
+
+            channelLogoCache.set(channelPage, request);
+            return request;
+        }
+
+        function hydrateChannelLogo(img, channelPage, shouldAttempt) {
+            if (!img || !shouldAttempt) return;
+            getChannelLogoAsync(channelPage)
+                .then(logo => {
+                    if (logo) {
+                        img.src = logo;
+                        img.dataset.logoLoaded = 'true';
+                    }
+                })
+                .catch(() => { /* already logged in fetch helper */ });
+        }
 
         // Theme toggle
         (function initTheme() {
@@ -457,7 +502,9 @@
             const titleText = typeof video.title === 'string' ? video.title.trim() : '';
 
             // Use channel logo if provided, otherwise fallback to the YouTube glyph
-            const channelLogo = video.channel_logo || 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
+            const channelPage = typeof video.channel_page === 'string' ? video.channel_page.trim() : '';
+            const logoIsDefault = Boolean(video.channel_logo_is_default);
+            const channelLogo = (typeof video.channel_logo === 'string' && video.channel_logo.trim()) || fallbackChannelLogo;
             const safeLink = typeof video.link === 'string' ? video.link : '';
             const notesUrl = `./youtube-notes.html?video=${encodeURIComponent(safeLink)}`;
 
@@ -487,6 +534,12 @@
           </div>
         </a>
       `;
+
+            const logoImg = card.querySelector('.channel-logo');
+            if (logoImg) {
+                logoImg.dataset.channelPage = channelPage;
+                hydrateChannelLogo(logoImg, channelPage, logoIsDefault && !!channelPage);
+            }
 
             return card;
         }

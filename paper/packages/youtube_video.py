@@ -1,8 +1,10 @@
 import html
 import re
 import socket
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from typing import Dict, List, Optional
-from urllib.error import URLError, HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from yt_dlp import YoutubeDL
 
@@ -55,7 +57,15 @@ def _format_views(views: Optional[int]) -> str:
 
 
 _channel_logo_cache: Dict[str, str] = {}
+_channel_logo_lock = Lock()
 _DEFAULT_CHANNEL_LOGO = "https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png"
+
+
+def _normalize_channel_logo(logo_url: str) -> str:
+    """Downscale large channel logo URLs to a smaller size."""
+    if not logo_url or not isinstance(logo_url, str):
+        return ""
+    return re.sub(r"=s\d+-c", "=s88-c", logo_url, count=1)
 
 
 def _fetch_channel_logo(channel_page_url: Optional[str]) -> str:
@@ -70,7 +80,8 @@ def _fetch_channel_logo(channel_page_url: Optional[str]) -> str:
     if not channel_page_url:
         return ""
 
-    cached = _channel_logo_cache.get(channel_page_url)
+    with _channel_logo_lock:
+        cached = _channel_logo_cache.get(channel_page_url)
     if cached is not None:
         return cached
 
@@ -85,11 +96,12 @@ def _fetch_channel_logo(channel_page_url: Optional[str]) -> str:
                 )
             },
         )
-        with urlopen(req, timeout=6) as response:
+        with urlopen(req, timeout=4) as response:
             charset = response.headers.get_content_charset() or "utf-8"
             html_text = response.read().decode(charset, errors="ignore")
     except (ValueError, HTTPError, URLError, TimeoutError, socket.timeout):
-        _channel_logo_cache[channel_page_url] = ""
+        with _channel_logo_lock:
+            _channel_logo_cache[channel_page_url] = ""
         return ""
 
     logo_match = re.search(
@@ -98,15 +110,26 @@ def _fetch_channel_logo(channel_page_url: Optional[str]) -> str:
         flags=re.IGNORECASE,
     )
     if not logo_match:
-        _channel_logo_cache[channel_page_url] = ""
+        with _channel_logo_lock:
+            _channel_logo_cache[channel_page_url] = ""
         return ""
 
     logo_url = html.unescape(logo_match.group(1))
-    _channel_logo_cache[channel_page_url] = logo_url
+    with _channel_logo_lock:
+        _channel_logo_cache[channel_page_url] = logo_url
     return logo_url
 
 
-def search_youtube_videos(query: str, num: int = 8) -> List[Dict[str, str]]:
+def get_channel_logo(channel_page_url: Optional[str]) -> str:
+    """Public helper to resolve and normalize a channel logo."""
+    return _normalize_channel_logo(_fetch_channel_logo(channel_page_url)) or ""
+
+
+def get_default_channel_logo() -> str:
+    return _DEFAULT_CHANNEL_LOGO
+
+
+def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = False) -> List[Dict[str, str]]:
     """
     Search YouTube videos using yt-dlp.
     
@@ -135,6 +158,8 @@ def search_youtube_videos(query: str, num: int = 8) -> List[Dict[str, str]]:
         'default_search': 'ytsearch',  # Use YouTube search
         'format': 'best',
         'noplaylist': True,
+        'playlistend': num,
+        'cachedir': False,
     }
     
     videos: List[Dict[str, str]] = []
@@ -149,8 +174,31 @@ def search_youtube_videos(query: str, num: int = 8) -> List[Dict[str, str]]:
                 return []
             
             entries = result.get('entries', [])
-            
-            for entry in entries[:num]:
+            limited_entries = entries[:num]
+
+            if prefetch_logos:
+                unique_pages: List[str] = []
+                for entry in limited_entries:
+                    channel_page = (entry.get('channel_url') or entry.get('uploader_url') or "").strip()
+                    if channel_page and channel_page not in unique_pages:
+                        unique_pages.append(channel_page)
+
+                with _channel_logo_lock:
+                    cached_pages = set(_channel_logo_cache.keys())
+                missing_pages = [
+                    page for page in unique_pages
+                    if page and page not in cached_pages
+                ]
+                if missing_pages:
+                    max_workers = min(6, len(missing_pages))
+                    try:
+                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                            list(executor.map(_fetch_channel_logo, missing_pages))
+                    except RuntimeError:
+                        for page in missing_pages:
+                            _fetch_channel_logo(page)
+
+            for entry in limited_entries:
                 if not entry:
                     continue
                 
@@ -179,8 +227,9 @@ def search_youtube_videos(query: str, num: int = 8) -> List[Dict[str, str]]:
                     video_url = f"https://www.youtube.com/watch?v={video_id}"
                 
                 # Channel thumbnail/logo (scraped from channel page metadata)
-                channel_page = entry.get('channel_url') or entry.get('uploader_url') or ""
-                channel_logo = _fetch_channel_logo(channel_page) or _DEFAULT_CHANNEL_LOGO
+                channel_page = (entry.get('channel_url') or entry.get('uploader_url') or "").strip()
+                channel_logo = get_channel_logo(channel_page) if prefetch_logos else ""
+                final_logo = channel_logo or _DEFAULT_CHANNEL_LOGO
                 
                 # Only add if we have essential data
                 if title and video_url and thumbnail:
@@ -191,7 +240,9 @@ def search_youtube_videos(query: str, num: int = 8) -> List[Dict[str, str]]:
                         "views": views,
                         "duration": duration,
                         "thumbnail": thumbnail,
-                        "channel_logo": channel_logo if isinstance(channel_logo, str) else _DEFAULT_CHANNEL_LOGO,
+                        "channel_logo": final_logo,
+                        "channel_logo_is_default": final_logo == _DEFAULT_CHANNEL_LOGO,
+                        "channel_page": channel_page,
                     })
     
     except Exception as e:

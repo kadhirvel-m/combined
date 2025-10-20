@@ -71,7 +71,11 @@ from packages.yt_transcript import (
     fetch_transcript_paragraph,
     extract_video_id,
 )
-from packages.youtube_video import search_youtube_videos
+from packages.youtube_video import (
+    get_channel_logo,
+    get_default_channel_logo,
+    search_youtube_videos,
+)
 try:
     # Used for fetching YouTube video metadata (channel, views, etc.)
     from yt_dlp import YoutubeDL  # type: ignore
@@ -9973,6 +9977,20 @@ def api_youtube_search(
         return videos
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"YouTube search failed: {str(e)}")
+
+
+@youtube_search_router.get("/channel-logo")
+def api_youtube_channel_logo(
+    channel_url: str = Query(..., description="Full YouTube channel URL")
+):
+    if not channel_url or not channel_url.strip():
+        raise HTTPException(status_code=400, detail="channel_url is required")
+
+    try:
+        logo = get_channel_logo(channel_url.strip()) or get_default_channel_logo()
+        return {"logo": logo}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Channel logo lookup failed: {str(e)}")
 
 
 # --- FastAPI app ---
