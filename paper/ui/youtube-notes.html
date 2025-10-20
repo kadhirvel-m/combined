@@ -65,7 +65,7 @@
     </style>
 </head>
 <body data-theme="dark" class="text-slate-900 dark:text-slate-100">
-    <header class="fixed inset-x-0 top-0 z-40 bg-white/80 dark:bg-slate-950/75 border-b border-slate-200/60 dark:border-slate-700/40 backdrop-blur">
+    <header class="fixed inset-x-0 top-0 z-40 bg-white/95 dark:bg-slate-950 border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm dark:shadow-slate-900/40">
         <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
             <a href="index.html" class="flex items-center gap-3" aria-label="Paper X Home">
                 <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 dark:hidden">
@@ -89,7 +89,7 @@
         </div>
     </header>
 
-    <main class="relative mx-auto max-w-7xl px-5 pt-28 pb-16">
+    <main class="relative mx-auto max-w-7xl px-5 pt-36 sm:pt-40 lg:pt-44 pb-16">
         <div class="notes-grid">
             <aside class="notes-sidebar space-y-5">
                 <div class="surface overflow-hidden">
@@ -99,9 +99,9 @@
                 </div>
                 <div class="surface p-6 space-y-5">
                     <div class="flex items-center gap-4">
-                        <span class="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-cyan-200/60 to-purple-200/60 text-lg font-semibold text-slate-900 dark:from-cyan-500/20 dark:to-purple-500/20 dark:text-white">
-                            <img id="channelAvatar" alt="Channel avatar" class="hidden h-full w-full rounded-2xl object-cover">
-                            <span id="channelAvatarFallback">P</span>
+                        <span class="grid h-14 w-14 place-items-center rounded-2xl bg-white text-lg font-semibold text-slate-900 shadow-inner dark:bg-slate-900 dark:text-slate-100">
+                            <img id="channelAvatar" alt="Channel avatar" referrerpolicy="no-referrer" class="hidden h-full w-full rounded-2xl object-cover ring-1 ring-white/80 dark:ring-slate-800">
+                            <span id="channelAvatarFallback" class="text-base font-semibold">P</span>
                         </span>
                         <div class="space-y-1">
                             <p id="channelName" class="text-base font-semibold">N/A</p>
@@ -334,9 +334,22 @@
 
                 const avatar = meta.channel_logo || meta.channel_thumbnail || meta.channel_avatar || meta.channel_image || '';
                 if (avatar && channelAvatarImg) {
+                    const showAvatar = () => {
+                        channelAvatarImg.classList.remove('hidden');
+                        channelAvatarFallback?.classList.add('hidden');
+                    };
+                    const showFallback = () => {
+                        channelAvatarImg.classList.add('hidden');
+                        channelAvatarImg.removeAttribute('src');
+                        channelAvatarFallback?.classList.remove('hidden');
+                    };
+                    channelAvatarImg.onload = showAvatar;
+                    channelAvatarImg.onerror = showFallback;
                     channelAvatarImg.src = avatar;
-                    channelAvatarImg.classList.remove('hidden');
-                    channelAvatarFallback.classList.add('hidden');
+                    // If the image is cached, onload may not fire
+                    if (channelAvatarImg.complete && channelAvatarImg.naturalWidth > 0) {
+                        showAvatar();
+                    }
                 } else if (channelAvatarImg) {
                     channelAvatarImg.classList.add('hidden');
                     channelAvatarImg.removeAttribute('src');
