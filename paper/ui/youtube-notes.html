@@ -1,239 +1,182 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth dark">
-
+<html lang="en" class="scroll-smooth">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PaperX - YouTube Notes</title>
+    <title>PaperX ? YouTube Notes</title>
     <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg" />
-
-    <!-- Inter + Material Symbols -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
-        rel="stylesheet">
-
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/tailwind.css" />
-    <!-- Markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
-
-    <script>
-        window.tailwind = window.tailwind || {};
-    </script>
-    <script>
-        window.tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
-                    colors: {
-                        brand: { 50: '#F7F2F9', 100: '#EDE1F0', 200: '#D9C4E2', 400: '#B07AC3', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' },
-                        neon: { 500: '#57E8FF', 700: '#36B2D6' }
-                    },
-                    boxShadow: {
-                        glow: '0 18px 60px rgba(87,232,255,0.22)',
-                        card: '0 24px 60px rgba(30,30,47,0.35)'
-                    },
-                    backgroundImage: {
-                        cosmic: 'radial-gradient(1400px 800px at 50% 0%, rgba(87,232,255,0.12), transparent 60%), linear-gradient(180deg, #0F0D1F 0%, #1E1E2F 60%, #090810 100%)'
-                    }
-                }
-            }
-        };
-    </script>
     <style>
-        [x-cloak] {
-            display: none !important;
+        :root { color-scheme: light; }
+        body {
+            min-height: 100vh;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            background: linear-gradient(180deg, #f7f4fb 0%, #ffffff 30%, #eff1ff 100%);
+            transition: background .3s ease, color .3s ease;
         }
-
-        .material-symbols-rounded {
-            font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+        body[data-theme="dark"] {
+            color-scheme: dark;
+            background: radial-gradient(900px 600px at 65% -150px, rgba(87,232,255,.18), transparent 70%), linear-gradient(180deg, #05070f 0%, #10152b 55%, #0b0e1d 100%);
         }
-
-        .gradient-text {
-            background: linear-gradient(90deg, #57E8FF 0%, #9E4B8A 45%, #F9B5FF 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .notes-grid { display: grid; gap: 2rem; }
+        @media (min-width: 1024px) {
+            .notes-grid { grid-template-columns: 1fr 4fr; }
+            .notes-sidebar { position: sticky; top: 6.75rem; align-self: flex-start; }
         }
-
-        .theme-toggle {
-            transition: background-color .25s ease, border-color .25s ease, color .25s ease;
+        .surface {
+            background: rgba(255,255,255,0.88);
+            border-radius: 24px;
+            border: 1px solid rgba(148,163,184,0.12);
+            box-shadow: 0 24px 60px rgba(15,23,42,0.12);
+            backdrop-filter: blur(18px);
         }
-
-        body[data-theme='light'] {
-            background-color: #F7F4FB;
-            color: #1E1E2F;
+        body[data-theme="dark"] .surface {
+            background: rgba(12,19,35,0.78);
+            border: 1px solid rgba(94,234,212,0.14);
+            box-shadow: 0 32px 80px rgba(2,6,23,0.55);
         }
-
-        body[data-theme='light'] .bg-cosmic {
-            background-image: radial-gradient(1400px 800px at 50% 0%, rgba(158, 75, 138, .08), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #F9F4FB 40%, #F2ECF7 100%);
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            padding: .35rem .8rem;
+            border-radius: 999px;
+            font-size: .75rem;
+            font-weight: 600;
+            background: rgba(148,163,184,0.16);
+            color: rgba(30,41,59,0.68);
         }
-
-        body[data-theme='light'] .bg-brand-900 {
-            background-color: #F9F5FC !important;
+        body[data-theme="dark"] .pill { background: rgba(148,163,184,0.12); color: rgba(226,232,240,0.78); }
+        .notes-scroll {
+            max-height: calc(100vh - 12rem);
+            overflow-y: auto;
         }
-
-        body[data-theme='light'] .bg-brand-900\/70 {
-            background-color: rgba(249, 245, 252, .9) !important;
+        .notes-scroll::-webkit-scrollbar { width: 8px; }
+        .notes-scroll::-webkit-scrollbar-thumb {
+            background: rgba(148,163,184,0.4);
+            border-radius: 999px;
         }
-
-        body[data-theme='light'] .bg-white\/5 {
-            background-color: rgba(255, 255, 255, .92) !important;
-        }
-
-        body[data-theme='light'] .bg-white\/10 {
-            background-color: rgba(255, 255, 255, .86) !important;
-        }
-
-        body[data-theme='light'] .border-white\/10 {
-            border-color: rgba(76, 42, 89, .16) !important;
-        }
-
-        body[data-theme='light'] .border-white\/5 {
-            border-color: rgba(76, 42, 89, .1) !important;
-        }
-
-        body[data-theme='light'] .text-white {
-            color: #1E1E2F !important;
-        }
-
-        body[data-theme='light'] .text-white\/90 {
-            color: rgba(30, 30, 47, .92) !important;
-        }
-
-        body[data-theme='light'] .text-white\/80 {
-            color: rgba(30, 30, 47, .82) !important;
-        }
-
-        body[data-theme='light'] .text-white\/70,
-        body[data-theme='light'] .text-white\/60 {
-            color: rgba(30, 30, 47, .72) !important;
-        }
-
-        body[data-theme='light'] .text-white\/40 {
-            color: rgba(30, 30, 47, .5) !important;
-        }
-
-        body[data-theme='light'] .text-brand-900 {
-            color: #1E1E2F !important;
-        }
-
-        body[data-theme='light'] .shadow-card {
-            box-shadow: 0 30px 70px rgba(76, 42, 89, .18) !important;
-        }
+        body[data-theme="dark"] .notes-scroll::-webkit-scrollbar-thumb { background: rgba(94,234,212,0.35); }
     </style>
 </head>
-
-<body data-theme="dark" class="bg-brand-900 text-white font-sans selection:bg-brand-500/20 selection:text-white">
-    <div
-        class="relative min-h-screen overflow-hidden bg-cosmic before:absolute before:inset-0 before:-z-10 before:bg-[radial-gradient(circle_at_20%_20%,rgba(87,232,255,0.12),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(158,75,138,0.22),transparent_55%)]">
-        <div
-            class="absolute inset-x-0 top-0 -z-20 h-[320px] bg-gradient-to-b from-neon-500/20 via-transparent to-transparent blur-3xl">
-        </div>
-
-        <header class="relative">
-            <nav class="mx-auto flex max-w-6xl items-center justify-between px-3 pt-10">
-                <a href="index.html" class="flex items-center gap-3 text-white/90 transition hover:text-white">
-                    <span class="material-symbols-rounded text-3xl text-neon-500">language</span>
-                    <span class="text-lg font-semibold tracking-wide">PaperX Synth</span>
-                </a>
-                <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-3 text-sm font-medium text-white/70">
-                        <a href="notes_generator.html"
-                            class="rounded-full border border-white/10 px-4 py-2 transition hover:border-neon-500/60 hover:text-white">Notes
-                            Studio</a>
-                        <a href="youtube-transcript.html"
-                            class="rounded-full bg-neon-500/15 px-4 py-2 text-neon-500 shadow-glow ring-1 ring-inset ring-neon-500/30">YouTube
-                            Notes</a>
-                    </div>
-                    <button id="themeToggle" type="button" aria-label="Toggle color mode" aria-pressed="true"
-                        class="theme-toggle flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 transition hover:border-neon-500/60 hover:text-white focus:outline-none focus:ring-2 focus:ring-neon-500/40">
-                        <span data-icon="sun" class="material-symbols-rounded text-xl hidden">light_mode</span>
-                        <span data-icon="moon" class="material-symbols-rounded text-xl">dark_mode</span>
-                    </button>
-                </div>
+<body data-theme="dark" class="text-slate-900 dark:text-slate-100">
+    <header class="fixed inset-x-0 top-0 z-40 bg-white/80 dark:bg-slate-950/75 border-b border-slate-200/60 dark:border-slate-700/40 backdrop-blur">
+        <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+            <a href="index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 dark:hidden">
+                <img src="../assets/img/logo-dark.svg" alt="Paper X" class="hidden h-10 dark:block">
+            </a>
+            <nav class="hidden items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-200 lg:flex">
+                <a href="index.html" class="transition hover:text-slate-900 dark:hover:text-white">Home</a>
+                <a href="about.html" class="transition hover:text-slate-900 dark:hover:text-white">About</a>
+                <a href="contact.html" class="transition hover:text-slate-900 dark:hover:text-white">Contact</a>
+                <a href="help.html" class="transition hover:text-slate-900 dark:hover:text-white">Help</a>
+                <a href="index.html#pricing" class="transition hover:text-slate-900 dark:hover:text-white">Pricing</a>
             </nav>
-        </header>
+            <div class="flex items-center gap-2">
+                <button data-theme-toggle class="inline-flex items-center gap-2 rounded-full border border-slate-200/70 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:text-white">
+                    <span class="material-symbols-rounded text-base">dark_mode</span>
+                    <span class="hidden sm:block">Theme</span>
+                </button>
+                <a href="login.html" class="hidden rounded-full px-3 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-200 dark:hover:text-white md:inline-flex">Log in</a>
+                <a href="signup.html" class="hidden rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-500/30 transition hover:shadow-purple-500/50 md:inline-flex">Sign up</a>
+            </div>
+        </div>
+    </header>
 
-        <main class="relative mx-auto flex min-h-[calc(100vh-120px)] max-w-6xl flex-col gap-8 px-3 pb-20 pt-10">
-            <section class="grid gap-6 lg:grid-cols-[360px_1fr] lg:items-start">
-                <div class="space-y-4">
-                    <div
-                        class="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-card backdrop-blur-xl ring-1 ring-white/10">
-                        <div class="aspect-video w-full bg-brand-900/50">
-                            <iframe id="videoEmbed" title="YouTube video" class="h-full w-full" src=""
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                allowfullscreen></iframe>
+    <main class="relative mx-auto max-w-7xl px-5 pt-28 pb-16">
+        <div class="notes-grid">
+            <aside class="notes-sidebar space-y-5">
+                <div class="surface overflow-hidden">
+                    <div class="aspect-video bg-black">
+                        <iframe id="videoEmbed" title="YouTube video player" class="h-full w-full" allowfullscreen></iframe>
+                    </div>
+                </div>
+                <div class="surface p-6 space-y-5">
+                    <div class="flex items-center gap-4">
+                        <span class="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-cyan-200/60 to-purple-200/60 text-lg font-semibold text-slate-900 dark:from-cyan-500/20 dark:to-purple-500/20 dark:text-white">
+                            <img id="channelAvatar" alt="Channel avatar" class="hidden h-full w-full rounded-2xl object-cover">
+                            <span id="channelAvatarFallback">P</span>
+                        </span>
+                        <div class="space-y-1">
+                            <p id="channelName" class="text-base font-semibold">N/A</p>
+                            <p class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-300">
+                                <span class="material-symbols-rounded text-base opacity-70">calendar_today</span>
+                                <span id="uploadDate">N/A</span>
+                            </p>
+                            <p class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-300">
+                                <span class="material-symbols-rounded text-base opacity-70">visibility</span>
+                                <span id="viewCount">N/A</span>
+                            </p>
                         </div>
-                        <div class="flex items-center justify-between gap-3 p-4">
-                            <div class="flex items-center gap-3">
-                                <div
-                                    class="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/10 bg-gradient-to-br from-neon-500/30 to-brand-500/30">
-                                    <img id="channelAvatar" alt="Channel avatar"
-                                        class="hidden h-full w-full object-cover" />
-                                    <div id="channelAvatarFallback"
-                                        class="flex h-full w-full items-center justify-center text-sm font-bold text-white/80">
-                                        Y</div>
-                                </div>
-                                <div>
-                                    <div id="channelName" class="text-sm font-semibold text-white">—</div>
-                                    <div id="uploadDate" class="text-xs text-white/60">—</div>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-2 text-xs text-white/70">
-                                <span class="material-symbols-rounded text-neon-500">visibility</span>
-                                <span id="viewCount">—</span>
-                            </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">Source</p>
+                            <a id="openOnYoutube" href="#" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-200/70 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400 dark:hover:text-white">
+                                <span class="material-symbols-rounded text-base">open_in_new</span>
+                                Watch on YouTube
+                            </a>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="pill">
+                                <span class="material-symbols-rounded text-base opacity-60">robot</span>
+                                Gemini summary
+                            </span>
+                            <span class="pill">
+                                <span class="material-symbols-rounded text-base opacity-60">subtitles</span>
+                                Smart transcript
+                            </span>
                         </div>
                     </div>
                 </div>
+            </aside>
 
-                <section id="notesSection"
-                    class="relative grid content-start gap-4 rounded-3xl border border-white/10 bg-white/5 p-5 shadow-card backdrop-blur-xl ring-1 ring-white/10">
-                    <header class="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                            <h2 class="text-xl font-semibold text-white">Structured notes</h2>
-                            <p class="text-sm text-white/60">Rendered Markdown for clean reading.</p>
-                        </div>
-                        <div class="flex gap-2">
-                            <button id="notesCopyBtn"
-                                class="group flex items-center gap-2 rounded-2xl border border-white/10 px-3 py-2 text-sm font-medium text-white/70 transition hover:border-neon-500/60 hover:text-white focus:outline-none focus:ring-2 focus:ring-neon-500/40">
-                                <span
-                                    class="material-symbols-rounded text-base text-neon-500/80 transition group-hover:text-neon-500">content_copy</span>
-                                Copy
-                            </button>
-                        </div>
-                    </header>
-                    <p id="notesStatus" class="text-sm font-medium text-white/60" role="status"></p>
-                    <article
-                        class="relative max-h-[75vh] overflow-y-auto rounded-2xl border border-white/5 bg-brand-900/70 p-6 text-base leading-relaxed text-white/90 shadow-inner">
-                        <div id="notesRendered" class="prose prose-invert max-w-none"></div>
-                    </article>
-                </section>
+            <section class="surface p-6 lg:p-8 space-y-6">
+                <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <h1 class="text-2xl font-semibold tracking-tight lg:text-3xl">Structured Notes</h1>
+                        <p id="notesStatus" class="text-sm font-medium text-slate-500 dark:text-slate-300" role="status">Preparing workspace...</p>
+                    </div>
+                    <button id="notesCopyBtn" class="inline-flex items-center gap-2 rounded-full border border-slate-200/70 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-900 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400 dark:hover:text-white">
+                        <span class="material-symbols-rounded text-base">content_copy</span>
+                        Copy notes
+                    </button>
+                </header>
+                <div class="notes-scroll space-y-4 text-base leading-relaxed text-slate-700 dark:text-slate-100">
+                    <div id="notesRendered" class="prose max-w-none prose-headings:mt-6 prose-headings:font-semibold prose-p:mb-4 prose-ul:mb-5 prose-li:marker:text-slate-400 dark:prose-invert"></div>
+                </div>
             </section>
-        </main>
+        </div>
+    </main>
 
-        <footer class="border-t border-white/5 bg-brand-900/80 py-8 text-center text-xs text-white/40 backdrop-blur">
-            Crafted with the PaperX toolkit - yt-dlp + YouTubeTranscript API
-        </footer>
-    </div>
+    <footer class="px-5 pb-10 text-center text-sm text-slate-400 dark:text-slate-500">
+        Crafted with PaperX ? yt-dlp ? YouTube Transcript API ? Gemini
+    </footer>
 
     <script>
-        const API_BASE = (() => {
-            const datasetBase = (document.body && document.body.dataset && document.body.dataset.apiBase)
-                ? document.body.dataset.apiBase.trim() : '';
-            if (datasetBase) return datasetBase.replace(/\/$/, '');
-            if (window.location.protocol === 'file:') return 'http://127.0.0.1:8000';
-            const origin = window.location.origin;
-            if (/:(5500|5501)$/i.test(origin)) return origin.replace(/:(5500|5501)$/i, ':8000');
-            return origin;
+        const root = document.documentElement;
+        const themeKey = 'px-theme';
+        const statusPalette = {
+            dark: { info: '#94a3b8', success: '#67e8f9', error: '#fb7185' },
+            light: { info: '#475569', success: '#0f766e', error: '#dc2626' }
+        };
+
+        const apiBase = (() => {
+            const manual = document.body.dataset.apiBase ? document.body.dataset.apiBase.trim() : '';
+            if (manual) return manual.replace(/\/$/, '');
+            if (location.protocol === 'file:') return 'http://127.0.0.1:8000';
+            if (/:(5500|5501)$/i.test(location.origin)) return location.origin.replace(/:(5500|5501)$/i, ':8000');
+            return location.origin;
         })();
 
-        const search = new URLSearchParams(window.location.search);
-        const videoUrl = search.get('video') || search.get('url') || '';
+        const params = new URLSearchParams(location.search);
+        const videoUrl = params.get('video') || params.get('url') || '';
 
         const embedEl = document.getElementById('videoEmbed');
         const channelAvatarImg = document.getElementById('channelAvatar');
@@ -244,153 +187,200 @@
         const notesRenderedEl = document.getElementById('notesRendered');
         const notesCopyBtn = document.getElementById('notesCopyBtn');
         const notesStatusEl = document.getElementById('notesStatus');
-        const themeToggle = document.getElementById('themeToggle');
-        const themeIconSun = themeToggle ? themeToggle.querySelector('[data-icon="sun"]') : null;
-        const themeIconMoon = themeToggle ? themeToggle.querySelector('[data-icon="moon"]') : null;
+        const openOnYoutubeEl = document.getElementById('openOnYoutube');
 
-        const STATUS_COLORS = {
-            dark: { info: 'rgba(255, 255, 255, 0.68)', success: '#57E8FF', error: '#F87171' },
-            light: { info: '#4C2A59', success: '#1A9C85', error: '#D64564' }
-        };
-        let lastNotesStatus = { message: '', tone: 'info' };
+        let lastStatus = { message: '', tone: 'info' };
         let notesAbortController = null;
 
-        function applyTheme(nextTheme) {
-            const resolved = nextTheme === 'light' ? 'light' : 'dark';
-            document.body.dataset.theme = resolved;
-            document.documentElement.classList.toggle('dark', resolved === 'dark');
-            try { localStorage.setItem('px-theme', resolved); } catch { }
-            if (themeToggle) themeToggle.setAttribute('aria-pressed', resolved === 'dark' ? 'true' : 'false');
-            if (themeIconSun && themeIconMoon) {
-                themeIconSun.classList.toggle('hidden', resolved !== 'light');
-                themeIconMoon.classList.toggle('hidden', resolved === 'light');
-            }
-            if (lastNotesStatus.message) setNotesStatus(lastNotesStatus.message, lastNotesStatus.tone, true);
-        }
-        let savedTheme = 'dark';
-        try { const stored = localStorage.getItem('px-theme'); if (stored === 'light' || stored === 'dark') savedTheme = stored; } catch { }
-        applyTheme(savedTheme);
-        themeToggle?.addEventListener('click', () => applyTheme(document.body.dataset.theme === 'dark' ? 'light' : 'dark'));
+        const themeButtons = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
 
-        function themedColor(tone = 'info') {
+        function applyTheme(mode) {
+            const resolved = mode === 'light' ? 'light' : 'dark';
+            document.body.dataset.theme = resolved;
+            root.classList.toggle('dark', resolved === 'dark');
+            try { localStorage.setItem(themeKey, resolved); } catch {}
+            themeButtons().forEach(btn => {
+                const icon = btn.querySelector('.material-symbols-rounded');
+                if (icon) icon.textContent = resolved === 'dark' ? 'light_mode' : 'dark_mode';
+            });
+            if (lastStatus.message) setStatus(lastStatus.message, lastStatus.tone, true);
+        }
+
+        function initTheme() {
+            let start = 'dark';
+            try {
+                const stored = localStorage.getItem(themeKey);
+                if (stored === 'light' || stored === 'dark') start = stored;
+                else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) start = 'light';
+            } catch {}
+            applyTheme(start);
+        }
+
+        themeButtons().forEach(btn => btn.addEventListener('click', () => applyTheme(document.body.dataset.theme === 'dark' ? 'light' : 'dark')));
+        initTheme();
+
+        function toneColor(tone) {
             const theme = document.body.dataset.theme === 'light' ? 'light' : 'dark';
-            const palette = STATUS_COLORS[theme] || STATUS_COLORS.dark;
-            return palette[tone] || palette.info;
+            return (statusPalette[theme] && statusPalette[theme][tone]) || statusPalette[theme].info;
         }
-        function setNotesStatus(message, tone = 'info', skip = false) {
+
+        function setStatus(message, tone = 'info', skipStore = false) {
             if (!notesStatusEl) return;
-            notesStatusEl.textContent = message; notesStatusEl.className = 'text-sm font-medium';
-            notesStatusEl.style.color = themedColor(tone); if (!skip) lastNotesStatus = { message, tone };
+            notesStatusEl.textContent = message;
+            notesStatusEl.style.color = toneColor(tone);
+            if (!skipStore) lastStatus = { message, tone };
         }
+
         function formatViews(n) {
-            if (typeof n !== 'number' || !isFinite(n)) return '—';
+            if (typeof n !== 'number' || !isFinite(n)) return 'N/A';
             if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
             if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
-            return n.toString();
+            return n.toLocaleString();
         }
-        async function fetchMeta(url) {
-            const response = await fetch(`${API_BASE}/api/transcripts/meta`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url })
-            });
+
+        async function fetchJson(url, options) {
+            const response = await fetch(url, options);
             if (!response.ok) {
-                let text = response.statusText || 'Unable to fetch video details';
-                try { const detail = await response.json(); text = detail.detail || detail.error || text; } catch { }
+                let text = response.statusText || 'Request failed';
+                try {
+                    const detail = await response.json();
+                    text = detail.detail || detail.error || text;
+                } catch {}
                 throw new Error(text);
             }
             return response.json();
         }
-        async function generateStructuredNotes(url) {
-            try { if (notesAbortController) notesAbortController.abort(); } catch { }
-            notesAbortController = new AbortController();
-            setNotesStatus('Composing structured notes with Gemini...', 'info');
-            notesRenderedEl.innerHTML = '';
-            const response = await fetch(`${API_BASE}/api/transcripts/notes`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, lang: 'en', fallback_ytdlp: true, clean: true }), signal: notesAbortController.signal
-            });
-            if (!response.ok) {
-                let text = response.statusText || 'Unable to generate notes';
-                try { const detail = await response.json(); text = detail.detail || detail.error || text; } catch { }
-                throw new Error(text);
-            }
-            const data = await response.json();
-            const md = data.notes_markdown || '';
-            if (!md.trim()) { setNotesStatus('Gemini returned empty notes. Try again later.', 'error'); return; }
-            renderMarkdownIntoNotes(md);
-            const originMessage = data.model ? `Notes crafted with ${data.model}.` : 'Notes crafted with Gemini.';
-            const detail = data.truncated ? `${originMessage} Transcript was partially processed.` : originMessage;
-            setNotesStatus(detail, 'success');
-            notesAbortController = null;
-        }
 
-        function renderMarkdownIntoNotes(md) {
-            const html = (window.marked && window.DOMPurify) ? DOMPurify.sanitize(marked.parse(md)) : (md || '').replace(/\n/g, '<br/>');
-            notesRenderedEl.innerHTML = html;
+        async function fetchMeta(video) {
+            return fetchJson(`${apiBase}/api/transcripts/meta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: video })
+            });
         }
 
         async function fetchSavedNotes(videoId) {
             if (!videoId) return null;
             try {
-                const res = await fetch(`${API_BASE}/api/transcripts/saved/${encodeURIComponent(videoId)}`);
-                if (res.status === 404) return null; // no cached notes
+                const res = await fetch(`${apiBase}/api/transcripts/saved/${encodeURIComponent(videoId)}`);
+                if (res.status === 404) return null;
                 if (!res.ok) {
-                    let msg = res.statusText || 'Failed to check saved notes';
-                    try { const j = await res.json(); msg = j.detail || j.error || msg; } catch { }
+                    let msg = res.statusText || 'Failed to load saved notes';
+                    try {
+                        const detail = await res.json();
+                        msg = detail.detail || detail.error || msg;
+                    } catch {}
                     throw new Error(msg);
                 }
-                return await res.json();
+                return res.json();
             } catch (err) {
-                // Non-fatal; just log to console and proceed to generation
                 console.warn('Saved notes lookup failed:', err);
                 return null;
             }
         }
 
-        async function init() {
-            if (!videoUrl) {
-                setNotesStatus('No URL provided. Please go back and paste a YouTube link.', 'error');
+        function renderMarkdown(content) {
+            const html = (window.marked && window.DOMPurify) ? DOMPurify.sanitize(marked.parse(content)) : (content || '').replace(/\\n/g, '<br/>');
+            notesRenderedEl.innerHTML = html;
+        }
+
+        async function generateNotes(video) {
+            try { if (notesAbortController) notesAbortController.abort(); } catch {}
+            notesAbortController = new AbortController();
+            setStatus('Composing structured notes with Gemini...', 'info');
+            notesRenderedEl.innerHTML = '';
+            const data = await fetchJson(`${apiBase}/api/transcripts/notes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: video, lang: 'en', fallback_ytdlp: true, clean: true }),
+                signal: notesAbortController.signal
+            });
+            const md = data.notes_markdown || '';
+            if (!md.trim()) {
+                setStatus('Gemini returned empty notes. Try again later.', 'error');
                 return;
             }
+            renderMarkdown(md);
+            const origin = data.model ? `Notes crafted with ${data.model}.` : 'Notes crafted with Gemini.';
+            setStatus(data.truncated ? `${origin} Transcript was partially processed.` : origin, 'success');
+            notesAbortController = null;
+        }
+
+        async function boot() {
+            if (!videoUrl) {
+                setStatus('No URL provided. Please go back and choose a video.', 'error');
+                return;
+            }
+
+            if (openOnYoutubeEl) openOnYoutubeEl.href = videoUrl;
+
             try {
+                setStatus('Fetching video details...', 'info');
                 const meta = await fetchMeta(videoUrl);
-                if (embedEl) embedEl.src = (meta.embed_url || '') + '?rel=0&modestbranding=1';
+
+                if (embedEl) {
+                    const embed = meta.embed_url || '';
+                    embedEl.src = embed ? `${embed}?rel=0&modestbranding=1` : '';
+                }
                 if (channelNameEl) channelNameEl.textContent = meta.channel_name || 'YouTube';
                 if (uploadDateEl) {
                     const d = meta.upload_date ? new Date(meta.upload_date) : null;
-                    uploadDateEl.textContent = d ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+                    uploadDateEl.textContent = d ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
                 }
-                if (viewCountEl) viewCountEl.textContent = meta.views != null ? `${formatViews(meta.views)} views` : '—';
+                if (viewCountEl) viewCountEl.textContent = meta.views != null ? `${formatViews(meta.views)} views` : 'N/A';
+
                 const initial = (meta.channel_name || 'Y').trim().charAt(0).toUpperCase();
                 if (channelAvatarFallback) channelAvatarFallback.textContent = initial || 'Y';
-                if (channelAvatarImg) { channelAvatarImg.classList.add('hidden'); channelAvatarImg.removeAttribute('src'); }
 
-                // 1) Try to load saved/cached notes by video_id; 2) else generate
-                const vid = meta.video_id || '';
-                if (vid) {
-                    setNotesStatus('Checking for saved notes…', 'info');
-                    const saved = await fetchSavedNotes(vid);
+                const avatar = meta.channel_logo || meta.channel_thumbnail || meta.channel_avatar || meta.channel_image || '';
+                if (avatar && channelAvatarImg) {
+                    channelAvatarImg.src = avatar;
+                    channelAvatarImg.classList.remove('hidden');
+                    channelAvatarFallback.classList.add('hidden');
+                } else if (channelAvatarImg) {
+                    channelAvatarImg.classList.add('hidden');
+                    channelAvatarImg.removeAttribute('src');
+                    channelAvatarFallback.classList.remove('hidden');
+                }
+
+                if (meta.video_id) {
+                    setStatus('Checking for saved notes...', 'info');
+                    const saved = await fetchSavedNotes(meta.video_id);
                     if (saved && saved.notes_markdown && saved.notes_markdown.trim()) {
-                        renderMarkdownIntoNotes(saved.notes_markdown);
-                        const cachedMsg = saved.model ? `Loaded saved notes (${saved.model}).` : 'Loaded saved notes.';
-                        setNotesStatus(cachedMsg, 'success');
-                        return; // Stop here, don’t regenerate
+                        renderMarkdown(saved.notes_markdown);
+                        const msg = saved.model ? `Loaded saved notes (${saved.model}).` : 'Loaded saved notes.';
+                        setStatus(msg, 'success');
+                        return;
                     }
                 }
-            } catch (e) {
-                setNotesStatus(`Video details failed: ${e.message || e}`, 'error');
+            } catch (err) {
+                setStatus(`Video details failed: ${err.message || err}`, 'error');
             }
-            try { await generateStructuredNotes(videoUrl); } catch (e) { setNotesStatus(`${e.message || e}`, 'error'); }
+
+            try {
+                await generateNotes(videoUrl);
+            } catch (err) {
+                setStatus(err.message || String(err), 'error');
+            }
         }
 
         notesCopyBtn?.addEventListener('click', async () => {
             const text = notesRenderedEl?.innerText?.trim() || '';
-            if (!text) { setNotesStatus('Nothing to copy yet.', 'info'); return; }
-            try { await navigator.clipboard.writeText(text); setNotesStatus('Structured notes copied to clipboard.', 'success'); }
-            catch { setNotesStatus('Clipboard not available in this browser.', 'error'); }
+            if (!text) {
+                setStatus('Nothing to copy yet.', 'info');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(text);
+                setStatus('Structured notes copied to clipboard.', 'success');
+            } catch {
+                setStatus('Clipboard is unavailable in this browser.', 'error');
+            }
         });
 
-        init();
+        boot();
     </script>
-</body>
 
+    <script src="auth.js"></script>
+</body>
 </html>
