@@ -946,6 +946,10 @@
       if ($relatedVideosSummary) {
         $relatedVideosSummary.textContent = `Showing videos for "${topic}"`;
       }
+      try {
+        localStorage.setItem('paperx:lastVideos', JSON.stringify(videos));
+        localStorage.setItem('paperx:lastTopic', topic);
+      } catch { }
     }
 
     async function loadRelatedVideos(topic, options = {}) {
@@ -966,7 +970,10 @@
           $relatedVideosEmpty.textContent = 'Videos will appear once a topic is generated.';
           $relatedVideosEmpty.classList.remove('hidden');
         }
-        try { localStorage.removeItem('paperx:lastTopic'); } catch { }
+        try {
+          localStorage.removeItem('paperx:lastTopic');
+          localStorage.removeItem('paperx:lastVideos');
+        } catch { }
         return;
       }
 
@@ -986,8 +993,14 @@
       }
       relatedVideosAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
 
-      $relatedVideosSkeleton?.classList.remove('hidden');
-      $relatedVideosWrap?.classList.add('hidden');
+      const hasExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+      if (hasExisting) {
+        $relatedVideosSkeleton?.classList.add('hidden');
+        $relatedVideosWrap?.classList.remove('hidden');
+      } else {
+        $relatedVideosSkeleton?.classList.remove('hidden');
+        $relatedVideosWrap?.classList.add('hidden');
+      }
       $relatedVideosEmpty?.classList.add('hidden');
 
       try {
@@ -998,14 +1011,24 @@
         }
         const videos = await response.json();
         if (!Array.isArray(videos) || videos.length === 0) {
-          $relatedVideosSkeleton?.classList.add('hidden');
-          $relatedVideosWrap?.classList.add('hidden');
-          if ($relatedVideosEmpty) {
-            $relatedVideosEmpty.textContent = 'No related videos found. Try a more specific topic.';
-            $relatedVideosEmpty.classList.remove('hidden');
-          }
-          if ($relatedVideosSummary) {
-            $relatedVideosSummary.textContent = `No videos found for "${query}".`;
+          const hasExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+          if (hasExisting) {
+            $relatedVideosSkeleton?.classList.add('hidden');
+            $relatedVideosWrap?.classList.remove('hidden');
+            $relatedVideosEmpty?.classList.add('hidden');
+            if ($relatedVideosSummary) {
+              $relatedVideosSummary.textContent = `Showing saved videos for "${query}".`;
+            }
+          } else {
+            $relatedVideosSkeleton?.classList.add('hidden');
+            $relatedVideosWrap?.classList.add('hidden');
+            if ($relatedVideosEmpty) {
+              $relatedVideosEmpty.textContent = 'No related videos found. Try a more specific topic.';
+              $relatedVideosEmpty.classList.remove('hidden');
+            }
+            if ($relatedVideosSummary) {
+              $relatedVideosSummary.textContent = `No videos found for "${query}".`;
+            }
           }
           return;
         }
@@ -1013,14 +1036,24 @@
       } catch (error) {
         if (error?.name === 'AbortError') return;
         console.error('Related videos error:', error);
-        $relatedVideosSkeleton?.classList.add('hidden');
-        $relatedVideosWrap?.classList.add('hidden');
-        if ($relatedVideosEmpty) {
-          $relatedVideosEmpty.textContent = 'Unable to load videos right now.';
-          $relatedVideosEmpty.classList.remove('hidden');
-        }
-        if ($relatedVideosSummary) {
-          $relatedVideosSummary.textContent = `Unable to load videos for "${query}".`;
+        const hasExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+        if (hasExisting) {
+          $relatedVideosSkeleton?.classList.add('hidden');
+          $relatedVideosWrap?.classList.remove('hidden');
+          $relatedVideosEmpty?.classList.add('hidden');
+          if ($relatedVideosSummary) {
+            $relatedVideosSummary.textContent = `Showing saved videos for "${query}".`;
+          }
+        } else {
+          $relatedVideosSkeleton?.classList.add('hidden');
+          $relatedVideosWrap?.classList.add('hidden');
+          if ($relatedVideosEmpty) {
+            $relatedVideosEmpty.textContent = 'Unable to load videos right now.';
+            $relatedVideosEmpty.classList.remove('hidden');
+          }
+          if ($relatedVideosSummary) {
+            $relatedVideosSummary.textContent = `Unable to load videos for "${query}".`;
+          }
         }
       } finally {
         relatedVideosAbort = null;
@@ -1037,6 +1070,26 @@
     const storedTopic = (() => {
       try { return localStorage.getItem('paperx:lastTopic') || ''; } catch { return ''; }
     })();
+    const storedVideos = (() => {
+      try {
+        const raw = localStorage.getItem('paperx:lastVideos');
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (storedTopic && storedVideos && storedVideos.length) {
+      if (!$topic.value) $topic.value = storedTopic;
+      if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
+      renderRelatedVideos(storedVideos, storedTopic);
+    } else if ($relatedVideosSection) {
+      $relatedVideosSection.classList.remove('hidden');
+      $relatedVideosSkeleton?.classList.remove('hidden');
+      $relatedVideosWrap?.classList.add('hidden');
+    }
 
     if (!$topic.value && storedTopic) {
       $topic.value = storedTopic;
