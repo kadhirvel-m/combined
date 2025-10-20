@@ -1,82 +1,146 @@
 import os, re
-from dotenv import load_dotenv
-from typing import List, Optional, Literal, Tuple, Dict, Any
-from serpapi import GoogleSearch
-from urllib.parse import urlparse, parse_qs
+from typing import List, Optional, Dict, Any
+from yt_dlp import YoutubeDL
 
-load_dotenv()
 
-_IMG_EXT = re.compile(r"\.(png|jpg|jpeg|webp|gif)(\?|$)", re.I)
-
-def _parse_video_id(link: str) -> Optional[str]:
-    try:
-        u = urlparse(link)
-        if u.netloc.endswith("youtu.be"):
-            vid = u.path.lstrip("/")
-            return vid or None
-        if u.path.startswith("/shorts/"):
-            parts = [p for p in u.path.split("/") if p]
-            return parts[1] if len(parts) > 1 else None
-        qs = parse_qs(u.query)
-        if "v" in qs and qs["v"]:
-            return qs["v"][0]
-    except Exception:
+def _parse_video_id(url: str) -> Optional[str]:
+    """Extract video ID from YouTube URL."""
+    if not url:
         return None
+    # Already just an ID
+    if re.match(r'^[A-Za-z0-9_-]{11}$', url):
+        return url
+    # Extract from various URL formats
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([A-Za-z0-9_-]{11})',
+        r'youtube\.com\/shorts\/([A-Za-z0-9_-]{11})',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
     return None
 
-def _to_str(v) -> str:
-    if v is None:
+
+def _format_duration(seconds: Optional[int]) -> str:
+    """Format duration in seconds to MM:SS or HH:MM:SS."""
+    if seconds is None or seconds <= 0:
         return ""
-    if isinstance(v, (int, float)):
-        # format ints like 157,517
-        return f"{int(v):,}" if float(v).is_integer() else str(v)
-    return str(v)
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+def _format_views(views: Optional[int]) -> str:
+    """Format view count with commas."""
+    if views is None:
+        return ""
+    if views >= 1_000_000:
+        return f"{views / 1_000_000:.1f}M views"
+    elif views >= 1_000:
+        return f"{views / 1_000:.1f}K views"
+    return f"{views:,} views"
+
 
 def search_youtube_videos(query: str, num: int = 8) -> List[Dict[str, str]]:
-    key = os.getenv("SERPAPI_API_KEY")
-    if not key:
+    """
+    Search YouTube videos using yt-dlp.
+    
+    Args:
+        query: Search query string
+        num: Number of results to return (default 8, max 20)
+    
+    Returns:
+        List of video dictionaries with title, link, channel, views, duration, thumbnail
+    """
+    if not YoutubeDL:
+        raise ImportError("yt-dlp is not installed. Install it with: pip install yt-dlp")
+    
+    if not query or not query.strip():
         return []
-    params = {"engine": "youtube", "search_query": query, "num": num, "api_key": key}
-    results = GoogleSearch(params).get_dict()
-    items = results.get("video_results", []) or []
-
+    
+    # Limit results
+    num = max(1, min(num, 20))
+    
+    # yt-dlp options for searching
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': True,  # Don't download, just extract metadata
+        'force_generic_extractor': False,
+        'default_search': 'ytsearch',  # Use YouTube search
+        'format': 'best',
+        'noplaylist': True,
+    }
+    
     videos: List[Dict[str, str]] = []
-    for v in items[:num]:
-        title = _to_str(v.get("title")).strip()
-        link = _to_str(v.get("link")).strip()
-
-        ch = v.get("channel")
-        if isinstance(ch, dict):
-            channel = _to_str(ch.get("name")).strip()
-        else:
-            channel = _to_str(ch).strip() or "YouTube"
-
-        duration = _to_str(v.get("length") or v.get("duration")).strip()
-        views_raw = v.get("views")
-        views = _to_str(views_raw).strip()
-        if views and views.isdigit():
-            views = f"{int(views):,}"
-
-        thumb = v.get("thumbnail") or v.get("thumbnail_link") or ""
-        if isinstance(thumb, dict):
-            thumb = thumb.get("static") or thumb.get("url") or ""
-        thumb = _to_str(thumb).split("?")[0]
-        if not thumb:
-            vid = v.get("video_id") or _parse_video_id(link)
-            if vid:
-                thumb = f"https://i.ytimg.com/vi/{vid}/hq720.jpg"
-        if not _IMG_EXT.search(thumb):
-            # ytimg sometimes returns .jpg without query, keep it; otherwise skip
-            if "i.ytimg.com/vi/" not in thumb:
-                continue
-
-        if title and link and thumb:
-            videos.append({
-                "title": title,
-                "link": link,
-                "channel": channel or "YouTube",
-                "views": views,
-                "duration": duration,
-                "thumbnail": thumb,
-            })
+    
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            # Search for videos (ytsearch{num}:{query})
+            search_query = f"ytsearch{num}:{query}"
+            result = ydl.extract_info(search_query, download=False)
+            
+            if not result or 'entries' not in result:
+                return []
+            
+            entries = result.get('entries', [])
+            
+            for entry in entries[:num]:
+                if not entry:
+                    continue
+                
+                # Extract video information
+                video_id = entry.get('id', '')
+                title = entry.get('title', '').strip()
+                channel = entry.get('channel') or entry.get('uploader') or 'YouTube'
+                
+                # Duration
+                duration_sec = entry.get('duration')
+                duration = _format_duration(duration_sec)
+                
+                # Views
+                view_count = entry.get('view_count')
+                views = _format_views(view_count)
+                
+                # Thumbnail - prefer maxresdefault, then hq720
+                thumbnail = entry.get('thumbnail', '')
+                if not thumbnail and video_id:
+                    # Fallback to standard YouTube thumbnail URLs
+                    thumbnail = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
+                
+                # Video URL
+                video_url = entry.get('url', '')
+                if not video_url and video_id:
+                    video_url = f"https://www.youtube.com/watch?v={video_id}"
+                
+                # Channel thumbnail/logo (use video thumbnail as fallback)
+                channel_logo = entry.get('channel_url', '')
+                if channel_logo:
+                    # Extract channel ID from URL if possible
+                    channel_id_match = re.search(r'channel/([^/]+)', channel_logo)
+                    if channel_id_match:
+                        channel_id = channel_id_match.group(1)
+                        channel_logo = f"https://www.youtube.com/channel/{channel_id}"
+                
+                # Only add if we have essential data
+                if title and video_url and thumbnail:
+                    videos.append({
+                        "title": title,
+                        "link": video_url,
+                        "channel": channel.strip() if channel else "YouTube",
+                        "views": views,
+                        "duration": duration,
+                        "thumbnail": thumbnail,
+                        "channel_logo": channel_logo if isinstance(channel_logo, str) else "",
+                    })
+    
+    except Exception as e:
+        # Log error but return empty list instead of raising
+        print(f"Error searching YouTube videos: {e}")
+        return []
+    
     return videos
