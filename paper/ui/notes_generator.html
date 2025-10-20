@@ -860,11 +860,17 @@
 
     function createRelatedVideoCard(video) {
       const anchor = document.createElement('a');
-      const link = (typeof video.link === 'string' && video.link.trim()) || '#';
-      anchor.href = link;
-      anchor.target = '_blank';
-      anchor.rel = 'noopener noreferrer';
+      const link = (typeof video.link === 'string' && video.link.trim()) || '';
+      const notesUrl = link ? `./youtube-notes.html?video=${encodeURIComponent(link)}` : '#';
+      anchor.href = notesUrl;
       anchor.className = 'yt-card';
+      anchor.setAttribute('data-video-card', '1');
+      if (notesUrl && notesUrl !== '#') {
+        anchor.addEventListener('click', (event) => {
+          event.preventDefault();
+          window.location.href = notesUrl;
+        });
+      }
 
       const thumb = document.createElement('div');
       thumb.className = 'yt-thumb';
@@ -950,13 +956,17 @@
         relatedVideosTopic = '';
         relatedVideosAbort?.abort();
         relatedVideosAbort = null;
-        if ($relatedVideosSection) $relatedVideosSection.classList.add('hidden');
+        if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
         if ($relatedVideosSummary) {
           $relatedVideosSummary.textContent = 'Enter a topic to discover supporting videos.';
         }
         if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = '';
         $relatedVideosSkeleton?.classList.add('hidden');
-        $relatedVideosEmpty?.classList.add('hidden');
+        if ($relatedVideosEmpty) {
+          $relatedVideosEmpty.textContent = 'Videos will appear once a topic is generated.';
+          $relatedVideosEmpty.classList.remove('hidden');
+        }
+        try { localStorage.removeItem('paperx:lastTopic'); } catch { }
         return;
       }
 
@@ -969,6 +979,7 @@
       if ($relatedVideosSummary) {
         $relatedVideosSummary.textContent = `Finding videos for "${query}"...`;
       }
+      try { localStorage.setItem('paperx:lastTopic', query); } catch { }
 
       if (relatedVideosAbort) {
         relatedVideosAbort.abort();
@@ -1022,6 +1033,15 @@
     let currentNoteId = localStorage.getItem('paperx:lastNoteId') || '';
     let dense = false;
     let emphasis = localStorage.getItem('paperx:emphasis') === '1';
+
+    const storedTopic = (() => {
+      try { return localStorage.getItem('paperx:lastTopic') || ''; } catch { return ''; }
+    })();
+
+    if (!$topic.value && storedTopic) {
+      $topic.value = storedTopic;
+      loadRelatedVideos(storedTopic, { force: true });
+    }
 
     // ===== Chips (suggested topics) =====
     document.querySelectorAll('.chip').forEach(ch => {
