@@ -170,8 +170,9 @@
         }
 
         .carousel-item {
-            flex: 0 0 340px;
+            flex: 0 0 320px;
             scroll-snap-align: start;
+            width: 320px;
         }
 
         /* Video card styles */
@@ -181,6 +182,7 @@
             overflow: hidden;
             background: var(--surface);
             transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
         }
 
         .video-card:hover {
@@ -451,11 +453,16 @@
             const card = document.createElement('div');
             card.className = 'carousel-item';
 
+            // Normalize string fields for layout
+            const titleText = typeof video.title === 'string' ? video.title.trim() : '';
+
             // Use channel logo if provided, otherwise fallback to the YouTube glyph
             const channelLogo = video.channel_logo || 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
+            const safeLink = typeof video.link === 'string' ? video.link : '';
+            const notesUrl = `./youtube-notes.html?video=${encodeURIComponent(safeLink)}`;
 
             card.innerHTML = `
-        <a href="${video.link}" target="_blank" rel="noopener noreferrer" class="video-card block">
+        <a href="${notesUrl}" class="video-card block">
           <div class="video-thumbnail-wrapper">
             <img src="${video.thumbnail}" alt="${video.title}" class="video-thumbnail" loading="lazy">
             <div class="play-overlay">
@@ -464,9 +471,7 @@
             ${video.duration ? `<div class="duration-badge">${video.duration}</div>` : ''}
           </div>
           <div class="p-4">
-            <h3 class="font-semibold text-sm mb-2 line-clamp-2" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-              ${video.title}
-            </h3>
+            <h3 class="font-semibold text-sm mb-2" style="display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${titleText}</h3>
             <div class="flex items-center justify-between gap-3 text-xs text-[var(--muted)]">
               <div class="flex items-center gap-2">
                 <img src="${channelLogo}" alt="${video.channel}" class="channel-logo" loading="lazy" referrerpolicy="no-referrer">
