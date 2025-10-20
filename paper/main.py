@@ -225,6 +225,69 @@ NOTES_DIR = os.path.join(BASE_DIR, "notes")
 os.makedirs(NOTES_DIR, exist_ok=True)
 os.makedirs(NOTES_DIR, exist_ok=True)
 
+# DB table for AI notes (title + markdown)
+AI_NOTES_TABLE = os.getenv("AI_NOTES_TABLE", "ai_notes")
+
+def db_get_ai_note_by_title_exact(title: str) -> Optional[Dict[str, Any]]:
+    """Fetch a note by exact title (case-insensitive) from Supabase."""
+    supabase = get_service_client()
+    t = (title or "").strip()
+    if not t:
+        return None
+    try:
+        # title_ci is a generated column lower(title); see db.sql
+        res = supabase.table(AI_NOTES_TABLE).select("id,title,markdown,created_at,updated_at").eq("title_ci", t.lower()).limit(1).execute()
+        data = getattr(res, 'data', []) or []
+        return data[0] if data else None
+    except Exception:
+        return None
+
+def db_upsert_ai_note_by_title(title: str, markdown: str) -> Dict[str, Any]:
+    """Insert or update a note by title; returns the stored row."""
+    supabase = get_service_client()
+    now = datetime.utcnow().isoformat()
+    payload = {
+        "title": title.strip() or "Untitled",
+        "markdown": markdown or "",
+        "updated_at": now,
+    }
+    try:
+        res = supabase.table(AI_NOTES_TABLE).upsert(payload, on_conflict="title_ci", returning="representation").execute()
+        if getattr(res, 'error', None):
+            raise Exception(res.error)
+        row = (getattr(res, 'data', []) or [{}])[0]
+        if row:
+            return row
+        # Fallback: refetch by title_ci
+        ref = supabase.table(AI_NOTES_TABLE).select("id,title,markdown,created_at,updated_at").eq("title_ci", payload["title"].lower()).limit(1).execute()
+        data = getattr(ref, 'data', []) or []
+        if not data:
+            raise RuntimeError("Failed to upsert ai_note")
+        return data[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB save failed: {e}")
+
+def db_get_ai_note_by_id(note_id: str) -> Optional[Dict[str, Any]]:
+    supabase = get_service_client()
+    try:
+        res = supabase.table(AI_NOTES_TABLE).select("id,title,markdown,created_at,updated_at").eq("id", note_id).limit(1).execute()
+        data = getattr(res, 'data', []) or []
+        return data[0] if data else None
+    except Exception:
+        return None
+
+def db_update_ai_note_markdown(note_id: str, markdown: str) -> Optional[Dict[str, Any]]:
+    supabase = get_service_client()
+    try:
+        res = supabase.table(AI_NOTES_TABLE).update({"markdown": markdown or "", "updated_at": datetime.utcnow().isoformat()}).eq("id", note_id).execute()
+        if getattr(res, 'error', None):
+            raise Exception(res.error)
+        # Return updated minimal info
+        out = db_get_ai_note_by_id(note_id)
+        return out
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB update failed: {e}")
+
 
 def _slugify_topic(topic: str) -> str:
     s = re.sub(r"[^a-zA-Z0-9_.-]+", "-", (topic or "").strip()).strip("-")
@@ -1112,7 +1175,7 @@ Start with '# {topic}' and then the sections in a logical order.
         image_urls = collect_image_urls(topic, related_pages, stop_event=stop_event)
         if stop_event and stop_event.is_set():
             return
-        yield ("images", {"count": len(image_urls)})
+        yield ("images", {"count": len(image_urls), "image_urls": image_urls})
 
         yield ("final", {"markdown": content, "image_urls": image_urls})
     except Exception as e:
@@ -9552,22 +9615,18 @@ async def generate(payload: dict):
         return JSONResponse({"error": "Missing 'topic'"}, status_code=400)
     try:
         if not force:
-            match = find_existing_note_for_topic(topic)
-            if match:
-                try:
-                    data = read_note(match["id"])  # type: ignore[index]
-                    return {
-                        "id": match["id"],
-                        "markdown": data.get("markdown", ""),
-                        "cached": True,
-                        "match_score": match.get("score", 0),
-                        "title": match.get("title"),
-                    }
-                except Exception:
-                    pass
+            # Exact-title cache from DB
+            row = db_get_ai_note_by_title_exact(topic)
+            if row and (row.get("markdown") or "").strip():
+                return {
+                    "id": row.get("id"),
+                    "markdown": row.get("markdown", ""),
+                    "cached": True,
+                    "title": row.get("title"),
+                }
         md = generate_notes_markdown(topic)
-        meta = save_note(topic, md)
-        return {"id": meta["id"], "markdown": md, "cached": False}
+        row = db_upsert_ai_note_by_title(topic, md)
+        return {"id": row.get("id"), "markdown": row.get("markdown", md), "cached": False, "title": row.get("title")}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -9577,28 +9636,23 @@ async def generate(payload: dict):
 async def generate_stream(topic: str, force: bool = False):
     async def event_source() -> AsyncGenerator[bytes, None]:
         yield b"event: open\n\n"
-        # Early cache hit: emit and close
+        # Early cache hit: exact-title lookup in DB
         if not force:
-            match = find_existing_note_for_topic(topic)
-            if match:
-                try:
-                    data = read_note(match["id"])  # type: ignore[index]
-                    payload = {
-                        "id": match["id"],
-                        "markdown": data.get("markdown", ""),
-                        "cached": True,
-                        "match_score": match.get("score", 0),
-                        "title": match.get("title"),
-                    }
-                    line = f"event: final\n".encode("utf-8")
-                    data_json = json.dumps(payload, ensure_ascii=False)
-                    data_b = ("data: " + data_json + "\n\n").encode("utf-8")
-                    yield line
-                    yield data_b
-                    yield b"event: close\n\n"
-                    return
-                except Exception:
-                    pass
+            row = db_get_ai_note_by_title_exact(topic)
+            if row and (row.get("markdown") or "").strip():
+                payload = {
+                    "id": row.get("id"),
+                    "markdown": row.get("markdown", ""),
+                    "cached": True,
+                    "title": row.get("title"),
+                }
+                line = f"event: final\n".encode("utf-8")
+                data_json = json.dumps(payload, ensure_ascii=False)
+                data_b = ("data: " + data_json + "\n\n").encode("utf-8")
+                yield line
+                yield data_b
+                yield b"event: close\n\n"
+                return
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[Tuple[str, Optional[str], Optional[Dict[str, Any]]]] = asyncio.Queue()
         stop_event = threading.Event()
@@ -9626,8 +9680,9 @@ async def generate_stream(topic: str, force: bool = False):
                     try:
                         if name == "final" and isinstance(payload, dict) and payload.get("markdown"):
                             try:
-                                meta = save_note(topic, payload.get("markdown", ""))
-                                payload["id"] = meta.get("id")
+                                row = db_upsert_ai_note_by_title(topic, payload.get("markdown", ""))
+                                payload["id"] = row.get("id")
+                                payload["title"] = row.get("title")
                                 payload["cached"] = False
                             except Exception:
                                 pass
@@ -9671,54 +9726,61 @@ async def generate_stream(topic: str, force: bool = False):
 @notes_router.get("/notes")
 @notes_router.get("/api/notes")
 def api_list_notes():
-    return {"items": list_notes()}
+    """List recent AI notes from DB."""
+    supabase = get_service_client()
+    try:
+        res = supabase.table(AI_NOTES_TABLE).select("id,title,created_at,updated_at").order("updated_at", desc=True).limit(50).execute()
+        data = getattr(res, 'data', []) or []
+        return {"items": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list notes: {e}")
 
 
 @notes_router.post("/notes")
 @notes_router.post("/api/notes")
 def api_create_note(payload: dict):
-    topic = (payload or {}).get("topic", "").strip() or "Untitled"
+    title = (payload or {}).get("topic", "").strip() or (payload or {}).get("title", "Untitled").strip() or "Untitled"
     markdown = (payload or {}).get("markdown", "")
-    meta = save_note(topic, markdown)
-    return meta
+    row = db_upsert_ai_note_by_title(title, markdown)
+    return {"id": row.get("id"), "title": row.get("title"), "created_at": row.get("created_at"), "updated_at": row.get("updated_at")}
 
 
 @notes_router.get("/notes/{note_id}")
 @notes_router.get("/api/notes/{note_id}")
 def api_read_note(note_id: str):
-    try:
-        return read_note(note_id)
-    except FileNotFoundError:
+    row = db_get_ai_note_by_id(note_id)
+    if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
+    return {"id": row.get("id"), "title": row.get("title"), "markdown": row.get("markdown", ""), "updated_at": row.get("updated_at")}
 
 
 @notes_router.put("/notes/{note_id}")
 @notes_router.put("/api/notes/{note_id}")
 def api_update_note(note_id: str, payload: dict):
     markdown = (payload or {}).get("markdown", "")
-    try:
-        return update_note(note_id, markdown)
-    except FileNotFoundError:
-        return JSONResponse({"error": "Not found"}, status_code=404)
+    row = db_update_ai_note_markdown(note_id, markdown)
+    return {"id": note_id, "updated_at": row.get("updated_at") if row else None}
 
 
 @notes_router.get("/notes/{note_id}/download")
 @notes_router.get("/api/notes/{note_id}/download")
 def api_download_note(note_id: str):
-    path = note_path(note_id)
-    if not path or not os.path.isfile(path):
+    row = db_get_ai_note_by_id(note_id)
+    if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
-    return FileResponse(path, media_type="text/markdown", filename=f"{note_id}.md")
+    content = row.get("markdown", "")
+    filename = f"{note_id}.md"
+    headers = {"Content-Disposition": f"attachment; filename={filename}"}
+    return Response(content=content, media_type="text/markdown", headers=headers)
 
 
 @notes_router.get("/notes/{note_id}/pdf")
 @notes_router.get("/api/notes/{note_id}/pdf")
 def api_note_pdf(note_id: str):
-    try:
-        data = read_note(note_id)
-    except FileNotFoundError:
+    row = db_get_ai_note_by_id(note_id)
+    if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
-    md = data.get("markdown", "")
+    md = row.get("markdown", "")
     try:
         pdf_bytes = render_pdf_from_markdown_via_headless(md, title=note_id)
     except Exception:

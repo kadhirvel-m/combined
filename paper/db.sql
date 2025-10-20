@@ -526,3 +526,18 @@ CREATE TABLE public.youtube_ai_notes (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
 );
+
+-- AI-generated topic notes (exact-title cache)
+CREATE TABLE public.ai_notes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  -- stored lowercase for fast exact-title lookups (case-insensitive)
+  title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
+  markdown text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_pkey PRIMARY KEY (id)
+);
+
+-- Enforce uniqueness on title (case-insensitive)
+CREATE UNIQUE INDEX ai_notes_title_ci_key ON public.ai_notes (title_ci);
