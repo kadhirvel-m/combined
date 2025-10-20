@@ -9807,11 +9807,18 @@ class YouTubeMetaResponse(BaseModel):
     views: Optional[int] = None
 
 
-def _extract_youtube_meta(url: str) -> YouTubeMetaResponse:
-    """Extract basic metadata for a YouTube video using yt-dlp without downloading.
+def _normalize_video_key(url: str) -> str:
+    try:
+        vid = extract_video_id(str(url))
+        if vid:
+            return vid
+    except HTTPException:
+        pass
+    return str(url).strip()
 
-    Returns video_id, embed_url, channel_name, upload_date (YYYY-MM-DD), and views.
-    """
+
+@lru_cache(maxsize=512)
+def _cached_youtube_meta(video_key: str) -> Dict[str, Any]:
     if YoutubeDL is None:  # pragma: no cover - optional dependency missing
         raise HTTPException(status_code=501, detail="yt-dlp is not available on the server.")
 
@@ -9821,9 +9828,14 @@ def _extract_youtube_meta(url: str) -> YouTubeMetaResponse:
         "no_warnings": True,
         "extract_flat": False,  # get full metadata for a single video
     }
+
+    target_url = video_key
+    if re.fullmatch(r"[A-Za-z0-9_-]{11}", video_key):
+        target_url = f"https://www.youtube.com/watch?v={video_key}"
+
     with YoutubeDL(ydl_opts) as ydl:
         try:
-            info = ydl.extract_info(str(url), download=False)
+            info = ydl.extract_info(str(target_url), download=False)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Could not fetch metadata: {exc}") from exc
 
@@ -9852,13 +9864,23 @@ def _extract_youtube_meta(url: str) -> YouTubeMetaResponse:
     except Exception:
         views = None
 
-    return YouTubeMetaResponse(
-        video_id=vid,
-        embed_url=f"https://www.youtube.com/embed/{vid}",
-        channel_name=channel_name,
-        upload_date=upload_date,
-        views=views,
-    )
+    return {
+        "video_id": vid,
+        "embed_url": f"https://www.youtube.com/embed/{vid}",
+        "channel_name": channel_name,
+        "upload_date": upload_date,
+        "views": views,
+    }
+
+
+def _extract_youtube_meta(url: str) -> YouTubeMetaResponse:
+    """Extract basic metadata for a YouTube video using yt-dlp without downloading.
+
+    Returns video_id, embed_url, channel_name, upload_date (YYYY-MM-DD), and views.
+    """
+    video_key = _normalize_video_key(url)
+    meta = _cached_youtube_meta(video_key)
+    return YouTubeMetaResponse(**meta)
 
 
 @youtube_transcript_router.post("/paragraph", response_model=YouTubeTranscriptResponse)
