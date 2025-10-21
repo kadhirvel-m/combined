@@ -167,8 +167,11 @@
       const footer = document.createElement('div');
       footer.className = 'mt-3 flex items-center justify-between';
       const est = document.createElement('div');
-      est.className = 'text-[12px] opacity-70';
-      est.textContent = (j.estimated_price!=null) ? (`Est. ₹${Number(j.estimated_price).toFixed(2)}`) : '';
+      const hasPrice = (j.estimated_price!=null);
+      est.className = hasPrice
+        ? 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] bg-brand-500 text-white shadow'
+        : 'text-[12px] opacity-70';
+      est.textContent = hasPrice ? (`₹${Number(j.estimated_price).toFixed(2)}`) : '';
       const actions = document.createElement('div'); actions.className = 'flex items-center gap-2';
       const API = (window.API_BASE || '');
       if (j.status === 'submitted') actions.appendChild(btn('Accept', (e) => { e.stopPropagation(); act('accept'); })), actions.appendChild(btn('Reject', (e) => { e.stopPropagation(); act('reject'); }, 'text-red-600 ring-1 ring-red-600/40'));
@@ -303,25 +306,75 @@
 
     function closeModal() { $('#jobModal').classList.add('hidden'); }
 
+    function toStartOfDay(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); return x; }
+    function toEndOfDay(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59,999); return x; }
+    function inRange(iso, range){
+      if(!iso) return false;
+      const t = new Date(iso);
+      if (range === 'all') return true;
+      const now = new Date();
+      if (range === 'today'){
+        return t >= toStartOfDay(now) && t <= toEndOfDay(now);
+      }
+      if (range === '7d'){
+        const from = new Date(now); from.setDate(from.getDate() - 6); // include today
+        return t >= toStartOfDay(from) && t <= toEndOfDay(now);
+      }
+      if (range === '30d'){
+        const from = new Date(now); from.setDate(from.getDate() - 29);
+        return t >= toStartOfDay(from) && t <= toEndOfDay(now);
+      }
+      return true;
+    }
+
     async function load() {
       const token = (window.getToken && window.getToken()) || getToken(); const hdr = token ? { Authorization: 'Bearer ' + token } : {};
       const status = (window.__FILTER || '');
       const url = (window.API_BASE || '') + '/api/shop/jobs' + (status && status !== 'all' ? ('?status=' + encodeURIComponent(status)) : '');
       const r = await fetch(url, { headers: hdr }).catch(() => null);
-      const jobs = r && r.ok ? ((await r.json()).jobs || []) : [];
+      let jobs = r && r.ok ? ((await r.json()).jobs || []) : [];
+      // Client-side filters
+      const dateRange = (window.__DATE_RANGE || 'today');
+      const priceOnly = !!window.__PRICE_ONLY;
+      jobs = jobs.filter(j => inRange(j.created_at, dateRange) && (!priceOnly || (j.estimated_price != null)));
+      // Render
       const wrap = $('#list'); wrap.innerHTML = '';
       jobs.forEach(j => wrap.appendChild(cardRich(j)));
       $('#empty').classList.toggle('hidden', jobs.length > 0);
-      $('#summary').textContent = jobs.length ? `${jobs.length} job${jobs.length>1?'s':''} shown` : '';
+      const labeled = { today: 'Today', '7d':'Last 7 days', '30d':'Last 30 days', all:'All time' };
+      const dateLabel = labeled[dateRange] || 'All time';
+      const extra = priceOnly ? ' • With price' : '';
+      $('#summary').textContent = jobs.length ? `${jobs.length} job${jobs.length>1?'s':''} • ${dateLabel}${extra}` : `No jobs • ${dateLabel}${extra}`;
     }
 
     function setupFilters() {
       const c = $('#filters'); c.innerHTML = '';
+      // Status pills
       const statuses = ['all','submitted','accepted','printing','ready','completed','cancelled'];
-      statuses.forEach(s => c.appendChild(pill(s[0].toUpperCase()+s.slice(1), (window.__FILTER||'all')===s, () => { window.__FILTER = s; setupFilters(); load(); })));
+      const row1 = document.createElement('div'); row1.className = 'flex flex-wrap items-center gap-2';
+      row1.appendChild(document.createTextNode('Status:'));
+      statuses.forEach(s => row1.appendChild(pill(s[0].toUpperCase()+s.slice(1), (window.__FILTER||'all')===s, () => { window.__FILTER = s; setupFilters(); load(); })));
+      c.appendChild(row1);
+
+      // Date range pills
+      const row2 = document.createElement('div'); row2.className = 'mt-2 flex flex-wrap items-center gap-2';
+      row2.appendChild(document.createTextNode('Date:'));
+      const ranges = [ ['today','Today'], ['7d','7 days'], ['30d','30 days'], ['all','All'] ];
+      const current = (window.__DATE_RANGE || 'today');
+      ranges.forEach(([k,label]) => row2.appendChild(pill(label, current===k, () => { window.__DATE_RANGE = k; setupFilters(); load(); })));
+
+      // Price-only toggle
+      const priceBtn = document.createElement('button');
+      priceBtn.className = 'px-3 py-1.5 rounded-full ' + (window.__PRICE_ONLY ? 'bg-emerald-600 text-white' : 'ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10');
+      priceBtn.textContent = 'With price';
+      priceBtn.addEventListener('click', () => { window.__PRICE_ONLY = !window.__PRICE_ONLY; setupFilters(); load(); });
+      row2.appendChild(priceBtn);
+      c.appendChild(row2);
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+      // Default to today's orders
+      window.__DATE_RANGE = 'today';
       setupFilters();
       load();
       // Load and bind shop avatar
