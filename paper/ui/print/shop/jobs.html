@@ -78,17 +78,29 @@
         </div>`;
       const actions = document.createElement('div'); actions.className = 'flex items-center gap-2';
       const API = (window.API_BASE || '');
-      if (j.marketplace_note_id) {
-        const pv = document.createElement('a'); pv.textContent = 'Preview'; pv.href = `${API}/api/marketplace/notes/${encodeURIComponent(j.marketplace_note_id)}/preview`; pv.target = '_blank'; pv.className = 'px-2 py-1 rounded-md text-[12px] ring-1 ring-black/10 dark:ring-white/15'; actions.appendChild(pv);
-        const dl = document.createElement('a'); dl.textContent = 'Download'; dl.href = `${API}/api/marketplace/notes/${encodeURIComponent(j.marketplace_note_id)}/download`; dl.className = 'px-2 py-1 rounded-md text-[12px] ring-1 ring-black/10 dark:ring-white/15'; actions.appendChild(dl);
-      }
+      // Preview/Download removed from normal view per request
       if (j.status === 'submitted') actions.appendChild(btn('Accept', (e) => { e.stopPropagation(); act('accept'); })), actions.appendChild(btn('Reject', (e) => { e.stopPropagation(); act('reject'); }, 'text-red-600 ring-1 ring-red-600/40'));
       if (j.status === 'accepted') actions.appendChild(btn('Mark Printing', (e) => { e.stopPropagation(); act('printing'); }));
       if (j.status === 'printing') actions.appendChild(btn('Mark Ready', (e) => { e.stopPropagation(); act('ready'); }));
-      if (j.status === 'ready') { const i = document.createElement('input'); i.placeholder = 'OTP'; i.className = 'px-2 py-1 text-[12px] rounded-md ring-1 ring-black/10 dark:ring-white/15'; actions.appendChild(i); actions.appendChild(btn('Release', (e) => { e.stopPropagation(); act('release', i.value); }, 'bg-brand-500/90 text-white')); }
+      if (j.status === 'ready') {
+        const i = document.createElement('input');
+        i.placeholder = 'OTP';
+        i.className = 'px-2 py-1 text-[12px] rounded-md ring-1 ring-black/10 dark:ring-white/15';
+        i.setAttribute('data-stop', '');
+        i.addEventListener('click', (e)=> e.stopPropagation());
+        i.addEventListener('focus', (e)=> e.stopPropagation());
+        i.addEventListener('keydown', (e)=> e.stopPropagation());
+        actions.appendChild(i);
+        actions.appendChild(btn('Release', (e) => { e.stopPropagation(); act('release', i.value); }, 'bg-brand-500/90 text-white'));
+      }
       wrap.appendChild(actions);
 
-      wrap.addEventListener('click', () => openModal(j));
+      // Open modal only when clicking on non-interactive areas
+      wrap.addEventListener('click', (e) => {
+        const t = e.target;
+        if (t && t.closest && t.closest('button,a,input,select,textarea,[data-close-modal],[data-stop]')) return;
+        openModal(j);
+      });
 
       async function act(kind, otp) {
         const token = (window.getToken && window.getToken()); const hdr = token ? { Authorization: 'Bearer ' + token } : {};
