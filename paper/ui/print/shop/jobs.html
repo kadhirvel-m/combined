@@ -62,6 +62,13 @@
       </div>
     </section>
 
+    <!-- Date Filters moved below Jobs Board section -->
+    <div id="dateFiltersWrap" class="mb-3 flex justify-end">
+      <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-3">
+        <div id="dateFilters" class="flex flex-wrap items-center gap-2 text-[12px]"></div>
+      </div>
+    </div>
+
     <div id="summary" class="text-[12px] opacity-80 mb-3"></div>
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="list"></div>
     <div id="empty" class="hidden text-sm opacity-70">No jobs.</div>
@@ -112,17 +119,19 @@
     // ---- UI helpers for rich cards ----
     function fmtTime(s){ if(!s) return ''; return (s.replace('T',' ').slice(0,16)); }
     function statusTone(st){
-      const k = String(st||'').toLowerCase();
-      if (k==='submitted') return {bg:'bg-blue-50 dark:bg-blue-500/10', fg:'text-blue-700 dark:text-blue-300', ring:'ring-blue-200/60 dark:ring-blue-400/30', icon:'move_to_inbox'};
-      if (k==='accepted')  return {bg:'bg-amber-50 dark:bg-amber-500/10', fg:'text-amber-800 dark:text-amber-300', ring:'ring-amber-200/60 dark:ring-amber-400/30', icon:'task_alt'};
-      if (k==='printing')  return {bg:'bg-indigo-50 dark:bg-indigo-500/10', fg:'text-indigo-800 dark:text-indigo-300', ring:'ring-indigo-200/60 dark:ring-indigo-400/30', icon:'print'};
-      if (k==='ready')     return {bg:'bg-emerald-50 dark:bg-emerald-500/10', fg:'text-emerald-800 dark:text-emerald-300', ring:'ring-emerald-200/60 dark:ring-emerald-400/30', icon:'done_all'};
-      if (k==='completed') return {bg:'bg-slate-50 dark:bg-slate-500/10', fg:'text-slate-800 dark:text-slate-300', ring:'ring-slate-200/60 dark:ring-slate-400/30', icon:'verified'};
-      if (k==='cancelled') return {bg:'bg-rose-50 dark:bg-rose-500/10', fg:'text-rose-800 dark:text-rose-300', ring:'ring-rose-200/60 dark:ring-rose-400/30', icon:'cancel'};
-      return {bg:'bg-neutral-50 dark:bg-white/5', fg:'text-neutral-700 dark:text-white/70', ring:'ring-black/10 dark:ring-white/15', icon:'info'};
+      const k = String(st||'').trim().toLowerCase();
+      if (k==='submitted') return {bg:'bg-blue-50 dark:bg-blue-500/10', fg:'text-blue-700 dark:text-blue-300', ring:'ring-1 ring-blue-200/60 dark:ring-blue-400/30', icon:'move_to_inbox'};
+      if (k==='accepted')  return {bg:'bg-amber-50 dark:bg-amber-500/10', fg:'text-amber-800 dark:text-amber-300', ring:'ring-1 ring-amber-200/60 dark:ring-amber-400/30', icon:'task_alt'};
+      if (k==='printing')  return {bg:'bg-indigo-50 dark:bg-indigo-500/10', fg:'text-indigo-800 dark:text-indigo-300', ring:'ring-1 ring-indigo-200/60 dark:ring-indigo-400/30', icon:'print'};
+      if (k==='ready')     return {bg:'bg-emerald-50 dark:bg-emerald-500/10', fg:'text-emerald-800 dark:text-emerald-300', ring:'ring-1 ring-emerald-200/60 dark:ring-emerald-400/30', icon:'done_all'};
+      // Badge colors per request: Completed = green, Cancelled = red
+      if (k==='completed') return {bg:'bg-emerald-600', fg:'text-white', ring:'ring-0', icon:'verified'};
+      if (k==='cancelled' || k==='canceled') return {bg:'', fg:'text-white', ring:'ring-0', icon:'cancel', style:'background-color:#dc2626;color:#fff'}; // Tailwind red-600 inline fallback
+      return {bg:'bg-neutral-50 dark:bg-white/5', fg:'text-neutral-700 dark:text-white/70', ring:'ring-1 ring-black/10 dark:ring-white/15', icon:'info'};
     }
-    function chipHTML(icon, text, cls){
-      return `<span class=\"inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] ${cls}\"><span class=\"material-symbols-rounded text-[14px]\">${icon}</span><span>${text}</span></span>`;
+    function chipHTML(icon, text, cls, style){
+      const styleAttr = style ? ` style=\"${style}\"` : '';
+      return `<span class=\"inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] ${cls}\"${styleAttr}><span class=\"material-symbols-rounded text-[14px]\">${icon}</span><span>${text}</span></span>`;
     }
 
     function cardRich(j) {
@@ -137,7 +146,7 @@
           <div class='space-y-1'>
             <div class='text-[12px]'>Order <b>#${(j.id||'').slice(0,8)}</b></div>
             <div class='flex flex-wrap items-center gap-1.5'>
-              ${chipHTML(tone.icon, (j.status||'').toString().replace(/^./,c=>c.toUpperCase()), `${tone.bg} ${tone.fg} ${tone.ring} ring-1`)}
+              ${chipHTML(tone.icon, (j.status||'').toString().replace(/^./,c=>c.toUpperCase()), `${tone.bg} ${tone.fg} ${tone.ring}`, tone.style)}
               ${chipHTML('calendar_month', fmtTime(j.created_at||''), 'ring-1 ring-black/10 dark:ring-white/15')}
             </div>
           </div>
@@ -348,28 +357,29 @@
     }
 
     function setupFilters() {
-      const c = $('#filters'); c.innerHTML = '';
-      // Status pills
+      // Top status filters
+      const c = $('#filters'); if (c) { c.innerHTML = ''; }
       const statuses = ['all','submitted','accepted','printing','ready','completed','cancelled'];
       const row1 = document.createElement('div'); row1.className = 'flex flex-wrap items-center gap-2';
       row1.appendChild(document.createTextNode('Status:'));
       statuses.forEach(s => row1.appendChild(pill(s[0].toUpperCase()+s.slice(1), (window.__FILTER||'all')===s, () => { window.__FILTER = s; setupFilters(); load(); })));
-      c.appendChild(row1);
+      if (c) c.appendChild(row1);
 
-      // Date range pills
-      const row2 = document.createElement('div'); row2.className = 'mt-2 flex flex-wrap items-center gap-2';
+      // Date filters moved below Jobs Board section
+      const d = $('#dateFilters'); if (d) { d.innerHTML = ''; }
+      const row2 = document.createElement('div'); row2.className = 'flex flex-wrap items-center gap-2';
       row2.appendChild(document.createTextNode('Date:'));
       const ranges = [ ['today','Today'], ['7d','7 days'], ['30d','30 days'], ['all','All'] ];
       const current = (window.__DATE_RANGE || 'today');
       ranges.forEach(([k,label]) => row2.appendChild(pill(label, current===k, () => { window.__DATE_RANGE = k; setupFilters(); load(); })));
 
-      // Price-only toggle
+      // Price-only toggle stays alongside date controls
       const priceBtn = document.createElement('button');
       priceBtn.className = 'px-3 py-1.5 rounded-full ' + (window.__PRICE_ONLY ? 'bg-emerald-600 text-white' : 'ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10');
       priceBtn.textContent = 'With price';
       priceBtn.addEventListener('click', () => { window.__PRICE_ONLY = !window.__PRICE_ONLY; setupFilters(); load(); });
       row2.appendChild(priceBtn);
-      c.appendChild(row2);
+      if (d) d.appendChild(row2);
     }
 
     document.addEventListener('DOMContentLoaded', () => {
