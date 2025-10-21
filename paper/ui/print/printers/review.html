@@ -206,22 +206,40 @@
             </label>
           </div>
 
-          <!-- Name -->
-          <label class="block">
-            <span class="text-xs opacity-80">Name</span>
-            <input name="contact_name" id="contact_name" required
-              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring"
-              placeholder="Your name">
-          </label>
+          <!-- Pickup For -->
+          <div class="block">
+            <span class="text-xs opacity-80">Pickup For</span>
+            <div class="mt-1 flex items-center gap-6">
+              <label class="inline-flex items-center gap-2">
+                <input type="radio" name="contact_for" id="for_me" value="me" checked>
+                <span>For me</span>
+              </label>
+              <label class="inline-flex items-center gap-2">
+                <input type="radio" name="contact_for" id="for_others" value="other">
+                <span>For others</span>
+              </label>
+            </div>
+            <div id="meInfo" class="text-[11px] opacity-70 mt-1 hidden"></div>
+          </div>
 
-          <!-- Phone with lightweight mask -->
-          <label class="block">
-            <span class="text-xs opacity-80">Phone</span>
-            <input name="contact_phone" id="contact_phone" inputmode="tel" maxlength="14"
-              class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring"
-              placeholder="+91 9XXXXXXXXX">
-            <span class="text-[11px] opacity-70">We'll share status updates and OTP to this number.</span>
-          </label>
+          <div id="contactFields" class="grid grid-cols-1 gap-4">
+            <!-- Name -->
+            <label class="block">
+              <span class="text-xs opacity-80">Name</span>
+              <input name="contact_name" id="contact_name" required
+                class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring"
+                placeholder="Your name">
+            </label>
+
+            <!-- Phone with lightweight mask -->
+            <label class="block">
+              <span class="text-xs opacity-80">Phone</span>
+              <input name="contact_phone" id="contact_phone" inputmode="tel" maxlength="14"
+                class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring"
+                placeholder="+91 9XXXXXXXXX">
+              <span class="text-[11px] opacity-70">We'll share status updates and OTP to this number.</span>
+            </label>
+          </div>
 
           <!-- Terms -->
           <label class="flex items-start gap-2">
@@ -273,6 +291,28 @@
       m.textContent = msg; t.classList.remove('hidden', 'opacity-0');
       t.classList.add('transition', 'duration-200');
       setTimeout(() => { t.classList.add('opacity-0'); setTimeout(() => t.classList.add('hidden'), 200); }, ms);
+    }
+    // Token helper (fallback if not provided globally)
+    if (!window.getToken) {
+      window.getToken = function () {
+        const keys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+        for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } }
+        return '';
+      };
+    }
+    let __PROFILE_CACHE = null;
+    async function loadProfileMe() {
+      if (__PROFILE_CACHE) return __PROFILE_CACHE;
+      const tk = (window.getToken && window.getToken()) || '';
+      if (!tk) return null;
+      try {
+        const r = await fetch((window.API_BASE || '') + '/api/me', { headers: { Authorization: 'Bearer ' + tk } });
+        if (!r.ok) return null;
+        const j = await r.json().catch(() => ({}));
+        const prof = (j && (j.profile || j)) || null;
+        __PROFILE_CACHE = prof || null;
+        return __PROFILE_CACHE;
+      } catch { return null; }
     }
     function parseRange(input, totalPages) {
       const t = (input || '').trim();
@@ -445,6 +485,49 @@
       e.target.value = v;
     });
 
+    // Contact: for me / for others
+    async function updateContactMode() {
+      const mode = (document.querySelector('input[name="contact_for"]:checked')?.value || 'me');
+      const fieldsWrap = document.getElementById('contactFields');
+      const meInfo = document.getElementById('meInfo');
+      const nameInput = document.getElementById('contact_name');
+      const phoneInput = document.getElementById('contact_phone');
+      if (mode === 'me') {
+        const tk = (window.getToken && window.getToken()) || '';
+        if (!tk) {
+          // Not logged in: cannot auto-fill; keep fields visible
+          fieldsWrap.classList.remove('hidden');
+          nameInput.required = true; phoneInput.required = true;
+          meInfo.classList.remove('hidden');
+          meInfo.textContent = 'Login to auto-fill your details, or enter them below.';
+          return;
+        }
+        const prof = window.__PX_PROFILE_SNAPSHOT || await loadProfileMe();
+        const nm = (prof && (prof.name || prof.full_name || prof.username)) || '';
+        const ph = (prof && prof.phone) || '';
+        if (nm) nameInput.value = nm;
+        if (ph) phoneInput.value = ph;
+        if (nm && ph) {
+          fieldsWrap.classList.add('hidden');
+          nameInput.required = false; phoneInput.required = false;
+          meInfo.classList.remove('hidden');
+          meInfo.textContent = `Using your profile: ${nm} • ${ph}`;
+        } else {
+          fieldsWrap.classList.remove('hidden');
+          nameInput.required = !nm; phoneInput.required = !ph;
+          meInfo.classList.remove('hidden');
+          meInfo.textContent = 'Complete missing details below. We will save with your user ID.';
+        }
+      } else {
+        fieldsWrap.classList.remove('hidden');
+        nameInput.required = true; phoneInput.required = true;
+        meInfo.classList.add('hidden');
+        meInfo.textContent = '';
+        nameInput.value = '';
+        phoneInput.value = '';
+      }
+    }
+
     // ------ Load shop + settings summary ------
     async function loadShop() {
       const url = (window.API_BASE || '') + '/api/print/shops';
@@ -519,9 +602,18 @@
       const token = (window.getToken && window.getToken()) || '';
       const f = new FormData(document.getElementById('reviewForm'));
 
+      // Resolve contact per selection
+      const mode = (document.querySelector('input[name="contact_for"]:checked')?.value || 'me');
+      let name = (document.getElementById('contact_name').value || '').trim();
+      let phone = (document.getElementById('contact_phone').value || '').trim();
+      if (mode === 'me' && token) {
+        const prof = window.__PX_PROFILE_SNAPSHOT || await loadProfileMe();
+        if (prof) {
+          if (!name) name = (prof.name || prof.full_name || prof.username || '').trim();
+          if (!phone) phone = (prof.phone || '').trim();
+        }
+      }
       // Client-side checks
-      const name = $('#contact_name').value.trim();
-      const phone = $('#contact_phone').value.trim();
       if (!name) { $('#status').textContent = 'Please enter your name.'; toast('Please enter your name.'); return; }
       if (!phone) { $('#status').textContent = 'Please enter a phone number.'; toast('Please enter a phone number.'); return; }
       if (!document.getElementById('terms').checked) { $('#status').textContent = 'Please accept the terms.'; toast('Please accept the terms.'); return; }
@@ -599,7 +691,13 @@
     }
 
     // ------ Events ------
-    document.addEventListener('DOMContentLoaded', loadShop);
+    document.addEventListener('DOMContentLoaded', () => {
+      loadShop();
+      // Init contact mode handlers
+      document.getElementById('for_me')?.addEventListener('change', updateContactMode);
+      document.getElementById('for_others')?.addEventListener('change', updateContactMode);
+      updateContactMode();
+    });
     document.getElementById('submit').addEventListener('click', submitJob);
   </script>
 </body>

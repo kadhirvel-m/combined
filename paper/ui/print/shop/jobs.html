@@ -10,37 +10,86 @@
   <script src="../../auth.js" defer></script>
 </head>
 
-<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
-  <header
-    class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
-    <div class="container flex items-center justify-between py-3">
-      <h1 class="text-lg font-bold">Jobs Board</h1>
-      <div class="text-sm opacity-80">New | In Progress | Ready | Completed</div>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-glow dark:bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.22),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(30,30,47,.7),transparent)]">
+  <!-- App Bar -->
+  <header class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container flex items-center justify-between h-16">
+      <div class="inline-flex items-center gap-3">
+        <span class="material-symbols-rounded">work</span>
+        <h1 class="text-lg font-bold">Jobs Board</h1>
+      </div>
+      <a href="../printers/shops.html" class="text-sm hover:underline">Browse Shops</a>
     </div>
   </header>
+
+  <!-- Filters -->
+  <div class="container mt-4">
+    <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-3">
+      <div id="filters" class="flex flex-wrap items-center gap-2 text-[12px]"></div>
+    </div>
+  </div>
+
   <main class="container py-6">
+    <div id="summary" class="text-[12px] opacity-80 mb-3"></div>
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="list"></div>
     <div id="empty" class="hidden text-sm opacity-70">No jobs.</div>
   </main>
+
+  <!-- Modal -->
+  <div id="jobModal" class="fixed inset-0 z-50 hidden">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm md:backdrop-blur" data-close-modal></div>
+    <!-- Centered content -->
+    <div class="relative z-10 flex items-center justify-center min-h-full p-4">
+      <div class="w-full max-w-xl rounded-2xl ring-1 ring-black/5 dark:ring-white/10 shadow-2xl p-4 bg-white/95 dark:bg-brand-900/95">
+        <div class="flex items-center justify-between mb-2">
+          <div class="font-semibold">Job Details</div>
+          <button class="px-2 py-1 rounded-md text-[12px] ring-1 ring-black/10 dark:ring-white/15" data-close-modal>Close</button>
+        </div>
+        <div id="jobDetail" class="text-[13px] space-y-3"></div>
+        <div class="mt-3 flex items-center justify-between">
+          <div id="jobMeta" class="text-[11px] opacity-70"></div>
+          <div id="jobActions" class="flex items-center gap-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
   <script>
     function $(s) { return document.querySelector(s) }
     function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
     function btn(label, handler, variant) { const b = document.createElement('button'); b.textContent = label; b.className = 'px-2 py-1 rounded-md text-[12px] ' + (variant || 'ring-1 ring-black/10 dark:ring-white/15'); b.addEventListener('click', handler); return b; }
+    function pill(label, active, onclick) {
+      const a = document.createElement('button');
+      a.textContent = label;
+      a.className = 'px-3 py-1.5 rounded-full ' + (active ? 'bg-brand-500 text-white' : 'ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10');
+      a.addEventListener('click', onclick);
+      return a;
+    }
+
     function card(j) {
-      const wrap = document.createElement('div'); wrap.className = 'rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4 space-y-2';
-      wrap.innerHTML = `<div class='flex items-start justify-between'><div><div class='font-semibold'>${j.id}</div><div class='text-[12px] opacity-70'>${j.status || ''} • ${j.estimated_pages || '?'} pages × ${(j.settings && j.settings.copies) || 1}</div></div><div class='text-[11px] opacity-70'>${(j.created_at || '').replace('T', ' ').slice(0, 16)}</div></div>`;
+      const wrap = document.createElement('div'); wrap.className = 'rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4 space-y-2 cursor-pointer hover:shadow-lg transition';
+      wrap.innerHTML = `
+        <div class='flex items-start justify-between'>
+          <div>
+            <div class='font-semibold'>#${(j.id || '').slice(0,8)} <span class="text-[11px] opacity-60 align-middle">${j.status || ''}</span></div>
+            <div class='text-[12px] opacity-70'>${j.estimated_pages || '?'} pages × ${(j.settings && j.settings.copies) || 1} • ${j.settings?.paper_size || 'A4'} • ${(j.settings?.color_mode || 'auto')}</div>
+          </div>
+          <div class='text-[11px] opacity-70 text-right'>${(j.created_at || '').replace('T', ' ').slice(0, 16)}</div>
+        </div>`;
       const actions = document.createElement('div'); actions.className = 'flex items-center gap-2';
       const API = (window.API_BASE || '');
-      // If job came from a marketplace note, show quick Preview/Download
       if (j.marketplace_note_id) {
         const pv = document.createElement('a'); pv.textContent = 'Preview'; pv.href = `${API}/api/marketplace/notes/${encodeURIComponent(j.marketplace_note_id)}/preview`; pv.target = '_blank'; pv.className = 'px-2 py-1 rounded-md text-[12px] ring-1 ring-black/10 dark:ring-white/15'; actions.appendChild(pv);
         const dl = document.createElement('a'); dl.textContent = 'Download'; dl.href = `${API}/api/marketplace/notes/${encodeURIComponent(j.marketplace_note_id)}/download`; dl.className = 'px-2 py-1 rounded-md text-[12px] ring-1 ring-black/10 dark:ring-white/15'; actions.appendChild(dl);
       }
-      if (j.status === 'submitted') actions.appendChild(btn('Accept', () => act('accept'))), actions.appendChild(btn('Reject', () => act('reject'), 'text-red-600 ring-1 ring-red-600/40'));
-      if (j.status === 'accepted') actions.appendChild(btn('Mark Printing', () => act('printing')));
-      if (j.status === 'printing') actions.appendChild(btn('Mark Ready', () => act('ready')));
-      if (j.status === 'ready') { const i = document.createElement('input'); i.placeholder = 'OTP'; i.className = 'px-2 py-1 text-[12px] rounded-md ring-1 ring-black/10 dark:ring-white/15'; actions.appendChild(i); actions.appendChild(btn('Release', () => act('release', i.value), 'bg-brand-500/90 text-white')); }
+      if (j.status === 'submitted') actions.appendChild(btn('Accept', (e) => { e.stopPropagation(); act('accept'); })), actions.appendChild(btn('Reject', (e) => { e.stopPropagation(); act('reject'); }, 'text-red-600 ring-1 ring-red-600/40'));
+      if (j.status === 'accepted') actions.appendChild(btn('Mark Printing', (e) => { e.stopPropagation(); act('printing'); }));
+      if (j.status === 'printing') actions.appendChild(btn('Mark Ready', (e) => { e.stopPropagation(); act('ready'); }));
+      if (j.status === 'ready') { const i = document.createElement('input'); i.placeholder = 'OTP'; i.className = 'px-2 py-1 text-[12px] rounded-md ring-1 ring-black/10 dark:ring-white/15'; actions.appendChild(i); actions.appendChild(btn('Release', (e) => { e.stopPropagation(); act('release', i.value); }, 'bg-brand-500/90 text-white')); }
       wrap.appendChild(actions);
+
+      wrap.addEventListener('click', () => openModal(j));
+
       async function act(kind, otp) {
         const token = (window.getToken && window.getToken()); const hdr = token ? { Authorization: 'Bearer ' + token } : {};
         let ep = kind; if (kind === 'release') ep = 'release';
@@ -50,13 +99,81 @@
       }
       return wrap;
     }
+
+    function renderSettings(s) {
+      if (!s) return '<div class="text-[12px] opacity-70">No settings</div>';
+      const safe = (v) => (v == null ? '' : String(v));
+      return `
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+          <div>Copies: <b>${safe(s.copies || 1)}</b></div>
+          <div>Color: <b>${safe(s.color_mode || 'auto')}</b></div>
+          <div>Duplex: <b>${safe(s.duplex || 'off')}</b></div>
+          <div>N-up: <b>${safe(s.n_up || 1)}</b></div>
+          <div>Paper: <b>${safe(s.paper_size || 'A4')}</b>${s.paper_gsm ? (' • ' + safe(s.paper_gsm) + ' GSM') : ''}</div>
+          <div>Finish: <b>${safe(s.finishing || 'none')}</b></div>
+          <div>Orientation: <b>${safe(s.orientation || 'vertical')}</b></div>
+          <div>Pages: <b>${safe(s.page_range || 'all')}</b></div>
+          ${s.notes_to_shop ? ('<div class="col-span-2">Notes: <b>' + safe(s.notes_to_shop) + '</b></div>') : ''}
+        </div>`;
+    }
+
+    function openModal(j) {
+      const m = $('#jobModal');
+      const d = $('#jobDetail');
+      const meta = $('#jobMeta');
+      const actWrap = $('#jobActions');
+      const API = (window.API_BASE || '');
+      d.innerHTML = `
+        <div class="text-sm">
+          <div class="font-semibold mb-1">Order #${(j.id || '').slice(0,8)}</div>
+          <div class="text-[12px] opacity-70">Status: ${j.status || ''} • ${((j.created_at || '').replace('T',' ').slice(0,16))}</div>
+        </div>
+        <hr class="my-2 border-black/10 dark:border-white/10">
+        <div class="space-y-2">
+          <div><span class="text-xs opacity-70">Pickup</span><div class="text-sm font-medium">${j.pickup_window || '-'}</div></div>
+          <div><span class="text-xs opacity-70">Contact</span><div class="text-sm font-medium">${(j.contact_name || '-') + (j.contact_phone ? (' • ' + j.contact_phone) : '')}</div></div>
+          <div><span class="text-xs opacity-70">Estimated</span><div class="text-sm font-medium">${j.estimated_pages || '?'} pages${j.estimated_price ? (' • ₹' + Number(j.estimated_price).toFixed(2)) : ''}</div></div>
+        </div>
+        <hr class="my-2 border-black/10 dark:border-white/10">
+        <div>
+          <div class="text-xs opacity-70 mb-1">Settings</div>
+          ${renderSettings(j.settings)}
+        </div>`;
+      meta.textContent = j.marketplace_note_id ? 'This order has an attached file' : '';
+      actWrap.innerHTML = '';
+      if (j.marketplace_note_id) {
+        const pv = document.createElement('a'); pv.textContent = 'Open Preview'; pv.href = `${API}/api/marketplace/notes/${encodeURIComponent(j.marketplace_note_id)}/preview`; pv.target = '_blank'; pv.className = 'px-3 py-1.5 rounded-md text-[12px] ring-1 ring-black/10 dark:ring-white/15'; actWrap.appendChild(pv);
+        const pr = document.createElement('a'); pr.textContent = 'Print'; pr.href = `${API}/api/marketplace/notes/${encodeURIComponent(j.marketplace_note_id)}/preview`; pr.target = '_blank'; pr.className = 'px-3 py-1.5 rounded-md bg-brand-500 text-white'; actWrap.appendChild(pr);
+      }
+      m.classList.remove('hidden');
+    }
+
+    function closeModal() { $('#jobModal').classList.add('hidden'); }
+
     async function load() {
       const token = (window.getToken && window.getToken()) || getToken(); const hdr = token ? { Authorization: 'Bearer ' + token } : {};
-      const r = await fetch((window.API_BASE || '') + '/api/shop/jobs', { headers: hdr }).catch(() => null);
+      const status = (window.__FILTER || '');
+      const url = (window.API_BASE || '') + '/api/shop/jobs' + (status && status !== 'all' ? ('?status=' + encodeURIComponent(status)) : '');
+      const r = await fetch(url, { headers: hdr }).catch(() => null);
       const jobs = r && r.ok ? ((await r.json()).jobs || []) : [];
-      const wrap = $('#list'); wrap.innerHTML = ''; jobs.forEach(j => wrap.appendChild(card(j))); $('#empty').classList.toggle('hidden', jobs.length > 0);
+      const wrap = $('#list'); wrap.innerHTML = '';
+      jobs.forEach(j => wrap.appendChild(card(j)));
+      $('#empty').classList.toggle('hidden', jobs.length > 0);
+      $('#summary').textContent = jobs.length ? `${jobs.length} job${jobs.length>1?'s':''} shown` : '';
     }
-    document.addEventListener('DOMContentLoaded', load);
+
+    function setupFilters() {
+      const c = $('#filters'); c.innerHTML = '';
+      const statuses = ['all','submitted','accepted','printing','ready','completed','cancelled'];
+      statuses.forEach(s => c.appendChild(pill(s[0].toUpperCase()+s.slice(1), (window.__FILTER||'all')===s, () => { window.__FILTER = s; setupFilters(); load(); })));
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      setupFilters();
+      load();
+      document.addEventListener('click', (e) => { if (e.target && e.target.hasAttribute('data-close-modal')) closeModal(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+    });
   </script>
 </body>
 
