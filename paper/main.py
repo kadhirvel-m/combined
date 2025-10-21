@@ -21,7 +21,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, AsyncGenerator, Dict, Iterator, List, Literal, Optional, Set, Tuple
 from urllib.parse import quote, urlparse
 import threading
 
@@ -8069,6 +8069,7 @@ class PrintSettings(BaseModel):
     page_range: str = Field(default="all")
     scale: str = Field(default="fit")
     collate: bool = Field(default=True)
+    orientation: Literal["vertical", "horizontal"] = Field(default="vertical")
     notes_to_shop: Optional[str] = None
 
 
@@ -8077,6 +8078,7 @@ class CreateJobIn(BaseModel):
     settings: PrintSettings
     marketplace_note_id: Optional[str] = None
     estimated_pages: Optional[int] = None
+    estimated_price: Optional[float] = None
     file_size: Optional[int] = None
     contact_name: Optional[str] = None
     contact_phone: Optional[str] = None
@@ -8160,6 +8162,7 @@ def create_print_job(payload: CreateJobIn, authorization: Optional[str] = Header
         "otp": otp,
         "settings": _supabase_payload(payload.settings.dict()),
         "estimated_pages": payload.estimated_pages,
+        "estimated_price": payload.estimated_price,
         "file_size": payload.file_size,
         "marketplace_note_id": payload.marketplace_note_id,
         "pickup_window": payload.pickup_window,

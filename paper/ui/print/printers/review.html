@@ -417,6 +417,7 @@
     const customWrap = $('#customWrap');
     const customDate = $('#customDate');
     const customTime = $('#customTime');
+    let latestEstimatedPrice = null;
 
     // Live pickup preview
     function updatePickupPreview() {
@@ -476,6 +477,7 @@
       const fallbackPageTotal = perCopyPages != null ? perCopyPages * copiesCount : null;
 
       const priceInfo = estimatePrice(shop, s, selectableTotal);
+      latestEstimatedPrice = (priceInfo && priceInfo.amount != null) ? priceInfo.amount : null;
       const pageTotal = (priceInfo && Number.isFinite(priceInfo.logicalPages) && priceInfo.logicalPages > 0)
         ? priceInfo.logicalPages
         : fallbackPageTotal;
@@ -537,6 +539,7 @@
         marketplace_note_id: noteId || null,
         estimated_pages: pages || null,
         file_size: size || null,
+        estimated_price: latestEstimatedPrice != null ? Number(latestEstimatedPrice) : null,
         settings: {
           copies: parseInt(settings.copies || '1') || 1,
           color_mode: settings.color_mode || 'auto',
@@ -548,7 +551,8 @@
           page_range: settings.page_range || 'all',
           scale: settings.scale || 'fit',
           collate: !!(settings.collate === true || settings.collate === 'on'),
-          notes_to_shop: settings.notes_to_shop || ''
+          notes_to_shop: settings.notes_to_shop || '',
+          orientation: (settings.orientation === 'horizontal') ? 'horizontal' : 'vertical'
         },
         pickup_window,
         contact_name: name,

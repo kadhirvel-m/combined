@@ -123,6 +123,7 @@ CREATE TABLE public.print_jobs (
   otp text,
   settings jsonb NOT NULL DEFAULT '{}'::jsonb,
   estimated_pages integer,
+  estimated_price numeric(10,2),
   file_size bigint,
   marketplace_note_id uuid,
   pickup_window text,
