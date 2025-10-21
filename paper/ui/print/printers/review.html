@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Review Job — PaperX</title>
+  <title>Review Job at PaperX</title>
 
   <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -150,18 +150,22 @@
           <hr class="my-5 border-black/10 dark:border-white/10">
 
           <!-- Live totals -->
-          <div class="flex items-center justify-between">
-            <div id="est" class="text-[12px] opacity-80"></div>
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div id="est" class="text-[12px] opacity-80"></div>
+              <div id="price" class="text-sm font-semibold mt-1"></div>
+              <div id="priceNote" class="text-[11px] opacity-70 mt-1 hidden"></div>
+            </div>
             <div class="text-right">
               <div class="text-xs opacity-70">Pickup</div>
-              <div id="pickupPreview" class="text-sm font-semibold">—</div>
+              <div id="pickupPreview" class="text-sm font-semibold">-</div>
             </div>
           </div>
 
           <!-- Informational footer -->
           <div class="mt-4 text-[12px] opacity-75 flex items-start gap-2">
             <span class="material-symbols-rounded text-base">info</span>
-            <p>You’ll receive an OTP after submission. Share it at pickup for a secure handover.</p>
+            <p>You will receive an OTP after submission. Share it at pickup for a secure handover.</p>
           </div>
         </div>
       </div>
@@ -216,7 +220,7 @@
             <input name="contact_phone" id="contact_phone" inputmode="tel" maxlength="14"
               class="mt-1 w-full px-3 py-2 rounded-lg ring-soft bg-white/80 dark:bg-white/5 focus-ring"
               placeholder="+91 9XXXXXXXXX">
-            <span class="text-[11px] opacity-70">We’ll share status updates and OTP to this number.</span>
+            <span class="text-[11px] opacity-70">We'll share status updates and OTP to this number.</span>
           </label>
 
           <!-- Terms -->
@@ -235,24 +239,6 @@
             </button>
           </div>
         </form>
-      </div>
-
-      <!-- Help cards -->
-      <div class="mt-6 grid sm:grid-cols-2 gap-3">
-        <div class="p-4 rounded-2xl bg-white/70 dark:bg-white/5 ring-soft">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="material-symbols-rounded">lock</span>
-            <p class="text-sm font-semibold">Secure pickup</p>
-          </div>
-          <p class="text-[12px] opacity-80">Only someone with the OTP can collect the prints.</p>
-        </div>
-        <div class="p-4 rounded-2xl bg-white/70 dark:bg-white/5 ring-soft">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="material-symbols-rounded">support_agent</span>
-            <p class="text-sm font-semibold">Shop notes</p>
-          </div>
-          <p class="text-[12px] opacity-80">Special handling? Add it in “notes_to_shop” earlier in the flow.</p>
-        </div>
       </div>
     </section>
   </main>
@@ -288,6 +274,130 @@
       t.classList.add('transition', 'duration-200');
       setTimeout(() => { t.classList.add('opacity-0'); setTimeout(() => t.classList.add('hidden'), 200); }, ms);
     }
+    function parseRange(input, totalPages) {
+      const t = (input || '').trim();
+      if (!t || t.toLowerCase() === 'all') return totalPages || null;
+      let count = 0;
+      const parts = t.split(',').map(seg => seg.trim()).filter(Boolean);
+      for (const segment of parts) {
+        if (/^\d+$/.test(segment)) {
+          const v = parseInt(segment, 10);
+          if (!totalPages || (v >= 1 && v <= totalPages)) { count += 1; } else { return null; }
+        } else if (/^\d+\s*-\s*\d+$/.test(segment)) {
+          const [aRaw, bRaw] = segment.split('-').map(s => parseInt(s.trim(), 10));
+          if (aRaw > bRaw) return null;
+          if (!totalPages || (aRaw >= 1 && bRaw <= totalPages)) { count += (bRaw - aRaw + 1); } else { return null; }
+        } else {
+          return null;
+        }
+      }
+      return count;
+    }
+    function computeSelectedPages(settings, totalPages) {
+      const allPages = Number.isFinite(totalPages) ? totalPages : 0;
+      const mode = (settings.range_mode || 'all').toLowerCase();
+      if (mode === 'range') {
+        return parseRange(settings.page_range || '', allPages);
+      }
+      if (mode === 'single') {
+        const sp = parseInt(settings.single_page || '', 10);
+        if (Number.isFinite(sp) && sp >= 1 && (!allPages || sp <= allPages)) return 1;
+        return null;
+      }
+      return allPages || null;
+    }
+    function formatCurrency(value) {
+      if (!Number.isFinite(value)) return '';
+      try {
+        const fmt = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return fmt.format(value);
+      } catch {
+        return `â‚¹${value.toFixed(2)}`;
+      }
+    }
+    function friendlyPricingKey(key) {
+      const map = {
+        bw_single: 'B/W single side',
+        bw_duplex: 'B/W duplex',
+        color_single: 'Color single side',
+        color_duplex: 'Color duplex'
+      };
+      return map[key] || key;
+    }
+    function normalizePricing(pricing) {
+      if (!pricing) return {};
+      if (typeof pricing === 'string') {
+        try { return JSON.parse(pricing); } catch { return {}; }
+      }
+      if (typeof pricing === 'object') return pricing;
+      return {};
+    }
+    function selectPricingTier(tiers, quantity) {
+      if (!Array.isArray(tiers) || !tiers.length) return null;
+      const sorted = tiers.slice().sort((a, b) => ((a?.min ?? 0) - (b?.min ?? 0)));
+      let match = sorted.find(t => {
+        const min = Number(t?.min);
+        const upto = Number(t?.upto);
+        const minOk = !Number.isFinite(min) || quantity >= min;
+        const uptoOk = !Number.isFinite(upto) || quantity <= upto;
+        return minOk && uptoOk;
+      });
+      if (!match) {
+        match = sorted.reduce((acc, curr) => {
+          const min = Number(curr?.min);
+          if (!Number.isFinite(min) || quantity < min) return acc;
+          if (!acc) return curr;
+          const accMin = Number(acc?.min);
+          return (!Number.isFinite(accMin) || min > accMin) ? curr : acc;
+        }, null);
+      }
+      return match || null;
+    }
+    function estimatePrice(shop, settings, totalPagesInput) {
+      if (!shop) return { amount: null, reason: 'Shop not found.' };
+      const copiesRaw = parseInt(settings.copies || '1', 10);
+      const copies = Number.isFinite(copiesRaw) && copiesRaw > 0 ? copiesRaw : 1;
+      const totalPagesNumber = Number(totalPagesInput);
+      const selectableTotal = Number.isFinite(totalPagesNumber) ? totalPagesNumber : 0;
+      const selected = computeSelectedPages(settings, selectableTotal);
+      const fallbackPages = (Number.isFinite(totalPagesNumber) && totalPagesNumber > 0) ? totalPagesNumber : null;
+      const pagesPerCopy = Number.isFinite(selected) && selected > 0 ? selected : fallbackPages;
+      if (!Number.isFinite(pagesPerCopy) || pagesPerCopy <= 0) {
+        return { amount: null, reason: 'Add page count to view an estimate.' };
+      }
+      const nupRaw = parseInt(settings.n_up || '1', 10);
+      const nUp = Number.isFinite(nupRaw) && nupRaw > 0 ? nupRaw : 1;
+      const sidesPerCopy = Math.max(1, Math.ceil(pagesPerCopy / nUp));
+      const duplexOn = (settings.duplex || '').toLowerCase() !== 'off';
+      const unitsPerCopy = duplexOn ? Math.max(1, Math.ceil(sidesPerCopy / 2)) : sidesPerCopy;
+      const qty = unitsPerCopy * copies;
+      if (!qty) {
+        return { amount: null, reason: 'Page count is zero.' };
+      }
+      const colorMode = (settings.color_mode || 'bw').toLowerCase();
+      const pricingKey = (colorMode === 'color' ? 'color' : 'bw') + '_' + (duplexOn ? 'duplex' : 'single');
+      const pricing = normalizePricing(shop.pricing);
+      const tiers = Array.isArray(pricing[pricingKey]) ? pricing[pricingKey] : [];
+      if (!tiers.length) {
+        return { amount: null, reason: `No rates for ${friendlyPricingKey(pricingKey)}.` };
+      }
+      const tier = selectPricingTier(tiers, qty);
+      if (!tier) {
+        const unitWord = duplexOn ? 'sheet' : 'side';
+        return { amount: null, reason: `No rate matches ${qty} ${unitWord}${qty === 1 ? '' : 's'}.` };
+      }
+      const perPage = Number(tier.per_page);
+      if (!Number.isFinite(perPage) || perPage <= 0) {
+        return { amount: null, reason: 'Rate missing in selected tier.' };
+      }
+      const amount = Math.round(perPage * qty * 100) / 100;
+      const perPageRounded = Math.round(perPage * 100) / 100;
+      const unitWord = duplexOn ? 'sheet' : 'side';
+      const unitLabel = qty === 1 ? unitWord : `${unitWord}s`;
+      const breakdown = `${formatCurrency(perPageRounded)} per ${unitWord} x ${qty} ${unitLabel} (${friendlyPricingKey(pricingKey)})`;
+      const logicalTotal = Math.round(pagesPerCopy * copies);
+      return { amount, perPage: perPageRounded, qty, unit: unitLabel, breakdown, reason: null, logicalPages: logicalTotal };
+    }
 
     // ------ Query / state ------
     const p = new URLSearchParams(location.search);
@@ -300,6 +410,8 @@
 
     // ------ UI elements ------
     const estEl = $('#est');
+    const priceEl = $('#price');
+    const priceNoteEl = $('#priceNote');
     const pickupPreview = $('#pickupPreview');
     const pickupSel = $('#pickup_window');
     const customWrap = $('#customWrap');
@@ -310,11 +422,11 @@
     function updatePickupPreview() {
       const v = pickupSel.value;
       if (v === 'Custom') {
-        const d = customDate.value || '—';
-        const t = customTime.value || '—';
+        const d = customDate.value || 'â€”';
+        const t = customTime.value || 'â€”';
         pickupPreview.textContent = `${d} ${t}`.trim();
       } else {
-        pickupPreview.textContent = v || '—';
+        pickupPreview.textContent = v || 'â€”';
       }
     }
     pickupSel.addEventListener('change', () => {
@@ -347,14 +459,54 @@
       const s = settings || {};
       $('#settings').innerHTML = `<ul class="space-y-1">
         <li>Copies: <b>${escapeHtml(s.copies || '1')}</b></li>
-        <li>Color: <b>${escapeHtml(s.color_mode || 'auto')}</b> • Duplex: <b>${escapeHtml(s.duplex || 'off')}</b> • N-up: <b>${escapeHtml(s.n_up || '1')}</b></li>
-        <li>Paper: <b>${escapeHtml(s.paper_size || 'A4')}</b>${s.paper_gsm ? (' • ' + escapeHtml(s.paper_gsm) + ' GSM') : ''} • Finish: <b>${escapeHtml(s.finishing || 'none')}</b></li>
-        <li>Pages: <b>${pages || '?'}</b> × Copies <b>${escapeHtml(s.copies || '1')}</b></li>
+        <li>Color: <b>${escapeHtml(s.color_mode || 'auto')}</b> - Duplex: <b>${escapeHtml(s.duplex || 'off')}</b> - N-up: <b>${escapeHtml(s.n_up || '1')}</b></li>
+        <li>Paper: <b>${escapeHtml(s.paper_size || 'A4')}</b>${s.paper_gsm ? (' - ' + escapeHtml(s.paper_gsm) + ' GSM') : ''} - Finish: <b>${escapeHtml(s.finishing || 'none')}</b></li>
+        <li>Pages: <b>${pages || '?'}</b> x Copies <b>${escapeHtml(s.copies || '1')}</b></li>
         ${s.page_range ? ('<li>Range: <b>' + escapeHtml(s.page_range) + '</b></li>') : ''}
       </ul>`;
 
-      const est = pages && s.copies ? (pages * parseInt(s.copies)) : '';
-      estEl.textContent = est ? (`Estimated total pages: ${est}`) : '';
+      const copiesParsed = parseInt(s.copies || '1', 10);
+      const copiesCount = Number.isFinite(copiesParsed) && copiesParsed > 0 ? copiesParsed : 1;
+      const totalPagesNumber = Number(pages);
+      const selectableTotal = Number.isFinite(totalPagesNumber) ? totalPagesNumber : 0;
+      const selectedPerCopy = computeSelectedPages(s, selectableTotal);
+      const perCopyPages = Number.isFinite(selectedPerCopy) && selectedPerCopy > 0
+        ? selectedPerCopy
+        : (Number.isFinite(totalPagesNumber) && totalPagesNumber > 0 ? totalPagesNumber : null);
+      const fallbackPageTotal = perCopyPages != null ? perCopyPages * copiesCount : null;
+
+      const priceInfo = estimatePrice(shop, s, selectableTotal);
+      const pageTotal = (priceInfo && Number.isFinite(priceInfo.logicalPages) && priceInfo.logicalPages > 0)
+        ? priceInfo.logicalPages
+        : fallbackPageTotal;
+      estEl.textContent = pageTotal ? (`Estimated total pages: ${pageTotal}`) : '';
+
+      if (priceEl) {
+        if (priceInfo && priceInfo.amount != null) {
+          priceEl.textContent = `Estimated price: ${formatCurrency(priceInfo.amount)}`;
+          if (priceNoteEl) {
+            if (priceInfo.breakdown) {
+              priceNoteEl.textContent = priceInfo.breakdown;
+              priceNoteEl.classList.remove('hidden');
+            } else {
+              priceNoteEl.textContent = '';
+              priceNoteEl.classList.add('hidden');
+            }
+          }
+        } else if (priceInfo && priceInfo.reason) {
+          priceEl.textContent = 'Price unavailable';
+          if (priceNoteEl) {
+            priceNoteEl.textContent = priceInfo.reason;
+            priceNoteEl.classList.remove('hidden');
+          }
+        } else {
+          priceEl.textContent = '';
+          if (priceNoteEl) {
+            priceNoteEl.textContent = '';
+            priceNoteEl.classList.add('hidden');
+          }
+        }
+      }
 
       // Initialize pickup preview
       updatePickupPreview();
@@ -407,10 +559,10 @@
       const submitBtn = document.getElementById('submit');
       const statusEl = document.getElementById('status');
       const originalBtn = submitBtn.innerHTML;
-      statusEl.textContent = 'Submitting…';
+      statusEl.textContent = 'Submittingâ€¦';
       submitBtn.disabled = true;
       submitBtn.classList.add('opacity-70', 'pointer-events-none');
-      submitBtn.innerHTML = `<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> <span>Submitting…</span>`;
+      submitBtn.innerHTML = `<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> <span>Submittingâ€¦</span>`;
 
       let r;
       try {
@@ -433,7 +585,7 @@
         return;
       }
 
-      statusEl.textContent = 'Submitted. Generating OTP…';
+      statusEl.textContent = 'Submitted. Generating OTPâ€¦';
       toast('Job submitted!');
 
       const next = new URL('./success.html', location.href);
