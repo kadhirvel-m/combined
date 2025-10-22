@@ -8414,6 +8414,92 @@ def admin_list_shops(q: Optional[str] = Query(default=None), limit: int = Query(
         raise HTTPException(status_code=500, detail=f"Failed to list shops: {e}")
 
 
+@print_router.get("/api/admin/print/shops/{shop_id}/jobs", summary="Admin: list jobs for a shop")
+def admin_shop_jobs(shop_id: str, status: Optional[str] = Query(default=None), limit: int = Query(default=500, ge=1, le=5000), authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    try:
+        q = supabase.table(PRINT_JOBS_TABLE).select("*").eq("shop_id", shop_id)
+        if status:
+            q = q.eq("status", status)
+        res = q.order("created_at", desc=True).limit(limit).execute()
+        return {"jobs": getattr(res, 'data', []) or []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list shop jobs: {e}")
+
+
+class AdminSettleOut(BaseModel):
+    settled_count: int
+    settled_amount: float
+
+
+@print_router.post("/api/admin/print/shops/{shop_id}/settle", summary="Admin: settle all completed jobs -> settled", response_model=AdminSettleOut)
+def admin_settle_shop(shop_id: str, authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    try:
+        # Fetch all completed (not already settled) jobs for this shop
+        res = supabase.table(PRINT_JOBS_TABLE).select("id,estimated_price,status").eq("shop_id", shop_id).in_("status", ["completed"]).execute()
+        rows = (getattr(res, 'data', []) or [])
+        if not rows:
+            return AdminSettleOut(settled_count=0, settled_amount=0.0)
+        now = _now_iso()
+        ids = [r["id"] for r in rows]
+        total = 0.0
+        for r in rows:
+            try:
+                amt = float(r.get("estimated_price") or 0)
+            except Exception:
+                amt = 0.0
+            total += amt
+        # Bulk update in batches (Supabase might limit IN size)
+        batch_size = 200
+        for i in range(0, len(ids), batch_size):
+            chunk = ids[i:i+batch_size]
+            supabase.table(PRINT_JOBS_TABLE).update({"status": "settled", "updated_at": now}).in_("id", chunk).execute()
+            # Insert events for audit
+            ev = [{"job_id": jid, "status": "settled", "note": "Settled by admin", "created_at": now} for jid in chunk]
+            if ev:
+                supabase.table(PRINT_JOB_EVENTS_TABLE).insert(ev).execute()
+        return AdminSettleOut(settled_count=len(ids), settled_amount=round(total, 2))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to settle: {e}")
+
+
+@print_router.post("/api/admin/print/shops/{shop_id}/jobs/{job_id}/close", summary="Admin: close a job for a shop (closed by admin)")
+def admin_close_job(shop_id: str, job_id: str, authorization: Optional[str] = Header(default=None)):
+    """
+    Mark a specific job as closed by admin. Adds an audit event.
+    """
+    _require_admin(authorization)
+    supabase = get_service_client()
+    try:
+        # Verify job belongs to shop
+        jr = supabase.table(PRINT_JOBS_TABLE).select("id,shop_id,status").eq("id", job_id).eq("shop_id", shop_id).limit(1).execute()
+        job = (getattr(jr, 'data', []) or [{}])
+        if not job or not job[0].get("id"):
+            raise HTTPException(status_code=404, detail="Job not found")
+        # If already settled, disallow closing
+        cur_status = (job[0].get("status") or "").lower()
+        if cur_status in ("settled",):
+            raise HTTPException(status_code=409, detail="Cannot close a settled job")
+        now = _now_iso()
+        supabase.table(PRINT_JOBS_TABLE).update({"status": "closed", "updated_at": now}).eq("id", job_id).execute()
+        supabase.table(PRINT_JOB_EVENTS_TABLE).insert({
+            "job_id": job_id,
+            "status": "closed",
+            "note": "Closed by admin",
+            "created_at": now
+        }).execute()
+        return {"ok": True, "job_id": job_id, "status": "closed"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to close job: {e}")
+
+
 @print_router.get("/api/shop/jobs", summary="List jobs for my shop")
 def shop_jobs(
     status: Optional[str] = Query(default=None),

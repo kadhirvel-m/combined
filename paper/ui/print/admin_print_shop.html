@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin • Shop Detail — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px
+        }
+
+        .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08)
+        }
+
+        .dark .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
+        }
+    </style>
+    <script>
+        (function () {
+            try {
+                var stored = localStorage.getItem('px_theme');
+                var prefers = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if ((stored ? stored === 'dark' : prefers)) document.documentElement.classList.add('dark');
+            } catch (_) { }
+            try {
+                var t = localStorage.getItem('px_token');
+                if (!t) { var next = encodeURIComponent(location.pathname + (location.search || '')); location.replace('../login.html?next=' + next); }
+            } catch (_) { location.replace('../login.html'); }
+        })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3">
+            <a href="admin_print.html" class="inline-flex items-center gap-2"><span
+                    class="material-symbols-rounded">arrow_back</span> <span class="font-semibold">Back</span></a>
+            <div class="text-lg font-bold">Shop Details</div>
+            <div class="flex items-center gap-2"></div>
+        </div>
+    </header>
+
+    <main class="container py-6 space-y-6">
+        <!-- Shop header -->
+        <section class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4">
+            <div class="flex items-start gap-4">
+                <div id="logoWrap" class="h-16 w-16 rounded-xl ring-soft bg-black/5 dark:bg-white/10"></div>
+                <div class="flex-1">
+                    <div class="text-xl font-extrabold" id="shopName">—</div>
+                    <div class="text-[13px] opacity-75" id="shopAddr">—</div>
+                    <div class="text-[13px] opacity-75" id="shopContact">—</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[12px] opacity-70">Completed total</div>
+                    <div id="sumCompleted" class="text-2xl font-extrabold">₹0</div>
+                    <button id="btnSettle"
+                        class="mt-2 inline-flex items-center gap-2 rounded-xl px-3 py-2 bg-brand-500 text-white hover:bg-brand-700 disabled:opacity-60">
+                        <span class="material-symbols-rounded text-base">account_balance_wallet</span>
+                        <span>Settle Payment</span>
+                    </button>
+                    <div id="settleStatus" class="text-[12px] opacity-70 mt-1"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid lg:grid-cols-2 gap-4">
+            <div class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold">Pending Orders</h3>
+                    <div class="text-[12px] opacity-70" id="cntPending">—</div>
+                </div>
+                <div class="mt-3 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="text-left text-[12px] uppercase tracking-wide opacity-70">
+                            <tr>
+                                <th class="px-2 py-2">Order</th>
+                                <th class="px-2 py-2">Name</th>
+                                <th class="px-2 py-2">Phone</th>
+                                <th class="px-2 py-2">Status</th>
+                                <th class="px-2 py-2">Created</th>
+                                <th class="px-2 py-2 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbPending" class="divide-y divide-black/5 dark:divide-white/10"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold">Completed Orders</h3>
+                    <div class="text-[12px] opacity-70" id="cntCompleted">—</div>
+                </div>
+                <div class="mt-3 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="text-left text-[12px] uppercase tracking-wide opacity-70">
+                            <tr>
+                                <th class="px-2 py-2">Order</th>
+                                <th class="px-2 py-2">Amount</th>
+                                <th class="px-2 py-2">Completed</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbCompleted" class="divide-y divide-black/5 dark:divide-white/10"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Close Order Modal -->
+    <div id="modalClose" class="fixed inset-0 z-50 hidden items-center justify-center">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" data-close="1"></div>
+        <div id="modalClosePanel"
+            class="relative w-[92vw] max-w-md transition-all duration-200 ease-out opacity-0 scale-95">
+            <div
+                class="rounded-2xl p-5 ring-1 ring-black/10 dark:ring-white/15 shadow-2xl bg-white/90 dark:bg-brand-900/90">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                        <span
+                            class="inline-flex items-center justify-center size-10 rounded-xl bg-rose-500/15 text-rose-600 ring-1 ring-rose-500/30"><span
+                                class="material-symbols-rounded">close</span></span>
+                        <div>
+                            <div class="text-lg font-extrabold">Close Order</div>
+                            <div id="modalCloseText" class="text-[13px] opacity-80 mt-0.5">—</div>
+                        </div>
+                    </div>
+                    <button id="btnXClose"
+                        class="inline-flex items-center justify-center size-9 rounded-xl hover:bg-black/5 dark:hover:bg-white/10"><span
+                            class="material-symbols-rounded">close</span></button>
+                </div>
+                <div class="flex items-center justify-end gap-2 mt-5">
+                    <button id="btnCancelClose"
+                        class="rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">Cancel</button>
+                    <button id="btnConfirmClose"
+                        class="rounded-xl px-3 py-2 bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60">
+                        <span class="material-symbols-rounded text-base">done</span>
+                        <span>Confirm Close</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Settle Modal -->
+    <div id="modalSettle" class="fixed inset-0 z-50 hidden items-center justify-center">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" data-close="1"></div>
+        <div id="modalSettlePanel"
+            class="relative w-[92vw] max-w-md transition-all duration-200 ease-out opacity-0 scale-95">
+            <div
+                class="rounded-2xl p-5 ring-1 ring-black/10 dark:ring-white/15 shadow-2xl bg-white/90 dark:bg-brand-900/90">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                        <span
+                            class="inline-flex items-center justify-center size-10 rounded-xl bg-brand-500/15 text-brand-700 dark:text-brand-200 ring-1 ring-brand-500/30"><span
+                                class="material-symbols-rounded">account_balance_wallet</span></span>
+                        <div>
+                            <div class="text-lg font-extrabold">Confirm Settlement</div>
+                            <div id="modalText" class="text-[13px] opacity-80 mt-0.5">—</div>
+                        </div>
+                    </div>
+                    <button id="btnXModal"
+                        class="inline-flex items-center justify-center size-9 rounded-xl hover:bg-black/5 dark:hover:bg-white/10"><span
+                            class="material-symbols-rounded">close</span></button>
+                </div>
+                <div class="flex items-center justify-end gap-2 mt-5">
+                    <button id="btnCancelModal"
+                        class="rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">Cancel</button>
+                    <button id="btnConfirmModal"
+                        class="rounded-xl px-3 py-2 bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60">
+                        <span class="material-symbols-rounded text-base">done</span>
+                        <span>Confirm</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="border-t border-black/5 dark:border-white/10">
+        <div class="container py-8 text-[13px] flex items-center justify-between">
+            <div class="opacity-80">© <span id="y"></span> Paper X • Admin</div>
+        </div>
+    </footer>
+
+    <script src="../config.js"></script>
+    <script>
+        const API = (window.API_BASE || window.__API_BASE || '').replace(/\/$/, '');
+        const getToken = () => { try { return localStorage.getItem('px_token'); } catch (_) { return null; } };
+        const Rs = n => (typeof n === 'number' && isFinite(n)) ? ('₹' + n.toFixed(0)) : '₹0';
+        const esc = s => (s || '').toString().replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
+        document.getElementById('y').textContent = new Date().getFullYear();
+
+        const P = new URLSearchParams(location.search);
+        const shopId = P.get('shopId') || '';
+        let JOBS = [];
+
+        function setShopHeader(shop) {
+            const l = document.getElementById('logoWrap');
+            if (shop.logo_url) { l.innerHTML = `<img src="${esc(shop.logo_url)}" class="h-16 w-16 rounded-xl object-cover ring-soft">`; }
+            document.getElementById('shopName').textContent = shop.name || '—';
+            document.getElementById('shopAddr').textContent = shop.address || '—';
+            const contact = [shop.phone || '', shop.email || ''].filter(Boolean).join(' • ');
+            document.getElementById('shopContact').textContent = contact || '—';
+        }
+
+        function render() {
+            const pending = JOBS.filter(j => (j.status || '') !== 'completed' && (j.status || '') !== 'cancelled' && (j.status || '') !== 'settled' && (j.status || '') !== 'closed');
+            const completed = JOBS.filter(j => (j.status || '') === 'completed' || (j.status || '') === 'settled');
+            const tbP = document.getElementById('tbPending');
+            const tbC = document.getElementById('tbCompleted');
+            document.getElementById('cntPending').textContent = `${pending.length} orders`;
+            document.getElementById('cntCompleted').textContent = `${completed.length} orders`;
+            tbP.innerHTML = pending.map(j => `<tr>
+        <td class="px-2 py-2 font-medium">${(j.id || '').slice(0, 8)}</td>
+        <td class="px-2 py-2">${esc(j.contact_name || '—')}</td>
+        <td class="px-2 py-2">${esc(j.contact_phone || '—')}</td>
+        <td class="px-2 py-2">${esc(j.status || '')}</td>
+        <td class="px-2 py-2">${(j.created_at || '').replace('T', ' ').slice(0, 16)}</td>
+        <td class="px-2 py-2 text-right">
+            <button class="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[12px] ring-1 ring-rose-500/50 text-rose-700 bg-rose-500/10 hover:bg-rose-500/15" data-close-id="${esc(j.id)}">
+                <span class="material-symbols-rounded text-sm">close</span> Close
+            </button>
+        </td>
+      </tr>`).join('');
+            tbC.innerHTML = completed.map(j => {
+                const settledBadge = (j.status || '') === 'settled' ? `<span class="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/30">Settled</span>` : '';
+                return `<tr>
+        <td class="px-2 py-2 font-medium">${(j.id || '').slice(0, 8)}</td>
+        <td class="px-2 py-2">${Rs(typeof j.estimated_price === 'number' ? j.estimated_price : 0)}</td>
+                <td class="px-2 py-2">${(j.updated_at || '').replace('T', ' ').slice(0, 16)}${settledBadge}</td>
+            </tr>`;
+            }).join('');
+            const sum = completed.reduce((a, j) => a + (typeof j.estimated_price === 'number' ? j.estimated_price : 0), 0);
+            document.getElementById('sumCompleted').textContent = Rs(sum);
+            // Enable/disable settle button based on unsettled-completed
+            const btn = document.getElementById('btnSettle');
+            const unsettled = JOBS.filter(j => (j.status || '') === 'completed');
+            btn.disabled = unsettled.length === 0;
+        }
+
+        async function fetchShop() {
+            const token = getToken();
+            const hdr = token ? { Authorization: 'Bearer ' + token } : {};
+            // We don't have a direct admin shop detail route; reuse list and filter client-side
+            const r = await fetch(`${API}/api/admin/print/shops?limit=5000`, { headers: hdr });
+            if (!r.ok) throw new Error('shops');
+            const j = await r.json();
+            const list = (j && j.shops) || [];
+            const shop = list.find(s => String(s.id) === String(shopId));
+            if (!shop) throw new Error('shop-not-found');
+            setShopHeader(shop);
+        }
+
+        async function fetchJobs() {
+            const token = getToken();
+            const hdr = token ? { Authorization: 'Bearer ' + token } : {};
+            const r = await fetch(`${API}/api/admin/print/shops/${encodeURIComponent(shopId)}/jobs?limit=2000`, { headers: hdr });
+            if (!r.ok) throw new Error('jobs');
+            const j = await r.json();
+            JOBS = (j && j.jobs) || [];
+            render();
+        }
+
+        // Close order helpers
+        let __closeJobId = null;
+        function openCloseModal(jobId) {
+            __closeJobId = jobId;
+            const text = document.getElementById('modalCloseText');
+            text.textContent = `Are you sure you want to close order ${String(jobId).slice(0, 8)}? This cannot be undone.`;
+            const mdl = document.getElementById('modalClose');
+            const panel = document.getElementById('modalClosePanel');
+            mdl.classList.remove('hidden'); mdl.classList.add('flex');
+            requestAnimationFrame(() => { panel.classList.remove('opacity-0', 'scale-95'); });
+        }
+        function closeCloseModal() {
+            __closeJobId = null;
+            const mdl = document.getElementById('modalClose');
+            const panel = document.getElementById('modalClosePanel');
+            panel.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => { mdl.classList.add('hidden'); mdl.classList.remove('flex'); }, 180);
+        }
+        async function closeJob() {
+            if (!__closeJobId) return;
+            const st = document.getElementById('settleStatus');
+            st.textContent = 'Closing…';
+            try {
+                const token = getToken(); const hdr = token ? { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token } : { 'Content-Type': 'application/json' };
+                const r = await fetch(`${API}/api/admin/print/shops/${encodeURIComponent(shopId)}/jobs/${encodeURIComponent(__closeJobId)}/close`, { method: 'POST', headers: hdr });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) { throw new Error(j.detail || ('HTTP ' + r.status)); }
+                st.textContent = 'Order closed.';
+                await fetchJobs();
+            } catch (e) { st.textContent = 'Failed to close order.'; }
+            finally { closeCloseModal(); }
+        }
+
+        function showSettleModal() {
+            const mdl = document.getElementById('modalSettle');
+            const panel = document.getElementById('modalSettlePanel');
+            const text = document.getElementById('modalText');
+            const { count, total } = getUnsettledTotals();
+            if (count === 0) {
+                text.textContent = 'No completed orders to settle.';
+                document.getElementById('btnConfirmModal').disabled = true;
+            } else {
+                text.textContent = `Settle ${count} completed order${count > 1 ? 's' : ''} totaling ${Rs(total)}?`;
+                document.getElementById('btnConfirmModal').disabled = false;
+            }
+            mdl.classList.remove('hidden');
+            mdl.classList.add('flex');
+            requestAnimationFrame(() => { panel.classList.remove('opacity-0', 'scale-95'); });
+        }
+
+        function closeSettleModal() {
+            const mdl = document.getElementById('modalSettle');
+            const panel = document.getElementById('modalSettlePanel');
+            panel.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => { mdl.classList.add('hidden'); mdl.classList.remove('flex'); }, 180);
+        }
+
+        function getUnsettledTotals() {
+            const list = JOBS.filter(j => (j.status || '') === 'completed');
+            const total = list.reduce((a, j) => a + (typeof j.estimated_price === 'number' ? j.estimated_price : 0), 0);
+            return { count: list.length, total };
+        }
+
+        async function settle() {
+            const btn = document.getElementById('btnSettle');
+            const st = document.getElementById('settleStatus');
+            btn.disabled = true; st.textContent = 'Settling…';
+            try {
+                const token = getToken(); const hdr = token ? { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token } : { 'Content-Type': 'application/json' };
+                const r = await fetch(`${API}/api/admin/print/shops/${encodeURIComponent(shopId)}/settle`, { method: 'POST', headers: hdr });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) { throw new Error(j.detail || ('HTTP ' + r.status)); }
+                st.textContent = `Settled ${j.settled_count || 0} orders • ${j.settled_amount != null ? Rs(j.settled_amount) : '₹0'}`;
+                await fetchJobs();
+            } catch (e) { st.textContent = 'Failed to settle.'; }
+            finally { btn.disabled = false; closeSettleModal(); }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!shopId) { location.replace('admin_print.html'); return; }
+            fetchShop().then(fetchJobs).catch(() => { location.replace('admin_print.html'); });
+            // Button opens modal
+            document.getElementById('btnSettle').addEventListener('click', showSettleModal);
+            // Modal controls
+            document.getElementById('btnCancelModal').addEventListener('click', closeSettleModal);
+            document.getElementById('btnXModal').addEventListener('click', closeSettleModal);
+            document.getElementById('modalSettle').addEventListener('click', (e) => { if (e.target && e.target.getAttribute('data-close') === '1') closeSettleModal(); });
+            document.getElementById('btnConfirmModal').addEventListener('click', settle);
+            window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSettleModal(); });
+
+            // Wire close buttons (event delegation)
+            document.addEventListener('click', (e) => {
+                const t = e.target.closest('[data-close-id]');
+                if (t) { e.preventDefault(); openCloseModal(t.getAttribute('data-close-id')); }
+            });
+            // Close modal wiring
+            document.getElementById('btnCancelClose').addEventListener('click', closeCloseModal);
+            document.getElementById('btnXClose').addEventListener('click', closeCloseModal);
+            document.getElementById('modalClose').addEventListener('click', (e) => { if (e.target && e.target.getAttribute('data-close') === '1') closeCloseModal(); });
+            document.getElementById('btnConfirmClose').addEventListener('click', closeJob);
+        });
+    </script>
+</body>
+
+</html>

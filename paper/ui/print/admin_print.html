@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin • Print Shops — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px
+        }
+
+        .row:hover {
+            background-color: rgba(158, 75, 138, .06);
+        }
+
+        .dark .row:hover {
+            background-color: rgba(158, 75, 138, .10);
+        }
+
+        .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08)
+        }
+
+        .dark .ring-soft {
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
+        }
+    </style>
+    <script>
+        // Theme + guard (admins only)
+        (function () {
+            try {
+                var stored = localStorage.getItem('px_theme');
+                var prefers = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if ((stored ? stored === 'dark' : prefers)) document.documentElement.classList.add('dark');
+            } catch (_) { }
+            try {
+                var t = localStorage.getItem('px_token');
+                if (!t) { var next = encodeURIComponent(location.pathname + (location.search || '')); location.replace('../login.html?next=' + next); }
+            } catch (_) { location.replace('../login.html'); }
+        })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3">
+            <a href="index.html" class="flex items-center gap-3" aria-label="Paper X Admin Home">
+                <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-8 w-auto dark:hidden">
+                <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-8 w-auto hidden dark:block">
+            </a>
+            <nav class="hidden md:flex items-center gap-2 text-sm">
+                <span
+                    class="rounded-full px-3 py-2 bg-brand-500/10 text-brand-700 dark:text-brand-200 ring-1 ring-brand-500/30"><span
+                        class="material-symbols-rounded text-base">admin_panel_settings</span> Admin</span>
+                <a href="../print/dashboard.html"
+                    class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
+                        class="material-symbols-rounded text-base">dashboard</span> Shop Dashboard</a>
+            </nav>
+            <div class="md:hidden flex items-center gap-2">
+                <span
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-soft bg-brand-500/10 text-brand-600 dark:text-brand-200"
+                    title="Admin"><span class="material-symbols-rounded">admin_panel_settings</span></span>
+                <a href="../print/dashboard.html"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-soft hover:bg-black/5 dark:hover:bg-white/5"
+                    title="Shop Dashboard"><span class="material-symbols-rounded">dashboard</span></a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container py-6 space-y-6">
+        <section class="flex flex-wrap items-center justify-between gap-3">
+            <div class="text-[12px] opacity-75">Admins can view all print shops.</div>
+            <div id="err" class="hidden text-[12px] text-rose-600">Access denied. Admins only.</div>
+        </section>
+
+        <!-- Controls -->
+        <section class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4 md:p-5">
+            <div class="flex flex-col md:flex-row md:items-end gap-3 md:gap-4">
+                <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
+                    <label class="block text-xs font-semibold opacity-70">Search
+                        <input id="q" placeholder="Name, email, phone, address"
+                            class="mt-1 w-full rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10" />
+                    </label>
+                    <label class="block text-xs font-semibold opacity-70">Status
+                        <select id="fltOpen"
+                            class="mt-1 w-full rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10">
+                            <option value="all">All</option>
+                            <option value="open">Open</option>
+                            <option value="closed">Closed</option>
+                            <option value="paused">Paused</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btnReload"
+                        class="rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 text-sm"><span
+                            class="material-symbols-rounded text-base">refresh</span> Reload</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Row list -->
+        <section class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10">
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="text-left text-[12px] uppercase tracking-wide opacity-70">
+                        <tr>
+                            <th class="px-3 py-2">Shop</th>
+                            <th class="px-3 py-2">Contact</th>
+                            <th class="px-3 py-2">Status</th>
+                            <th class="px-3 py-2">Rating</th>
+                            <th class="px-3 py-2">Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody" class="divide-y divide-black/5 dark:divide-white/10"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-black/5 dark:border-white/10">
+        <div class="container py-8 text-[13px] flex flex-col md:flex-row items-center justify-between gap-3">
+            <div class="opacity-80">© <span id="y"></span> Paper X • Admin</div>
+            <div class="flex items-center gap-3">
+                <a href="../print/dashboard.html" class="hover:underline">Shop Dashboard</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../config.js"></script>
+    <script>
+        const API = (window.API_BASE || window.__API_BASE || '').replace(/\/$/, '');
+        const getToken = () => { try { return localStorage.getItem('px_token'); } catch (_) { return null; } };
+        const yEl = document.getElementById('y'); if (yEl) yEl.textContent = new Date().getFullYear();
+
+        function Rs(n) { return typeof n === 'number' && isFinite(n) ? '₹' + n.toFixed(0) : '₹0'; }
+        function esc(s) { return (s || '').toString().replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])); }
+
+        function badge(txt, tone) { return `<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${tone}">${txt}</span>`; }
+        function toneFor(shop) { if (shop.paused) return 'bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/30'; return shop.is_open ? 'bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/30' : 'bg-neutral-500/15 text-neutral-700 ring-1 ring-neutral-500/30'; }
+
+        async function ensureAdmin() {
+            const token = getToken(); if (!token) return false;
+            try {
+                const r = await fetch(`${API}/api/admin/roles/me`, { headers: { Authorization: 'Bearer ' + token } });
+                if (!r.ok) return false; const j = await r.json();
+                return (String(j.role || '').toLowerCase() === 'admin');
+            } catch (_) { return false; }
+        }
+
+        function render(rows) {
+            const tbody = document.getElementById('tbody');
+            const q = (document.getElementById('q').value || '').trim().toLowerCase();
+            const f = document.getElementById('fltOpen').value;
+            let list = rows.slice();
+            if (q) { list = list.filter(r => (`${r.name || ''} ${r.email || ''} ${r.phone || ''} ${r.address || ''}`).toLowerCase().includes(q)); }
+            if (f === 'open') list = list.filter(r => !!r.is_open && !r.paused);
+            if (f === 'closed') list = list.filter(r => !r.is_open);
+            if (f === 'paused') list = list.filter(r => !!r.paused);
+            const html = list.map(r => {
+                const logo = r.logo_url ? `<img src="${esc(r.logo_url)}" alt="logo" class="h-9 w-9 rounded-md ring-soft object-cover">` : `<span class="h-9 w-9 rounded-md ring-soft inline-flex items-center justify-center bg-black/5 dark:bg-white/10">${esc((r.name || '').slice(0, 1).toUpperCase())}</span>`;
+                const status = badge(r.paused ? 'Paused' : (r.is_open ? 'Open' : 'Closed'), toneFor(r));
+                const rating = (r.rating != null) ? Number(r.rating).toFixed(1) : '—';
+                const updated = (r.updated_at || '').replace('T', ' ').slice(0, 16);
+                const href = `admin_print_shop.html?shopId=${encodeURIComponent(r.id || '')}`;
+                return `<tr class="row cursor-pointer" onclick="location.href='${href}'">
+          <td class="px-3 py-2">
+            <div class="flex items-center gap-3">
+              ${logo}
+              <div>
+                                <div class="font-semibold underline decoration-dotted">${esc(r.name || '')}</div>
+                <div class="text-[12px] opacity-70">${esc(r.address || '')}</div>
+              </div>
+            </div>
+          </td>
+          <td class="px-3 py-2">
+            <div class="text-[13px]">${esc(r.phone || '—')}</div>
+            <div class="text-[12px] opacity-70">${esc(r.email || '—')}</div>
+          </td>
+          <td class="px-3 py-2">${status}</td>
+          <td class="px-3 py-2">${rating}</td>
+          <td class="px-3 py-2">${updated}</td>
+        </tr>`;
+            }).join('');
+            tbody.innerHTML = html || `<tr><td colspan="5" class="px-3 py-6 text-center text-[13px] opacity-70">No shops found.</td></tr>`;
+        }
+
+        async function load() {
+            const token = getToken(); if (!API || !token) return;
+            const ok = await ensureAdmin();
+            const err = document.getElementById('err');
+            if (!ok) { err.classList.remove('hidden'); return; }
+            try {
+                const r = await fetch(`${API}/api/admin/print/shops`, { headers: { Authorization: 'Bearer ' + token } });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const j = await r.json();
+                window.__ADMIN_SHOPS__ = (j && j.shops) || [];
+                render(window.__ADMIN_SHOPS__);
+            } catch (e) { err.textContent = 'Could not load shops.'; err.classList.remove('hidden'); }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            load();
+            ['q', 'fltOpen'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('input', () => render(window.__ADMIN_SHOPS__ || [])); });
+            document.getElementById('btnReload').addEventListener('click', load);
+        });
+    </script>
+</body>
+
+</html>
