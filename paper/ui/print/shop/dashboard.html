@@ -1,0 +1,902 @@
+﻿<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shop Command Center â€” PaperX</title>
+  <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+  <link rel="stylesheet" href="../../assets/css/tailwind.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+  <script src="../../config.js"></script>
+  <script src="../../auth.js" defer></script>
+  <style>
+    .material-symbols-rounded { vertical-align: -5px; }
+    .glass { background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(14px); }
+    .dark .glass { background: rgba(30, 30, 47, 0.55); }
+    .hero-grid {
+      background:
+        radial-gradient(900px 600px at 10% -10%, rgba(158, 75, 138, 0.4), transparent 60%),
+        radial-gradient(1400px 800px at 90% -10%, rgba(82, 196, 216, 0.15), transparent 60%),
+        linear-gradient(135deg, rgba(26, 24, 47, 0.95) 0%, rgba(32, 22, 46, 0.95) 40%, rgba(17, 13, 30, 0.95) 100%);
+    }
+    @keyframes neonGlow {
+      0% {
+        box-shadow: 0 0 10px rgba(158, 75, 138, 0.25), 0 0 40px rgba(76, 42, 89, 0.35), 0 0 80px rgba(158, 75, 138, 0.25);
+      }
+      50% {
+        box-shadow: 0 0 16px rgba(158, 75, 138, 0.35), 0 0 60px rgba(76, 42, 89, 0.45), 0 0 120px rgba(158, 75, 138, 0.35);
+      }
+      100% {
+        box-shadow: 0 0 10px rgba(158, 75, 138, 0.25), 0 0 40px rgba(76, 42, 89, 0.35), 0 0 80px rgba(158, 75, 138, 0.25);
+      }
+    }
+    .glow-card { animation: neonGlow 6s ease-in-out infinite; }
+    @keyframes slowSpin { to { transform: rotate(360deg); } }
+    .animate-spin-slow { animation: slowSpin 12s linear infinite; }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-neutral-950">
+  <header class="sticky top-0 z-50 bg-white/70 dark:bg-neutral-950/70 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container flex items-center justify-between h-16">
+      <a href="../../print/index.html" class="flex items-center gap-2" aria-label="PaperX">
+        <img src="../../assets/img/logo-light.svg" alt="Paper X" class="h-8 w-auto dark:hidden">
+        <img src="../../assets/img/logo-dark.svg" alt="Paper X" class="h-8 w-auto hidden dark:block">
+        <span class="hidden sm:inline text-sm font-semibold tracking-wide uppercase text-brand-500">Print Network</span>
+      </a>
+      <nav class="hidden md:flex items-center gap-2 text-sm">
+        <a href="./dashboard.html" class="inline-flex items-center gap-1 rounded-full px-3 py-2 bg-brand-500 text-white shadow hover:bg-brand-600">
+          <span class="material-symbols-rounded text-base">space_dashboard</span>Dashboard
+        </a>
+        <a href="./jobs.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">
+          <span class="material-symbols-rounded text-base">assignment</span> Jobs
+        </a>
+        <a href="./profile.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">
+          <span class="material-symbols-rounded text-base">storefront</span> Profile
+        </a>
+        <a href="../printers/shops.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">
+          <span class="material-symbols-rounded text-base">map</span> Nearby
+        </a>
+        <button id="themeToggle" class="inline-flex items-center gap-2 rounded-full px-3 py-2 ring-1 ring-white/20 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10" aria-label="Toggle theme">
+          <span class="material-symbols-rounded text-base">dark_mode</span>
+          <span class="hidden sm:block">Theme</span>
+        </button>
+        <a id="navProfile" href="./profile.html" data-profile-link="print/shop/profile.html" data-profile-source="shop"
+          class="hidden items-center gap-2 rounded-full px-2.5 py-1.5 ring-1 ring-white/15 hover:bg-black/5 dark:hover:bg-white/10" title="My shop">
+          <span class="relative inline-flex h-10 w-10 items-center justify-center">
+            <img id="navProfileImg" class="hidden h-10 w-10 rounded-full object-cover ring-2 ring-brand-500/40" alt="Shop logo">
+            <span id="navProfileInitial" class="grid h-10 w-10 place-content-center rounded-full bg-brand-500/15 text-[13px] font-semibold uppercase text-brand-100">ME</span>
+          </span>
+          <div class="hidden xl:flex flex-col text-[11px] leading-tight opacity-80">
+            <span>Synced</span>
+            <span class="font-semibold text-brand-200">Shop Profile</span>
+          </div>
+        </a>
+        <button id="signOutBtn" type="button"
+          class="hidden items-center gap-2 rounded-full px-3 py-2 ring-1 ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">
+          <span class="material-symbols-rounded text-base">logout</span>
+          <span>Sign out</span>
+        </button>
+      </nav>
+      <div class="md:hidden flex items-center gap-2">
+        <button id="themeToggleSm"
+          class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-white/15 hover:bg-black/5 dark:hover:bg-white/10" aria-label="Toggle theme">
+          <span class="material-symbols-rounded">dark_mode</span>
+        </button>
+        <a href="./jobs.html"
+          class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-white/15 hover:bg-black/5 dark:hover:bg-white/10" title="Jobs">
+          <span class="material-symbols-rounded">assignment</span>
+        </a>
+        <a id="navProfileMobile" href="./profile.html" data-profile-link="print/shop/profile.html" data-profile-source="shop"
+          class="hidden items-center justify-center rounded-full ring-1 ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 px-1.5 py-1" title="Profile">
+          <span class="relative inline-flex h-10 w-10 items-center justify-center">
+            <img id="navProfileImgMobile" class="hidden h-10 w-10 rounded-full object-cover ring-2 ring-brand-500/40" alt="Shop logo">
+            <span id="navProfileInitialMobile"
+              class="grid h-10 w-10 place-content-center rounded-full bg-brand-500/15 text-[13px] font-semibold uppercase text-brand-100" data-profile-name data-profile-mode="initials">ME</span>
+          </span>
+        </a>
+        <button id="signOutBtnMobile" type="button"
+          class="hidden items-center justify-center size-10 rounded-full ring-1 ring-white/15 hover:bg-black/5 dark:hover:bg-white/10" title="Sign out">
+          <span class="material-symbols-rounded">logout</span>
+        </button>
+      </div>
+    </div>
+  </header>
+  <main class="pb-16">
+    <section class="hero-grid text-white">
+      <div class="container py-12 lg:py-16">
+        <div class="grid lg:grid-cols-[2fr,1.1fr] gap-8">
+          <div class="space-y-6">
+            <div class="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs uppercase tracking-[0.2em] text-brand-100">
+              <span class="material-symbols-rounded text-sm">auto_graph</span> Quantum Ops Mode
+            </div>
+            <div class="flex flex-col gap-4">
+              <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight">
+                Mission control for your PaperX print hub
+              </h1>
+              <p class="max-w-2xl text-sm sm:text-base text-white/80">
+                Visualize live demand, prep your crew, stay profit-positive. A single command center that blends telemetry, forecasting, and action shortcuts for your print universe.
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button
+                class="inline-flex items-center gap-2 rounded-full bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/40 hover:bg-brand-600 transition">
+                <span class="material-symbols-rounded text-base">bolt</span>
+                Engage Auto-Router
+              </button>
+              <button
+                class="inline-flex items-center gap-2 rounded-full border border-white/30 px-5 py-2.5 text-sm font-semibold text-white/85 hover:bg-white/10 transition">
+                <span class="material-symbols-rounded text-base">view_in_ar</span>
+                Launch AR Overlay
+              </button>
+            </div>
+            <dl class="grid sm:grid-cols-3 gap-4 text-sm">
+              <div class="glass rounded-2xl p-4 ring-1 ring-white/15">
+                <dt class="text-white/60">Queue Velocity</dt>
+                <dd class="mt-2 text-2xl font-semibold text-brand-200">+38%</dd>
+                <dd class="mt-1 text-xs text-emerald-300/90 inline-flex items-center gap-1">
+                  <span class="material-symbols-rounded text-base">trending_up</span> vs last 7 days
+                </dd>
+              </div>
+              <div class="glass rounded-2xl p-4 ring-1 ring-white/15">
+                <dt class="text-white/60">Ready-to-pickup</dt>
+                <dd class="mt-2 text-2xl font-semibold text-brand-200">19 jobs</dd>
+                <dd class="mt-1 text-xs text-white/80">Avg wait 17m</dd>
+              </div>
+              <div class="glass rounded-2xl p-4 ring-1 ring-white/15">
+                <dt class="text-white/60">Reputation Index</dt>
+                <dd class="mt-2 text-2xl font-semibold text-brand-200">4.92</dd>
+                <dd class="mt-1 text-xs text-amber-200 inline-flex items-center gap-1">
+                  <span class="material-symbols-rounded text-base">grade</span> 128 new reviews
+                </dd>
+              </div>
+            </dl>
+          </div>
+          <aside
+            class="glass glow-card rounded-3xl p-6 ring-1 ring-white/20 flex flex-col gap-4 justify-between shadow-2xl">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[11px] uppercase tracking-[0.25em] text-white/60">Shop Uptime</div>
+                <div class="mt-1 text-3xl font-semibold text-white">99.4%</div>
+              </div>
+              <div class="relative size-16 rounded-full border border-brand-200/40 grid place-content-center text-brand-100">
+                <span class="material-symbols-rounded text-3xl">offline_bolt</span>
+                <span class="absolute inset-0 rounded-full border border-dashed border-brand-200/40 animate-spin-slow"></span>
+              </div>
+            </div>
+            <div class="space-y-3 text-sm text-white/80">
+              <div class="flex justify-between">
+                <span>Auto-routing</span>
+                <span class="font-semibold text-brand-100">Active</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Predictive stock</span>
+                <span class="font-semibold text-emerald-200">Optimal</span>
+              </div>
+              <div class="flex justify-between">
+                <span>AI assistant</span>
+                <span class="font-semibold text-white/90 inline-flex items-center gap-1">
+                  <span class="material-symbols-rounded text-sm">robot_2</span> 3 suggestions
+                </span>
+              </div>
+            </div>
+            <div class="rounded-2xl bg-white/10 p-4 text-xs text-white/75">
+              <div class="flex items-center justify-between">
+                <span class="uppercase tracking-[0.35em]">Next sync</span>
+                <span class="font-semibold text-white">05m 40s</span>
+              </div>
+              <p class="mt-2 text-white/60 leading-relaxed">
+                Forecast refresh aligns with campus class-change blocks for just-in-time staffing nudges.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+    <section class="container -mt-14 space-y-12">
+      <div class="grid lg:grid-cols-[1fr,420px] gap-6">
+        <div class="glass rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10">
+          <div class="flex flex-wrap items-center gap-3 justify-between">
+            <header>
+              <h2 class="text-xl font-semibold tracking-tight">Mission telemetry</h2>
+              <p class="text-sm text-neutral-600 dark:text-white/70">Track live demand, revenue flow, and device health.</p>
+            </header>
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <select id="telemetryRange"
+                class="rounded-full border border-black/10 dark:border-white/15 bg-white/70 dark:bg-neutral-900/70 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/70">
+                <option value="7">Last 7 days</option>
+                <option value="14">Last 14 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+              </select>
+              <div class="inline-flex items-center gap-1 rounded-full bg-brand-500/15 px-3 py-1 text-brand-600 text-[11px] dark:text-brand-200">
+                <span class="material-symbols-rounded text-[14px]">radar</span>
+                Live pulse
+              </div>
+            </div>
+          </div>
+          <div class="mt-6 grid md:grid-cols-3 gap-4 text-sm">
+            <div class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-neutral-900/60 p-4">
+              <div class="text-neutral-500 dark:text-white/60">Revenue (â‚¹)</div>
+              <div class="mt-2 text-2xl font-semibold" id="metricRevenue">â‚¹ --</div>
+              <div class="mt-1 text-xs text-emerald-500 dark:text-emerald-300 inline-flex items-center gap-1"
+                id="metricRevenueChange">
+                <span class="material-symbols-rounded text-base">trending_up</span>
+                <span>vs previous</span>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-neutral-900/60 p-4">
+              <div class="text-neutral-500 dark:text-white/60">Orders processed</div>
+              <div class="mt-2 text-2xl font-semibold" id="metricOrders">--</div>
+              <div class="mt-1 text-xs text-brand-500 dark:text-brand-200 inline-flex items-center gap-1"
+                id="metricOrdersChange">
+                <span class="material-symbols-rounded text-base">equalizer</span>
+                <span>stable load</span>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-neutral-900/60 p-4">
+              <div class="text-neutral-500 dark:text-white/60">Device utilization</div>
+              <div class="mt-2 text-2xl font-semibold" id="metricUtil">--%</div>
+              <div class="mt-1 text-xs text-sky-500 dark:text-sky-300 inline-flex items-center gap-1"
+                id="metricUtilChange">
+                <span class="material-symbols-rounded text-base">data_exploration</span>
+                <span>optimal window</span>
+              </div>
+            </div>
+          </div>
+          <div class="mt-8">
+            <canvas id="performanceChart" height="180" class="w-full"></canvas>
+          </div>
+        </div>
+        <div class="glass rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10">
+          <header class="flex items-center justify-between gap-3">
+            <div>
+              <h3 class="text-lg font-semibold tracking-tight">Experience radar</h3>
+              <p class="text-sm text-neutral-600 dark:text-white/70">Measure your service pillars in real-time.</p>
+            </div>
+            <button
+              class="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition">
+              <span class="material-symbols-rounded text-base">ios_share</span>
+              Export
+            </button>
+          </header>
+          <div class="mt-6 grid gap-3">
+            <div class="flex items-center justify-between text-sm p-3 rounded-2xl bg-white/70 dark:bg-neutral-900/60 border border-black/5 dark:border-white/10">
+              <div class="flex items-center gap-2">
+                <span class="size-8 rounded-full bg-emerald-500/15 text-emerald-500 grid place-content-center">
+                  <span class="material-symbols-rounded text-base">timer</span>
+                </span>
+                <div>
+                  <div class="font-semibold">Turnaround</div>
+                  <div class="text-xs text-neutral-500 dark:text-white/60">Avg 28m &middot; 93% on-time</div>
+                </div>
+              </div>
+              <span class="text-sm font-semibold text-emerald-500 dark:text-emerald-300">4.8</span>
+            </div>
+            <div class="flex items-center justify-between text-sm p-3 rounded-2xl bg-white/70 dark:bg-neutral-900/60 border border-black/5 dark:border-white/10">
+              <div class="flex items-center gap-2">
+                <span class="size-8 rounded-full bg-sky-500/15 text-sky-500 grid place-content-center">
+                  <span class="material-symbols-rounded text-base">support_agent</span>
+                </span>
+                <div>
+                  <div class="font-semibold">Service empathy</div>
+                  <div class="text-xs text-neutral-500 dark:text-white/60">Response rating from 147 chats</div>
+                </div>
+              </div>
+              <span class="text-sm font-semibold text-sky-500 dark:text-sky-300">4.9</span>
+            </div>
+            <div class="flex items-center justify-between text-sm p-3 rounded-2xl bg-white/70 dark:bg-neutral-900/60 border border-black/5 dark:border-white/10">
+              <div class="flex items-center gap-2">
+                <span class="size-8 rounded-full bg-amber-500/15 text-amber-500 grid place-content-center">
+                  <span class="material-symbols-rounded text-base">workspace_premium</span>
+                </span>
+                <div>
+                  <div class="font-semibold">Print fidelity</div>
+                  <div class="text-xs text-neutral-500 dark:text-white/60">Color accuracy & finish checks</div>
+                </div>
+              </div>
+              <span class="text-sm font-semibold text-amber-500 dark:text-amber-300">99%</span>
+            </div>
+          </div>
+          <div class="mt-6">
+            <canvas id="radarChart" height="180" class="w-full"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="grid lg:grid-cols-[1.35fr,1fr] gap-6 items-stretch">
+        <section class="glass rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10 flex flex-col">
+          <header class="flex flex-wrap items-center gap-3 justify-between">
+            <div>
+              <h3 class="text-lg font-semibold tracking-tight">Live operations feed</h3>
+              <p class="text-xs text-neutral-500 dark:text-white/60">Blend of job queue, chat, and automation signals.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <label class="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1.5">
+                <input type="checkbox" class="accent-brand-500" checked id="filterAutomation">
+                <span class="opacity-80">Automation</span>
+              </label>
+              <label class="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1.5">
+                <input type="checkbox" class="accent-brand-500" checked id="filterChats">
+                <span class="opacity-80">Chats</span>
+              </label>
+              <label class="inline-flex items-center gap-1 rounded-full border border-black/10 dark:border-white/10 px-3 py-1.5">
+                <input type="checkbox" class="accent-brand-500" checked id="filterOrders">
+                <span class="opacity-80">Orders</span>
+              </label>
+            </div>
+          </header>
+          <div class="mt-5 space-y-4 overflow-y-auto pr-2" style="max-height: 360px;" id="opsFeed"></div>
+        </section>
+        <aside class="glass rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10 flex flex-col gap-6">
+          <div>
+            <h3 class="text-lg font-semibold tracking-tight">AI crew insights</h3>
+            <p class="text-xs text-neutral-500 dark:text-white/60">Quick wins to unlock higher throughput.</p>
+          </div>
+          <ul class="space-y-4 text-sm">
+            <li class="rounded-2xl border border-brand-500/20 bg-brand-500/10 p-4">
+              <div class="flex items-start gap-3">
+                <span class="material-symbols-rounded text-base text-brand-500 mt-0.5">auto_fix</span>
+                <div>
+                  <div class="font-semibold">Auto-accept homework batches</div>
+                  <p class="mt-1 text-xs text-neutral-600 dark:text-white/60">You have 14 repeat students whose presets can be applied instantly.</p>
+                  <button class="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-brand-600 hover:text-brand-500">
+                    Apply template
+                    <span class="material-symbols-rounded text-base">arrow_forward</span>
+                  </button>
+                </div>
+              </div>
+            </li>
+            <li class="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+              <div class="flex items-start gap-3">
+                <span class="material-symbols-rounded text-base text-emerald-500 mt-0.5">inventory_2</span>
+                <div>
+                  <div class="font-semibold">Reorder glossy A3 stock</div>
+                  <p class="mt-1 text-xs text-neutral-600 dark:text-white/60">Projected depletion in 2.5 days based on senior design submissions.</p>
+                  <div class="mt-3 inline-flex items-center gap-3 text-xs text-emerald-600 dark:text-emerald-300">
+                    <button class="inline-flex items-center gap-1 hover:text-emerald-500">
+                      <span class="material-symbols-rounded text-sm">shopping_cart</span> Refill now
+                    </button>
+                    <span class="inline-flex items-center gap-1 text-neutral-500 dark:text-white/60">
+                      <span class="material-symbols-rounded text-sm">schedule</span> Snooze 1 day
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </li>
+            <li class="rounded-2xl border border-sky-500/20 bg-sky-500/10 p-4">
+              <div class="flex items-start gap-3">
+                <span class="material-symbols-rounded text-base text-sky-500 mt-0.5">chat</span>
+                <div>
+                  <div class="font-semibold">Follow-up on design feedback</div>
+                  <p class="mt-1 text-xs text-neutral-600 dark:text-white/60">3 premium orders flagged â€œawaiting customer checkâ€. Ping them with suggested reply.</p>
+                  <button class="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-sky-600 hover:text-sky-500">
+                    Send smart nudges
+                    <span class="material-symbols-rounded text-base">send</span>
+                  </button>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </aside>
+      </div>
+      <section class="glass rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 class="text-lg font-semibold tracking-tight">Segment intelligence</h3>
+            <p class="text-xs text-neutral-500 dark:text-white/60">Understand who is sending what and when.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <button data-segment type="button"
+              class="segment-btn inline-flex items-center gap-1 rounded-full border border-brand-500/40 bg-brand-500/15 px-3 py-1 text-brand-600 dark:text-brand-200">
+              <span class="material-symbols-rounded text-base">school</span> Students
+            </button>
+            <button data-segment type="button"
+              class="segment-btn inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 hover:bg-black/5 dark:hover:bg-white/10">
+              <span class="material-symbols-rounded text-base">business_center</span> Businesses
+            </button>
+            <button data-segment type="button"
+              class="segment-btn inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 hover:bg-black/5 dark:hover:bg-white/10">
+              <span class="material-symbols-rounded text-base">groups</span> Societies
+            </button>
+            <div class="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1">
+              <span class="material-symbols-rounded text-base">calendar_month</span>
+              <span>Apr â€” Jun</span>
+            </div>
+          </div>
+        </div>
+        <div class="mt-6 grid xl:grid-cols-[1.35fr,1fr] gap-6">
+          <div class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-neutral-900/60 p-4">
+            <canvas id="mixChart" height="210" class="w-full"></canvas>
+          </div>
+          <div class="space-y-4 text-sm">
+            <article class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-neutral-900/60 p-4">
+              <header class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs text-neutral-500 dark:text-white/60 uppercase tracking-wider">Top cohort</div>
+                  <div class="text-lg font-semibold">Engineering seniors</div>
+                </div>
+                <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-600 dark:text-emerald-200">
+                  <span class="material-symbols-rounded text-base">north_east</span> +42%
+                </span>
+              </header>
+              <ul class="mt-3 space-y-2 text-xs">
+                <li class="flex items-center justify-between">
+                  <span>Large format thesis prints</span>
+                  <span class="font-semibold">31%</span>
+                </li>
+                <li class="flex items-center justify-between">
+                  <span>Premium color decks</span>
+                  <span class="font-semibold">24%</span>
+                </li>
+                <li class="flex items-center justify-between">
+                  <span>CAD blueprint copies</span>
+                  <span class="font-semibold">19%</span>
+                </li>
+              </ul>
+            </article>
+            <article class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-neutral-900/60 p-4">
+              <header class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs text-neutral-500 dark:text-white/60 uppercase tracking-wider">Retention signal</div>
+                  <div class="text-lg font-semibold">79% come back within 10 days</div>
+                </div>
+              </header>
+              <p class="mt-2 text-xs text-neutral-500 dark:text-white/60">
+                Auto-schedule thank-you credits for every 3rd order to keep loyalty pace high.
+              </p>
+              <div class="mt-3 inline-flex items-center gap-3 text-xs">
+                <button class="inline-flex items-center gap-1 text-brand-600 hover:text-brand-500">
+                  <span class="material-symbols-rounded text-sm">loyalty</span> Manage credits
+                </button>
+                <button class="inline-flex items-center gap-1 text-neutral-500 dark:text-white/60 hover:text-white/80">
+                  <span class="material-symbols-rounded text-sm">insights</span> View cohort journey
+                </button>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <footer class="border-t border-black/5 dark:border-white/10 mt-16">
+    <div class="container py-8 text-[12px] flex flex-col md:flex-row items-center justify-between gap-3 text-neutral-500 dark:text-white/60">
+      <div>Calibrated for PaperX shops &middot; <span id="y"></span></div>
+      <div class="inline-flex items-center gap-3">
+        <a href="../../index.html" class="hover:text-white/80">Main network</a>
+        <a href="../index.html" class="hover:text-white/80">Student view</a>
+        <a href="./jobs.html" class="hover:text-white/80">Jobs board</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const yearEl = document.getElementById('y');
+    if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+    const themeButtons = [document.getElementById('themeToggle'), document.getElementById('themeToggleSm')].filter(Boolean);
+    function syncThemeIcon() {
+      const dark = document.documentElement.classList.contains('dark');
+      themeButtons.forEach(btn => {
+        const icon = btn?.querySelector('.material-symbols-rounded');
+        if (icon) icon.textContent = dark ? 'light_mode' : 'dark_mode';
+      });
+    }
+    themeButtons.forEach(btn => btn.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.setItem('px_theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+      syncThemeIcon();
+    }));
+    syncThemeIcon();
+
+    const sampleData = {
+      orders: [
+        { day: '2024-06-01', revenue: 18250, jobs: 44, utilization: 72 },
+        { day: '2024-06-02', revenue: 19870, jobs: 48, utilization: 75 },
+        { day: '2024-06-03', revenue: 22460, jobs: 52, utilization: 81 },
+        { day: '2024-06-04', revenue: 20840, jobs: 47, utilization: 76 },
+        { day: '2024-06-05', revenue: 23510, jobs: 55, utilization: 84 },
+        { day: '2024-06-06', revenue: 24140, jobs: 58, utilization: 86 },
+        { day: '2024-06-07', revenue: 25460, jobs: 63, utilization: 88 },
+        { day: '2024-06-08', revenue: 26130, jobs: 66, utilization: 91 },
+        { day: '2024-06-09', revenue: 24810, jobs: 61, utilization: 87 },
+        { day: '2024-06-10', revenue: 27250, jobs: 68, utilization: 92 },
+        { day: '2024-06-11', revenue: 28130, jobs: 71, utilization: 94 },
+        { day: '2024-06-12', revenue: 29460, jobs: 74, utilization: 95 },
+        { day: '2024-06-13', revenue: 30120, jobs: 79, utilization: 96 },
+        { day: '2024-06-14', revenue: 31880, jobs: 82, utilization: 97 },
+        { day: '2024-06-15', revenue: 32640, jobs: 86, utilization: 97 },
+        { day: '2024-06-16', revenue: 31180, jobs: 81, utilization: 92 },
+        { day: '2024-06-17', revenue: 33710, jobs: 90, utilization: 98 },
+        { day: '2024-06-18', revenue: 34840, jobs: 93, utilization: 98 },
+        { day: '2024-06-19', revenue: 33070, jobs: 88, utilization: 94 },
+        { day: '2024-06-20', revenue: 35540, jobs: 94, utilization: 99 },
+        { day: '2024-06-21', revenue: 36230, jobs: 96, utilization: 99 },
+        { day: '2024-06-22', revenue: 34940, jobs: 92, utilization: 96 },
+        { day: '2024-06-23', revenue: 33110, jobs: 87, utilization: 92 },
+        { day: '2024-06-24', revenue: 35870, jobs: 95, utilization: 99 },
+        { day: '2024-06-25', revenue: 36940, jobs: 98, utilization: 99 },
+        { day: '2024-06-26', revenue: 37480, jobs: 100, utilization: 100 },
+        { day: '2024-06-27', revenue: 36510, jobs: 96, utilization: 96 },
+        { day: '2024-06-28', revenue: 35140, jobs: 91, utilization: 93 },
+        { day: '2024-06-29', revenue: 33820, jobs: 86, utilization: 90 },
+        { day: '2024-06-30', revenue: 32640, jobs: 82, utilization: 88 }
+      ],
+      segments: {
+        students: { colorWork: 42, mono: 28, posters: 18, cad: 12 },
+        businesses: { colorWork: 38, mono: 22, posters: 9, cad: 31 },
+        societies: { colorWork: 36, mono: 18, posters: 34, cad: 12 }
+      },
+      workflow: [
+        { job: '#PX-9124', device: 'laser', finish: 'staple', crew: 'Asha', sla: '22m', status: 'Printing' },
+        { job: '#PX-9125', device: 'color', finish: 'laminate', crew: 'Ravi', sla: '48m', status: 'Queued' },
+        { job: '#PX-9126', device: 'plotter', finish: 'laminate', crew: 'Zara', sla: '1h 10m', status: 'Processing' },
+        { job: '#PX-9127', device: 'color', finish: 'spiral', crew: 'Asha', sla: '36m', status: 'Ready' },
+        { job: '#PX-9128', device: 'laser', finish: 'staple', crew: 'Manu', sla: '18m', status: 'Pickup' },
+        { job: '#PX-9129', device: 'laser', finish: 'spiral', crew: 'Zara', sla: '29m', status: 'Printing' },
+        { job: '#PX-9130', device: 'color', finish: 'laminate', crew: 'Ravi', sla: '51m', status: 'Queued' }
+      ],
+      opsFeed: [
+        { type: 'automation', time: '1 min ago', title: 'Auto-routed 6-page thesis draft', body: 'Preset applied &middot; Color duplex &middot; Satin finish queued to Ultra Color lane.' },
+        { type: 'chat', time: '4 min ago', title: 'Student chat â€” Priya M.', body: '"Can I pick up 30 mins later?" &middot; Suggested reply drafted.' },
+        { type: 'order', time: '6 min ago', title: 'Blueprint batch ready', body: 'Order #PX-9119 moved to Ready &middot; Notify with OTP 543 219.' },
+        { type: 'automation', time: '12 min ago', title: 'Spiral binding lane recalibrated', body: 'Load balance shifted &middot; Manu assigned to cutter assistance.' },
+        { type: 'chat', time: '15 min ago', title: 'Alumni club: event kits', body: '"Need 150 folders, matte." &middot; Auto-quote prepared at â‚¹12,450.' },
+        { type: 'order', time: '18 min ago', title: 'Design proof approved', body: 'PX-9114 premium posters &middot; Move to print stage.' }
+      ]
+    };
+
+    const telemetryRangeSelect = document.getElementById('telemetryRange');
+    const metricRevenue = document.getElementById('metricRevenue');
+    const metricRevenueChange = document.getElementById('metricRevenueChange');
+    const metricOrders = document.getElementById('metricOrders');
+    const metricOrdersChange = document.getElementById('metricOrdersChange');
+    const metricUtil = document.getElementById('metricUtil');
+    const metricUtilChange = document.getElementById('metricUtilChange');
+
+    function formatCurrency(value) {
+      return 'â‚¹ ' + value.toLocaleString('en-IN');
+    }
+
+    function average(arr) {
+      return arr.reduce((acc, v) => acc + v, 0) / (arr.length || 1);
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function computeTelemetry(rangeDays) {
+      const total = sampleData.orders.slice(-rangeDays);
+      const previous = sampleData.orders.slice(-(rangeDays * 2), -rangeDays);
+      const sumRevenue = total.reduce((acc, row) => acc + row.revenue, 0);
+      const sumJobs = total.reduce((acc, row) => acc + row.jobs, 0);
+      const avgUtil = average(total.map(row => row.utilization));
+
+      const sumRevenuePrev = previous.reduce((acc, row) => acc + row.revenue, 0) || sumRevenue;
+      const sumJobsPrev = previous.reduce((acc, row) => acc + row.jobs, 0) || sumJobs;
+      const avgUtilPrev = average(previous.map(row => row.utilization)) || avgUtil;
+
+      const revenueDelta = ((sumRevenue - sumRevenuePrev) / sumRevenuePrev) * 100;
+      const jobsDelta = ((sumJobs - sumJobsPrev) / sumJobsPrev) * 100;
+      const utilDelta = avgUtil - avgUtilPrev;
+
+      metricRevenue.textContent = formatCurrency(sumRevenue);
+      metricRevenueChange.innerHTML = `<span class="material-symbols-rounded text-base">${revenueDelta >= 0 ? 'trending_up' : 'trending_down'}</span><span>${revenueDelta >= 0 ? '+' : ''}${revenueDelta.toFixed(1)}% vs previous</span>`;
+      metricRevenueChange.className = `mt-1 text-xs inline-flex items-center gap-1 ${revenueDelta >= 0 ? 'text-emerald-500 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`;
+
+      metricOrders.textContent = sumJobs.toLocaleString('en-IN');
+      metricOrdersChange.innerHTML = `<span class="material-symbols-rounded text-base">${jobsDelta >= 0 ? 'equalizer' : 'stacked_line_chart'}</span><span>${jobsDelta >= 0 ? '+' : ''}${jobsDelta.toFixed(1)}% vs previous</span>`;
+      metricOrdersChange.className = `mt-1 text-xs inline-flex items-center gap-1 ${jobsDelta >= 0 ? 'text-brand-500 dark:text-brand-200' : 'text-rose-500 dark:text-rose-300'}`;
+
+      metricUtil.textContent = clamp(avgUtil, 0, 100).toFixed(0) + '%';
+      metricUtilChange.innerHTML = `<span class="material-symbols-rounded text-base">${utilDelta >= 0 ? 'data_exploration' : 'data_thresholding'}</span><span>${utilDelta >= 0 ? '+' : ''}${utilDelta.toFixed(1)} pts vs previous</span>`;
+      metricUtilChange.className = `mt-1 text-xs inline-flex items-center gap-1 ${utilDelta >= 0 ? 'text-sky-500 dark:text-sky-300' : 'text-amber-500 dark:text-amber-300'}`;
+
+      drawPerformanceChart(total);
+    }
+
+    const perfCanvas = document.getElementById('performanceChart');
+    const perfCtx = perfCanvas.getContext('2d');
+    function drawPerformanceChart(rows) {
+      const w = perfCanvas.width = perfCanvas.clientWidth * window.devicePixelRatio;
+      const h = perfCanvas.height = perfCanvas.clientHeight * window.devicePixelRatio;
+      perfCtx.clearRect(0, 0, w, h);
+
+      const padding = 40 * window.devicePixelRatio;
+      const maxRevenue = Math.max(...rows.map(r => r.revenue));
+      const maxJobs = Math.max(...rows.map(r => r.jobs));
+
+      perfCtx.strokeStyle = 'rgba(255,255,255,0.08)';
+      perfCtx.lineWidth = 1;
+      const gridCount = 4;
+      for (let i = 0; i <= gridCount; i++) {
+        const y = padding + ((h - padding * 1.8) / gridCount) * i;
+        perfCtx.beginPath();
+        perfCtx.moveTo(padding, y);
+        perfCtx.lineTo(w - padding, y);
+        perfCtx.stroke();
+      }
+
+      const areaPoints = rows.map((row, idx) => {
+        const x = padding + ((w - padding * 2) / Math.max(rows.length - 1, 1)) * idx;
+        const y = padding + (1 - row.revenue / maxRevenue) * (h - padding * 1.8);
+        return { x, y };
+      });
+
+      const gradient = perfCtx.createLinearGradient(0, padding, 0, h);
+      gradient.addColorStop(0, 'rgba(158,75,138,0.45)');
+      gradient.addColorStop(1, 'rgba(158,75,138,0)');
+      perfCtx.beginPath();
+      perfCtx.moveTo(areaPoints[0]?.x || padding, h - padding / 2);
+      areaPoints.forEach(pt => perfCtx.lineTo(pt.x, pt.y));
+      perfCtx.lineTo(areaPoints.at(-1)?.x || (w - padding), h - padding / 2);
+      perfCtx.closePath();
+      perfCtx.fillStyle = gradient;
+      perfCtx.fill();
+
+      perfCtx.beginPath();
+      perfCtx.lineWidth = 3 * window.devicePixelRatio;
+      perfCtx.strokeStyle = 'rgba(158,75,138,0.9)';
+      areaPoints.forEach((pt, idx) => {
+        if (idx === 0) perfCtx.moveTo(pt.x, pt.y);
+        else perfCtx.lineTo(pt.x, pt.y);
+      });
+      perfCtx.stroke();
+
+      perfCtx.fillStyle = 'rgba(82,196,216,0.25)';
+      rows.forEach((row, idx) => {
+        const x = padding + ((w - padding * 2) / Math.max(rows.length - 1, 1)) * idx;
+        const y = padding + (1 - row.jobs / maxJobs) * (h - padding * 1.8);
+        const barWidth = (w - padding * 2) / rows.length * 0.4;
+        perfCtx.fillRect(x - barWidth / 2, y, barWidth, h - padding / 2 - y);
+      });
+    }
+
+    const radarCanvas = document.getElementById('radarChart');
+    const radarCtx = radarCanvas.getContext('2d');
+    function drawRadarChart() {
+      const metrics = [
+        { name: 'Speed', value: 0.93 },
+        { name: 'Empathy', value: 0.97 },
+        { name: 'Fidelity', value: 0.99 },
+        { name: 'Reliability', value: 0.91 },
+        { name: 'Innovation', value: 0.88 }
+      ];
+      const w = radarCanvas.width = radarCanvas.clientWidth * window.devicePixelRatio;
+      const h = radarCanvas.height = radarCanvas.clientHeight * window.devicePixelRatio;
+      const cx = w / 2;
+      const cy = h / 2;
+      const radius = Math.min(w, h) / 2.6;
+      radarCtx.clearRect(0, 0, w, h);
+      const layers = 4;
+      radarCtx.lineWidth = 1 * window.devicePixelRatio;
+      radarCtx.strokeStyle = 'rgba(255,255,255,0.08)';
+      radarCtx.fillStyle = 'rgba(158,75,138,0.08)';
+      for (let l = layers; l >= 1; l--) {
+        radarCtx.beginPath();
+        metrics.forEach((_, idx) => {
+          const angle = (Math.PI * 2 * idx) / metrics.length - Math.PI / 2;
+          const r = radius * (l / layers);
+          const x = cx + Math.cos(angle) * r;
+          const y = cy + Math.sin(angle) * r;
+          if (idx === 0) radarCtx.moveTo(x, y);
+          else radarCtx.lineTo(x, y);
+        });
+        radarCtx.closePath();
+        radarCtx.stroke();
+        radarCtx.fill();
+        radarCtx.fillStyle = 'rgba(158,75,138,0.04)';
+      }
+      radarCtx.strokeStyle = 'rgba(158,75,138,0.55)';
+      radarCtx.fillStyle = 'rgba(158,75,138,0.25)';
+      radarCtx.beginPath();
+      metrics.forEach((metric, idx) => {
+        const angle = (Math.PI * 2 * idx) / metrics.length - Math.PI / 2;
+        const r = radius * metric.value;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (idx === 0) radarCtx.moveTo(x, y);
+        else radarCtx.lineTo(x, y);
+      });
+      radarCtx.closePath();
+      radarCtx.fill();
+      radarCtx.stroke();
+      radarCtx.fillStyle = 'rgba(255,255,255,0.85)';
+      radarCtx.font = `${12 * window.devicePixelRatio}px "Inter", sans-serif`;
+      metrics.forEach((metric, idx) => {
+        const angle = (Math.PI * 2 * idx) / metrics.length - Math.PI / 2;
+        const x = cx + Math.cos(angle) * (radius + 18 * window.devicePixelRatio);
+        const y = cy + Math.sin(angle) * (radius + 18 * window.devicePixelRatio);
+        radarCtx.fillText(metric.name, x - 20, y + 4);
+      });
+    }
+
+    const mixCanvas = document.getElementById('mixChart');
+    const mixCtx = mixCanvas.getContext('2d');
+    function drawMixChart(segmentKey = 'students') {
+      const data = sampleData.segments[segmentKey];
+      const entries = Object.entries(data);
+      const w = mixCanvas.width = mixCanvas.clientWidth * window.devicePixelRatio;
+      const h = mixCanvas.height = mixCanvas.clientHeight * window.devicePixelRatio;
+      mixCtx.clearRect(0, 0, w, h);
+      const total = entries.reduce((acc, [, value]) => acc + value, 0);
+      let startAngle = -Math.PI / 2;
+      const colors = {
+        colorWork: 'rgba(158,75,138,0.85)',
+        mono: 'rgba(82,196,216,0.85)',
+        posters: 'rgba(244,162,97,0.85)',
+        cad: 'rgba(95,214,162,0.85)'
+      };
+      entries.forEach(([key, value]) => {
+        const slice = (value / total) * Math.PI * 2;
+        mixCtx.beginPath();
+        mixCtx.moveTo(w / 2, h / 2);
+        mixCtx.fillStyle = colors[key] || 'rgba(255,255,255,0.6)';
+        mixCtx.arc(w / 2, h / 2, Math.min(w, h) / 2.3, startAngle, startAngle + slice);
+        mixCtx.closePath();
+        mixCtx.fill();
+        const midAngle = startAngle + slice / 2;
+        const labelX = w / 2 + Math.cos(midAngle) * (Math.min(w, h) / 3);
+        const labelY = h / 2 + Math.sin(midAngle) * (Math.min(w, h) / 3);
+        mixCtx.fillStyle = 'rgba(255,255,255,0.9)';
+        mixCtx.font = `${12 * window.devicePixelRatio}px "Inter", sans-serif`;
+        mixCtx.fillText(`${(value / total * 100).toFixed(0)}%`, labelX - 16, labelY + 4);
+        startAngle += slice;
+      });
+    }
+
+    function renderOpsFeed() {
+      const feedRoot = document.getElementById('opsFeed');
+      const showAutomation = document.getElementById('filterAutomation').checked;
+      const showChats = document.getElementById('filterChats').checked;
+      const showOrders = document.getElementById('filterOrders').checked;
+      feedRoot.innerHTML = '';
+      const iconMap = {
+        automation: { icon: 'storm', color: 'text-brand-500' },
+        chat: { icon: 'chat', color: 'text-sky-500' },
+        order: { icon: 'assignment_turned_in', color: 'text-emerald-500' }
+      };
+      sampleData.opsFeed.forEach(item => {
+        if ((item.type === 'automation' && !showAutomation) ||
+            (item.type === 'chat' && !showChats) ||
+            (item.type === 'order' && !showOrders)) return;
+        const wrapper = document.createElement('article');
+        wrapper.className = 'rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-neutral-900/60 p-4 shadow-sm shadow-brand-500/5';
+        wrapper.innerHTML = `
+          <div class="flex items-center justify-between text-xs text-neutral-500 dark:text-white/60">
+            <div class="inline-flex items-center gap-2 uppercase tracking-wider">
+              <span class="material-symbols-rounded text-sm ${iconMap[item.type].color}">${iconMap[item.type].icon}</span>
+              ${item.type}
+            </div>
+            <span>${item.time}</span>
+          </div>
+          <h4 class="mt-2 text-sm font-semibold">${item.title}</h4>
+          <p class="mt-1 text-xs text-neutral-600 dark:text-white/60 leading-relaxed">${item.body}</p>
+        `;
+        feedRoot.appendChild(wrapper);
+      });
+    }
+
+    const workflowTable = document.getElementById('workflowTable');
+    function renderWorkflowRows() {
+      const deviceFilter = document.getElementById('deviceFilter').value;
+      const finishFilter = document.getElementById('finishFilter').value;
+      workflowTable.innerHTML = '';
+      sampleData.workflow
+        .filter(row => (deviceFilter === 'all' || row.device === deviceFilter))
+        .filter(row => (finishFilter === 'all' || row.finish === finishFilter))
+        .forEach(row => {
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-black/5 dark:hover:bg-white/5 transition';
+          tr.innerHTML = `
+            <td class="py-3 pr-6 font-semibold">${row.job}</td>
+            <td class="py-3 pr-6 capitalize">${row.device}</td>
+            <td class="py-3 pr-6 capitalize">${row.finish}</td>
+            <td class="py-3 pr-6">${row.crew}</td>
+            <td class="py-3 pr-6">${row.sla}</td>
+            <td class="py-3 pr-6 text-right">
+              <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ring-1 ring-brand-500/40 text-brand-600 dark:text-brand-200">
+                <span class="material-symbols-rounded text-sm">pulse_alert</span>
+                ${row.status}
+              </span>
+            </td>
+          `;
+          workflowTable.appendChild(tr);
+        });
+    }
+
+    telemetryRangeSelect.addEventListener('change', () => {
+      computeTelemetry(Number(telemetryRangeSelect.value));
+    });
+
+    ['filterAutomation', 'filterChats', 'filterOrders'].forEach(id => {
+      const ctrl = document.getElementById(id);
+      if (ctrl) ctrl.addEventListener('change', renderOpsFeed);
+    });
+
+    document.getElementById('deviceFilter').addEventListener('change', renderWorkflowRows);
+    document.getElementById('finishFilter').addEventListener('change', renderWorkflowRows);
+    document.getElementById('presetButton').addEventListener('click', () => {
+      document.getElementById('deviceFilter').value = 'color';
+      document.getElementById('finishFilter').value = 'laminate';
+      renderWorkflowRows();
+    });
+
+    document.querySelectorAll('[data-segment]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-segment]').forEach(el => {
+          el.classList.remove('border-brand-500/40', 'bg-brand-500/15', 'text-brand-600', 'dark:text-brand-200');
+        });
+        btn.classList.add('border-brand-500/40', 'bg-brand-500/15', 'text-brand-600', 'dark:text-brand-200');
+        const segmentKey = btn.textContent.trim().split(' ')[0].toLowerCase();
+        drawMixChart(segmentKey === 'students' ? 'students' : segmentKey === 'businesses' ? 'businesses' : 'societies');
+      });
+    });
+
+    function handleResize() {
+      computeTelemetry(Number(telemetryRangeSelect.value));
+      drawRadarChart();
+      const activeBtn = document.querySelector('[data-segment].border-brand-500\\/40') || document.querySelector('[data-segment]');
+      if (activeBtn) {
+        const segmentKey = activeBtn.textContent.trim().split(' ')[0].toLowerCase();
+        drawMixChart(segmentKey === 'students' ? 'students' : segmentKey === 'businesses' ? 'businesses' : 'societies');
+      }
+    }
+    window.addEventListener('resize', () => {
+      window.requestAnimationFrame(handleResize);
+    });
+
+    computeTelemetry(Number(telemetryRangeSelect.value));
+    drawRadarChart();
+    drawMixChart('students');
+    renderOpsFeed();
+    renderWorkflowRows();
+  </script>
+</body>
+</html>
+
+      <section class="glass rounded-3xl p-6 ring-1 ring-black/5 dark:ring-white/10">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 class="text-lg font-semibold tracking-tight">Workflow matrix</h3>
+            <p class="text-xs text-neutral-500 dark:text-white/60">Filter by device lanes, finish types, and crew roles.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <select id="deviceFilter"
+              class="rounded-full border border-black/10 dark:border-white/15 bg-white/70 dark:bg-neutral-900/70 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/70">
+              <option value="all">All devices</option>
+              <option value="laser">Laser mono</option>
+              <option value="color">Ultra color</option>
+              <option value="plotter">Plotter XL</option>
+            </select>
+            <select id="finishFilter"
+              class="rounded-full border border-black/10 dark:border-white/15 bg-white/70 dark:bg-neutral-900/70 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/70">
+              <option value="all">All finishes</option>
+              <option value="laminate">Laminate</option>
+              <option value="spiral">Spiral bind</option>
+              <option value="staple">Staple sets</option>
+            </select>
+            <button id="presetButton"
+              class="inline-flex items-center gap-2 rounded-full border border-brand-500/40 bg-brand-500/15 px-3 py-1.5 text-xs font-semibold text-brand-600 dark:text-brand-200 hover:bg-brand-500/25">
+              <span class="material-symbols-rounded text-base">auto_awesome</span>
+              Apply best preset
+            </button>
+          </div>
+        </div>
+        <div class="mt-6 overflow-x-auto">
+          <table class="min-w-full text-left text-xs">
+            <thead class="uppercase tracking-wider text-[11px] text-neutral-500 dark:text-white/60 border-b border-black/5 dark:border-white/10">
+              <tr>
+                <th class="py-3 pr-6">Job</th>
+                <th class="py-3 pr-6">Device lane</th>
+                <th class="py-3 pr-6">Finish</th>
+                <th class="py-3 pr-6">Crew</th>
+                <th class="py-3 pr-6">SLA</th>
+                <th class="py-3 pr-6 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody id="workflowTable" class="divide-y divide-black/5 dark:divide-white/10 text-sm"></tbody>
+          </table>
+        </div>
+      </section>
