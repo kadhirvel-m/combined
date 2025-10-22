@@ -9,33 +9,59 @@
   <!-- Inter + Material Symbols -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+    rel="stylesheet">
   <link rel="stylesheet" href="../../assets/css/tailwind.css" />
   <script src="../../config.js"></script>
   <script src="../../auth.js" defer></script>
+  <script>
+    // Simple auth guard: require user session (px_token); otherwise redirect to login
+    (function () {
+      try {
+        var token = localStorage.getItem('px_token');
+        if (!token) {
+          var next = encodeURIComponent(location.pathname + (location.search || ''));
+          location.replace('login.html?next=' + next);
+        }
+      } catch (_) {
+        location.replace('login.html');
+      }
+    })();
+  </script>
 </head>
 
-<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-glow dark:bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.22),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(30,30,47,.7),transparent)]">
+<body
+  class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-glow dark:bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.22),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(30,30,47,.7),transparent)]">
   <!-- App Bar -->
-  <header class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+  <header
+    class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
     <div class="container flex items-center justify-between h-16">
-      <a href="../../index.html" class="flex items-center gap-2" aria-label="Paper X Home">
+      <a href="../index.html" class="flex items-center gap-2" aria-label="Paper X Home">
         <img src="../../assets/img/logo-light.svg" alt="Paper X" class="h-8 w-auto dark:hidden">
         <img src="../../assets/img/logo-dark.svg" alt="Paper X" class="h-8 w-auto hidden dark:block">
       </a>
       <nav class="hidden md:flex items-center gap-2 text-sm">
-        <a href="./jobs.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span class="material-symbols-rounded text-base">assignment</span> Jobs</a>
-        <a href="./profile.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span class="material-symbols-rounded text-base">storefront</span> Shop Profile</a>
-        <button id="themeToggle" class="inline-flex items-center gap-2 rounded-full px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5" aria-label="Toggle theme">
+        <a href="./jobs.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
+            class="material-symbols-rounded text-base">assignment</span> Jobs</a>
+        <a href="./payments.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
+            class="material-symbols-rounded text-base">payments</span> Payments</a>
+        <a href="./profile.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
+            class="material-symbols-rounded text-base">storefront</span> Shop Profile</a>
+        <button id="themeToggle"
+          class="inline-flex items-center gap-2 rounded-full px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+          aria-label="Toggle theme">
           <span id="themeIcon" class="material-symbols-rounded text-base">dark_mode</span>
           <span class="hidden sm:block">Theme</span>
         </button>
         <!-- Shop avatar (logo) linking to shop profile -->
-        <a id="shopProfile" href="./profile.html" title="My Shop" class="items-center justify-center w-10 h-10 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60 hidden">
+        <a id="shopProfile" href="./profile.html" title="My Shop"
+          class="items-center justify-center w-10 h-10 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60 hidden">
           <img id="shopProfileImg" alt="Shop" class="w-full h-full object-cover hidden" />
           <span id="shopProfileInitial" class="text-xs font-semibold">SH</span>
         </a>
-        <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out" class="hidden items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
+        <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out"
+          class="hidden items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
           <span class="material-symbols-rounded text-base">logout</span>
           <span>Sign out</span>
         </button>
@@ -80,10 +106,12 @@
     <div class="absolute inset-0 bg-black/50 backdrop-blur-sm md:backdrop-blur" data-close-modal></div>
     <!-- Centered content -->
     <div class="relative z-10 flex items-center justify-center min-h-full p-4">
-      <div class="w-full max-w-xl rounded-2xl ring-1 ring-black/5 dark:ring-white/10 shadow-2xl p-4 bg-white/95 dark:bg-brand-900/95">
+      <div
+        class="w-full max-w-xl rounded-2xl ring-1 ring-black/5 dark:ring-white/10 shadow-2xl p-4 bg-white/95 dark:bg-brand-900/95">
         <div class="flex items-center justify-between mb-2">
           <div class="font-semibold">Job Details</div>
-          <button class="px-2 py-1 rounded-md text-[12px] ring-1 ring-black/10 dark:ring-white/15" data-close-modal>Close</button>
+          <button class="px-2 py-1 rounded-md text-[12px] ring-1 ring-black/10 dark:ring-white/15"
+            data-close-modal>Close</button>
         </div>
         <div id="jobDetail" class="text-[13px] space-y-3"></div>
         <div class="mt-3 flex items-center justify-between">
@@ -95,15 +123,15 @@
   </div>
   <script>
     function $(s) { return document.querySelector(s) }
-    function deriveInitials(name){
-      if(!name) return 'SH';
-      return name.split(/\s+/).filter(Boolean).map(p=>p[0]?.toUpperCase()).slice(0,2).join('') || 'SH';
+    function deriveInitials(name) {
+      if (!name) return 'SH';
+      return name.split(/\s+/).filter(Boolean).map(p => p[0]?.toUpperCase()).slice(0, 2).join('') || 'SH';
     }
     // Theme toggle hookup
-    (function(){
-      function syncIcon(){ try { document.getElementById('themeIcon').textContent = (document.documentElement.classList.contains('dark') ? 'light_mode' : 'dark_mode'); } catch(_){} }
+    (function () {
+      function syncIcon() { try { document.getElementById('themeIcon').textContent = (document.documentElement.classList.contains('dark') ? 'light_mode' : 'dark_mode'); } catch (_) { } }
       const btn = document.getElementById('themeToggle');
-      if (btn) btn.addEventListener('click', function(){ if (window.Theme && typeof Theme.toggle === 'function') Theme.toggle(); else document.documentElement.classList.toggle('dark'); syncIcon(); });
+      if (btn) btn.addEventListener('click', function () { if (window.Theme && typeof Theme.toggle === 'function') Theme.toggle(); else document.documentElement.classList.toggle('dark'); syncIcon(); });
       syncIcon();
     })();
     function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
@@ -117,19 +145,19 @@
     }
 
     // ---- UI helpers for rich cards ----
-    function fmtTime(s){ if(!s) return ''; return (s.replace('T',' ').slice(0,16)); }
-    function statusTone(st){
-      const k = String(st||'').trim().toLowerCase();
-      if (k==='submitted') return {bg:'bg-blue-50 dark:bg-blue-500/10', fg:'text-blue-700 dark:text-blue-300', ring:'ring-1 ring-blue-200/60 dark:ring-blue-400/30', icon:'move_to_inbox'};
-      if (k==='accepted')  return {bg:'bg-amber-50 dark:bg-amber-500/10', fg:'text-amber-800 dark:text-amber-300', ring:'ring-1 ring-amber-200/60 dark:ring-amber-400/30', icon:'task_alt'};
-      if (k==='printing')  return {bg:'bg-indigo-50 dark:bg-indigo-500/10', fg:'text-indigo-800 dark:text-indigo-300', ring:'ring-1 ring-indigo-200/60 dark:ring-indigo-400/30', icon:'print'};
-      if (k==='ready')     return {bg:'bg-emerald-50 dark:bg-emerald-500/10', fg:'text-emerald-800 dark:text-emerald-300', ring:'ring-1 ring-emerald-200/60 dark:ring-emerald-400/30', icon:'done_all'};
+    function fmtTime(s) { if (!s) return ''; return (s.replace('T', ' ').slice(0, 16)); }
+    function statusTone(st) {
+      const k = String(st || '').trim().toLowerCase();
+      if (k === 'submitted') return { bg: 'bg-blue-50 dark:bg-blue-500/10', fg: 'text-blue-700 dark:text-blue-300', ring: 'ring-1 ring-blue-200/60 dark:ring-blue-400/30', icon: 'move_to_inbox' };
+      if (k === 'accepted') return { bg: 'bg-amber-50 dark:bg-amber-500/10', fg: 'text-amber-800 dark:text-amber-300', ring: 'ring-1 ring-amber-200/60 dark:ring-amber-400/30', icon: 'task_alt' };
+      if (k === 'printing') return { bg: 'bg-indigo-50 dark:bg-indigo-500/10', fg: 'text-indigo-800 dark:text-indigo-300', ring: 'ring-1 ring-indigo-200/60 dark:ring-indigo-400/30', icon: 'print' };
+      if (k === 'ready') return { bg: 'bg-emerald-50 dark:bg-emerald-500/10', fg: 'text-emerald-800 dark:text-emerald-300', ring: 'ring-1 ring-emerald-200/60 dark:ring-emerald-400/30', icon: 'done_all' };
       // Badge colors per request: Completed = green, Cancelled = red
-      if (k==='completed') return {bg:'bg-emerald-600', fg:'text-white', ring:'ring-0', icon:'verified'};
-      if (k==='cancelled' || k==='canceled') return {bg:'', fg:'text-white', ring:'ring-0', icon:'cancel', style:'background-color:#dc2626;color:#fff'}; // Tailwind red-600 inline fallback
-      return {bg:'bg-neutral-50 dark:bg-white/5', fg:'text-neutral-700 dark:text-white/70', ring:'ring-1 ring-black/10 dark:ring-white/15', icon:'info'};
+      if (k === 'completed') return { bg: 'bg-emerald-600', fg: 'text-white', ring: 'ring-0', icon: 'verified' };
+      if (k === 'cancelled' || k === 'canceled') return { bg: '', fg: 'text-white', ring: 'ring-0', icon: 'cancel', style: 'background-color:#dc2626;color:#fff' }; // Tailwind red-600 inline fallback
+      return { bg: 'bg-neutral-50 dark:bg-white/5', fg: 'text-neutral-700 dark:text-white/70', ring: 'ring-1 ring-black/10 dark:ring-white/15', icon: 'info' };
     }
-    function chipHTML(icon, text, cls, style){
+    function chipHTML(icon, text, cls, style) {
       const styleAttr = style ? ` style=\"${style}\"` : '';
       return `<span class=\"inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] ${cls}\"${styleAttr}><span class=\"material-symbols-rounded text-[14px]\">${icon}</span><span>${text}</span></span>`;
     }
@@ -144,10 +172,10 @@
       inner.innerHTML = `
         <div class='flex items-start justify-between'>
           <div class='space-y-1'>
-            <div class='text-[12px]'>Order <b>#${(j.id||'').slice(0,8)}</b></div>
+            <div class='text-[12px]'>Order <b>#${(j.id || '').slice(0, 8)}</b></div>
             <div class='flex flex-wrap items-center gap-1.5'>
-              ${chipHTML(tone.icon, (j.status||'').toString().replace(/^./,c=>c.toUpperCase()), `${tone.bg} ${tone.fg} ${tone.ring}`, tone.style)}
-              ${chipHTML('calendar_month', fmtTime(j.created_at||''), 'ring-1 ring-black/10 dark:ring-white/15')}
+              ${chipHTML(tone.icon, (j.status || '').toString().replace(/^./, c => c.toUpperCase()), `${tone.bg} ${tone.fg} ${tone.ring}`, tone.style)}
+              ${chipHTML('calendar_month', fmtTime(j.created_at || ''), 'ring-1 ring-black/10 dark:ring-white/15')}
             </div>
           </div>
           <div class='text-right'>
@@ -170,13 +198,13 @@
           </div>
           <div class='space-y-1'>
             <div class='opacity-70'>Contact</div>
-            <div class='font-semibold truncate'>${(j.contact_name||'-')}${j.contact_phone?(' • '+j.contact_phone):''}</div>
+            <div class='font-semibold truncate'>${(j.contact_name || '-')}${j.contact_phone ? (' • ' + j.contact_phone) : ''}</div>
           </div>
         </div>`;
       const footer = document.createElement('div');
       footer.className = 'mt-3 flex items-center justify-between';
       const est = document.createElement('div');
-      const hasPrice = (j.estimated_price!=null);
+      const hasPrice = (j.estimated_price != null);
       est.className = hasPrice
         ? 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] bg-brand-500 text-white shadow'
         : 'text-[12px] opacity-70';
@@ -191,9 +219,9 @@
         i.placeholder = 'OTP';
         i.className = 'px-2 py-1 text-[12px] rounded-md ring-1 ring-black/10 dark:ring-white/15';
         i.setAttribute('data-stop', '');
-        i.addEventListener('click', (e)=> e.stopPropagation());
-        i.addEventListener('focus', (e)=> e.stopPropagation());
-        i.addEventListener('keydown', (e)=> e.stopPropagation());
+        i.addEventListener('click', (e) => e.stopPropagation());
+        i.addEventListener('focus', (e) => e.stopPropagation());
+        i.addEventListener('keydown', (e) => e.stopPropagation());
         actions.appendChild(i);
         actions.appendChild(btn('Release', (e) => { e.stopPropagation(); act('release', i.value); }, 'bg-brand-500/90 text-white'));
       }
@@ -224,7 +252,7 @@
       wrap.innerHTML = `
         <div class='flex items-start justify-between'>
           <div>
-            <div class='font-semibold'>#${(j.id || '').slice(0,8)} <span class="text-[11px] opacity-60 align-middle">${j.status || ''}</span></div>
+            <div class='font-semibold'>#${(j.id || '').slice(0, 8)} <span class="text-[11px] opacity-60 align-middle">${j.status || ''}</span></div>
             <div class='text-[12px] opacity-70'>${j.estimated_pages || '?'} pages × ${(j.settings && j.settings.copies) || 1} • ${j.settings?.paper_size || 'A4'} • ${(j.settings?.color_mode || 'auto')}</div>
           </div>
           <div class='text-[11px] opacity-70 text-right'>${(j.created_at || '').replace('T', ' ').slice(0, 16)}</div>
@@ -240,9 +268,9 @@
         i.placeholder = 'OTP';
         i.className = 'px-2 py-1 text-[12px] rounded-md ring-1 ring-black/10 dark:ring-white/15';
         i.setAttribute('data-stop', '');
-        i.addEventListener('click', (e)=> e.stopPropagation());
-        i.addEventListener('focus', (e)=> e.stopPropagation());
-        i.addEventListener('keydown', (e)=> e.stopPropagation());
+        i.addEventListener('click', (e) => e.stopPropagation());
+        i.addEventListener('focus', (e) => e.stopPropagation());
+        i.addEventListener('keydown', (e) => e.stopPropagation());
         actions.appendChild(i);
         actions.appendChild(btn('Release', (e) => { e.stopPropagation(); act('release', i.value); }, 'bg-brand-500/90 text-white'));
       }
@@ -290,8 +318,8 @@
       const API = (window.API_BASE || '');
       d.innerHTML = `
         <div class="text-sm">
-          <div class="font-semibold mb-1">Order #${(j.id || '').slice(0,8)}</div>
-          <div class="text-[12px] opacity-70">Status: ${j.status || ''} • ${((j.created_at || '').replace('T',' ').slice(0,16))}</div>
+          <div class="font-semibold mb-1">Order #${(j.id || '').slice(0, 8)}</div>
+          <div class="text-[12px] opacity-70">Status: ${j.status || ''} • ${((j.created_at || '').replace('T', ' ').slice(0, 16))}</div>
         </div>
         <hr class="my-2 border-black/10 dark:border-white/10">
         <div class="space-y-2">
@@ -315,21 +343,21 @@
 
     function closeModal() { $('#jobModal').classList.add('hidden'); }
 
-    function toStartOfDay(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); return x; }
-    function toEndOfDay(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59,999); return x; }
-    function inRange(iso, range){
-      if(!iso) return false;
+    function toStartOfDay(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); return x; }
+    function toEndOfDay(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); return x; }
+    function inRange(iso, range) {
+      if (!iso) return false;
       const t = new Date(iso);
       if (range === 'all') return true;
       const now = new Date();
-      if (range === 'today'){
+      if (range === 'today') {
         return t >= toStartOfDay(now) && t <= toEndOfDay(now);
       }
-      if (range === '7d'){
+      if (range === '7d') {
         const from = new Date(now); from.setDate(from.getDate() - 6); // include today
         return t >= toStartOfDay(from) && t <= toEndOfDay(now);
       }
-      if (range === '30d'){
+      if (range === '30d') {
         const from = new Date(now); from.setDate(from.getDate() - 29);
         return t >= toStartOfDay(from) && t <= toEndOfDay(now);
       }
@@ -350,28 +378,28 @@
       const wrap = $('#list'); wrap.innerHTML = '';
       jobs.forEach(j => wrap.appendChild(cardRich(j)));
       $('#empty').classList.toggle('hidden', jobs.length > 0);
-      const labeled = { today: 'Today', '7d':'Last 7 days', '30d':'Last 30 days', all:'All time' };
+      const labeled = { today: 'Today', '7d': 'Last 7 days', '30d': 'Last 30 days', all: 'All time' };
       const dateLabel = labeled[dateRange] || 'All time';
       const extra = priceOnly ? ' • With price' : '';
-      $('#summary').textContent = jobs.length ? `${jobs.length} job${jobs.length>1?'s':''} • ${dateLabel}${extra}` : `No jobs • ${dateLabel}${extra}`;
+      $('#summary').textContent = jobs.length ? `${jobs.length} job${jobs.length > 1 ? 's' : ''} • ${dateLabel}${extra}` : `No jobs • ${dateLabel}${extra}`;
     }
 
     function setupFilters() {
       // Top status filters
       const c = $('#filters'); if (c) { c.innerHTML = ''; }
-      const statuses = ['all','submitted','accepted','printing','ready','completed','cancelled'];
+      const statuses = ['all', 'submitted', 'accepted', 'printing', 'ready', 'completed', 'cancelled'];
       const row1 = document.createElement('div'); row1.className = 'flex flex-wrap items-center gap-2';
       row1.appendChild(document.createTextNode('Status:'));
-      statuses.forEach(s => row1.appendChild(pill(s[0].toUpperCase()+s.slice(1), (window.__FILTER||'all')===s, () => { window.__FILTER = s; setupFilters(); load(); })));
+      statuses.forEach(s => row1.appendChild(pill(s[0].toUpperCase() + s.slice(1), (window.__FILTER || 'all') === s, () => { window.__FILTER = s; setupFilters(); load(); })));
       if (c) c.appendChild(row1);
 
       // Date filters moved below Jobs Board section
       const d = $('#dateFilters'); if (d) { d.innerHTML = ''; }
       const row2 = document.createElement('div'); row2.className = 'flex flex-wrap items-center gap-2';
       row2.appendChild(document.createTextNode('Date:'));
-      const ranges = [ ['today','Today'], ['7d','7 days'], ['30d','30 days'], ['all','All'] ];
+      const ranges = [['today', 'Today'], ['7d', '7 days'], ['30d', '30 days'], ['all', 'All']];
       const current = (window.__DATE_RANGE || 'today');
-      ranges.forEach(([k,label]) => row2.appendChild(pill(label, current===k, () => { window.__DATE_RANGE = k; setupFilters(); load(); })));
+      ranges.forEach(([k, label]) => row2.appendChild(pill(label, current === k, () => { window.__DATE_RANGE = k; setupFilters(); load(); })));
 
       // Price-only toggle stays alongside date controls
       const priceBtn = document.createElement('button');

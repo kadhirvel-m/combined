@@ -58,11 +58,15 @@
     const navProfileImg = el('navProfileImg');
     const navProfileInitial = el('navProfileInitial');
     const navProfileMobile = el('navProfileMobile');
+    const navProfileImgMobile = el('navProfileImgMobile');
+    const navProfileInitialMobile = el('navProfileInitialMobile');
     const navProfileMobileLabel = navProfileMobile ? navProfileMobile.querySelector('[data-profile-name]') : null;
+    const mobileMode = navProfileMobileLabel && navProfileMobileLabel.dataset ? navProfileMobileLabel.dataset.profileMode : null;
 
     let initials = deriveInitials(profile.name || profile.full_name || profile.username || '');
     if(navProfileInitial){ navProfileInitial.textContent = initials; navProfileInitial.classList.remove('hidden'); }
-    const avatar = profile.profile_image_url || profile.avatar_url;
+    if(navProfileInitialMobile){ navProfileInitialMobile.textContent = initials; navProfileInitialMobile.classList.remove('hidden'); }
+    const avatar = profile.logo_url || profile.profile_image_url || profile.avatar_url;
     if(avatar && navProfileImg){
       navProfileImg.src = avatar;
       navProfileImg.classList.remove('hidden');
@@ -70,13 +74,25 @@
     } else if(navProfileImg){
       navProfileImg.classList.add('hidden');
     }
+    if(avatar && navProfileImgMobile){
+      navProfileImgMobile.src = avatar;
+      navProfileImgMobile.classList.remove('hidden');
+      if(navProfileInitialMobile) navProfileInitialMobile.classList.add('hidden');
+    } else if(navProfileImgMobile){
+      navProfileImgMobile.classList.add('hidden');
+      if(navProfileInitialMobile) navProfileInitialMobile.classList.remove('hidden');
+    }
     const titleName = profile.name || profile.full_name || 'Profile';
     if(navProfile){ navProfile.classList.remove('hidden'); navProfile.setAttribute('title', titleName); }
     if(navProfileMobile){
       navProfileMobile.classList.remove('hidden');
       if(navProfileMobileLabel){
-        const first = (titleName||'').split(/\s+/).filter(Boolean)[0];
-        navProfileMobileLabel.textContent = first ? `Hi, ${first}` : 'My profile';
+        if(mobileMode === 'initials'){
+          navProfileMobileLabel.textContent = initials || 'ME';
+        } else {
+          const first = (titleName||'').split(/\s+/).filter(Boolean)[0];
+          navProfileMobileLabel.textContent = first ? `Hi, ${first}` : 'My profile';
+        }
       }
     }
   }
@@ -93,14 +109,30 @@
     return { kind: null, token: null };
   }
 
+  function resolveCustomProfileHref(node, root, session){
+    if(!node || node.tagName !== 'A') return null;
+    const custom = node.getAttribute('data-profile-link');
+    if(!custom) return null;
+    if(/^https?:\/\//i.test(custom)) return custom;
+    if(custom.startsWith('/')) return custom;
+    return root + custom.replace(/^\//, '');
+  }
+
   function setProfileLinks(){
     const root = resolveUiRoot();
     const session = activeSession();
     const href = session.kind === 'teacher' ? (root + 'teacher_profile.html?user=me') : (root + 'profile.html');
     const a1 = el('navProfile');
     const a2 = el('navProfileMobile');
-    if (a1 && a1.tagName === 'A') a1.href = href;
-    if (a2 && a2.tagName === 'A') a2.href = href;
+    if (a1 && a1.tagName === 'A') a1.href = resolveCustomProfileHref(a1, root, session) || href;
+    if (a2 && a2.tagName === 'A') a2.href = resolveCustomProfileHref(a2, root, session) || href;
+  }
+
+  function wantsShopProfile(){
+    return [el('navProfile'), el('navProfileMobile')].filter(Boolean).some(node => {
+      if(!node || typeof node.getAttribute !== 'function') return false;
+      return node.getAttribute('data-profile-source') === 'shop';
+    });
   }
 
   window.__PX_NAV_APPLY = applyNavProfile; // expose globally so profile page can re-use
@@ -164,14 +196,44 @@
       const profile = session.kind === 'teacher'
         ? ((data && (data.teacher || data.profile || data)) || {})
         : ((data && (data.profile || data)) || {});
-      window.__PX_PROFILE_SNAPSHOT = profile;
-      applyNavProfile(profile);
+      const existing = window.__PX_PROFILE_SNAPSHOT || {};
+      const merged = Object.assign({}, existing, profile);
+      if(!merged.logo_url && existing.logo_url) merged.logo_url = existing.logo_url;
+      if(!merged.profile_image_url && existing.profile_image_url) merged.profile_image_url = existing.profile_image_url;
+      if(!merged.avatar_url && existing.avatar_url) merged.avatar_url = existing.avatar_url;
+      window.__PX_PROFILE_SNAPSHOT = merged;
+      applyNavProfile(merged);
       setProfileLinks();
     } catch(e){ /* swallow network errors silently */ }
   }
 
+  async function fetchShopProfile(){
+    try {
+      const session = activeSession();
+      if (!session.token) { showAuthButtons(); hideSessionUI(); return; }
+      const res = await fetch(`${API}/api/shop/me`, { headers: { Authorization: `Bearer ${session.token}` }});
+      if(res.status === 401){ safeRemove(USER_TOKEN_KEY); safeRemove(TEACHER_TOKEN_KEY); showAuthButtons(); hideSessionUI(); return; }
+      if(res.status === 404){ fetchProfile(); return; }
+      if(!res.ok) return;
+      const shop = await res.json().catch(()=>null);
+      if(!shop) return;
+      const logo = shop.logo_url || shop.logoUrl || null;
+      const payload = {
+        name: shop.name || shop.shop_name || '',
+        logo_url: logo,
+        profile_image_url: logo,
+        avatar_url: logo
+      };
+      const snapshot = Object.assign({}, window.__PX_PROFILE_SNAPSHOT || {}, payload, { shop });
+      window.__PX_PROFILE_SNAPSHOT = snapshot;
+      applyNavProfile(snapshot);
+      setProfileLinks();
+    } catch(e){ /* swallow */ }
+  }
+
   function init(){
     const session = activeSession();
+    const useShopProfile = wantsShopProfile();
     if(session.token){
       hideAuthButtons();
       showSessionUI();
@@ -179,7 +241,10 @@
       setProfileLinks();
       if(window.__PX_PROFILE_SNAPSHOT){
         applyNavProfile(window.__PX_PROFILE_SNAPSHOT);
-      } else {
+      }
+      if(useShopProfile){
+        fetchShopProfile();
+      } else if(!window.__PX_PROFILE_SNAPSHOT || (!window.__PX_PROFILE_SNAPSHOT.profile_image_url && !window.__PX_PROFILE_SNAPSHOT.avatar_url)){
         fetchProfile();
       }
     } else {

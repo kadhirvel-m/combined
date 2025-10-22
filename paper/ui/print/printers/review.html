@@ -292,7 +292,7 @@
       t.classList.add('transition', 'duration-200');
       setTimeout(() => { t.classList.add('opacity-0'); setTimeout(() => t.classList.add('hidden'), 200); }, ms);
     }
-    // Token helper (fallback if not provided globally)
+    // Token + storage helpers (fallback if not provided globally)
     if (!window.getToken) {
       window.getToken = function () {
         const keys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
@@ -300,19 +300,48 @@
         return '';
       };
     }
+    function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+    function safeSet(k, v) { try { localStorage.setItem(k, v); } catch { } }
+    const PX_PROFILE_LS_KEY = 'px_profile_cache';
     let __PROFILE_CACHE = null;
+    let __PROFILE_PROMISE = null;
+    function readCachedProfile() {
+      try {
+        const raw = safeGet(PX_PROFILE_LS_KEY);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (!obj || !obj.ts) return null;
+        // 5 minutes TTL
+        if (Date.now() - obj.ts > 5 * 60 * 1000) return null;
+        return obj.profile || null;
+      } catch { return null; }
+    }
+    function writeCachedProfile(p) {
+      try { safeSet(PX_PROFILE_LS_KEY, JSON.stringify({ ts: Date.now(), profile: p || null })); } catch { }
+    }
     async function loadProfileMe() {
       if (__PROFILE_CACHE) return __PROFILE_CACHE;
+      if (__PROFILE_PROMISE) return __PROFILE_PROMISE;
       const tk = (window.getToken && window.getToken()) || '';
       if (!tk) return null;
-      try {
-        const r = await fetch((window.API_BASE || '') + '/api/me', { headers: { Authorization: 'Bearer ' + tk } });
-        if (!r.ok) return null;
-        const j = await r.json().catch(() => ({}));
-        const prof = (j && (j.profile || j)) || null;
-        __PROFILE_CACHE = prof || null;
-        return __PROFILE_CACHE;
-      } catch { return null; }
+      // Try local cache first for instant fill
+      const cached = readCachedProfile();
+      if (cached) { __PROFILE_CACHE = cached; return __PROFILE_CACHE; }
+      // Network fetch with timeout and de-dupe
+      __PROFILE_PROMISE = (async () => {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 3500);
+        try {
+          const r = await fetch((window.API_BASE || '') + '/api/me', { headers: { Authorization: 'Bearer ' + tk }, signal: ctrl.signal });
+          if (!r.ok) return null;
+          const j = await r.json().catch(() => ({}));
+          const prof = (j && (j.profile || j)) || null;
+          if (prof) { __PROFILE_CACHE = prof; writeCachedProfile(prof); }
+          return __PROFILE_CACHE;
+        } catch { return null; }
+        finally { clearTimeout(t); __PROFILE_PROMISE = null; }
+      })();
+      return __PROFILE_PROMISE;
     }
     function parseRange(input, totalPages) {
       const t = (input || '').trim();
@@ -485,8 +514,8 @@
       e.target.value = v;
     });
 
-    // Contact: for me / for others
-    async function updateContactMode() {
+    // Contact: for me / for others (fast, non-blocking; refines asynchronously)
+    function updateContactMode(fromAsync = false) {
       const mode = (document.querySelector('input[name="contact_for"]:checked')?.value || 'me');
       const fieldsWrap = document.getElementById('contactFields');
       const meInfo = document.getElementById('meInfo');
@@ -502,9 +531,10 @@
           meInfo.textContent = 'Login to auto-fill your details, or enter them below.';
           return;
         }
-        const prof = window.__PX_PROFILE_SNAPSHOT || await loadProfileMe();
+        // Immediate best-effort data (snapshot or LS cache) – no await to keep UI snappy
+        const prof = window.__PX_PROFILE_SNAPSHOT || __PROFILE_CACHE || readCachedProfile();
         const nm = (prof && (prof.name || prof.full_name || prof.username)) || '';
-        const ph = (prof && prof.phone) || '';
+        const ph = (prof && (prof.phone || prof.mobile || '')) || '';
         if (nm) nameInput.value = nm;
         if (ph) phoneInput.value = ph;
         if (nm && ph) {
@@ -517,6 +547,10 @@
           nameInput.required = !nm; phoneInput.required = !ph;
           meInfo.classList.remove('hidden');
           meInfo.textContent = 'Complete missing details below. We will save with your user ID.';
+          // If we haven't refined via async fetch yet, trigger once and re-apply
+          if (!fromAsync) {
+            loadProfileMe().then(p => { if (p) { updateContactMode(true); } });
+          }
         }
       } else {
         fieldsWrap.classList.remove('hidden');
@@ -697,6 +731,16 @@
       document.getElementById('for_me')?.addEventListener('change', updateContactMode);
       document.getElementById('for_others')?.addEventListener('change', updateContactMode);
       updateContactMode();
+      // If global auth fetch updates profile later, refine the UI without waiting
+      try {
+        const prevApply = window.__PX_NAV_APPLY;
+        window.__PX_NAV_APPLY = function (profile) {
+          try { if (prevApply) prevApply(profile); } catch { }
+          try { if (profile) { __PROFILE_CACHE = profile; writeCachedProfile(profile); } } catch { }
+          // Re-apply mode to hide fields if now complete
+          try { updateContactMode(true); } catch { }
+        };
+      } catch { }
     });
     document.getElementById('submit').addEventListener('click', submitJob);
   </script>

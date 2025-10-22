@@ -139,6 +139,18 @@ def _supabase_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Return a JSON-serializable dict suitable for Supabase from a Pydantic .dict() payload."""
     return {k: _to_supabase_json(v) for k, v in raw.items() if v is not None}
 
+# --- Auth helpers ---
+def _bearer_token_from_header(authorization: Optional[str]) -> Optional[str]:
+    if not authorization:
+        return None
+    try:
+        parts = str(authorization).split()
+        if len(parts) >= 2 and parts[0].lower() == 'bearer':
+            return parts[1]
+        return str(authorization)
+    except Exception:
+        return None
+
 # --- Resiliency helpers for Supabase/httpx transient protocol errors ---
 # Some users have observed intermittent httpcore.RemoteProtocolError("Server disconnected") coming
 # from underlying HTTP/2 (or connection reuse) when performing rapid successive metadata lookups.
@@ -8349,18 +8361,90 @@ def shop_me_update(payload: UpdateShopIn, authorization: Optional[str] = Header(
     return {"ok": True}
 
 
+# ---- Admin endpoints: roles + shops listing ----
+
+def _require_admin(authorization: Optional[str]) -> str:
+    token = _bearer_token_from_header(authorization)
+    uid = _require_auth_user_id(token)
+    supabase = get_service_client()
+    try:
+        r = supabase.table("admin_roles").select("role,permissions").eq("auth_user_id", uid).limit(1).execute()
+        row = (getattr(r, 'data', []) or [{}])[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to resolve admin role: {e}")
+    role = (row.get("role") or "").lower()
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+    return uid
+
+
+@print_router.get("/api/admin/roles/me", summary="Return current user's admin role")
+def admin_role_me(authorization: Optional[str] = Header(default=None)):
+    token = _bearer_token_from_header(authorization)
+    uid = _require_auth_user_id(token)
+    supabase = get_service_client()
+    try:
+        r = supabase.table("admin_roles").select("role,permissions").eq("auth_user_id", uid).limit(1).execute()
+        row = (getattr(r, 'data', []) or [{}])[0]
+        role = (row.get("role") or "student")
+        perms = row.get("permissions") or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch role: {e}")
+    return {"role": role, "permissions": perms}
+
+
+@print_router.get("/api/admin/print/shops", summary="Admin: list print shops")
+def admin_list_shops(q: Optional[str] = Query(default=None), limit: int = Query(default=1000, ge=1, le=5000), authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    cols = "id,name,phone,email,address,is_open,paused,rating,logo_url,owner_user_id,updated_at,created_at"
+    try:
+        builder = supabase.table(PRINT_SHOPS_TABLE).select(cols).order("updated_at", desc=True).limit(limit)
+        # Conservative: apply search client-side if ilike is unavailable
+        res = builder.execute()
+        data = (getattr(res, 'data', []) or [])
+        if q:
+            qq = (q or '').strip().lower()
+            def _match(row: Dict[str, Any]) -> bool:
+                s = " ".join(str(row.get(k, "")) for k in ("name","email","phone","address")).lower()
+                return qq in s
+            data = [r for r in data if _match(r)]
+        return {"shops": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list shops: {e}")
+
+
 @print_router.get("/api/shop/jobs", summary="List jobs for my shop")
-def shop_jobs(status: Optional[str] = Query(default=None), authorization: Optional[str] = Header(default=None)):
+def shop_jobs(
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    authorization: Optional[str] = Header(default=None),
+):
     uid, _ = _get_auth_user(authorization)
     supabase = get_service_client()
-    shop_res = supabase.table(PRINT_SHOPS_TABLE).select("id").eq("owner_user_id", uid).limit(1).execute()
+    # Query shop id with retry to handle transient protocol disconnects
+    shop_res = _supabase_retry(lambda: supabase
+                               .table(PRINT_SHOPS_TABLE)
+                               .select("id")
+                               .eq("owner_user_id", uid)
+                               .limit(1)
+                               .execute())
     shop = (getattr(shop_res, 'data', []) or [{}])[0]
     if not shop:
         raise HTTPException(status_code=404, detail="No shop found")
     q = supabase.table(PRINT_JOBS_TABLE).select("*").eq("shop_id", shop.get("id"))
     if status:
         q = q.eq("status", status)
-    res = q.order("created_at").execute()
+    # Order by newest first and cap result size to avoid large payload disconnects
+    q = q.order("created_at", desc=True).limit(limit)
+    try:
+        res = _supabase_retry(lambda: q.execute())
+    except Exception as e:
+        # Retry once with a smaller window in case of upstream disconnects
+        try:
+            res = _supabase_retry(lambda: q.limit(min(limit, 100)).execute())
+        except Exception:
+            raise HTTPException(status_code=502, detail="Upstream query failed while fetching jobs")
     return {"jobs": getattr(res, 'data', []) or []}
 
 
@@ -9988,7 +10072,7 @@ def _cached_youtube_meta(video_key: str) -> Dict[str, Any]:
     if not vid:
         # Fallback to parser if present
         try:
-            vid = extract_video_id(str(url))
+            vid = extract_video_id(str(target_url))
         except HTTPException:
             pass
     if not vid:
