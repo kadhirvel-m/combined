@@ -455,6 +455,9 @@
 
         <!-- Quick actions -->
         <div class="ml-auto flex items-center gap-2">
+          <button id="flashcardBtn"
+            class="ripple hidden px-3 py-2 rounded-lg border text-sm bg-gradient-to-r from-fuchsia-500 via-brand-500 to-indigo-500 text-white font-semibold shadow-neon transition disabled:opacity-60 disabled:cursor-not-allowed"
+            style="border-color: var(--outline)" disabled aria-disabled="true">Flashcards</button>
           <button id="densityBtn"
             class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)] transition"
             style="border-color: var(--outline)" title="Toggle density">Density</button>
@@ -809,12 +812,67 @@
     const $fsCtrl = document.getElementById('fsControls');
     const $fsExit = document.getElementById('fsExitBtn');
     const $fsHome = document.getElementById('fsHomeBtn');
+  const $flashcardBtn = document.getElementById('flashcardBtn');
+  const flashcardDefaultLabel = $flashcardBtn ? ($flashcardBtn.textContent || 'Flashcards') : 'Flashcards';
 
     const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
     const channelLogoCache = new Map();
     let relatedVideosAbort = null;
     let relatedVideosTopic = '';
     let relatedVideosDebounce = null;
+
+    function resetFlashcardAccess() {
+      if (!$flashcardBtn) return;
+      $flashcardBtn.classList.add('hidden');
+      $flashcardBtn.disabled = true;
+      $flashcardBtn.setAttribute('aria-disabled', 'true');
+      $flashcardBtn.dataset.noteId = '';
+      $flashcardBtn.dataset.topic = '';
+      $flashcardBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (flashcardDefaultLabel) {
+        $flashcardBtn.textContent = flashcardDefaultLabel;
+      }
+    }
+
+    function enableFlashcardAccess(noteId, topic) {
+      if (!$flashcardBtn) return;
+      $flashcardBtn.dataset.noteId = noteId || '';
+      $flashcardBtn.dataset.topic = topic || '';
+      $flashcardBtn.disabled = false;
+      $flashcardBtn.removeAttribute('aria-disabled');
+      $flashcardBtn.classList.remove('hidden');
+      $flashcardBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (flashcardDefaultLabel) {
+        $flashcardBtn.textContent = flashcardDefaultLabel;
+      }
+    }
+
+    function openFlashcards() {
+      if (!$flashcardBtn) return;
+      const noteId = ($flashcardBtn.dataset.noteId || '').trim();
+      if (!noteId) {
+        snack('Generate notes first');
+        return;
+      }
+      const inferredTopic = (
+        ($flashcardBtn.dataset.topic || '')
+        || (document.querySelector('#output h1')?.textContent || '')
+        || ($topic.value || '')
+      ).trim();
+      try {
+        sessionStorage.setItem('paperx:lastFlashcardSeed', JSON.stringify({ noteId, topic: inferredTopic, ts: Date.now() }));
+      } catch (e) { /* ignore */ }
+      const search = new URLSearchParams({ noteId });
+      if (inferredTopic) {
+        search.set('topic', inferredTopic);
+      }
+      const target = `./flashcards.html?${search.toString()}`;
+      $flashcardBtn.classList.add('pointer-events-none', 'opacity-70');
+      $flashcardBtn.textContent = 'Opening…';
+      setTimeout(() => { window.location.href = target; }, 120);
+    }
+
+    resetFlashcardAccess();
 
     function getChannelLogoAsync(channelPage) {
       if (!channelPage) return Promise.resolve('');
@@ -1114,6 +1172,13 @@
       });
     }
 
+    if ($flashcardBtn) {
+      $flashcardBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        openFlashcards();
+      });
+    }
+
     if ($topic) {
       $topic.addEventListener('input', () => {
         const query = ($topic.value || '').trim();
@@ -1283,6 +1348,8 @@
       $toc.innerHTML = '';
       $progress.style.width = '0%';
       $meta.textContent = '';
+      resetFlashcardAccess();
+  currentNoteId = '';
       // reset images skeleton
       ['', '', ''].forEach(() => {
         const sk = document.createElement('div');
@@ -1354,6 +1421,18 @@
           currentNoteId = d.id;
           localStorage.setItem('paperx:lastNoteId', currentNoteId);
           $meta.textContent = `Saved • ${currentNoteId}`;
+        }
+        const detectedTopic = (() => {
+          const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
+          if (fromHeading) return fromHeading;
+          const fromPayload = (d.title || d.topic || '').trim();
+          if (fromPayload) return fromPayload;
+          const fromInput = ($topic.value || '').trim();
+          if (fromInput) return fromInput;
+          return relatedVideosTopic || '';
+        })();
+        if (currentNoteId) {
+          enableFlashcardAccess(currentNoteId, detectedTopic);
         }
         logEvent('Complete');
         setBusy(false); es && es.close(); es = null;
@@ -1613,6 +1692,16 @@
         if (data?.markdown) {
           renderMarkdown(data.markdown);
           $meta.textContent = `Loaded • ${id}`;
+          currentNoteId = data?.id || id;
+          const derivedTopic = (
+            (data?.title || '')
+            || (document.querySelector('#output h1')?.textContent || '')
+            || storedTopic
+            || ($topic.value || '')
+          ).trim();
+          if (currentNoteId) {
+            enableFlashcardAccess(currentNoteId, derivedTopic);
+          }
         }
       } catch { }
     })();

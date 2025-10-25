@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PaperX — Flashcard Orbit</title>
+
+  <script>
+    (function () {
+      try {
+        var keys = ['cx-theme', 'theme', 'px-theme'];
+        var mode = null;
+        for (var i = 0; i < keys.length; i++) {
+          var v = localStorage.getItem(keys[i]);
+          if (v === 'dark' || v === 'light') { mode = v; break; }
+        }
+        if (!mode && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          mode = 'dark';
+        }
+        if (mode) {
+          document.documentElement.setAttribute('data-theme', mode);
+          document.documentElement.classList.toggle('dark', mode === 'dark');
+        }
+      } catch (e) { }
+    })();
+  </script>
+
+  <link rel="stylesheet" href="assets/css/tailwind.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="config.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.18), transparent 55%),
+        radial-gradient(circle at 85% 10%, rgba(129, 140, 248, 0.16), transparent 60%),
+        radial-gradient(circle at 30% 78%, rgba(34, 197, 94, 0.14), transparent 60%),
+        linear-gradient(180deg, #020617 0%, #060b1d 60%, #020617 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .cosmic-grid::before,
+    .cosmic-grid::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.22), transparent 45%),
+        radial-gradient(circle at 90% 20%, rgba(236, 72, 153, 0.22), transparent 50%),
+        radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.2), transparent 55%);
+      mix-blend-mode: screen;
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .cosmic-grid::after {
+      background: url('data:image/svg+xml,%3Csvg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd" stroke="%23ffffff" stroke-opacity="0.05" stroke-width="1"%3E%3Cpath d="M0 0h400v400H0z"/%3E%3Cpath d="M20 20h360v360H20z"/%3E%3C/g%3E%3C/svg%3E');
+      opacity: 0.4;
+      mask-image: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.65), transparent 70%);
+    }
+
+    .glass-panel {
+      position: relative;
+      backdrop-filter: blur(18px);
+      background: rgba(12, 18, 45, 0.78);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      box-shadow: 0 0 40px rgba(59, 166, 255, 0.18);
+    }
+
+    #cardTrack {
+      position: relative;
+      width: 100%;
+      min-height: min(68vh, 650px);
+      perspective: 1400px;
+      isolation: isolate;
+    }
+
+    .flashcard {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: min(100%, 920px);
+      transition: transform 0.55s ease, opacity 0.55s ease, filter 0.55s ease;
+      transform-origin: center;
+      transform: translate3d(0, 0, 0) scale(0.82);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .flashcard.card-active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate3d(0, -12px, 0) scale(1);
+      z-index: 3;
+      filter: drop-shadow(0 0 45px rgba(56, 189, 248, 0.35));
+    }
+
+    .flashcard.card-prev {
+      opacity: 0.35;
+      transform: translate3d(-18%, 8px, -80px) rotateY(16deg) scale(0.86);
+      z-index: 1;
+      filter: blur(0.5px);
+    }
+
+    .flashcard.card-next {
+      opacity: 0.35;
+      transform: translate3d(18%, 8px, -80px) rotateY(-16deg) scale(0.86);
+      z-index: 1;
+      filter: blur(0.5px);
+    }
+
+    .flashcard:not(.card-active) .card-surface {
+      pointer-events: none;
+    }
+
+    .card-surface {
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(12, 18, 38, 0.88));
+      border: 1px solid rgba(99, 102, 241, 0.24);
+      border-radius: 1.65rem;
+      padding: clamp(1.35rem, 1.8vw + 1rem, 2.4rem);
+      box-shadow: inset 0 0 45px rgba(14, 165, 233, 0.08);
+      min-height: min(64vh, 600px);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-surface::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      background: linear-gradient(120deg, rgba(59, 166, 255, 0.65), rgba(236, 72, 153, 0.35), rgba(45, 212, 191, 0.6));
+      filter: blur(32px);
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      pointer-events: none;
+    }
+
+    .flashcard.card-active .card-surface::before {
+      opacity: 0.35;
+    }
+
+    .sections-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.1rem;
+    }
+
+    .card-section {
+      position: relative;
+      border-radius: 1.25rem;
+      padding: 1.1rem 1.1rem 1.3rem;
+      background: rgba(15, 23, 42, 0.62);
+      border: 1px solid rgba(59, 166, 255, 0.26);
+      box-shadow: inset 0 0 28px rgba(15, 118, 110, 0.16);
+      transition: transform 0.28s ease, border-color 0.28s ease;
+    }
+
+    .card-section:hover {
+      transform: translateY(-4px);
+      border-color: rgba(165, 180, 252, 0.45);
+    }
+
+    .card-section button.reveal-btn {
+      position: absolute;
+      top: 0.9rem;
+      right: 0.9rem;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+      background: rgba(147, 197, 253, 0.12);
+      color: rgba(226, 232, 240, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    .card-section button.reveal-btn:hover {
+      background: rgba(37, 99, 235, 0.38);
+      color: #f8fafc;
+    }
+
+    [data-section][data-revealed="false"] .section-answer {
+      filter: blur(12px);
+      opacity: 0.35;
+    }
+
+    body:not(.study-mode) [data-section] .section-answer {
+      filter: none !important;
+      opacity: 1 !important;
+    }
+
+    .study-mode [data-section][data-revealed="false"] .section-answer::after {
+      content: 'Tap Reveal';
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(226, 232, 240, 0.75);
+    }
+
+    .study-mode [data-section][data-revealed="false"] .section-answer {
+      position: relative;
+    }
+
+    .study-mode [data-section] button.reveal-btn {
+      opacity: 1;
+    }
+
+    .keychip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      background: rgba(49, 46, 129, 0.58);
+      border: 1px solid rgba(165, 180, 252, 0.35);
+      border-radius: 999px;
+      padding: 0.45rem 0.9rem;
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .keychip:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 18px rgba(99, 102, 241, 0.35);
+    }
+
+    .rich-text {
+      font-size: 0.96rem;
+      line-height: 1.65;
+      color: rgba(226, 232, 240, 0.88);
+    }
+
+    .rich-text p {
+      margin-bottom: 0.75rem;
+    }
+
+    .rich-text ul,
+    .rich-text ol {
+      margin-bottom: 0.75rem;
+      padding-left: 1.2rem;
+    }
+
+    .rich-text li {
+      margin-bottom: 0.35rem;
+    }
+
+    .rich-text code {
+      background: rgba(15, 23, 42, 0.65);
+      border-radius: 0.35rem;
+      padding: 0.1rem 0.35rem;
+      font-size: 0.85rem;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid rgba(94, 234, 212, 0.35);
+      background: rgba(94, 234, 212, 0.12);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .pill-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.32);
+      padding: 0.55rem 1.1rem;
+      font-size: 0.85rem;
+      transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+      backdrop-filter: blur(6px);
+      background: rgba(15, 23, 42, 0.68);
+      cursor: pointer;
+    }
+
+    .pill-button:hover {
+      transform: translateY(-2px);
+      background: rgba(37, 99, 235, 0.35);
+      border-color: rgba(96, 165, 250, 0.6);
+    }
+
+    .pill-button:focus-visible {
+      outline: 2px solid rgba(56, 189, 248, 0.7);
+      outline-offset: 2px;
+    }
+
+    .deck-progress {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .progress-track {
+      flex: 1 1 220px;
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(15, 23, 42, 0.7);
+      overflow: hidden;
+    }
+
+    .progress-track span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, rgba(56, 189, 248, 0.9), rgba(14, 165, 233, 0.9));
+      width: 0%;
+      transition: width 0.35s ease;
+    }
+
+    @media (max-width: 900px) {
+      .flashcard.card-prev,
+      .flashcard.card-next {
+        display: none;
+      }
+
+      .flashcard {
+        position: relative;
+        transform: scale(1);
+        opacity: 1;
+      }
+
+      #cardTrack {
+        min-height: unset;
+      }
+
+      .card-surface {
+        min-height: auto;
+      }
+    }
+
+    @media (max-width: 640px) {
+      header .action-buttons {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem;
+      }
+
+      .deck-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .deck-actions .pill-button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body class="overflow-x-hidden">
+  <div class="absolute inset-0 -z-10 cosmic-grid"></div>
+
+  <header class="max-w-7xl mx-auto px-4 lg:px-8 pt-8 flex flex-col gap-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div class="flex items-center gap-3 text-sm">
+        <a href="./notes_generator.html" class="inline-flex items-center gap-2 text-sky-300 hover:text-sky-100 transition">
+          <span class="text-lg">←</span> Back to Generator
+        </a>
+        <span class="status-pill" id="statusPill">Summoning deck…</span>
+      </div>
+      <div class="flex items-center gap-3 text-xs text-slate-300/70">
+        <span id="truncateBadge" class="hidden px-3 py-1 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-200">Trimmed notes</span>
+        <span id="modelBadge" class="px-3 py-1 rounded-full border border-slate-500/60 bg-slate-900/60">Model • gemini</span>
+  <button id="themeToggle" type="button" class="pill-button px-4 py-2">
+          <span class="hidden">Toggle theme</span>
+          <span class="text-sm">Light</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="glass-panel rounded-3xl p-6 lg:p-8">
+      <div class="flex flex-col lg:flex-row lg:items-center gap-8">
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 rounded-3xl bg-gradient-to-br from-sky-400 via-blue-500 to-fuchsia-500 shadow-lg grid place-items-center text-2xl">
+            ⚡️
+          </div>
+          <div class="space-y-2">
+            <p id="deckHeadline" class="text-xs uppercase tracking-[0.35em] text-slate-400">Generating flashcards…</p>
+            <h1 id="topicTitle" class="text-3xl lg:text-[2.4rem] font-semibold text-slate-100">Loading your deck</h1>
+            <p id="deckMeta" class="text-sm text-slate-300/80">Hang tight while we weave galaxies of learning.</p>
+            <p id="topicSubtitle" class="text-xs uppercase tracking-[0.35em] text-slate-500">Every answer stays grounded in your notes.</p>
+          </div>
+        </div>
+        <div class="deck-actions flex items-center gap-3 ml-auto">
+          <button id="shuffleBtn" type="button" class="pill-button">Shuffle Deck</button>
+          <button id="studyToggle" type="button" class="pill-button">Study Mode</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 lg:px-8 pb-20">
+    <section class="glass-panel rounded-3xl p-6 lg:p-8 mt-10">
+      <div class="mt-4 relative" id="deckWrap">
+        <div id="cardTrack" class="grid place-items-center">
+          <article class="flashcard card-active w-full" aria-live="polite">
+            <div class="card-surface animate-pulse">
+              <div class="flex flex-col gap-3">
+                <div class="flex items-center gap-3 text-xs text-slate-400">
+                  <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full border border-slate-700 uppercase tracking-[0.3em]">Loading</span>
+                  <span>Generating flashcards…</span>
+                </div>
+                <div class="h-7 w-64 rounded-full bg-slate-800/60"></div>
+                <div class="h-4 w-full rounded-full bg-slate-900/60"></div>
+              </div>
+              <div class="sections-grid mt-8">
+                <div class="h-32 rounded-2xl bg-slate-900/60 border border-slate-700/60"></div>
+                <div class="h-32 rounded-2xl bg-slate-900/60 border border-slate-700/60"></div>
+                <div class="h-32 rounded-2xl bg-slate-900/60 border border-slate-700/60"></div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="mt-12 deck-progress">
+        <div class="flex items-center gap-3 text-sm text-slate-300/80">
+          <button id="prevBtn" class="pill-button px-4 py-2">◀ Prev</button>
+          <button id="nextBtn" class="pill-button px-4 py-2">Next ▶</button>
+          <span id="cardCounter" class="text-xs uppercase tracking-[0.3em] text-slate-400">0 / 0</span>
+        </div>
+        <div class="progress-track">
+          <span id="progressBar"></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="snack" class="fixed left-1/2 -translate-x-1/2 bottom-6 px-4 py-2 rounded-xl border border-slate-600/40 bg-slate-900/85 text-sm hidden">Copied</div>
+
+  <script>
+    function stripCitations(text) {
+      if (!text) return text;
+      let cleaned = String(text);
+      cleaned = cleaned.replace(/\s*\(citation:.*?\)/gi, '');
+      cleaned = cleaned.replace(/\s*\[citation[^\]]*\]/gi, '');
+      cleaned = cleaned.replace(/\s*\[(?:source|ref)[^\]]*\]/gi, '');
+      cleaned = cleaned.replace(/\s*\[[0-9]+(?:\s*,\s*[0-9]+)*\]/g, '');
+      cleaned = cleaned.replace(/^\s*(?:Citations?|Sources?):.*$/gim, '');
+      cleaned = cleaned.replace(/^\s*\[[0-9]+\]:.*$/gm, '');
+      return cleaned.trim();
+    }
+
+    function renderMarkdown(text) {
+      if (!text) return '';
+      if (window.marked && window.DOMPurify) {
+        var html = window.marked.parse(text, { breaks: true, mangle: false, headerIds: false });
+        return window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+      }
+      return text;
+    }
+
+  const apiBase = (window.API_BASE || window.location.origin).replace(/\/$/, '');
+    const params = new URLSearchParams(window.location.search);
+    const noteId = params.get('noteId') || params.get('note_id');
+    const topicParam = params.get('topic') || '';
+
+    const state = {
+      cards: [],
+      current: 0,
+      topic: topicParam || '',
+      count: 0,
+      studyMode: false,
+      noteId: noteId || '',
+      truncated: false,
+      model: '',
+      fallback: false,
+    };
+
+    if (!state.topic) {
+      try {
+        const cachedSeed = sessionStorage.getItem('paperx:lastFlashcardSeed');
+        if (cachedSeed) {
+          const parsedSeed = JSON.parse(cachedSeed);
+          if (!state.topic && parsedSeed && parsedSeed.topic && parsedSeed.noteId === state.noteId) {
+            state.topic = parsedSeed.topic;
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    const $statusPill = document.getElementById('statusPill');
+    const $deckHeadline = document.getElementById('deckHeadline');
+    const $deckMeta = document.getElementById('deckMeta');
+    const $topicTitle = document.getElementById('topicTitle');
+    const $topicSubtitle = document.getElementById('topicSubtitle');
+    const $modelBadge = document.getElementById('modelBadge');
+    const $truncateBadge = document.getElementById('truncateBadge');
+    const $cardTrack = document.getElementById('cardTrack');
+    const $progressBar = document.getElementById('progressBar');
+    const $cardCounter = document.getElementById('cardCounter');
+    const $prev = document.getElementById('prevBtn');
+    const $next = document.getElementById('nextBtn');
+    const $shuffle = document.getElementById('shuffleBtn');
+    const $studyToggle = document.getElementById('studyToggle');
+    const $themeToggle = document.getElementById('themeToggle');
+
+    if (state.topic) {
+      $topicTitle.textContent = state.topic;
+      $deckHeadline.textContent = `Preparing flashcards for ${state.topic}`;
+    }
+
+    function snack(msg) {
+      const $sn = document.getElementById('snack');
+      $sn.textContent = msg;
+      $sn.classList.remove('hidden');
+      setTimeout(() => $sn.classList.add('hidden'), 1800);
+    }
+
+    function setStatus(text, tone) {
+      if (!$statusPill) return;
+      $statusPill.textContent = text;
+      if (tone === 'error') {
+        $statusPill.style.borderColor = 'rgba(248,113,113,0.4)';
+        $statusPill.style.background = 'rgba(248,113,113,0.08)';
+      } else if (tone === 'ready') {
+        $statusPill.style.borderColor = 'rgba(125, 211, 252, 0.4)';
+        $statusPill.style.background = 'rgba(125, 211, 252, 0.12)';
+      } else {
+        $statusPill.style.borderColor = 'rgba(94, 234, 212, 0.35)';
+        $statusPill.style.background = 'rgba(94, 234, 212, 0.12)';
+      }
+    }
+
+    function createSection(section, sectionIndex) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'card-section';
+      wrapper.dataset.section = String(sectionIndex);
+      wrapper.dataset.revealed = state.studyMode ? 'false' : 'true';
+
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'flex items-center gap-2 text-slate-200 text-lg font-semibold';
+      iconWrap.innerHTML = `<span class="text-2xl">${section.icon || '🧠'}</span><span>${section.heading || 'Concept'}</span>`;
+      wrapper.appendChild(iconWrap);
+
+      if (section.question) {
+        const question = document.createElement('p');
+        question.className = 'mt-2 text-xs uppercase tracking-[0.18em] text-slate-400';
+        question.textContent = section.question;
+        wrapper.appendChild(question);
+      }
+
+      const answer = document.createElement('div');
+      answer.className = 'section-answer mt-3 rich-text';
+      answer.innerHTML = renderMarkdown(section.answer || 'Not covered in notes');
+      wrapper.appendChild(answer);
+
+      const revealBtn = document.createElement('button');
+      revealBtn.type = 'button';
+      revealBtn.className = 'reveal-btn';
+      const updateLabel = () => {
+        revealBtn.textContent = wrapper.dataset.revealed === 'true' ? 'Hide' : 'Reveal';
+      };
+      revealBtn.addEventListener('click', () => {
+        wrapper.dataset.revealed = wrapper.dataset.revealed === 'true' ? 'false' : 'true';
+        updateLabel();
+      });
+      updateLabel();
+      wrapper.appendChild(revealBtn);
+
+      return wrapper;
+    }
+
+    function createCard(card, index) {
+      const article = document.createElement('article');
+      article.className = 'flashcard w-full';
+      article.dataset.index = String(index);
+      article.setAttribute('role', 'group');
+      article.setAttribute('aria-roledescription', 'flashcard');
+
+      const surface = document.createElement('div');
+      surface.className = 'card-surface';
+
+  const header = document.createElement('div');
+  header.className = 'flex flex-col gap-3';
+  const summaryHtml = card.summary ? `<div class="text-sm text-slate-300/80 leading-relaxed rich-text">${renderMarkdown(card.summary)}</div>` : '';
+      header.innerHTML = `
+        <div class="flex items-center gap-3 text-xs text-slate-400">
+          <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full border border-slate-700 uppercase tracking-[0.3em]">CARD ${index + 1}</span>
+          <span class="uppercase tracking-[0.3em] text-slate-500">${state.count} total</span>
+        </div>
+        <h2 class="text-2xl lg:text-[2rem] font-semibold text-slate-50 flex items-center gap-3"><span>${card.concept || 'Concept'}</span></h2>
+        ${summaryHtml}
+      `;
+      surface.appendChild(header);
+
+      const sectionsWrap = document.createElement('div');
+      sectionsWrap.className = 'sections-grid';
+      (card.sections || []).forEach((section, sIdx) => {
+        if (section) {
+          const sectionEl = createSection(section, sIdx);
+          sectionsWrap.appendChild(sectionEl);
+        }
+      });
+      surface.appendChild(sectionsWrap);
+
+      if (card.key_points && card.key_points.length) {
+        const footer = document.createElement('div');
+        footer.className = 'mt-auto';
+        const title = document.createElement('p');
+        title.className = 'text-xs uppercase tracking-[0.3em] text-slate-400 mb-3';
+        title.textContent = 'Key Sparks';
+        footer.appendChild(title);
+
+        const list = document.createElement('div');
+        list.className = 'flex flex-wrap gap-2';
+        card.key_points.slice(0, 6).forEach((point) => {
+          const cleanedPoint = stripCitations(point);
+          const chip = document.createElement('span');
+          chip.className = 'keychip';
+          chip.textContent = cleanedPoint;
+          chip.addEventListener('click', () => {
+            navigator.clipboard.writeText(cleanedPoint).then(() => snack('Key point copied'));
+          });
+          list.appendChild(chip);
+        });
+        footer.appendChild(list);
+        surface.appendChild(footer);
+      }
+
+      article.appendChild(surface);
+      return article;
+    }
+
+    function updateActiveCard() {
+      const cards = Array.from($cardTrack.querySelectorAll('.flashcard'));
+      cards.forEach((cardEl) => {
+        const idx = Number(cardEl.dataset.index);
+        cardEl.classList.remove('card-active', 'card-prev', 'card-next');
+        if (idx === state.current) {
+          cardEl.classList.add('card-active');
+          cardEl.setAttribute('aria-hidden', 'false');
+        } else {
+          cardEl.setAttribute('aria-hidden', 'true');
+          if (idx === (state.current - 1 + state.count) % state.count) {
+            cardEl.classList.add('card-prev');
+          }
+          if (idx === (state.current + 1) % state.count) {
+            cardEl.classList.add('card-next');
+          }
+        }
+      });
+
+      const progress = state.count ? ((state.current + 1) / state.count) * 100 : 0;
+      $progressBar.style.width = `${progress}%`;
+      $cardCounter.textContent = `${state.current + 1} / ${state.count}`;
+    }
+
+    function renderDeck() {
+      $cardTrack.innerHTML = '';
+      state.cards.forEach((card, index) => {
+        const cardEl = createCard(card, index);
+        $cardTrack.appendChild(cardEl);
+      });
+      updateActiveCard();
+    }
+
+    function gotoCard(index) {
+      if (!state.count) return;
+      const nextIndex = (index + state.count) % state.count;
+      state.current = nextIndex;
+      updateActiveCard();
+    }
+
+    function shuffleDeck() {
+      if (!state.count) return;
+      const currentCard = state.cards[state.current];
+      const rest = state.cards.filter((_, idx) => idx !== state.current);
+      for (let i = rest.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [rest[i], rest[j]] = [rest[j], rest[i]];
+      }
+      state.cards = [currentCard, ...rest];
+      state.current = 0;
+      renderDeck();
+      applyStudyMode(state.studyMode);
+    }
+
+    function applyStudyMode(on) {
+      state.studyMode = on;
+      document.body.classList.toggle('study-mode', on);
+      const sections = document.querySelectorAll('[data-section]');
+      sections.forEach((section) => {
+        section.dataset.revealed = on ? 'false' : 'true';
+        const btn = section.querySelector('button.reveal-btn');
+        if (btn) {
+          btn.textContent = on ? 'Reveal' : 'Hide';
+        }
+      });
+      if ($studyToggle) {
+        $studyToggle.textContent = on ? 'Study Mode: On' : 'Study Mode';
+      }
+    }
+
+    function buildFlashcardEndpoints() {
+      const endpoints = [];
+      const primary = `${apiBase}/notes/${encodeURIComponent(state.noteId)}/flashcards`;
+      endpoints.push(primary);
+      const hasApiSuffix = /\/api$/i.test(apiBase);
+      const altBase = hasApiSuffix ? apiBase.replace(/\/api$/i, '') : `${apiBase}/api`;
+      const alt = `${altBase.replace(/\/$/, '')}/notes/${encodeURIComponent(state.noteId)}/flashcards`;
+      if (!endpoints.includes(alt)) {
+        endpoints.push(alt);
+      }
+      return endpoints;
+    }
+
+    async function requestFlashcards(url) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: state.topic || undefined }),
+        });
+        if (!res.ok) {
+          let message = `HTTP ${res.status}`;
+          try {
+            const detail = await res.json();
+            if (detail && typeof detail === 'object') {
+              message = detail.detail || detail.error || message;
+            }
+          } catch (_) {
+            try {
+              const text = await res.text();
+              if (text) message = text;
+            } catch (_) { /* ignore */ }
+          }
+          return { ok: false, status: res.status, message };
+        }
+        const data = await res.json();
+        return { ok: true, data };
+      } catch (error) {
+        return { ok: false, status: 0, message: error && error.message ? error.message : 'Network error' };
+      }
+    }
+
+    async function fetchFlashcards() {
+      if (!state.noteId) {
+        setStatus('Missing note reference', 'error');
+        $deckHeadline.textContent = 'Note ID missing';
+        $deckMeta.textContent = 'Append ?noteId=<id> to the URL from the generator page.';
+        return;
+      }
+      setStatus('Summoning deck…');
+      try {
+        const endpoints = buildFlashcardEndpoints();
+        let responseData = null;
+        for (let i = 0; i < endpoints.length; i += 1) {
+          const result = await requestFlashcards(endpoints[i]);
+          if (result.ok) {
+            responseData = result.data;
+            state.endpointUsed = endpoints[i];
+            break;
+          }
+          const retriable = result.status === 404 || result.status === 405;
+          if (!retriable || i === endpoints.length - 1) {
+            throw new Error(result.message || 'Flashcard endpoint rejected the request.');
+          }
+        }
+
+        const data = responseData;
+        state.cards = (Array.isArray(data.flashcards) ? data.flashcards : []).map((raw, idx) => {
+          const normalized = Object.assign({}, raw);
+          normalized.concept = stripCitations(normalized.concept || `Concept ${idx + 1}`);
+          normalized.summary = stripCitations(normalized.summary || '');
+          normalized.key_points = Array.isArray(normalized.key_points)
+            ? normalized.key_points.map(stripCitations)
+            : [];
+          normalized.sections = Array.isArray(normalized.sections)
+            ? normalized.sections.map((section) => ({
+              icon: section && section.icon ? section.icon : '🧠',
+              heading: stripCitations(section && section.heading ? section.heading : 'Concept'),
+              question: stripCitations(section && section.question ? section.question : ''),
+              answer: stripCitations(section && section.answer ? section.answer : ''),
+            }))
+            : [];
+          return normalized;
+        });
+        state.count = state.cards.length;
+        state.topic = data.topic || topicParam || 'Flashcards';
+        state.truncated = Boolean(data.truncated);
+        state.model = data.model || '';
+        state.fallback = Boolean(data.fallback);
+        state.current = 0;
+
+        if (!state.count) {
+          throw new Error('No flashcards were generated. Try regenerating your notes.');
+        }
+
+        document.title = `${state.topic} — Flashcard Orbit`;
+        $topicTitle.textContent = state.topic;
+        $deckHeadline.textContent = `${state.count} flashcards orbiting your notes`;
+        if (state.fallback) {
+          $deckMeta.textContent = 'Deck auto-built locally from your notes after the AI timed out. You can still shuffle and study every concept.';
+        } else {
+          $deckMeta.textContent = 'Use ← → keys or buttons to cruise through concepts. Toggle Study Mode to hide answers.';
+        }
+        $topicSubtitle.textContent = 'Every answer is grounded in your generated notes. Shuffle, reveal, and conquer your revision galaxy.';
+
+        if (state.truncated) {
+          $truncateBadge.classList.remove('hidden');
+        }
+        if (state.model) {
+          $modelBadge.textContent = state.fallback ? 'Model • fallback' : `Model • ${state.model}`;
+        }
+        setStatus(state.fallback ? 'Deck ready (fallback)' : 'Deck ready', 'ready');
+        renderDeck();
+        applyStudyMode(state.studyMode);
+      } catch (error) {
+        console.error('Flashcard error', error);
+        setStatus('Generation failed', 'error');
+        $deckHeadline.textContent = 'Something broke in hyperspace';
+        $deckMeta.textContent = error.message || 'Unable to generate flashcards. Try regenerating notes and retry.';
+      }
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        gotoCard(state.current + 1);
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        gotoCard(state.current - 1);
+      } else if (event.key.toLowerCase() === 's' && event.altKey) {
+        applyStudyMode(!state.studyMode);
+      }
+    });
+
+    $prev.addEventListener('click', () => gotoCard(state.current - 1));
+    $next.addEventListener('click', () => gotoCard(state.current + 1));
+    $shuffle.addEventListener('click', shuffleDeck);
+    $studyToggle.addEventListener('click', () => applyStudyMode(!state.studyMode));
+
+    if ($themeToggle) {
+      $themeToggle.addEventListener('click', () => {
+        if (window.Theme && typeof window.Theme.toggle === 'function') {
+          const mode = window.Theme.toggle();
+          $themeToggle.querySelector('span:last-child').textContent = mode === 'dark' ? 'Light' : 'Dark';
+        } else {
+          document.documentElement.classList.toggle('dark');
+          const darkNow = document.documentElement.classList.contains('dark');
+          $themeToggle.querySelector('span:last-child').textContent = darkNow ? 'Light' : 'Dark';
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if ($themeToggle) {
+        const label = $themeToggle.querySelector('span:last-child');
+        if (window.Theme && typeof window.Theme.init === 'function') {
+          const current = window.Theme.init();
+          if (label) {
+            label.textContent = current === 'dark' ? 'Light' : 'Dark';
+          }
+        } else {
+          const darkNow = document.documentElement.classList.contains('dark');
+          if (label) {
+            label.textContent = darkNow ? 'Light' : 'Dark';
+          }
+        }
+      }
+      fetchFlashcards();
+    });
+  </script>
+</body>
+
+</html>

@@ -9896,6 +9896,429 @@ async def generate_stream(topic: str, force: bool = False):
     return StreamingResponse(event_source(), media_type="text/event-stream", headers=headers)
 
 
+class FlashcardSection(BaseModel):
+    icon: str = Field(..., min_length=1, max_length=8)
+    heading: str = Field(..., min_length=1)
+    question: str = Field(..., min_length=1)
+    answer: str = Field(..., min_length=1)
+
+
+class FlashcardCard(BaseModel):
+    concept: str = Field(..., min_length=1)
+    summary: Optional[str] = None
+    sections: List[FlashcardSection] = Field(default_factory=list)
+    key_points: List[str] = Field(default_factory=list)
+
+    @validator("sections")
+    def ensure_sections(cls, value):
+        if not value:
+            raise ValueError("Each flashcard must include at least one section.")
+        return value
+
+
+def _derive_topic_from_markdown(markdown: str, fallback: str = "") -> str:
+    title, _ = _extract_title_and_headings(markdown or "")
+    if title:
+        return title
+    return fallback
+
+
+def _fallback_flashcards_from_markdown(markdown: str, topic: str, max_cards: int) -> List[Dict[str, Any]]:
+    text = (markdown or "").strip()
+    if not text:
+        return []
+
+    heading_pattern = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+    matches = list(heading_pattern.finditer(text))
+    sections: List[Tuple[str, str]] = []
+
+    if matches:
+        for idx, match in enumerate(matches):
+            title = match.group(1).strip()
+            start = match.end()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+            body = text[start:end].strip()
+            if body:
+                sections.append((title, body))
+    else:
+        sections.append((topic or "Overview", text))
+
+    bullet_pattern = re.compile(r"^\s*[-*+]\s+(.*)$", re.MULTILINE)
+    candidate_cards: List[Tuple[str, str]] = []
+    seen_titles: Set[str] = set()
+    for title, body in sections:
+        tkey = title.lower()
+        if tkey in seen_titles:
+            continue
+        seen_titles.add(tkey)
+        candidate_cards.append((title, body))
+
+    # If not enough sections, create additional cards from bullets
+    if len(candidate_cards) < max_cards:
+        bullets = [b.strip() for b in bullet_pattern.findall(text) if b.strip()]
+        for idx, bullet in enumerate(bullets):
+            if len(candidate_cards) >= max_cards:
+                break
+            candidate_cards.append((f"Key Insight {idx + 1}", bullet))
+
+    cards: List[Dict[str, Any]] = []
+    for title, body in candidate_cards[:max_cards]:
+        clean_body = body.strip()
+        paragraphs = [p.strip() for p in re.split(r"\n{2,}", clean_body) if p.strip()]
+        summary_source = paragraphs[0] if paragraphs else clean_body
+        summary = textwrap.shorten(summary_source.replace("\n", " "), width=220, placeholder="…") if summary_source else ""
+
+        sections_payload: List[Dict[str, str]] = []
+        sections_payload.append({
+            "icon": "🧠",
+            "heading": "Core Idea",
+            "question": f"What is {title}?",
+            "answer": summary_source or "Not covered in notes",
+        })
+
+        if len(paragraphs) > 1:
+            sections_payload.append({
+                "icon": "⚙️",
+                "heading": "Mechanism",
+                "question": "How does it work?",
+                "answer": paragraphs[1],
+            })
+        if len(paragraphs) > 2:
+            sections_payload.append({
+                "icon": "🛡️",
+                "heading": "Pitfalls",
+                "question": "What should we watch out for?",
+                "answer": paragraphs[2],
+            })
+
+        if len(sections_payload) < 2:
+            alt_answer = " ".join(paragraphs[1:2]) or clean_body[:240]
+            sections_payload.append({
+                "icon": "🔭",
+                "heading": "Details",
+                "question": "Tell me more",
+                "answer": alt_answer or "Not covered in notes",
+            })
+
+        key_points: List[str] = []
+        bullets = [b.strip() for b in bullet_pattern.findall(body) if b.strip()]
+        for bullet in bullets[:4]:
+            key_points.append(textwrap.shorten(bullet, width=100, placeholder="…"))
+        if not key_points and summary:
+            key_points.append(summary)
+
+        cards.append({
+            "concept": title[:80],
+            "summary": summary,
+            "sections": sections_payload,
+            "key_points": key_points,
+        })
+
+    return cards[:max_cards]
+
+
+def _generate_flashcards_with_gemini(markdown: str, topic: str, max_cards: int) -> Tuple[List[Dict[str, Any]], str, bool, bool]:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured for flashcard generation.")
+    try:
+        import google.generativeai as genai  # type: ignore
+        from google.api_core import exceptions as google_exceptions  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
+
+    cleaned_notes = (markdown or "").strip()
+    if not cleaned_notes:
+        raise HTTPException(status_code=400, detail="Note does not contain any content to build flashcards.")
+
+    limit_chars = int(os.getenv("FLASHCARD_MAX_CHARS", "9000") or "9000")
+    truncated = len(cleaned_notes) > limit_chars
+    excerpt = cleaned_notes[:limit_chars]
+
+    max_cards = max(4, min(max_cards, 8))
+    min_cards = min(6, max_cards)
+
+    prompt = textwrap.dedent(
+        f"""
+        You are PaperX's futuristic study companion. Craft an engaging flashcard deck for the topic "{topic}" using ONLY the material inside the triple chevrons.
+
+        Requirements:
+        - Produce between {min_cards} and {max_cards} flashcards (inclusive). If the notes cover fewer than {min_cards} solid ideas, produce as many as the notes justify but never exceed {max_cards}.
+        - Each flashcard is a JSON object with keys: "concept", "summary", "sections", "key_points".
+        - "concept": 3-6 word title anchored in the notes.
+        - "summary": 1-2 sentence high-energy overview derived strictly from the notes.
+        - "sections": array of 2-4 objects, each with emoji "icon", "heading", "question", "answer". Questions must be informational; answers must come strictly from the notes. Icons should feel futuristic/fantasy (🧠, ⚙️, 🔮, 🌌, 🛡️, 💡, etc.).
+        - "key_points": array of 2-4 crisp bullet phrases (≤80 characters) quoting or paraphrasing unique facts from the notes.
+        - NEVER invent information. If the notes lack detail for a section, set the answer to "Not covered in notes".
+        - Keep terminology consistent with the notes (math symbols, proper nouns, etc.).
+        - The vibe should be adventurous and motivating while staying accurate.
+        - Return ONLY valid JSON matching this exact structure: {{"topic": "...", "flashcards": [ {{...}} ] }}
+        - Do not wrap the JSON in markdown fences or additional commentary.
+
+        {"The notes excerpt was truncated for length. Mention this limitation when relevant." if truncated else ""}
+
+        <<<NOTES>>>
+        {excerpt}
+        <<<END NOTES>>>
+        """
+    ).strip()
+
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(GEMINI_NOTES_MODEL)
+    generation_config = genai.GenerationConfig(
+        response_mime_type="application/json",
+        temperature=0.45,
+        top_p=0.75,
+        max_output_tokens=1024,
+    )
+
+    request_timeout = float(os.getenv("GEMINI_FLASHCARD_TIMEOUT", "35"))
+    max_attempts = max(1, int(os.getenv("GEMINI_FLASHCARD_RETRIES", "3")))
+    base_delay = max(0.8, float(os.getenv("GEMINI_FLASHCARD_RETRY_DELAY", "1.5")))
+    transient_errors = (
+        google_exceptions.RetryError,
+        google_exceptions.ServiceUnavailable,
+        google_exceptions.ResourceExhausted,
+        google_exceptions.InternalServerError,
+    )
+    payload = [
+        {"text": prompt},
+    ]
+
+    response = None
+    last_exc: Optional[Exception] = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = model.generate_content(
+                payload,
+                generation_config=generation_config,
+                request_options={"timeout": request_timeout},
+            )
+            break
+        except google_exceptions.DeadlineExceeded as exc:
+            notes_logger.warning(
+                "Gemini flashcard generation deadline exceeded",
+                extra={
+                    "topic": topic,
+                    "note_chars": len(cleaned_notes),
+                    "limit_chars": limit_chars,
+                    "attempt": attempt,
+                },
+            )
+            fallback_cards = _fallback_flashcards_from_markdown(cleaned_notes, topic, max_cards)
+            if fallback_cards:
+                return fallback_cards, "fallback-markdown", truncated, True
+            raise HTTPException(status_code=504, detail="Flashcard generation timed out. Try again with a shorter note.") from exc
+        except transient_errors as exc:  # pragma: no cover - network dependent
+            last_exc = exc
+            delay = min(base_delay * (2 ** (attempt - 1)), 8.0)
+            notes_logger.warning(
+                "Gemini flashcard transient error; will retry",
+                extra={
+                    "topic": topic,
+                    "attempt": attempt,
+                    "remaining_attempts": max_attempts - attempt,
+                    "error": str(exc),
+                    "retry_delay_sec": delay,
+                },
+            )
+            if attempt == max_attempts:
+                break
+            time.sleep(delay)
+            continue
+        except google_exceptions.GoogleAPICallError as exc:  # pragma: no cover - network dependent
+            last_exc = exc
+            notes_logger.error(
+                "Gemini flashcard generation error",
+                extra={"topic": topic, "error": str(exc), "attempt": attempt},
+            )
+            if attempt == max_attempts:
+                break
+            delay = min(base_delay * (2 ** (attempt - 1)), 8.0)
+            time.sleep(delay)
+        except Exception as exc:  # pragma: no cover - safer catch-all
+            last_exc = exc
+            notes_logger.error(
+                "Gemini flashcard unexpected failure",
+                extra={"topic": topic, "error": str(exc), "attempt": attempt},
+            )
+            break
+
+    if response is None:
+        fallback_cards = _fallback_flashcards_from_markdown(cleaned_notes, topic, max_cards)
+        if fallback_cards:
+            notes_logger.warning(
+                "Gemini flashcard generation exhausted retries; using fallback",
+                extra={"topic": topic, "attempts": max_attempts, "error": str(last_exc) if last_exc else None},
+            )
+            return fallback_cards, "fallback-markdown", truncated, True
+        detail = "Gemini service error while generating flashcards."
+        if isinstance(last_exc, google_exceptions.RetryError):
+            detail = "Gemini retry attempts exhausted. Please try again shortly."
+        raise HTTPException(status_code=502, detail=detail)
+
+    raw_text = getattr(response, "text", None)
+    if not raw_text and getattr(response, "candidates", None):
+        for candidate in response.candidates:  # pragma: no cover - depends on API payload
+            content = getattr(candidate, "content", None)
+            if not content:
+                continue
+            parts = getattr(content, "parts", None) or []
+            raw_text = "".join(part.text or "" for part in parts if getattr(part, "text", None))
+            if raw_text:
+                break
+
+    if not raw_text:
+        fallback_cards = _fallback_flashcards_from_markdown(cleaned_notes, topic, max_cards)
+        if fallback_cards:
+            notes_logger.warning("Gemini returned empty flashcard payload; using fallback", extra={"topic": topic})
+            return fallback_cards, "fallback-markdown", truncated, True
+        raise HTTPException(status_code=500, detail="Gemini returned empty flashcard response.")
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        fallback_cards = _fallback_flashcards_from_markdown(cleaned_notes, topic, max_cards)
+        if fallback_cards:
+            notes_logger.warning("Gemini returned malformed JSON; using fallback", extra={"topic": topic})
+            return fallback_cards, "fallback-markdown", truncated, True
+        raise HTTPException(status_code=500, detail=f"Failed to parse Gemini flashcards JSON: {exc}") from exc
+
+    cards_raw = payload.get("flashcards") or payload.get("cards")
+    if not cards_raw or not isinstance(cards_raw, list):
+        fallback_cards = _fallback_flashcards_from_markdown(cleaned_notes, topic, max_cards)
+        if fallback_cards:
+            notes_logger.warning("Gemini response missing flashcards array; using fallback", extra={"topic": topic})
+            return fallback_cards, "fallback-markdown", truncated, True
+        raise HTTPException(status_code=500, detail="Gemini response missing 'flashcards' list.")
+
+    cards: List[Dict[str, Any]] = []
+    for idx, item in enumerate(cards_raw[:max_cards]):
+        prepared = dict(item or {})
+        if "concept" not in prepared:
+            prepared["concept"] = prepared.get("title") or prepared.get("name") or f"Concept {idx + 1}"
+        if "summary" not in prepared:
+            prepared["summary"] = prepared.get("overview") or prepared.get("synopsis") or ""
+
+        sections = prepared.get("sections")
+        if not isinstance(sections, list) or not sections:
+            base_question = prepared.get("question") or "What is the key idea?"
+            base_answer = prepared.get("answer") or prepared.get("summary") or "Not covered in notes"
+            sections = [{
+                "icon": prepared.get("icon") or "🧠",
+                "heading": prepared.get("heading") or prepared["concept"],
+                "question": base_question,
+                "answer": base_answer,
+            }]
+        normalized_sections = []
+        for section in sections:
+            sec = dict(section or {})
+            sec.setdefault("icon", "🔮")
+            sec.setdefault("heading", prepared["concept"])
+            sec.setdefault("question", "What does this cover?")
+            sec.setdefault("answer", "Not covered in notes")
+            normalized_sections.append(sec)
+        prepared["sections"] = normalized_sections
+
+        key_points = prepared.get("key_points")
+        if not isinstance(key_points, list) or not key_points:
+            fallback_points = prepared.get("bullets") or prepared.get("highlights")
+            if isinstance(fallback_points, list):
+                key_points = fallback_points
+            else:
+                key_points = []
+        prepared["key_points"] = key_points
+
+        try:
+            card = FlashcardCard.parse_obj(prepared)
+        except Exception as exc:
+            fallback_cards = _fallback_flashcards_from_markdown(cleaned_notes, topic, max_cards)
+            if fallback_cards:
+                notes_logger.warning("Gemini produced invalid flashcard schema; using fallback", extra={"topic": topic})
+                return fallback_cards, "fallback-markdown", truncated, True
+            raise HTTPException(status_code=500, detail=f"Invalid flashcard data returned by Gemini: {exc}") from exc
+
+        card_data = card.dict()
+        if not card_data.get("summary") and card_data["sections"]:
+            first_answer = card_data["sections"][0]["answer"]
+            card_data["summary"] = first_answer.split("\n")[0][:200]
+        cards.append(card_data)
+
+    if not cards:
+        fallback_cards = _fallback_flashcards_from_markdown(cleaned_notes, topic, max_cards)
+        if fallback_cards:
+            return fallback_cards, "fallback-markdown", truncated, True
+        raise HTTPException(status_code=500, detail="Gemini returned no flashcards.")
+
+    return cards, GEMINI_NOTES_MODEL, truncated, False
+
+
+@notes_router.post("/notes/{note_id}/flashcards")
+@notes_router.post("/api/notes/{note_id}/flashcards")
+def api_generate_flashcards(note_id: str, payload: Optional[Dict[str, Any]] = Body(default=None)):
+    row = db_get_ai_note_by_id(note_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    markdown = (row.get("markdown") or "").strip()
+    if not markdown:
+        raise HTTPException(status_code=400, detail="Note is empty; generate notes before requesting flashcards.")
+
+    requested_max = 8
+    topic_override = ""
+    if isinstance(payload, dict):
+        if "max_cards" in payload:
+            try:
+                requested_max = int(payload["max_cards"])
+            except Exception:
+                raise HTTPException(status_code=400, detail="max_cards must be an integer")
+        topic_override = str(payload.get("topic") or "").strip()
+
+    max_cards = max(4, min(requested_max, 8))
+    inferred_topic = topic_override or row.get("title") or _derive_topic_from_markdown(markdown, fallback="Study Flashcards")
+    try:
+        cards, used_model, truncated, used_fallback = _generate_flashcards_with_gemini(
+            markdown,
+            inferred_topic,
+            max_cards=max_cards,
+        )
+    except HTTPException:
+        # Let explicit HTTPException bubble (these have proper status codes)
+        raise
+    except Exception as exc:  # defensive: ensure we never leak a 500 from unexpected errors
+        notes_logger.exception("Flashcard generation - unexpected error, attempting fallback", extra={"note_id": note_id})
+        # Try local fallback from markdown. This should always produce something if markdown exists.
+        try:
+            fallback_cards = _fallback_flashcards_from_markdown(markdown, inferred_topic, max_cards)
+        except Exception:
+            fallback_cards = []
+
+        if fallback_cards:
+            return {
+                "note_id": note_id,
+                "topic": inferred_topic,
+                "flashcards": fallback_cards,
+                "count": len(fallback_cards),
+                "model": "fallback-markdown",
+                "truncated": False,
+                "fallback": True,
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+            }
+
+        # If fallback failed, return an explicit JSON error rather than raw 500
+        raise HTTPException(status_code=500, detail=f"Flashcard generation failed: {exc}") from exc
+
+    return {
+        "note_id": note_id,
+        "topic": inferred_topic,
+        "flashcards": cards,
+        "count": len(cards),
+        "model": used_model,
+        "truncated": truncated,
+        "fallback": used_fallback,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
 @notes_router.get("/notes")
 @notes_router.get("/api/notes")
 def api_list_notes():
