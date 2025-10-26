@@ -607,31 +607,22 @@
         <div class="px-4 sm:px-5 py-3 border-b flex items-center gap-2" style="border-color: var(--outline);">
           <h3 class="text-sm font-semibold mr-auto">Final Output</h3>
 
-          <div class="hidden sm:flex items-center gap-1 text-[11px] text-[var(--muted)] mr-2">
-            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--chip)]">MD</span>
-            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--chip)]">Mermaid</span>
-            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--chip)]">Citations</span>
-          </div>
+          <!-- removed MD / Mermaid / Citations chips per request -->
 
           <!-- Variant switcher -->
-          <div class="flex items-center gap-1 mr-2" role="tablist" aria-label="Variant">
+          <div class="inline-flex items-center mr-2 rounded-xl border p-0.5 bg-[var(--surface)]" role="tablist"
+            aria-label="Variant" style="border-color: var(--outline)">
             <button id="variantDetailed" data-variant="detailed"
-              class="ripple px-2.5 py-1.5 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
-              style="border-color: var(--outline)">Detailed</button>
+              class="ripple px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--brand-soft)] transition">Detailed</button>
             <button id="variantCheatsheet" data-variant="cheatsheet"
-              class="ripple px-2.5 py-1.5 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
-              style="border-color: var(--outline)">Cheat Sheet</button>
+              class="ripple px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--brand-soft)] transition">Cheat Sheet</button>
             <button id="variantSimple" data-variant="simple"
-              class="ripple px-2.5 py-1.5 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
-              style="border-color: var(--outline)">Simple</button>
+              class="ripple px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--brand-soft)] transition">Simple</button>
           </div>
 
-          <button id="editToggle" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
-            style="border-color: var(--outline)">Edit</button>
+          <!-- removed Edit & Copy MD buttons per request -->
           <button id="saveBtn"
             class="ripple px-3 py-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-600 text-white text-sm hidden">Save</button>
-          <button id="copyBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
-            style="border-color: var(--outline)">Copy MD</button>
           <button id="downloadBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
             style="border-color: var(--outline)">Download</button>
           <button id="emphBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
@@ -1148,12 +1139,21 @@
         if (!btn) return;
         const v = btn.dataset.variant;
         const on = v === act;
-        btn.classList.toggle('bg-[var(--brand-soft)]', on);
-        btn.classList.toggle('text-brand-700', on);
+        btn.classList.toggle('bg-brand-600', on);
+        btn.classList.toggle('text-white', on);
+        btn.classList.toggle('shadow-neon', on);
+        btn.classList.toggle('bg-transparent', !on);
+        btn.classList.toggle('text-inherit', !on);
         btn.setAttribute('aria-selected', on ? 'true' : 'false');
       });
     }
     setVariantUI();
+    function currentTopicOrHeading() {
+      const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
+      const fromInput = ($topic.value || '').trim();
+      return fromInput || fromHeading || '';
+    }
+
     [$variantDetailed, $variantCheatsheet, $variantSimple].forEach(btn => {
       if (!btn) return;
       btn.addEventListener('click', () => {
@@ -1162,19 +1162,42 @@
         currentVariant = v;
         try { localStorage.setItem('paperx:lastVariant', v); } catch { }
         setVariantUI();
-        // load last note for this variant if available
+        logEvent('Switch variant', v);
+        console.log('[Variant] switch clicked:', v);
+        // load last note for this variant if available; else auto-generate using current topic/heading
         const lastId = localStorage.getItem(noteKey(currentVariant)) || '';
+        const fallbackGenerate = () => {
+          const t = currentTopicOrHeading();
+          if (!t) {
+            snack('Enter a topic');
+            console.warn('[Variant] No topic/heading to generate');
+            return;
+          }
+          console.log('[Variant] auto-generate for topic:', t, 'variant:', currentVariant);
+          logEvent('Auto-generate', `${currentVariant} • ${t}`);
+          startGeneration(t, false);
+        };
         if (lastId) {
+          $meta.textContent = `Loading • ${lastId} • ${currentVariant}`;
           fetch(`${apiBase}/notes/${encodeURIComponent(lastId)}?variant=${encodeURIComponent(currentVariant)}`)
-            .then(r => r.ok ? r.json() : null)
+            .then(r => {
+              if (!r.ok) return null;
+              return r.json();
+            })
             .then(data => {
               if (data && data.markdown) {
                 renderMarkdown(data.markdown);
-                $meta.textContent = `Loaded • ${lastId} • ${currentVariant}`;
+                $meta.textContent = `Loaded • ${data.id || lastId} • ${currentVariant}`;
                 currentNoteId = data.id || lastId;
                 enableFlashcardAccess(currentNoteId, (document.querySelector('#output h1')?.textContent || $topic.value || '').trim());
+              } else {
+                console.warn('[Variant] No cached note for id; generating…', lastId, currentVariant);
+                fallbackGenerate();
               }
-            }).catch(() => { });
+            })
+            .catch(err => { console.error('[Variant] Fetch by id failed:', err); fallbackGenerate(); });
+        } else {
+          fallbackGenerate();
         }
       });
     });
@@ -1510,11 +1533,12 @@
 
     document.getElementById('generateBtn').addEventListener('click', () => {
       const topic = ($topic.value || '').trim();
+      console.log('[Generate] clicked topic:', topic, 'variant:', currentVariant);
       startGeneration(topic, false);
     });
 
     // ===== Toolbar actions =====
-    $copy.addEventListener('click', async () => {
+    if ($copy) $copy.addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(lastMarkdown || ''); snack('Copied markdown'); }
       catch { snack('Copy failed'); }
     });
@@ -1781,12 +1805,16 @@
       $output.classList.toggle('hidden', on);
       $editor.classList.toggle('hidden', !on);
       $save.classList.toggle('hidden', !on);
-      $editToggle.textContent = on ? 'Preview' : 'Edit';
+      if (typeof $editToggle !== 'undefined' && $editToggle) {
+        $editToggle.textContent = on ? 'Preview' : 'Edit';
+      }
       if (on) { $editor.value = lastMarkdown; }
       else { renderMarkdown($editor.value); }
     }
     let isEditing = false;
-    $editToggle.addEventListener('click', () => { isEditing = !isEditing; setEditMode(isEditing); });
+    if (typeof $editToggle !== 'undefined' && $editToggle) {
+      $editToggle.addEventListener('click', () => { isEditing = !isEditing; setEditMode(isEditing); });
+    }
     $save.addEventListener('click', async () => {
       const md = $editor.value || '';
       if (!currentNoteId) {

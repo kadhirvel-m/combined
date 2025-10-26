@@ -1182,7 +1182,8 @@ Output rules (STRICT):
   5) Keywords (comma-separated list)
 - Bold key terms and symbols with **...**. Prefer compact phrasing over full sentences.
 - If any fact is uncertain, mark [needs review].
-- Add a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to the minimal URLs used.
+ - Do NOT include sections titled 'TL;DR', 'Common Mistakes', or 'Memory Aids'.
+ - Do NOT include a 'CITATIONS' section or any citation list.
 """.strip()
     if v == "simple":
         return f"""
@@ -9915,7 +9916,7 @@ async def generate(payload: dict):
                 custom = None
                 if variant == "cheatsheet":
                     custom = (
-                        "Rewrite as an ultra-concise exam cheat sheet: 250–400 words, bullets/tables, sections: Core Concepts; Key Definitions & Formulas; Quick Steps/Algorithms; Pitfalls; Keywords. Bold key terms. End with a CITATIONS list preserved from input."
+                        "Rewrite as an ultra-concise exam cheat sheet: 250–400 words, bullets/tables, sections: Core Concepts; Key Definitions & Formulas; Quick Steps/Algorithms; Pitfalls; Keywords. Bold key terms. Do NOT include TL;DR, Common Mistakes, Memory Aids, or any CITATIONS section."
                     )
                 prompt = _build_transform_prompt(mode, md_detailed, custom)
                 client = _openai_client()
