@@ -704,7 +704,7 @@
   </button>
   <div id="geminiSelectionPanel" role="dialog" aria-modal="false" aria-hidden="true"
     class="hidden rounded-2xl glass border shadow-glow custom-scroll"
-    style="position:absolute; z-index:70; width:min(340px,calc(100vw-32px)); border-color:var(--outline);">
+    style="position:absolute; z-index:70; width:240px; max-width:calc(100vw-32px); border-color:var(--outline);">
     <div class="p-4 space-y-2">
       <div class="flex items-start justify-between gap-2">
         <div class="flex items-center gap-1.5 text-[12px] font-semibold text-brand-600">
@@ -781,6 +781,18 @@
     #geminiSelectionOutput::-webkit-scrollbar-thumb {
       background: var(--outline);
       border-radius: 4px;
+    }
+
+    #geminiSelectionContext {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 1.5rem;
+    }
+
+    #output ::selection {
+      background: rgba(79, 70, 229, 0.45);
+      color: var(--surface-contrast);
     }
 
     .custom-scroll::-webkit-scrollbar {
@@ -925,6 +937,7 @@
       const PREVIEW_MAX = 420;
       let selectionText = '';
       let selectionRect = null;
+      let selectionEndRect = null;
       let panelPinned = false;
       let busy = false;
 
@@ -986,8 +999,18 @@
       function positionBtn(rect) {
         if (!rect) return;
         const viewportWidth = document.documentElement.clientWidth;
-        const left = Math.min(Math.max(rect.left + (rect.width ? rect.width / 2 : 0) - 18, window.scrollX + 12), window.scrollX + viewportWidth - 48);
-        const top = Math.max(window.scrollY + 12, rect.bottom + 6);
+        const viewportHeight = window.innerHeight;
+        const anchorX = (typeof rect.right === 'number' && rect.right) ? rect.right : (rect.left + (rect.width || 0));
+        const btnWidth = 32;
+        const left = Math.min(
+          Math.max(anchorX - btnWidth / 2, window.scrollX + 12),
+          window.scrollX + viewportWidth - btnWidth - 12
+        );
+        const anchorY = (typeof rect.bottom === 'number' && rect.bottom) ? rect.bottom : rect.top;
+        const top = Math.min(
+          Math.max(anchorY + 6, window.scrollY + 12),
+          window.scrollY + viewportHeight - 48
+        );
         btn.style.left = `${left}px`;
         btn.style.top = `${top}px`;
         btn.classList.remove('hidden');
@@ -996,7 +1019,7 @@
       function positionPanel() {
         const viewportWidth = document.documentElement.clientWidth;
         const viewportHeight = window.innerHeight;
-        const panelWidth = panel.offsetWidth || Math.min(340, viewportWidth - 32);
+        const panelWidth = panel.offsetWidth || Math.min(240, viewportWidth - 32);
         let left = selectionRect ? selectionRect.left : (window.scrollX + (viewportWidth - panelWidth) / 2);
         let top = selectionRect ? selectionRect.bottom + 12 : (window.scrollY + 80);
         left = Math.min(Math.max(window.scrollX + 16, left), window.scrollX + viewportWidth - panelWidth - 16);
@@ -1029,30 +1052,41 @@
         if (!sel || sel.isCollapsed) {
           selectionText = '';
           selectionRect = null;
+          selectionEndRect = null;
           hideBtn();
           return;
         }
         if (!withinOutput(sel.anchorNode) || !withinOutput(sel.focusNode)) {
           selectionText = '';
           selectionRect = null;
+          selectionEndRect = null;
           hideBtn();
           return;
         }
         const text = sel.toString().trim();
         if (!text) {
+          selectionText = '';
+          selectionRect = null;
+          selectionEndRect = null;
           hideBtn();
           return;
         }
         selectionText = text.replace(/\s+/g, ' ').trim();
         const range = sel.getRangeAt(sel.rangeCount - 1);
         const rect = captureRect(range);
+        const endClone = range.cloneRange();
+        endClone.collapse(false);
+        const endRect = captureRect(endClone);
         if (!rect) {
+          selectionRect = null;
+          selectionEndRect = null;
           hideBtn();
           return;
         }
         selectionRect = rect;
+        selectionEndRect = endRect || rect;
         updateContextPreview();
-        positionBtn(rect);
+        positionBtn(selectionEndRect);
       }
 
       async function runGemini() {
