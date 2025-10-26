@@ -9910,9 +9910,9 @@ def api_snippet_assist(payload: dict):
     model = genai.GenerativeModel(GEMINI_NOTES_MODEL)
     base_instruction = textwrap.dedent(
         """
-        You are PaperX's inline study copilot. Read the highlighted passage and respond strictly using its information.
-        Provide a concise, student-friendly answer that can include short bullet points, definitions, or translations.
-        If the instruction cannot be satisfied with the supplied text, clearly say so.
+        You are PaperX's inline study copilot. Prefer the highlighted passage for context, but when it lacks details you may
+        add concise, accurate background knowledge that a tutor would supply. Always tie your response to the user's instruction,
+        keep it student-friendly, and note when the highlight didn't mention a fact you add.
         """
     ).strip()
     user_instruction = instruction or "Explain this selection simply."
