@@ -9886,6 +9886,64 @@ def api_transform_note(payload: dict):
         raise HTTPException(status_code=500, detail=f"Transform failed: {e}")
 
 
+@notes_router.post("/api/notes/snippet-assist")
+def api_snippet_assist(payload: dict):
+    """Provide inline Gemini help for a highlighted snippet."""
+    selection = (payload or {}).get("selection") or (payload or {}).get("snippet") or ""
+    instruction = (payload or {}).get("instruction") or (payload or {}).get("prompt") or ""
+    selection = (selection or "").strip()
+    instruction = (instruction or "").strip()
+    if not selection:
+        raise HTTPException(status_code=400, detail="Missing selection text.")
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured.")
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise HTTPException(
+            status_code=501,
+            detail=f"Gemini client library missing: {exc}. Install google-generativeai to enable this feature.",
+        ) from exc
+
+    trimmed_selection = selection[:3000]
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(GEMINI_NOTES_MODEL)
+    base_instruction = textwrap.dedent(
+        """
+        You are PaperX's inline study copilot. Read the highlighted passage and respond strictly using its information.
+        Provide a concise, student-friendly answer that can include short bullet points, definitions, or translations.
+        If the instruction cannot be satisfied with the supplied text, clearly say so.
+        """
+    ).strip()
+    user_instruction = instruction or "Explain this selection simply."
+    prompt_body = textwrap.dedent(
+        f"""
+        Instruction: {user_instruction}
+
+        Highlighted selection:
+        {trimmed_selection}
+        """
+    ).strip()
+    try:
+        response = model.generate_content(
+            [{"text": base_instruction}, {"text": prompt_body}],
+            generation_config={"temperature": 0.35, "max_output_tokens": 512},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini selection assist failed: {exc}") from exc
+
+    generated = getattr(response, "text", "") or ""
+    if not generated:
+        try:
+            generated = response.candidates[0].content.parts[0].text  # type: ignore[index]
+        except Exception:
+            generated = ""
+    generated = (generated or "").strip()
+    if not generated:
+        raise HTTPException(status_code=502, detail="Gemini returned empty response.")
+    return {"text": generated, "truncated": len(selection) > len(trimmed_selection)}
+
+
 @notes_router.post("/generate")
 @notes_router.post("/api/notes/generate")
 async def generate(payload: dict):

@@ -523,14 +523,6 @@
               style="border-color: var(--outline)" disabled>Cancel</button>
             <div class="text-xs text-[var(--muted)] ml-auto">Curated sources: GFG, TP, Scaler, Wiki, TPoint</div>
           </div>
-
-          <!-- Suggested chips -->
-          <div class="mt-3 hidden sm:flex flex-wrap gap-2">
-            <button class="chip" data-val="DFA vs NFA">DFA vs NFA</button>
-            <button class="chip" data-val="Support Vector Machine">SVM</button>
-            <button class="chip" data-val="Backpropagation algorithm">Backprop</button>
-            <button class="chip" data-val="Turing Machine">Turing Machine</button>
-          </div>
         </div>
 
         <!-- Stepper / progress -->
@@ -704,6 +696,43 @@
     class="fixed left-1/2 -translate-x-1/2 bottom-4 px-4 py-2 rounded-xl shadow-glow bg-[var(--surface)] border text-sm hidden"
     style="border-color: var(--outline)">Copied</div>
 
+  <!-- Inline Gemini helper affordances -->
+  <button id="geminiSelectionBtn" type="button" aria-label="Ask Gemini about selection"
+    class="hidden select-none text-brand-600"
+    style="position:absolute; z-index:70; border:1px solid var(--outline); background:var(--surface); border-radius:999px; padding:6px; box-shadow:0 6px 16px rgba(15,23,42,0.18);">
+    <span class="material-symbols-outlined text-base leading-none">auto_awesome</span>
+  </button>
+  <div id="geminiSelectionPanel" role="dialog" aria-modal="false" aria-hidden="true"
+    class="hidden rounded-2xl glass border shadow-glow custom-scroll"
+    style="position:absolute; z-index:70; width:min(340px,calc(100vw-32px)); border-color:var(--outline);">
+    <div class="p-4 space-y-2">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex items-center gap-1.5 text-[12px] font-semibold text-brand-600">
+          <span class="material-symbols-outlined text-base leading-none">auto_awesome</span>
+          Gemini inline help
+        </div>
+        <button id="geminiSelectionClose" type="button"
+          class="text-[10px] uppercase tracking-wide text-[var(--muted)] hover:text-[var(--surface-contrast)]">Close</button>
+      </div>
+      <div class="text-[11px] text-[var(--muted)] bg-[var(--chip)]/60 rounded-lg px-2 py-1 max-h-20 overflow-auto custom-scroll"
+        id="geminiSelectionContext"></div>
+      <label for="geminiSelectionInput" class="text-[11px] font-medium text-[var(--muted)] tracking-wide uppercase">Ask
+        anything</label>
+      <textarea id="geminiSelectionInput" rows="2" spellcheck="false"
+        class="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+        placeholder="Explain it simply, expand it, translate it..."
+        style="border-color:var(--outline); background:var(--surface); color:var(--surface-contrast);"></textarea>
+      <div class="flex items-center gap-2">
+        <button id="geminiSelectionRun" type="button"
+          class="ripple px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold uppercase tracking-wide">Ask
+          Gemini</button>
+        <div id="geminiSelectionStatus" class="text-[11px] text-[var(--muted)] hidden"></div>
+      </div>
+      <div id="geminiSelectionOutput"
+        class="text-sm leading-relaxed prose prose-sm dark:prose-invert max-h-56 overflow-auto custom-scroll"></div>
+    </div>
+  </div>
+
 
 
   <!-- Inject Material Symbols for icons used in the FAB/panel -->
@@ -723,6 +752,33 @@
     }
 
     #aiPanel::-webkit-scrollbar-thumb {
+      background: var(--outline);
+      border-radius: 4px;
+    }
+
+    #geminiSelectionBtn {
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+    }
+
+    #geminiSelectionBtn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.25);
+    }
+
+    #geminiSelectionPanel {
+      backdrop-filter: blur(18px);
+    }
+
+    #geminiSelectionOutput :is(p, ul, ol) {
+      margin: 0.35rem 0;
+      font-size: 0.85rem;
+    }
+
+    #geminiSelectionOutput::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #geminiSelectionOutput::-webkit-scrollbar-thumb {
       background: var(--outline);
       border-radius: 4px;
     }
@@ -850,6 +906,257 @@
     }
 
     resetFlashcardAccess();
+
+    // ===== Inline Gemini selection assistant =====
+    (function () {
+      if (!$output) return;
+      const btn = document.getElementById('geminiSelectionBtn');
+      const panel = document.getElementById('geminiSelectionPanel');
+      const closeBtn = document.getElementById('geminiSelectionClose');
+      const promptInput = document.getElementById('geminiSelectionInput');
+      const runBtn = document.getElementById('geminiSelectionRun');
+      const statusBox = document.getElementById('geminiSelectionStatus');
+      const contextBox = document.getElementById('geminiSelectionContext');
+      const outputBox = document.getElementById('geminiSelectionOutput');
+      if (!btn || !panel || !runBtn || !contextBox || !outputBox) return;
+
+      const endpoint = `${apiBase}/api/notes/snippet-assist`;
+      const MAX_SELECTION_PAYLOAD = 2800;
+      const PREVIEW_MAX = 420;
+      let selectionText = '';
+      let selectionRect = null;
+      let panelPinned = false;
+      let busy = false;
+
+      function withinOutput(node) {
+        if (!node) return false;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        return node ? $output.contains(node) : false;
+      }
+
+      function hideBtn() {
+        btn.classList.add('hidden');
+      }
+
+      function resetStatus() {
+        if (statusBox) {
+          statusBox.textContent = '';
+          statusBox.classList.add('hidden');
+          delete statusBox.dataset.error;
+          statusBox.style.color = 'var(--muted)';
+        }
+      }
+
+      function setStatus(msg, isError = false) {
+        if (!statusBox) return;
+        if (!msg) {
+          resetStatus();
+          return;
+        }
+        statusBox.textContent = msg;
+        statusBox.style.color = isError ? '#ef4444' : 'var(--muted)';
+        statusBox.dataset.error = isError ? '1' : '';
+        statusBox.classList.remove('hidden');
+      }
+
+      function setBusy(state) {
+        busy = state;
+        runBtn.disabled = state;
+        runBtn.classList.toggle('opacity-60', state);
+        if (state) {
+          setStatus('Asking Gemini…', false);
+        } else if (!statusBox?.dataset.error) {
+          resetStatus();
+        }
+      }
+
+      function captureRect(range) {
+        if (!range) return null;
+        const rect = range.getBoundingClientRect();
+        if (!rect || (!rect.width && !rect.height)) return null;
+        return {
+          top: rect.top + window.scrollY,
+          left: rect.left + window.scrollX,
+          right: rect.right + window.scrollX,
+          bottom: rect.bottom + window.scrollY,
+          width: rect.width || 0,
+        };
+      }
+
+      function positionBtn(rect) {
+        if (!rect) return;
+        const viewportWidth = document.documentElement.clientWidth;
+        const left = Math.min(Math.max(rect.left + (rect.width ? rect.width / 2 : 0) - 18, window.scrollX + 12), window.scrollX + viewportWidth - 48);
+        const top = Math.max(window.scrollY + 12, rect.bottom + 6);
+        btn.style.left = `${left}px`;
+        btn.style.top = `${top}px`;
+        btn.classList.remove('hidden');
+      }
+
+      function positionPanel() {
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight;
+        const panelWidth = panel.offsetWidth || Math.min(340, viewportWidth - 32);
+        let left = selectionRect ? selectionRect.left : (window.scrollX + (viewportWidth - panelWidth) / 2);
+        let top = selectionRect ? selectionRect.bottom + 12 : (window.scrollY + 80);
+        left = Math.min(Math.max(window.scrollX + 16, left), window.scrollX + viewportWidth - panelWidth - 16);
+        const maxTop = window.scrollY + viewportHeight - panel.offsetHeight - 16;
+        top = Math.min(Math.max(window.scrollY + 16, top), Number.isFinite(maxTop) ? maxTop : top);
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+      }
+
+      function hidePanel() {
+        panelPinned = false;
+        panel.classList.add('hidden');
+        panel.setAttribute('aria-hidden', 'true');
+        resetStatus();
+      }
+
+      function updateContextPreview() {
+        if (!contextBox) return;
+        if (!selectionText) {
+          contextBox.textContent = 'Select text in the Final Output to get inline Gemini help.';
+          return;
+        }
+        const preview = selectionText.slice(0, PREVIEW_MAX);
+        contextBox.textContent = preview + (selectionText.length > PREVIEW_MAX ? '…' : '');
+      }
+
+      function handleSelectionChange() {
+        if (panelPinned) return;
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) {
+          selectionText = '';
+          selectionRect = null;
+          hideBtn();
+          return;
+        }
+        if (!withinOutput(sel.anchorNode) || !withinOutput(sel.focusNode)) {
+          selectionText = '';
+          selectionRect = null;
+          hideBtn();
+          return;
+        }
+        const text = sel.toString().trim();
+        if (!text) {
+          hideBtn();
+          return;
+        }
+        selectionText = text.replace(/\s+/g, ' ').trim();
+        const range = sel.getRangeAt(sel.rangeCount - 1);
+        const rect = captureRect(range);
+        if (!rect) {
+          hideBtn();
+          return;
+        }
+        selectionRect = rect;
+        updateContextPreview();
+        positionBtn(rect);
+      }
+
+      async function runGemini() {
+        if (!selectionText || !selectionRect) {
+          snack('Select some text in the Final Output first');
+          return;
+        }
+        if (busy) return;
+        const instruction = (promptInput?.value || '').trim() || 'Explain the highlighted text simply.';
+        const payloadSelection = selectionText.slice(0, MAX_SELECTION_PAYLOAD);
+        setBusy(true);
+        outputBox.innerHTML = '';
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selection: payloadSelection, instruction })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `HTTP ${res.status}`;
+            throw new Error(detail);
+          }
+          const text = (data && data.text) ? String(data.text) : '';
+          if (!text) {
+            setStatus('Gemini returned an empty reply', true);
+            outputBox.textContent = '';
+            return;
+          }
+          try {
+            outputBox.innerHTML = marked.parse(text);
+          } catch (err) {
+            console.warn('Gemini inline render fallback', err);
+            outputBox.textContent = text;
+          }
+          resetStatus();
+        } catch (error) {
+          console.error('Gemini inline assist error', error);
+          setStatus(error?.message || 'Gemini request failed', true);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function openPanel() {
+        if (!selectionText) {
+          snack('Select some text in the Final Output first');
+          panelPinned = false;
+          return;
+        }
+        panelPinned = true;
+        btn.classList.add('hidden');
+        panel.classList.remove('hidden');
+        panel.setAttribute('aria-hidden', 'false');
+        updateContextPreview();
+        resetStatus();
+        outputBox.innerHTML = '';
+        if (promptInput) {
+          promptInput.value = promptInput.value.trim() ? promptInput.value : 'Explain it simply';
+        }
+        requestAnimationFrame(() => {
+          positionPanel();
+          promptInput?.focus();
+        });
+      }
+
+      btn.addEventListener('click', openPanel);
+      runBtn.addEventListener('click', runGemini);
+      promptInput?.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          runGemini();
+        }
+      });
+      closeBtn?.addEventListener('click', hidePanel);
+
+      document.addEventListener('selectionchange', () => {
+        if (!panelPinned) handleSelectionChange();
+      });
+      window.addEventListener('scroll', () => {
+        if (!panelPinned) hideBtn();
+      }, { passive: true });
+      window.addEventListener('resize', () => {
+        if (panelPinned) {
+          requestAnimationFrame(positionPanel);
+        } else {
+          hideBtn();
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !panel.classList.contains('hidden')) {
+          hidePanel();
+        }
+      });
+      document.addEventListener('click', (e) => {
+        if (panel.classList.contains('hidden')) return;
+        const target = e.target;
+        if (panel.contains(target) || btn.contains(target)) return;
+        if (withinOutput(target)) return;
+        hidePanel();
+      });
+
+      updateContextPreview();
+    })();
 
     function getChannelLogoAsync(channelPage) {
       if (!channelPage) return Promise.resolve('');
