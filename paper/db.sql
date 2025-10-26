@@ -542,3 +542,29 @@ CREATE TABLE public.ai_notes (
 
 -- Enforce uniqueness on title (case-insensitive)
 CREATE UNIQUE INDEX ai_notes_title_ci_key ON public.ai_notes (title_ci);
+
+-- Variant: exam-ready cheat sheet notes (very concise)
+CREATE TABLE public.ai_notes_cheatsheet (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
+  markdown text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_cheatsheet_pkey PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX ai_notes_cheatsheet_title_ci_key ON public.ai_notes_cheatsheet (title_ci);
+
+-- Variant: simple/easy-to-understand medium version
+CREATE TABLE public.ai_notes_simple (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
+  markdown text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_simple_pkey PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX ai_notes_simple_title_ci_key ON public.ai_notes_simple (title_ci);

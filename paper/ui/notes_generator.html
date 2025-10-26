@@ -467,18 +467,18 @@
         </div>
       </div>
     </div>
-</header>
+  </header>
 
   <!-- Related Videos -->
-  <section id="relatedVideosSection"
-    class="max-w-7xl mx-auto px-4 sm:px-6 mt-6 hidden">
+  <section id="relatedVideosSection" class="max-w-7xl mx-auto px-4 sm:px-6 mt-6 hidden">
     <div class="rounded-2xl glass border shadow-glow"
       style="border-color: var(--outline); background: color-mix(in oklab, var(--surface) 78%, transparent);">
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 py-5 border-b"
         style="border-color: var(--outline)">
         <div>
           <h2 class="text-lg font-semibold tracking-tight">Related YouTube Videos</h2>
-          <p id="relatedVideosSummary" class="text-sm text-[var(--muted)]">Enter a topic to discover supporting videos.</p>
+          <p id="relatedVideosSummary" class="text-sm text-[var(--muted)]">Enter a topic to discover supporting videos.
+          </p>
         </div>
         <button id="refreshVideosBtn"
           class="ripple inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[var(--brand-soft)] transition"
@@ -611,6 +611,19 @@
             <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--chip)]">MD</span>
             <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--chip)]">Mermaid</span>
             <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--chip)]">Citations</span>
+          </div>
+
+          <!-- Variant switcher -->
+          <div class="flex items-center gap-1 mr-2" role="tablist" aria-label="Variant">
+            <button id="variantDetailed" data-variant="detailed"
+              class="ripple px-2.5 py-1.5 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
+              style="border-color: var(--outline)">Detailed</button>
+            <button id="variantCheatsheet" data-variant="cheatsheet"
+              class="ripple px-2.5 py-1.5 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
+              style="border-color: var(--outline)">Cheat Sheet</button>
+            <button id="variantSimple" data-variant="simple"
+              class="ripple px-2.5 py-1.5 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
+              style="border-color: var(--outline)">Simple</button>
           </div>
 
           <button id="editToggle" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
@@ -812,8 +825,11 @@
     const $fsCtrl = document.getElementById('fsControls');
     const $fsExit = document.getElementById('fsExitBtn');
     const $fsHome = document.getElementById('fsHomeBtn');
-  const $flashcardBtn = document.getElementById('flashcardBtn');
-  const flashcardDefaultLabel = $flashcardBtn ? ($flashcardBtn.textContent || 'Flashcards') : 'Flashcards';
+    const $flashcardBtn = document.getElementById('flashcardBtn');
+    const flashcardDefaultLabel = $flashcardBtn ? ($flashcardBtn.textContent || 'Flashcards') : 'Flashcards';
+    const $variantDetailed = document.getElementById('variantDetailed');
+    const $variantCheatsheet = document.getElementById('variantCheatsheet');
+    const $variantSimple = document.getElementById('variantSimple');
 
     const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
     const channelLogoCache = new Map();
@@ -1121,7 +1137,47 @@
     // ===== State =====
     let es = null;
     let lastMarkdown = '';
-    let currentNoteId = localStorage.getItem('paperx:lastNoteId') || '';
+    const VARIANTS = ['detailed', 'cheatsheet', 'simple'];
+    let currentVariant = (localStorage.getItem('paperx:lastVariant') || 'detailed');
+    if (!VARIANTS.includes(currentVariant)) currentVariant = 'detailed';
+    const noteKey = (v) => `paperx:lastNoteId:${v}`;
+    let currentNoteId = localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? (localStorage.getItem('paperx:lastNoteId') || '') : '');
+    function setVariantUI() {
+      const act = currentVariant;
+      [$variantDetailed, $variantCheatsheet, $variantSimple].forEach(btn => {
+        if (!btn) return;
+        const v = btn.dataset.variant;
+        const on = v === act;
+        btn.classList.toggle('bg-[var(--brand-soft)]', on);
+        btn.classList.toggle('text-brand-700', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+    }
+    setVariantUI();
+    [$variantDetailed, $variantCheatsheet, $variantSimple].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        const v = btn.dataset.variant;
+        if (!v || !VARIANTS.includes(v)) return;
+        currentVariant = v;
+        try { localStorage.setItem('paperx:lastVariant', v); } catch { }
+        setVariantUI();
+        // load last note for this variant if available
+        const lastId = localStorage.getItem(noteKey(currentVariant)) || '';
+        if (lastId) {
+          fetch(`${apiBase}/notes/${encodeURIComponent(lastId)}?variant=${encodeURIComponent(currentVariant)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+              if (data && data.markdown) {
+                renderMarkdown(data.markdown);
+                $meta.textContent = `Loaded • ${lastId} • ${currentVariant}`;
+                currentNoteId = data.id || lastId;
+                enableFlashcardAccess(currentNoteId, (document.querySelector('#output h1')?.textContent || $topic.value || '').trim());
+              }
+            }).catch(() => { });
+        }
+      });
+    });
     let dense = false;
     let emphasis = localStorage.getItem('paperx:emphasis') === '1';
 
@@ -1349,7 +1405,7 @@
       $progress.style.width = '0%';
       $meta.textContent = '';
       resetFlashcardAccess();
-  currentNoteId = '';
+      currentNoteId = '';
       // reset images skeleton
       ['', '', ''].forEach(() => {
         const sk = document.createElement('div');
@@ -1386,6 +1442,7 @@
       const url = new URL(`${apiBase}/generate/stream`);
       url.searchParams.set('topic', t);
       if (force) url.searchParams.set('force', 'true');
+      url.searchParams.set('variant', currentVariant);
       es = new EventSource(url.toString());
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
@@ -1419,8 +1476,11 @@
         setEmphasis(emphasis);
         if (d.id) {
           currentNoteId = d.id;
-          localStorage.setItem('paperx:lastNoteId', currentNoteId);
-          $meta.textContent = `Saved • ${currentNoteId}`;
+          try {
+            localStorage.setItem(noteKey(currentVariant), currentNoteId);
+            if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+          } catch { }
+          $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
         }
         const detectedTopic = (() => {
           const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
@@ -1684,14 +1744,14 @@
     // Load last note on open (persistence)
     (async function loadLastNote() {
       if (queryTopic) return;
-      const id = localStorage.getItem('paperx:lastNoteId'); if (!id) return;
+      const id = (localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? localStorage.getItem('paperx:lastNoteId') : '')); if (!id) return;
       try {
-        const res = await fetch(`${apiBase}/notes/${encodeURIComponent(id)}`);
+        const res = await fetch(`${apiBase}/notes/${encodeURIComponent(id)}?variant=${encodeURIComponent(currentVariant)}`);
         if (!res.ok) return;
         const data = await res.json();
         if (data?.markdown) {
           renderMarkdown(data.markdown);
-          $meta.textContent = `Loaded • ${id}`;
+          $meta.textContent = `Loaded • ${id} • ${currentVariant}`;
           currentNoteId = data?.id || id;
           const derivedTopic = (
             (data?.title || '')
@@ -1731,7 +1791,7 @@
       const md = $editor.value || '';
       if (!currentNoteId) {
         const topic = (document.querySelector('#output h1')?.textContent || $topic.value || 'Untitled').trim();
-        const res = await fetch(`${apiBase}/notes`, {
+        const res = await fetch(`${apiBase}/notes?variant=${encodeURIComponent(currentVariant)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ topic, markdown: md })
@@ -1739,8 +1799,11 @@
         if (res.ok) {
           const data = await res.json();
           currentNoteId = data.id;
-          localStorage.setItem('paperx:lastNoteId', currentNoteId);
-          $meta.textContent = `Saved • ${currentNoteId}`;
+          try {
+            localStorage.setItem(noteKey(currentVariant), currentNoteId);
+            if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+          } catch { }
+          $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
           renderMarkdown(md);
           isEditing = false; setEditMode(false);
           logEvent('Saved', currentNoteId);
@@ -1748,7 +1811,7 @@
         } else { logEvent('Save failed'); snack('Save failed'); }
         return;
       }
-      const res = await fetch(`${apiBase}/notes/${encodeURIComponent(currentNoteId)}`, {
+      const res = await fetch(`${apiBase}/notes/${encodeURIComponent(currentNoteId)}?variant=${encodeURIComponent(currentVariant)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ markdown: md })
@@ -1756,7 +1819,7 @@
       if (res.ok) {
         renderMarkdown(md);
         isEditing = false; setEditMode(false);
-        $meta.textContent = `Saved • ${currentNoteId}`;
+        $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
         logEvent('Saved', currentNoteId);
         snack('Saved');
       } else { logEvent('Save failed'); snack('Save failed'); }

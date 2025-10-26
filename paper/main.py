@@ -239,39 +239,76 @@ os.makedirs(NOTES_DIR, exist_ok=True)
 
 # DB table for AI notes (title + markdown)
 AI_NOTES_TABLE = os.getenv("AI_NOTES_TABLE", "ai_notes")
+AI_NOTES_CHEATSHEET_TABLE = os.getenv("AI_NOTES_CHEATSHEET_TABLE", "ai_notes_cheatsheet")
+AI_NOTES_SIMPLE_TABLE = os.getenv("AI_NOTES_SIMPLE_TABLE", "ai_notes_simple")
+
+VALID_NOTE_VARIANTS = {"detailed", "cheatsheet", "simple"}
+
+def _normalize_variant(variant: Optional[str]) -> str:
+    v = (variant or "detailed").strip().lower()
+    return v if v in VALID_NOTE_VARIANTS else "detailed"
+
+def _table_for_variant(variant: Optional[str]) -> str:
+    v = _normalize_variant(variant)
+    if v == "cheatsheet":
+        return AI_NOTES_CHEATSHEET_TABLE
+    if v == "simple":
+        return AI_NOTES_SIMPLE_TABLE
+    return AI_NOTES_TABLE
 
 def db_get_ai_note_by_title_exact(title: str) -> Optional[Dict[str, Any]]:
-    """Fetch a note by exact title (case-insensitive) from Supabase."""
+    """Fetch a detailed-variant note by exact title. Backward-compat wrapper."""
+    return db_get_ai_note_by_title_exact_variant(title, variant="detailed")
+
+def db_get_ai_note_by_title_exact_variant(title: str, *, variant: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Fetch a note by exact title (case-insensitive) from the table for the given variant."""
     supabase = get_service_client()
     t = (title or "").strip()
     if not t:
         return None
+    table = _table_for_variant(variant)
     try:
-        # title_ci is a generated column lower(title); see db.sql
-        res = supabase.table(AI_NOTES_TABLE).select("id,title,markdown,created_at,updated_at").eq("title_ci", t.lower()).limit(1).execute()
+        res = (
+            supabase.table(table)
+            .select("id,title,markdown,created_at,updated_at")
+            .eq("title_ci", t.lower())
+            .limit(1)
+            .execute()
+        )
         data = getattr(res, 'data', []) or []
         return data[0] if data else None
     except Exception:
         return None
 
 def db_upsert_ai_note_by_title(title: str, markdown: str) -> Dict[str, Any]:
-    """Insert or update a note by title; returns the stored row."""
+    """Insert or update a detailed-variant note by title; returns the stored row."""
+    return db_upsert_ai_note_by_title_variant(title, markdown, variant="detailed")
+
+def db_upsert_ai_note_by_title_variant(title: str, markdown: str, *, variant: Optional[str] = None) -> Dict[str, Any]:
+    """Insert or update a note by title in the variant-specific table; returns the stored row."""
     supabase = get_service_client()
     now = datetime.utcnow().isoformat()
     payload = {
-        "title": title.strip() or "Untitled",
+        "title": (title or "").strip() or "Untitled",
         "markdown": markdown or "",
         "updated_at": now,
     }
+    table = _table_for_variant(variant)
     try:
-        res = supabase.table(AI_NOTES_TABLE).upsert(payload, on_conflict="title_ci", returning="representation").execute()
+        res = supabase.table(table).upsert(payload, on_conflict="title_ci", returning="representation").execute()
         if getattr(res, 'error', None):
             raise Exception(res.error)
         row = (getattr(res, 'data', []) or [{}])[0]
         if row:
             return row
         # Fallback: refetch by title_ci
-        ref = supabase.table(AI_NOTES_TABLE).select("id,title,markdown,created_at,updated_at").eq("title_ci", payload["title"].lower()).limit(1).execute()
+        ref = (
+            supabase.table(table)
+            .select("id,title,markdown,created_at,updated_at")
+            .eq("title_ci", payload["title"].lower())
+            .limit(1)
+            .execute()
+        )
         data = getattr(ref, 'data', []) or []
         if not data:
             raise RuntimeError("Failed to upsert ai_note")
@@ -280,22 +317,50 @@ def db_upsert_ai_note_by_title(title: str, markdown: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"DB save failed: {e}")
 
 def db_get_ai_note_by_id(note_id: str) -> Optional[Dict[str, Any]]:
+    """Backward compat: search only detailed table."""
+    return db_get_ai_note_by_id_variant(note_id, variant="detailed")
+
+def db_get_ai_note_by_id_variant(note_id: str, *, variant: Optional[str] = None) -> Optional[Dict[str, Any]]:
     supabase = get_service_client()
+    table = _table_for_variant(variant)
     try:
-        res = supabase.table(AI_NOTES_TABLE).select("id,title,markdown,created_at,updated_at").eq("id", note_id).limit(1).execute()
+        res = (
+            supabase.table(table)
+            .select("id,title,markdown,created_at,updated_at")
+            .eq("id", note_id)
+            .limit(1)
+            .execute()
+        )
         data = getattr(res, 'data', []) or []
         return data[0] if data else None
     except Exception:
         return None
 
+def db_get_ai_note_by_id_any(note_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Search all variant tables for the given id. Returns (row, variant)."""
+    for v in ("detailed", "cheatsheet", "simple"):
+        row = db_get_ai_note_by_id_variant(note_id, variant=v)
+        if row:
+            return row, v
+    return None, None
+
 def db_update_ai_note_markdown(note_id: str, markdown: str) -> Optional[Dict[str, Any]]:
+    """Backward compat: update only detailed table."""
+    return db_update_ai_note_markdown_variant(note_id, markdown, variant="detailed")
+
+def db_update_ai_note_markdown_variant(note_id: str, markdown: str, *, variant: Optional[str] = None) -> Optional[Dict[str, Any]]:
     supabase = get_service_client()
+    table = _table_for_variant(variant)
     try:
-        res = supabase.table(AI_NOTES_TABLE).update({"markdown": markdown or "", "updated_at": datetime.utcnow().isoformat()}).eq("id", note_id).execute()
+        res = (
+            supabase.table(table)
+            .update({"markdown": markdown or "", "updated_at": datetime.utcnow().isoformat()})
+            .eq("id", note_id)
+            .execute()
+        )
         if getattr(res, 'error', None):
             raise Exception(res.error)
-        # Return updated minimal info
-        out = db_get_ai_note_by_id(note_id)
+        out = db_get_ai_note_by_id_variant(note_id, variant=variant)
         return out
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB update failed: {e}")
@@ -1097,7 +1162,63 @@ Start with '# {topic}' and then the sections in a logical order.
 
 # ---------------- New: Streaming events generator for UI/API ----------------
 
-def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
+def _build_variant_user_prompt(context: str, topic: str, variant: str) -> str:
+    v = _normalize_variant(variant)
+    if v == "cheatsheet":
+        return f"""
+You will compose an EXAM-READY CHEAT SHEET for the topic "{topic}" based ONLY on the source excerpts below.
+
+Context:
+{context}
+
+Output rules (STRICT):
+- Keep it ultra concise (≈ 250–400 words). Use bullets and tables.
+- Start with a single H1: '# {topic} — Cheat Sheet'.
+- Sections (H2):
+  1) Core Concepts (5–10 bullets, crisp one-liners)
+  2) Key Definitions & Formulas (bullets; inline math where relevant)
+  3) Quick Steps / Algorithms (bulleted steps)
+  4) Pitfalls / Gotchas (3–6 bullets)
+  5) Keywords (comma-separated list)
+- Bold key terms and symbols with **...**. Prefer compact phrasing over full sentences.
+- If any fact is uncertain, mark [needs review].
+- Add a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to the minimal URLs used.
+""".strip()
+    if v == "simple":
+        return f"""
+You will write a SIMPLE, EASY-TO-UNDERSTAND set of notes for "{topic}" using ONLY the source excerpts below.
+
+Context:
+{context}
+
+Output rules (STRICT):
+- Target length: 600–900 words, plain language, short sentences.
+- Start with '# {topic} — Simple Notes'.
+- Structure with logical H2 sections, including: Introduction, Concepts, Examples, TL;DR, Common Mistakes, Conclusion.
+- Explain in everyday words without dumbing down definitions.
+- Use bullets and small tables where helpful.
+- Bold important terms with **...**.
+- Include a final '## CITATIONS' section with label→URL list for the sources you used.
+""".strip()
+    # default detailed prompt remains as before
+    return f"""
+You will compose the final Markdown notes now.
+
+Context:
+{context}
+
+Instructions:
+- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" → pick one).
+- Include the compulsory sections even if they were not present in sources.
+- Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
+- Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
+- Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
+ - Bold important keywords/terms and symbols (e.g., θ, γ, α, ε-greedy, key definitions) with **...** consistently; avoid over-bolding.
+
+Start with '# {topic}' and then the sections in a logical order.
+""".strip()
+
+def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None, variant: str = "detailed") -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Yield (event_name, payload) tuples describing real-time progress and final output.
 
     Events emitted in order (names):
@@ -1154,22 +1275,7 @@ def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] =
         yield ("context_ready", {"chars": len(context)})
 
         assistant = build_agent()
-        user_prompt = f"""
-You will compose the final Markdown notes now.
-
-Context:
-{context}
-
-Instructions:
-- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" → pick one).
-- Include the compulsory sections even if they were not present in sources.
-- Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
-- Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
-- Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., θ, γ, α, ε-greedy, key definitions) with **...** consistently; avoid over-bolding.
-
-Start with '# {topic}' and then the sections in a logical order.
-        """
+        user_prompt = _build_variant_user_prompt(context, topic, variant)
         yield ("llm_start", {})
         try:
             # Use safe runner in case we're under FastAPI's loop
@@ -9784,40 +9890,74 @@ def api_transform_note(payload: dict):
 async def generate(payload: dict):
     topic = (payload or {}).get("topic", "").strip()
     force = bool((payload or {}).get("force", False))
+    variant = _normalize_variant((payload or {}).get("variant", "detailed"))
     if not topic:
         return JSONResponse({"error": "Missing 'topic'"}, status_code=400)
     try:
         if not force:
-            # Exact-title cache from DB
-            row = db_get_ai_note_by_title_exact(topic)
+            # Exact-title cache from DB for the variant
+            row = db_get_ai_note_by_title_exact_variant(topic, variant=variant)
             if row and (row.get("markdown") or "").strip():
                 return {
                     "id": row.get("id"),
                     "markdown": row.get("markdown", ""),
                     "cached": True,
                     "title": row.get("title"),
+                    "variant": variant,
                 }
-        md = generate_notes_markdown(topic)
-        row = db_upsert_ai_note_by_title(topic, md)
-        return {"id": row.get("id"), "markdown": row.get("markdown", md), "cached": False, "title": row.get("title")}
+        # Non-streaming generation: use detailed pipeline for detailed, or transform detailed into variant
+        md_detailed = generate_notes_markdown(topic)
+        md = md_detailed
+        if variant == "cheatsheet" or variant == "simple":
+            try:
+                # Use transform endpoint logic locally to adjust style
+                mode = "simplify" if variant == "simple" else "custom"
+                custom = None
+                if variant == "cheatsheet":
+                    custom = (
+                        "Rewrite as an ultra-concise exam cheat sheet: 250–400 words, bullets/tables, sections: Core Concepts; Key Definitions & Formulas; Quick Steps/Algorithms; Pitfalls; Keywords. Bold key terms. End with a CITATIONS list preserved from input."
+                    )
+                prompt = _build_transform_prompt(mode, md_detailed, custom)
+                client = _openai_client()
+                model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+                messages = [
+                    {"role": "system", "content": "You are an assistant that edits markdown content precisely as instructed."},
+                    {"role": "user", "content": prompt},
+                ]
+                create_fn = None
+                try:
+                    create_fn = client.chat.completions.create  # type: ignore[attr-defined]
+                except AttributeError:
+                    create_fn = None
+                if create_fn:
+                    resp = create_fn(model=model, messages=messages, temperature=0.4, max_tokens=4096)
+                    md = resp.choices[0].message.content if resp.choices else md_detailed
+                else:
+                    resp = client.ChatCompletion.create(model=model, messages=messages, temperature=0.4, max_tokens=4096)  # type: ignore[attr-defined]
+                    md = resp.choices[0].message["content"] if resp.choices else md_detailed
+            except Exception:
+                md = md_detailed
+        row = db_upsert_ai_note_by_title_variant(topic, md, variant=variant)
+        return {"id": row.get("id"), "markdown": row.get("markdown", md), "cached": False, "title": row.get("title"), "variant": variant}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @notes_router.get("/generate/stream")
 @notes_router.get("/api/notes/generate/stream")
-async def generate_stream(topic: str, force: bool = False):
+async def generate_stream(topic: str, force: bool = False, variant: str = "detailed"):
     async def event_source() -> AsyncGenerator[bytes, None]:
         yield b"event: open\n\n"
         # Early cache hit: exact-title lookup in DB
         if not force:
-            row = db_get_ai_note_by_title_exact(topic)
+            row = db_get_ai_note_by_title_exact_variant(topic, variant=_normalize_variant(variant))
             if row and (row.get("markdown") or "").strip():
                 payload = {
                     "id": row.get("id"),
                     "markdown": row.get("markdown", ""),
                     "cached": True,
                     "title": row.get("title"),
+                    "variant": _normalize_variant(variant),
                 }
                 line = f"event: final\n".encode("utf-8")
                 data_json = json.dumps(payload, ensure_ascii=False)
@@ -9835,7 +9975,7 @@ async def generate_stream(topic: str, force: bool = False):
 
         def worker() -> None:
             try:
-                for name, payload in generate_notes_events(topic, stop_event=stop_event):
+                for name, payload in generate_notes_events(topic, stop_event=stop_event, variant=_normalize_variant(variant)):
                     if stop_event.is_set():
                         break
                     dispatch(("event", name, payload))
@@ -9853,10 +9993,11 @@ async def generate_stream(topic: str, force: bool = False):
                     try:
                         if name == "final" and isinstance(payload, dict) and payload.get("markdown"):
                             try:
-                                row = db_upsert_ai_note_by_title(topic, payload.get("markdown", ""))
+                                row = db_upsert_ai_note_by_title_variant(topic, payload.get("markdown", ""), variant=_normalize_variant(variant))
                                 payload["id"] = row.get("id")
                                 payload["title"] = row.get("title")
                                 payload["cached"] = False
+                                payload["variant"] = _normalize_variant(variant)
                             except Exception:
                                 pass
                             finally:
@@ -10255,7 +10396,7 @@ def _generate_flashcards_with_gemini(markdown: str, topic: str, max_cards: int) 
 @notes_router.post("/notes/{note_id}/flashcards")
 @notes_router.post("/api/notes/{note_id}/flashcards")
 def api_generate_flashcards(note_id: str, payload: Optional[Dict[str, Any]] = Body(default=None)):
-    row = db_get_ai_note_by_id(note_id)
+    row, _v = db_get_ai_note_by_id_any(note_id)
     if not row:
         raise HTTPException(status_code=404, detail="Note not found")
 
@@ -10321,47 +10462,60 @@ def api_generate_flashcards(note_id: str, payload: Optional[Dict[str, Any]] = Bo
 
 @notes_router.get("/notes")
 @notes_router.get("/api/notes")
-def api_list_notes():
-    """List recent AI notes from DB."""
+def api_list_notes(variant: str = Query("detailed")):
+    """List recent AI notes from DB (variant-specific)."""
     supabase = get_service_client()
+    table = _table_for_variant(variant)
     try:
-        res = supabase.table(AI_NOTES_TABLE).select("id,title,created_at,updated_at").order("updated_at", desc=True).limit(50).execute()
+        res = supabase.table(table).select("id,title,created_at,updated_at").order("updated_at", desc=True).limit(50).execute()
         data = getattr(res, 'data', []) or []
-        return {"items": data}
+        return {"items": data, "variant": _normalize_variant(variant)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list notes: {e}")
 
 
 @notes_router.post("/notes")
 @notes_router.post("/api/notes")
-def api_create_note(payload: dict):
+def api_create_note(payload: dict, variant: str = Query("detailed")):
     title = (payload or {}).get("topic", "").strip() or (payload or {}).get("title", "Untitled").strip() or "Untitled"
     markdown = (payload or {}).get("markdown", "")
-    row = db_upsert_ai_note_by_title(title, markdown)
-    return {"id": row.get("id"), "title": row.get("title"), "created_at": row.get("created_at"), "updated_at": row.get("updated_at")}
+    row = db_upsert_ai_note_by_title_variant(title, markdown, variant=_normalize_variant(variant))
+    return {"id": row.get("id"), "title": row.get("title"), "created_at": row.get("created_at"), "updated_at": row.get("updated_at"), "variant": _normalize_variant(variant)}
 
 
 @notes_router.get("/notes/{note_id}")
 @notes_router.get("/api/notes/{note_id}")
-def api_read_note(note_id: str):
-    row = db_get_ai_note_by_id(note_id)
+def api_read_note(note_id: str, variant: Optional[str] = Query(default=None)):
+    row: Optional[Dict[str, Any]] = None
+    used_variant: Optional[str] = None
+    if variant:
+        used_variant = _normalize_variant(variant)
+        row = db_get_ai_note_by_id_variant(note_id, variant=used_variant)
+    if not row:
+        row, used_variant = db_get_ai_note_by_id_any(note_id)
     if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
-    return {"id": row.get("id"), "title": row.get("title"), "markdown": row.get("markdown", ""), "updated_at": row.get("updated_at")}
+    return {"id": row.get("id"), "title": row.get("title"), "markdown": row.get("markdown", ""), "updated_at": row.get("updated_at"), "variant": used_variant}
 
 
 @notes_router.put("/notes/{note_id}")
 @notes_router.put("/api/notes/{note_id}")
-def api_update_note(note_id: str, payload: dict):
+def api_update_note(note_id: str, payload: dict, variant: Optional[str] = Query(default=None)):
     markdown = (payload or {}).get("markdown", "")
-    row = db_update_ai_note_markdown(note_id, markdown)
+    if variant:
+        row = db_update_ai_note_markdown_variant(note_id, markdown, variant=_normalize_variant(variant))
+    else:
+        found, found_variant = db_get_ai_note_by_id_any(note_id)
+        if not found:
+            raise HTTPException(status_code=404, detail="Not found")
+        row = db_update_ai_note_markdown_variant(note_id, markdown, variant=found_variant)
     return {"id": note_id, "updated_at": row.get("updated_at") if row else None}
 
 
 @notes_router.get("/notes/{note_id}/download")
 @notes_router.get("/api/notes/{note_id}/download")
 def api_download_note(note_id: str):
-    row = db_get_ai_note_by_id(note_id)
+    row, _v = db_get_ai_note_by_id_any(note_id)
     if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
     content = row.get("markdown", "")
@@ -10373,7 +10527,7 @@ def api_download_note(note_id: str):
 @notes_router.get("/notes/{note_id}/pdf")
 @notes_router.get("/api/notes/{note_id}/pdf")
 def api_note_pdf(note_id: str):
-    row = db_get_ai_note_by_id(note_id)
+    row, _v = db_get_ai_note_by_id_any(note_id)
     if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
     md = row.get("markdown", "")
