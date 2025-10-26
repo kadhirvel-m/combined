@@ -288,7 +288,7 @@
         let collegeId = params.collegeId; let collegeName = params.collegeName ? decodeURIComponent(params.collegeName) : ''; let degreeId = params.degreeId; let degreeName = params.degreeName ? decodeURIComponent(params.degreeName) : ''; let departmentId = params.departmentId; let departmentName = params.departmentName ? decodeURIComponent(params.departmentName) : '';
         // Attempt recovery from sessionStorage if critical params missing (back navigation without query string)
         (function recoverContext() {
-            const need = !collegeId || !departmentName;
+            const need = !collegeId || !departmentId || !departmentName;
             if (!need) return;
             try {
                 const raw = sessionStorage.getItem('px_ctx_batches');
@@ -299,12 +299,13 @@
                         collegeName = collegeName || ctx.collegeName;
                         degreeId = degreeId || ctx.degreeId;
                         degreeName = degreeName || ctx.degreeName;
+                        departmentId = departmentId || ctx.departmentId;
                         departmentName = departmentName || ctx.departmentName;
                         console.debug('[batches] recovered from sessionStorage', ctx);
                     }
                 }
             } catch (e) { console.debug('[batches] sessionStorage recovery failed', e); }
-            if (!collegeId || !departmentName) {
+            if (!collegeId || !departmentId || !departmentName) {
                 try {
                     const raw2 = localStorage.getItem('px_ctx_batches_last');
                     if (raw2) {
@@ -314,6 +315,7 @@
                             collegeName = collegeName || ctx2.collegeName;
                             degreeId = degreeId || ctx2.degreeId;
                             degreeName = degreeName || ctx2.degreeName;
+                            departmentId = departmentId || ctx2.departmentId;
                             departmentName = departmentName || ctx2.departmentName;
                             console.debug('[batches] recovered from localStorage', ctx2);
                         }
@@ -321,7 +323,7 @@
                 } catch (e2) { console.debug('[batches] localStorage recovery failed', e2); }
             }
             // If still missing, attempt upstream redirect if we have at least collegeId
-            if ((!collegeId || !departmentName) && collegeId) {
+            if ((!collegeId || !departmentId || !departmentName) && collegeId) {
                 const redirectUrl = `departments.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}`;
                 console.debug('[batches] redirecting upstream due to incomplete context');
                 window.location.replace(redirectUrl);
@@ -344,8 +346,9 @@
         function attachBatchEditHandlers() { results.querySelectorAll('[data-batch-edit]').forEach(btn => { btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const id = btn.getAttribute('data-batch-edit'); const batch = batchesCache.find(b => String(b.id) === String(id)); if (batch) openBatchModal('edit', batch); }); }); }
         function attachBatchCardNavigation() { results.querySelectorAll('[data-batch-card]').forEach(card => { const href = card.getAttribute('data-batch-card'); if (!href) return; card.addEventListener('click', e => { if (e.target.closest('[data-batch-edit]')) return; if (e.target.closest('a')) return; window.location.href = href; }); card.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-batch-edit]')) { e.preventDefault(); window.location.href = href; } }); }); }
         async function loadBatches() {
-            if (!collegeId || !departmentName) { showError('Missing collegeId or departmentName in URL.'); return; } showLoader(); try {
-                const deptSlug = encodeURIComponent((departmentName || '').toUpperCase()); const batches = await Collage.fetchJson(`/api/colleges/${collegeId}/departments/${deptSlug}/batches/full`, { skipAuth: true }); const label = departmentName || 'Selected department'; titleEl.innerHTML = `Batches · <span class=\"opacity-80\">${Collage.escapeHtml(label)}</span>`; const list = Array.isArray(batches) ? batches : []; batchesCache = list.map(i => ({ id: i.id, from_year: Number(i.from_year), to_year: Number(i.to_year) })); subtitleEl.textContent = `${list.length} batch${list.length === 1 ? '' : 'es'} recorded for this department.`; breadcrumbsEl.innerHTML = makeBreadcrumb([
+            if (!collegeId || !departmentId) { showError('Missing collegeId or departmentId in URL.'); return; } showLoader(); try {
+                const deptKey = encodeURIComponent(departmentId);
+                const batches = await Collage.fetchJson(`/api/departments/${deptKey}/batches/full`, { skipAuth: true }); const label = departmentName || 'Selected department'; titleEl.innerHTML = `Batches · <span class=\"opacity-80\">${Collage.escapeHtml(label)}</span>`; const list = Array.isArray(batches) ? batches : []; batchesCache = list.map(i => ({ id: i.id, from_year: Number(i.from_year), to_year: Number(i.to_year) })); subtitleEl.textContent = `${list.length} batch${list.length === 1 ? '' : 'es'} recorded for this department.`; breadcrumbsEl.innerHTML = makeBreadcrumb([
                     { label: 'Colleges', href: 'clg_info.html' },
                     { label: collegeName || 'College', href: `degrees.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}` },
                     { label: degreeName || 'Degree', href: `departments.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}` },
@@ -365,7 +368,7 @@
                     'from-[#7F57D1]/55 via-brand-500/60 to-brand-700/80',
                     'from-brand-700/65 via-brandlt-400/55 to-brand-500/70'
                 ];
-                results.innerHTML = list.map((batch, index) => { const range = Collage.formatYearRange(batch.from_year, batch.to_year); const accent = accentPalette[index % accentPalette.length]; const subjectsLink = `subjects.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(batch.id)}&batchRange=${encodeURIComponent(range)}`; return `<article class=\"group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition hover:shadow-glow focus-within:shadow-glow cursor-pointer\" data-batch-card=\"${subjectsLink}\" tabindex=\"0\"><div class=\"absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accent} opacity-20 blur-3xl\"></div><button type=\"button\" data-batch-edit=\"${batch.id}\" aria-label=\"Edit batch ${Collage.escapeHtml(range)}\" class=\"absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition\"><span class=\"material-symbols-rounded text-base\">edit</span></button><div class=\"relative flex items-center justify-between text-xs text-neutral-600 dark:text-white/70\"><span class=\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\">Batch</span><span class=\"font-mono text-[11px] text-neutral-500/80 dark:text-white/50\">${Collage.escapeHtml(String(batch.id).slice(0, 8))}…</span></div><h2 class=\"relative mt-6 text-xl font-semibold text-neutral-900 dark:text-white group-hover:text-brand-500\"><a href=\"${subjectsLink}\" class=\"inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900\">${Collage.escapeHtml(range)}<span class=\"material-symbols-rounded text-base text-brand-500 opacity-0 group-hover:opacity-100 transition\">north_east</span></a></h2><p class=\"relative mt-3 text-sm text-neutral-600 dark:text-white/65\">View all subjects (syllabus courses) taught in this cohort and dive into their syllabus.</p><a class=\"relative mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85\" href=\"${subjectsLink}\">View subjects<span class=\"material-symbols-rounded text-base transition group-hover:translate-x-1\">arrow_forward</span></a></article>`; }).join('');
+                results.innerHTML = list.map((batch, index) => { const range = Collage.formatYearRange(batch.from_year, batch.to_year); const accent = accentPalette[index % accentPalette.length]; const subjectsLink = `subjects.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentId=${encodeURIComponent(departmentId || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(batch.id)}&batchRange=${encodeURIComponent(range)}`; return `<article class=\"group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition hover:shadow-glow focus-within:shadow-glow cursor-pointer\" data-batch-card=\"${subjectsLink}\" tabindex=\"0\"><div class=\"absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accent} opacity-20 blur-3xl\"></div><button type=\"button\" data-batch-edit=\"${batch.id}\" aria-label=\"Edit batch ${Collage.escapeHtml(range)}\" class=\"absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition\"><span class=\"material-symbols-rounded text-base\">edit</span></button><div class=\"relative flex items-center justify-between text-xs text-neutral-600 dark:text-white/70\"><span class=\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\">Batch</span><span class=\"font-mono text-[11px] text-neutral-500/80 dark:text-white/50\">${Collage.escapeHtml(String(batch.id).slice(0, 8))}…</span></div><h2 class=\"relative mt-6 text-xl font-semibold text-neutral-900 dark:text-white group-hover:text-brand-500\"><a href=\"${subjectsLink}\" class=\"inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900\">${Collage.escapeHtml(range)}<span class=\"material-symbols-rounded text-base text-brand-500 opacity-0 group-hover:opacity-100 transition\">north_east</span></a></h2><p class=\"relative mt-3 text-sm text-neutral-600 dark:text-white/65\">View all subjects (syllabus courses) taught in this cohort and dive into their syllabus.</p><a class=\"relative mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85\" href=\"${subjectsLink}\">View subjects<span class=\"material-symbols-rounded text-base transition group-hover:translate-x-1\">arrow_forward</span></a></article>`; }).join('');
                 attachBatchEditHandlers(); attachBatchCardNavigation();
             } catch (err) { console.error(err); showError(err.message || 'Unexpected error'); }
         }

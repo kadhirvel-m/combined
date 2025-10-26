@@ -7276,6 +7276,45 @@ def list_batches_for_department_with_ids(college_id: uuid.UUID, dept_name: str):
     ]
 
 
+@academics_router.get(
+    "/api/departments/{department_id}/batches/full",
+    response_model=List[BatchWithIdOut],
+    summary="List batches (with id) for a department by id",
+)
+def list_batches_for_department_with_ids_by_id(department_id: uuid.UUID):
+    supabase = get_service_client()
+    dept_res = (
+        supabase.table("departments")
+        .select("id,college_id")
+        .eq("id", str(department_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(dept_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find department by id): {dept_res.error}")
+    if not dept_res.data:
+        raise HTTPException(status_code=404, detail="Department not found")
+
+    college_id_value = dept_res.data[0].get("college_id")
+
+    query = (
+        supabase.table("batches")
+        .select("id,from_year,to_year")
+        .eq("department_id", str(department_id))
+        .order("from_year")
+    )
+    if college_id_value:
+        query = query.eq("college_id", str(college_id_value))
+
+    b = query.execute()
+    if getattr(b, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get dept batches full by id): {b.error}")
+    return [
+        {"id": row["id"], "from_year": row["from_year"], "to_year": row["to_year"]}
+        for row in (b.data or [])
+    ]
+
+
 @academics_router.post(
     "/api/departments/{department_id}/batches",
     response_model=BatchWithIdOut,

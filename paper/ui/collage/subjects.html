@@ -312,6 +312,7 @@
         const collegeName = params.collegeName ? decodeURIComponent(params.collegeName) : '';
         const degreeId = params.degreeId;
         const degreeName = params.degreeName ? decodeURIComponent(params.degreeName) : '';
+        const departmentId = params.departmentId;
         const departmentName = params.departmentName ? decodeURIComponent(params.departmentName) : '';
         const batchId = params.batchId;
         const batchRange = params.batchRange ? decodeURIComponent(params.batchRange) : '';
@@ -580,7 +581,7 @@
                     { label: 'Colleges', href: 'clg_info.html' },
                     { label: collegeName || 'College', href: `degrees.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}` },
                     { label: degreeName || 'Degree', href: `departments.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}` },
-                    { label: departmentName || 'Department', href: `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}` },
+                    { label: departmentName || 'Department', href: `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentId=${encodeURIComponent(departmentId || '')}&departmentName=${encodeURIComponent(departmentName || '')}` },
                     { label: 'Subjects' }
                 ]);
                 filterAndRender();
@@ -597,13 +598,13 @@
             semesterFilter.addEventListener('change', filterAndRender);
             // Ensure back link preserves navigation context
             if (backLink) {
-                const backUrl = `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
+                const backUrl = `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentId=${encodeURIComponent(departmentId || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
                 backLink.setAttribute('href', backUrl);
             }
             // Persist context so batches.html can recover if user returns without query params
             try {
                 const ctx = {
-                    collegeId, collegeName, degreeId, degreeName, departmentName
+                    collegeId, collegeName, degreeId, degreeName, departmentId, departmentName
                 };
                 sessionStorage.setItem('px_ctx_batches', JSON.stringify(ctx));
                 // Also persist to localStorage as a longer-lived fallback
