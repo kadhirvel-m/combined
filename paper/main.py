@@ -9924,6 +9924,52 @@ def api_snippet_assist(payload: dict):
         {trimmed_selection}
         """
     ).strip()
+    def _extract_gemini_text(resp):
+        def _finish_reason(candidate):
+            finish = getattr(candidate, "finish_reason", None)
+            if finish is None and isinstance(candidate, dict):
+                finish = candidate.get("finish_reason") or candidate.get("finishReason")
+            if finish is None:
+                return None
+            finish_str = str(finish).upper()
+            if finish_str.isdigit():
+                return int(finish_str)
+            return finish_str
+
+        try:
+            quick = getattr(resp, "text", None)
+            if isinstance(quick, str) and quick.strip():
+                return quick.strip()
+        except Exception:
+            pass
+
+        candidates = getattr(resp, "candidates", None) or []
+        if isinstance(candidates, dict):
+            candidates = [candidates]
+        for cand in candidates:
+            finish = _finish_reason(cand)
+            if finish in (2, "SAFETY") or (isinstance(finish, str) and "SAFETY" in finish):
+                raise HTTPException(status_code=502, detail="Gemini blocked the response for safety. Try rephrasing your selection or question.")
+            content = getattr(cand, "content", None)
+            parts = None
+            if content is not None:
+                parts = getattr(content, "parts", None)
+                if parts is None and isinstance(content, dict):
+                    parts = content.get("parts")
+            if parts is None and isinstance(cand, dict):
+                parts = cand.get("content", {}).get("parts") if isinstance(cand.get("content"), dict) else None
+            texts = []
+            if parts:
+                for part in parts:
+                    text_val = getattr(part, "text", None)
+                    if text_val is None and isinstance(part, dict):
+                        text_val = part.get("text")
+                    if text_val:
+                        texts.append(str(text_val))
+            if texts:
+                return "\n".join(texts).strip()
+        return ""
+
     try:
         response = model.generate_content(
             [{"text": base_instruction}, {"text": prompt_body}],
@@ -9932,13 +9978,12 @@ def api_snippet_assist(payload: dict):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Gemini selection assist failed: {exc}") from exc
 
-    generated = getattr(response, "text", "") or ""
-    if not generated:
-        try:
-            generated = response.candidates[0].content.parts[0].text  # type: ignore[index]
-        except Exception:
-            generated = ""
-    generated = (generated or "").strip()
+    try:
+        generated = _extract_gemini_text(response)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini returned malformed response: {exc}") from exc
     if not generated:
         raise HTTPException(status_code=502, detail="Gemini returned empty response.")
     return {"text": generated, "truncated": len(selection) > len(trimmed_selection)}
