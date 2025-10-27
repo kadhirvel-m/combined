@@ -232,6 +232,11 @@
                                 <span class="material-symbols-rounded text-base">add</span>
                                 Add subject
                             </button>
+                            <button id="uploadSyllabusBtn" type="button"
+                                class="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-5 py-2.5 text-sm font-semibold text-neutral-800 dark:text-white/85 hover:border-brand-500/50 hover:text-brand-700 dark:hover:text-white transition">
+                                <span class="material-symbols-rounded text-base">cloud_upload</span>
+                                Upload syllabus
+                            </button>
                         </div>
                     </div>
                     <div class="flex">
@@ -307,6 +312,17 @@
             const usp = new URLSearchParams(s);
             usp.forEach((v, k) => q[k] = v);
             return q;
+        })();
+        // Recover missing context (including batch) from storage if query lacks it
+        (function restoreCtx(){
+            function getStored(){
+                try { const s = sessionStorage.getItem('px_ctx_batches'); if (s) return JSON.parse(s); } catch(_){}
+                try { const l = localStorage.getItem('px_ctx_batches_last'); if (l) return JSON.parse(l); } catch(_){}
+                return {};
+            }
+            const st = getStored();
+            const keys = ['collegeId','collegeName','degreeId','degreeName','departmentId','departmentName','batchId','batchRange'];
+            keys.forEach(k => { if (!params[k] && st[k]) params[k] = st[k]; });
         })();
         const collegeId = params.collegeId;
         const collegeName = params.collegeName ? decodeURIComponent(params.collegeName) : '';
@@ -604,13 +620,35 @@
             // Persist context so batches.html can recover if user returns without query params
             try {
                 const ctx = {
-                    collegeId, collegeName, degreeId, degreeName, departmentId, departmentName
+                    collegeId, collegeName, degreeId, degreeName, departmentId, departmentName, batchId, batchRange
                 };
                 sessionStorage.setItem('px_ctx_batches', JSON.stringify(ctx));
                 // Also persist to localStorage as a longer-lived fallback
                 localStorage.setItem('px_ctx_batches_last', JSON.stringify({ ...ctx, ts: Date.now() }));
                 if (window?.console) console.debug('[subjects] stored context', ctx);
             } catch (_) { /* ignore storage errors */ }
+
+            // Upload syllabus button routing with preserved context
+            const uploadBtn = document.getElementById('uploadSyllabusBtn');
+            if (uploadBtn) {
+                const q = new URLSearchParams({
+                    collegeId: collegeId || '',
+                    collegeName: collegeName || '',
+                    degreeId: degreeId || '',
+                    degreeName: degreeName || '',
+                    departmentId: departmentId || '',
+                    departmentName: departmentName || '',
+                    batchId: batchId || '',
+                    batchRange: batchRange || ''
+                }).toString();
+                uploadBtn.addEventListener('click', () => {
+                    window.location.href = `upload_syllabus.html?${q}`;
+                });
+                if (!batchId) {
+                    uploadBtn.disabled = true;
+                    uploadBtn.classList.add('opacity-60', 'cursor-not-allowed');
+                }
+            }
         });
     </script>
     <script>

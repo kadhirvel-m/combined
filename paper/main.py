@@ -30,7 +30,8 @@ from autogen_core.models import ModelInfo
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from fastapi import APIRouter, Body, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, Request
+from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -51,6 +52,11 @@ try:
     import docx  # type: ignore
 except Exception:  # pragma: no cover
     docx = None  # type: ignore
+
+try:
+    import PyPDF2  # type: ignore
+except Exception:  # pragma: no cover
+    PyPDF2 = None  # type: ignore
 
 try:
     from pptx import Presentation  # type: ignore
@@ -2425,6 +2431,9 @@ def _normalize_parsed_struct(parsed: dict, hints: dict) -> ParsedSyllabusOut:
     return ParsedSyllabusOut(course_code=cc, title=ttl, units=units_in)
 
 
+GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-2.5-flash").strip()
+
+
 def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
     if not GEMINI_API_KEY:
         return None
@@ -2435,13 +2444,18 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-1.5-pro")
+        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-2.5-flash")
         prompt = (
-            "You are a strict JSON parser. Given a raw syllabus text, extract a JSON with keys: "
-            "course_code (string, optional), title (string, optional), units (array of {unit_title, topics: array of {topic}}). "
-            "Keep structure concise and preserve topic order."
+            "You are a strict JSON parser for academic syllabi. Given the raw syllabus text, return ONLY JSON with keys: "
+            "semester (integer 1-12, optional), course_code (string, optional), title (string, optional), "
+            "units (array of {unit_title (string), topics: array of {topic (string)}}). "
+            "Omit any units or topics that correspond to labs, laboratory sessions, practicals, experiments, or sessionals. "
+            "Do not include explanations or commentary; respond with JSON only."
         )
-        content = f"Hints: {json.dumps(hints or {})}\n\nSyllabus Text:\n{text}"
+        # Limit the text length to keep latency low
+        max_chars = int(os.getenv("GEMINI_PARSE_MAX_CHARS", "20000"))
+        safe_text = (text or "")[:max_chars]
+        content = f"Hints: {json.dumps(hints or {})}\n\nSyllabus Text:\n{safe_text}"
         resp = model.generate_content([
             {"text": prompt},
             {"text": content},
@@ -2462,6 +2476,40 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
         return None
 
 
+async def _gemini_parse_with_timeout(text: str, hints: dict, timeout_s: float = 18.0) -> Optional[dict]:
+    try:
+        return await asyncio.wait_for(run_in_threadpool(_gemini_parse, text, hints), timeout=timeout_s)
+    except Exception:
+        return None
+
+
+LAB_KEYWORD_PATTERN = re.compile(r"\b(lab|laboratory|practical|sessional|experiment|experiments)\b", re.IGNORECASE)
+
+
+def _contains_lab(text: Optional[str]) -> bool:
+    if not text:
+        return False
+    return bool(LAB_KEYWORD_PATTERN.search(text))
+
+
+def _filter_lab_units(units: List[UnitIn]) -> List[UnitIn]:
+    filtered: List[UnitIn] = []
+    for unit in units or []:
+        title = unit.unit_title or ""
+        if _contains_lab(title):
+            continue
+        clean_topics: List[TopicIn] = []
+        for topic in unit.topics or []:
+            topic_text = getattr(topic, "topic", None)
+            if not topic_text or _contains_lab(topic_text):
+                continue
+            clean_topics.append(TopicIn(topic=topic_text))
+        if not clean_topics:
+            continue
+        filtered.append(UnitIn(unit_title=title, topics=clean_topics))
+    return filtered
+
+
 def parse_syllabus(payload: ParseSyllabusIn) -> ParsedSyllabusOut:
     text = (payload.text or "").strip()
     if len(text) < 10:
@@ -2476,6 +2524,56 @@ def parse_syllabus(payload: ParseSyllabusIn) -> ParsedSyllabusOut:
     if not norm.units:
         raise HTTPException(status_code=422, detail="Could not extract any units or topics")
     return norm
+
+
+def _pdf_bytes_to_text(data: bytes) -> str:
+    text = ""
+    # Prefer PyMuPDF (fitz) for accuracy
+    if data and fitz is not None:  # type: ignore[attr-defined]
+        try:
+            with fitz.open(stream=data, filetype="pdf") as doc:  # type: ignore[attr-defined]
+                chunks: List[str] = []
+                for page in doc:
+                    try:
+                        chunks.append(page.get_text("text"))
+                    except Exception:
+                        continue
+                text = "\n".join(chunks).strip()
+        except Exception:
+            text = ""
+    if not text and textract is not None:
+        try:
+            out = textract.process(io.BytesIO(data), extension='pdf')  # type: ignore
+            try:
+                text = out.decode('utf-8', errors='ignore').strip()
+            except Exception:
+                text = (out or b"").decode('latin-1', errors='ignore').strip()
+        except Exception:
+            text = ""
+    if not text and PyPDF2 is not None:
+        try:
+            reader = PyPDF2.PdfReader(io.BytesIO(data))  # type: ignore[attr-defined]
+            chunks: List[str] = []
+            for page in reader.pages:
+                try:
+                    page_text = page.extract_text()  # type: ignore[attr-defined]
+                except Exception:
+                    page_text = None
+                if page_text:
+                    chunks.append(page_text)
+            text = "\n".join(chunks).strip()
+        except Exception:
+            text = ""
+    if not text:
+        # Very last fallback: naive bytes decode
+        try:
+            text = data.decode('utf-8', errors='ignore')
+        except Exception:
+            text = ""
+    return text
+
+
+# NOTE: The /api/syllabus/upload route is registered later, after academics_router is created.
 
 
 def signup_user(user):
@@ -5144,6 +5242,153 @@ academics_router = APIRouter()
 @academics_router.post("/api/parse/syllabus-text", response_model=ParsedSyllabusOut, summary="Parse raw syllabus text into structured units/topics")
 def parse_syllabus_text(payload: ParseSyllabusIn):
     return parse_syllabus(payload)
+
+@academics_router.post("/api/syllabus/upload", response_model=SyllabusCourseOut, summary="Upload a syllabus PDF and parse + store units/topics")
+async def upload_syllabus_pdf(
+    request: Request,
+    batch_id: uuid.UUID = Form(...),
+    file: UploadFile = File(...),
+    course_code: Optional[str] = Form(None),
+    title: Optional[str] = Form(None),
+    semester: Optional[int] = Form(None),
+    prefer_naive: Optional[str] = Form(None),
+):
+    try:
+        print(f"[UPLOAD] {request.method} {request.url.path} origin={request.headers.get('origin')} content-type={request.headers.get('content-type')}")
+    except Exception:
+        pass
+    if not file or (file.content_type not in ("application/pdf", None) and not file.filename.lower().endswith(".pdf")):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    blob = await file.read()
+    if not blob:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    # Extract text off the event loop to avoid blocking concurrent requests
+    raw_text = await run_in_threadpool(_pdf_bytes_to_text, blob)
+    if not raw_text or len(raw_text) < 16:
+        raise HTTPException(status_code=422, detail="Could not extract text from PDF")
+
+    hints = {"course_code": course_code, "title": title}
+    # Determine if client asked to skip AI parsing
+    def _to_bool(val: Optional[str]) -> bool:
+        if val is None:
+            return False
+        v = str(val).strip().lower()
+        return v in {"1", "true", "yes", "y", "on"}
+
+    use_naive_only = _to_bool(prefer_naive)
+    # Try Gemini with timeout unless client prefers naive-only; on failure/timeout, fall back to naive
+    timeout_env = os.getenv("GEMINI_PARSE_TIMEOUT_S")
+    try:
+        timeout_s = float(timeout_env) if timeout_env else 18.0
+    except Exception:
+        timeout_s = 18.0
+    if use_naive_only:
+        parsed = _naive_extract(raw_text)
+    else:
+        parsed = await _gemini_parse_with_timeout(raw_text, hints, timeout_s=timeout_s)
+        if not parsed:
+            parsed = _naive_extract(raw_text)
+
+    norm = _normalize_parsed_struct(parsed or {}, hints)
+    filtered_units = _filter_lab_units(norm.units)
+    if not filtered_units:
+        fallback = _naive_extract(raw_text)
+        fallback_norm = _normalize_parsed_struct(fallback or {}, hints)
+        filtered_units = _filter_lab_units(fallback_norm.units) or fallback_norm.units
+        if filtered_units:
+            norm = ParsedSyllabusOut(
+                course_code=fallback_norm.course_code or norm.course_code,
+                title=fallback_norm.title or norm.title,
+                units=filtered_units,
+            )
+    else:
+        norm = ParsedSyllabusOut(
+            course_code=norm.course_code,
+            title=norm.title,
+            units=filtered_units,
+        )
+
+    if not norm.units:
+        fallback_topics: List[TopicIn] = []
+        for line in raw_text.splitlines():
+            line = line.strip()
+            if len(line) < 4:
+                continue
+            if _contains_lab(line):
+                continue
+            fallback_topics.append(TopicIn(topic=line))
+            if len(fallback_topics) >= 12:
+                break
+        if fallback_topics:
+            norm = ParsedSyllabusOut(
+                course_code=norm.course_code,
+                title=norm.title,
+                units=[UnitIn(unit_title="Unit 1", topics=fallback_topics)],
+            )
+
+    sem_val: Optional[int] = None
+    if semester is not None:
+        sem_val = int(semester)
+    else:
+        try:
+            sem_from_json = parsed.get("semester") if isinstance(parsed, dict) else None
+        except Exception:
+            sem_from_json = None
+        if isinstance(sem_from_json, (int, float)):
+            sem_val = int(sem_from_json)
+        elif isinstance(sem_from_json, str) and sem_from_json.strip().isdigit():
+            sem_val = int(sem_from_json.strip())
+        if sem_val is None:
+            m = re.search(r"sem(?:ester)?\s*[:\-]?\s*(\d{1,2})", raw_text, flags=re.IGNORECASE)
+            if m:
+                try:
+                    sem_val = int(m.group(1))
+                except Exception:
+                    sem_val = None
+    if not sem_val or sem_val < 1 or sem_val > 12:
+        sem_val = 1
+        try:
+            print("[UPLOAD] semester fallback -> 1 (provide explicit semester to override)")
+        except Exception:
+            pass
+
+    course_in = SyllabusCourseIn(
+        batch_id=batch_id,
+        semester=sem_val,
+        course_code=(norm.course_code or "UNKNOWN").upper(),
+        title=norm.title or "Untitled Course",
+        units=norm.units or [],
+    )
+    course = await run_in_threadpool(upsert_syllabus_course, course_in)
+    if not course.id:
+        raise HTTPException(status_code=500, detail="Failed to create or resolve course id")
+    units = await run_in_threadpool(sync_units_and_topics, course.id, norm.units or [])
+    try:
+        print(f"[UPLOAD] saved course id={course.id} code={course.course_code} title={course.title} units={len(units)}")
+    except Exception:
+        pass
+    return SyllabusCourseOut(
+        id=course.id,
+        batch_id=course.batch_id,
+        semester=course.semester,
+        course_code=course.course_code,
+        title=course.title,
+        units=units,
+    )
+
+@academics_router.get("/api/syllabus/upload", summary="Info: how to use the syllabus upload endpoint")
+def upload_syllabus_info():
+    return {
+        "ok": True,
+        "message": "Use POST multipart/form-data to /api/syllabus/upload with fields: file (PDF), batch_id (UUID), optional course_code, title, semester (1-12)",
+    }
+
+@academics_router.options("/api/syllabus/upload")
+def upload_syllabus_options():
+    # Explicit OPTIONS handler to help with certain proxies while debugging
+    return Response(status_code=200)
 
 
 # ---------------- Admin: List Users -----------------
@@ -11311,6 +11556,27 @@ def create_app() -> FastAPI:
     app.include_router(youtube_transcript_router)
     app.include_router(youtube_search_router)
     app.include_router(yt_transcript_router, prefix="/api/youtube", tags=["youtube transcripts (raw)"])
+
+    # Simple request logger to aid debugging 405/OPTIONS/CORS issues
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):  # type: ignore[override]
+        try:
+            print(f"[REQ] {request.method} {request.url.path} origin={request.headers.get('origin')}")
+        except Exception:
+            pass
+        try:
+            response = await call_next(request)
+        except Exception as e:
+            try:
+                print(f"[ERR] {request.method} {request.url.path} -> {e}")
+            except Exception:
+                pass
+            raise
+        try:
+            print(f"[RES] {request.method} {request.url.path} {response.status_code}")
+        except Exception:
+            pass
+        return response
 
     @app.get("/")
     def root():
