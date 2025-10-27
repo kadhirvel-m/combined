@@ -17,56 +17,15 @@
     <!-- Tailwind (forms/typography/aspect-ratio) -->
     <link rel="stylesheet" href="assets/css/tailwind.css" />
     <script>
-        // Tailwind config with your palette + light mode complements
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                container: { center: true, padding: '1rem' },
-                extend: {
-                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
-                    colors: {
-                        brand: {
-                            900: '#1E1E2F', // deep night
-                            700: '#4C2A59', // plum
-                            500: '#9E4B8A', // magenta
-                        },
-                        brandlt: {        // light-theme complements
-                            50: '#FAF5FB',
-                            100: '#F3E7F2',
-                            200: '#E7D0E4',
-                            300: '#D9B4D3',
-                            400: '#C88DBA',
-                            500: '#9E4B8A',
-                            700: '#4C2A59',
-                            900: '#1E1E2F'
-                        },
-                        // Added direct aliases for pricing card component
-                        ink: '#1E1E2F',
-                        plum: '#4C2A59',
-                        orchid: '#9E4B8A',
-                        // Additional palette required for mega menus (from test.html)
-                        indigoDark: '#1E1E2F',
-                        deepPurple: '#4C2A59',
-                        magenta: '#9E4B8A',
-                        paper: '#FFFFFF',
-                        stoneTint: '#F6F7FB',
-                        edge: '#E7E9F2'
-                    },
-                    boxShadow: {
-                        glow: '0 8px 30px rgba(158,75,138,0.35)',
-                        soft: '0 10px 30px rgba(0,0,0,0.25)',
-                        // Pricing card shadow
-                        card: '0 24px 60px rgba(30,30,47,0.35)'
-                    },
-                    backgroundImage: {
-                        'hero-dark':
-                            'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
-                        'hero-light':
-                            'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
-                    }
-                }
+        // Early theme detection to prevent flash
+        (function () {
+            const root = document.documentElement;
+            const stored = localStorage.getItem('px_theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (stored === 'dark' || (!stored && prefersDark)) {
+                root.classList.add('dark');
             }
-        }
+        })();
     </script>
     <style>
         /* Prevent flicker of cloaked elements before Alpine initializes */
@@ -486,14 +445,65 @@
     </style>
 
     <script>
-            // Theme boot (runs before paint to avoid flash)
-            (() => {
-                const stored = localStorage.getItem('px_theme');
-                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                const isDark = stored ? stored === 'dark' : prefersDark;
-                if (isDark) document.documentElement.classList.add('dark');
-            })();
+        // Theme boot (runs before paint to avoid flash)
+        (() => {
+            const stored = localStorage.getItem('px_theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = stored ? stored === 'dark' : prefersDark;
+            if (isDark) document.documentElement.classList.add('dark');
+        })();
     </script>
+
+    <!-- Flipbook Styles -->
+    <style>
+        #flipbook-container {
+            width: 100%;
+            position: relative;
+        }
+
+        #book {
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .page-canvas {
+            background-color: white;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .stf__parent {
+            margin: 0 auto;
+        }
+
+        .stf__wrapper {
+            margin: 0 auto;
+        }
+
+        .stf__item {
+            background-color: white !important;
+        }
+
+        /* Dark mode adjustments */
+        .dark .page-canvas {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Make flipbook responsive */
+        @media (max-width: 768px) {
+            #book {
+                transform: scale(0.8);
+            }
+        }
+
+        @media (max-width: 480px) {
+            #book {
+                transform: scale(0.6);
+            }
+        }
+    </style>
+
     <!-- Alpine.js (for mega menus) -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
@@ -949,26 +959,52 @@
 
             <!-- Card visual -->
             <div class="mt-14 md:mt-20">
-                <!-- Hero Inline Video (added) -->
+                <!-- Interactive Flipbook -->
                 <div
-                    class="mx-auto max-w-5xl rounded-3xl border border-black/5 dark:border-white/10 bg-white/60 dark:bg-brand-900/40 backdrop-blur overflow-hidden shadow-soft dark:shadow-glow">
-                    <div class="relative group">
-                        <video class="w-full h-full aspect-[16/9] object-cover" autoplay muted loop playsinline
-                            poster="../assets/img/img1.png">
-                            <source src="../assets/video/hero.mp4" type="video/mp4" />
-                            Your browser does not support the video tag.
-                        </video>
-                        <!-- Optional overlay gradient for readability -->
-                        <div
-                            class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-black/0 to-black/10 dark:from-black/50">
+                    class="mx-auto w-[400px] h-[400px] rounded-3xl border border-black/5 dark:border-white/10 bg-white/60 dark:bg-brand-900/40 backdrop-blur overflow-hidden shadow-soft dark:shadow-glow">
+                    <div class="relative group bg-neutral-100 dark:bg-neutral-900 p-6 h-full">
+                        <!-- Flipbook Container -->
+                        <div id="flipbook-container" class="flex items-center justify-center h-full">
+                            <div id="book" class="relative"></div>
                         </div>
-                        <!-- Optional caption -->
+
+                        <!-- Navigation Controls -->
                         <div
-                            class="absolute bottom-3 right-4 text-[10px] tracking-wide uppercase font-medium text-white/70 backdrop-blur-sm bg-black/30 px-2 py-1 rounded-full ring-1 ring-white/20">
-                            Product Preview</div>
+                            class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-black/70 backdrop-blur-sm px-6 py-3 rounded-full ring-1 ring-white/20 z-50">
+                            <button id="prev-btn"
+                                class="text-white hover:text-brand-300 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                                aria-label="Previous page">
+                                <span class="material-symbols-rounded text-3xl">chevron_left</span>
+                            </button>
+                            <div class="text-sm font-medium text-white/90 min-w-[80px] text-center">
+                                Page <span id="current-page">1</span> / <span id="total-pages">0</span>
+                            </div>
+                            <button id="next-btn"
+                                class="text-white hover:text-brand-300 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                                aria-label="Next page">
+                                <span class="material-symbols-rounded text-3xl">chevron_right</span>
+                            </button>
+                        </div>
+
+                        <!-- Flipbook Caption -->
+                        <div
+                            class="absolute top-4 right-4 text-[10px] tracking-wide uppercase font-medium text-white/70 backdrop-blur-sm bg-black/30 px-3 py-1.5 rounded-full ring-1 ring-white/20 z-50">
+                            Interactive Storybook</div>
+
+                        <!-- Loading indicator -->
+                        <div id="loading"
+                            class="absolute inset-0 flex items-center justify-center bg-neutral-100/95 dark:bg-neutral-900/95 z-40">
+                            <div class="text-center">
+                                <div
+                                    class="inline-block animate-spin rounded-full h-16 w-16 border-4 border-brand-500/30 border-t-brand-500">
+                                </div>
+                                <p class="mt-4 text-base text-neutral-600 dark:text-white/70 font-medium">Loading
+                                    flipbook...</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <!-- End Hero Inline Video -->
+                <!-- End Interactive Flipbook -->
             </div>
         </div>
     </section>
@@ -1035,7 +1071,8 @@
 
                 <!-- Left text -->
                 <div class="p-10 md:p-14">
-                    <h3 class="text-3xl md:text-4xl font-extrabold tracking-tight text-neutral-900 dark:text-white">
+                    <h3
+                        class="text-4xl md:text-4xl font-extrabold tracking-tight mx-auto max-w-5xl leading-[1.08] gradient-hero-text">
                         Join the Revolution
                     </h3>
                     <p class="mt-4 text-neutral-600 dark:text-white/70">
@@ -1046,22 +1083,24 @@
                         Be part of the future of learning and innovation. Start today and shape your academic journey
                         with PaperX.
                     </p>
-                    <a href="#signup"
-                        class="inline-flex items-center gap-2 mt-6 font-semibold text-magenta-600 dark:text-magenta-400 hover:underline">
+                    <button onclick="window.location.href='\signup'"
+                        class="inline-flex items-center gap-2 mt-6 rounded-full bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] text-white font-semibold px-6 py-3 shadow-[0_4px_18px_-4px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_28px_-6px_rgba(158,75,138,0.8)] hover:scale-105 transition-all duration-200">
                         Get Started with PaperX
                         <span class="material-symbols-rounded text-lg">arrow_forward</span>
-                    </a>
+                    </button>
                 </div>
 
                 <!-- Right image -->
-                <div class="w-full h-full py-6 relative">
+                <div class="flex items-center justify-center py-6 pr-6 relative">
                     <!-- <img src="../assets/img/img4.png" alt="Bubu the unicorn piggy leading the PaperX revolution"
                         class="w-full h-full object-cover brightness-100 dark:brightness-105 contrast-105 dark:contrast-110 transition"
                         loading="lazy" decoding="async"> -->
-                    <video class="w-full h-full object-cover" autoplay muted loop playsinline>
-                        <source src="../assets/video/read.mp4" type="video/mp4" />
-                        Your browser does not support the video tag.
-                    </video>
+                    <div class="w-[85%] aspect-video rounded-2xl overflow-hidden shadow-lg">
+                        <video class="w-full h-full object-cover" autoplay muted loop playsinline>
+                            <source src="../assets/video/read.mp4" type="video/mp4" />
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1072,7 +1111,9 @@
     <section id="features" class="py-20">
         <div class="container max-w-7xl">
             <header class="text-center mb-12">
-                <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight">Exam-ready features</h2>
+                <h2
+                    class="text-4xl md:text-4xl font-extrabold tracking-tight mx-auto max-w-5xl leading-[1.08] gradient-hero-text">
+                    Exam-ready features</h2>
                 <p class="mt-3 text-neutral-600 dark:text-white/70">Everything aligned to Indian college syllabi & past
                     papers.</p>
             </header>
@@ -1080,48 +1121,60 @@
                 <!-- 6 features -->
                 <article
                     class="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 hover:shadow-glow transition">
-                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-500 mb-4"><span
-                            class="material-symbols-rounded">menu_book</span></div>
+                    <div
+                        class="size-10 grid place-content-center rounded-xl bg-brand-500/15 dark:bg-brand-500/25 text-brand-500 dark:text-brand-400 mb-4">
+                        <span class="material-symbols-rounded">menu_book</span>
+                    </div>
                     <h3 class="font-semibold">Syllabus → Smart Notes</h3>
                     <p class="mt-1 text-sm text-neutral-600 dark:text-white/70">Auto-structured notes per Unit → Topic →
                         Sub-topic with examples & diagrams.</p>
                 </article>
                 <article
                     class="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 hover:shadow-glow transition">
-                    <div class="size-10 grid place-content-center rounded-xl bg-brand-700/15 text-brand-700 mb-4"><span
-                            class="material-symbols-rounded">style</span></div>
+                    <div
+                        class="size-10 grid place-content-center rounded-xl bg-brand-500/15 dark:bg-brand-500/25 text-brand-500 dark:text-brand-400 mb-4">
+                        <span class="material-symbols-rounded">style</span>
+                    </div>
                     <h3 class="font-semibold">Flashcards & SRS</h3>
                     <p class="mt-1 text-sm text-neutral-600 dark:text-white/70">Spaced-repetition decks with images,
                         formulas, and quick tests.</p>
                 </article>
                 <article
                     class="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 hover:shadow-glow transition">
-                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-500 mb-4"><span
-                            class="material-symbols-rounded">quiz</span></div>
+                    <div
+                        class="size-10 grid place-content-center rounded-xl bg-brand-500/15 dark:bg-brand-500/25 text-brand-500 dark:text-brand-400 mb-4">
+                        <span class="material-symbols-rounded">quiz</span>
+                    </div>
                     <h3 class="font-semibold">Question Banks & Past Papers</h3>
                     <p class="mt-1 text-sm text-neutral-600 dark:text-white/70">Chapter-wise previous questions with
                         solutions & weightage analytics.</p>
                 </article>
                 <article
                     class="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 hover:shadow-glow transition">
-                    <div class="size-10 grid place-content-center rounded-xl bg-brand-700/15 text-brand-700 mb-4"><span
-                            class="material-symbols-rounded">auto_awesome</span></div>
+                    <div
+                        class="size-10 grid place-content-center rounded-xl bg-brand-500/15 dark:bg-brand-500/25 text-brand-500 dark:text-brand-400 mb-4">
+                        <span class="material-symbols-rounded">auto_awesome</span>
+                    </div>
                     <h3 class="font-semibold">AI Diagrams & Summaries</h3>
                     <p class="mt-1 text-sm text-neutral-600 dark:text-white/70">Topic diagrams, tables, and one-page
                         summaries auto-generated.</p>
                 </article>
                 <article
                     class="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 hover:shadow-glow transition">
-                    <div class="size-10 grid place-content-center rounded-xl bg-brand-500/15 text-brand-500 mb-4"><span
-                            class="material-symbols-rounded">task_alt</span></div>
+                    <div
+                        class="size-10 grid place-content-center rounded-xl bg-brand-500/15 dark:bg-brand-500/25 text-brand-500 dark:text-brand-400 mb-4">
+                        <span class="material-symbols-rounded">task_alt</span>
+                    </div>
                     <h3 class="font-semibold">Exam-oriented Study Plans</h3>
                     <p class="mt-1 text-sm text-neutral-600 dark:text-white/70">Week-by-week goals, PYQ focus, and
                         high-yield checkpoints.</p>
                 </article>
                 <article
                     class="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 hover:shadow-glow transition">
-                    <div class="size-10 grid place-content-center rounded-xl bg-brand-700/15 text-brand-700 mb-4"><span
-                            class="material-symbols-rounded">translate</span></div>
+                    <div
+                        class="size-10 grid place-content-center rounded-xl bg-brand-500/15 dark:bg-brand-500/25 text-brand-500 dark:text-brand-400 mb-4">
+                        <span class="material-symbols-rounded">translate</span>
+                    </div>
                     <h3 class="font-semibold">Multilingual & Offline</h3>
                     <p class="mt-1 text-sm text-neutral-600 dark:text-white/70">English + Indian languages. Sync once,
                         study anywhere.</p>
@@ -1135,7 +1188,9 @@
     <section id="how-it-works" class="py-20 border-y border-black/5 dark:border-white/10">
         <div class="container max-w-6xl">
             <header class="text-center mb-12">
-                <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight">How Paper X works</h2>
+                <h2
+                    class="text-4xl md:text-4xl font-extrabold tracking-tight mx-auto max-w-5xl leading-[1.08] gradient-hero-text">
+                    How Paper X works</h2>
                 <p class="mt-3 text-neutral-600 dark:text-white/70">Four simple steps from PDF to perfect prep.</p>
             </header>
             <ol class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1182,7 +1237,9 @@
     <!-- Customers Carousel (auto-scrolling) -->
     <section class="py-20 border-y border-black/5 dark:border-white/10" aria-label="Customer success stories">
         <div class="container">
-            <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight text-center">Customers growing with us</h2>
+            <h2
+                class="text-4xl md:text-4xl font-extrabold tracking-tight mx-auto max-w-5xl leading-[1.08] gradient-hero-text">
+                Customers growing with us</h2>
             <p class="mt-3 text-sm text-neutral-600 dark:text-white/60 text-center max-w-2xl mx-auto">Continuous
                 carousel of real-world impact. (Demo content)</p>
             <div id="custMarquee" class="mt-10 marquee-wrapper group relative">
@@ -1320,7 +1377,7 @@
         <div class="container relative max-w-[88rem] xl:max-w-[92rem]">
             <header class="text-center mb-14 md:mb-20">
                 <h2
-                    class="text-4xl md:text-5xl font-extrabold tracking-tight gradient-hero-text drop-shadow-[0_2px_8px_rgba(255,255,255,0.15)]">
+                    class="text-4xl md:text-4xl font-extrabold tracking-tight gradient-hero-text drop-shadow-[0_2px_8px_rgba(255,255,255,0.15)]">
                     All‑in‑One Learning Platform
                 </h2>
                 <p class="mt-5 text-lg md:text-xl text-neutral-600 dark:text-neutral-300 max-w-2xl mx-auto">
@@ -1832,6 +1889,186 @@
                 cancelClose() { clearTimeout(this.closeTimeout); }
             }
         }
+    </script>
+
+    <!-- PDF.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <!-- StPageFlip Library -->
+    <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
+
+    <!-- Flipbook Implementation -->
+    <script>
+        (async function () {
+            const bookContainer = document.getElementById('book');
+            const loading = document.getElementById('loading');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const currentPageSpan = document.getElementById('current-page');
+            const totalPagesSpan = document.getElementById('total-pages');
+
+            if (!bookContainer) {
+                console.error('Book container not found');
+                return;
+            }
+
+            // Configure PDF.js
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+            try {
+                console.log('Loading PDF...');
+                // Try multiple possible PDF paths
+                const possiblePaths = [
+                    'assets/img/storybook/storybook.pdf',
+                    './assets/img/storybook/storybook.pdf',
+                    '../assets/img/storybook/storybook.pdf'
+                ];
+
+                let pdf = null;
+                let pdfUrl = null;
+
+                for (const path of possiblePaths) {
+                    try {
+                        console.log('Trying path:', path);
+                        pdf = await pdfjsLib.getDocument(path).promise;
+                        pdfUrl = path;
+                        console.log('PDF loaded successfully from:', path);
+                        break;
+                    } catch (e) {
+                        console.log('Failed to load from:', path, e.message);
+                    }
+                }
+
+                if (!pdf) {
+                    throw new Error('Could not load PDF from any path. Please check if storybook.pdf exists in assets/img/storybook/');
+                }
+
+                const numPages = pdf.numPages;
+                console.log('Total pages:', numPages);
+                totalPagesSpan.textContent = numPages;
+
+                // Render all pages to canvas and add directly to book container
+                console.log('Rendering pages...');
+                for (let i = 1; i <= numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 1.5 });
+
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    canvas.className = 'page-canvas';
+                    canvas.setAttribute('data-density', 'hard'); // For StPageFlip
+
+                    await page.render({
+                        canvasContext: context,
+                        viewport: viewport
+                    }).promise;
+
+                    // Add canvas directly to book container
+                    bookContainer.appendChild(canvas);
+                    console.log('Rendered and added page', i);
+                }
+
+                console.log('All pages added to container');
+
+                // Create flipbook and load from book container's children
+                console.log('Initializing flipbook');
+                const pageFlip = new St.PageFlip(bookContainer, {
+                    width: 550,  // base page width
+                    height: 733, // base page height
+                    size: "stretch",
+                    minWidth: 315,
+                    maxWidth: 1000,
+                    minHeight: 420,
+                    maxHeight: 1350,
+                    maxShadowOpacity: 0.5,
+                    showCover: true,
+                    mobileScrollSupport: false,
+                    autoSize: true,
+                    usePortrait: false
+                });
+
+                // Convert HTMLCollection to Array before passing
+                const pageElements = Array.from(bookContainer.children);
+                console.log('Loading', pageElements.length, 'pages into flipbook');
+                pageFlip.loadFromHTML(pageElements);
+                console.log('Flipbook initialized with', pageFlip.getPageCount(), 'pages');
+
+                // Hide loading AFTER successful initialization
+                console.log('Hiding loading indicator');
+                if (loading) loading.style.display = 'none';
+
+                let currentPageIndex = 0;
+
+                // Update page counter
+                function updatePageCounter() {
+                    currentPageSpan.textContent = currentPageIndex + 1;
+
+                    // Update button states
+                    if (prevBtn) prevBtn.disabled = currentPageIndex === 0;
+                    if (nextBtn) nextBtn.disabled = currentPageIndex >= numPages - 1;
+
+                    console.log('Current page:', currentPageIndex + 1, '/', numPages);
+                }
+
+                // Event listeners
+                pageFlip.on('flip', (e) => {
+                    console.log('Flip event:', e);
+                    currentPageIndex = e.data;
+                    updatePageCounter();
+                });
+
+                pageFlip.on('changeState', (e) => {
+                    console.log('State changed:', e);
+                    const state = pageFlip.getState();
+                    currentPageIndex = state.currentPageIndex;
+                    updatePageCounter();
+                });
+
+                if (prevBtn) {
+                    prevBtn.addEventListener('click', () => {
+                        console.log('Previous button clicked');
+                        pageFlip.flipPrev();
+                    });
+                }
+
+                if (nextBtn) {
+                    nextBtn.addEventListener('click', () => {
+                        console.log('Next button clicked');
+                        pageFlip.flipNext();
+                    });
+                }
+
+                // Keyboard navigation
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowLeft') {
+                        console.log('Left arrow pressed');
+                        pageFlip.flipPrev();
+                    }
+                    if (e.key === 'ArrowRight') {
+                        console.log('Right arrow pressed');
+                        pageFlip.flipNext();
+                    }
+                });
+
+                // Initial update
+                updatePageCounter();
+                console.log('Flipbook ready!');
+
+            } catch (error) {
+                console.error('Error loading flipbook:', error);
+                if (loading) {
+                    loading.innerHTML = `
+                        <div class="text-center px-6">
+                            <p class="text-base text-red-500 font-medium">Failed to load flipbook</p>
+                            <p class="text-sm text-neutral-600 dark:text-white/70 mt-2">${error.message}</p>
+                            <p class="text-xs text-neutral-500 dark:text-white/50 mt-2">Check browser console for details</p>
+                        </div>
+                    `;
+                }
+            }
+        })();
     </script>
 </body>
 
