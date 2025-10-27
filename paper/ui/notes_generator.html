@@ -468,12 +468,23 @@
           <p id="relatedVideosSummary" class="text-xs sm:text-sm text-[var(--muted)]">Enter a topic to discover
             supporting videos.</p>
         </div>
-        <button id="refreshVideosBtn"
-          class="ripple inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[var(--brand-soft)] transition shrink-0"
-          style="border-color: var(--outline)">
-          <span class="material-symbols-outlined text-base">refresh</span>
-          Refresh
-        </button>
+        <div class="flex items-center gap-3 shrink-0">
+          <select id="videoLanguageSelect"
+            class="rounded-xl border px-3 py-2 text-sm font-medium bg-transparent text-current focus:outline-none focus:ring-2 focus:ring-[var(--brand-soft)] transition"
+            style="border-color: var(--outline)" aria-label="Select video language">
+            <option value="English">English</option>
+            <option value="Tamil">Tamil</option>
+            <option value="Hindi">Hindi</option>
+            <option value="Telugu">Telugu</option>
+            <option value="Malayalam">Malayalam</option>
+          </select>
+          <button id="refreshVideosBtn"
+            class="ripple inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[var(--brand-soft)] transition shrink-0"
+            style="border-color: var(--outline)">
+            <span class="material-symbols-outlined text-base">refresh</span>
+            Refresh
+          </button>
+        </div>
       </div>
       <div id="relatedVideosSkeleton" class="px-6 py-5">
         <div class="yt-skeleton-grid">
@@ -833,6 +844,7 @@
     const $relatedVideosCarousel = document.getElementById('relatedVideoCarousel');
     const $relatedVideosEmpty = document.getElementById('relatedVideosEmpty');
     const $refreshVideos = document.getElementById('refreshVideosBtn');
+    const $videoLanguage = document.getElementById('videoLanguageSelect');
     const $topic = document.getElementById('topic');
     const $generate = document.getElementById('generateBtn');
     const $regen = document.getElementById('regenBtn');
@@ -867,7 +879,26 @@
     const channelLogoCache = new Map();
     let relatedVideosAbort = null;
     let relatedVideosTopic = '';
+    let relatedVideosFullQuery = '';
+    let relatedVideosLanguage = ($videoLanguage?.value || 'English');
     let relatedVideosDebounce = null;
+
+    function normalizeVideoLanguage(language) {
+      return (language || '').trim();
+    }
+
+    function buildRelatedVideosQuery(baseTopic, language) {
+      const topic = (baseTopic || '').trim();
+      if (!topic) return '';
+      const lang = normalizeVideoLanguage(language);
+      if (!lang) return topic;
+      if (lang.toLowerCase() === 'english') return topic;
+      const suffix = ` in ${lang}`;
+      if (topic.toLowerCase().endsWith(suffix.toLowerCase())) {
+        return topic;
+      }
+      return `${topic}${suffix}`;
+    }
 
     function resetFlashcardAccess() {
       if (!$flashcardBtn) return;
@@ -1313,7 +1344,7 @@
       return anchor;
     }
 
-    function renderRelatedVideos(videos, topic) {
+    function renderRelatedVideos(videos, displayTopic, baseTopic, language) {
       if (!$relatedVideosWrap || !$relatedVideosCarousel) return;
       $relatedVideosCarousel.innerHTML = '';
       const fragment = document.createDocumentFragment();
@@ -1323,20 +1354,32 @@
       $relatedVideosEmpty?.classList.add('hidden');
       $relatedVideosWrap.classList.remove('hidden');
       if ($relatedVideosSummary) {
-        $relatedVideosSummary.textContent = `Showing for "${topic}"`;
+        $relatedVideosSummary.textContent = `Showing for "${displayTopic}"`;
       }
       try {
         localStorage.setItem('paperx:lastVideos', JSON.stringify(videos));
-        localStorage.setItem('paperx:lastTopic', topic);
+        if (baseTopic) {
+          localStorage.setItem('paperx:lastTopic', baseTopic);
+        } else {
+          localStorage.removeItem('paperx:lastTopic');
+        }
+        if (language) {
+          localStorage.setItem('paperx:lastVideoLanguage', language);
+        } else {
+          localStorage.removeItem('paperx:lastVideoLanguage');
+        }
       } catch { }
     }
 
     async function loadRelatedVideos(topic, options = {}) {
-      const query = (topic || '').trim();
+      const baseQuery = (topic || '').trim();
       const force = Boolean(options.force);
+      const requestedLanguage = normalizeVideoLanguage(options.language ?? relatedVideosLanguage);
+      const searchQuery = buildRelatedVideosQuery(baseQuery, requestedLanguage);
 
-      if (!query) {
+      if (!baseQuery) {
         relatedVideosTopic = '';
+        relatedVideosFullQuery = '';
         relatedVideosAbort?.abort();
         relatedVideosAbort = null;
         if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
@@ -1352,20 +1395,28 @@
         try {
           localStorage.removeItem('paperx:lastTopic');
           localStorage.removeItem('paperx:lastVideos');
+          localStorage.removeItem('paperx:lastVideoLanguage');
         } catch { }
         return;
       }
 
-      if (!force && relatedVideosTopic && relatedVideosTopic.toLowerCase() === query.toLowerCase()) {
+      if (!force && relatedVideosFullQuery && relatedVideosFullQuery.toLowerCase() === searchQuery.toLowerCase()) {
         return;
       }
 
-      relatedVideosTopic = query;
+      relatedVideosTopic = baseQuery;
+      relatedVideosLanguage = requestedLanguage || 'English';
+      relatedVideosFullQuery = searchQuery;
       if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
       if ($relatedVideosSummary) {
-        $relatedVideosSummary.textContent = `Finding videos for "${query}"...`;
+        $relatedVideosSummary.textContent = `Finding videos for "${searchQuery}"...`;
       }
-      try { localStorage.setItem('paperx:lastTopic', query); } catch { }
+      try {
+        localStorage.setItem('paperx:lastTopic', baseQuery);
+        if (relatedVideosLanguage) {
+          localStorage.setItem('paperx:lastVideoLanguage', relatedVideosLanguage);
+        }
+      } catch { }
 
       if (relatedVideosAbort) {
         relatedVideosAbort.abort();
@@ -1384,19 +1435,19 @@
 
       try {
         const fetchOptions = relatedVideosAbort ? { signal: relatedVideosAbort.signal } : undefined;
-        const response = await fetch(`${apiBase}/api/youtube/search?query=${encodeURIComponent(query)}&num=8`, fetchOptions);
+        const response = await fetch(`${apiBase}/api/youtube/search?query=${encodeURIComponent(searchQuery)}&num=8`, fetchOptions);
         if (!response.ok) {
           throw new Error(`Search failed with status ${response.status}`);
         }
         const videos = await response.json();
         if (!Array.isArray(videos) || videos.length === 0) {
-          const hasExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
-          if (hasExisting) {
+          const hadExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+          if (hadExisting) {
             $relatedVideosSkeleton?.classList.add('hidden');
             $relatedVideosWrap?.classList.remove('hidden');
             $relatedVideosEmpty?.classList.add('hidden');
             if ($relatedVideosSummary) {
-              $relatedVideosSummary.textContent = `Showing saved videos for "${query}".`;
+              $relatedVideosSummary.textContent = `Showing saved videos for "${searchQuery}".`;
             }
           } else {
             $relatedVideosSkeleton?.classList.add('hidden');
@@ -1406,22 +1457,22 @@
               $relatedVideosEmpty.classList.remove('hidden');
             }
             if ($relatedVideosSummary) {
-              $relatedVideosSummary.textContent = `No videos found for "${query}".`;
+              $relatedVideosSummary.textContent = `No videos found for "${searchQuery}".`;
             }
           }
           return;
         }
-        renderRelatedVideos(videos.slice(0, 8), query);
+        renderRelatedVideos(videos.slice(0, 8), searchQuery, baseQuery, relatedVideosLanguage);
       } catch (error) {
         if (error?.name === 'AbortError') return;
         console.error('Related videos error:', error);
-        const hasExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
-        if (hasExisting) {
+        const hadExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+        if (hadExisting) {
           $relatedVideosSkeleton?.classList.add('hidden');
           $relatedVideosWrap?.classList.remove('hidden');
           $relatedVideosEmpty?.classList.add('hidden');
           if ($relatedVideosSummary) {
-            $relatedVideosSummary.textContent = `Showing saved videos for "${query}".`;
+            $relatedVideosSummary.textContent = `Showing saved videos for "${searchQuery}".`;
           }
         } else {
           $relatedVideosSkeleton?.classList.add('hidden');
@@ -1431,7 +1482,7 @@
             $relatedVideosEmpty.classList.remove('hidden');
           }
           if ($relatedVideosSummary) {
-            $relatedVideosSummary.textContent = `Unable to load videos for "${query}".`;
+            $relatedVideosSummary.textContent = `Unable to load videos for "${searchQuery}".`;
           }
         }
       } finally {
@@ -1534,11 +1585,30 @@
         return null;
       }
     })();
+    const storedVideoLanguage = (() => {
+      try { return localStorage.getItem('paperx:lastVideoLanguage') || ''; } catch { return ''; }
+    })();
+
+    if ($videoLanguage) {
+      if (storedVideoLanguage && $videoLanguage.querySelector(`option[value="${storedVideoLanguage}"]`)) {
+        $videoLanguage.value = storedVideoLanguage;
+        relatedVideosLanguage = storedVideoLanguage;
+      } else {
+        relatedVideosLanguage = $videoLanguage.value || storedVideoLanguage || relatedVideosLanguage;
+      }
+    } else if (storedVideoLanguage) {
+      relatedVideosLanguage = storedVideoLanguage;
+    }
 
     if (storedTopic && storedVideos && storedVideos.length) {
       if (!$topic.value) $topic.value = storedTopic;
       if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
-      renderRelatedVideos(storedVideos, storedTopic);
+      const appliedLanguage = storedVideoLanguage || relatedVideosLanguage;
+      const displayTopic = buildRelatedVideosQuery(storedTopic, appliedLanguage);
+      renderRelatedVideos(storedVideos, displayTopic, storedTopic, appliedLanguage);
+      relatedVideosLanguage = normalizeVideoLanguage(appliedLanguage) || 'English';
+      relatedVideosTopic = storedTopic;
+      relatedVideosFullQuery = displayTopic;
     } else if ($relatedVideosSection) {
       $relatedVideosSection.classList.remove('hidden');
       $relatedVideosSkeleton?.classList.remove('hidden');
@@ -1547,7 +1617,7 @@
 
     if (!$topic.value && storedTopic) {
       $topic.value = storedTopic;
-      loadRelatedVideos(storedTopic, { force: true });
+      loadRelatedVideos(storedTopic, { force: true, language: relatedVideosLanguage });
     }
 
     // ===== Chips (suggested topics) =====
@@ -1565,6 +1635,19 @@
       $refreshVideos.addEventListener('click', () => {
         const current = ($topic.value || relatedVideosTopic || '').trim();
         loadRelatedVideos(current || relatedVideosTopic, { force: true });
+      });
+    }
+
+    if ($videoLanguage) {
+      $videoLanguage.addEventListener('change', () => {
+        const selected = normalizeVideoLanguage($videoLanguage.value) || 'English';
+        if (selected.toLowerCase() === (relatedVideosLanguage || '').toLowerCase()) return;
+        relatedVideosLanguage = selected;
+        try { localStorage.setItem('paperx:lastVideoLanguage', relatedVideosLanguage); } catch { }
+        const current = ($topic.value || relatedVideosTopic || '').trim();
+        if (current) {
+          loadRelatedVideos(current, { force: true, language: relatedVideosLanguage });
+        }
       });
     }
 
