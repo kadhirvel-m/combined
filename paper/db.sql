@@ -568,3 +568,20 @@ CREATE TABLE public.ai_notes_simple (
 );
 
 CREATE UNIQUE INDEX ai_notes_simple_title_ci_key ON public.ai_notes_simple (title_ci);
+
+-- User-edited notes: per-user saved custom versions of notes by topic/title and variant
+CREATE TABLE public.ai_notes_user_edits (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
+  variant text NOT NULL DEFAULT 'detailed',
+  markdown text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_user_edits_pkey PRIMARY KEY (id),
+  CONSTRAINT ai_notes_user_edits_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+
+-- Enforce one saved edit per user per title (case-insensitive) and variant
+CREATE UNIQUE INDEX ai_notes_user_edits_unique_key ON public.ai_notes_user_edits (user_id, title_ci, variant);

@@ -607,6 +607,8 @@
           <!-- removed Edit & Copy MD buttons per request -->
           <button id="saveBtn"
             class="ripple px-3 py-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-600 text-white text-sm hidden">Save</button>
+          <button id="myNoteBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)] hidden"
+            style="border-color: var(--outline)">My note</button>
           <button id="downloadBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
             style="border-color: var(--outline)">Download</button>
           <button id="emphBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
@@ -710,7 +712,7 @@
     style="border-color: var(--outline)">Copied</div>
 
   <!-- Inline Gemini helper affordances -->
-  <button id="geminiSelectionBtn" type="button" aria-label="Ask Gemini about selection"
+  <button id="geminiSelectionBtn" type="button" aria-label="Ask TuneAI about selection"
     class="hidden select-none text-brand-600"
     style="position:absolute; z-index:70; border:1px solid var(--outline); background:var(--surface); border-radius:999px; padding:6px; box-shadow:0 6px 16px rgba(15,23,42,0.18);">
     <span class="material-symbols-outlined text-base leading-none">auto_awesome</span>
@@ -739,7 +741,15 @@
       <div class="flex items-center gap-2">
         <button id="geminiSelectionRun" type="button"
           class="ripple px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold uppercase tracking-wide">Ask
-          Gemini</button>
+          Tune</button>
+        <button id="geminiSelectionMeaning" type="button"
+          class="ripple px-3 py-2 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
+          style="border-color:var(--outline)"><span
+            class="material-symbols-outlined text-xs align-middle mr-1">translate</span>Meaning</button>
+        <button id="geminiSelectionEdit" type="button"
+          class="ripple px-3 py-2 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
+          style="border-color:var(--outline)"><span
+            class="material-symbols-outlined text-xs align-middle mr-1">edit</span>Edit</button>
         <div id="geminiSelectionStatus" class="text-[11px] text-[var(--muted)] hidden"></div>
       </div>
       <div id="geminiSelectionOutput"
@@ -861,6 +871,7 @@
     const $wrap = document.getElementById('outputWrap');
     const $editToggle = document.getElementById('editToggle');
     const $save = document.getElementById('saveBtn');
+    const $myNoteBtn = document.getElementById('myNoteBtn');
     const $editor = document.getElementById('editor');
     const $meta = document.getElementById('noteMeta');
     const $snack = document.getElementById('snack');
@@ -874,6 +885,7 @@
     const $variantDetailed = document.getElementById('variantDetailed');
     const $variantCheatsheet = document.getElementById('variantCheatsheet');
     const $variantSimple = document.getElementById('variantSimple');
+    // inline panel action buttons are wired inside the inline IIFE
 
     const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
     const channelLogoCache = new Map();
@@ -953,6 +965,30 @@
 
     resetFlashcardAccess();
 
+    // ===== User auth token helper =====
+    function getAuthToken() {
+      try {
+        return localStorage.getItem('teacherToken') || localStorage.getItem('px_token') || '';
+      } catch { return ''; }
+    }
+
+    // ===== My note visibility and loading =====
+    async function checkMyNoteVisibility() {
+      if (!$myNoteBtn) return;
+      const token = getAuthToken();
+      if (!token) { $myNoteBtn.classList.add('hidden'); return; }
+      const title = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+      if (!title) { $myNoteBtn.classList.add('hidden'); return; }
+      try {
+        const url = `${apiBase}/api/notes/edited/check?title=${encodeURIComponent(title)}&variant=${encodeURIComponent(currentVariant)}`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) { $myNoteBtn.classList.add('hidden'); return; }
+        const data = await res.json().catch(() => ({}));
+        if (data && data.exists) { $myNoteBtn.classList.remove('hidden'); }
+        else { $myNoteBtn.classList.add('hidden'); }
+      } catch { $myNoteBtn.classList.add('hidden'); }
+    }
+
     // ===== Inline Gemini selection assistant =====
     (function () {
       if (!$output) return;
@@ -961,6 +997,8 @@
       const closeBtn = document.getElementById('geminiSelectionClose');
       const promptInput = document.getElementById('geminiSelectionInput');
       const runBtn = document.getElementById('geminiSelectionRun');
+      const meaningBtn = document.getElementById('geminiSelectionMeaning');
+      const editBtn = document.getElementById('geminiSelectionEdit');
       const statusBox = document.getElementById('geminiSelectionStatus');
       const contextBox = document.getElementById('geminiSelectionContext');
       const outputBox = document.getElementById('geminiSelectionOutput');
@@ -972,6 +1010,8 @@
       let selectionText = '';
       let selectionRect = null;
       let selectionEndRect = null;
+      let selectionAnchorNode = null;
+      let selectionFocusNode = null;
       let panelPinned = false;
       let busy = false;
 
@@ -1011,7 +1051,7 @@
         runBtn.disabled = state;
         runBtn.classList.toggle('opacity-60', state);
         if (state) {
-          setStatus('Asking Gemini…', false);
+          setStatus('Asking TuneAI…', false);
         } else if (!statusBox?.dataset.error) {
           resetStatus();
         }
@@ -1087,6 +1127,8 @@
           selectionText = '';
           selectionRect = null;
           selectionEndRect = null;
+          selectionAnchorNode = null;
+          selectionFocusNode = null;
           hideBtn();
           return;
         }
@@ -1094,6 +1136,8 @@
           selectionText = '';
           selectionRect = null;
           selectionEndRect = null;
+          selectionAnchorNode = null;
+          selectionFocusNode = null;
           hideBtn();
           return;
         }
@@ -1102,10 +1146,14 @@
           selectionText = '';
           selectionRect = null;
           selectionEndRect = null;
+          selectionAnchorNode = null;
+          selectionFocusNode = null;
           hideBtn();
           return;
         }
         selectionText = text.replace(/\s+/g, ' ').trim();
+        selectionAnchorNode = sel.anchorNode;
+        selectionFocusNode = sel.focusNode;
         const range = sel.getRangeAt(sel.rangeCount - 1);
         const rect = captureRect(range);
         const endClone = range.cloneRange();
@@ -1160,6 +1208,53 @@
         } catch (error) {
           console.error('Gemini inline assist error', error);
           setStatus(error?.message || 'Gemini request failed', true);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function runMeaning() {
+        if (!selectionText || !selectionRect) {
+          snack('Select a term or phrase');
+          return;
+        }
+        if (busy) return;
+        const instruction = `Give a very short dictionary-like meaning for: "${selectionText}" (1–2 lines). No examples.`;
+        const payloadSelection = selectionText.slice(0, MAX_SELECTION_PAYLOAD);
+        setBusy(true);
+        outputBox.innerHTML = '';
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selection: payloadSelection, instruction })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `HTTP ${res.status}`;
+            throw new Error(detail);
+          }
+          const text = (data && data.text) ? String(data.text) : '';
+          if (!text) {
+            setStatus('No meaning available', true);
+            outputBox.textContent = '';
+            return;
+          }
+          try {
+            outputBox.innerHTML = marked.parse(text);
+          } catch {
+            outputBox.textContent = text;
+          }
+          // Ensure panel is visible/pinned near selection
+          panelPinned = true;
+          panel.classList.remove('hidden');
+          panel.setAttribute('aria-hidden', 'false');
+          updateContextPreview();
+          requestAnimationFrame(positionPanel);
+          resetStatus();
+        } catch (error) {
+          console.warn('Meaning error', error);
+          setStatus(error?.message || 'Meaning failed', true);
         } finally {
           setBusy(false);
         }
@@ -1224,6 +1319,183 @@
       });
 
       updateContextPreview();
+
+      // Inline panel actions: Meaning and Edit
+      meaningBtn?.addEventListener('click', runMeaning);
+      function findClosestHeadingInOutput(node) {
+        if (!node) return null;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        let cur = node;
+        while (cur && cur !== $output) {
+          if (/^H[1-3]$/.test(cur.nodeName)) {
+            const level = cur.nodeName === 'H1' ? 1 : (cur.nodeName === 'H2' ? 2 : 3);
+            const title = (cur.textContent || '').trim();
+            return { level, title };
+          }
+          cur = cur.previousSibling || cur.parentNode;
+        }
+        // fallback: search previous headings
+        const hs = Array.from($output.querySelectorAll('h1,h2,h3'));
+        let last = null;
+        for (const h of hs) { if (h.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) break; last = h; }
+        if (last) {
+          const level = last.nodeName === 'H1' ? 1 : (last.nodeName === 'H2' ? 2 : 3);
+          return { level, title: (last.textContent || '').trim() };
+        }
+        return null;
+      }
+
+      function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+      function sliceSectionFromMarkdown(md, heading, level) {
+        const lines = md.split(/\n/);
+        const needle = `${'#'.repeat(level)} ${heading}`;
+        const startRe = new RegExp(`^${escapeRegex(needle)}\s*$`, 'i');
+        let start = -1;
+        for (let i = 0; i < lines.length; i++) { if (startRe.test(lines[i])) { start = i; break; } }
+        if (start === -1) return null;
+        const stopRe = new RegExp(`^#{1,${level}}\s+`); // next same or higher heading
+        let end = lines.length;
+        for (let i = start + 1; i < lines.length; i++) { if (stopRe.test(lines[i])) { end = i; break; } }
+        const before = lines.slice(0, start).join('\n');
+        const section = lines.slice(start, end).join('\n');
+        const after = lines.slice(end).join('\n');
+        return { before, section, after };
+      }
+
+      // --- Inline selection mapping helpers (DOM selection -> markdown substring) ---
+      function _normalizeForMatch(s) { return (s || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+      function _buildNormalizedMap(src) {
+        const map = [];
+        let norm = '';
+        let lastSpace = false;
+        for (let i = 0; i < src.length; i++) {
+          const ch = src[i];
+          if (/\s/.test(ch)) {
+            if (!lastSpace) { norm += ' '; map.push(i); lastSpace = true; }
+          } else { norm += ch.toLowerCase(); map.push(i); lastSpace = false; }
+        }
+        let a = 0; while (a < norm.length && norm[a] === ' ') a++;
+        let b = norm.length; while (b > a && norm[b - 1] === ' ') b--;
+        return { norm: norm.slice(a, b), map: map.slice(a, b) };
+      }
+
+      function findSelectionInMarkdownSection(sectionMd, selectionTxt) {
+        if (!selectionTxt) return null;
+        // 1. Direct substring
+        let direct = sectionMd.indexOf(selectionTxt);
+        if (direct !== -1) return { start: direct, end: direct + selectionTxt.length };
+        // 2. Normalized substring
+        const { norm, map } = _buildNormalizedMap(sectionMd);
+        const sel = _normalizeForMatch(selectionTxt);
+        let idx = norm.indexOf(sel);
+        if (idx !== -1) {
+          const start = map[idx];
+          const end = map[Math.min(idx + sel.length - 1, map.length - 1)] + 1;
+          return { start, end };
+        }
+        // 3. Try joining lines in selection (for multi-line or list selections)
+        const selFlat = _normalizeForMatch(selectionTxt.replace(/\n+/g, ' '));
+        idx = norm.indexOf(selFlat);
+        if (idx !== -1) {
+          const start = map[idx];
+          const end = map[Math.min(idx + selFlat.length - 1, map.length - 1)] + 1;
+          return { start, end };
+        }
+        // 4. Fuzzy: try to find the largest matching substring (at least 10 chars)
+        for (let len = Math.min(sel.length, 60); len >= 10; len--) {
+          for (let i = 0; i <= sel.length - len; i++) {
+            const sub = sel.slice(i, i + len);
+            const subIdx = norm.indexOf(sub);
+            if (subIdx !== -1) {
+              const start = map[subIdx];
+              const end = map[Math.min(subIdx + len - 1, map.length - 1)] + 1;
+              return { start, end, partial: true };
+            }
+          }
+        }
+        return null;
+      }
+
+      function isWithinCodeOrPre(node) {
+        if (!node) return false;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        const pre = node.closest ? node.closest('pre, code') : null;
+        return !!pre;
+      }
+
+      async function persistMyNote(fullMarkdown) {
+        const token = getAuthToken();
+        if (!token) return false;
+        const title = (document.querySelector('#output h1')?.textContent || $topic.value || 'Untitled').trim();
+        if (!title) return false;
+        try {
+          const res = await fetch(`${apiBase}/api/notes/edited?variant=${encodeURIComponent(currentVariant)}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ title, markdown: fullMarkdown })
+          });
+          if (!res.ok) return false;
+          return true;
+        } catch { return false; }
+      }
+
+      editBtn?.addEventListener('click', async () => {
+        const anchor = selectionAnchorNode;
+        const focus = selectionFocusNode;
+        if (!selectionText || (!anchor && !focus)) { snack('Select text to edit'); return; }
+        if (isWithinCodeOrPre(anchor) || isWithinCodeOrPre(focus)) { snack('Inline edit works on regular text (not code blocks)'); return; }
+        const head = findClosestHeadingInOutput(anchor) || findClosestHeadingInOutput(focus);
+        if (!head || head.level === 1) { snack('Place cursor inside a section (H2/H3)'); return; }
+        const found = sliceSectionFromMarkdown(lastMarkdown || '', head.title, head.level);
+        if (!found || !found.section) { snack('Could not locate section in markdown'); return; }
+        const match = findSelectionInMarkdownSection(found.section, selectionText);
+        let selectedMd, replaceStart, replaceEnd, partial = false;
+        if (match) {
+          selectedMd = found.section.slice(match.start, match.end);
+          replaceStart = match.start;
+          replaceEnd = match.end;
+          partial = !!match.partial;
+        } else {
+          // Fallback: try to find the paragraph or list item containing the selection
+          const paras = found.section.split(/\n{2,}/);
+          let paraIdx = -1;
+          for (let i = 0; i < paras.length; i++) {
+            if (_normalizeForMatch(paras[i]).includes(_normalizeForMatch(selectionText))) { paraIdx = i; break; }
+          }
+          if (paraIdx !== -1) {
+            let offset = 0;
+            for (let j = 0; j < paraIdx; j++) offset += paras[j].length + 2;
+            selectedMd = paras[paraIdx];
+            replaceStart = offset;
+            replaceEnd = offset + paras[paraIdx].length;
+            partial = true;
+          } else {
+            snack('Could not map selection to markdown. Try a shorter or more precise phrase.');
+            return;
+          }
+        }
+        const instruction = (promptInput?.value || '').trim() || (partial ? 'edit this part for clarity' : 'simplify the selected text with clearer language');
+        try {
+          setStatus('Processing…'); setBusy(true);
+          const res = await fetch(`${apiBase}/api/notes/transform`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'custom', markdown: selectedMd, prompt: instruction })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error((data && (data.detail || data.error)) || 'Transform failed');
+          const replacement = (data && data.markdown) ? String(data.markdown) : '';
+          if (!replacement) { snack('No change'); return; }
+          const updatedSection = found.section.slice(0, replaceStart) + replacement + found.section.slice(replaceEnd);
+          const merged = [found.before, updatedSection, found.after].filter(Boolean).join('\n');
+          lastMarkdown = merged;
+          if ($editor && !$editor.classList.contains('hidden')) { $editor.value = merged; }
+          renderMarkdown(merged);
+          const ok = await persistMyNote(merged);
+          if (ok) { snack('Edited and saved to My note'); checkMyNoteVisibility(); } else { snack('Edited (not saved — sign in to save)'); }
+        } catch (e) { console.warn('Edit selection error', e); snack('Edit failed'); }
+        finally { setBusy(false); resetStatus(); }
+      });
     })();
 
     function getChannelLogoAsync(channelPage) {
@@ -1529,6 +1801,7 @@
         setVariantUI();
         logEvent('Switch variant', v);
         console.log('[Variant] switch clicked:', v);
+        checkMyNoteVisibility();
         // If a topic is present, auto-click Generate to regenerate for the new variant
         const t0 = ($topic.value || '').trim();
         if (t0) { $generate.click(); return; }
@@ -1655,6 +1928,27 @@
       $flashcardBtn.addEventListener('click', (event) => {
         event.preventDefault();
         openFlashcards();
+      });
+    }
+
+    if ($myNoteBtn) {
+      $myNoteBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        const token = getAuthToken();
+        if (!token) { snack('Sign in to use My note'); return; }
+        const title = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+        if (!title) { snack('No note loaded'); return; }
+        try {
+          const url = `${apiBase}/api/notes/edited?title=${encodeURIComponent(title)}&variant=${encodeURIComponent(currentVariant)}`;
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) { throw new Error((data && (data.detail || data.error)) || 'Load failed'); }
+          if (data && data.markdown) {
+            renderMarkdown(data.markdown);
+            $meta.textContent = `My note • ${currentVariant}`;
+            snack('Loaded My note');
+          }
+        } catch (e) { console.warn('My note error:', e); snack('Unable to load My note'); }
       });
     }
 
@@ -1811,6 +2105,8 @@
 
       postprocessLinks();
       buildTOC();
+      // Update 'My note' visibility when content/title changes
+      checkMyNoteVisibility();
     }
 
     function clearUI() {

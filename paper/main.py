@@ -241,6 +241,7 @@ os.makedirs(NOTES_DIR, exist_ok=True)
 AI_NOTES_TABLE = os.getenv("AI_NOTES_TABLE", "ai_notes")
 AI_NOTES_CHEATSHEET_TABLE = os.getenv("AI_NOTES_CHEATSHEET_TABLE", "ai_notes_cheatsheet")
 AI_NOTES_SIMPLE_TABLE = os.getenv("AI_NOTES_SIMPLE_TABLE", "ai_notes_simple")
+AI_NOTES_USER_EDITS_TABLE = os.getenv("AI_NOTES_USER_EDITS_TABLE", "ai_notes_user_edits")
 
 VALID_NOTE_VARIANTS = {"detailed", "cheatsheet", "simple"}
 
@@ -364,6 +365,71 @@ def db_update_ai_note_markdown_variant(note_id: str, markdown: str, *, variant: 
         return out
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB update failed: {e}")
+
+
+# --- Per-user edited notes helpers ---
+
+def db_get_user_edit_by_title(user_id: str, title: str, *, variant: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    supabase = get_service_client()
+    v = _normalize_variant(variant or "detailed")
+    t = (title or "").strip()
+    if not user_id or not t:
+        return None
+    try:
+        res = (
+            supabase.table(AI_NOTES_USER_EDITS_TABLE)
+            .select("id,title,variant,markdown,created_at,updated_at")
+            .eq("user_id", str(user_id))
+            .eq("title_ci", t.lower())
+            .eq("variant", v)
+            .limit(1)
+            .execute()
+        )
+        data = getattr(res, 'data', []) or []
+        return data[0] if data else None
+    except Exception:
+        return None
+
+
+def db_upsert_user_edit(user_id: str, title: str, markdown: str, *, variant: Optional[str] = None) -> Dict[str, Any]:
+    supabase = get_service_client()
+    v = _normalize_variant(variant or "detailed")
+    now = datetime.utcnow().isoformat()
+    payload = {
+        "user_id": str(user_id),
+        "title": (title or "").strip() or "Untitled",
+        "variant": v,
+        "markdown": markdown or "",
+        "updated_at": now,
+    }
+    try:
+        res = (
+            supabase
+            .table(AI_NOTES_USER_EDITS_TABLE)
+            .upsert(payload, on_conflict="user_id,title_ci,variant", returning="representation")
+            .execute()
+        )
+        if getattr(res, 'error', None):
+            raise Exception(res.error)
+        row = (getattr(res, 'data', []) or [{}])[0]
+        if row:
+            return row
+        # Fallback: refetch by composite key
+        ref = (
+            supabase.table(AI_NOTES_USER_EDITS_TABLE)
+            .select("id,title,variant,markdown,created_at,updated_at")
+            .eq("user_id", str(user_id))
+            .eq("title_ci", payload["title"].lower())
+            .eq("variant", v)
+            .limit(1)
+            .execute()
+        )
+        data = getattr(ref, 'data', []) or []
+        if not data:
+            raise RuntimeError("Failed to upsert user edit")
+        return data[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB save failed: {e}")
 
 
 def _slugify_topic(topic: str) -> str:
@@ -9876,7 +9942,7 @@ def _build_transform_prompt(mode: str, content: str, custom: str | None) -> str:
 
 @notes_router.post("/api/notes/transform")
 def api_transform_note(payload: dict):
-    """Ephemeral transform of markdown (summarize / expand / custom)."""
+    """Ephemeral transform of markdown (summarize / expand / custom) using Gemini only."""
     mode = (payload or {}).get("mode", "summarize").strip().lower()
     markdown = (payload or {}).get("markdown", "")
     custom = (payload or {}).get("prompt")
@@ -9884,45 +9950,115 @@ def api_transform_note(payload: dict):
         raise HTTPException(status_code=400, detail="Missing markdown")
     if mode not in {"summarize", "expand", "custom", "simplify"}:
         raise HTTPException(status_code=400, detail="Invalid mode")
-    prompt = _build_transform_prompt(mode, markdown, custom)
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured.")
     try:
-        client = _openai_client()
-        model = os.getenv("LLM_MODEL", "gpt-4o-mini")
-        messages = [
-            {"role": "system", "content": "You are an assistant that edits markdown content precisely as instructed."},
-            {"role": "user", "content": prompt},
-        ]
-        out_text = ""
-        # Detect 1.x client (has .chat.completions.create)
-        create_fn = None
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise HTTPException(
+            status_code=501,
+            detail=f"Gemini client library missing: {exc}. Install google-generativeai to enable this feature.",
+        ) from exc
+
+    prompt = _build_transform_prompt(mode, markdown, custom)
+    genai.configure(api_key=GEMINI_API_KEY)
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+    ]
+    model = genai.GenerativeModel(GEMINI_NOTES_MODEL)
+
+    base_instruction = textwrap.dedent(
+        """
+        You edit Markdown precisely as instructed. Return ONLY valid Markdown. Avoid any harmful, explicit, or actionable content.
+        If the requested transform could enable harm, reply with a safe, high-level academic rewrite or keep content neutral.
+        """
+    ).strip()
+
+    def _extract_gemini_text(resp):
+        def _finish_reason(candidate):
+            finish = getattr(candidate, "finish_reason", None)
+            if finish is None and isinstance(candidate, dict):
+                finish = candidate.get("finish_reason") or candidate.get("finishReason")
+            if finish is None:
+                return None
+            finish_str = str(finish).upper()
+            if finish_str.isdigit():
+                return int(finish_str)
+            return finish_str
+
         try:
-            create_fn = client.chat.completions.create  # type: ignore[attr-defined]
-        except AttributeError:
-            create_fn = None
-        if create_fn:
-            resp = create_fn(
-                model=model,
-                messages=messages,
-                temperature=0.4,
-                max_tokens=4096,
-            )
-            out_text = resp.choices[0].message.content if resp.choices else ""
+            quick = getattr(resp, "text", None)
+            if isinstance(quick, str) and quick.strip():
+                return quick.strip()
+        except Exception:
+            pass
+        candidates = getattr(resp, "candidates", None) or []
+        if isinstance(candidates, dict):
+            candidates = [candidates]
+        for cand in candidates:
+            finish = _finish_reason(cand)
+            if finish in (2, "SAFETY") or (isinstance(finish, str) and "SAFETY" in finish):
+                # Surface to caller so we can retry conservatively
+                raise HTTPException(status_code=502, detail="Gemini blocked the response for safety.")
+            content = getattr(cand, "content", None)
+            parts = None
+            if content is not None:
+                parts = getattr(content, "parts", None)
+                if parts is None and isinstance(content, dict):
+                    parts = content.get("parts")
+            if parts is None and isinstance(cand, dict):
+                parts = cand.get("content", {}).get("parts") if isinstance(cand.get("content"), dict) else None
+            texts = []
+            if parts:
+                for part in parts:
+                    text_val = getattr(part, "text", None)
+                    if text_val is None and isinstance(part, dict):
+                        text_val = part.get("text")
+                    if text_val:
+                        texts.append(str(text_val))
+            if texts:
+                return "\n".join(texts).strip()
+        return ""
+
+    def call_gemini(_instruction: str, _body: str):
+        return model.generate_content(
+            [{"text": _instruction}, {"text": _body}],
+            generation_config={"temperature": 0.25, "max_output_tokens": 2048},
+            safety_settings=safety_settings,
+        )
+
+    try:
+        response = call_gemini(base_instruction, prompt)
+    except Exception as exc:
+        # Return empty markdown so UI treats it as no change rather than hard fail
+        return {"markdown": "", "mode": mode, "custom": custom or None, "error": f"Gemini error: {exc}"}
+
+    try:
+        out_text = _extract_gemini_text(response)
+    except HTTPException as exc:
+        # Retry once with a conservative instruction
+        if "safety" in str(getattr(exc, "detail", "")).lower():
+            conservative = textwrap.dedent(
+                """
+                Provide a safe, high-level, non-actionable rewrite of the provided Markdown per the instruction. Keep it brief if needed.
+                Return only valid Markdown.
+                """
+            ).strip()
+            try:
+                resp2 = call_gemini(conservative, prompt)
+                out_text = _extract_gemini_text(resp2)
+            except Exception:
+                out_text = ""
         else:
-            # Legacy 0.x fallback
-            resp = client.ChatCompletion.create(  # type: ignore[attr-defined]
-                model=model,
-                messages=messages,
-                temperature=0.4,
-                max_tokens=4096,
-            )
-            out_text = resp.choices[0].message["content"] if resp.choices else ""
-        if not out_text:
-            raise HTTPException(status_code=500, detail="Empty transform output")
-        return {"markdown": out_text, "mode": mode, "custom": custom or None}
-    except HTTPException:
-        raise
-    except Exception as e:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=f"Transform failed: {e}")
+            out_text = ""
+    except Exception:
+        out_text = ""
+
+    # If empty after attempts, return empty string (UI will show 'No change')
+    return {"markdown": out_text or "", "mode": mode, "custom": custom or None}
 
 
 @notes_router.post("/api/notes/snippet-assist")
@@ -9946,12 +10082,23 @@ def api_snippet_assist(payload: dict):
 
     trimmed_selection = selection[:3000]
     genai.configure(api_key=GEMINI_API_KEY)
+    # Relax safety to block only high-severity content while still allowing educational, non-actionable summaries
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+    ]
     model = genai.GenerativeModel(GEMINI_NOTES_MODEL)
     base_instruction = textwrap.dedent(
         """
-        You are PaperX's inline study copilot. Prefer the highlighted passage for context, but when it lacks details you may
-        add concise, accurate background knowledge that a tutor would supply. Always tie your response to the user's instruction,
-        keep it student-friendly, and note when the highlight didn't mention a fact you add.
+        You are PaperX's inline study copilot. Prefer the highlighted passage for context.
+        Key constraints to avoid safety blocks:
+        - Provide a neutral, educational, non-actionable explanation only.
+        - Do NOT include step-by-step instructions, realistic procedures, or facilitation of harm.
+        - Avoid explicit, graphic, or sexual content.
+        - If the selection entails sensitive material, provide a safe high-level overview in academic tone.
+        - Keep it concise and student-friendly.
         """
     ).strip()
     user_instruction = instruction or "Explain this selection simply."
@@ -10009,22 +10156,50 @@ def api_snippet_assist(payload: dict):
                 return "\n".join(texts).strip()
         return ""
 
-    try:
-        response = model.generate_content(
-            [{"text": base_instruction}, {"text": prompt_body}],
-            generation_config={"temperature": 0.35, "max_output_tokens": 512},
+    def call_gemini(_instruction: str, _body: str):
+        return model.generate_content(
+            [{"text": _instruction}, {"text": _body}],
+            generation_config={"temperature": 0.25, "max_output_tokens": 512},
+            safety_settings=safety_settings,
         )
+
+    # First attempt with safe defaults
+    try:
+        response = call_gemini(base_instruction, prompt_body)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Gemini selection assist failed: {exc}") from exc
 
     try:
         generated = _extract_gemini_text(response)
-    except HTTPException:
-        raise
+    except HTTPException as exc:
+        # Retry once with an even more conservative instruction if blocked for SAFETY
+        detail = getattr(exc, "detail", "") or str(exc)
+        if "Gemini blocked the response for safety" in detail:
+            conservative_instruction = textwrap.dedent(
+                """
+                Provide a brief, safe, high-level, non-actionable academic overview of the selection.
+                Do NOT include steps, procedures, or details that could enable harm.
+                If necessary, generalize abstractly. Keep it 2–5 sentences.
+                """
+            ).strip()
+            try:
+                response2 = call_gemini(conservative_instruction, prompt_body)
+                generated = _extract_gemini_text(response2)
+            except Exception:
+                # Fall through to friendly message
+                generated = ""
+        else:
+            raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Gemini returned malformed response: {exc}") from exc
     if not generated:
-        raise HTTPException(status_code=502, detail="Gemini returned empty response.")
+        # Provide a graceful, safe fallback message (no OpenAI, no external calls)
+        safe_msg = (
+            "This selection may involve sensitive content. Here is a safe, high-level academic overview: "
+            "The highlighted text appears to reference material that can trigger content safety filters. "
+            "Please try asking for a neutral definition, historical context, purpose, or key concepts without step-by-step procedures."
+        )
+        return {"text": safe_msg, "truncated": len(selection) > len(trimmed_selection)}
     return {"text": generated, "truncated": len(selection) > len(trimmed_selection)}
 
 
@@ -10684,6 +10859,67 @@ def api_note_pdf(note_id: str):
     filename = f"{note_id}.pdf"
     headers = {"Content-Disposition": f"attachment; filename={filename}"}
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
+
+
+# --- Per-user edited notes API ---
+
+@notes_router.get("/api/notes/edited/check")
+def api_check_user_edit(
+    title: str = Query(..., min_length=1),
+    variant: str = Query("detailed"),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    user_id = _require_auth_user_id(token)
+    row = db_get_user_edit_by_title(user_id, title, variant=_normalize_variant(variant))
+    if not row:
+        return {"exists": False}
+    return {
+        "exists": True,
+        "id": row.get("id"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+@notes_router.get("/api/notes/edited")
+def api_get_user_edit(
+    title: str = Query(..., min_length=1),
+    variant: str = Query("detailed"),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    user_id = _require_auth_user_id(token)
+    row = db_get_user_edit_by_title(user_id, title, variant=_normalize_variant(variant))
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {
+        "id": row.get("id"),
+        "title": row.get("title"),
+        "variant": row.get("variant"),
+        "markdown": row.get("markdown", ""),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+@notes_router.post("/api/notes/edited")
+def api_upsert_user_edit(
+    payload: dict,
+    variant: str = Query("detailed"),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    user_id = _require_auth_user_id(token)
+    title = (payload or {}).get("title") or (payload or {}).get("topic") or "Untitled"
+    markdown = (payload or {}).get("markdown") or ""
+    if not str(title).strip():
+        raise HTTPException(status_code=400, detail="Missing title")
+    row = db_upsert_user_edit(user_id, str(title).strip(), markdown, variant=_normalize_variant(variant))
+    return {
+        "id": row.get("id"),
+        "title": row.get("title"),
+        "variant": row.get("variant"),
+        "updated_at": row.get("updated_at"),
+    }
 
 
 @notes_router.post("/pdf")
