@@ -140,7 +140,29 @@
         function setThemeToggle() { document.addEventListener('click', e => { if (e.target.closest('[data-theme-toggle]')) { const r = document.documentElement; const d = r.classList.toggle('dark'); localStorage.setItem('px_theme', d ? 'dark' : 'light') } }) }
         function esc(s = '') { return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])) }
         const els = { grid: document.getElementById('classesGrid'), empty: document.getElementById('classesEmpty'), err: document.getElementById('classesError'), form: document.getElementById('classForm'), status: document.getElementById('formStatus'), filter: document.getElementById('filterInput'), submitLabel: document.getElementById('submitLabel') };
-        async function fetchJSON(u, opts = {}) { const r = await fetch(u, opts); const t = await r.text(); let d = {}; try { d = t ? JSON.parse(t) : {}; } catch { d = { detail: t } } if (!r.ok) { const e = new Error(d.detail || 'Request failed'); e.status = r.status; e.data = d; throw e; } return d; }
+        async function fetchJSON(u, opts = {}, retries = 2) {
+            try {
+                const r = await fetch(u, opts);
+                const t = await r.text();
+                let d = {};
+                try { d = t ? JSON.parse(t) : {}; } catch { d = { detail: t } }
+                if (!r.ok) {
+                    const e = new Error(d.detail || 'Request failed');
+                    e.status = r.status; e.data = d;
+                    throw e;
+                }
+                return d;
+            } catch (err) {
+                const isNetwork = (err instanceof TypeError) || /NetworkError|Failed to fetch|load failed|disconnected/i.test(String(err && err.message || ''));
+                const status = err && err.status;
+                const isTransient = isNetwork || (status && (status === 502 || status === 503 || status === 504));
+                if (retries > 0 && isTransient) {
+                    await new Promise(r => setTimeout(r, 400));
+                    return fetchJSON(u, opts, retries - 1);
+                }
+                throw err;
+            }
+        }
         async function loadClasses() { els.grid.innerHTML = ''; els.empty.classList.add('hidden'); els.err.classList.add('hidden'); try { const data = await fetchJSON(API_BASE + '/api/teacher/classes/mine', { headers: { Authorization: 'Bearer ' + getToken() } }); const filter = (els.filter.value || '').toLowerCase(); const list = data.filter(c => !filter || (c.subject || '').toLowerCase().includes(filter)); if (!list.length) { els.empty.classList.remove('hidden'); return; } list.forEach(c => { els.grid.insertAdjacentHTML('beforeend', classCard(c)); }); } catch (e) { els.err.textContent = e.message; els.err.classList.remove('hidden'); } }
         function classCard(c) {
             const meta = [c.semester ? ('Sem ' + c.semester) : '', c.section ? ('Sec ' + esc(c.section)) : ''].filter(Boolean).join(' • '); return `<div class='group relative rounded-2xl ring-1 ring-black/10 dark:ring-white/10 bg-white/70 dark:bg-white/5 p-4 flex flex-col gap-3'>
