@@ -1,16 +1,16 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Paper X — Upload Syllabus</title>
+  <title>Paper X â€” Upload Syllabus</title>
   <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
   <link rel="stylesheet" href="../assets/css/tailwind.css" />
   <script>
-    tailwind.config = {
+    try { if (window.tailwind) { window.tailwind.config = {
       darkMode: 'class',
       theme: {
         container: { center: true, padding: '1rem' },
@@ -30,7 +30,7 @@
           }
         }
       }
-    };
+    }; } } catch(_){}
   </script>
   <style>
     .material-symbols-rounded { vertical-align: -6px }
@@ -94,23 +94,14 @@
             <input id="file" type="file" accept="application/pdf" required class="block w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/90 dark:bg-white/10 px-3.5 py-2.5 text-sm" />
             <p class="text-xs text-neutral-500 dark:text-white/50">Only PDF is supported.</p>
           </div>
-          <div class="grid gap-1 sm:grid-cols-3 sm:gap-4">
-            <label class="grid gap-1">
-              <span class="text-sm font-medium">Course code (hint)</span>
-              <input id="courseCode" type="text" placeholder="e.g., CS301" class="mt-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/90 dark:bg-white/10 px-3.5 py-2.5 text-sm" />
-            </label>
-            <label class="grid gap-1 sm:col-span-2">
-              <span class="text-sm font-medium">Subject title (hint)</span>
-              <input id="title" type="text" placeholder="e.g., Data Structures" class="mt-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/90 dark:bg-white/10 px-3.5 py-2.5 text-sm" />
-            </label>
-          </div>
+          <!-- Bulk upload: course code/title will be detected per subject -->
           <div class="grid gap-1 sm:grid-cols-2 sm:gap-4">
             <label class="grid gap-1">
-              <span class="text-sm font-medium">Semester (optional)</span>
+              <span class="text-sm font-medium">Semester</span>
               <input id="semester" type="number" min="1" max="12" placeholder="1-12" required class="mt-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/90 dark:bg-white/10 px-3.5 py-2.5 text-sm" />
             </label>
             <div class="grid items-end">
-              <p class="text-xs text-neutral-500 dark:text-white/50">If omitted, the system attempts to detect it from the PDF.</p>
+              <p class="text-xs text-neutral-500 dark:text-white/50">Upload full semester PDF containing multiple subjects. We will detect and save them all.</p>
             </div>
           </div>
           <div id="status" class="hidden text-sm"></div>
@@ -157,8 +148,9 @@
 
     const el = id => document.getElementById(id);
     const fileEl = el('file');
-    const codeEl = el('courseCode');
-    const titleEl = el('title');
+    // Bulk mode: code/title hints not used
+    const codeEl = { value: '' };
+    const titleEl = { value: '' };
     const semEl = el('semester');
     const formEl = el('uploadForm');
     const statusEl = el('status');
@@ -204,17 +196,16 @@
       batchMeta.textContent = batchRange ? `Batch ${batchRange}` : '';
       backBtn.setAttribute('href', backUrl);
 
-      async function postUpload({ preferNaive = false, timeoutMs = 45000 } = {}){
+      async function postUpload({ preferNaive = false, timeoutMs = 90000 } = {}){
         const ctrl = new AbortController();
         const timer = setTimeout(() => { try { ctrl.abort(); } catch(_){} }, timeoutMs);
         const fd = new FormData();
         fd.append('file', fileEl.files[0]);
         fd.append('batch_id', batchId);
-        if (codeEl.value) fd.append('course_code', codeEl.value.trim());
-        if (titleEl.value) fd.append('title', titleEl.value.trim());
+        // bulk: no course_code/title
         if (semEl.value) fd.append('semester', semEl.value.trim());
         if (preferNaive) fd.append('prefer_naive', '1');
-        const url = API.replace(/\/$/, '') + '/api/syllabus/upload';
+        const url = API.replace(/\/$/, '') + '/api/syllabus/upload-bulk';
         let res;
         try {
           res = await fetch(url, { method: 'POST', body: fd, signal: ctrl.signal });
@@ -241,15 +232,14 @@
           return;
         }
 
-        submitBtn.disabled = true;
-        setStatus('Uploading and parsing…', 'info');
+        setStatus('Uploading and parsing bulk syllabus…', 'info');
         try {
           let res;
           try {
-            res = await postUpload({ preferNaive: false, timeoutMs: 45000 });
+            res = await postUpload({ preferNaive: false, timeoutMs: 90000 });
           } catch (err) {
             if (err && (err.name === 'AbortError' || String(err).includes('aborted'))) {
-              setStatus('Still working… Retrying quickly without AI parsing.', 'info');
+              setStatus('Still working… Retrying with heuristic parsing.', 'info');
               res = await postUpload({ preferNaive: true, timeoutMs: 90000 });
             } else {
               throw err;
@@ -261,10 +251,11 @@
             throw new Error(msg || `Upload failed (${res.status})`);
           }
           const data = await res.json();
-          setStatus('Parsed and saved successfully.', 'ok');
-          // Redirect to syllabus view for this course
-          const syllabusUrl = `syllabus.html?courseId=${encodeURIComponent(data.id)}&courseCode=${encodeURIComponent(data.course_code||'')}&courseTitle=${encodeURIComponent(data.title||'')}&semester=${encodeURIComponent(data.semester||'')}&batchId=${encodeURIComponent(batchId)}&batchRange=${encodeURIComponent(batchRange)}&collegeName=${encodeURIComponent(collegeName)}&degreeName=${encodeURIComponent(degreeName)}&departmentName=${encodeURIComponent(departmentName)}`;
-          setTimeout(() => { window.location.href = syllabusUrl; }, 700);
+          const count = Array.isArray(data) ? data.length : (data ? 1 : 0);
+          setStatus(`Parsed and saved ${count} subject${count===1?'':'s'}.`, 'ok');
+          try { sessionStorage.setItem('px_flash', `Added ${count} subject${count===1?'':'s'} for semester ${encodeURIComponent(semVal)}`); } catch(_){} 
+          const backUrl2 = `subjects.html?collegeId=${encodeURIComponent(Q.collegeId||stored.collegeId||'')}&collegeName=${encodeURIComponent(collegeName)}&degreeId=${encodeURIComponent(Q.degreeId||stored.degreeId||'')}&degreeName=${encodeURIComponent(degreeName)}&departmentId=${encodeURIComponent(Q.departmentId||stored.departmentId||'')}&departmentName=${encodeURIComponent(departmentName)}&batchId=${encodeURIComponent(batchId)}&batchRange=${encodeURIComponent(batchRange)}`;
+          setTimeout(() => { window.location.href = backUrl2; }, 900);
         } catch (err) {
           console.error(err);
           if (err && (err.name === 'AbortError' || String(err).toLowerCase().includes('aborted'))) {
@@ -290,3 +281,7 @@
   </script>
 </body>
 </html>
+
+
+
+

@@ -2405,7 +2405,8 @@ def _naive_extract_improved(text: str) -> dict:
     seen_first_unit = False
     end_reached = False
 
-    unit_pat = re.compile(r"^(?:unit|module|chapter)\b[\s.:\-]*([ivx]+|\d+)?", re.IGNORECASE)
+    # Match UNIT headers even when there is no space before the numeral, e.g., "UNITV"
+    unit_pat = re.compile(r"^(?:unit|module|chapter)(?=\s*[ivxlcdm\d])\s*([ivxlcdm]+|\d+)?", re.IGNORECASE)
 
     skip_topic_pat = re.compile(
         r"^(TOTAL\s+PERIODS|TEXT\s*BOOKS|REFERENCE\s*BOOKS|CONTENT\s+BEYOND\s+SYLLABUS|SUBJECT\s+CODE|SUBJECT\s+NAME|LECTURES|TUTORIALS|PRACTICALS?)\b",
@@ -2464,7 +2465,8 @@ def _naive_extract_improved(text: str) -> dict:
 
         um = unit_pat.match(ln)
         if um:
-            after = re.sub(r"^(?:unit|module|chapter)\b[\s.:\-]*([ivx]+|\d+)?\s*", "", ln, flags=re.IGNORECASE)
+            # remove the leading keyword + numeral (with or without space), plus any immediate separators
+            after = re.sub(r"^(?:unit|module|chapter)\s*([ivxlcdm]+|\d+)?\s*[:–—-]?\s*", "", ln, flags=re.IGNORECASE)
             parts = re.split(r"[:–—-]", after, maxsplit=1)
             title_part = (parts[1] if len(parts) > 1 else parts[0]).strip()
             title_main, title_rest = (title_part.split(":", 1) + [""])[:2]
@@ -2486,6 +2488,57 @@ def _naive_extract_improved(text: str) -> dict:
             current_unit["topics"].append({"topic": tp})
 
     return {"course_code": course_code, "title": course_title, "units": units}
+
+
+def _split_subject_sections(text: str) -> List[Dict[str, str]]:
+    """Split a full-semester syllabus text into subject sections.
+
+    Heuristic: a subject starts at a line that looks like a course code followed by a title, e.g.,
+      "AI PE703 DEEP REINFORCEMENT LEARNING 3 - -"
+
+    Returns list of dicts with keys: code, title, text.
+    """
+    lines = [ln.rstrip() for ln in (text or "").splitlines()]
+    sections: List[Dict[str, str]] = []
+    # Accept lines where code is followed by optional title on same line
+    code_line_pat = re.compile(r"^\s*([A-Z]{2,4}\s*[A-Z]{0,3}\d{2,4}[A-Z]?)\b(?:[\s,:-]+(.+))?$")
+    anchors: List[Tuple[int, str, Optional[str]]] = []
+    for idx, raw in enumerate(lines):
+        ln = raw.strip()
+        m = code_line_pat.search(ln)
+        if not m:
+            continue
+        code = m.group(1).strip()
+        tail = (m.group(2) or "").strip()
+        if tail:
+            tail = re.sub(r"\b\d+\s*[–—-]\s*[–—-].*$", "", tail).strip()
+        title = tail.strip("-–—:; .") if tail else None
+        if code:
+            anchors.append((idx, code, title))
+    if not anchors:
+        return []
+    # Helper: find a reasonable title if missing on the code line
+    def infer_title(start_idx: int) -> Optional[str]:
+        # Look ahead a few lines for the subject name (skip meta headers)
+        skip_pat = re.compile(r"^(subject\s+code|subject\s+name|lectures|tutorials|practical|course\s+pre|course\s+objectives|course\s+outcomes)\b", re.IGNORECASE)
+        for j in range(start_idx + 1, min(start_idx + 8, len(lines))):
+            cand = lines[j].strip().strip("-–—:; .")
+            if not cand or skip_pat.search(cand):
+                continue
+            # stop if we hit a unit header
+            if re.match(r"^(?:unit|module|chapter)(?=\s*[ivxlcdm\d])", cand, flags=re.IGNORECASE):
+                break
+            return cand
+        return None
+
+    for i, (start, code, title) in enumerate(anchors):
+        end = anchors[i + 1][0] if i + 1 < len(anchors) else len(lines)
+        seg = "\n".join(lines[start:end]).strip()
+        if not seg:
+            continue
+        ttl = title or infer_title(start)
+        sections.append({"code": code, "title": (ttl or "").strip(), "text": seg})
+    return sections
 
 def _naive_extract(text: str) -> dict:
     lines = _clean_lines(text)
@@ -5479,6 +5532,133 @@ async def upload_syllabus_pdf(
         title=course.title,
         units=units,
     )
+
+@academics_router.post("/api/syllabus/upload-bulk", summary="Upload a semester syllabus PDF containing multiple subjects; parse and store all")
+async def upload_syllabus_pdf_bulk(
+    request: Request,
+    batch_id: uuid.UUID = Form(...),
+    file: UploadFile = File(...),
+    semester: Optional[int] = Form(None),
+    prefer_naive: Optional[str] = Form(None),
+):
+    try:
+        print(f"[UPLOAD-BULK] {request.method} {request.url.path} origin={request.headers.get('origin')} content-type={request.headers.get('content-type')}")
+    except Exception:
+        pass
+    if not file or (file.content_type not in ("application/pdf", None) and not file.filename.lower().endswith(".pdf")):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    blob = await file.read()
+    if not blob:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    raw_text = await run_in_threadpool(_pdf_bytes_to_text, blob)
+    if not raw_text or len(raw_text) < 16:
+        raise HTTPException(status_code=422, detail="Could not extract text from PDF")
+
+    def _to_bool(val: Optional[str]) -> bool:
+        if val is None:
+            return False
+        v = str(val).strip().lower()
+        return v in {"1", "true", "yes", "y", "on"}
+
+    use_naive_only = _to_bool(prefer_naive)
+    timeout_env = os.getenv("GEMINI_PARSE_TIMEOUT_S")
+    try:
+        timeout_s = float(timeout_env) if timeout_env else 18.0
+    except Exception:
+        timeout_s = 18.0
+
+    sections = _split_subject_sections(raw_text)
+    results: List[SyllabusCourseOut] = []
+    if not sections:
+        # Fallback: treat as a single subject using the single-subject pipeline
+        hints = {"course_code": None, "title": None}
+        if use_naive_only:
+            parsed = _naive_extract_improved(raw_text)
+        else:
+            parsed = await _gemini_parse_with_timeout(raw_text, hints, timeout_s=timeout_s)
+            if not parsed:
+                parsed = _naive_extract_improved(raw_text)
+        norm = _normalize_parsed_struct(parsed or {}, hints)
+        filtered_units = _filter_lab_units(norm.units)
+        if not filtered_units:
+            fallback_norm = _normalize_parsed_struct(_naive_extract_improved(raw_text), hints)
+            filtered_units = _filter_lab_units(fallback_norm.units) or fallback_norm.units
+            if filtered_units:
+                norm = ParsedSyllabusOut(
+                    course_code=fallback_norm.course_code or norm.course_code,
+                    title=fallback_norm.title or norm.title,
+                    units=filtered_units,
+                )
+        sem_val = int(semester) if semester else 1
+        course_in = SyllabusCourseIn(
+            batch_id=batch_id,
+            semester=sem_val,
+            course_code=(norm.course_code or "UNKNOWN").upper(),
+            title=norm.title or "Untitled Course",
+            units=norm.units or [],
+        )
+        course = await run_in_threadpool(upsert_syllabus_course, course_in)
+        units_saved = await run_in_threadpool(sync_units_and_topics, course.id, norm.units or [])
+        results.append(
+            SyllabusCourseOut(
+                id=course.id,
+                batch_id=course.batch_id,
+                semester=course.semester,
+                course_code=course.course_code,
+                title=course.title,
+                units=units_saved,
+            )
+        )
+        return results
+
+    # Multi-section path
+    sem_val = int(semester) if semester else 1
+    for sec in sections:
+        sec_text = sec.get("text") or ""
+        hints = {"course_code": sec.get("code"), "title": sec.get("title")}
+        if use_naive_only:
+            parsed = _naive_extract_improved(sec_text)
+        else:
+            parsed = await _gemini_parse_with_timeout(sec_text, hints, timeout_s=timeout_s)
+            if not parsed:
+                parsed = _naive_extract_improved(sec_text)
+        norm = _normalize_parsed_struct(parsed or {}, hints)
+        filtered_units = _filter_lab_units(norm.units)
+        if not filtered_units:
+            fallback_norm = _normalize_parsed_struct(_naive_extract_improved(sec_text), hints)
+            filtered_units = _filter_lab_units(fallback_norm.units) or fallback_norm.units
+            if filtered_units:
+                norm = ParsedSyllabusOut(
+                    course_code=fallback_norm.course_code or norm.course_code,
+                    title=fallback_norm.title or norm.title,
+                    units=filtered_units,
+                )
+        course_in = SyllabusCourseIn(
+            batch_id=batch_id,
+            semester=sem_val,
+            course_code=(norm.course_code or "UNKNOWN").upper(),
+            title=norm.title or "Untitled Course",
+            units=norm.units or [],
+        )
+        course = await run_in_threadpool(upsert_syllabus_course, course_in)
+        units_saved = await run_in_threadpool(sync_units_and_topics, course.id, norm.units or [])
+        results.append(
+            SyllabusCourseOut(
+                id=course.id,
+                batch_id=course.batch_id,
+                semester=course.semester,
+                course_code=course.course_code,
+                title=course.title,
+                units=units_saved,
+            )
+        )
+    try:
+        print(f"[UPLOAD-BULK] saved {len(results)} courses for batch={batch_id} semester={sem_val}")
+    except Exception:
+        pass
+    return results
 
 @academics_router.get("/api/syllabus/upload", summary="Info: how to use the syllabus upload endpoint")
 def upload_syllabus_info():
