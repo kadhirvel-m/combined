@@ -563,20 +563,19 @@
             }
             const downloadUrl = apiBase && n.id ? `${apiBase}/api/marketplace/notes/${n.id}/download` : '';
             const purchaseUrl = apiBase && n.id ? `${apiBase}/api/marketplace/notes/${n.id}/purchase` : '';
-            const derivedDownloadUrl = downloadUrl;
-            const inlinePreviewUrl = apiBase && n.id ? `${apiBase}/api/marketplace/notes/${n.id}/preview` : '';
             const hasAccess = !!detail.has_access || (n.price_cents || 0) === 0;
+            const remoteUrl = (n.url && /^https?:\/\//i.test(n.url)) ? n.url : ((n.stored_path && /^https?:\/\//i.test(n.stored_path)) ? n.stored_path : '');
+            const derivedDownloadUrl = (hasAccess && remoteUrl) ? remoteUrl : '';
+            const inlinePreviewUrl = '';
+            
             const tryPrimaryPreview = () => {
-                // 0. Dedicated backend inline preview endpoint
-                if (inlinePreviewUrl && (n.mime_type || n.original_filename)) {
-                    const m = (n.mime_type || '').toLowerCase();
-                    const fname = (n.original_filename || '').toLowerCase();
-                    const canInline = m.startsWith('image/') || m === 'application/pdf' || /\.(pdf|png|jpe?g|webp|gif)$/.test(fname);
-                    if (canInline) {
-                        if (m === 'application/pdf' || fname.endsWith('.pdf')) { showPdf(inlinePreviewUrl); return true; }
-                        showImage(inlinePreviewUrl); return true;
-                    }
+                // Prefer remote stored_path when URL-backed note
+                if (n.stored_path && /^https?:\/\//i.test(n.stored_path)) {
+                    const lower = n.stored_path.split('?')[0].toLowerCase();
+                    if (/(\.pdf)$/.test(lower)) { showPdf(n.stored_path); return true; }
+                    if (/(\.png|\.jpe?g|\.webp|\.gif)$/.test(lower)) { showImage(n.stored_path); return true; }
                 }
+                // Skip backend inline preview; use remote URLs only
                 // 1. Explicit preview_url
                 if (n.preview_url) {
                     const lower = n.preview_url.split('?')[0].toLowerCase();
@@ -584,9 +583,8 @@
                     if (/(\.png|\.jpe?g|\.webp|\.gif)$/.test(lower)) { showImage(n.preview_url); return true; }
                 }
                 // 2. Explicit cover_path
-                if (n.cover_path && apiBase && n.id) {
-                    const coverUrl = `${apiBase}/api/marketplace/notes/${n.id}/cover`;
-                    showImage(coverUrl); return true;
+                if (n.cover_path && /^https?:\/\//i.test(n.cover_path)) {
+                    showImage(n.cover_path); return true;
                 }
                 // 3. Thumbs array
                 if (thumbs.length) { showImage(thumbs[0]); return true; }
@@ -642,6 +640,16 @@
             // CTA wiring
             const cta = el('#primaryCta'); const mobileCta = el('#mobileCta'); const statusEl = el('#purchaseStatus');
             async function doDownload() {
+                // If we have a direct remote URL (Supabase/public) and access, open it directly
+                if (/^https?:\/\//i.test(derivedDownloadUrl) && hasAccess) {
+                    const a = document.createElement('a');
+                    a.href = derivedDownloadUrl;
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    a.download = suggestedDownloadName || n.original_filename || n.title || 'note';
+                    document.body.appendChild(a); a.click(); a.remove();
+                    return;
+                }
                 const token = getToken();
                 try {
                     const r = await fetch(downloadUrl, { headers: token ? { Authorization: 'Bearer ' + token } : {} });

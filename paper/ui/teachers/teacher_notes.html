@@ -13,6 +13,8 @@
         rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/tailwind.css" />
     <script src="../config.js"></script>
+    <!-- Supabase client for Storage uploads -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
         // Guard for environments without the CDN runtime (SES lockdown would otherwise throw)
         window.tailwind = window.tailwind || {};
@@ -257,6 +259,45 @@
             return data;
         }
 
+        // ---------- Supabase helpers (for file uploads) ----------
+        let supabaseClient = null;
+        let SUPABASE_BUCKET = 'notes';
+        async function ensureSupabase() {
+            if (supabaseClient) return supabaseClient;
+            const base = (API_BASE || '').replace(/\/$/, '');
+            try {
+                const cfg = await fetch(base + '/api/public/supabase').then(r => r.json());
+                if (!cfg?.url || !cfg?.anonKey) throw new Error('Missing Supabase config');
+                supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
+                if (cfg.bucket) SUPABASE_BUCKET = cfg.bucket;
+                return supabaseClient;
+            } catch (e) {
+                console.warn('[TeacherNotes] Supabase init failed', e);
+                throw e;
+            }
+        }
+        function safePath(name = '') {
+            const base = (name || '').toString().split('\\').pop().split('/').pop();
+            const clean = base.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/-+/g, '-');
+            return clean || ('file-' + Date.now());
+        }
+        async function uploadToSupabase(file, meta = {}) {
+            const sb = await ensureSupabase();
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            const rand = Math.random().toString(36).slice(2, 8);
+            const prefix = `teacher-notes/${y}/${m}/${d}`;
+            const path = `${prefix}/${rand}-${safePath(meta.originalName || file.name)}`;
+            const opt = { cacheControl: '3600', upsert: false, contentType: file.type || 'application/octet-stream' };
+            const { error } = await sb.storage.from(SUPABASE_BUCKET).upload(path, file, opt);
+            if (error) throw error;
+            const { data } = sb.storage.from(SUPABASE_BUCKET).getPublicUrl(path);
+            const publicUrl = data?.publicUrl || '';
+            return { path, publicUrl };
+        }
+
         async function loadMeta() {
             try {
                 const meta = await fetchJSON(API_BASE + '/api/teacher/notes/upload-meta', { headers: { 'Authorization': 'Bearer ' + token } });
@@ -420,6 +461,27 @@
                 console.log('[TeacherNotes] FormData entries', debugEntries);
             } catch (debugErr) {
                 console.warn('[TeacherNotes] Failed to inspect FormData entries', debugErr);
+            }
+            // If a document file is present, upload to Supabase Storage first
+            const file = fd.get('file');
+            if (file instanceof File && file.size > 0) {
+                try {
+                    uploadStatus.textContent = 'Uploading to cloud storage...';
+                    const up = await uploadToSupabase(file, { originalName: file.name });
+                    // Include canonical URL for backend to persist in DB
+                    fd.set('stored_path', up.publicUrl);
+                    fd.set('url', up.publicUrl);
+                    fd.set('original_filename', file.name);
+                    fd.set('mime_type', file.type || 'application/octet-stream');
+                    fd.set('file_size', String(file.size));
+                    // Prevent backend from storing locally
+                    fd.delete('file');
+                    fd.delete('files');
+                } catch (cloudErr) {
+                    console.error('[TeacherNotes] Cloud upload failed', cloudErr);
+                    uploadStatus.textContent = 'Cloud upload failed: ' + (cloudErr.message || cloudErr.error_description || '');
+                    return;
+                }
             }
             // convert to marketplace payload fields
             fd.append('price_cents', '0');

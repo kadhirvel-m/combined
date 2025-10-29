@@ -9555,21 +9555,26 @@ def _compute_page_count(file_path: Path, original_name: Optional[str], mime_type
 
 
 def _store_marketplace_file(upload: UploadFile) -> tuple[str, int, str]:
+    """Deprecated: legacy local storage path now replaced with Supabase Storage.
+    Retained for compatibility but uploads to Supabase and returns public URL as stored_name.
+    """
     suffix = Path(upload.filename or "").suffix.lower()
     if suffix not in ALLOWED_NOTE_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Unsupported file type")
-    # Read into memory (size limit) then write
-    content = upload.file.read()
-    size = len(content)
+    blob = _read_upload_bytes(upload)
+    size = len(blob)
     if size > MAX_NOTE_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File too large (>25MB)")
-    rand = uuid.uuid4().hex
-    safe_name = _sanitize_filename(Path(upload.filename or "uploaded").name)
-    stored_name = f"{rand}-{safe_name}"
-    stored_path = MARKETPLACE_STORAGE / stored_name
-    with open(stored_path, "wb") as f:
-        f.write(content)
-    return stored_name, size, (upload.content_type or "application/octet-stream")
+    supabase = get_service_client()
+    bucket = os.getenv("SUPABASE_BUCKET", "").strip()
+    if not bucket:
+        raise HTTPException(status_code=500, detail="Missing SUPABASE_BUCKET in environment")
+    safe_ext = suffix or ".bin"
+    dest = f"marketplace/notes/{uuid.uuid4().hex}{safe_ext}"
+    _storage_upload_bytes(supabase, bucket, dest, blob, upload.content_type)
+    public_url = _storage_public_url(supabase, bucket, dest)
+    # Return public URL as stored_name for downstream callers
+    return public_url, size, (upload.content_type or "application/octet-stream")
 
 
 @marketplace_router.post("/api/marketplace/notes", summary="Upload a note to marketplace")
@@ -9589,6 +9594,12 @@ def mp_upload_note(
     semester: Optional[int] = Form(None),
     file: Optional[UploadFile] = File(None),
     files: Optional[List[UploadFile]] = File(None),
+    # Remote storage (Supabase) fields to allow URL-only flow
+    stored_path: Optional[str] = Form(None, description="If provided as http(s) URL, backend will not store locally."),
+    url: Optional[str] = Form(None, description="Optional alias for stored_path (http URL)."),
+    original_filename: Optional[str] = Form(None),
+    mime_type: Optional[str] = Form(None),
+    file_size: Optional[int] = Form(None),
     cover: Optional[UploadFile] = File(None),
     authorization: Optional[str] = Header(default=None),
 ):
@@ -9599,20 +9610,72 @@ def mp_upload_note(
         uploads.extend([f for f in files if f is not None and getattr(f, 'filename', None)])
     if file is not None and getattr(file, 'filename', None):
         uploads.append(file)
+    # If no binary uploads, accept URL-based create when stored_path/url is provided
     if not uploads:
-        raise HTTPException(status_code=400, detail="No file(s) provided")
+        remote = url or stored_path
+        if not remote or not str(remote).lower().startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="No file(s) provided")
+        supabase = get_service_client()
+        cats = [c.strip() for c in (categories or "").split(",") if c.strip()]
+        row: Dict[str, Any] = {
+            "owner_user_id": user_id,
+            "title": title.strip(),
+            "description": description.strip() or None,
+            "subject": subject.strip() or None,
+            "unit": unit.strip() or None,
+            "exam_type": exam_type.strip() or None,
+            "categories": cats,
+            "price_cents": price_cents,
+            "original_filename": original_filename or None,
+            "stored_path": str(remote),
+            "mime_type": (mime_type or "application/octet-stream"),
+            "file_size": int(file_size) if file_size is not None else None,
+        }
+        if url:
+            # If the table has a 'url' column it will be persisted; otherwise ignored
+            row["url"] = str(url)
+        # Academic linkages
+        if college_id:
+            row["college_id"] = college_id
+        if degree_id:
+            row["degree_id"] = degree_id
+        if department_id:
+            row["department_id"] = department_id
+        if batch_id:
+            row["batch_id"] = batch_id
+        if semester is not None:
+            if semester < 1 or semester > 12:
+                raise HTTPException(status_code=400, detail="semester must be between 1 and 12")
+            row["semester"] = semester
+        if subject_id:
+            try:
+                uuid.UUID(str(subject_id))
+                row["subject_id"] = str(subject_id)
+                row["subject_href"] = f"/api/syllabus/courses/{subject_id}"
+            except Exception:
+                pass
+        res = supabase.table("marketplace_notes").insert(row).execute()
+        if getattr(res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert note): {res.error}")
+        data_rows = res.data if isinstance(res.data, list) else ([res.data] if res.data else [row])
+        return {"notes": data_rows}
     cover_name: Optional[str] = None
     if cover and cover.filename:
         try:
-            # Reuse storage but restrict to image types
+            # Upload cover to Supabase Storage
             ext = Path(cover.filename).suffix.lower()
             if ext not in {'.png', '.jpg', '.jpeg', '.webp', '.gif'}:
                 raise HTTPException(status_code=400, detail="Unsupported cover image type")
-            content = cover.file.read()
-            if len(content) > 5 * 1024 * 1024:
+            blob = _read_upload_bytes(cover)
+            if len(blob) > 5 * 1024 * 1024:
                 raise HTTPException(status_code=400, detail="Cover image too large (>5MB)")
-            cover_name = f"cover-{uuid.uuid4().hex}{ext}"
-            (MARKETPLACE_STORAGE / cover_name).write_bytes(content)
+            supabase = get_service_client()
+            bucket = os.getenv("SUPABASE_BUCKET", "").strip()
+            if not bucket:
+                raise HTTPException(status_code=500, detail="Missing SUPABASE_BUCKET in environment")
+            dest = f"marketplace/notes/covers/{uuid.uuid4().hex}{ext}"
+            _storage_upload_bytes(supabase, bucket, dest, blob, cover.content_type or "image/png")
+            cover_name = _storage_public_url(supabase, bucket, dest)
         except HTTPException:
             raise
         except Exception as e:  # pragma: no cover
@@ -10234,48 +10297,33 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
 
 @marketplace_router.get("/api/marketplace/notes/{note_id}/download", summary="Download note file (public)")
 def mp_download_note(note_id: uuid.UUID):
-    """Serve the note file publicly (purchase no longer required)."""
+    """Redirect to the remote file URL stored in Supabase (no local files)."""
     supabase = get_service_client()
-    res = supabase.table("marketplace_notes").select("stored_path").eq("id", str(note_id)).limit(1).execute()
-    if getattr(res, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get note): {res.error}")
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Note not found")
-    stored = res.data[0].get("stored_path")
-    if not stored:
-        raise HTTPException(status_code=500, detail="File missing")
-    file_path = MARKETPLACE_STORAGE / stored
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="File not found on server")
-    return FileResponse(str(file_path), filename=stored)
-
-@marketplace_router.get("/api/marketplace/notes/{note_id}/preview", summary="Inline preview for PDF or image")
-def mp_preview_note(note_id: uuid.UUID):
-    """Serve the note file with Content-Disposition inline for browser preview.
-
-    Falls back to normal download if type unsupported.
-    """
-    supabase = get_service_client()
-    res = supabase.table("marketplace_notes").select("stored_path,mime_type,original_filename").eq("id", str(note_id)).limit(1).execute()
+    res = supabase.table("marketplace_notes").select("stored_path,url,original_filename").eq("id", str(note_id)).limit(1).execute()
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (get note): {res.error}")
     if not res.data:
         raise HTTPException(status_code=404, detail="Note not found")
     row = res.data[0]
-    stored = row.get("stored_path")
-    if not stored:
-        raise HTTPException(status_code=500, detail="File missing")
-    file_path = MARKETPLACE_STORAGE / stored
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="File not found on server")
-    mime = (row.get("mime_type") or "application/octet-stream").lower()
-    # Allow inline only for pdf / images
-    allow_inline = mime.startswith("image/") or mime == "application/pdf"
-    headers = {}
-    if allow_inline:
-        # Force inline
-        headers["Content-Disposition"] = f"inline; filename={stored}"
-    return FileResponse(str(file_path), filename=stored, media_type=mime, headers=headers)
+    target = row.get("url") or row.get("stored_path") or ""
+    if not target or not str(target).lower().startswith(("http://", "https://")):
+        raise HTTPException(status_code=404, detail="Remote URL not available")
+    return RedirectResponse(url=str(target))
+
+@marketplace_router.get("/api/marketplace/notes/{note_id}/preview", summary="Inline preview for PDF or image")
+def mp_preview_note(note_id: uuid.UUID):
+    """Redirect to remote URL; front-end handles inline rendering based on type."""
+    supabase = get_service_client()
+    res = supabase.table("marketplace_notes").select("stored_path,url").eq("id", str(note_id)).limit(1).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get note): {res.error}")
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    row = res.data[0]
+    target = row.get("url") or row.get("stored_path") or ""
+    if not target or not str(target).lower().startswith(("http://", "https://")):
+        raise HTTPException(status_code=404, detail="Remote URL not available")
+    return RedirectResponse(url=str(target))
 
 @marketplace_router.get("/api/marketplace/notes/{note_id}/cover", summary="Get cover image for a note")
 def mp_cover_image(note_id: uuid.UUID):
@@ -10286,21 +10334,9 @@ def mp_cover_image(note_id: uuid.UUID):
     if not res.data:
         raise HTTPException(status_code=404, detail="Note not found")
     cover = res.data[0].get("cover_path")
-    if not cover:
-        raise HTTPException(status_code=404, detail="No cover set")
-    file_path = MARKETPLACE_STORAGE / cover
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Cover not found")
-    # Guess mime
-    ext = file_path.suffix.lower()
-    mime = "image/jpeg"
-    if ext == ".png":
-        mime = "image/png"
-    elif ext == ".webp":
-        mime = "image/webp"
-    elif ext == ".gif":
-        mime = "image/gif"
-    return FileResponse(str(file_path), filename=cover, media_type=mime, headers={"Content-Disposition": f"inline; filename={cover}"})
+    if not cover or not str(cover).lower().startswith(("http://", "https://")):
+        raise HTTPException(status_code=404, detail="No remote cover URL set")
+    return RedirectResponse(url=str(cover))
 
 
 @marketplace_router.post("/api/marketplace/notes/{note_id}/purchase", summary="Purchase a paid note (mock payment)")
