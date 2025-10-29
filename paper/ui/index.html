@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Paper X — Cloud Landing</title>
-    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
 
     <!-- Inter + Material Symbols -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,15 +17,56 @@
     <!-- Tailwind (forms/typography/aspect-ratio) -->
     <link rel="stylesheet" href="assets/css/tailwind.css" />
     <script>
-        // Early theme detection to prevent flash
-        (function () {
-            const root = document.documentElement;
-            const stored = localStorage.getItem('px_theme');
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            if (stored === 'dark' || (!stored && prefersDark)) {
-                root.classList.add('dark');
+        // Tailwind config with your palette + light mode complements
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            900: '#1E1E2F', // deep night
+                            700: '#4C2A59', // plum
+                            500: '#9E4B8A', // magenta
+                        },
+                        brandlt: {        // light-theme complements
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        },
+                        // Added direct aliases for pricing card component
+                        ink: '#1E1E2F',
+                        plum: '#4C2A59',
+                        orchid: '#9E4B8A',
+                        // Additional palette required for mega menus (from test.html)
+                        indigoDark: '#1E1E2F',
+                        deepPurple: '#4C2A59',
+                        magenta: '#9E4B8A',
+                        paper: '#FFFFFF',
+                        stoneTint: '#F6F7FB',
+                        edge: '#E7E9F2'
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        // Pricing card shadow
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark':
+                            'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+                        'hero-light':
+                            'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+                    }
+                }
             }
-        })();
+        }
     </script>
     <style>
         /* Prevent flicker of cloaked elements before Alpine initializes */
@@ -69,6 +110,36 @@
             100% {
                 background-position: 0% 50%;
             }
+        }
+
+        /* Storybook Carousel Styles */
+        #storybookCarousel .slides-wrapper {
+            will-change: transform;
+        }
+
+        #storybookCarousel .slide {
+            user-select: none;
+            -webkit-user-select: none;
+            flex-shrink: 0;
+            width: 100%;
+        }
+
+        #storybookCarousel .slide img {
+            pointer-events: none;
+        }
+
+        #storybookCarousel button {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        #storybookCarousel .slide-dot.active {
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            transform: scale(1.3);
+        }
+
+        #storybookCarousel .slide-dot {
+            transition: all 0.3s ease;
         }
 
         /* Logo ticker */
@@ -445,65 +516,14 @@
     </style>
 
     <script>
-        // Theme boot (runs before paint to avoid flash)
-        (() => {
-            const stored = localStorage.getItem('px_theme');
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            const isDark = stored ? stored === 'dark' : prefersDark;
-            if (isDark) document.documentElement.classList.add('dark');
-        })();
+            // Theme boot (runs before paint to avoid flash)
+            (() => {
+                const stored = localStorage.getItem('px_theme');
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const isDark = stored ? stored === 'dark' : prefersDark;
+                if (isDark) document.documentElement.classList.add('dark');
+            })();
     </script>
-
-    <!-- Flipbook Styles -->
-    <style>
-        #flipbook-container {
-            width: 100%;
-            position: relative;
-        }
-
-        #book {
-            margin: 0 auto;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .page-canvas {
-            background-color: white;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-        }
-
-        .stf__parent {
-            margin: 0 auto;
-        }
-
-        .stf__wrapper {
-            margin: 0 auto;
-        }
-
-        .stf__item {
-            background-color: white !important;
-        }
-
-        /* Dark mode adjustments */
-        .dark .page-canvas {
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-        }
-
-        /* Make flipbook responsive */
-        @media (max-width: 768px) {
-            #book {
-                transform: scale(0.8);
-            }
-        }
-
-        @media (max-width: 480px) {
-            #book {
-                transform: scale(0.6);
-            }
-        }
-    </style>
-
     <!-- Alpine.js (for mega menus) -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
@@ -526,8 +546,8 @@
         class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10 relative">
         <div class="container flex items-center justify-between py-4">
             <a href="index.html" class="flex items-center gap-3" aria-label="Paper X Home">
-                <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
-                <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
+                <img src="assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
+                <img src="assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
             </a>
             <nav class="hidden md:flex items-center gap-2 text-sm text-neutral-700 dark:text-white/85">
                 <a class="inline-flex items-center rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
@@ -957,54 +977,97 @@
                 </a>
             </div>
 
-            <!-- Card visual -->
+            <!-- Storybook Slides Carousel -->
             <div class="mt-14 md:mt-20">
-                <!-- Interactive Flipbook -->
                 <div
-                    class="mx-auto w-[400px] h-[400px] rounded-3xl border border-black/5 dark:border-white/10 bg-white/60 dark:bg-brand-900/40 backdrop-blur overflow-hidden shadow-soft dark:shadow-glow">
-                    <div class="relative group bg-neutral-100 dark:bg-neutral-900 p-6 h-full">
-                        <!-- Flipbook Container -->
-                        <div id="flipbook-container" class="flex items-center justify-center h-full">
-                            <div id="book" class="relative"></div>
-                        </div>
-
-                        <!-- Navigation Controls -->
-                        <div
-                            class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-black/70 backdrop-blur-sm px-6 py-3 rounded-full ring-1 ring-white/20 z-50">
-                            <button id="prev-btn"
-                                class="text-white hover:text-brand-300 transition disabled:opacity-30 disabled:cursor-not-allowed"
-                                aria-label="Previous page">
-                                <span class="material-symbols-rounded text-3xl">chevron_left</span>
-                            </button>
-                            <div class="text-sm font-medium text-white/90 min-w-[80px] text-center">
-                                Page <span id="current-page">1</span> / <span id="total-pages">0</span>
-                            </div>
-                            <button id="next-btn"
-                                class="text-white hover:text-brand-300 transition disabled:opacity-30 disabled:cursor-not-allowed"
-                                aria-label="Next page">
-                                <span class="material-symbols-rounded text-3xl">chevron_right</span>
-                            </button>
-                        </div>
-
-                        <!-- Flipbook Caption -->
-                        <div
-                            class="absolute top-4 right-4 text-[10px] tracking-wide uppercase font-medium text-white/70 backdrop-blur-sm bg-black/30 px-3 py-1.5 rounded-full ring-1 ring-white/20 z-50">
-                            Interactive Storybook</div>
-
-                        <!-- Loading indicator -->
-                        <div id="loading"
-                            class="absolute inset-0 flex items-center justify-center bg-neutral-100/95 dark:bg-neutral-900/95 z-40">
-                            <div class="text-center">
-                                <div
-                                    class="inline-block animate-spin rounded-full h-16 w-16 border-4 border-brand-500/30 border-t-brand-500">
+                    class="mx-auto max-w-5xl rounded-3xl border border-black/5 dark:border-white/10 bg-white/60 dark:bg-brand-900/40 backdrop-blur overflow-hidden shadow-soft dark:shadow-glow">
+                    <div class="relative group" id="storybookCarousel">
+                        <!-- Slides Container -->
+                        <div class="relative aspect-[16/9] overflow-hidden bg-black">
+                            <div class="slides-wrapper flex transition-transform duration-500 ease-out h-full"
+                                id="slidesWrapper">
+                                <!-- Slide 1 -->
+                                <div class="slide min-w-full h-full relative">
+                                    <img src="assets/img/storybook/slides/slide1.png" alt="Storybook Slide 1"
+                                        class="w-full h-full object-contain" loading="eager">
                                 </div>
-                                <p class="mt-4 text-base text-neutral-600 dark:text-white/70 font-medium">Loading
-                                    flipbook...</p>
+
+                                <!-- Slide 2 -->
+                                <div class="slide min-w-full h-full relative">
+                                    <img src="assets/img/storybook/slides/slide2.png" alt="Storybook Slide 2"
+                                        class="w-full h-full object-contain" loading="lazy">
+                                </div>
+
+                                <!-- Slide 3 -->
+                                <div class="slide min-w-full h-full relative">
+                                    <img src="assets/img/storybook/slides/slide3.png" alt="Storybook Slide 3"
+                                        class="w-full h-full object-contain" loading="lazy">
+                                </div>
+
+                                <!-- Slide 4 -->
+                                <div class="slide min-w-full h-full relative">
+                                    <img src="assets/img/storybook/slides/slide4.png" alt="Storybook Slide 4"
+                                        class="w-full h-full object-contain" loading="lazy">
+                                </div>
+
+                                <!-- Slide 5 -->
+                                <div class="slide min-w-full h-full relative">
+                                    <img src="assets/img/storybook/slides/slide5.png" alt="Storybook Slide 5"
+                                        class="w-full h-full object-contain" loading="lazy">
+                                </div>
+
+                                <!-- Slide 6 -->
+                                <div class="slide min-w-full h-full relative">
+                                    <img src="assets/img/storybook/slides/slide6.png" alt="Storybook Slide 6"
+                                        class="w-full h-full object-contain" loading="lazy">
+                                </div>
+
+                                <!-- Slide 7 -->
+                                <div class="slide min-w-full h-full relative">
+                                    <img src="assets/img/storybook/slides/slide7.png" alt="Storybook Slide 7"
+                                        class="w-full h-full object-contain" loading="lazy">
+                                </div>
+
+                                <!-- Slide 8 -->
+                                <div class="slide min-w-full h-full relative">
+                                    <img src="assets/img/storybook/slides/slide8.png" alt="Storybook Slide 8"
+                                        class="w-full h-full object-contain" loading="lazy">
+                                </div>
                             </div>
+                        </div>
+
+                        <!-- Navigation Arrows -->
+                        <button id="prevSlide"
+                            class="absolute left-4 top-1/2 -translate-y-1/2 size-10 rounded-full bg-white/90 dark:bg-black/50 backdrop-blur flex items-center justify-center ring-1 ring-black/10 dark:ring-white/20 hover:scale-110 transition opacity-0 group-hover:opacity-100">
+                            <span class="material-symbols-rounded text-brand-900 dark:text-white">chevron_left</span>
+                        </button>
+                        <button id="nextSlide"
+                            class="absolute right-4 top-1/2 -translate-y-1/2 size-10 rounded-full bg-white/90 dark:bg-black/50 backdrop-blur flex items-center justify-center ring-1 ring-black/10 dark:ring-white/20 hover:scale-110 transition opacity-0 group-hover:opacity-100">
+                            <span class="material-symbols-rounded text-brand-900 dark:text-white">chevron_right</span>
+                        </button>
+
+                        <!-- Dot Indicators -->
+                        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2" id="slideIndicators">
+                            <button class="slide-dot size-2 rounded-full bg-white/50 hover:bg-white transition active"
+                                data-slide="0"></button>
+                            <button class="slide-dot size-2 rounded-full bg-white/50 hover:bg-white transition"
+                                data-slide="1"></button>
+                            <button class="slide-dot size-2 rounded-full bg-white/50 hover:bg-white transition"
+                                data-slide="2"></button>
+                            <button class="slide-dot size-2 rounded-full bg-white/50 hover:bg-white transition"
+                                data-slide="3"></button>
+                            <button class="slide-dot size-2 rounded-full bg-white/50 hover:bg-white transition"
+                                data-slide="4"></button>
+                            <button class="slide-dot size-2 rounded-full bg-white/50 hover:bg-white transition"
+                                data-slide="5"></button>
+                            <button class="slide-dot size-2 rounded-full bg-white/50 hover:bg-white transition"
+                                data-slide="6"></button>
+                            <button class="slide-dot size-2 rounded-full bg-white/50 hover:bg-white transition"
+                                data-slide="7"></button>
                         </div>
                     </div>
                 </div>
-                <!-- End Interactive Flipbook -->
+                <!-- End Storybook Slides Carousel -->
             </div>
         </div>
     </section>
@@ -1092,7 +1155,7 @@
 
                 <!-- Right image -->
                 <div class="flex items-center justify-center py-6 pr-6 relative">
-                    <!-- <img src="../assets/img/img4.png" alt="Bubu the unicorn piggy leading the PaperX revolution"
+                    <!-- <img src="assets/img/img4.png" alt="Bubu the unicorn piggy leading the PaperX revolution"
                         class="w-full h-full object-cover brightness-100 dark:brightness-105 contrast-105 dark:contrast-110 transition"
                         loading="lazy" decoding="async"> -->
                     <div class="w-[85%] aspect-video rounded-2xl overflow-hidden shadow-lg">
@@ -1504,8 +1567,8 @@
                 <div class="grid gap-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)] items-start">
                     <div class="app-footer__brand space-y-5">
                         <a href="#" class="inline-flex items-center gap-3">
-                            <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-12 w-auto dark:hidden">
-                            <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-12 w-auto hidden dark:block">
+                            <img src="assets/img/logo-light.svg" alt="Paper X" class="h-12 w-auto dark:hidden">
+                            <img src="assets/img/logo-dark.svg" alt="Paper X" class="h-12 w-auto hidden dark:block">
                         </a>
                         <p class="text-sm leading-relaxed max-w-sm opacity-80">
                             Exam-ready intelligence for Indian colleges. Capture syllabi, generate smart notes, practice
@@ -1818,11 +1881,11 @@
                         subtitle: 'Core Platform Navigation',
                         cta: { label: 'Go to Projects Hub', href: '#' },
                         brands: [
-                            { name: 'Postings', tag: 'Module', img: '../assets/img/nav/project/project1.png', href: 'projects/postings.html' },
-                            { name: 'Create a Project', tag: 'Action', img: '../assets/img/nav/project/project2.png', href: 'projects/project_post.html' },
-                            { name: 'Test Portal', tag: 'Lab', img: '../assets/img/nav/project/project5.png', href: '#' },
-                            { name: 'My Applications', tag: 'Dashboard', img: '../assets/img/nav/project/project4.png', href: 'projects/my_applications.html' },
-                            { name: 'Incoming Requests', tag: 'Queue', img: '../assets/img/nav/project/project3.png', href: 'projects/incoming_requests.html' },
+                            { name: 'Postings', tag: 'Module', img: 'assets/img/nav/project/project1.png', href: 'projects/postings.html' },
+                            { name: 'Create a Project', tag: 'Action', img: 'assets/img/nav/project/project2.png', href: 'projects/project_post.html' },
+                            { name: 'Test Portal', tag: 'Lab', img: 'assets/img/nav/project/project5.png', href: '#' },
+                            { name: 'My Applications', tag: 'Dashboard', img: 'assets/img/nav/project/project4.png', href: 'projects/my_applications.html' },
+                            { name: 'Incoming Requests', tag: 'Queue', img: 'assets/img/nav/project/project3.png', href: 'projects/incoming_requests.html' },
                         ]
                     },
                     {
@@ -1831,9 +1894,9 @@
                         subtitle: 'Delivering Exceptional Performance',
                         cta: { label: 'See all Equipment', href: '#' },
                         brands: [
-                            { name: 'Romantasy', tag: 'System', img: '../assets/img/nav/tale/tale1.png', href: 'tales/romantasy.html' },
-                            { name: 'Thriller / Mystery', tag: 'System', img: '../assets/img/nav/tale/tale2.png', href: '#' },
-                            { name: 'Webtoons', tag: 'System', img: '../assets/img/nav/tale/tale3.png', href: '#' },
+                            { name: 'Romantasy', tag: 'System', img: 'assets/img/nav/tale/tale1.png', href: 'tales/romantasy.html' },
+                            { name: 'Thriller / Mystery', tag: 'System', img: 'assets/img/nav/tale/tale2.png', href: '#' },
+                            { name: 'Webtoons', tag: 'System', img: 'assets/img/nav/tale/tale3.png', href: '#' },
                         ]
                     },
                     {
@@ -1842,7 +1905,7 @@
                         subtitle: 'Embracing the Future',
                         cta: { label: 'See all Digital tools', href: '#' },
                         brands: [
-                            { name: 'Institutions', tag: 'System', img: '../assets/img/nav/clg/clg.png', href: 'collage/clg_info.html' },
+                            { name: 'Institutions', tag: 'System', img: 'assets/img/nav/clg/clg.png', href: 'collage/clg_info.html' },
                         ]
                     },
                     {
@@ -1851,9 +1914,9 @@
                         subtitle: 'For Our Direct‑to‑Market Regions',
                         cta: { label: 'See all Services', href: '#' },
                         brands: [
-                            { name: 'Notes Market', tag: 'NoteHub', img: '../assets/img/nav/market/market1.png', href: 'matketplace/notes/notes_marketplace.html' },
-                            { name: 'Project Market', tag: 'ProjectXchange', img: '../assets/img/nav/market/market2.png', href: '#' },
-                            { name: 'Tutoring', tag: 'SkillShareX', img: '../assets/img/nav/market/market3.png', href: '#' },
+                            { name: 'Notes Market', tag: 'NoteHub', img: 'assets/img/nav/market/market1.png', href: 'matketplace/notes/notes_marketplace.html' },
+                            { name: 'Project Market', tag: 'ProjectXchange', img: 'assets/img/nav/market/market2.png', href: '#' },
+                            { name: 'Tutoring', tag: 'SkillShareX', img: 'assets/img/nav/market/market3.png', href: '#' },
                         ]
                     },
                     {
@@ -1862,11 +1925,11 @@
                         subtitle: 'For Our Direct‑to‑Market Regions',
                         cta: { label: 'See all Services', href: '#' },
                         brands: [
-                            { name: 'Agentic AI Tutor', tag: 'TutorX', img: '../assets/img/nav/ai/ai1.png', href: '#' },
-                            { name: 'AI Research Paper', tag: 'PaperGen', img: '../assets/img/nav/ai/ai2.png', href: '#' },
-                            { name: 'Portfolio Builder', tag: 'DeckX', img: '../assets/img/nav/ai/ai3.png', href: '#' },
-                            { name: 'Flashcard & Revision', tag: 'FlashMind', img: '../assets/img/nav/ai/ai4.png', href: '#' },
-                            { name: 'Learning Insights AI', tag: 'InsightX', img: '../assets/img/nav/ai/ai5.png', href: '#' },
+                            { name: 'Agentic AI Tutor', tag: 'TutorX', img: 'assets/img/nav/ai/ai1.png', href: '#' },
+                            { name: 'AI Research Paper', tag: 'PaperGen', img: 'assets/img/nav/ai/ai2.png', href: '#' },
+                            { name: 'Portfolio Builder', tag: 'DeckX', img: 'assets/img/nav/ai/ai3.png', href: '#' },
+                            { name: 'Flashcard & Revision', tag: 'FlashMind', img: 'assets/img/nav/ai/ai4.png', href: '#' },
+                            { name: 'Learning Insights AI', tag: 'InsightX', img: 'assets/img/nav/ai/ai5.png', href: '#' },
                         ]
                     },
                 ],
@@ -1921,7 +1984,7 @@
                 const possiblePaths = [
                     'assets/img/storybook/storybook.pdf',
                     './assets/img/storybook/storybook.pdf',
-                    '../assets/img/storybook/storybook.pdf'
+                    'assets/img/storybook/storybook.pdf'
                 ];
 
                 let pdf = null;
