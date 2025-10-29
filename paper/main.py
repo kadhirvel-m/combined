@@ -89,7 +89,14 @@ try:
 except Exception:  # pragma: no cover
     YoutubeDL = None  # type: ignore
 
-load_dotenv()
+# Load .env from this module's directory to avoid CWD issues
+try:
+    _env_path = (Path(__file__).resolve().parent / ".env")
+    # override=True so a valid file value isn't shadowed by a stale OS env
+    load_dotenv(dotenv_path=str(_env_path), override=True)
+except Exception:
+    # Fallback to default discovery
+    load_dotenv()
 
 # --- Supabase helpers ---
 
@@ -226,7 +233,7 @@ deepseek_model_client =  OpenAIChatCompletionClient(
 
 gemini_model_client = OpenAIChatCompletionClient(
     model="gemini-2.5-flash",
-    api_key=os.getenv("GEMINI_API_KEY"),
+    api_key=(os.getenv("GEMINI_API_KEY", "") or "").strip(),
     model_info=ModelInfo(
         vision=True,
         function_calling=True,
@@ -818,9 +825,9 @@ if not notes_logger.handlers:
 notes_logger.setLevel(logging.INFO)
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY", "") or "").strip()
+SERPAPI_API_KEY = (os.getenv("SERPAPI_API_KEY", "") or "").strip()
+GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or "").strip()
 GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-2.5-flash")
 MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
@@ -7972,6 +7979,108 @@ def update_course_metadata(course_id: uuid.UUID, payload: SyllabusCourseSimpleUp
         course_code=payload.course_code,
         title=payload.title,
     )
+
+# Alias route to support existing UI paths
+@academics_router.put(
+    "/api/courses/{course_id}",
+    response_model=SyllabusCourseSummaryOut,
+    summary="Update subject metadata (alias)",
+)
+def update_course_metadata_alias(course_id: uuid.UUID, payload: SyllabusCourseSimpleUpdateIn):
+    return update_course_metadata(course_id, payload)
+
+
+@academics_router.delete(
+    "/api/courses/{course_id}",
+    summary="Delete a subject and all units & topics",
+)
+def delete_course_cascade(course_id: uuid.UUID):
+    supabase = get_service_client()
+
+    # Verify course exists
+    course_q = (
+        supabase.table("syllabus_courses")
+        .select("id")
+        .eq("id", str(course_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(course_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find course): {course_q.error}")
+    if not course_q.data:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    # Collect unit ids
+    units_q = (
+        supabase.table("syllabus_units")
+        .select("id")
+        .eq("course_id", str(course_id))
+        .execute()
+    )
+    if getattr(units_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list units): {units_q.error}")
+    unit_ids = [u.get("id") for u in (units_q.data or []) if u.get("id")]
+
+    # For each unit: delete progress for its topics, then delete topics
+    total_deleted_topics = 0
+    for uid in unit_ids:
+        # topics under this unit
+        t_q = (
+            supabase.table("syllabus_topics")
+            .select("id")
+            .eq("unit_id", uid)
+            .execute()
+        )
+        if getattr(t_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (list topics): {t_q.error}")
+        t_ids = [t.get("id") for t in (t_q.data or []) if t.get("id")]
+
+        # delete progress in chunks to avoid IN payload issues
+        if t_ids:
+            for i in range(0, len(t_ids), 100):
+                chunk = t_ids[i:i+100]
+                prog_del = (
+                    supabase.table("user_topic_progress")
+                    .delete()
+                    .in_("topic_id", chunk)
+                    .execute()
+                )
+                if getattr(prog_del, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (delete progress): {prog_del.error}")
+
+            # delete topics for this unit
+            topics_del = (
+                supabase.table("syllabus_topics")
+                .delete()
+                .eq("unit_id", uid)
+                .execute()
+            )
+            if getattr(topics_del, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (delete topics): {topics_del.error}")
+            total_deleted_topics += len(t_ids)
+
+    # Delete units by course_id
+    if unit_ids:
+        units_del = (
+            supabase.table("syllabus_units")
+            .delete()
+            .eq("course_id", str(course_id))
+            .execute()
+        )
+        if getattr(units_del, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete units): {units_del.error}")
+
+    # Delete course
+    course_del = (
+        supabase.table("syllabus_courses")
+        .delete()
+        .eq("id", str(course_id))
+        .execute()
+    )
+    if getattr(course_del, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete course): {course_del.error}")
+
+    return {"ok": True, "deleted_units": len(unit_ids), "deleted_topics": total_deleted_topics}
 
 
 @academics_router.get(
