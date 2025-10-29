@@ -111,7 +111,7 @@
           <div
             class="rounded-3xl overflow-hidden bg-white/80 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 shadow-soft dark:shadow-glow aspect-[16/9] md:aspect-[21/10] max-w-xl md:max-w-lg mx-auto">
             <video class="w-full h-full object-cover" autoplay muted loop playsinline>
-              <source src="../../assets/video/login2.mp4" type="video/mp4" />
+              <source src="../assets/video/signup.mp4" type="video/mp4" />
             </video>
           </div>
           <ul class="space-y-3 text-sm text-neutral-600 dark:text-white/65">
@@ -212,10 +212,10 @@
         const res = await fetch(base + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const data = await safeJson(res);
         if (!res.ok) { throw new Error(data.detail || data.error || 'Login failed (' + res.status + ')'); }
-                if (!data.access_token) { throw new Error('No access token returned'); }
-                // Enforce single active session (teacher wins here)
-                localStorage.setItem('teacherToken', data.access_token || '');
-                try { localStorage.removeItem('px_token'); } catch {}
+        if (!data.access_token) { throw new Error('No access token returned'); }
+        // Enforce single active session (teacher wins here)
+        localStorage.setItem('teacherToken', data.access_token || '');
+        try { localStorage.removeItem('px_token'); } catch { }
         statusEl.classList.remove('hidden');
         statusEl.textContent = 'Signed in. Checking role...';
         const st = await fetch(base + '/api/teacher/me/status', { headers: { 'Authorization': 'Bearer ' + data.access_token } });

@@ -115,6 +115,40 @@
         .dark .ring-soft {
             box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
         }
+
+        /* Gradient hero text (copied from index.html) */
+        .gradient-hero-text {
+            display: inline-block;
+            /* ensure background sizing ties to content */
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            -webkit-box-decoration-break: clone;
+            box-decoration-break: clone;
+        }
+
+        /* Dark theme override for gradient hero text */
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
     </style>
 
     <!-- Theme boot BEFORE anything else (same snippet as index/about) -->
@@ -174,7 +208,9 @@
         <div class="container py-6 md:py-8">
             <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Notes Marketplace</h1>
+                    <h1
+                        class="text-4xl md:text-5xl font-extrabold tracking-tight mx-auto max-w-5xl leading-[1.08] gradient-hero-text">
+                        Notes Marketplace</h1>
                     <p class="text-sm text-neutral-600 dark:text-white/60 mt-1">Discover peer‑reviewed notes, past
                         papers, and quick revision packs.</p>
                 </div>
@@ -187,30 +223,66 @@
                             class="material-symbols-rounded text-sm">verified</span> Peer rated</span>
                 </div>
             </div>
-            <div class="mt-5 flex flex-col md:flex-row gap-3">
-                <div class="flex-1 relative">
-                    <span
-                        class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">search</span>
-                    <input id="q" placeholder="Search by title, subject, keywords…"
-                        class="w-full rounded-xl pl-11 pr-4 py-3 text-sm ring-1 ring-black/10 dark:ring-white/15 bg-white/90 dark:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                </div>
-                <div class="flex items-center gap-2">
-                    <button id="quickFree"
-                        class="px-3 py-2 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">Free</button>
-                    <button id="quickTop"
-                        class="px-3 py-2 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">Top
-                        rated</button>
-                    <button id="quickNew"
-                        class="px-3 py-2 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">New</button>
+            <div class="mt-5">
+                <!-- All filters in one row -->
+                <div id="inlineFilters" class="flex flex-col md:flex-row gap-2 items-center flex-wrap">
+                    <div class="flex-1 md:flex-none md:w-64 relative">
+                        <span
+                            class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">search</span>
+                        <input id="q" placeholder="Search by title, keywords…"
+                            class="w-full rounded-xl pl-11 pr-4 py-3 text-sm ring-1 ring-black/10 dark:ring-white/15 bg-white/90 dark:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                    </div>
+
+                    <select id="collegeFilter"
+                        class="w-32 rounded-lg border px-3 py-2 text-sm bg-white/90 dark:bg-brand-900/40">
+                        <option value="">College</option>
+                    </select>
+
+                    <select id="degreeFilter" disabled
+                        class="w-32 rounded-lg border px-3 py-2 text-sm bg-white/90 dark:bg-brand-900/40">
+                        <option value="">Degree</option>
+                    </select>
+
+                    <select id="deptFilter" disabled
+                        class="w-32 rounded-lg border px-3 py-2 text-sm bg-white/90 dark:bg-brand-900/40">
+                        <option value="">Department</option>
+                    </select>
+
+                    <select id="batchFilter" disabled
+                        class="w-28 rounded-lg border px-3 py-2 text-sm bg-white/90 dark:bg-brand-900/40">
+                        <option value="">Batch</option>
+                    </select>
+
+                    <select id="semFilter" disabled
+                        class="w-24 rounded-lg border px-3 py-2 text-sm bg-white/90 dark:bg-brand-900/40">
+                        <option value="">Semester</option>
+                    </select>
+
+                    <input id="minPrice" type="number" min="0" placeholder="Min ₹"
+                        class="w-20 rounded-lg border px-2 py-2 text-sm bg-white/90 dark:bg-brand-900/40" />
+                    <input id="maxPrice" type="number" min="0" placeholder="Max ₹"
+                        class="w-20 rounded-lg border px-2 py-2 text-sm bg-white/90 dark:bg-brand-900/40" />
+
+                    <button id="applyFilters"
+                        class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_10px_30px_rgba(158,75,138,0.28)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.35)] transition min-w-[90px]">
+                        <span class="material-symbols-rounded text-base">filter_alt</span>Apply
+                    </button>
+
+                    <button id="clearAll"
+                        class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_10px_30px_rgba(158,75,138,0.28)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.35)] transition min-w-[90px]"><span
+                            class="material-symbols-rounded text-base">clear</span>Clear</button>
+
                     <a href="./upload_note.html"
-                        class="inline-flex items-center gap-1.5 rounded-full bg-brand-500 text-white text-sm font-medium px-5 py-2.5 shadow hover:shadow-glow transition"><span
-                            class="material-symbols-rounded text-base">upload</span> Upload</a>
+                        class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_10px_30px_rgba(158,75,138,0.28)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.35)] transition min-w-[90px] md:ml-auto"><span
+                            class="material-symbols-rounded text-base">upload</span>Upload</a>
                 </div>
             </div>
         </div>
     </section>
 
     <main class="container py-8 space-y-6">
+        <!-- filters moved inline beside search -->
+
         <!-- Controls row: view + sort -->
         <div class="flex items-center justify-between gap-3 flex-wrap">
             <div class="hidden md:flex items-center gap-2" role="tablist" aria-label="Scopes">
@@ -247,69 +319,9 @@
             </div>
         </div>
 
-        <section class="flex flex-col md:flex-row gap-6 items-start">
-            <!-- SIDEBAR FILTERS -->
-            <aside
-                class="w-full md:w-72 glass rounded-2xl shadow-card ring-1 ring-black/5 dark:ring-white/10 p-5 space-y-5"
-                aria-label="Filters" id="sidebarFilters">
-                <div class="flex items-center justify-between">
-                    <h2 class="font-semibold text-xs tracking-[0.18em] uppercase text-neutral-600 dark:text-white/50">
-                        Filters</h2>
-                    <button id="clearAll" class="text-xs text-brand-700 dark:text-fuchsia-200 hover:underline">Clear
-                        all</button>
-                </div>
-
-                <div class="space-y-2">
-                    <input id="subjectFilter" placeholder="Subject"
-                        class="w-full rounded-lg border px-3 py-2 text-sm bg-white/80 dark:bg-white/10" />
-                    <input id="examFilter" placeholder="Exam Type"
-                        class="w-full rounded-lg border px-3 py-2 text-sm bg-white/80 dark:bg-white/10" />
-                </div>
-
-                <hr class="border-black/5 dark:border-white/10" />
-
-                <p class="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/40">
-                    Academic</p>
-                <select id="collegeFilter"
-                    class="w-full rounded-lg border px-3 py-2 text-sm bg-white/80 dark:bg-white/10">
-                    <option value="">College</option>
-                </select>
-                <select id="degreeFilter" disabled
-                    class="w-full rounded-lg border px-3 py-2 text-sm bg-white/80 dark:bg-white/10">
-                    <option value="">Degree</option>
-                </select>
-                <select id="deptFilter" disabled
-                    class="w-full rounded-lg border px-3 py-2 text-sm bg-white/80 dark:bg-white/10">
-                    <option value="">Department</option>
-                </select>
-                <select id="batchFilter" disabled
-                    class="w-full rounded-lg border px-3 py-2 text-sm bg-white/80 dark:bg-white/10">
-                    <option value="">Batch</option>
-                </select>
-                <select id="semFilter" disabled
-                    class="w-full rounded-lg border px-3 py-2 text-sm bg-white/80 dark:bg-white/10">
-                    <option value="">Semester</option>
-                </select>
-
-                <div class="space-y-2">
-                    <label
-                        class="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/40">Price</label>
-                    <div class="flex gap-3">
-                        <input id="minPrice" type="number" min="0" placeholder="Min ₹"
-                            class="w-1/2 rounded-lg border px-3 py-2 text-sm bg-white/80 dark:bg-white/10" />
-                        <input id="maxPrice" type="number" min="0" placeholder="Max ₹"
-                            class="w-1/2 rounded-lg border px-3 py-2 text-sm bg-white/80 dark:bg-white/10" />
-                    </div>
-                </div>
-
-                <button id="applyFilters"
-                    class="w-full inline-flex items-center justify-center gap-1.5 bg-brand-500 hover:bg-brand-500/90 text-white rounded-lg py-2.5 text-sm font-medium">
-                    <span class="material-symbols-rounded text-base">filter_alt</span>Apply
-                </button>
-            </aside>
-
+        <section class="space-y-6">
             <!-- RESULTS -->
-            <div class="flex-1 space-y-4">
+            <div class="space-y-4">
                 <div id="alertBar"
                     class="hidden text-xs rounded-lg p-3 ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/10">
                 </div>
@@ -502,10 +514,18 @@
         el('#sortBy').addEventListener('change', () => { state.sort = el('#sortBy').value; load(true); });
         els('.scope-btn').forEach(b => b.addEventListener('click', () => { state.scope = b.value; highlightScopes(); load(true); }));
 
-        // Quick chips
-        el('#quickFree').addEventListener('click', () => { state.scope = 'free'; highlightScopes(); load(true); });
-        el('#quickTop').addEventListener('click', () => { state.scope = 'top'; highlightScopes(); load(true); });
-        el('#quickNew').addEventListener('click', () => { state.scope = 'new'; highlightScopes(); load(true); });
+        // Quick chips (attach handlers only if the buttons exist)
+        ['quickFree', 'quickTop', 'quickNew'].forEach(id => {
+            const btn = el('#' + id);
+            if (!btn) return;
+            btn.addEventListener('click', () => {
+                if (id === 'quickFree') state.scope = 'free';
+                if (id === 'quickTop') state.scope = 'top';
+                if (id === 'quickNew') state.scope = 'new';
+                highlightScopes();
+                load(true);
+            });
+        });
 
         function highlightScopes() {
             els('.scope-btn').forEach(b => {
@@ -628,8 +648,6 @@
         function buildParams() {
             const params = { page: state.page, page_size: state.page_size, sort: state.sort };
             const qv = el('#q').value.trim(); if (qv) params.q = qv;
-            const sv = el('#subjectFilter').value.trim(); if (sv) params.subject = sv;
-            const ev = el('#examFilter').value.trim(); if (ev) params.exam_type = ev;
             const min = el('#minPrice').value; if (min) params.min_price = min;
             const max = el('#maxPrice').value; if (max) params.max_price = max;
             const col = el('#collegeFilter').value; if (col) params.college_id = col;
@@ -651,16 +669,17 @@
 
         // Apply/Clear
         el('#applyFilters').addEventListener('click', () => load(true));
-        el('#clearAll').addEventListener('click', () => { els('input, select', el('#sidebarFilters')).forEach(x => { if (x.tagName === 'SELECT') x.selectedIndex = 0; else x.value = ''; }); els('.chip').forEach(c => c.classList.remove('active')); state.scope = 'all'; highlightScopes(); load(true); });
+        el('#clearAll').addEventListener('click', () => { els('input, select', el('#inlineFilters') || document).forEach(x => { if (x.tagName === 'SELECT') x.selectedIndex = 0; else x.value = ''; }); els('.chip').forEach(c => c.classList.remove('active')); state.scope = 'all'; highlightScopes(); load(true); });
 
         // Chips toggle
         document.addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; c.classList.toggle('active'); });
 
         // Mobile drawer
         const drawer = el('#filterDrawer');
-        const sidebar = el('#sidebarFilters');
+        const sidebar = el('#inlineFilters') || el('#sidebarFilters');
         el('#openFilters').addEventListener('click', () => { // clone filters into drawer
-            const host = el('#drawerFilters'); host.innerHTML = ''; host.appendChild(sidebar.cloneNode(true));
+            const host = el('#drawerFilters'); host.innerHTML = '';
+            if (sidebar) host.appendChild(sidebar.cloneNode(true));
             drawer.classList.remove('hidden');
         });
         el('#closeFilters').addEventListener('click', () => drawer.classList.add('hidden'));

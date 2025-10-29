@@ -2445,7 +2445,7 @@ def _naive_extract_improved(text: str) -> dict:
         cleaned = re.sub(r"^([\-*â€¢Â·ï¿½?ï¿½]+|\d+[.)])\s*", "", text_line).strip()
         if not cleaned or skip_topic_pat.search(cleaned):
             return []
-        parts = re.split(r"\s*,\s*|\s+[â€“â€”-]\s+", cleaned)
+        parts = re.split(r"\s*,\s*|\s+[–—-]\s+|-(?=[A-Z(])", cleaned)
         out: List[str] = []
         for p in parts:
             t = p.strip().strip(".;, ")
@@ -2501,7 +2501,7 @@ def _naive_extract_improved(text: str) -> dict:
             continue
 
         # Uppercase heading with colon indicates a new unit (e.g., BASIC PROBABILITY: ...)
-        mhead = re.match(r"^([A-Z][A-Z0-9 \-/&().]+?):\s*(.*)$", ln)
+        mhead = re.match(r"^([A-Z][A-Z0-9 ,\-/&().+]+?):\s*(.*)$", ln)
         if mhead and not skip_topic_pat.search(ln):
             title_main = (mhead.group(1) or "").strip().strip("-:; .")
             title_rest = (mhead.group(2) or "").strip()
@@ -2512,6 +2512,15 @@ def _naive_extract_improved(text: str) -> dict:
                 if title_rest:
                     for tp in split_topics(title_rest):
                         current_unit["topics"].append({"topic": tp})
+                continue
+        # Uppercase heading with no colon also indicates a unit (e.g., "STACK,QUEUE AND LINKED LISTS")
+        mhead_nc = re.match(r"^([A-Z][A-Z0-9 ,\-/&().+]+)$", ln)
+        if mhead_nc and not skip_topic_pat.search(ln):
+            title_main = (mhead_nc.group(1) or "").strip().strip("-:; .")
+            if title_main and len(title_main) >= 4:
+                current_unit = {"unit_title": title_main, "topics": []}
+                units.append(current_unit)
+                seen_first_unit = True
                 continue
         if not current_unit:
             # Should not happen now as we skip lines until the first unit header
