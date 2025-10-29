@@ -2392,6 +2392,101 @@ def _clean_lines(text: str) -> List[str]:
     return [ln for ln in lines if ln]
 
 
+def _naive_extract_improved(text: str) -> dict:
+    """Heuristic syllabus parser that:
+    - Detects unit headers like "UNIT I – Title:" and extracts unit title cleanly
+    - Splits topics by commas and spaced dashes (" - ", " – ", " — ")
+    - Skips non-topic sections (TOTAL PERIODS, Text Books, Reference Books, Content Beyond Syllabus)
+    - Attempts to guess course_code and title from a header line (e.g., "AI PE703 DEEP REINFORCEMENT LEARNING 3 - -")
+    """
+    lines = _clean_lines(text)
+    units: List[dict] = []
+    current_unit: Optional[dict] = None
+    seen_first_unit = False
+    end_reached = False
+
+    unit_pat = re.compile(r"^(?:unit|module|chapter)\b[\s.:\-]*([ivx]+|\d+)?", re.IGNORECASE)
+
+    skip_topic_pat = re.compile(
+        r"^(TOTAL\s+PERIODS|TEXT\s*BOOKS|REFERENCE\s*BOOKS|CONTENT\s+BEYOND\s+SYLLABUS|SUBJECT\s+CODE|SUBJECT\s+NAME|LECTURES|TUTORIALS|PRACTICALS?)\b",
+        re.IGNORECASE,
+    )
+    skip_intro_head_pat = re.compile(
+        r"^(COURSE\s+PRE[- ]?REQUISITE|COURSE\s+OBJECTIVES|COURSE\s+OUTCOMES)\b",
+        re.IGNORECASE,
+    )
+
+    course_code: Optional[str] = None
+    course_title: Optional[str] = None
+    code_line_pat = re.compile(r"\b([A-Z]{2,4}\s*[A-Z]{0,3}\d{2,4}[A-Z]?)\b[\s,:-]+(.+)$")
+
+    def split_topics(text_line: str) -> List[str]:
+        cleaned = re.sub(r"^([\-*•·�?�]+|\d+[.)])\s*", "", text_line).strip()
+        if not cleaned or skip_topic_pat.search(cleaned):
+            return []
+        parts = re.split(r"\s*,\s*|\s+[–—-]\s+", cleaned)
+        out: List[str] = []
+        for p in parts:
+            t = p.strip().strip(".;, ")
+            if t and not skip_topic_pat.search(t):
+                out.append(t)
+        return out
+
+    for ln in lines:
+        if end_reached:
+            break
+        if course_code is None:
+            mcode = code_line_pat.search(ln)
+            if mcode:
+                course_code = mcode.group(1).strip()
+                tail = mcode.group(2)
+                tail = re.sub(r"\b\d+\s*[–—-]\s*[–—-].*$", "", tail).strip()
+                if tail:
+                    course_title = tail.strip("-–—:; .") or None
+
+        # Stop parsing after end-of-syllabus markers appear
+        if re.match(r"^(TOTAL\s+PERIODS|TEXT\s*BOOKS|REFERENCE\s*BOOKS|CONTENT\s+BEYOND\s+SYLLABUS)\b", ln, flags=re.IGNORECASE):
+            end_reached = True
+            break
+
+        # Before first unit header, ignore all lines from intro sections
+        if not seen_first_unit:
+            if skip_intro_head_pat.match(ln):
+                # skip heading
+                continue
+            # Also skip bullet lines in intro (most have bullets like • or start with uppercase sentences)
+            if unit_pat.match(ln):
+                # fall through to create the first unit
+                pass
+            else:
+                # Ignore until first real unit header
+                continue
+
+        um = unit_pat.match(ln)
+        if um:
+            after = re.sub(r"^(?:unit|module|chapter)\b[\s.:\-]*([ivx]+|\d+)?\s*", "", ln, flags=re.IGNORECASE)
+            parts = re.split(r"[:–—-]", after, maxsplit=1)
+            title_part = (parts[1] if len(parts) > 1 else parts[0]).strip()
+            title_main, title_rest = (title_part.split(":", 1) + [""])[:2]
+            title_main = title_main.strip().strip("-–—:; ") or "Unit"
+
+            current_unit = {"unit_title": title_main, "topics": []}
+            units.append(current_unit)
+            seen_first_unit = True
+            if title_rest:
+                for tp in split_topics(title_rest):
+                    current_unit["topics"].append({"topic": tp})
+            continue
+
+        if not current_unit:
+            # Should not happen now as we skip lines until the first unit header
+            continue
+
+        for tp in split_topics(ln):
+            current_unit["topics"].append({"topic": tp})
+
+    return {"course_code": course_code, "title": course_title, "units": units}
+
 def _naive_extract(text: str) -> dict:
     lines = _clean_lines(text)
     units: List[dict] = []
@@ -2525,7 +2620,7 @@ def parse_syllabus(payload: ParseSyllabusIn) -> ParsedSyllabusOut:
 
     parsed = _gemini_parse(text, hints)
     if not parsed:
-        parsed = _naive_extract(text)
+        parsed = _naive_extract_improved(text)
 
     norm = _normalize_parsed_struct(parsed, hints)
     if not norm.units:
@@ -5292,16 +5387,16 @@ async def upload_syllabus_pdf(
     except Exception:
         timeout_s = 18.0
     if use_naive_only:
-        parsed = _naive_extract(raw_text)
+        parsed = _naive_extract_improved(raw_text)
     else:
         parsed = await _gemini_parse_with_timeout(raw_text, hints, timeout_s=timeout_s)
         if not parsed:
-            parsed = _naive_extract(raw_text)
+            parsed = _naive_extract_improved(raw_text)
 
     norm = _normalize_parsed_struct(parsed or {}, hints)
     filtered_units = _filter_lab_units(norm.units)
     if not filtered_units:
-        fallback = _naive_extract(raw_text)
+        fallback = _naive_extract_improved(raw_text)
         fallback_norm = _normalize_parsed_struct(fallback or {}, hints)
         filtered_units = _filter_lab_units(fallback_norm.units) or fallback_norm.units
         if filtered_units:
