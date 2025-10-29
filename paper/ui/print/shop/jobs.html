@@ -13,22 +13,350 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
     rel="stylesheet">
   <link rel="stylesheet" href="../../assets/css/tailwind.css" />
+  <script>
+    /* Adopt same Tailwind theme tokens as root login for consistent dark visuals */
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        container: { center: true, padding: '1rem' },
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+          colors: {
+            brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+            brandlt: {
+              50: '#FAF5FB',
+              100: '#F3E7F2',
+              200: '#E7D0E4',
+              300: '#D9B4D3',
+              400: '#C88DBA',
+              500: '#9E4B8A',
+              700: '#4C2A59',
+              900: '#1E1E2F'
+            },
+            ink: '#1E1E2F',
+            plum: '#4C2A59',
+            orchid: '#9E4B8A'
+          },
+          boxShadow: {
+            glow: '0 8px 30px rgba(158,75,138,0.35)',
+            soft: '0 10px 30px rgba(0,0,0,0.25)',
+            card: '0 24px 60px rgba(30,30,47,0.35)'
+          },
+          backgroundImage: {
+            'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+            'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+          }
+        }
+      }
+    }
+  </script>
   <script src="../../config.js"></script>
   <script src="../../auth.js" defer></script>
   <script>
-    // Simple auth guard: require user session (px_token); otherwise redirect to login
-    (function () {
-      try {
-        var token = localStorage.getItem('px_token');
-        if (!token) {
-          var next = encodeURIComponent(location.pathname + (location.search || ''));
-          location.replace('login.html?next=' + next);
+      // Simple auth guard: require user session (px_token); otherwise redirect to login
+      (function () {
+        try {
+          var token = localStorage.getItem('px_token');
+          if (!token) {
+            var next = encodeURIComponent(location.pathname + (location.search || ''));
+            location.replace('login.html?next=' + next);
+          }
+        } catch (_) {
+          location.replace('login.html');
         }
-      } catch (_) {
-        location.replace('login.html');
-      }
-    })();
+      })();
   </script>
+  <style>
+    /* Glass / elevated surfaces */
+    .glass {
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: #1e1e2f
+    }
+
+    .dark .glass {
+      background: rgba(30, 30, 47, 0.72);
+      color: rgba(255, 255, 255, 0.92)
+    }
+
+    .glass .btn {
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+    }
+
+    .shadow-elev-2 {
+      box-shadow: 0 10px 30px rgba(30, 30, 47, 0.12);
+    }
+
+    /* Gradient text for hero/title */
+    .gradient-hero-text {
+      display: inline-block;
+      background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A);
+      background-size: 200% 200%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: gradient-shift 4s ease-in-out infinite;
+    }
+
+    @keyframes gradient-shift {
+      0% {
+        background-position: 0% 50%
+      }
+
+      50% {
+        background-position: 100% 50%
+      }
+
+      100% {
+        background-position: 0% 50%
+      }
+    }
+
+    /* Status pill / count styling */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+      border: 1px solid transparent;
+      padding: 0 8px;
+    }
+
+    .status-pill .material-symbols-rounded {
+      vertical-align: -3px;
+    }
+
+    .count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      border-radius: 9999px;
+      font-size: 11px;
+      margin-left: 6px;
+      opacity: 0.95;
+      background: rgba(0, 0, 0, 0.06);
+      color: inherit;
+    }
+
+    .dark .count-badge {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    /* Per-status visual tokens (defaults; JS will apply classes dynamically) */
+    .pill-all {
+      background: linear-gradient(90deg, #9E4B8A, #B06AB3);
+      color: #fff;
+    }
+
+    .pill-submitted {
+      background: rgba(59, 130, 246, 0.08);
+      color: #13366b;
+    }
+
+    .dark .pill-submitted {
+      background: rgba(59, 130, 246, 0.12);
+      color: #bfdbfe;
+    }
+
+    .pill-accepted {
+      background: rgba(250, 204, 21, 0.07);
+      color: #704300;
+    }
+
+    .dark .pill-accepted {
+      background: rgba(250, 204, 21, 0.12);
+      color: #fef3c7;
+    }
+
+    .pill-printing {
+      background: rgba(99, 102, 241, 0.07);
+      color: #2a255f;
+    }
+
+    /* Force New Job button to use same gradient in both themes (remove dark-only highlight) */
+    .hero-newjob {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-radius: 9999px;
+      color: #fff;
+      background-image: linear-gradient(90deg, #9E4B8A, #B06AB3, #FF7FD1);
+      padding: 0.5rem 1rem;
+      box-shadow: 0 8px 24px rgba(158, 75, 138, 0.18);
+      text-decoration: none;
+    }
+
+    .hero-newjob:hover {
+      filter: brightness(1.03);
+    }
+
+    .dark .hero-newjob {
+      background-image: linear-gradient(90deg, #9E4B8A, #B06AB3, #FF7FD1);
+      color: #fff;
+    }
+
+    .dark .pill-printing {
+      background: rgba(99, 102, 241, 0.12);
+      color: #dbeafe;
+    }
+
+    .pill-ready {
+      background: rgba(16, 185, 129, 0.07);
+      color: #064e3b;
+    }
+
+    .dark .pill-ready {
+      background: rgba(16, 185, 129, 0.12);
+      color: #bbf7d0;
+    }
+
+    .pill-completed {
+      background: rgba(16, 185, 129, 0.9);
+      color: #fff;
+    }
+
+    .dark .pill-completed {
+      background: rgba(16, 185, 129, 0.95);
+      color: #fff;
+    }
+
+    .pill-cancelled {
+      background: #dc2626;
+      color: #fff;
+    }
+
+    .dark .pill-cancelled {
+      background: #dc2626;
+      color: #fff;
+    }
+
+    /* Slightly darker visual for 7d/all range buttons to help them stand out */
+    button[data-range="7d"],
+    button[data-range="all"] {
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+    }
+
+    .dark button[data-range="7d"],
+    .dark button[data-range="all"] {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    }
+
+    /* Reuse signup theme helpers */
+    .ring-soft {
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06);
+    }
+
+    .dark .ring-soft {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+    }
+
+    .shadow-neon {
+      box-shadow: 0 8px 32px rgba(158, 75, 138, .12);
+    }
+
+    .kpi {
+      min-width: 90px;
+      padding: 8px 12px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .kpi .num {
+      font-weight: 700;
+    }
+
+    /* subtle darker card background for completed/verified orders */
+    .card-dark {
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    .dark .card-dark {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* --- sync with login.html dark theme --- */
+    .dark .gradient-hero-text {
+      background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+    }
+
+    .dark body {
+      background-image: linear-gradient(to left top,
+          #1e1e2f,
+          #242138,
+          #2b2440,
+          #332649,
+          #3d2850,
+          #3f254a,
+          #402244,
+          #401f3e,
+          #34182d,
+          #26131e,
+          #190b11,
+          #000000);
+      background-repeat: no-repeat;
+      background-size: cover;
+    }
+
+    /* glass-card and inline-chip from login for consistent look */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(158, 75, 138, 0.18);
+    }
+
+    .dark .glass-card {
+      background: rgba(30, 30, 47, 0.72);
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+    }
+
+    .inline-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-radius: 9999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.75rem;
+      line-height: 1rem;
+      border: 1px solid rgba(252, 231, 243, 0.8);
+      background: rgba(255, 255, 255, 0.7);
+      color: #4C2A59;
+      box-shadow: 0 8px 18px rgba(158, 75, 138, 0.15);
+    }
+
+    .dark .inline-chip {
+      border-color: rgba(255, 255, 255, 0.08);
+      background: rgba(58, 43, 76, 0.65);
+      color: rgba(255, 255, 255, 0.8);
+      box-shadow: none;
+    }
+
+    html:not(.dark) h1:not(.gradient-hero-text),
+    html:not(.dark) h2:not(.gradient-hero-text),
+    html:not(.dark) h3:not(.gradient-hero-text),
+    html:not(.dark) h4:not(.gradient-hero-text),
+    html:not(.dark) h5:not(.gradient-hero-text),
+    html:not(.dark) h6:not(.gradient-hero-text) {
+      color: #1E1E2F;
+    }
+
+    /* Ensure hero overlay switches cleanly in dark mode to avoid white patching */
+    .hero-overlay {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.06));
+    }
+
+    .dark .hero-overlay {
+      background: linear-gradient(135deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.08));
+    }
+  </style>
 </head>
 
 <body
@@ -48,10 +376,10 @@
             class="material-symbols-rounded text-base">payments</span> Payments</a>
         <a href="./profile.html" class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"><span
             class="material-symbols-rounded text-base">storefront</span> Shop Profile</a>
-        <button id="themeToggle"
+        <button data-theme-toggle
           class="inline-flex items-center gap-2 rounded-full px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
           aria-label="Toggle theme">
-          <span id="themeIcon" class="material-symbols-rounded text-base">dark_mode</span>
+          <span class="material-symbols-rounded text-base">dark_mode</span>
           <span class="hidden sm:block">Theme</span>
         </button>
         <!-- Shop avatar (logo) linking to shop profile -->
@@ -69,24 +397,53 @@
     </div>
   </header>
 
-  <!-- Filters -->
-  <div class="container mt-4">
-    <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-3">
-      <div id="filters" class="flex flex-wrap items-center gap-2 text-[12px]"></div>
-    </div>
-  </div>
+  <!-- Filters (moved into main so hero appears above status filters) -->
 
   <main class="container py-6">
-    <!-- Header card -->
-    <section class="glass rounded-3xl ring-1 ring-black/5 dark:ring-white/10 p-5 mb-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
-          <span class="material-symbols-rounded">assignment</span>
-          <h1 class="text-lg font-bold">Jobs Board</h1>
+    <!-- Hero / header — modern, non-boxy presentation -->
+    <section class="mb-6">
+      <div class="relative rounded-3xl overflow-hidden p-6 md:p-8">
+        <div
+          class="absolute inset-0 -z-10 hero-overlay bg-gradient-to-tr from-white/40 via-transparent to-white/10 dark:from-black/20 dark:via-transparent dark:to-black/10">
         </div>
-        <div class="text-[12px] opacity-80">Track Submitted → Accepted → Printing → Ready → Completed</div>
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 class="text-3xl md:text-4xl font-extrabold gradient-hero-text">Jobs Board</h1>
+          </div>
+          <div class="flex items-center gap-3">
+            <div id="summaryTop" class="inline-flex items-center gap-2 px-3 py-2 rounded-full glass text-[13px]">Showing
+              latest jobs</div>
+            <div class="hidden sm:flex items-center gap-2">
+              <div
+                class="kpi ring-soft bg-white/95 dark:bg-brand-900/70 text-neutral-800 dark:text-white/90 shadow-neon">
+                <span class="text-[12px] opacity-70">Submitted</span>
+                <span id="k_submitted" class="num">0</span>
+              </div>
+              <div
+                class="kpi ring-soft bg-white/95 dark:bg-brand-900/70 text-neutral-800 dark:text-white/90 shadow-neon">
+                <span class="text-[12px] opacity-70">Printing</span>
+                <span id="k_printing" class="num">0</span>
+              </div>
+              <div
+                class="kpi ring-soft bg-white/95 dark:bg-brand-900/70 text-neutral-800 dark:text-white/90 shadow-neon">
+                <span class="text-[12px] opacity-70">Ready</span>
+                <span id="k_ready" class="num">0</span>
+              </div>
+            </div>
+            <div class="hidden sm:block">
+              <a href="#" class="hero-newjob">New Job</a>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
+
+    <!-- Status filters (moved here so hero appears above them) -->
+    <div class="mb-4">
+      <div class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-3">
+        <div id="filters" class="flex flex-wrap items-center gap-2 text-[12px]"></div>
+      </div>
+    </div>
 
     <!-- Date Filters moved below Jobs Board section -->
     <div id="dateFiltersWrap" class="mb-3 flex justify-end">
@@ -127,12 +484,29 @@
       if (!name) return 'SH';
       return name.split(/\s+/).filter(Boolean).map(p => p[0]?.toUpperCase()).slice(0, 2).join('') || 'SH';
     }
-    // Theme toggle hookup
+    // Theme toggle hookup (persists px_theme and updates all toggles)
     (function () {
-      function syncIcon() { try { document.getElementById('themeIcon').textContent = (document.documentElement.classList.contains('dark') ? 'light_mode' : 'dark_mode'); } catch (_) { } }
-      const btn = document.getElementById('themeToggle');
-      if (btn) btn.addEventListener('click', function () { if (window.Theme && typeof Theme.toggle === 'function') Theme.toggle(); else document.documentElement.classList.toggle('dark'); syncIcon(); });
-      syncIcon();
+      const root = document.documentElement;
+      const themeToggles = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+      const updateToggleIcons = () => themeToggles().forEach(btn => {
+        const icon = btn.querySelector('.material-symbols-rounded');
+        if (icon) icon.textContent = root.classList.contains('dark') ? 'light_mode' : 'dark_mode';
+      });
+      const setTheme = (mode) => {
+        if (mode === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
+        try { localStorage.setItem('px_theme', mode); } catch (e) { }
+        updateToggleIcons();
+      };
+      // Initialize
+      const stored = localStorage.getItem('px_theme');
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const isDark = stored ? stored === 'dark' : prefersDark;
+      setTheme(isDark ? 'dark' : 'light');
+      document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('[data-theme-toggle]');
+        if (!trigger) return;
+        setTheme(root.classList.contains('dark') ? 'light' : 'dark');
+      });
     })();
     function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
     function btn(label, handler, variant) { const b = document.createElement('button'); b.textContent = label; b.className = 'px-2 py-1 rounded-md text-[12px] ' + (variant || 'ring-1 ring-black/10 dark:ring-white/15'); b.addEventListener('click', handler); return b; }
@@ -168,7 +542,14 @@
       wrap.className = 'relative overflow-hidden rounded-2xl p-0.5 cursor-pointer transition hover:shadow-elev-2';
       wrap.style.background = 'linear-gradient(135deg, rgba(158,75,138,.45), rgba(76,42,89,.25))';
       const inner = document.createElement('div');
-      inner.className = 'rounded-2xl bg-white/85 dark:bg-brand-900/70 ring-1 ring-black/5 dark:ring-white/10 p-4 backdrop-blur';
+      // if completed/closed/settled/info or explicitly verified, give a slightly darker background for emphasis
+      const isDarkCard = (function (job) {
+        try {
+          const s = String((job && job.status) || '').toLowerCase();
+          return !!job.verified || s === 'completed' || s === 'closed' || s === 'settled' || s === 'info';
+        } catch (e) { return !!(job && job.verified); }
+      })(j);
+      inner.className = 'rounded-2xl ring-soft p-4 backdrop-blur shadow-neon ' + (isDarkCard ? 'card-dark' : 'bg-white/95 dark:bg-brand-900/75');
       inner.innerHTML = `
         <div class='flex items-start justify-between'>
           <div class='space-y-1'>
@@ -248,7 +629,12 @@
     }
 
     function card(j) {
-      const wrap = document.createElement('div'); wrap.className = 'rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4 space-y-2 cursor-pointer hover:shadow-lg transition';
+      const wrap = document.createElement('div'); wrap.className = 'rounded-2xl glass ring-soft dark:ring-white/10 p-4 space-y-2 cursor-pointer transition hover:shadow-neon';
+      // darken simple card background for completed/verified/closed/settled/info orders
+      try {
+        const s = String((j.status || '')).toLowerCase();
+        if (s === 'completed' || s === 'closed' || s === 'settled' || s === 'info' || !!j.verified) { wrap.classList.add('card-dark'); }
+      } catch (e) { }
       wrap.innerHTML = `
         <div class='flex items-start justify-between'>
           <div>
@@ -369,11 +755,22 @@
       const status = (window.__FILTER || '');
       const url = (window.API_BASE || '') + '/api/shop/jobs' + (status && status !== 'all' ? ('?status=' + encodeURIComponent(status)) : '');
       const r = await fetch(url, { headers: hdr }).catch(() => null);
-      let jobs = r && r.ok ? ((await r.json()).jobs || []) : [];
+      let allJobs = r && r.ok ? ((await r.json()).jobs || []) : [];
       // Client-side filters
       const dateRange = (window.__DATE_RANGE || 'today');
       const priceOnly = !!window.__PRICE_ONLY;
-      jobs = jobs.filter(j => inRange(j.created_at, dateRange) && (!priceOnly || (j.estimated_price != null)));
+      // compute counts from allJobs (unfiltered) for status chips
+      const counts = (allJobs || []).reduce((acc, j) => { const k = (j.status || 'unknown'); acc[k] = (acc[k] || 0) + 1; return acc; }, {});
+      counts['all'] = (allJobs || []).length;
+      updateStatusCounts(counts);
+      // Populate hero KPI chips (reflect global totals)
+      try {
+        const ks = { submitted: counts['submitted'] || 0, printing: counts['printing'] || 0, ready: counts['ready'] || 0 };
+        const elSub = document.getElementById('k_submitted'); if (elSub) elSub.textContent = String(ks.submitted);
+        const elPrint = document.getElementById('k_printing'); if (elPrint) elPrint.textContent = String(ks.printing);
+        const elReady = document.getElementById('k_ready'); if (elReady) elReady.textContent = String(ks.ready);
+      } catch (e) { }
+      let jobs = allJobs.filter(j => inRange(j.created_at, dateRange) && (!priceOnly || (j.estimated_price != null)));
       // Render
       const wrap = $('#list'); wrap.innerHTML = '';
       jobs.forEach(j => wrap.appendChild(cardRich(j)));
@@ -381,25 +778,73 @@
       const labeled = { today: 'Today', '7d': 'Last 7 days', '30d': 'Last 30 days', all: 'All time' };
       const dateLabel = labeled[dateRange] || 'All time';
       const extra = priceOnly ? ' • With price' : '';
-      $('#summary').textContent = jobs.length ? `${jobs.length} job${jobs.length > 1 ? 's' : ''} • ${dateLabel}${extra}` : `No jobs • ${dateLabel}${extra}`;
+      const summaryText = jobs.length ? `${jobs.length} job${jobs.length > 1 ? 's' : ''} • ${dateLabel}${extra}` : `No jobs • ${dateLabel}${extra}`;
+      $('#summary').textContent = summaryText;
+      const top = document.getElementById('summaryTop'); if (top) top.textContent = summaryText;
     }
 
     function setupFilters() {
-      // Top status filters
+      // Top status filters — render as pill group with count badges
       const c = $('#filters'); if (c) { c.innerHTML = ''; }
       const statuses = ['all', 'submitted', 'accepted', 'printing', 'ready', 'completed', 'cancelled'];
-      const row1 = document.createElement('div'); row1.className = 'flex flex-wrap items-center gap-2';
-      row1.appendChild(document.createTextNode('Status:'));
-      statuses.forEach(s => row1.appendChild(pill(s[0].toUpperCase() + s.slice(1), (window.__FILTER || 'all') === s, () => { window.__FILTER = s; setupFilters(); load(); })));
+      const row1 = document.createElement('div'); row1.className = 'flex flex-wrap items-center gap-3';
+      const label = document.createElement('div'); label.textContent = 'Status:'; label.className = 'text-[12px] opacity-80'; row1.appendChild(label);
+      const statusContainer = document.createElement('div'); statusContainer.className = 'flex flex-wrap items-center gap-2';
+      statuses.forEach(s => {
+        const b = document.createElement('button');
+        b.setAttribute('data-status', s);
+        b.setAttribute('type', 'button');
+        b.setAttribute('role', 'button');
+        b.tabIndex = 0;
+        b.disabled = false;
+        const active = (window.__FILTER || 'all') === s;
+        // base pill classes
+        let base = 'status-pill px-3 py-1.5 rounded-full flex items-center gap-2 text-[13px]';
+        // apply per-status classes for visual uniqueness
+        const cls = 'pill-' + s;
+        if (s === 'all') {
+          // 'All' uses gradient when active, subtle when inactive
+          if (active) base += ' ' + cls + ''; else base += ' ring-1 ring-black/10 dark:ring-white/15 ' + cls;
+        } else if (s === 'cancelled') {
+          // cancelled should feel urgent (red)
+          if (active) base += ' pill-cancelled'; else base += ' ring-1 ring-red-300 text-red-600 dark:text-red-200';
+        } else if (s === 'completed') {
+          if (active) base += ' pill-completed'; else base += ' ring-1 ring-black/10 dark:ring-white/15 text-emerald-700 dark:text-emerald-300';
+        } else {
+          // use soft tokens for other statuses
+          base += ' ring-1 ring-black/10 dark:ring-white/15 ' + cls;
+        }
+        b.className = base;
+        b.style.pointerEvents = 'auto';
+        // include an icon for clarity
+        const tone = (typeof statusTone === 'function') ? statusTone(s) : null;
+        const icon = tone && tone.icon ? tone.icon : 'info';
+        b.innerHTML = `<span class="material-symbols-rounded text-[16px]">${icon}</span><span class="capitalize">${s}</span><span class="count-badge" aria-hidden="true"></span>`;
+        b.addEventListener('click', () => { window.__FILTER = s; setupFilters(); load(); });
+        b.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); b.click(); } });
+        statusContainer.appendChild(b);
+      });
+      row1.appendChild(statusContainer);
       if (c) c.appendChild(row1);
 
       // Date filters moved below Jobs Board section
       const d = $('#dateFilters'); if (d) { d.innerHTML = ''; }
       const row2 = document.createElement('div'); row2.className = 'flex flex-wrap items-center gap-2';
-      row2.appendChild(document.createTextNode('Date:'));
+      const lbl = document.createElement('div'); lbl.textContent = 'Date:'; lbl.className = 'text-[12px] opacity-80'; row2.appendChild(lbl);
       const ranges = [['today', 'Today'], ['7d', '7 days'], ['30d', '30 days'], ['all', 'All']];
       const current = (window.__DATE_RANGE || 'today');
-      ranges.forEach(([k, label]) => row2.appendChild(pill(label, current === k, () => { window.__DATE_RANGE = k; setupFilters(); load(); })));
+      ranges.forEach(([k, label]) => {
+        const btn = document.createElement('button');
+        btn.setAttribute('data-range', k);
+        const active = current === k;
+        btn.className = 'px-3 py-1.5 rounded-full ' + (active ? 'bg-brand-500 text-white' : 'ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10');
+        // add subtle darker tone for 7d and all when active
+        if (k === '7d' && active) btn.classList.add('dark:bg-neutral-700');
+        if (k === 'all' && active) btn.classList.add('dark:bg-neutral-800');
+        btn.textContent = label;
+        btn.addEventListener('click', () => { window.__DATE_RANGE = k; setupFilters(); load(); });
+        row2.appendChild(btn);
+      });
 
       // Price-only toggle stays alongside date controls
       const priceBtn = document.createElement('button');
@@ -408,6 +853,33 @@
       priceBtn.addEventListener('click', () => { window.__PRICE_ONLY = !window.__PRICE_ONLY; setupFilters(); load(); });
       row2.appendChild(priceBtn);
       if (d) d.appendChild(row2);
+    }
+
+    function updateStatusCounts(counts) {
+      try {
+        Array.from(document.querySelectorAll('[data-status]')).forEach(btn => {
+          const s = btn.getAttribute('data-status');
+          const cb = btn.querySelector('.count-badge');
+          const n = counts[s] || 0;
+          if (cb) {
+            // always show counts (even zero) for clarity
+            cb.textContent = String(n || 0);
+            // color/contrast adjustments depending on theme
+            const isDark = document.documentElement.classList.contains('dark');
+            if (isDark) {
+              cb.style.background = 'rgba(255,255,255,0.06)'; cb.style.color = '#e6eef8';
+            } else {
+              cb.style.background = 'rgba(0,0,0,0.06)'; cb.style.color = '#111827';
+            }
+            // subtle emphasis when non-zero
+            if (n) cb.style.fontWeight = '700'; else cb.style.fontWeight = '500';
+          }
+          // add small emphasis for cancelled when present
+          if (s === 'cancelled') {
+            if ((counts['cancelled'] || 0) > 0) btn.classList.add('pill-cancelled'); else btn.classList.remove('pill-cancelled');
+          }
+        });
+      } catch (e) { }
     }
 
     document.addEventListener('DOMContentLoaded', () => {

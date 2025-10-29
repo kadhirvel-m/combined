@@ -122,6 +122,14 @@
             transform: translateY(0);
             pointer-events: auto
         }
+
+        /* Ensure unit modal panel is scrollable and capped to viewport */
+        #unitModalPanel {
+            max-height: 90vh;
+            height: 90vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
     </style>
     <script>
         (() => {
@@ -240,7 +248,8 @@
         role="dialog" aria-modal="true" aria-labelledby="unitModalTitle">
         <div id="unitModalBackdrop" class="fixed inset-0 bg-brand-900/70 dark:bg-black/70 backdrop-blur-sm"></div>
         <div
-            class="relative w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)]">
+            id="unitModalPanel"
+            class="relative w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)] max-h-[90vh] h-[90vh] overflow-y-auto">
             <div class="flex items-start justify-between gap-4 border-b border-black/5 dark:border-white/10 px-6 py-5">
                 <div>
                     <h2 id="unitModalTitle" class="text-xl font-semibold text-neutral-900 dark:text-white">Add a new
@@ -412,16 +421,124 @@
             const id = Math.random().toString(36).slice(2, 9);
             const row = document.createElement('div');
             row.className = 'flex items-center gap-2';
-            row.innerHTML = `<input type="text" data-topic-input id="topic-${id}" placeholder="Topic title" value="${Collage.escapeHtml(value)}" class="flex-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40" maxlength="256" /> <button type="button" aria-label="Remove topic" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition"><span class="material-symbols-rounded text-base">close</span></button>`;
-            const removeBtn = row.querySelector('button');
+            row.setAttribute('data-topic-row', '');
+            row.setAttribute('draggable', 'true');
+            row.innerHTML = `
+                <button type="button" data-drag-handle aria-label="Drag to reorder"
+                    class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 cursor-grab active:cursor-grabbing transition">
+                    <span class="material-symbols-rounded text-base">drag_indicator</span>
+                </button>
+                <input type="text" data-topic-input id="topic-${id}" placeholder="Topic title" value="${Collage.escapeHtml(value)}" class="flex-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40" maxlength="256" />
+                <button type="button" aria-label="Remove topic" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition"><span class="material-symbols-rounded text-base">close</span></button>`;
+            const removeBtn = row.querySelector('button[aria-label="Remove topic"]');
             removeBtn.addEventListener('click', () => {
                 row.remove();
                 if (!topicsContainer.querySelector('[data-topic-input]')) addTopicRow();
             });
             topicsContainer.appendChild(row);
+            // Make the handle itself draggable to ensure dragstart fires
+            const handleBtn = row.querySelector('[data-drag-handle]');
+            if (handleBtn) handleBtn.setAttribute('draggable', 'true');
+            ensureDragDropEnabled();
         }
 
         addTopicRowButton.addEventListener('click', () => addTopicRow());
+
+        // Drag and drop reordering with auto-scroll inside modal
+        let dragEl = null;
+        let autoScrollRAF = null;
+        let scrollSpeed = 0; // pixels per frame
+
+        function ensureDragDropEnabled() {
+            if (!topicsContainer) return;
+            // Delegate events only once
+            if (topicsContainer.__dragBound) return;
+            topicsContainer.__dragBound = true;
+
+            topicsContainer.addEventListener('dragstart', (e) => {
+                const row = e.target.closest('[data-topic-row]');
+                const handle = e.target.closest('[data-drag-handle]');
+                if (!row || !handle) { e.preventDefault(); return; }
+                dragEl = row;
+                dragEl.classList.add('opacity-50');
+                try { e.dataTransfer.setData('text/plain', ''); } catch (_) { }
+                e.dataTransfer.effectAllowed = 'move';
+                if (typeof e.dataTransfer.setDragImage === 'function') {
+                    const img = document.createElement('div');
+                    img.style.width = '1px';
+                    img.style.height = '1px';
+                    img.style.opacity = '0';
+                    document.body.appendChild(img);
+                    e.dataTransfer.setDragImage(img, 0, 0);
+                    setTimeout(() => img.remove(), 0);
+                }
+                startAutoScroll();
+            });
+
+            topicsContainer.addEventListener('dragover', (e) => {
+                if (!dragEl) return;
+                e.preventDefault();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                const after = getDragAfterElement(topicsContainer, e.clientY);
+                if (after == null) topicsContainer.appendChild(dragEl);
+                else topicsContainer.insertBefore(dragEl, after);
+                updateAutoScroll(e.clientY);
+            });
+
+            topicsContainer.addEventListener('drop', (e) => { if (dragEl) e.preventDefault(); });
+
+            topicsContainer.addEventListener('dragend', () => {
+                if (dragEl) dragEl.classList.remove('opacity-50');
+                dragEl = null;
+                stopAutoScroll();
+            });
+        }
+
+        function getDragAfterElement(container, y) {
+            const els = [...container.querySelectorAll('[data-topic-row]:not(.opacity-50)')];
+            let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
+            for (const child of els) {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) closest = { offset, element: child };
+            }
+            return closest.element;
+        }
+
+        function startAutoScroll() {
+            if (autoScrollRAF) cancelAnimationFrame(autoScrollRAF);
+            const scroller = document.getElementById('unitModalPanel') || topicsContainer;
+            const step = () => {
+                if (scrollSpeed !== 0) {
+                    scroller.scrollTop += scrollSpeed;
+                }
+                autoScrollRAF = requestAnimationFrame(step);
+            };
+            autoScrollRAF = requestAnimationFrame(step);
+        }
+
+        function stopAutoScroll() {
+            if (autoScrollRAF) cancelAnimationFrame(autoScrollRAF);
+            autoScrollRAF = null;
+            scrollSpeed = 0;
+        }
+
+        function updateAutoScroll(clientY) {
+            const scroller = document.getElementById('unitModalPanel') || topicsContainer;
+            const rect = scroller.getBoundingClientRect();
+            const threshold = 48; // px from edge to start autoscroll
+            const maxSpeed = 12; // px per frame for smoothness
+
+            if (clientY < rect.top + threshold) {
+                const ratio = (rect.top + threshold - clientY) / threshold; // 0..1
+                scrollSpeed = -Math.ceil(maxSpeed * ratio);
+            } else if (clientY > rect.bottom - threshold) {
+                const ratio = (clientY - (rect.bottom - threshold)) / threshold; // 0..1
+                scrollSpeed = Math.ceil(maxSpeed * ratio);
+            } else {
+                scrollSpeed = 0;
+            }
+        }
 
         async function handleUnitSubmit(e) {
             e.preventDefault();
