@@ -17,28 +17,32 @@
   <!-- Tailwind -->
   <link rel="stylesheet" href="../../assets/css/tailwind.css" />
   <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        container: { center: true, padding: '1rem' },
-        extend: {
-          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
-          colors: {
-            brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
-            brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
-          },
-          backgroundImage: {
-            'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
-            'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
-          },
-          boxShadow: { card: '0 6px 24px rgba(0,0,0,.12)', glow: '0 8px 30px rgba(158,75,138,0.35)' },
-          keyframes: {
-            shimmer: { '0%': { backgroundPosition: '-1000px 0' }, '100%': { backgroundPosition: '1000px 0' } }
-          },
-          animation: { shimmer: 'shimmer 1.6s infinite linear' }
-        }
+    try {
+      if (window.tailwind) {
+        tailwind.config = {
+          darkMode: 'class',
+          theme: {
+            container: { center: true, padding: '1rem' },
+            extend: {
+              fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+              colors: {
+                brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
+              },
+              backgroundImage: {
+                'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+                'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+              },
+              boxShadow: { card: '0 6px 24px rgba(0,0,0,.12)', glow: '0 8px 30px rgba(158,75,138,0.35)' },
+              keyframes: {
+                shimmer: { '0%': { backgroundPosition: '-1000px 0' }, '100%': { backgroundPosition: '1000px 0' } }
+              },
+              animation: { shimmer: 'shimmer 1.6s infinite linear' }
+            }
+          }
+        };
       }
-    };
+    } catch (_) { }
   </script>
 
   <style>
@@ -437,6 +441,7 @@
       // Convert price rupees ➝ cents
       const priceRupees = parseInt(fd.get('price_cents') || '0', 10); fd.set('price_cents', String((priceRupees || 0) * 100));
 
+      // Send file directly to backend; backend uses service role to upload to Supabase
       const token = getToken();
       const url = `${apiBase}/api/marketplace/notes` + (token ? `?token=${encodeURIComponent(token)}` : '');
       const xhr = new XMLHttpRequest();
@@ -444,8 +449,14 @@
       if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) { const pct = Math.round((e.loaded / e.total) * 100); prog.style.width = pct + '%'; } };
       xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) { prog.style.width = '100%'; showToast('Note uploaded successfully!', 'success'); status.textContent = ''; setTimeout(() => { location.href = './notes_marketplace.html'; }, 1200); }
-        else { showToast('Upload failed', 'error'); status.textContent = (xhr.response && JSON.parse(xhr.response).detail) || 'Upload failed'; }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          prog.style.width = '100%'; showToast('Note uploaded successfully!', 'success'); status.textContent = '';
+          setTimeout(() => { location.href = './notes_marketplace.html'; }, 1200);
+        } else {
+          let msg = 'Upload failed';
+          try { const j = JSON.parse(xhr.responseText || '{}'); msg = j.detail || msg; } catch {}
+          showToast('Upload failed', 'error'); status.textContent = msg;
+        }
       };
       xhr.onerror = () => { showToast('Network error', 'error'); status.textContent = 'Network error'; };
       xhr.send(fd);
