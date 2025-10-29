@@ -31,11 +31,11 @@
     }
 
     .ring-soft {
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08)
+      box-shadow: inset 0 0 0 1px var(--px-border-soft)
     }
 
     .dark .ring-soft {
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
+      box-shadow: inset 0 0 0 1px var(--px-border-soft)
     }
 
     .surface {
@@ -57,14 +57,183 @@
       gap: .35rem;
       padding: .25rem .6rem;
       border-radius: 9999px;
-      background: rgba(255, 255, 255, .7);
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+      background: var(--px-surface-strong);
+      box-shadow: inset 0 0 0 1px var(--px-border-soft);
       font-size: 12px
     }
 
     .dark .chip {
-      background: rgba(255, 255, 255, .08);
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
+      background: var(--px-surface-strong);
+      box-shadow: inset 0 0 0 1px var(--px-border-soft)
+    }
+  </style>
+
+  <style>
+    /* Theme tokens & helpers copied from login.html for consistent look */
+    /* Theme-aware variables — used to keep panels and inputs matching the page background */
+    :root {
+      --px-surface: rgba(255, 255, 255, 0.82);
+      --px-surface-strong: rgba(255, 255, 255, 0.92);
+      --px-input-bg: rgba(255, 255, 255, 0.90);
+      --px-panel-border: rgba(158, 75, 138, 0.12);
+      --px-border-soft: rgba(0, 0, 0, 0.06);
+    }
+
+    .dark :root,
+    .dark {
+      --px-surface: rgba(30, 30, 47, 0.72);
+      --px-surface-strong: rgba(30, 30, 47, 0.66);
+      --px-input-bg: rgba(255, 255, 255, 0.04);
+      --px-panel-border: rgba(255, 255, 255, 0.08);
+      --px-border-soft: rgba(255, 255, 255, 0.12);
+    }
+
+    /* Apply variables to native controls so form fields match the theme */
+    input[type="text"],
+    input[type="number"],
+    input[type="time"],
+    input[type="email"],
+    input[type="file"],
+    textarea,
+    select {
+      background: var(--px-input-bg) !important;
+    }
+
+    .gradient-hero-text {
+      display: inline-block;
+      background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+      background-size: 200% 200%;
+      animation: gradient-shift 4s ease-in-out infinite;
+      color: transparent;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+    }
+
+    .dark .gradient-hero-text {
+      background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+    }
+
+    @keyframes gradient-shift {
+      0% {
+        background-position: 0% 50%;
+      }
+
+      50% {
+        background-position: 100% 50%;
+      }
+
+      100% {
+        background-position: 0% 50%;
+      }
+    }
+
+    .glass-card {
+      background: var(--px-surface);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--px-panel-border);
+      border-radius: 1rem;
+    }
+
+    .dark .glass-card {
+      background: var(--px-surface);
+      border-color: var(--px-panel-border);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+    }
+
+    .shadow-soft {
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    .inline-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-radius: 9999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.75rem;
+      line-height: 1rem;
+      border: 1px solid rgba(252, 231, 243, 0.8);
+      background: var(--px-surface-strong);
+      color: #4C2A59;
+      box-shadow: 0 8px 18px rgba(158, 75, 138, 0.12);
+    }
+
+    .dark .inline-chip {
+      border-color: rgba(255, 255, 255, 0.08);
+      background: rgba(58, 43, 76, 0.65);
+      color: rgba(255, 255, 255, 0.88);
+      box-shadow: none;
+    }
+
+    /* Button tokens (from login theme) */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: linear-gradient(90deg, #9E4B8A, #B06AB3, #FF7FD1);
+      color: #fff;
+      border-radius: 0.75rem;
+      padding: 0.5rem 1rem;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(158, 75, 138, 0.28);
+      transition: box-shadow .18s ease, transform .12s ease;
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 16px 36px rgba(158, 75, 138, 0.35);
+      transform: translateY(-2px);
+    }
+
+    .dark .btn-primary {
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-radius: 0.6rem;
+      padding: 0.375rem 0.85rem;
+      background: rgba(255, 255, 255, 0.92);
+      color: #4C2A59;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      transition: background .12s ease, border-color .12s ease, transform .12s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    .dark .btn-secondary {
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.9);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: inherit;
+      padding: 0.35rem 0.7rem;
+      border-radius: 0.5rem;
+    }
+  </style>
+
+  <style>
+    /* Page background (login-like): light and dark variants */
+    body {
+      background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+      background-repeat: no-repeat;
+      background-size: cover;
+    }
+
+    .dark body {
+      background-image: linear-gradient(to left top, #1e1e2f, #242138, #2b2440, #332649, #3d2850, #3f254a, #402244, #401f3e, #34182d, #26131e, #190b11, #000000);
+      background-repeat: no-repeat;
+      background-size: cover;
     }
   </style>
 
@@ -79,8 +248,16 @@
   </script>
 </head>
 
-<body
-  class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.18),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(76,42,89,.25),transparent)] dark:bg-[radial-gradient(1200px_600px_at_10%_-10%,rgba(158,75,138,.2),transparent),radial-gradient(900px_500px_at_110%_10%,rgba(30,30,47,.7),transparent)]">
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white transition-colors overflow-x-hidden">
+  <!-- Ambient gradients -->
+  <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
+    <div
+      class="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-brand-500/15 blur-[110px] dark:bg-brand-500/30">
+    </div>
+    <div
+      class="absolute top-[40%] -right-24 w-[380px] h-[380px] rounded-full bg-brand-700/15 blur-[120px] dark:bg-brand-700/35">
+    </div>
+  </div>
   <!-- App bar -->
   <header
     class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
@@ -106,86 +283,139 @@
 
   <main class="container py-6 space-y-6">
     <!-- Title -->
-    <section class="rounded-3xl surface surface-elev ring-1 ring-black/5 dark:ring-white/10 p-5">
-      <div class="flex flex-wrap items-center gap-3 justify-between">
+    <section class="">
+
+      <div class="flex flex-wrap items-center gap-3 justify-between mb-4">
         <div>
-          <h1 class="text-xl md:text-2xl font-extrabold tracking-tight">Shop Profile</h1>
+          <h1 class="text-2xl md:text-4xl font-extrabold tracking-tight"><span class="gradient-hero-text">Shop
+              Profile</span></h1>
           <p class="text-[13px] opacity-80">Manage your shop details, capabilities, hours, and availability.</p>
         </div>
-        <div class="flex items-center gap-2 text-[12px] opacity-80">
-          <span class="chip" id="chipShopId"></span>
-          <span class="chip" id="chipStatus"></span>
+        <div class="text-[12px] opacity-80 text-right">
+          <span id="chipShopId"></span>
+          <span id="chipStatus" class="ml-3"></span>
         </div>
+      </div>
+
+      <!-- Status, Hours, Actions — horizontal cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <section class="rounded-xl glass-card ring-1 ring-black/5 dark:ring-white/10 p-4">
+          <h2 class="font-semibold mb-3 text-sm"><span class="gradient-hero-text">Status</span></h2>
+          <div class="flex flex-col gap-2">
+            <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="is_open"> Open
+              now</label>
+            <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="paused"> Pause
+              orders</label>
+          </div>
+          <div class="mt-3 text-[11px] opacity-75">Toggle to control availability instantly.</div>
+        </section>
+
+        <section class="rounded-xl glass-card ring-1 ring-black/5 dark:ring-white/10 p-4">
+          <h2 class="font-semibold mb-3 text-sm"><span class="gradient-hero-text">Hours</span></h2>
+          <form id="formHours" class="grid gap-2 text-[13px]">
+            <label class="grid gap-1">Open time
+              <input id="open_time" type="time" class="px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+            </label>
+            <label class="grid gap-1">Close time
+              <input id="close_time" type="time" class="px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+            </label>
+          </form>
+        </section>
+
+        <section class="rounded-xl glass-card ring-1 ring-black/5 dark:ring-white/10 p-4">
+          <h2 class="font-semibold mb-3 text-sm"><span class="gradient-hero-text">Actions</span></h2>
+          <div class="grid gap-2">
+            <button id="saveAll" class="btn-primary inline-flex items-center gap-2 text-sm justify-center"><span
+                class="material-symbols-rounded text-base">save</span> Save changes</button>
+            <a href="./jobs.html" class="btn-secondary inline-flex items-center gap-2 text-sm justify-center"><span
+                class="material-symbols-rounded text-base">assignment</span> Go to Jobs</a>
+          </div>
+        </section>
       </div>
     </section>
 
     <!-- Profile content grid -->
-    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- Left column: Core info -->
-      <div class="lg:col-span-2 space-y-6">
-        <!-- Logo -->
-        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="font-semibold">Logo</h2>
-            <div class="text-[12px] opacity-75">PNG, JPG, WEBP, SVG · max 4MB</div>
+    <section class="grid grid-cols-1 lg:grid-cols-1 gap-6">
+      <!-- Main content area -->
+      <div class="space-y-6">
+        <!-- Consolidated Shop details card -->
+        <section class="rounded-xl glass-card ring-1 ring-black/5 dark:ring-white/10 p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold text-xl md:text-2xl"><span class="gradient-hero-text">Shop Details</span></h2>
+            <div class="text-[12px] opacity-75">Manage logo, contact and address</div>
           </div>
-          <div class="flex items-center gap-4 flex-wrap">
-            <img id="logoPreview" alt="Shop logo"
-              class="w-16 h-16 rounded-xl object-contain ring-1 ring-black/5 dark:ring-white/10 bg-white/60 dark:bg-white/5 hidden" />
-            <input id="logoFile" type="file" accept="image/*" class="text-[13px]" />
-            <button id="uploadLogo"
-              class="inline-flex items-center gap-2 rounded-xl px-4 py-2 ring-soft text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
-                class="material-symbols-rounded text-base">upload</span> Upload</button>
-          </div>
-          <div id="logoMsg" class="mt-2 text-[12px] opacity-80"></div>
-        </section>
 
-        <!-- Basic info -->
-        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
-          <h2 class="font-semibold mb-3">Basic Information</h2>
-          <form id="formBasics" class="grid sm:grid-cols-2 gap-3 text-[13px]">
-            <label class="grid gap-1">Shop name
-              <input id="name" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" required />
-            </label>
-            <label class="grid gap-1">Contact phone
-              <input id="phone" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
-            </label>
-            <label class="sm:col-span-2 grid gap-1">Email (login)
-              <input id="email" class="px-3 py-2 rounded-md ring-soft bg-white/70 dark:bg-white/5 opacity-75"
-                disabled />
-            </label>
-          </form>
-        </section>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
 
-        <!-- Address & location -->
-        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="font-semibold">Address & Location</h2>
-            <button id="useLoc"
-              class="inline-flex items-center gap-1 px-3 py-1.5 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/10 text-[13px]"><span
-                class="material-symbols-rounded text-base">my_location</span>Use my location</button>
-          </div>
-          <form id="formAddress" class="grid gap-3 text-[13px]">
-            <label class="grid gap-1">Full address
-              <textarea id="address" rows="3"
-                class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5"></textarea>
-            </label>
-            <div class="grid sm:grid-cols-2 gap-3">
-              <label class="grid gap-1">Latitude
-                <input id="lat" type="number" step="0.000001"
-                  class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
-              </label>
-              <label class="grid gap-1">Longitude
-                <input id="lng" type="number" step="0.000001"
-                  class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
-              </label>
+            <!-- Logo column -->
+
+            <!-- Forms column (spans two grid columns) -->
+            <div class="md:col-span-2 space-y-4">
+              <!-- Manage Logo section -->
+              <div>
+                <h3 class="font-semibold mb-3"><span class="gradient-hero-text">Manage Logo</span></h3>
+                <div class="flex items-start gap-4">
+                  <div
+                    class="w-24 h-24 rounded-xl overflow-hidden bg-white/60 dark:bg-white/5 flex items-center justify-center ring-1 ring-black/5 dark:ring-white/10">
+                    <img id="logoPreview" alt="Shop logo" class="w-full h-full object-contain hidden" />
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <input id="logoFile" type="file" accept="image/*" class="text-[13px]" />
+                    <button id="uploadLogo" class="btn-secondary inline-flex items-center gap-2 text-sm"><span
+                        class="material-symbols-rounded text-base">upload</span> Upload</button>
+                    <div id="logoMsg" class="text-[12px] opacity-80"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Basic Information section -->
+              <div>
+                <h3 class="font-semibold mb-2"><span class="gradient-hero-text">Basic Information</span></h3>
+                <form id="formBasics" class="grid sm:grid-cols-2 gap-3 text-[13px]">
+                  <!-- Shop name (top) then contact fields -->
+                  <label class="sm:col-span-2 grid gap-1">Shop name
+                    <input id="name" class="px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5" required />
+                  </label>
+                  <label class="grid gap-1">Contact phone
+                    <input id="phone" class="px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+                  </label>
+                  <label class="sm:col-span-2 grid gap-1">Email (login)
+                    <input id="email" class="px-3 py-1 rounded-md ring-soft bg-white/70 dark:bg-white/5 opacity-75"
+                      disabled />
+                  </label>
+                </form>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <h3 class="font-semibold"><span class="gradient-hero-text">Address & Location</span></h3>
+                  <button id="useLoc" class="btn-secondary inline-flex items-center gap-1 text-[13px]"><span
+                      class="material-symbols-rounded text-base">my_location</span>Use my location</button>
+                </div>
+                <form id="formAddress" class="grid gap-3 text-[13px]">
+                  <label class="grid gap-1">Full address
+                    <textarea id="address" rows="3"
+                      class="px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5"></textarea>
+                  </label>
+                  <div class="grid sm:grid-cols-2 gap-3">
+                    <label class="grid gap-1">Latitude
+                      <input id="lat" type="number" step="0.000001"
+                        class="px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+                    </label>
+                    <label class="grid gap-1">Longitude
+                      <input id="lng" type="number" step="0.000001"
+                        class="px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
+                    </label>
+                  </div>
+                </form>
+              </div>
             </div>
-          </form>
+          </div>
         </section>
 
         <!-- Capabilities -->
-        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
-          <h2 class="font-semibold mb-3">Capabilities</h2>
+        <section class="rounded-3xl glass-card ring-1 ring-black/5 dark:ring-white/10 p-5">
+          <h2 class="font-semibold mb-3"><span class="gradient-hero-text">Capabilities</span></h2>
           <form id="formCaps" class="grid gap-3 text-[13px]">
             <div class="grid sm:grid-cols-3 gap-3">
               <label class="inline-flex items-center gap-2"><input type="checkbox" id="cap_color"> Color
@@ -196,7 +426,7 @@
             <div class="grid sm:grid-cols-3 gap-3">
               <label>Supported sizes
                 <select id="cap_sizes" multiple
-                  class="mt-1 w-full px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5">
+                  class="mt-1 w-full px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5">
                   <option>A4</option>
                   <option>A3</option>
                   <option>Letter</option>
@@ -205,14 +435,14 @@
               </label>
               <label>Binding
                 <select id="cap_binding" multiple
-                  class="mt-1 w-full px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5">
+                  class="mt-1 w-full px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5">
                   <option>staple</option>
                   <option>spiral</option>
                   <option>tape</option>
                 </select>
               </label>
               <label>Price hint
-                <input id="price_hint" class="mt-1 w-full px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5"
+                <input id="price_hint" class="mt-1 w-full px-3 py-1 rounded-md ring-soft bg-white/90 dark:bg-white/5"
                   placeholder="Eg. A4 B/W from ₹1/page" />
               </label>
             </div>
@@ -220,10 +450,13 @@
         </section>
 
         <!-- Pricing -->
-        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
+        <section class="rounded-3xl glass-card ring-1 ring-black/5 dark:ring-white/10 p-5">
           <div class="flex items-center justify-between mb-3">
-            <h2 class="font-semibold">Pricing (per page tiers)</h2>
-            <div class="text-[12px] opacity-80">Leave min/upto blank for open-ended</div>
+            <h2 class="font-semibold"><span class="gradient-hero-text">Pricing (per page tiers)</span></h2>
+            <div class="flex items-center gap-3">
+              <div class="text-[12px] opacity-80">Leave min/upto blank for open-ended</div>
+              <button id="loadSampleTiers" class="btn-secondary text-[13px]">Load sample tiers</button>
+            </div>
           </div>
           <div id="pricingForms" class="grid gap-5 text-[13px]">
             <!-- Sections rendered by JS: bw_single, bw_duplex, color_single, color_duplex -->
@@ -231,43 +464,7 @@
         </section>
       </div>
 
-      <!-- Right column: Status & hours -->
-      <div class="space-y-6">
-        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
-          <h2 class="font-semibold mb-3">Status</h2>
-          <div class="flex items-center gap-3">
-            <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="is_open"> Open
-              now</label>
-            <label class="inline-flex items-center gap-2 text-[13px]"><input type="checkbox" id="paused"> Pause
-              orders</label>
-          </div>
-          <div class="mt-3 text-[12px] opacity-80">Toggle to control availability instantly.</div>
-        </section>
-
-        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
-          <h2 class="font-semibold mb-3">Hours</h2>
-          <form id="formHours" class="grid gap-3 text-[13px]">
-            <label class="grid gap-1">Open time
-              <input id="open_time" type="time" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
-            </label>
-            <label class="grid gap-1">Close time
-              <input id="close_time" type="time" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" />
-            </label>
-          </form>
-        </section>
-
-        <section class="rounded-3xl surface ring-1 ring-black/5 dark:ring-white/10 p-5">
-          <h2 class="font-semibold mb-3">Actions</h2>
-          <div class="grid gap-2">
-            <button id="saveAll"
-              class="inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-brand-500 text-white text-sm font-semibold hover:bg-brand-700"><span
-                class="material-symbols-rounded text-base">save</span> Save changes</button>
-            <a href="./jobs.html"
-              class="inline-flex items-center gap-2 rounded-xl px-4 py-2 ring-soft text-sm hover:bg-black/5 dark:hover:bg-white/10"><span
-                class="material-symbols-rounded text-base">assignment</span> Go to Jobs</a>
-          </div>
-        </section>
-      </div>
+      <!-- Right column: Status & hours - REMOVED (moved to top horizontal cards) -->
     </section>
   </main>
 
@@ -339,30 +536,51 @@
     const pricingEl = document.getElementById('pricingForms');
     const pricingState = { bw_single: [], bw_duplex: [], color_single: [], color_duplex: [] };
 
+    // Sample tiers (from user input) — used by "Load sample tiers" button
+    const sampleTiers = {
+      bw_single: [{ min: 1, upto: 5, per_page: 5 }, { min: 6, upto: 50, per_page: 3 }],
+      bw_duplex: [{ min: 1, upto: 5, per_page: 5 }, { min: 6, upto: 50, per_page: 2 }],
+      color_single: [{ min: 1, upto: 100, per_page: 8 }],
+      color_duplex: [{ min: 1, upto: 100, per_page: 7 }],
+    };
+
+    // Load sample tiers into the UI when requested
+    document.addEventListener('click', (e) => {
+      if (e.target && (e.target.id === 'loadSampleTiers' || e.target.closest('#loadSampleTiers'))) {
+        Object.keys(sampleTiers).forEach(k => { pricingState[k] = sampleTiers[k].slice(); });
+        pricingEl.innerHTML = '';
+        pricingKeys.forEach(({ key, label }) => renderPricingSection(key, label));
+        toast('Sample tiers loaded');
+      }
+    });
+
     function renderPricingSection(key, label) {
       const wrap = document.createElement('div');
       wrap.innerHTML = `
         <div class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4">
           <div class="font-semibold mb-2">${label}</div>
-          <div class="grid md:grid-cols-3 gap-3" data-key="${key}">
+          <div class="flex flex-wrap gap-3" data-key="${key}"></div>
+          <div class="mt-3">
+            <button type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/10" data-add="${key}"><span class="material-symbols-rounded text-base">add</span>Add tier</button>
           </div>
-          <button type="button" class="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/10" data-add="${key}"><span class="material-symbols-rounded text-base">add</span>Add tier</button>
         </div>`;
-      const grid = wrap.querySelector('div.grid');
+      const container = wrap.querySelector('[data-key]');
       const add = wrap.querySelector('[data-add]');
+
       function addRow(tier = {}) {
         const row = document.createElement('div');
-        row.className = 'grid grid-cols-3 gap-2';
+        // responsive box for a tier
+        row.className = 'tier-row flex items-center gap-2 px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5';
+        row.style.minWidth = '220px';
         row.innerHTML = `
-          <input type="number" placeholder="min" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" value="${tier.min ?? ''}">
-          <input type="number" placeholder="upto" class="px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" value="${tier.upto ?? ''}">
-          <div class="flex gap-2">
-            <input type="number" step="0.01" placeholder="per page (₹)" class="flex-1 px-3 py-2 rounded-md ring-soft bg-white/90 dark:bg-white/5" value="${tier.per_page ?? ''}">
-            <button type="button" class="px-2 rounded-md ring-soft hover:bg-black/5 dark:hover:bg-white/10" title="Remove"><span class="material-symbols-rounded text-base">delete</span></button>
-          </div>`;
+            <input type="number" placeholder="min" class="w-20 text-sm px-2 py-1 rounded-md" value="${tier.min ?? ''}">
+            <input type="number" placeholder="upto" class="w-20 text-sm px-2 py-1 rounded-md" value="${tier.upto ?? ''}">
+            <input type="number" step="0.01" placeholder="per page (₹)" class="w-28 text-sm px-2 py-1 rounded-md" value="${tier.per_page ?? ''}">
+            <button type="button" class="ml-2 px-2 rounded-md" title="Remove"><span class="material-symbols-rounded text-base">delete</span></button>`;
         row.querySelector('button').addEventListener('click', () => { row.remove(); });
-        grid.appendChild(row);
+        container.appendChild(row);
       }
+
       (pricingState[key] || []).forEach(addRow);
       add.addEventListener('click', () => addRow({}));
       pricingEl.appendChild(wrap);
@@ -425,26 +643,22 @@
       const collectPricing = () => {
         const out = {};
         pricingKeys.forEach(({ key }) => {
-          const sect = pricingEl.querySelector(`[data-key="${key}"]`);
-          if (!sect) { out[key] = []; return; }
-          const rows = Array.from(sect.querySelectorAll(':scope > div.grid'));
-        });
-        // rows are nested in previous create; instead capture inputs directly under data-key container
-        pricingKeys.forEach(({ key }) => {
           const container = pricingEl.querySelector(`[data-key="${key}"]`);
           if (!container) { out[key] = []; return; }
-          const rows = Array.from(container.querySelectorAll(':scope > div, :scope > .row')).length ? Array.from(container.children) : [];
-          const triplets = Array.from(container.children).filter(el => el.classList.contains('grid'));
-          const tiers = triplets.map(tr => {
-            const [minEl, uptoEl, priceElWrap] = tr.children;
-            const perEl = priceElWrap.querySelector('input[type="number"]');
-            const t = {
-              min: minEl.value ? Number(minEl.value) : undefined,
-              upto: uptoEl.value ? Number(uptoEl.value) : undefined,
-              per_page: perEl.value ? Number(perEl.value) : undefined,
+          const rows = Array.from(container.querySelectorAll('.tier-row'));
+          const tiers = rows.map(row => {
+            const inputs = row.querySelectorAll('input');
+            const minV = inputs[0] ? (inputs[0].value || '').toString().trim() : '';
+            const uptoV = inputs[1] ? (inputs[1].value || '').toString().trim() : '';
+            const perV = inputs[2] ? (inputs[2].value || '').toString().trim() : '';
+            const perNum = perV === '' ? undefined : Number(perV);
+            if (perNum === undefined || Number.isNaN(perNum)) return null; // skip invalid/empty price
+            return {
+              min: minV === '' ? undefined : Number(minV),
+              upto: uptoV === '' ? undefined : Number(uptoV),
+              per_page: perNum,
             };
-            return t;
-          }).filter(t => t.per_page !== undefined);
+          }).filter(t => t !== null);
           out[key] = tiers;
         });
         return out;

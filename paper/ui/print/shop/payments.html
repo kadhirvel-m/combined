@@ -15,8 +15,58 @@
     <!-- Tailwind build -->
     <link rel="stylesheet" href="../../assets/css/tailwind.css" />
     <style>
+        :root {
+            --px-accent: #9E4B8A;
+            --px-accent-700: #4C2A59;
+            --px-bg-dark: #1E1E2F;
+            --px-panel: rgba(255, 255, 255, 0.02);
+        }
+
         .material-symbols-rounded {
             vertical-align: -6px
+        }
+
+        /* enhanced visual tokens (matching root index theme) */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(158, 75, 138, 0.12);
+        }
+
+        .dark .glass-card {
+            background: rgba(30, 30, 47, 0.72);
+            border-color: rgba(255, 255, 255, 0.06);
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+        }
+
+        .shadow-glow {
+            box-shadow: 0 12px 34px rgba(158, 75, 138, 0.14);
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: inline-grid;
+            place-items: center;
+            color: #fff
+        }
+
+        .stat-accent {
+            background: linear-gradient(90deg, var(--px-accent), var(--px-accent-700));
+        }
+
+        .stat-accent-blue {
+            background: linear-gradient(90deg, #60A5FA, #3B82F6);
+        }
+
+        .stat-accent-amber {
+            background: linear-gradient(90deg, #F59E0B, #D97706);
+        }
+
+        .stat-accent-violet {
+            background: linear-gradient(90deg, #A78BFA, #7C3AED);
         }
 
         .glass {
@@ -36,9 +86,175 @@
             box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12)
         }
 
+        /* ambient blobs for subtle background depth */
+        .ambient-wrap {
+            pointer-events: none;
+            position: fixed;
+            inset: 0;
+            z-index: -10;
+        }
+
+        .ambient-blob {
+            position: absolute;
+            border-radius: 9999px;
+            filter: blur(80px);
+            opacity: .6;
+            transform: translateZ(0);
+        }
+
+        .ambient-blob.b1 {
+            width: 420px;
+            height: 420px;
+            left: -6rem;
+            top: -6rem;
+            background: rgba(158, 75, 138, 0.18);
+        }
+
+        .ambient-blob.b2 {
+            width: 360px;
+            height: 360px;
+            right: -5rem;
+            top: 35%;
+            background: rgba(76, 42, 89, 0.14);
+        }
+
+        /* text gradient helper (uses safe background-clip values) */
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, var(--px-accent), #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 5s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
         .dark body {
             background-image: linear-gradient(135deg, #1E1E2F 0%, #201934 40%, #141321 100%);
             background-attachment: fixed
+        }
+
+        body {
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+            background-attachment: fixed
+        }
+
+        /* Hero title */
+        .hero-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.02em
+        }
+    </style>
+    <style>
+        /* Non-boxy payments UI enhancements */
+        .payments-hero {
+            gap: 1rem;
+            align-items: stretch;
+        }
+
+        .kpi-card {
+            border-radius: 14px;
+            padding: 1rem;
+            transition: transform .22s ease, box-shadow .22s ease;
+            transform: translateZ(0);
+            overflow: hidden;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 18px 40px rgba(16, 16, 24, 0.12);
+        }
+
+        .kpi-card .text-2xl {
+            letter-spacing: -0.01em;
+        }
+
+        .kpi-meta {
+            color: rgba(30, 30, 47, 0.6);
+        }
+
+        .dark .kpi-meta {
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        /* Floating panels for charts */
+        .panel-floating {
+            border-radius: 16px;
+            padding: 1rem;
+            transition: transform .22s ease, box-shadow .22s ease;
+        }
+
+        .panel-floating:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 22px 48px rgba(16, 16, 24, 0.14);
+        }
+
+        /* Tables: softer list-like rows */
+        .table-card {
+            border-radius: 14px;
+            padding: .75rem;
+        }
+
+        .table-card table thead th {
+            border-bottom: none;
+        }
+
+        .table-card table tbody tr {
+            background: transparent;
+            transition: background .12s ease, transform .12s ease;
+        }
+
+        .table-card table tbody tr:hover {
+            background: rgba(0, 0, 0, 0.03);
+            transform: translateY(-2px);
+        }
+
+        .dark .table-card table tbody tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .table-card .px-2 {
+            padding-left: .75rem;
+            padding-right: .75rem;
+        }
+
+        /* Reduce strong borders and use soft separators */
+        .glass-card {
+            border: none;
+        }
+
+        .ring-soft {
+            box-shadow: none;
+        }
+
+        /* Compact filters section to reduce height */
+        .filters-compact {
+            padding-top: .45rem;
+            padding-bottom: .45rem;
+        }
+
+        .filters-compact .mt-1 {
+            margin-top: .25rem;
         }
     </style>
     <script>
@@ -59,6 +275,11 @@
 </head>
 
 <body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
+    <!-- Ambient gradients -->
+    <div aria-hidden="true" class="ambient-wrap">
+        <div class="ambient-blob b1"></div>
+        <div class="ambient-blob b2"></div>
+    </div>
     <!-- App Bar -->
     <header
         class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
@@ -102,7 +323,7 @@
         </div>
     </header>
 
-    <main class="container py-6 space-y-6">
+    <main class="container max-w-6xl py-6 space-y-6">
         <!-- Info bar -->
         <section class="flex flex-wrap items-center justify-between gap-3">
             <div class="text-[12px] opacity-75">Last updated: <span id="lastUpdated">—</span> • Auto‑refresh 30s</div>
@@ -110,16 +331,16 @@
         </section>
 
         <!-- Filters -->
-        <section class="glass rounded-2xl ring-1 ring-black/5 dark:ring-white/10 p-4 md:p-5">
+        <section class="glass-card rounded-2xl ring-soft p-3 md:p-4 filters-compact">
             <div class="flex flex-col md:flex-row md:items-end gap-3 md:gap-4">
                 <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
                     <label class="block text-xs font-semibold opacity-70">Date
                         <input id="fltDate" type="date"
-                            class="mt-1 w-full rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10" />
+                            class="mt-1 w-full rounded-xl px-3 py-1.5 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10" />
                     </label>
                     <label class="block text-xs font-semibold opacity-70">Status
                         <select id="fltStatus"
-                            class="mt-1 w-full rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10">
+                            class="mt-1 w-full rounded-xl px-3 py-1.5 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10">
                             <option value="all">All</option>
                             <option value="collected">Collected</option>
                             <option value="pending">Pending</option>
@@ -127,79 +348,98 @@
                     </label>
                     <label class="block text-xs font-semibold opacity-70">Amount (>=)
                         <input id="fltMin" type="number" min="0" placeholder="₹"
-                            class="mt-1 w-full rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10" />
+                            class="mt-1 w-full rounded-xl px-3 py-1.5 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10" />
                     </label>
                     <label class="block text-xs font-semibold opacity-70">Search
                         <input id="fltSearch" placeholder="Search id or customer"
-                            class="mt-1 w-full rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10" />
+                            class="mt-1 w-full rounded-xl px-3 py-1.5 ring-1 ring-black/10 dark:ring-white/15 bg-white/80 dark:bg-white/10" />
                     </label>
                 </div>
                 <div class="flex items-center gap-2">
                     <button id="btnExport"
-                        class="rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 text-sm"><span
+                        class="rounded-xl px-3 py-1.5 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 text-sm"><span
                             class="material-symbols-rounded text-base">file_save</span> Export CSV</button>
                     <button id="fltReset"
-                        class="rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 text-sm">Reset</button>
+                        class="rounded-xl px-3 py-1.5 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 text-sm">Reset</button>
                 </div>
             </div>
         </section>
 
         <!-- KPIs -->
-        <section class="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <article class="rounded-2xl p-4 glass ring-1 ring-black/5 dark:ring-white/10">
+        <section class="payments-hero grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <article class="rounded-2xl p-4 glass-card ring-soft shadow-glow">
                 <div class="flex items-center justify-between">
-                    <div class="text-xs uppercase tracking-wider opacity-70">Collected today</div><span
-                        class="material-symbols-rounded text-emerald-500">payments</span>
+                    <div class="flex items-center gap-3">
+                        <div class="stat-icon stat-accent"><span class="material-symbols-rounded">payments</span></div>
+                        <div>
+                            <div class="text-xs uppercase tracking-wider opacity-70">Collected today</div>
+                            <div id="kCollectedToday" class="mt-1 text-2xl font-extrabold">₹0</div>
+                        </div>
+                    </div>
+                    <div id="kCollectedTodayDelta" class="text-[12px] opacity-70">—</div>
                 </div>
-                <div id="kCollectedToday" class="mt-2 text-2xl font-extrabold">₹0</div>
-                <div id="kCollectedTodayDelta" class="text-[12px] opacity-70">—</div>
             </article>
-            <article class="rounded-2xl p-4 glass ring-1 ring-black/5 dark:ring-white/10">
+            <article class="rounded-2xl p-4 glass-card ring-soft shadow-glow kpi-card">
                 <div class="flex items-center justify-between">
-                    <div class="text-xs uppercase tracking-wider opacity-70">This week</div><span
-                        class="material-symbols-rounded text-sky-500">calendar_month</span>
+                    <div class="flex items-center gap-3">
+                        <div class="stat-icon stat-accent-blue"><span
+                                class="material-symbols-rounded">calendar_month</span></div>
+                        <div>
+                            <div class="text-xs uppercase tracking-wider opacity-70">This week</div>
+                            <div id="kWeek" class="mt-1 text-2xl font-extrabold">₹0</div>
+                        </div>
+                    </div>
+                    <div id="kWeekDelta" class="text-[12px] opacity-70">—</div>
                 </div>
-                <div id="kWeek" class="mt-2 text-2xl font-extrabold">₹0</div>
-                <div id="kWeekDelta" class="text-[12px] opacity-70">—</div>
             </article>
-            <article class="rounded-2xl p-4 glass ring-1 ring-black/5 dark:ring-white/10">
+            <article class="rounded-2xl p-4 glass-card ring-soft shadow-glow kpi-card">
                 <div class="flex items-center justify-between">
-                    <div class="text-xs uppercase tracking-wider opacity-70">Pending</div><span
-                        class="material-symbols-rounded text-amber-500">hourglass</span>
+                    <div class="flex items-center gap-3">
+                        <div class="stat-icon stat-accent-amber"><span class="material-symbols-rounded">hourglass</span>
+                        </div>
+                        <div>
+                            <div class="text-xs uppercase tracking-wider opacity-70">Pending</div>
+                            <div id="kPending" class="mt-1 text-2xl font-extrabold">₹0</div>
+                        </div>
+                    </div>
+                    <div class="text-[12px] opacity-70">Across open jobs</div>
                 </div>
-                <div id="kPending" class="mt-2 text-2xl font-extrabold">₹0</div>
-                <div class="text-[12px] opacity-70">Across open jobs</div>
             </article>
-            <article class="rounded-2xl p-4 glass ring-1 ring-black/5 dark:ring-white/10">
+            <article class="rounded-2xl p-4 glass-card ring-soft shadow-glow kpi-card">
                 <div class="flex items-center justify-between">
-                    <div class="text-xs uppercase tracking-wider opacity-70">Avg ticket</div><span
-                        class="material-symbols-rounded text-violet-500">monitoring</span>
+                    <div class="flex items-center gap-3">
+                        <div class="stat-icon stat-accent-violet"><span
+                                class="material-symbols-rounded">monitoring</span></div>
+                        <div>
+                            <div class="text-xs uppercase tracking-wider opacity-70">Avg ticket</div>
+                            <div id="kAOV" class="mt-1 text-2xl font-extrabold">₹0</div>
+                        </div>
+                    </div>
+                    <div id="kAOVDelta" class="text-[12px] opacity-70">—</div>
                 </div>
-                <div id="kAOV" class="mt-2 text-2xl font-extrabold">₹0</div>
-                <div id="kAOVDelta" class="text-[12px] opacity-70">—</div>
             </article>
         </section>
 
         <!-- Charts -->
         <section class="grid lg:grid-cols-3 gap-4">
-            <div class="lg:col-span-2 rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4">
+            <div class="lg:col-span-2 rounded-2xl glass-card ring-soft p-4 panel-floating">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-semibold">Collected trend</h3>
                     <div class="text-[12px] opacity-70">Last 14 days</div>
                 </div>
                 <div class="mt-3 h-64"><canvas id="chartTrend" class="w-full h-full"></canvas></div>
             </div>
-            <div class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4">
+            <div class="rounded-2xl glass-card ring-soft p-4 panel-floating">
                 <h3 class="text-sm font-semibold">Status</h3>
                 <div class="mt-3 h-56"><canvas id="chartStatus" class="w-full h-full"></canvas></div>
             </div>
         </section>
         <section class="grid lg:grid-cols-3 gap-4">
-            <div class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4">
+            <div class="rounded-2xl glass-card ring-soft p-4 panel-floating">
                 <h3 class="text-sm font-semibold">Collected vs Pending</h3>
                 <div class="mt-3 h-56"><canvas id="chartSplit" class="w-full h-full"></canvas></div>
             </div>
-            <div class="lg:col-span-2 rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4">
+            <div class="lg:col-span-2 rounded-2xl glass-card ring-soft p-4 table-card">
                 <h3 class="text-sm font-semibold">Weekly summaries</h3>
                 <div class="mt-3 overflow-x-auto">
                     <table class="min-w-full text-sm">
@@ -219,7 +459,7 @@
 
         <!-- Tables -->
         <section class="grid lg:grid-cols-2 gap-4">
-            <div class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4">
+            <div class="rounded-2xl glass-card ring-soft p-4 table-card">
                 <div class="flex items-center justify-between gap-2">
                     <h3 class="text-sm font-semibold">Collected</h3>
                 </div>
@@ -238,7 +478,7 @@
                     </table>
                 </div>
             </div>
-            <div class="rounded-2xl glass ring-1 ring-black/5 dark:ring-white/10 p-4">
+            <div class="rounded-2xl glass-card ring-soft p-4 table-card">
                 <div class="flex items-center justify-between gap-2">
                     <h3 class="text-sm font-semibold">Pending</h3>
                 </div>
@@ -300,6 +540,10 @@
         const toggles = [document.getElementById('themeToggle'), document.getElementById('themeToggleSm')].filter(Boolean);
         function syncThemeIcon() { const dark = document.documentElement.classList.contains('dark'); toggles.forEach(btn => { const i = btn.querySelector('.material-symbols-rounded'); if (i) i.textContent = dark ? 'light_mode' : 'dark_mode'; }); }
         toggles.forEach(btn => btn.addEventListener('click', () => { document.documentElement.classList.toggle('dark'); localStorage.setItem('px_theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light'); syncThemeIcon(); })); syncThemeIcon();
+
+        // ACCENT color from CSS - charts and accents should follow the CSS variable
+        const ACCENT = (getComputedStyle(document.documentElement).getPropertyValue('--px-accent') || '#9E4B8A').trim();
+        function hexToRgba(hex, a) { try { hex = (hex || '').replace('#', ''); if (hex.length === 3) hex = hex.split('').map(c => c + c).join(''); const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16); return `rgba(${r},${g},${b},${a})`; } catch (_) { return `rgba(158,75,138,${a})`; } }
 
         let JOBS = []; let chartTrend = null, chartStatus = null, chartSplit = null;
         // Helper: determine a completion timestamp for a job (prefer explicit completed/released, fall back to updated_at, then created_at)
@@ -387,14 +631,14 @@
             const { days, labels } = clamp14();
             const series = days.map(key => (JOBS || []).filter(j => (j.status || '') === 'completed' && completionDateKey(j) === key).reduce((a, j) => a + (typeof j.estimated_price === 'number' ? j.estimated_price : 0), 0));
             if (!chartTrend) {
-                chartTrend = new Chart(document.getElementById('chartTrend'), { type: 'line', data: { labels, datasets: [{ label: 'Collected', data: series, borderColor: '#9E4B8A', backgroundColor: 'rgba(158,75,138,0.15)', fill: true, tension: .35, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,.06)' } } } } });
+                chartTrend = new Chart(document.getElementById('chartTrend'), { type: 'line', data: { labels, datasets: [{ label: 'Collected', data: series, borderColor: ACCENT, backgroundColor: hexToRgba(ACCENT, 0.15), fill: true, tension: .35, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,.06)' } } } } });
             } else { chartTrend.data.labels = labels; chartTrend.data.datasets[0].data = series; chartTrend.update(); }
             const sts = ['submitted', 'accepted', 'printing', 'ready', 'completed', 'cancelled'];
             const counts = sts.map(s => (JOBS || []).filter(j => (j.status || '') === s).length);
             if (!chartStatus) { chartStatus = new Chart(document.getElementById('chartStatus'), { type: 'bar', data: { labels: sts.map(s => s[0].toUpperCase() + s.slice(1)), datasets: [{ label: 'Orders', data: counts, backgroundColor: ['#4C2A59', '#9E4B8A', '#B06AB3', '#7E57C2', '#26A69A', '#EF5350'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } }); }
             else { chartStatus.data.datasets[0].data = counts; chartStatus.update(); }
             const total = (JOBS || []).length; const done = (JOBS || []).filter(j => (j.status || '') === 'completed').length; const pend = total - done;
-            if (!chartSplit) { chartSplit = new Chart(document.getElementById('chartSplit'), { type: 'doughnut', data: { labels: ['Collected', 'Pending'], datasets: [{ data: [done, pend], backgroundColor: ['#1E1E2F', '#9E4B8A'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } }); }
+            if (!chartSplit) { chartSplit = new Chart(document.getElementById('chartSplit'), { type: 'doughnut', data: { labels: ['Collected', 'Pending'], datasets: [{ data: [done, pend], backgroundColor: ['var(--px-bg-dark)', 'var(--px-accent)'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } }); }
             else { chartSplit.data.datasets[0].data = [done, pend]; chartSplit.update(); }
         }
 
