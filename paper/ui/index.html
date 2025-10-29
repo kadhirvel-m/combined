@@ -1146,7 +1146,7 @@
                         Be part of the future of learning and innovation. Start today and shape your academic journey
                         with PaperX.
                     </p>
-                    <button onclick="window.location.href='\signup'"
+                    <button onclick="window.location.href='signup.html'"
                         class="inline-flex items-center gap-2 mt-6 rounded-full bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] text-white font-semibold px-6 py-3 shadow-[0_4px_18px_-4px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_28px_-6px_rgba(158,75,138,0.8)] hover:scale-105 transition-all duration-200">
                         Get Started with PaperX
                         <span class="material-symbols-rounded text-lg">arrow_forward</span>
@@ -1303,8 +1303,6 @@
             <h2
                 class="text-4xl md:text-4xl font-extrabold tracking-tight mx-auto max-w-5xl leading-[1.08] gradient-hero-text">
                 Customers growing with us</h2>
-            <p class="mt-3 text-sm text-neutral-600 dark:text-white/60 text-center max-w-2xl mx-auto">Continuous
-                carousel of real-world impact. (Demo content)</p>
             <div id="custMarquee" class="mt-10 marquee-wrapper group relative">
                 <div id="custTrack" class="marquee-track" role="list">
                     <!-- Single logical set of slides; JS will clone for seamless loop -->
@@ -1784,6 +1782,102 @@
         })();
     </script>
     <script>
+        // Storybook Carousel - Movable Slides
+        (function () {
+            const carousel = document.getElementById('storybookCarousel');
+            if (!carousel) return;
+
+            const wrapper = carousel.querySelector('#slidesWrapper');
+            const slides = wrapper.querySelectorAll('.slide');
+            const prevBtn = carousel.querySelector('#prevSlide');
+            const nextBtn = carousel.querySelector('#nextSlide');
+            const dots = carousel.querySelectorAll('.slide-dot');
+
+            let currentIndex = 0;
+            let startX = 0;
+            let isDragging = false;
+            let autoplayInterval;
+
+            function updateSlide(index) {
+                if (index < 0) index = slides.length - 1;
+                if (index >= slides.length) index = 0;
+                currentIndex = index;
+
+                wrapper.style.transform = `translateX(-${currentIndex * 100}%)`;
+
+                // Update dots
+                dots.forEach((dot, i) => {
+                    if (i === currentIndex) {
+                        dot.classList.add('active');
+                        dot.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                    } else {
+                        dot.classList.remove('active');
+                        dot.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+                    }
+                });
+            }
+
+            // Navigation buttons
+            prevBtn.addEventListener('click', () => {
+                updateSlide(currentIndex - 1);
+            });
+
+            nextBtn.addEventListener('click', () => {
+                updateSlide(currentIndex + 1);
+            });
+
+            // Dot indicators
+            dots.forEach((dot, index) => {
+                dot.addEventListener('click', () => {
+                    updateSlide(index);
+                });
+            });
+
+            // Touch/Mouse drag support
+            wrapper.addEventListener('pointerdown', (e) => {
+                isDragging = true;
+                startX = e.clientX;
+                wrapper.style.transition = 'none';
+            });
+
+            window.addEventListener('pointermove', (e) => {
+                if (!isDragging) return;
+                const diff = e.clientX - startX;
+                const offset = -currentIndex * 100 + (diff / wrapper.clientWidth) * 100;
+                wrapper.style.transform = `translateX(${offset}%)`;
+            });
+
+            window.addEventListener('pointerup', (e) => {
+                if (!isDragging) return;
+                isDragging = false;
+                wrapper.style.transition = '';
+
+                const diff = e.clientX - startX;
+                const threshold = wrapper.clientWidth * 0.2; // 20% swipe threshold
+
+                if (diff > threshold) {
+                    updateSlide(currentIndex - 1);
+                } else if (diff < -threshold) {
+                    updateSlide(currentIndex + 1);
+                } else {
+                    updateSlide(currentIndex);
+                }
+            });
+
+            // Keyboard navigation
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowLeft') {
+                    updateSlide(currentIndex - 1);
+                } else if (e.key === 'ArrowRight') {
+                    updateSlide(currentIndex + 1);
+                }
+            });
+
+            // Initialize
+            updateSlide(0);
+        })();
+    </script>
+    <script>
         // Continuous testimonial marquee (independent of logos ticker)
         (function () {
             const track = document.getElementById('custTrack');
@@ -1952,186 +2046,6 @@
                 cancelClose() { clearTimeout(this.closeTimeout); }
             }
         }
-    </script>
-
-    <!-- PDF.js Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-
-    <!-- StPageFlip Library -->
-    <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
-
-    <!-- Flipbook Implementation -->
-    <script>
-        (async function () {
-            const bookContainer = document.getElementById('book');
-            const loading = document.getElementById('loading');
-            const prevBtn = document.getElementById('prev-btn');
-            const nextBtn = document.getElementById('next-btn');
-            const currentPageSpan = document.getElementById('current-page');
-            const totalPagesSpan = document.getElementById('total-pages');
-
-            if (!bookContainer) {
-                console.error('Book container not found');
-                return;
-            }
-
-            // Configure PDF.js
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-            try {
-                console.log('Loading PDF...');
-                // Try multiple possible PDF paths
-                const possiblePaths = [
-                    'assets/img/storybook/storybook.pdf',
-                    './assets/img/storybook/storybook.pdf',
-                    'assets/img/storybook/storybook.pdf'
-                ];
-
-                let pdf = null;
-                let pdfUrl = null;
-
-                for (const path of possiblePaths) {
-                    try {
-                        console.log('Trying path:', path);
-                        pdf = await pdfjsLib.getDocument(path).promise;
-                        pdfUrl = path;
-                        console.log('PDF loaded successfully from:', path);
-                        break;
-                    } catch (e) {
-                        console.log('Failed to load from:', path, e.message);
-                    }
-                }
-
-                if (!pdf) {
-                    throw new Error('Could not load PDF from any path. Please check if storybook.pdf exists in assets/img/storybook/');
-                }
-
-                const numPages = pdf.numPages;
-                console.log('Total pages:', numPages);
-                totalPagesSpan.textContent = numPages;
-
-                // Render all pages to canvas and add directly to book container
-                console.log('Rendering pages...');
-                for (let i = 1; i <= numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 1.5 });
-
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    canvas.className = 'page-canvas';
-                    canvas.setAttribute('data-density', 'hard'); // For StPageFlip
-
-                    await page.render({
-                        canvasContext: context,
-                        viewport: viewport
-                    }).promise;
-
-                    // Add canvas directly to book container
-                    bookContainer.appendChild(canvas);
-                    console.log('Rendered and added page', i);
-                }
-
-                console.log('All pages added to container');
-
-                // Create flipbook and load from book container's children
-                console.log('Initializing flipbook');
-                const pageFlip = new St.PageFlip(bookContainer, {
-                    width: 550,  // base page width
-                    height: 733, // base page height
-                    size: "stretch",
-                    minWidth: 315,
-                    maxWidth: 1000,
-                    minHeight: 420,
-                    maxHeight: 1350,
-                    maxShadowOpacity: 0.5,
-                    showCover: true,
-                    mobileScrollSupport: false,
-                    autoSize: true,
-                    usePortrait: false
-                });
-
-                // Convert HTMLCollection to Array before passing
-                const pageElements = Array.from(bookContainer.children);
-                console.log('Loading', pageElements.length, 'pages into flipbook');
-                pageFlip.loadFromHTML(pageElements);
-                console.log('Flipbook initialized with', pageFlip.getPageCount(), 'pages');
-
-                // Hide loading AFTER successful initialization
-                console.log('Hiding loading indicator');
-                if (loading) loading.style.display = 'none';
-
-                let currentPageIndex = 0;
-
-                // Update page counter
-                function updatePageCounter() {
-                    currentPageSpan.textContent = currentPageIndex + 1;
-
-                    // Update button states
-                    if (prevBtn) prevBtn.disabled = currentPageIndex === 0;
-                    if (nextBtn) nextBtn.disabled = currentPageIndex >= numPages - 1;
-
-                    console.log('Current page:', currentPageIndex + 1, '/', numPages);
-                }
-
-                // Event listeners
-                pageFlip.on('flip', (e) => {
-                    console.log('Flip event:', e);
-                    currentPageIndex = e.data;
-                    updatePageCounter();
-                });
-
-                pageFlip.on('changeState', (e) => {
-                    console.log('State changed:', e);
-                    const state = pageFlip.getState();
-                    currentPageIndex = state.currentPageIndex;
-                    updatePageCounter();
-                });
-
-                if (prevBtn) {
-                    prevBtn.addEventListener('click', () => {
-                        console.log('Previous button clicked');
-                        pageFlip.flipPrev();
-                    });
-                }
-
-                if (nextBtn) {
-                    nextBtn.addEventListener('click', () => {
-                        console.log('Next button clicked');
-                        pageFlip.flipNext();
-                    });
-                }
-
-                // Keyboard navigation
-                document.addEventListener('keydown', (e) => {
-                    if (e.key === 'ArrowLeft') {
-                        console.log('Left arrow pressed');
-                        pageFlip.flipPrev();
-                    }
-                    if (e.key === 'ArrowRight') {
-                        console.log('Right arrow pressed');
-                        pageFlip.flipNext();
-                    }
-                });
-
-                // Initial update
-                updatePageCounter();
-                console.log('Flipbook ready!');
-
-            } catch (error) {
-                console.error('Error loading flipbook:', error);
-                if (loading) {
-                    loading.innerHTML = `
-                        <div class="text-center px-6">
-                            <p class="text-base text-red-500 font-medium">Failed to load flipbook</p>
-                            <p class="text-sm text-neutral-600 dark:text-white/70 mt-2">${error.message}</p>
-                            <p class="text-xs text-neutral-500 dark:text-white/50 mt-2">Check browser console for details</p>
-                        </div>
-                    `;
-                }
-            }
-        })();
     </script>
 </body>
 
