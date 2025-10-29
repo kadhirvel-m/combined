@@ -1,4 +1,4 @@
-"""Single-file consolidated FastAPI app for PaperX."""
+﻿"""Single-file consolidated FastAPI app for PaperX."""
 
 from __future__ import annotations
 
@@ -698,7 +698,7 @@ def markdown_to_html(markdown_text: str) -> str:
 def render_pdf_from_markdown(markdown_text: str) -> bytes:
     """Render a PDF byte stream from a Markdown string.
 
-    Uses markdown→HTML and xhtml2pdf. Returns PDF bytes or raises RuntimeError on failure.
+    Uses markdownâ†’HTML and xhtml2pdf. Returns PDF bytes or raises RuntimeError on failure.
     """
     if pisa is None:
         raise RuntimeError("xhtml2pdf not installed")
@@ -1119,7 +1119,7 @@ def assemble_context_for_llm(pages: List[PageExtract], merged_titles: List[str],
     for p in pages:
         lines.append(f"\n### {p.title}\nURL: {p.url}")
         for s in p.sections[:8]:  # keep compact
-            lines.append(f"- [{s.title}] {s.quote}…")
+            lines.append(f"- [{s.title}] {s.quote}â€¦")
     lines.append("\nMERGED SECTION TITLES CANDIDATE ORDER:")
     for t in merged_titles:
         lines.append(f"- {t}")
@@ -1136,7 +1136,7 @@ CRITICAL RULES:
 - Include at least one Mermaid diagram when process/relationships are relevant.
 - Every non-obvious claim MUST carry an inline citation like [GFG], [TP], [Scaler], [Wiki], or [TPT] mapped in the CITATIONS section.
 - Prefer plain text + Mermaid diagrams; do not embed external images.
- - Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (ε-greedy)**, **Markov Decision Process (MDP)**, parameters like **θ**, **γ**, **α**, algorithm names like **Q-learning**.
+ - Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (Îµ-greedy)**, **Markov Decision Process (MDP)**, parameters like **Î¸**, **Î³**, **Î±**, algorithm names like **Q-learning**.
 
 OUTPUT FORMAT (STRICT):
 Return a single Markdown document with:
@@ -1148,7 +1148,7 @@ Return a single Markdown document with:
 
 If sources contradict, mark the line with [conflict] and keep both with citations.
 
-Keep it under ~1200–1500 words unless the topic is inherently longer.
+Keep it under ~1200â€“1500 words unless the topic is inherently longer.
 """
 
 
@@ -1223,12 +1223,12 @@ Context:
 {context}
 
 Instructions:
-- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" → pick one).
+- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" â†’ pick one).
 - Include the compulsory sections even if they were not present in sources.
 - Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
 - Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
 - Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., θ, γ, α, ε-greedy, key definitions) with **...** consistently; avoid over-bolding.
+ - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
 
 Start with '# {topic}' and then the sections in a logical order.
 """
@@ -1251,13 +1251,13 @@ Context:
 {context}
 
 Output rules (STRICT):
-- Keep it ultra concise (≈ 250–400 words). Use bullets and tables.
-- Start with a single H1: '# {topic} — Cheat Sheet'.
+- Keep it ultra concise (â‰ˆ 250â€“400 words). Use bullets and tables.
+- Start with a single H1: '# {topic} â€” Cheat Sheet'.
 - Sections (H2):
-  1) Core Concepts (5–10 bullets, crisp one-liners)
+  1) Core Concepts (5â€“10 bullets, crisp one-liners)
   2) Key Definitions & Formulas (bullets; inline math where relevant)
   3) Quick Steps / Algorithms (bulleted steps)
-  4) Pitfalls / Gotchas (3–6 bullets)
+  4) Pitfalls / Gotchas (3â€“6 bullets)
   5) Keywords (comma-separated list)
 - Bold key terms and symbols with **...**. Prefer compact phrasing over full sentences.
 - If any fact is uncertain, mark [needs review].
@@ -1272,13 +1272,13 @@ Context:
 {context}
 
 Output rules (STRICT):
-- Target length: 600–900 words, plain language, short sentences.
-- Start with '# {topic} — Simple Notes'.
+- Target length: 600â€“900 words, plain language, short sentences.
+- Start with '# {topic} â€” Simple Notes'.
 - Structure with logical H2 sections, including: Introduction, Concepts, Examples, TL;DR, Common Mistakes, Conclusion.
 - Explain in everyday words without dumbing down definitions.
 - Use bullets and small tables where helpful.
 - Bold important terms with **...**.
-- Include a final '## CITATIONS' section with label→URL list for the sources you used.
+- Include a final '## CITATIONS' section with labelâ†’URL list for the sources you used.
 """.strip()
     # default detailed prompt remains as before
     return f"""
@@ -1288,12 +1288,12 @@ Context:
 {context}
 
 Instructions:
-- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" → pick one).
+- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" â†’ pick one).
 - Include the compulsory sections even if they were not present in sources.
 - Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
 - Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
 - Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., θ, γ, α, ε-greedy, key definitions) with **...** consistently; avoid over-bolding.
+ - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
 
 Start with '# {topic}' and then the sections in a logical order.
 """.strip()
@@ -2394,12 +2394,32 @@ def _clean_lines(text: str) -> List[str]:
 
 def _naive_extract_improved(text: str) -> dict:
     """Heuristic syllabus parser that:
-    - Detects unit headers like "UNIT I – Title:" and extracts unit title cleanly
-    - Splits topics by commas and spaced dashes (" - ", " – ", " — ")
+    - Detects unit headers like "UNIT I â€“ Title:" and extracts unit title cleanly
+    - Splits topics by commas and spaced dashes (" - ", " â€“ ", " â€” ")
     - Skips non-topic sections (TOTAL PERIODS, Text Books, Reference Books, Content Beyond Syllabus)
     - Attempts to guess course_code and title from a header line (e.g., "AI PE703 DEEP REINFORCEMENT LEARNING 3 - -")
     """
     lines = _clean_lines(text)
+
+    # Merge hyphenated line breaks like "ar-" + "ray" => "array"
+    def _dehyphenate(ls: List[str]) -> List[str]:
+        out: List[str] = []
+        i = 0
+        while i < len(ls):
+            cur = ls[i]
+            if cur.endswith('-') and i + 1 < len(ls):
+                nxt = ls[i + 1]
+                # If next line starts with letters, merge tokens
+                if re.match(r"^[A-Za-z]", nxt or ""):
+                    merged = cur[:-1] + nxt.lstrip()
+                    out.append(merged)
+                    i += 2
+                    continue
+            out.append(cur)
+            i += 1
+        return out
+
+    lines = _dehyphenate(lines)
     units: List[dict] = []
     current_unit: Optional[dict] = None
     seen_first_unit = False
@@ -2422,10 +2442,10 @@ def _naive_extract_improved(text: str) -> dict:
     code_line_pat = re.compile(r"\b([A-Z]{2,4}\s*[A-Z]{0,3}\d{2,4}[A-Z]?)\b[\s,:-]+(.+)$")
 
     def split_topics(text_line: str) -> List[str]:
-        cleaned = re.sub(r"^([\-*•·�?�]+|\d+[.)])\s*", "", text_line).strip()
+        cleaned = re.sub(r"^([\-*â€¢Â·ï¿½?ï¿½]+|\d+[.)])\s*", "", text_line).strip()
         if not cleaned or skip_topic_pat.search(cleaned):
             return []
-        parts = re.split(r"\s*,\s*|\s+[–—-]\s+", cleaned)
+        parts = re.split(r"\s*,\s*|\s+[â€“â€”-]\s+", cleaned)
         out: List[str] = []
         for p in parts:
             t = p.strip().strip(".;, ")
@@ -2441,9 +2461,9 @@ def _naive_extract_improved(text: str) -> dict:
             if mcode:
                 course_code = mcode.group(1).strip()
                 tail = mcode.group(2)
-                tail = re.sub(r"\b\d+\s*[–—-]\s*[–—-].*$", "", tail).strip()
+                tail = re.sub(r"\b\d+\s*[â€“â€”-]\s*[â€“â€”-].*$", "", tail).strip()
                 if tail:
-                    course_title = tail.strip("-–—:; .") or None
+                    course_title = tail.strip("-â€“â€”:; .") or None
 
         # Stop parsing after end-of-syllabus markers appear
         if re.match(r"^(TOTAL\s+PERIODS|TEXT\s*BOOKS|REFERENCE\s*BOOKS|CONTENT\s+BEYOND\s+SYLLABUS)\b", ln, flags=re.IGNORECASE):
@@ -2455,7 +2475,7 @@ def _naive_extract_improved(text: str) -> dict:
             if skip_intro_head_pat.match(ln):
                 # skip heading
                 continue
-            # Also skip bullet lines in intro (most have bullets like • or start with uppercase sentences)
+            # Also skip bullet lines in intro (most have bullets like â€¢ or start with uppercase sentences)
             if unit_pat.match(ln):
                 # fall through to create the first unit
                 pass
@@ -2466,11 +2486,11 @@ def _naive_extract_improved(text: str) -> dict:
         um = unit_pat.match(ln)
         if um:
             # remove the leading keyword + numeral (with or without space), plus any immediate separators
-            after = re.sub(r"^(?:unit|module|chapter)\s*([ivxlcdm]+|\d+)?\s*[:–—-]?\s*", "", ln, flags=re.IGNORECASE)
-            parts = re.split(r"[:–—-]", after, maxsplit=1)
+            after = re.sub(r"^(?:unit|module|chapter)\s*([ivxlcdm]+|\d+)?\s*[:â€“â€”-]?\s*", "", ln, flags=re.IGNORECASE)
+            parts = re.split(r"[:â€“â€”-]", after, maxsplit=1)
             title_part = (parts[1] if len(parts) > 1 else parts[0]).strip()
             title_main, title_rest = (title_part.split(":", 1) + [""])[:2]
-            title_main = title_main.strip().strip("-–—:; ") or "Unit"
+            title_main = title_main.strip().strip("-â€“â€”:; ") or "Unit"
 
             current_unit = {"unit_title": title_main, "topics": []}
             units.append(current_unit)
@@ -2480,10 +2500,26 @@ def _naive_extract_improved(text: str) -> dict:
                     current_unit["topics"].append({"topic": tp})
             continue
 
+        # Uppercase heading with colon indicates a new unit (e.g., BASIC PROBABILITY: ...)
+        mhead = re.match(r"^([A-Z][A-Z0-9 \-/&().]+?):\s*(.*)$", ln)
+        if mhead and not skip_topic_pat.search(ln):
+            title_main = (mhead.group(1) or "").strip().strip("-:; .")
+            title_rest = (mhead.group(2) or "").strip()
+            if title_main and len(title_main) >= 4:
+                current_unit = {"unit_title": title_main, "topics": []}
+                units.append(current_unit)
+                seen_first_unit = True
+                if title_rest:
+                    for tp in split_topics(title_rest):
+                        current_unit["topics"].append({"topic": tp})
+                continue
         if not current_unit:
             # Should not happen now as we skip lines until the first unit header
             continue
 
+        # Skip hour-only lines or stray numbers
+        if re.match(r"^\(?\s*\d+\s*Hrs?\.?\s*\)?$", ln, flags=re.IGNORECASE) or ln.strip().isdigit():
+            continue
         for tp in split_topics(ln):
             current_unit["topics"].append({"topic": tp})
 
@@ -2511,8 +2547,8 @@ def _split_subject_sections(text: str) -> List[Dict[str, str]]:
         code = m.group(1).strip()
         tail = (m.group(2) or "").strip()
         if tail:
-            tail = re.sub(r"\b\d+\s*[–—-]\s*[–—-].*$", "", tail).strip()
-        title = tail.strip("-–—:; .") if tail else None
+            tail = re.sub(r"\b\d+\s*[â€“â€”-]\s*[â€“â€”-].*$", "", tail).strip()
+        title = tail.strip("-â€“â€”:; .") if tail else None
         if code:
             anchors.append((idx, code, title))
     if not anchors:
@@ -2521,14 +2557,23 @@ def _split_subject_sections(text: str) -> List[Dict[str, str]]:
     def infer_title(start_idx: int) -> Optional[str]:
         # Look ahead a few lines for the subject name (skip meta headers)
         skip_pat = re.compile(r"^(subject\s+code|subject\s+name|lectures|tutorials|practical|course\s+pre|course\s+objectives|course\s+outcomes)\b", re.IGNORECASE)
+        collected: List[str] = []
         for j in range(start_idx + 1, min(start_idx + 8, len(lines))):
-            cand = lines[j].strip().strip("-–—:; .")
+            cand = lines[j].strip().strip("-â€“â€”:; .")
             if not cand or skip_pat.search(cand):
                 continue
             # stop if we hit a unit header
             if re.match(r"^(?:unit|module|chapter)(?=\s*[ivxlcdm\d])", cand, flags=re.IGNORECASE):
                 break
-            return cand
+            collected.append(cand)
+            # if the next piece starts with uppercase and the first chunk looks incomplete (endswith AND), join one more line
+            if len(collected) == 1 and j + 1 < len(lines):
+                nxt = lines[j + 1].strip().strip("-â€“â€”:; .")
+                if nxt and re.match(r"^[A-Z]", nxt) and collected[0].upper().endswith(" AND"):
+                    collected.append(nxt)
+            break
+        if collected:
+            return " ".join(collected).strip()
         return None
 
     for i, (start, code, title) in enumerate(anchors):
@@ -2545,7 +2590,8 @@ def _naive_extract(text: str) -> dict:
     units: List[dict] = []
     current_unit: Optional[dict] = None
 
-    unit_pat = re.compile(r"^(?:unit|module|chapter)\b[\s.:\-]*([ivx]+|\d+)?", re.IGNORECASE)
+    # Match UNIT headers even when there is no space before the numeral, e.g., "UNITV"
+    unit_pat = re.compile(r"^(?:unit|module|chapter)(?=\s*[ivxlcdm\d])\s*([ivxlcdm]+|\d+)?", re.IGNORECASE)
 
     for ln in lines:
         if unit_pat.match(ln):
@@ -2556,7 +2602,7 @@ def _naive_extract(text: str) -> dict:
         if not current_unit:
             current_unit = {"unit_title": "Unit 1", "topics": []}
             units.append(current_unit)
-        topic = re.sub(r"^([\-*•]+|\d+[.)])\s*", "", ln).strip()
+        topic = re.sub(r"^([\-*â€¢]+|\d+[.)])\s*", "", ln).strip()
         if topic:
             current_unit["topics"].append({"topic": topic})
 
@@ -2671,9 +2717,8 @@ def parse_syllabus(payload: ParseSyllabusIn) -> ParsedSyllabusOut:
         raise HTTPException(status_code=400, detail="Text too short")
     hints = {"course_code": payload.course_code, "title": payload.title}
 
-    parsed = _gemini_parse(text, hints)
-    if not parsed:
-        parsed = _naive_extract_improved(text)
+    # Always use the improved heuristic parser for stability
+    parsed = _naive_extract_improved(text)
 
     norm = _normalize_parsed_struct(parsed, hints)
     if not norm.units:
@@ -3172,7 +3217,7 @@ def get_current_user_profile(token: Optional[str]):
 
 def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
     supabase = get_service_client()
-    existing = (
+    existing = _supabase_retry(lambda: (
         supabase.table("syllabus_courses")
         .select("id,title")
         .eq("batch_id", str(payload.batch_id))
@@ -3180,22 +3225,22 @@ def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
         .eq("course_code", payload.course_code)
         .limit(1)
         .execute()
-    )
+    ))
     if getattr(existing, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (find course): {existing.error}")
     if existing.data:
         course_id = uuid.UUID(existing.data[0]["id"])
         if existing.data[0].get("title") != payload.title:
-            upd = (
+            upd = _supabase_retry(lambda: (
                 supabase.table("syllabus_courses")
                 .update({"title": payload.title})
                 .eq("id", str(course_id))
                 .execute()
-            )
+            ))
             if getattr(upd, "error", None):
                 raise HTTPException(status_code=500, detail=f"Supabase error (update course): {upd.error}")
     else:
-        ins = (
+        ins = _supabase_retry(lambda: (
             supabase.table("syllabus_courses")
             .insert(
                 {
@@ -3206,7 +3251,7 @@ def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
                 }
             )
             .execute()
-        )
+        ))
         if getattr(ins, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (insert course): {ins.error}")
         course_id = uuid.UUID(ins.data[0]["id"]) if ins.data else None
@@ -5432,19 +5477,8 @@ async def upload_syllabus_pdf(
         v = str(val).strip().lower()
         return v in {"1", "true", "yes", "y", "on"}
 
-    use_naive_only = _to_bool(prefer_naive)
-    # Try Gemini with timeout unless client prefers naive-only; on failure/timeout, fall back to naive
-    timeout_env = os.getenv("GEMINI_PARSE_TIMEOUT_S")
-    try:
-        timeout_s = float(timeout_env) if timeout_env else 18.0
-    except Exception:
-        timeout_s = 18.0
-    if use_naive_only:
-        parsed = _naive_extract_improved(raw_text)
-    else:
-        parsed = await _gemini_parse_with_timeout(raw_text, hints, timeout_s=timeout_s)
-        if not parsed:
-            parsed = _naive_extract_improved(raw_text)
+    # Always use the improved heuristic parser for stability
+    parsed = _naive_extract_improved(raw_text)
 
     norm = _normalize_parsed_struct(parsed or {}, hints)
     filtered_units = _filter_lab_units(norm.units)
@@ -5562,24 +5596,12 @@ async def upload_syllabus_pdf_bulk(
         v = str(val).strip().lower()
         return v in {"1", "true", "yes", "y", "on"}
 
-    use_naive_only = _to_bool(prefer_naive)
-    timeout_env = os.getenv("GEMINI_PARSE_TIMEOUT_S")
-    try:
-        timeout_s = float(timeout_env) if timeout_env else 18.0
-    except Exception:
-        timeout_s = 18.0
-
     sections = _split_subject_sections(raw_text)
     results: List[SyllabusCourseOut] = []
     if not sections:
         # Fallback: treat as a single subject using the single-subject pipeline
         hints = {"course_code": None, "title": None}
-        if use_naive_only:
-            parsed = _naive_extract_improved(raw_text)
-        else:
-            parsed = await _gemini_parse_with_timeout(raw_text, hints, timeout_s=timeout_s)
-            if not parsed:
-                parsed = _naive_extract_improved(raw_text)
+        parsed = _naive_extract_improved(raw_text)
         norm = _normalize_parsed_struct(parsed or {}, hints)
         filtered_units = _filter_lab_units(norm.units)
         if not filtered_units:
@@ -5618,12 +5640,7 @@ async def upload_syllabus_pdf_bulk(
     for sec in sections:
         sec_text = sec.get("text") or ""
         hints = {"course_code": sec.get("code"), "title": sec.get("title")}
-        if use_naive_only:
-            parsed = _naive_extract_improved(sec_text)
-        else:
-            parsed = await _gemini_parse_with_timeout(sec_text, hints, timeout_s=timeout_s)
-            if not parsed:
-                parsed = _naive_extract_improved(sec_text)
+        parsed = _naive_extract_improved(sec_text)
         norm = _normalize_parsed_struct(parsed or {}, hints)
         filtered_units = _filter_lab_units(norm.units)
         if not filtered_units:
@@ -9751,15 +9768,15 @@ def mp_list_notes(
         is_teacher = oid in teacher_ids_role or bool(tprof)
         seller: dict[str, Any] = {"id": oid}
         if tprof:
-            seller["name"] = tprof.get("name") or (uprof.get("name") if uprof else oid[:6] + "…")
+            seller["name"] = tprof.get("name") or (uprof.get("name") if uprof else oid[:6] + "â€¦")
             if tprof.get("profile_image_url"):
                 seller["avatar_url"] = tprof.get("profile_image_url")
         elif uprof:
-            seller["name"] = uprof.get("name") or oid[:6] + "…"
+            seller["name"] = uprof.get("name") or oid[:6] + "â€¦"
             if uprof.get("profile_image_url"):
                 seller["avatar_url"] = uprof.get("profile_image_url")
         else:
-            seller["name"] = oid[:6] + "…"
+            seller["name"] = oid[:6] + "â€¦"
         if is_teacher:
             seller["verified"] = True
             seller["is_teacher"] = True
@@ -9937,7 +9954,7 @@ def mp_notes_meta(teachers_only: Optional[bool] = Query(False, description="If t
     If the table grows large, replace with server-side RPC or dedicated materialized view.
     """
     supabase = get_service_client()
-    # Fetch a reasonable window (latest 1000) – adjust as needed or paginate later.
+    # Fetch a reasonable window (latest 1000) â€“ adjust as needed or paginate later.
     res = supabase.table("marketplace_notes").select("*").order("created_at", desc=True).limit(1000).execute()
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (notes meta): {res.error}")
@@ -9998,7 +10015,7 @@ def mp_notes_meta(teachers_only: Optional[bool] = Query(False, description="If t
                     if uid:
                         seller_map[uid] = {
                             "id": uid,
-                            "name": row.get("name") or uid[:6] + "…",
+                            "name": row.get("name") or uid[:6] + "â€¦",
                             "avatar_url": row.get("profile_image_url"),
                         }
         except Exception:
@@ -10112,16 +10129,16 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
         except Exception:
             teacher_profile_row = None
     if teacher_profile_row:
-        seller_obj["name"] = teacher_profile_row.get("name") or (profiles_map.get(owner_id, {}).get("name") if owner_id in profiles_map else owner_id[:6] + "…")
+        seller_obj["name"] = teacher_profile_row.get("name") or (profiles_map.get(owner_id, {}).get("name") if owner_id in profiles_map else owner_id[:6] + "â€¦")
         if teacher_profile_row.get("profile_image_url"):
             seller_obj["avatar_url"] = teacher_profile_row.get("profile_image_url")
     if owner_id and not teacher_profile_row and owner_id in profiles_map:
         prow = profiles_map[owner_id]
-        seller_obj.setdefault("name", prow.get("name") or owner_id[:6] + "…")
+        seller_obj.setdefault("name", prow.get("name") or owner_id[:6] + "â€¦")
         if prow.get("profile_image_url"):
             seller_obj["avatar_url"] = prow.get("profile_image_url")
     if owner_id and "name" not in seller_obj:
-        seller_obj["name"] = owner_id[:6] + "…"
+        seller_obj["name"] = owner_id[:6] + "â€¦"
     if owner_id:
         note["seller"] = seller_obj
 
@@ -10155,7 +10172,7 @@ def mp_get_note(note_id: uuid.UUID, authorization: Optional[str] = Header(defaul
         if prow:
             r["reviewer"] = {
                 "id": rid,
-                "name": prow.get("name") or (rid[:6] + "…" if rid else None),
+                "name": prow.get("name") or (rid[:6] + "â€¦" if rid else None),
                 "avatar_url": prow.get("profile_image_url"),
             }
     # --- Academic metadata enrichment (names) ---
@@ -10808,7 +10825,7 @@ def api_snippet_assist(payload: dict):
                 """
                 Provide a brief, safe, high-level, non-actionable academic overview of the selection.
                 Do NOT include steps, procedures, or details that could enable harm.
-                If necessary, generalize abstractly. Keep it 2–5 sentences.
+                If necessary, generalize abstractly. Keep it 2â€“5 sentences.
                 """
             ).strip()
             try:
@@ -10862,7 +10879,7 @@ async def generate(payload: dict):
                 custom = None
                 if variant == "cheatsheet":
                     custom = (
-                        "Rewrite as an ultra-concise exam cheat sheet: 250–400 words, bullets/tables, sections: Core Concepts; Key Definitions & Formulas; Quick Steps/Algorithms; Pitfalls; Keywords. Bold key terms. Do NOT include TL;DR, Common Mistakes, Memory Aids, or any CITATIONS section."
+                        "Rewrite as an ultra-concise exam cheat sheet: 250â€“400 words, bullets/tables, sections: Core Concepts; Key Definitions & Formulas; Quick Steps/Algorithms; Pitfalls; Keywords. Bold key terms. Do NOT include TL;DR, Common Mistakes, Memory Aids, or any CITATIONS section."
                     )
                 prompt = _build_transform_prompt(mode, md_detailed, custom)
                 client = _openai_client()
@@ -11054,11 +11071,11 @@ def _fallback_flashcards_from_markdown(markdown: str, topic: str, max_cards: int
         clean_body = body.strip()
         paragraphs = [p.strip() for p in re.split(r"\n{2,}", clean_body) if p.strip()]
         summary_source = paragraphs[0] if paragraphs else clean_body
-        summary = textwrap.shorten(summary_source.replace("\n", " "), width=220, placeholder="…") if summary_source else ""
+        summary = textwrap.shorten(summary_source.replace("\n", " "), width=220, placeholder="â€¦") if summary_source else ""
 
         sections_payload: List[Dict[str, str]] = []
         sections_payload.append({
-            "icon": "🧠",
+            "icon": "ðŸ§ ",
             "heading": "Core Idea",
             "question": f"What is {title}?",
             "answer": summary_source or "Not covered in notes",
@@ -11066,14 +11083,14 @@ def _fallback_flashcards_from_markdown(markdown: str, topic: str, max_cards: int
 
         if len(paragraphs) > 1:
             sections_payload.append({
-                "icon": "⚙️",
+                "icon": "âš™ï¸",
                 "heading": "Mechanism",
                 "question": "How does it work?",
                 "answer": paragraphs[1],
             })
         if len(paragraphs) > 2:
             sections_payload.append({
-                "icon": "🛡️",
+                "icon": "ðŸ›¡ï¸",
                 "heading": "Pitfalls",
                 "question": "What should we watch out for?",
                 "answer": paragraphs[2],
@@ -11082,7 +11099,7 @@ def _fallback_flashcards_from_markdown(markdown: str, topic: str, max_cards: int
         if len(sections_payload) < 2:
             alt_answer = " ".join(paragraphs[1:2]) or clean_body[:240]
             sections_payload.append({
-                "icon": "🔭",
+                "icon": "ðŸ”­",
                 "heading": "Details",
                 "question": "Tell me more",
                 "answer": alt_answer or "Not covered in notes",
@@ -11091,7 +11108,7 @@ def _fallback_flashcards_from_markdown(markdown: str, topic: str, max_cards: int
         key_points: List[str] = []
         bullets = [b.strip() for b in bullet_pattern.findall(body) if b.strip()]
         for bullet in bullets[:4]:
-            key_points.append(textwrap.shorten(bullet, width=100, placeholder="…"))
+            key_points.append(textwrap.shorten(bullet, width=100, placeholder="â€¦"))
         if not key_points and summary:
             key_points.append(summary)
 
@@ -11134,8 +11151,8 @@ def _generate_flashcards_with_gemini(markdown: str, topic: str, max_cards: int) 
         - Each flashcard is a JSON object with keys: "concept", "summary", "sections", "key_points".
         - "concept": 3-6 word title anchored in the notes.
         - "summary": 1-2 sentence high-energy overview derived strictly from the notes.
-        - "sections": array of 2-4 objects, each with emoji "icon", "heading", "question", "answer". Questions must be informational; answers must come strictly from the notes. Icons should feel futuristic/fantasy (🧠, ⚙️, 🔮, 🌌, 🛡️, 💡, etc.).
-        - "key_points": array of 2-4 crisp bullet phrases (≤80 characters) quoting or paraphrasing unique facts from the notes.
+        - "sections": array of 2-4 objects, each with emoji "icon", "heading", "question", "answer". Questions must be informational; answers must come strictly from the notes. Icons should feel futuristic/fantasy (ðŸ§ , âš™ï¸, ðŸ”®, ðŸŒŒ, ðŸ›¡ï¸, ðŸ’¡, etc.).
+        - "key_points": array of 2-4 crisp bullet phrases (â‰¤80 characters) quoting or paraphrasing unique facts from the notes.
         - NEVER invent information. If the notes lack detail for a section, set the answer to "Not covered in notes".
         - Keep terminology consistent with the notes (math symbols, proper nouns, etc.).
         - The vibe should be adventurous and motivating while staying accurate.
@@ -11292,7 +11309,7 @@ def _generate_flashcards_with_gemini(markdown: str, topic: str, max_cards: int) 
             base_question = prepared.get("question") or "What is the key idea?"
             base_answer = prepared.get("answer") or prepared.get("summary") or "Not covered in notes"
             sections = [{
-                "icon": prepared.get("icon") or "🧠",
+                "icon": prepared.get("icon") or "ðŸ§ ",
                 "heading": prepared.get("heading") or prepared["concept"],
                 "question": base_question,
                 "answer": base_answer,
@@ -11300,7 +11317,7 @@ def _generate_flashcards_with_gemini(markdown: str, topic: str, max_cards: int) 
         normalized_sections = []
         for section in sections:
             sec = dict(section or {})
-            sec.setdefault("icon", "🔮")
+            sec.setdefault("icon", "ðŸ”®")
             sec.setdefault("heading", prepared["concept"])
             sec.setdefault("question", "What does this cover?")
             sec.setdefault("answer", "Not covered in notes")
@@ -11610,7 +11627,7 @@ def _structured_notes_from_transcript(transcript: str, *, title: str, lang: Opti
           3. Detailed Notes (use subsections or numbered steps when flow suggests)
           4. Examples & Analogies (bullets; add [not mentioned] if absent)
           5. Frameworks / Processes (tables or lists; include Mermaid diagrams when explaining flows)
-          6. Glossary (term – short definition table or list)
+          6. Glossary (term â€“ short definition table or list)
           7. Reflection Questions
           8. Action Items or Next Steps
           9. Further Reading / References (recommend logical follow ups; mark [none] if unavailable)
