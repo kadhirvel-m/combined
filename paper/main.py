@@ -232,6 +232,7 @@ deepseek_model_client =  OpenAIChatCompletionClient(
 )
 
 gemini_model_client = OpenAIChatCompletionClient(
+    base_url=os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
     model="gemini-2.5-flash",
     api_key=(os.getenv("GEMINI_API_KEY", "") or "").strip(),
     model_info=ModelInfo(
