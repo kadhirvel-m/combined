@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PaperX ? YouTube Notes</title>
-    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="assets/css/tailwind.css" />
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+    <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.5/dist/dotlottie-wc.js" type="module"></script>
     <style>
         :root {
             color-scheme: light;
@@ -100,6 +101,23 @@
         body[data-theme="dark"] .notes-scroll::-webkit-scrollbar-thumb {
             background: rgba(94, 234, 212, 0.35);
         }
+
+        /* Ensure loader has room inside the answer box while loading */
+        .notes-scroll.loading {
+            min-height: 360px;
+        }
+
+        /* Shared loader box to keep the animation square and responsive */
+        .px-loader-box {
+            width: clamp(180px, 45vw, 360px);
+            aspect-ratio: 1 / 1;
+        }
+
+        .px-loader-box>dotlottie-wc {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
     </style>
 </head>
 
@@ -108,8 +126,8 @@
         class="fixed inset-x-0 top-0 z-40 bg-white/95 dark:bg-slate-950 border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm dark:shadow-slate-900/40">
         <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
             <a href="index.html" class="flex items-center gap-3" aria-label="Paper X Home">
-                <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 dark:hidden">
-                <img src="../assets/img/logo-dark.svg" alt="Paper X" class="hidden h-10 dark:block">
+                <img src="assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
+                <img src="assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
             </a>
             <nav class="hidden items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-200 lg:flex">
                 <a href="index.html" class="transition hover:text-slate-900 dark:hover:text-white">Home</a>
@@ -178,7 +196,7 @@
                         <div class="flex flex-wrap gap-2">
                             <span class="pill">
                                 <span class="material-symbols-rounded text-base opacity-60">robot</span>
-                                Gemini summary
+                                TuneAI summary
                             </span>
                             <span class="pill">
                                 <span class="material-symbols-rounded text-base opacity-60">subtitles</span>
@@ -202,7 +220,16 @@
                         Copy notes
                     </button>
                 </header>
-                <div class="notes-scroll space-y-4 text-base leading-relaxed text-slate-700 dark:text-slate-100">
+                <div id="notesScroll"
+                    class="notes-scroll relative space-y-4 text-base leading-relaxed text-slate-700 dark:text-slate-100">
+                    <div id="notesLoader" class="absolute inset-0 flex items-center justify-center pointer-events-none"
+                        style="display: none;">
+                        <div class="px-loader-box">
+                            <dotlottie-wc
+                                src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
+                                autoplay loop></dotlottie-wc>
+                        </div>
+                    </div>
                     <div id="notesRendered"
                         class="prose max-w-none prose-headings:mt-6 prose-headings:font-semibold prose-p:mb-4 prose-ul:mb-5 prose-li:marker:text-slate-400 dark:prose-invert">
                     </div>
@@ -212,7 +239,7 @@
     </main>
 
     <footer class="px-5 pb-10 text-center text-sm text-slate-400 dark:text-slate-500">
-        Crafted with PaperX ? yt-dlp ? YouTube Transcript API ? Gemini
+        Crafted with PaperX ? yt-dlp ? YouTube Transcript API ? TuneAI
     </footer>
 
     <script>
@@ -263,6 +290,8 @@
         const uploadDateEl = document.getElementById('uploadDate');
         const viewCountEl = document.getElementById('viewCount');
         const notesRenderedEl = document.getElementById('notesRendered');
+        const notesLoaderEl = document.getElementById('notesLoader');
+        const notesScrollEl = document.getElementById('notesScroll');
         const notesCopyBtn = document.getElementById('notesCopyBtn');
         const notesStatusEl = document.getElementById('notesStatus');
         const openOnYoutubeEl = document.getElementById('openOnYoutube');
@@ -307,6 +336,16 @@
             notesStatusEl.textContent = message;
             notesStatusEl.style.color = toneColor(tone);
             if (!skipStore) lastStatus = { message, tone };
+        }
+
+        function showLoader() {
+            if (notesLoaderEl) notesLoaderEl.style.display = 'flex';
+            if (notesScrollEl) notesScrollEl.classList.add('loading');
+        }
+
+        function hideLoader() {
+            if (notesLoaderEl) notesLoaderEl.style.display = 'none';
+            if (notesScrollEl) notesScrollEl.classList.remove('loading');
         }
 
         function formatViews(n) {
@@ -365,8 +404,9 @@
         async function generateNotes(video) {
             try { if (notesAbortController) notesAbortController.abort(); } catch { }
             notesAbortController = new AbortController();
-            setStatus('Composing structured notes with Gemini...', 'info');
+            setStatus('Composing structured notes with TuneAI...', 'info');
             notesRenderedEl.innerHTML = '';
+            showLoader();
             const data = await fetchJson(`${apiBase}/api/transcripts/notes`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -375,12 +415,14 @@
             });
             const md = data.notes_markdown || '';
             if (!md.trim()) {
-                setStatus('Gemini returned empty notes. Try again later.', 'error');
+                setStatus('TuneAI returned empty notes. Try again later.', 'error');
+                hideLoader();
                 return;
             }
             renderMarkdown(md);
-            const origin = data.model ? `Notes crafted with ${data.model}.` : 'Notes crafted with Gemini.';
+            const origin = data.model ? 'Notes crafted with TuneAI.' : 'Notes crafted with TuneAI.';
             setStatus(data.truncated ? `${origin} Transcript was partially processed.` : origin, 'success');
+            hideLoader();
             notesAbortController = null;
         }
 
@@ -393,6 +435,7 @@
             if (openOnYoutubeEl) openOnYoutubeEl.href = videoUrl;
 
             try {
+                showLoader();
                 setStatus('Fetching video details...', 'info');
                 const meta = await fetchMeta(videoUrl);
 
@@ -442,8 +485,9 @@
                     const saved = await fetchSavedNotes(meta.video_id);
                     if (saved && saved.notes_markdown && saved.notes_markdown.trim()) {
                         renderMarkdown(saved.notes_markdown);
-                        const msg = saved.model ? `Loaded saved notes (${saved.model}).` : 'Loaded saved notes.';
+                        const msg = saved.model ? `Loaded saved notes.` : 'Loaded saved notes.';
                         setStatus(msg, 'success');
+                        hideLoader();
                         return;
                     }
                 }
@@ -455,6 +499,7 @@
                 await generateNotes(videoUrl);
             } catch (err) {
                 setStatus(err.message || String(err), 'error');
+                hideLoader();
             }
         }
 

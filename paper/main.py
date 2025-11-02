@@ -12042,6 +12042,8 @@ class YouTubeMetaResponse(BaseModel):
     channel_name: Optional[str] = None
     upload_date: Optional[str] = None  # ISO date string (YYYY-MM-DD) when available
     views: Optional[int] = None
+    channel_url: Optional[str] = None
+    channel_logo: Optional[str] = None
 
 
 def _normalize_video_key(url: str) -> str:
@@ -12088,6 +12090,7 @@ def _cached_youtube_meta(video_key: str) -> Dict[str, Any]:
 
     # Prefer channel name field, fallback to uploader
     channel_name = info.get("channel") or info.get("uploader") or None
+    channel_url = info.get("channel_url") or info.get("uploader_url") or None
 
     # upload_date comes as YYYYMMDD; convert to YYYY-MM-DD if present
     up_raw = info.get("upload_date") or ""
@@ -12101,13 +12104,24 @@ def _cached_youtube_meta(video_key: str) -> Dict[str, Any]:
     except Exception:
         views = None
 
-    return {
+    out = {
         "video_id": vid,
         "embed_url": f"https://www.youtube.com/embed/{vid}",
         "channel_name": channel_name,
         "upload_date": upload_date,
         "views": views,
     }
+    # Best-effort channel logo resolution when channel_url is available
+    try:
+        if channel_url:
+            logo = get_channel_logo(channel_url) or get_default_channel_logo()
+            out["channel_url"] = channel_url
+            if logo:
+                out["channel_logo"] = logo
+    except Exception:
+        # Non-fatal; just omit logo on errors
+        out["channel_url"] = channel_url
+    return out
 
 
 def _extract_youtube_meta(url: str) -> YouTubeMetaResponse:

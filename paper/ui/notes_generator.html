@@ -80,6 +80,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <!-- Lottie Web Component for loader animation -->
+  <script type="module" src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.5/dist/dotlottie-wc.js"></script>
 
   <style>
     :root {
@@ -417,6 +419,24 @@
         padding-bottom: .75rem !important;
       }
     }
+
+    /* Ensure the output area reserves space while loading */
+    #outputWrap.loading {
+      min-height: 360px;
+    }
+  </style>
+  <style>
+    /* Shared loader box to keep the animation perfectly square and responsive */
+    .px-loader-box {
+      width: clamp(180px, 45vw, 360px);
+      aspect-ratio: 1 / 1;
+    }
+
+    .px-loader-box>dotlottie-wc {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
   </style>
 </head>
 
@@ -635,14 +655,16 @@
         </div>
 
         <!-- Output -->
-        <div id="outputWrap" class="p-4 sm:p-6">
-          <article id="output" class="prose prose-slate dark:prose-invert max-w-none">
-            <!-- placeholder skeleton -->
-            <div class="h-5 w-48 rounded skeleton mb-3"></div>
-            <div class="h-4 w-full rounded skeleton mb-2"></div>
-            <div class="h-4 w-[90%] rounded skeleton mb-2"></div>
-            <div class="h-4 w-[80%] rounded skeleton mb-2"></div>
-          </article>
+        <div id="outputWrap" class="relative p-4 sm:p-6">
+          <!-- Centered loader overlay inside the answer box -->
+          <div id="outputLoader" class="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
+            style="display: none;">
+            <div class="px-loader-box">
+              <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie" autoplay
+                loop></dotlottie-wc>
+            </div>
+          </div>
+          <article id="output" class="prose prose-slate dark:prose-invert max-w-none"></article>
 
           <textarea id="editor" class="hidden w-full h-[60vh] mt-2 p-3 rounded-lg border font-mono text-[13px]"
             style="border-color: var(--outline); background: var(--surface); color: var(--surface-contrast)"
@@ -890,6 +912,7 @@
     const $emphBtn = document.getElementById('emphBtn');
     const $expand = document.getElementById('expandBtn');
     const $wrap = document.getElementById('outputWrap');
+    const $outputLoader = document.getElementById('outputLoader');
     const $editToggle = document.getElementById('editToggle');
     const $save = document.getElementById('saveBtn');
     const $myNoteBtn = document.getElementById('myNoteBtn');
@@ -2223,6 +2246,16 @@
       if ($regenMobile) $regenMobile.disabled = b;
     }
 
+    // Loader controls scoped to the Final Output answer box
+    function showOutputLoader() {
+      if ($outputLoader) $outputLoader.style.display = 'flex';
+      if ($wrap) $wrap.classList.add('loading');
+    }
+    function hideOutputLoader() {
+      if ($outputLoader) $outputLoader.style.display = 'none';
+      if ($wrap) $wrap.classList.remove('loading');
+    }
+
     function postprocessLinks() {
       $output.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
     }
@@ -2294,17 +2327,13 @@
 
     function clearUI() {
       $images.innerHTML = '';
-      $output.innerHTML = `
-        <div class="h-5 w-48 rounded skeleton mb-3"></div>
-        <div class="h-4 w-full rounded skeleton mb-2"></div>
-        <div class="h-4 w-[90%] rounded skeleton mb-2"></div>
-        <div class="h-4 w-[80%] rounded skeleton mb-2"></div>`;
+      $output.innerHTML = '';
       $toc.innerHTML = '';
       $progress.style.width = '0%';
       $meta.textContent = '';
       resetFlashcardAccess();
       currentNoteId = '';
-      // reset images skeleton
+      // reset images skeleton (keep for images only)
       ['', '', ''].forEach(() => {
         const sk = document.createElement('div');
         sk.className = 'h-24 rounded-lg skeleton';
@@ -2326,7 +2355,9 @@
 
     // ===== Streaming events =====
     document.getElementById('cancelBtn').addEventListener('click', () => {
-      if (es) { es.close(); es = null; logEvent('Cancelled'); setBusy(false); }
+      if (es) { es.close(); es = null; logEvent('Cancelled'); }
+      hideOutputLoader();
+      setBusy(false);
     });
 
     // Unified generator: supports force to bypass cache
@@ -2337,6 +2368,7 @@
       if (es) { try { es.close(); } catch { } es = null; }
       clearUI();
       setBusy(true);
+      showOutputLoader();
       const url = new URL(`${apiBase}/generate/stream`);
       url.searchParams.set('topic', t);
       if (force) url.searchParams.set('force', 'true');
@@ -2346,8 +2378,8 @@
       es = new EventSource(url.toString());
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
-      es.addEventListener('error', () => { logEvent('Stream error'); setBusy(false); es && es.close(); es = null; });
-      es.addEventListener('close', () => { setBusy(false); es && es.close(); es = null; });
+      es.addEventListener('error', () => { logEvent('Stream error'); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+      es.addEventListener('close', () => { hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
 
       const on = (name, fn) => es.addEventListener(name, (ev) => { try { fn(JSON.parse(ev.data)); setProgress(name); } catch { } });
 
@@ -2388,10 +2420,11 @@
           a.appendChild(img); $images.appendChild(a);
         });
       });
-      on('error', (d) => { logEvent('Error', d.message); setBusy(false); es && es.close(); es = null; });
+      on('error', (d) => { logEvent('Error', d.message); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
       on('final', (d) => {
         renderMarkdown(d.markdown);
         setEmphasis(emphasis);
+        hideOutputLoader();
         if (d.id) {
           currentNoteId = d.id;
           try {
