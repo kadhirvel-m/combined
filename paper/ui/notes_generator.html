@@ -527,6 +527,23 @@
               class="ripple sm:hidden px-3 py-2 rounded-xl border text-sm hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
               style="border-color: var(--outline)">Regenerate</button>
           </div>
+          <!-- Degree selector -->
+          <div id="degreeRow" class="hidden mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
+            <div class="flex items-center gap-2">
+              <label for="degreeSelect" class="text-xs font-medium shrink-0">Degree</label>
+              <select id="degreeSelect"
+                class="w-full px-3 py-2 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                style="border-color: var(--outline)">
+                <option value="">Select degree…</option>
+                <option value="custom">Other…</option>
+              </select>
+            </div>
+            <div id="degreeCustomRow" class="hidden sm:col-span-1">
+              <input id="degreeCustom" type="text" placeholder="Type your degree (e.g., B.Tech)"
+                class="w-full px-3 py-2 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                style="border-color: var(--outline); background: var(--surface); color: var(--surface-contrast)" />
+            </div>
+          </div>
           <div class="hidden sm:flex items-center gap-2 mt-3">
             <button id="regenBtn"
               class="ripple px-3 py-2 rounded-xl border hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
@@ -534,7 +551,7 @@
             <button id="cancelBtn"
               class="ripple px-3 py-2 rounded-xl border hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
               style="border-color: var(--outline)" disabled>Cancel</button>
-            <div class="text-xs text-[var(--muted)] ml-auto">Curated sources: GFG, TP, Scaler, Wiki, TPoint</div>
+            <div class="text-xs text-[var(--muted)] ml-auto"><span id="domainsHint">Sources: auto</span></div>
           </div>
         </div>
 
@@ -856,6 +873,10 @@
     const $refreshVideos = document.getElementById('refreshVideosBtn');
     const $videoLanguage = document.getElementById('videoLanguageSelect');
     const $topic = document.getElementById('topic');
+    const $degree = document.getElementById('degreeSelect');
+    const $degreeCustom = document.getElementById('degreeCustom');
+    const $degreeCustomRow = document.getElementById('degreeCustomRow');
+    const $degreeRow = document.getElementById('degreeRow');
     const $generate = document.getElementById('generateBtn');
     const $regen = document.getElementById('regenBtn');
     const $regenMobile = document.getElementById('regenBtnMobile');
@@ -874,6 +895,7 @@
     const $myNoteBtn = document.getElementById('myNoteBtn');
     const $editor = document.getElementById('editor');
     const $meta = document.getElementById('noteMeta');
+    const $domainsHint = document.getElementById('domainsHint');
     const $snack = document.getElementById('snack');
     const $themeBtn = document.getElementById('themeBtn');
     const $densityBtn = document.getElementById('densityBtn');
@@ -894,6 +916,139 @@
     let relatedVideosFullQuery = '';
     let relatedVideosLanguage = ($videoLanguage?.value || 'English');
     let relatedVideosDebounce = null;
+
+    // ===== Degree handling =====
+    const DEGREE_KEY = 'paperx:degree';
+    function getStoredDegree() {
+      try { return localStorage.getItem(DEGREE_KEY) || ''; } catch { return ''; }
+    }
+    function setStoredDegree(v) {
+      try { if (v) localStorage.setItem(DEGREE_KEY, v); else localStorage.removeItem(DEGREE_KEY); } catch { }
+    }
+    function getSelectedDegree() {
+      // Prefer hidden select/custom values; fall back to stored degree if UI not initialized yet.
+      const uiVal = (() => {
+        if (!$degree) return '';
+        const v = ($degree.value || '').trim();
+        if (v === 'custom') { return ($degreeCustom?.value || '').trim(); }
+        return v;
+      })();
+      if (uiVal) return uiVal;
+      const stored = getStoredDegree();
+      return (stored || '').trim();
+    }
+    async function loadDegreeOptions() {
+      if (!$degree) return;
+      // Preserve any existing non-default options except 'custom'
+      try {
+        const res = await fetch(`${apiBase}/api/notes/degrees`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const arr = await res.json();
+        const selected = getStoredDegree();
+        // Reset to default + custom
+        $degree.innerHTML = '';
+        const opt0 = document.createElement('option'); opt0.value = ''; opt0.textContent = 'Select degree…'; $degree.appendChild(opt0);
+        if (Array.isArray(arr)) {
+          arr.forEach(row => {
+            const lbl = (row && (row.degree_label || row.degree_key)) || '';
+            const key = (row && (row.degree_key || row.degree_label)) || '';
+            const val = (lbl || key || '').trim();
+            if (!val) return;
+            const opt = document.createElement('option');
+            opt.value = val; opt.textContent = lbl || key;
+            $degree.appendChild(opt);
+          });
+        }
+        const optC = document.createElement('option'); optC.value = 'custom'; optC.textContent = 'Other…'; $degree.appendChild(optC);
+        // Apply selection
+        if (selected) {
+          // If matches an option, select it; else select custom and fill input
+          const match = Array.from($degree.options).some(o => (o.value || '').toLowerCase() === selected.toLowerCase());
+          if (match) {
+            $degree.value = selected;
+            $degreeCustomRow?.classList.add('hidden');
+          } else {
+            $degree.value = 'custom';
+            if ($degreeCustom) $degreeCustom.value = selected;
+            $degreeCustomRow?.classList.remove('hidden');
+          }
+        }
+        updateDomainsHintDebounced();
+      } catch {
+        // ignore
+      }
+    }
+    function onDegreeChange() {
+      const val = ($degree?.value || '').trim();
+      if (val === 'custom') {
+        $degreeCustomRow?.classList.remove('hidden'); // keep row hidden globally; used only if we ever show
+        // don't store incomplete custom until user types
+      } else {
+        $degreeCustomRow?.classList.add('hidden');
+        setStoredDegree(val);
+        updateDomainsHintDebounced();
+      }
+    }
+    function onDegreeCustomInput() {
+      const v = ($degreeCustom?.value || '').trim();
+      setStoredDegree(v);
+      updateDomainsHintDebounced();
+    }
+    async function updateDomainsHint() {
+      if (!$domainsHint) return;
+      const degree = getSelectedDegree();
+      if (!degree) { $domainsHint.textContent = 'Sources: auto'; return; }
+      try {
+        const res = await fetch(`${apiBase}/api/notes/allowed-domains?degree=${encodeURIComponent(degree)}`);
+        if (!res.ok) { $domainsHint.textContent = `Degree: ${degree}`; return; }
+        const data = await res.json();
+        const list = (data && Array.isArray(data.domains)) ? data.domains : [];
+        if (!list || list.length === 0) { $domainsHint.textContent = `Degree: ${degree} • web (fallback)`; return; }
+        const preview = list.slice(0, 4).join(', ');
+        $domainsHint.textContent = `Degree: ${degree} • ${preview}${list.length > 4 ? '…' : ''}`;
+      } catch {
+        $domainsHint.textContent = `Degree: ${degree}`;
+      }
+    }
+    let domainsHintTimer = null;
+    function updateDomainsHintDebounced() {
+      if (domainsHintTimer) clearTimeout(domainsHintTimer);
+      domainsHintTimer = setTimeout(updateDomainsHint, 250);
+    }
+
+    // Auto-resolve degree from logged-in profile and hide UI controls
+    async function autoResolveDegreeFromProfile() {
+      try {
+        const token = getAuthToken();
+        if (!token) { return false; }
+        const meRes = await fetch(`${apiBase}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!meRes.ok) { return false; }
+        const me = await meRes.json();
+        const deptId = me && me.profile && me.profile.department && me.profile.department.id;
+        if (!deptId) { return false; }
+        // fetch academic meta to map department -> degree
+        const metaRes = await fetch(`${apiBase}/api/public/academic-meta`);
+        if (!metaRes.ok) { return false; }
+        const meta = await metaRes.json();
+        const depts = Array.isArray(meta && meta.departments) ? meta.departments : [];
+        const degrees = Array.isArray(meta && meta.degrees) ? meta.degrees : [];
+        const dept = depts.find(d => String(d.id) === String(deptId));
+        if (!dept || !dept.degree_id) { return false; }
+        const deg = degrees.find(g => String(g.id) === String(dept.degree_id));
+        const label = (deg && deg.name) ? String(deg.name).trim() : '';
+        if (!label) { return false; }
+        // Store and set hidden inputs
+        setStoredDegree(label);
+        if ($degree) {
+          // Try to select matching option if present, else set custom value
+          const match = Array.from($degree.options || []).some(o => (o.value || '').toLowerCase() === label.toLowerCase());
+          if (match) { $degree.value = label; }
+          else { $degree.value = 'custom'; if ($degreeCustom) $degreeCustom.value = label; }
+        }
+        updateDomainsHintDebounced();
+        return true;
+      } catch { return false; }
+    }
 
     function normalizeVideoLanguage(language) {
       return (language || '').trim();
@@ -1845,6 +2000,34 @@
     let dense = false;
     let emphasis = localStorage.getItem('paperx:emphasis') === '1';
 
+    // Initialize degree UI
+    if ($degree) {
+      $degree.addEventListener('change', onDegreeChange);
+      loadDegreeOptions();
+    }
+    if ($degreeCustom) {
+      $degreeCustom.addEventListener('input', onDegreeCustomInput);
+    }
+    // Always hide the entire degree selector field for automatic behavior
+    if ($degreeRow) { $degreeRow.classList.add('hidden'); }
+    // Resolve degree automatically from profile if possible; otherwise rely on stored degree or backend fallback
+    (async () => {
+      const ok = await autoResolveDegreeFromProfile();
+      if (!ok) {
+        // No profile/degree; if a stored degree exists, ensure hint shows it, else keep 'auto'
+        const stored = getStoredDegree();
+        if ($degree) {
+          if (stored) {
+            const match = Array.from($degree.options || []).some(o => (o.value || '').toLowerCase() === stored.toLowerCase());
+            if (match) $degree.value = stored; else { $degree.value = 'custom'; if ($degreeCustom) $degreeCustom.value = stored; }
+          } else {
+            $degree.value = '';
+          }
+        }
+      }
+      updateDomainsHintDebounced();
+    })();
+
     const storedTopic = (() => {
       try { return localStorage.getItem('paperx:lastTopic') || ''; } catch { return ''; }
     })();
@@ -2158,6 +2341,8 @@
       url.searchParams.set('topic', t);
       if (force) url.searchParams.set('force', 'true');
       url.searchParams.set('variant', currentVariant);
+      const degree = getSelectedDegree();
+      if (degree) url.searchParams.set('degree', degree);
       es = new EventSource(url.toString());
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
@@ -2166,7 +2351,25 @@
 
       const on = (name, fn) => es.addEventListener(name, (ev) => { try { fn(JSON.parse(ev.data)); setProgress(name); } catch { } });
 
-      on('start', (d) => logEvent('Start', `Allowed: ${d.allowed_domains.join(', ')}`));
+      on('start', (d) => {
+        const allowed = Array.isArray(d.allowed_domains) ? d.allowed_domains : [];
+        const deg = (d.degree || '').trim();
+        logEvent('Start', `Allowed: ${allowed.join(', ')}`);
+        if ($domainsHint) {
+          if (deg && allowed.length) {
+            const preview = allowed.slice(0, 4).join(', ');
+            $domainsHint.textContent = `Degree: ${deg} • ${preview}${allowed.length > 4 ? '…' : ''}`;
+          } else if (deg && !allowed.length) {
+            $domainsHint.textContent = `Degree: ${deg} • web (fallback)`;
+          } else if (!deg && allowed.length) {
+            // No degree param, but backend allowed domains present (likely default)
+            const preview = allowed.slice(0, 4).join(', ');
+            $domainsHint.textContent = `Sources: ${preview}${allowed.length > 4 ? '…' : ''}`;
+          } else {
+            $domainsHint.textContent = 'Sources: auto';
+          }
+        }
+      });
       on('search_results', (d) => logEvent('Searching', `${d.urls.length} results`));
       on('fetch_start', (d) => logEvent('Fetching', d.url));
       on('fetch_done', (d) => logEvent('Parsed', `${d.title} (${d.sections} sections)`));

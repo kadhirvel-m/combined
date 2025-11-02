@@ -33,7 +33,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Body, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, Request
 from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 try:
     import httpx  # Optional: used for catching RemoteProtocolError from underlying HTTP calls
@@ -832,14 +832,18 @@ GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or "").strip()
 GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-2.5-flash")
 MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
-ALLOWED_DOMAINS = [
+# Default domains for notes/web search when DB has no config yet
+DEFAULT_ALLOWED_DOMAINS = [
     "geeksforgeeks.org",
     "tutorialspoint.com",
     "scaler.com",
     "byjus.com",
     "wikipedia.org",
-    "tpointtech.com", 
+    "tpointtech.com",
 ]
+
+# Table to store degree-specific allowed domains
+DEGREE_ALLOWED_DOMAINS_TABLE = os.getenv("DEGREE_ALLOWED_DOMAINS_TABLE", "degree_allowed_domains")
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (PaperX; +https://example.com) AppleWebKit/537.36 "
@@ -864,18 +868,78 @@ class PageExtract:
     sections: List[SectionChunk] = field(default_factory=list)
 
 
-def is_allowed(url: str) -> bool:
+def _normalize_degree_key(degree: Optional[str]) -> Optional[str]:
+    if not degree:
+        return None
+    s = re.sub(r"[^a-zA-Z0-9]+", "", degree).upper()
+    return s or None
+
+
+def db_get_allowed_domains_for_degree(degree: Optional[str]) -> List[str]:
+    """Fetch enabled allowed domains for the normalized degree key.
+
+    Returns empty list if none configured (caller may fallback to DEFAULT).
+    """
+    key = _normalize_degree_key(degree)
+    if not key:
+        return []
+    supabase = get_service_client()
+    try:
+        res = (
+            supabase.table(DEGREE_ALLOWED_DOMAINS_TABLE)
+            .select("domain,enabled")
+            .eq("degree_key", key)
+            .eq("enabled", True)
+            .order("domain")
+            .execute()
+        )
+        rows = getattr(res, "data", []) or []
+        out = []
+        for r in rows:
+            d = (r.get("domain") or "").strip()
+            if d:
+                out.append(d)
+        return out
+    except Exception:
+        return []
+
+
+def is_allowed(url: str, allowed_domains: Optional[List[str]] = None) -> bool:
+    """Check if URL's host matches any allowed domain.
+
+    If allowed_domains is empty/None, allow all (no restriction).
+    """
     try:
         host = urlparse(url).netloc.lower()
-        return any(host.endswith(d) for d in ALLOWED_DOMAINS)
+        domains = allowed_domains or []
+        if not domains:
+            return True
+        return any(host.endswith(d) for d in domains)
     except Exception:
         return False
 
 
-def serpapi_search(topic: str, num: int = 10) -> List[str]:
-    """Search constrained to allowed domains."""
-    site_filter = " OR ".join([f"site:{d}" for d in ALLOWED_DOMAINS])
-    q = f'{topic} ({site_filter})'
+def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, allowed_domains: Optional[List[str]] = None) -> List[str]:
+    """Search Google via SerpAPI.
+
+    Preference order for domain restriction:
+      1) allowed_domains param if provided (non-empty)
+      2) domains fetched from DB by degree
+      3) DEFAULT_ALLOWED_DOMAINS
+
+    Fallback: If no URLs matched the domain filter, retry WITHOUT any site filter (top web results).
+    """
+    # Resolve domains according to priority
+    domains: List[str] = []
+    if allowed_domains:
+        domains = [d for d in allowed_domains if d]
+    elif degree:
+        domains = db_get_allowed_domains_for_degree(degree)
+    if not domains:
+        domains = list(DEFAULT_ALLOWED_DOMAINS)
+
+    site_filter = " OR ".join([f"site:{d}" for d in domains]) if domains else ""
+    q = f"{topic} ({site_filter})" if site_filter else topic
     params = {
         "engine": "google",
         "q": q,
@@ -887,7 +951,7 @@ def serpapi_search(topic: str, num: int = 10) -> List[str]:
     notes_logger.info("SerpAPI search start", extra={
         "topic": topic,
         "query": q,
-        "allowed_domains": ALLOWED_DOMAINS,
+        "allowed_domains": domains,
         "api_key_present": bool(SERPAPI_API_KEY),
     })
     search = GoogleSearch(params)
@@ -896,53 +960,69 @@ def serpapi_search(topic: str, num: int = 10) -> List[str]:
     except Exception as exc:
         notes_logger.error("SerpAPI search failed", exc_info=exc)
         raise
-
+    urls: List[str] = []
     if not results:
         notes_logger.warning("SerpAPI returned empty response", extra={"topic": topic})
-        return []
-
-    err = results.get("error")
-    if err:
-        notes_logger.error("SerpAPI error for topic '%s': %s", topic, err)
     else:
-        notes_logger.debug(
-            "SerpAPI search metadata",
-            extra={
-                "topic": topic,
-                "organic_count": len(results.get("organic_results") or []),
-                "related_questions": len(results.get("related_questions") or []),
-            },
-        )
+        err = results.get("error")
+        if err:
+            notes_logger.error("SerpAPI error for topic '%s': %s", topic, err)
+        else:
+            notes_logger.debug(
+                "SerpAPI search metadata",
+                extra={
+                    "topic": topic,
+                    "organic_count": len(results.get("organic_results") or []),
+                    "related_questions": len(results.get("related_questions") or []),
+                },
+            )
 
-    urls = []
-    for item in (results.get("organic_results") or []):
-        link = item.get("link")
-        if link and is_allowed(link):
-            urls.append(link)
-    # fallback: also parse "related" if available
-    for item in (results.get("related_questions") or []):
-        for src in (item.get("sources") or []):
-            link = src.get("link")
-            if link and is_allowed(link):
-                urls.append(link)
-    # dedup preserve order
-    seen = set()
-    out = []
+            for item in (results.get("organic_results") or []):
+                link = item.get("link")
+                if link and is_allowed(link, domains):
+                    urls.append(link)
+            # Also parse related if available
+            for item in (results.get("related_questions") or []):
+                for src in (item.get("sources") or []):
+                    link = src.get("link")
+                    if link and is_allowed(link, domains):
+                        urls.append(link)
+
+    # Dedup preserve order
+    seen: Set[str] = set()
+    filtered: List[str] = []
     for u in urls:
         if u not in seen:
             seen.add(u)
-            out.append(u)
-    if not out:
-        notes_logger.warning(
-            "SerpAPI returned no URLs after filtering",
-            extra={"topic": topic, "raw_count": len(urls)},
-        )
-    else:
+            filtered.append(u)
+
+    if filtered:
         notes_logger.info(
             "SerpAPI search success",
-            extra={"topic": topic, "selected_urls": out[: min(3, len(out))], "total": len(out)},
+            extra={"topic": topic, "selected_urls": filtered[: min(3, len(filtered))], "total": len(filtered), "domains": domains},
         )
-    return out[:num]
+        return filtered[:num]
+
+    # Fallback: re-run without site restriction to get top results
+    notes_logger.warning("No URLs matched allowed domains; falling back to unrestricted search", extra={"topic": topic})
+    try:
+        search2 = GoogleSearch({**params, "q": topic})
+        results2 = search2.get_dict()
+    except Exception:
+        return []
+    urls2: List[str] = []
+    for item in (results2.get("organic_results") or []):
+        link = item.get("link")
+        if link:
+            urls2.append(link)
+    # dedup preserve order
+    seen2: Set[str] = set()
+    out2: List[str] = []
+    for u in urls2:
+        if u not in seen2:
+            seen2.add(u)
+            out2.append(u)
+    return out2[:num]
 
 
 def fetch(url: str) -> str:
@@ -1179,10 +1259,10 @@ def _run_assistant_blocking(assistant: AssistantAgent, user_prompt: str):
         return asyncio.run(_coro())
 
 
-def generate_notes_markdown(topic: str) -> str:
+def generate_notes_markdown(topic: str, *, degree: Optional[str] = None) -> str:
     # 1) Search
     notes_logger.info("generate_notes_markdown:start", extra={"topic": topic})
-    urls = serpapi_search(topic, num=10)
+    urls = serpapi_search(topic, num=10, degree=degree)
     if not urls:
         notes_logger.error("generate_notes_markdown:no_urls", extra={"topic": topic})
         raise RuntimeError("No results from allowed domains.")
@@ -1299,7 +1379,7 @@ Instructions:
 Start with '# {topic}' and then the sections in a logical order.
 """.strip()
 
-def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None, variant: str = "detailed") -> Iterator[Tuple[str, Dict[str, Any]]]:
+def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None, variant: str = "detailed", degree: Optional[str] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Yield (event_name, payload) tuples describing real-time progress and final output.
 
     Events emitted in order (names):
@@ -1316,10 +1396,13 @@ def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] =
     try:
         if stop_event and stop_event.is_set():
             return
-        yield ("start", {"topic": topic, "allowed_domains": ALLOWED_DOMAINS})
+        dyn_domains = db_get_allowed_domains_for_degree(degree) if degree else []
+        if not dyn_domains:
+            dyn_domains = list(DEFAULT_ALLOWED_DOMAINS)
+        yield ("start", {"topic": topic, "allowed_domains": dyn_domains, "degree": degree})
         if stop_event and stop_event.is_set():
             return
-        urls = serpapi_search(topic, num=10)
+        urls = serpapi_search(topic, num=10, degree=degree)
         if stop_event and stop_event.is_set():
             return
         if not urls:
@@ -1423,15 +1506,20 @@ def main():
         sys.exit(1)
 
     topic = sys.argv[1].strip()
+    degree = sys.argv[2].strip() if len(sys.argv) > 2 else None
+    resolved_domains = db_get_allowed_domains_for_degree(degree) if degree else []
+    if not resolved_domains:
+        resolved_domains = list(DEFAULT_ALLOWED_DOMAINS)
     
     print(f"[Paper X] Generating notes for topic: {topic}\n"
-          f"Allowed domains: {', '.join(ALLOWED_DOMAINS)}\n")
+          f"Degree: {degree or '-'}\n"
+          f"Allowed domains: {', '.join(resolved_domains)}\n")
 
-    md_text = generate_notes_markdown(topic)
+    md_text = generate_notes_markdown(topic, degree=degree)
     path = save_md(topic, md_text)
     print(md_text)
     # Collect related images without downloading (URLs only)
-    related_pages = serpapi_search(topic, num=8)
+    related_pages = serpapi_search(topic, num=8, degree=degree)
     image_urls = collect_image_urls(topic, related_pages)
     if image_urls:
         print("\n---\nRelated image URLs (filtered, no logos):")
@@ -8591,6 +8679,73 @@ def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
     return load_unit_with_topics(unit_id)
 
 
+@academics_router.delete(
+    "/api/syllabus/units/{unit_id}",
+    summary="Delete a syllabus unit and all its topics",
+)
+def delete_unit_cascade(unit_id: uuid.UUID):
+    """Delete a single unit and cascade-delete its topics and related user progress."""
+    supabase = get_service_client()
+
+    # Verify unit exists
+    unit_q = (
+        supabase.table("syllabus_units")
+        .select("id")
+        .eq("id", str(unit_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(unit_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find unit): {unit_q.error}")
+    if not unit_q.data:
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    # Gather topic ids under this unit
+    topics_q = (
+        supabase.table("syllabus_topics")
+        .select("id")
+        .eq("unit_id", str(unit_id))
+        .execute()
+    )
+    if getattr(topics_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list topics): {topics_q.error}")
+    topic_ids = [t.get("id") for t in (topics_q.data or []) if t.get("id")]
+
+    # Delete progress rows referencing these topics, in chunks
+    if topic_ids:
+        for i in range(0, len(topic_ids), 100):
+            chunk = topic_ids[i:i+100]
+            prog_del = (
+                supabase.table("user_topic_progress")
+                .delete()
+                .in_("topic_id", chunk)
+                .execute()
+            )
+            if getattr(prog_del, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (delete progress): {prog_del.error}")
+
+        # Delete the topics
+        t_del = (
+            supabase.table("syllabus_topics")
+            .delete()
+            .eq("unit_id", str(unit_id))
+            .execute()
+        )
+        if getattr(t_del, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete topics): {t_del.error}")
+
+    # Finally delete the unit
+    u_del = (
+        supabase.table("syllabus_units")
+        .delete()
+        .eq("id", str(unit_id))
+        .execute()
+    )
+    if getattr(u_del, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete unit): {u_del.error}")
+
+    return {"ok": True, "deleted_topics": len(topic_ids or [])}
+
 # ---------- Progress tracking ----------
 
 class TopicToggleIn(BaseModel):
@@ -8831,6 +8986,124 @@ def upload_profile_asset(
 
 
 notes_router = APIRouter()
+
+# ---- Degree-specific Allowed Domains API ----
+
+class DegreeDomainsIn(BaseModel):
+    degree_label: str = Field(..., min_length=1, max_length=128)
+    domains: List[str] = Field(default_factory=list, description="List of hostnames like 'geeksforgeeks.org'")
+
+
+class DegreeDomainsOut(BaseModel):
+    degree_key: str
+    degree_label: str
+    domains: List[str]
+
+
+def db_replace_allowed_domains_for_degree(degree_label: str, domains: List[str]) -> DegreeDomainsOut:
+    key = _normalize_degree_key(degree_label)
+    if not key:
+        raise HTTPException(status_code=400, detail="Invalid degree label")
+    # normalize domains (host only, lowercase)
+    cleaned: List[str] = []
+    for d in domains:
+        d = (d or "").strip().lower()
+        if not d:
+            continue
+        # If a URL was pasted, extract host
+        try:
+            if "://" in d:
+                d = urlparse(d).netloc or d
+        except Exception:
+            pass
+        d = d.strip()
+        d = d.lstrip("*")  # don't allow wildcards
+        if d and d not in cleaned:
+            cleaned.append(d)
+
+    supabase = get_service_client()
+    now = datetime.utcnow().isoformat()
+    # Upsert rows
+    rows = [{
+        "degree_key": key,
+        "degree_label": degree_label,
+        "domain": dom,
+        "enabled": True,
+        "updated_at": now,
+    } for dom in cleaned]
+    try:
+        if rows:
+            supabase.table(DEGREE_ALLOWED_DOMAINS_TABLE).upsert(rows, on_conflict="degree_key,domain").execute()
+        # Remove extras not in the new list
+        if cleaned:
+            supabase.table(DEGREE_ALLOWED_DOMAINS_TABLE).delete().eq("degree_key", key).notin_("domain", cleaned).execute()
+        else:
+            # If empty list provided, delete all for degree
+            supabase.table(DEGREE_ALLOWED_DOMAINS_TABLE).delete().eq("degree_key", key).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB upsert failed: {e}")
+    return DegreeDomainsOut(degree_key=key, degree_label=degree_label, domains=cleaned)
+
+
+def db_delete_degree_domain(degree: str, domain: str) -> dict:
+    key = _normalize_degree_key(degree)
+    if not key or not domain:
+        raise HTTPException(status_code=400, detail="Invalid parameters")
+    supabase = get_service_client()
+    try:
+        supabase.table(DEGREE_ALLOWED_DOMAINS_TABLE).delete().eq("degree_key", key).eq("domain", domain.lower()).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {e}")
+    return {"ok": True}
+
+
+def db_list_degree_configs() -> List[DegreeDomainsOut]:
+    supabase = get_service_client()
+    try:
+        res = supabase.table(DEGREE_ALLOWED_DOMAINS_TABLE).select("degree_key,degree_label,domain,enabled").eq("enabled", True).execute()
+        rows = getattr(res, 'data', []) or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB fetch failed: {e}")
+    agg: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        key = (r.get("degree_key") or "").strip()
+        lbl = (r.get("degree_label") or "").strip() or key
+        dom = (r.get("domain") or "").strip().lower()
+        if not key or not dom:
+            continue
+        if key not in agg:
+            agg[key] = {"degree_key": key, "degree_label": lbl, "domains": []}
+        if dom not in agg[key]["domains"]:
+            agg[key]["domains"].append(dom)
+    out: List[DegreeDomainsOut] = []
+    for v in agg.values():
+        v["domains"].sort()
+        out.append(DegreeDomainsOut(**v))
+    # sort by label
+    out.sort(key=lambda x: x.degree_label.lower())
+    return out
+
+
+@notes_router.get("/api/notes/allowed-domains", summary="Get allowed domains for a degree", response_model=DegreeDomainsOut)
+def api_get_allowed_domains(degree: str = Query(..., min_length=1)):
+    key = _normalize_degree_key(degree)
+    domains = db_get_allowed_domains_for_degree(degree)
+    return DegreeDomainsOut(degree_key=key or "", degree_label=degree, domains=domains or [])
+
+
+@notes_router.post("/api/notes/allowed-domains", summary="Replace allowed domains for a degree", response_model=DegreeDomainsOut)
+def api_set_allowed_domains(payload: DegreeDomainsIn):
+    return db_replace_allowed_domains_for_degree(payload.degree_label, payload.domains or [])
+
+
+@notes_router.delete("/api/notes/allowed-domains", summary="Delete a single domain from a degree")
+def api_delete_domain(degree: str = Query(..., min_length=1), domain: str = Query(..., min_length=1)):
+    return db_delete_degree_domain(degree, domain)
+
+
+@notes_router.get("/api/notes/degrees", summary="List degrees with configured domains", response_model=List[DegreeDomainsOut])
+def api_list_degrees():
+    return db_list_degree_configs()
 
 # --- Print API ---
 print_router = APIRouter()
@@ -10901,6 +11174,7 @@ async def generate(payload: dict):
     topic = (payload or {}).get("topic", "").strip()
     force = bool((payload or {}).get("force", False))
     variant = _normalize_variant((payload or {}).get("variant", "detailed"))
+    degree = (payload or {}).get("degree")
     if not topic:
         return JSONResponse({"error": "Missing 'topic'"}, status_code=400)
     try:
@@ -10916,7 +11190,7 @@ async def generate(payload: dict):
                     "variant": variant,
                 }
         # Non-streaming generation: use detailed pipeline for detailed, or transform detailed into variant
-        md_detailed = generate_notes_markdown(topic)
+        md_detailed = generate_notes_markdown(topic, degree=degree)
         md = md_detailed
         if variant == "cheatsheet" or variant == "simple":
             try:
@@ -10955,7 +11229,7 @@ async def generate(payload: dict):
 
 @notes_router.get("/generate/stream")
 @notes_router.get("/api/notes/generate/stream")
-async def generate_stream(topic: str, force: bool = False, variant: str = "detailed"):
+async def generate_stream(topic: str, force: bool = False, variant: str = "detailed", degree: Optional[str] = None):
     async def event_source() -> AsyncGenerator[bytes, None]:
         yield b"event: open\n\n"
         # Early cache hit: exact-title lookup in DB
@@ -10985,7 +11259,7 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
 
         def worker() -> None:
             try:
-                for name, payload in generate_notes_events(topic, stop_event=stop_event, variant=_normalize_variant(variant)):
+                for name, payload in generate_notes_events(topic, stop_event=stop_event, variant=_normalize_variant(variant), degree=degree):
                     if stop_event.is_set():
                         break
                     dispatch(("event", name, payload))

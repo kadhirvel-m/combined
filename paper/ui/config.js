@@ -12,7 +12,7 @@
       var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
       resolved = /localhost|127\.0\.0\.1/.test(origin) ? 'http://127.0.0.1:8000' : (origin || 'http://127.0.0.1:8000');
     }
-    resolved = resolved.replace(/\/\$/, '');
+      resolved = resolved.replace(/\/$/, '');
     window.API_BASE = resolved;
     window.__API_BASE = resolved;
   } catch (_) {

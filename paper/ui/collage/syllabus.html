@@ -247,8 +247,7 @@
     <div id="unitModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
         role="dialog" aria-modal="true" aria-labelledby="unitModalTitle">
         <div id="unitModalBackdrop" class="fixed inset-0 bg-brand-900/70 dark:bg-black/70 backdrop-blur-sm"></div>
-        <div
-            id="unitModalPanel"
+        <div id="unitModalPanel"
             class="relative w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)] max-h-[90vh] h-[90vh] overflow-y-auto">
             <div class="flex items-start justify-between gap-4 border-b border-black/5 dark:border-white/10 px-6 py-5">
                 <div>
@@ -277,7 +276,11 @@
                     <div id="topicsContainer" class="space-y-3"></div>
                 </div>
                 <p id="unitModalMessage" class="hidden text-sm text-red-500"></p>
-                <div class="flex items-center justify-end gap-3">
+                <div class="flex items-center justify-between gap-3">
+                    <button id="unitDeleteBtn" type="button"
+                        class="hidden inline-flex items-center justify-center gap-2 rounded-full border border-red-300/60 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200 px-4 py-2 text-sm font-medium hover:border-red-400/80 transition">
+                        <span class="material-symbols-rounded text-base">delete</span>Delete
+                    </button>
                     <button id="unitModalCancel" type="button"
                         class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">Cancel</button>
                     <button id="unitSubmitBtn" type="submit"
@@ -322,6 +325,7 @@
         const unitModalCancel = document.getElementById('unitModalCancel');
         const unitModalClose = document.getElementById('unitModalClose');
         const unitSubmitBtn = document.getElementById('unitSubmitBtn');
+        const unitDeleteBtn = document.getElementById('unitDeleteBtn');
         const unitForm = document.getElementById('unitForm');
         const unitTitleInput = document.getElementById('unitTitle');
         const topicsContainer = document.getElementById('topicsContainer');
@@ -382,6 +386,7 @@
             unitModalMessage.classList.add('hidden');
             unitModalMode = 'add';
             unitSubmitBtn.innerHTML = '<span class="material-symbols-rounded text-base">save</span>Save unit';
+            if (unitDeleteBtn) unitDeleteBtn.classList.add('hidden');
             topicsContainer.innerHTML = '';
             addTopicRow();
         }
@@ -412,6 +417,10 @@
 
             unitModalTitle.textContent = mode === 'edit' ? 'Edit unit' : 'Add a new unit';
             unitSubmitBtn.innerHTML = mode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save unit';
+            if (unitDeleteBtn) {
+                if (mode === 'edit') unitDeleteBtn.classList.remove('hidden');
+                else unitDeleteBtn.classList.add('hidden');
+            }
             unitModal.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
             setTimeout(() => { unitTitleInput?.focus(); }, 60);
@@ -587,6 +596,41 @@
         unitModalClose.addEventListener('click', closeUnitModal);
         unitModalBackdrop.addEventListener('click', closeUnitModal);
         document.addEventListener('keydown', e => { if (e.key === 'Escape' && !unitModal.classList.contains('hidden')) closeUnitModal(); });
+
+        function setUnitDeleteLoading(isLoading) {
+            if (!unitDeleteBtn) return;
+            unitDeleteBtn.disabled = isLoading;
+            unitModalCancel.disabled = isLoading;
+            unitSubmitBtn.disabled = isLoading;
+            unitDeleteBtn.innerHTML = isLoading
+                ? '<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Deleting…'
+                : '<span class="material-symbols-rounded text-base">delete</span>Delete';
+        }
+
+        async function handleUnitDelete() {
+            if (!syllabusCourse || !syllabusCourse.editingUnitId) return;
+            const ok = window.confirm('Delete this unit and all its topics? This action cannot be undone.');
+            if (!ok) return;
+            setUnitDeleteLoading(true);
+            unitModalMessage.classList.add('hidden');
+            try {
+                await Collage.fetchJson(`/api/syllabus/units/${syllabusCourse.editingUnitId}`, { method: 'DELETE', skipAuth: true });
+                closeUnitModal();
+                await loadSyllabus();
+            } catch (error) {
+                let m = error?.message ?? 'Unable to delete unit.';
+                if (typeof m !== 'string') {
+                    try { m = JSON.stringify(m); } catch (_) { m = 'Unable to delete unit.'; }
+                }
+                if (m === '[object Object]') m = 'Unexpected response.';
+                unitModalMessage.textContent = m;
+                unitModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setUnitDeleteLoading(false);
+            }
+        }
+        if (unitDeleteBtn) unitDeleteBtn.addEventListener('click', handleUnitDelete);
 
         function renderUnits(units) {
             if (!units.length) {

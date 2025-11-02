@@ -585,3 +585,22 @@ CREATE TABLE public.ai_notes_user_edits (
 
 -- Enforce one saved edit per user per title (case-insensitive) and variant
 CREATE UNIQUE INDEX ai_notes_user_edits_unique_key ON public.ai_notes_user_edits (user_id, title_ci, variant);
+
+-- Degree-specific allowed domains for notes/web search
+-- Normalizes degree as degree_key (e.g., 'BTECH', 'MTECH', 'MBBS') and stores one domain per row.
+CREATE TABLE public.degree_allowed_domains (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  degree_key text NOT NULL,
+  degree_label text NOT NULL,
+  domain text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT degree_allowed_domains_pkey PRIMARY KEY (id)
+);
+
+-- Ensure there are no duplicate domains per degree
+CREATE UNIQUE INDEX degree_allowed_domains_unique_key ON public.degree_allowed_domains (degree_key, domain);
+
+-- Helpful index to query by degree
+CREATE INDEX degree_allowed_domains_degree_key_idx ON public.degree_allowed_domains (degree_key);
