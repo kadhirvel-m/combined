@@ -16,6 +16,7 @@ import textwrap
 import time
 import uuid
 import math
+import ast
 from dataclasses import dataclass, field
 from datetime import datetime, date
 from decimal import Decimal
@@ -11740,6 +11741,399 @@ def api_generate_flashcards(note_id: str, payload: Optional[Dict[str, Any]] = Bo
         "model": used_model,
         "truncated": truncated,
         "fallback": used_fallback,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+# --- MCQ generation from notes ---
+
+class MCQQuestion(BaseModel):
+    question: str = Field(..., min_length=3)
+    options: List[str] = Field(..., min_items=4)
+    correct_index: int = Field(..., ge=0, le=3)
+    explanation: Optional[str] = Field(default=None)
+
+
+def _generate_mcq_with_gemini(markdown: str, topic: str, count: int) -> Tuple[List[Dict[str, Any]], str, bool]:
+    """Generate MCQs grounded strictly in the provided markdown using Gemini.
+
+    Returns (questions, model_name, truncated).
+    """
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured for MCQ generation.")
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
+
+    cleaned = (markdown or "").strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Note does not contain any content to build MCQs.")
+
+    # Keep request compact
+    limit_chars = int(os.getenv("MCQ_MAX_CHARS", "9000") or "9000")
+    truncated = len(cleaned) > limit_chars
+    excerpt = cleaned[:limit_chars]
+
+    count = max(8, min(count or 10, 12))
+    min_q = min(8, count)
+
+    prompt = textwrap.dedent(
+        f"""
+        You are PaperX's quiz compiler. Create a rigorous MCQ test for "{topic}" using ONLY the material in the triple chevrons.
+
+        Constraints:
+        - Produce between {min_q} and {count} multiple-choice questions.
+        - Each question MUST have 4 options (A–D). Distractors must be plausible from the notes.
+        - For each question, return: "question" (string), "options" (array of 4 strings), "correct_index" (0..3), "explanation" (1–2 line reason grounded in notes).
+        - Strictly avoid facts not supported by the notes. If unsure, prefer conceptual questions.
+        - Return ONLY JSON with this exact schema: {{"topic": "...", "questions": [{{"question":"...","options":["...","...","...","..."],"correct_index": 0,"explanation":"..."}}]}}
+        - Do not wrap in markdown fences or commentary.
+
+        {"The notes excerpt was truncated for length; keep questions within available context." if truncated else ""}
+
+        <<<NOTES>>>
+        {excerpt}
+        <<<END NOTES>>>
+        """
+    ).strip()
+
+    genai.configure(api_key=GEMINI_API_KEY)
+    model_name = GEMINI_NOTES_MODEL
+    model = genai.GenerativeModel(model_name)
+    generation_config = genai.GenerationConfig(
+        response_mime_type="application/json",
+        temperature=0.2,
+        top_p=0.8,
+        max_output_tokens=int(os.getenv("GEMINI_MCQ_MAX_TOKENS", "3600") or "3600"),
+        candidate_count=1,
+    )
+
+    # Try to loosen safety gating for benign educational content.
+    # Build safety settings using SDK enums when available; otherwise, disable this knob.
+    safety_settings = None
+    try:  # Newer SDKs expose these types
+        from google.generativeai.types import HarmCategory, SafetySetting, HarmBlockThreshold  # type: ignore
+        safety_settings = [
+            SafetySetting(category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_NONE),
+            SafetySetting(category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=HarmBlockThreshold.BLOCK_NONE),
+            SafetySetting(category=HarmCategory.HARM_CATEGORY_SEXUAL_CONTENT, threshold=HarmBlockThreshold.BLOCK_NONE),
+            SafetySetting(category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=HarmBlockThreshold.BLOCK_NONE),
+        ]
+    except Exception:
+        safety_settings = None  # Fallback: rely on model defaults
+
+    request_timeout = float(os.getenv("GEMINI_MCQ_TIMEOUT", "35"))
+    payload = [{"text": prompt}]
+
+    def _generate_safe(pl: List[Dict[str, str]]):
+        """Call Gemini once, trying with safety_settings if available, and retrying without on compatibility errors."""
+        try:
+            if safety_settings is not None:
+                return model.generate_content(
+                    pl,
+                    generation_config=generation_config,
+                    safety_settings=safety_settings,  # may be unsupported on some SDKs
+                    request_options={"timeout": request_timeout},
+                )
+            # No safety_settings available
+            return model.generate_content(
+                pl,
+                generation_config=generation_config,
+                request_options={"timeout": request_timeout},
+            )
+        except Exception as e:
+            msg = str(e).lower()
+            # Retry without safety_settings if we suspect compatibility or category errors
+            if ("harm_category" in msg) or ("safety" in msg) or isinstance(e, (KeyError, TypeError, ValueError)):
+                return model.generate_content(
+                    pl,
+                    generation_config=generation_config,
+                    request_options={"timeout": request_timeout},
+                )
+            raise
+
+    try:
+        resp = _generate_safe(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini MCQ request failed: {exc}") from exc
+
+    # Robustly extract text from response without assuming resp.text always exists
+    raw: Optional[str] = None
+    finish_reason: Optional[Any] = None
+    try:
+        # resp.text may raise ValueError if no Part was returned
+        raw = resp.text  # type: ignore[attr-defined]
+    except Exception:
+        raw = None
+    # Capture finish_reason if present
+    try:
+        if getattr(resp, "candidates", None):
+            finish_reason = getattr(resp.candidates[0], "finish_reason", None)
+    except Exception:
+        finish_reason = None
+
+    if not raw and getattr(resp, "candidates", None):  # try extracting from parts
+        try:
+            for cand in resp.candidates:
+                content = getattr(cand, "content", None)
+                parts = getattr(content, "parts", None) if content is not None else None
+                if parts:
+                    s = "".join(getattr(p, "text", "") for p in parts if hasattr(p, "text"))
+                    if s and s.strip():
+                        raw = s
+                        break
+        except Exception:
+            raw = None
+
+    if not raw:
+        # Last resort: try dict form
+        try:
+            to_dict = getattr(resp, "to_dict", None)
+            if to_dict:
+                d = resp.to_dict()
+                for cand in (d.get("candidates") or []):
+                    parts = (((cand.get("content") or {}).get("parts")) or [])
+                    s = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p)
+                    if s and s.strip():
+                        raw = s
+                        break
+        except Exception:
+            raw = None
+
+    if not raw:
+        # If the first attempt produced no content, retry once with a more compact prompt
+        retry_count = max(8, min(count, 8))
+        compact_prompt = textwrap.dedent(
+            f"""
+            You are PaperX's quiz compiler. Create a rigorous MCQ test for "{topic}" using ONLY the material in the triple chevrons.
+
+            Constraints (STRICT):
+            - Return EXACTLY {retry_count} questions.
+            - Each question MUST have 4 short options (A–D).
+            - Explanation MUST be under 18 words and grounded in the notes.
+            - Output MUST be strictly valid JSON only, no comments, no markdown fences, no trailing commas.
+            - Schema: {{"topic": "...", "questions": [{{"question":"...","options":["...","...","...","..."],"correct_index": 0,"explanation":"..."}}]}}
+            {"The notes excerpt was truncated for length; keep questions within available context." if truncated else ""}
+
+            <<<NOTES>>>
+            {excerpt}
+            <<<END NOTES>>>
+            """
+        ).strip()
+        try:
+            resp_retry = _generate_safe([{"text": compact_prompt}])
+            raw = getattr(resp_retry, "text", None)  # type: ignore[attr-defined]
+            if not raw and getattr(resp_retry, "candidates", None):
+                for cand in resp_retry.candidates:
+                    content = getattr(cand, "content", None)
+                    parts = getattr(content, "parts", None) if content is not None else None
+                    if parts:
+                        s = "".join(getattr(p, "text", "") for p in parts if hasattr(p, "text"))
+                        if s and s.strip():
+                            raw = s
+                            break
+        except Exception:
+            raw = None
+
+    if not raw:
+        # Build a meaningful error message (safety/finish_reason info when available)
+        msg = "Gemini returned no content for MCQ generation"
+        try:
+            pf = getattr(resp, "prompt_feedback", None)
+            if pf and getattr(pf, "safety_ratings", None):
+                ratings = []
+                for r in pf.safety_ratings:
+                    try:
+                        ratings.append(f"{getattr(r, 'category', '?')}={getattr(r, 'probability', '?')}")
+                    except Exception:
+                        continue
+                if ratings:
+                    msg += f"; safety={', '.join(ratings)}"
+        except Exception:
+            pass
+        if finish_reason is not None:
+            msg += f"; finish_reason={finish_reason}"
+        raise HTTPException(status_code=502, detail=msg)
+
+    # --- Tolerant JSON parsing helpers ---
+    def _strip_code_fences(txt: str) -> str:
+        s = txt.strip()
+        # Remove triple-backtick fences if present
+        if s.startswith("```"):
+            s = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", s)
+            s = re.sub(r"\s*```$", "", s)
+        return s.strip()
+
+    def _extract_first_json_object(txt: str) -> Optional[str]:
+        # Find first top-level {...} block using brace matching
+        start = txt.find('{')
+        if start == -1:
+            return None
+        depth = 0
+        for i in range(start, len(txt)):
+            c = txt[i]
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return txt[start:i+1]
+        return None
+
+    def _try_parse_mcq_payload(raw_text: str) -> Dict[str, Any]:
+        s = _strip_code_fences(raw_text)
+        # First attempt: direct JSON
+        try:
+            return json.loads(s)
+        except Exception:
+            pass
+        # Second: extract first JSON object region
+        block = _extract_first_json_object(s)
+        if block:
+            try:
+                return json.loads(block)
+            except Exception:
+                pass
+        # Third: python-literal fallback (handle 'true/false/null' and single quotes)
+        t = s
+        try:
+            t = re.sub(r"\btrue\b", "True", t)
+            t = re.sub(r"\bfalse\b", "False", t)
+            t = re.sub(r"\bnull\b", "None", t)
+            val = ast.literal_eval(t)
+            if isinstance(val, dict):
+                return val
+        except Exception:
+            pass
+        # Give up
+        raise ValueError("Unable to parse MCQ JSON")
+
+    try:
+        data = _try_parse_mcq_payload(raw)
+    except Exception as exc_first:
+        # Retry once with a more compact prompt and smaller count to avoid token/size truncation issues
+        retry_count = max(8, min(count, 8))
+        compact_prompt = textwrap.dedent(
+            f"""
+            You are PaperX's quiz compiler. Create a rigorous MCQ test for "{topic}" using ONLY the material in the triple chevrons.
+
+            Constraints (STRICT):
+            - Return EXACTLY {retry_count} questions.
+            - Each question MUST have 4 short options (A–D).
+            - Explanation MUST be under 18 words and grounded in the notes.
+            - Output MUST be strictly valid JSON only, no comments, no markdown fences, no trailing commas.
+            - Schema: {{"topic": "...", "questions": [{{"question":"...","options":["...","...","...","..."],"correct_index": 0,"explanation":"..."}}]}}
+            {"The notes excerpt was truncated for length; keep questions within available context." if truncated else ""}
+
+            <<<NOTES>>>
+            {excerpt}
+            <<<END NOTES>>>
+            """
+        ).strip()
+        try:
+            resp2 = model.generate_content(
+                [{"text": compact_prompt}],
+                generation_config=generation_config,
+                request_options={"timeout": request_timeout},
+            )
+        except Exception as exc:
+            # Give original parse error with context
+            preview = (raw or "")[:480].replace("\n", " ")
+            raise HTTPException(status_code=500, detail=f"Failed to parse MCQ JSON: {exc_first}; preview={preview}") from exc
+
+        raw2: Optional[str] = None
+        try:
+            raw2 = resp2.text  # type: ignore[attr-defined]
+        except Exception:
+            raw2 = None
+        if not raw2 and getattr(resp2, "candidates", None):
+            try:
+                for cand in resp2.candidates:
+                    content = getattr(cand, "content", None)
+                    parts = getattr(content, "parts", None) if content is not None else None
+                    if parts:
+                        s = "".join(getattr(p, "text", "") for p in parts if hasattr(p, "text"))
+                        if s and s.strip():
+                            raw2 = s
+                            break
+            except Exception:
+                raw2 = None
+
+        if not raw2:
+            preview = (raw or "")[:480].replace("\n", " ")
+            raise HTTPException(status_code=500, detail=f"Failed to parse MCQ JSON: {exc_first}; preview={preview}") from exc_first
+
+        try:
+            data = _try_parse_mcq_payload(raw2)
+        except Exception as exc_second:
+            preview1 = (raw or "")[:360].replace("\n", " ")
+            preview2 = (raw2 or "")[:360].replace("\n", " ")
+            raise HTTPException(status_code=500, detail=f"Failed to parse MCQ JSON after retry: {exc_second}; preview1={preview1}; preview2={preview2}") from exc_second
+
+    qlist = data.get("questions")
+    if not isinstance(qlist, list) or not qlist:
+        raise HTTPException(status_code=500, detail="Gemini response missing 'questions' list.")
+
+    out: List[Dict[str, Any]] = []
+    for idx, item in enumerate(qlist[:count]):
+        try:
+            q = MCQQuestion.parse_obj(item)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Invalid MCQ at index {idx}: {exc}") from exc
+        # Normalize options to exactly 4 entries when possible
+        opts = list(q.options)[:4]
+        if len(opts) < 4:
+            # pad by repeating last safely
+            while len(opts) < 4:
+                opts.append(opts[-1] if opts else "")
+        ci = int(q.correct_index)
+        if ci < 0 or ci > 3:
+            # clamp and ensure within bounds
+            ci = max(0, min(ci, 3))
+        # Enforce compact explanation length to reduce future overflows
+        expl = (q.explanation or "").strip()
+        if len(expl) > 200:
+            expl = expl[:200].rstrip() + "…"
+        out.append({
+            "question": q.question.strip(),
+            "options": [str(o).strip() for o in opts],
+            "correct_index": ci,
+            "explanation": expl,
+        })
+
+    return out, model_name, truncated
+
+
+@notes_router.post("/notes/{note_id}/mcq")
+@notes_router.post("/api/notes/{note_id}/mcq")
+def api_generate_mcq(note_id: str, payload: Optional[Dict[str, Any]] = Body(default=None)):
+    row, _v = db_get_ai_note_by_id_any(note_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Note not found")
+    markdown = (row.get("markdown") or "").strip()
+    if not markdown:
+        raise HTTPException(status_code=400, detail="Note is empty; generate notes before requesting MCQs.")
+
+    requested = 10
+    topic_override = ""
+    if isinstance(payload, dict):
+        if "count" in payload:
+            try:
+                requested = int(payload["count"])  # type: ignore[index]
+            except Exception:
+                raise HTTPException(status_code=400, detail="count must be an integer")
+        topic_override = str(payload.get("topic") or "").strip()
+
+    inferred_topic = topic_override or row.get("title") or _derive_topic_from_markdown(markdown, fallback="MCQ Test")
+    questions, used_model, truncated = _generate_mcq_with_gemini(markdown, inferred_topic, requested)
+    return {
+        "note_id": note_id,
+        "topic": inferred_topic,
+        "questions": questions,
+        "count": len(questions),
+        "model": used_model,
+        "truncated": truncated,
         "generated_at": datetime.utcnow().isoformat() + "Z",
     }
 
