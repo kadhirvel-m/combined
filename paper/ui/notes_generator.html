@@ -466,6 +466,9 @@
           <button id="flashcardBtn"
             class="ripple hidden px-3 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
             disabled aria-disabled="true">Flashcards</button>
+          <button id="mcqBtn"
+            class="ripple hidden px-3 py-2 rounded-full bg-indigo-600 text-white text-sm font-semibold shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled aria-disabled="true">MCQ</button>
           <button id="densityBtn"
             class="ripple px-3 py-2 rounded-full border text-sm hover:bg-brandlt-100 dark:hover:bg-white/10 transition"
             style="border-color: var(--outline)" title="Toggle density">Density</button>
@@ -926,7 +929,9 @@
     const $fsExit = document.getElementById('fsExitBtn');
     const $fsHome = document.getElementById('fsHomeBtn');
     const $flashcardBtn = document.getElementById('flashcardBtn');
+    const $mcqBtn = document.getElementById('mcqBtn');
     const flashcardDefaultLabel = $flashcardBtn ? ($flashcardBtn.textContent || 'Flashcards') : 'Flashcards';
+    const mcqDefaultLabel = $mcqBtn ? ($mcqBtn.textContent || 'MCQ') : 'MCQ';
     const $variantDetailed = document.getElementById('variantDetailed');
     const $variantCheatsheet = document.getElementById('variantCheatsheet');
     const $variantSimple = document.getElementById('variantSimple');
@@ -1103,6 +1108,19 @@
       }
     }
 
+    function resetMCQAccess() {
+      if (!$mcqBtn) return;
+      $mcqBtn.classList.add('hidden');
+      $mcqBtn.disabled = true;
+      $mcqBtn.setAttribute('aria-disabled', 'true');
+      $mcqBtn.dataset.noteId = '';
+      $mcqBtn.dataset.topic = '';
+      $mcqBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (mcqDefaultLabel) {
+        $mcqBtn.textContent = mcqDefaultLabel;
+      }
+    }
+
     function enableFlashcardAccess(noteId, topic) {
       if (!$flashcardBtn) return;
       $flashcardBtn.dataset.noteId = noteId || '';
@@ -1113,6 +1131,19 @@
       $flashcardBtn.classList.remove('pointer-events-none', 'opacity-70');
       if (flashcardDefaultLabel) {
         $flashcardBtn.textContent = flashcardDefaultLabel;
+      }
+    }
+
+    function enableMCQAccess(noteId, topic) {
+      if (!$mcqBtn) return;
+      $mcqBtn.dataset.noteId = noteId || '';
+      $mcqBtn.dataset.topic = topic || '';
+      $mcqBtn.disabled = false;
+      $mcqBtn.removeAttribute('aria-disabled');
+      $mcqBtn.classList.remove('hidden');
+      $mcqBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (mcqDefaultLabel) {
+        $mcqBtn.textContent = mcqDefaultLabel;
       }
     }
 
@@ -1141,7 +1172,31 @@
       setTimeout(() => { window.location.href = target; }, 120);
     }
 
+    function openMCQ() {
+      if (!$mcqBtn) return;
+      const noteId = ($mcqBtn.dataset.noteId || '').trim();
+      if (!noteId) {
+        snack('Generate notes first');
+        return;
+      }
+      const inferredTopic = (
+        ($mcqBtn.dataset.topic || '')
+        || (document.querySelector('#output h1')?.textContent || '')
+        || ($topic.value || '')
+      ).trim();
+      try {
+        sessionStorage.setItem('paperx:lastMCQSeed', JSON.stringify({ noteId, topic: inferredTopic, ts: Date.now() }));
+      } catch (e) { }
+      const search = new URLSearchParams({ noteId });
+      if (inferredTopic) search.set('topic', inferredTopic);
+      const target = `./mcq.html?${search.toString()}`;
+      $mcqBtn.classList.add('pointer-events-none', 'opacity-70');
+      $mcqBtn.textContent = 'Opening…';
+      setTimeout(() => { window.location.href = target; }, 120);
+    }
+
     resetFlashcardAccess();
+    resetMCQAccess();
 
     // ===== User auth token helper =====
     function getAuthToken() {
@@ -2008,7 +2063,9 @@
                 renderMarkdown(data.markdown);
                 $meta.textContent = `Loaded • ${data.id || lastId} • ${currentVariant}`;
                 currentNoteId = data.id || lastId;
-                enableFlashcardAccess(currentNoteId, (document.querySelector('#output h1')?.textContent || $topic.value || '').trim());
+                const loadedTopic = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+                enableFlashcardAccess(currentNoteId, loadedTopic);
+                enableMCQAccess(currentNoteId, loadedTopic);
               } else {
                 console.warn('[Variant] No cached note for id; generating…', lastId, currentVariant);
                 fallbackGenerate();
@@ -2134,6 +2191,13 @@
       $flashcardBtn.addEventListener('click', (event) => {
         event.preventDefault();
         openFlashcards();
+      });
+    }
+
+    if ($mcqBtn) {
+      $mcqBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        openMCQ();
       });
     }
 
@@ -2332,6 +2396,7 @@
       $progress.style.width = '0%';
       $meta.textContent = '';
       resetFlashcardAccess();
+      resetMCQAccess();
       currentNoteId = '';
       // reset images skeleton (keep for images only)
       ['', '', ''].forEach(() => {
@@ -2444,6 +2509,7 @@
         })();
         if (currentNoteId) {
           enableFlashcardAccess(currentNoteId, detectedTopic);
+          enableMCQAccess(currentNoteId, detectedTopic);
         }
         logEvent('Complete');
         setBusy(false); es && es.close(); es = null;
@@ -2727,6 +2793,7 @@
           ).trim();
           if (currentNoteId) {
             enableFlashcardAccess(currentNoteId, derivedTopic);
+            enableMCQAccess(currentNoteId, derivedTopic);
           }
         }
       } catch { }
