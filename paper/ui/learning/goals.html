@@ -172,8 +172,12 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', async function () {
-            if (!PaperXLearning.requireAuth({ redirectTo: '../login.html' })) {
+            const token = PaperXLearning.requireAuth({ redirectTo: '../login.html' });
+            if (!token) {
                 return;
+            }
+            if (!PaperXLearning.getPlan()) {
+                try { await PaperXLearning.loadLatestPlan(); } catch (_) { }
             }
             const language = PaperXLearning.getLanguage();
             if (!language) {

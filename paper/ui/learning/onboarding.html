@@ -133,9 +133,17 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', async function () {
-            if (!PaperXLearning.requireAuth({ redirectTo: '../login.html' })) {
+            const token = PaperXLearning.requireAuth({ redirectTo: '../login.html' });
+            if (!token) {
                 return;
             }
+            try {
+                const snapshot = await PaperXLearning.loadLatestPlan();
+                if (snapshot && snapshot.plan) {
+                    window.location.href = 'dashboard.html';
+                    return;
+                }
+            } catch (_) { }
             const form = document.getElementById('languageForm');
             const container = document.getElementById('languageOptions');
             const template = document.getElementById('languageTemplate');

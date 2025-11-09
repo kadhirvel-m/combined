@@ -12518,6 +12518,40 @@ def _upsert_learning_track_progress(
     return (fetch.data or [data])[0]
 
 
+def _fetch_latest_learning_plan(user_id: str) -> Optional[Dict[str, Any]]:
+    supabase = get_service_client()
+    res = (
+        supabase.table(LEARNING_TRACK_PLANS_TABLE)
+        .select(
+            "plan_id, language, stack, goal, companies, experience_level, focus_areas, plan_json, updated_at, created_at"
+        )
+        .eq("auth_user_id", user_id)
+        .order("updated_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch learning plan): {res.error}")
+    data = getattr(res, "data", []) or []
+    return data[0] if data else None
+
+
+def _fetch_learning_goal(user_id: str) -> Optional[Dict[str, Any]]:
+    supabase = get_service_client()
+    res = (
+        supabase.table(LEARNING_TRACK_GOALS_TABLE)
+        .select("language, stack, goal, companies, experience_level, focus_areas, updated_at, created_at")
+        .eq("auth_user_id", user_id)
+        .order("updated_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch learning goal): {res.error}")
+    data = getattr(res, "data", []) or []
+    return data[0] if data else None
+
+
 class LearningTrackPlanRequest(BaseModel):
     language: str = Field(..., min_length=2, max_length=16)
     stack: str = Field(..., min_length=2, max_length=64)
@@ -12817,6 +12851,61 @@ def api_learning_tracks_config():
         "flashcard_model": config["flashcard_model"],
         "code_explainer_model": config["code_explainer_model"],
         "compiler_languages": config["compiler_languages"],
+    }
+
+
+@learning_tracks_router.get("/plan/latest")
+def api_learning_tracks_latest_plan(authorization: Optional[str] = Header(default=None)):
+    token = _bearer_token_from_header(authorization)
+    user_id, profile_id = _require_user_and_profile(token)
+    plan_row = _fetch_latest_learning_plan(user_id)
+    goal_row = _fetch_learning_goal(user_id)
+
+    goal_payload: Optional[Dict[str, Any]] = None
+    if goal_row:
+        goal_payload = {
+            "language": goal_row.get("language"),
+            "stack": goal_row.get("stack"),
+            "goal": goal_row.get("goal"),
+            "companies": goal_row.get("companies") or [],
+            "experience_level": goal_row.get("experience_level"),
+            "focus_areas": goal_row.get("focus_areas") or [],
+            "updated_at": goal_row.get("updated_at"),
+        }
+
+    if not plan_row:
+        return {
+            "plan": None,
+            "plan_id": None,
+            "filters": None,
+            "goals": goal_payload,
+        }
+
+    raw_plan = plan_row.get("plan_json") or {}
+    plan_json = dict(raw_plan) if isinstance(raw_plan, dict) else raw_plan
+    if isinstance(plan_json, dict):
+        plan_json.setdefault("plan_id", plan_row.get("plan_id"))
+        plan_json.setdefault("language", plan_row.get("language"))
+        plan_json.setdefault("stack", plan_row.get("stack"))
+        plan_json.setdefault("goal", plan_row.get("goal"))
+        if "companies" not in plan_json:
+            plan_json["companies"] = plan_row.get("companies") or []
+
+    filters = {
+        "language": plan_row.get("language"),
+        "stack": plan_row.get("stack"),
+        "goal": plan_row.get("goal"),
+        "companies": plan_row.get("companies") or [],
+        "experience_level": plan_row.get("experience_level"),
+        "focus_areas": plan_row.get("focus_areas") or [],
+    }
+
+    return {
+        "plan_id": plan_row.get("plan_id"),
+        "plan": plan_json,
+        "filters": filters,
+        "goals": goal_payload,
+        "updated_at": plan_row.get("updated_at"),
     }
 
 
