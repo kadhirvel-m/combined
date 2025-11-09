@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PaperX Learning Tracks — Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <script>
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            900: '#1E1E2F',
+                            800: '#26263A',
+                            700: '#4C2A59',
+                            500: '#9E4B8A',
+                            300: '#C88DBA'
+                        },
+                        surface: '#F7F2F9'
+                    },
+                    boxShadow: {
+                        card: '0 24px 60px rgba(30,30,47,0.20)'
+                    }
+                }
+            }
+        };
+    </script>
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script defer src="../config.js"></script>
+    <script defer src="tracks.js"></script>
+</head>
+
+<body class="bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 text-white">
+    <header class="border-b border-white/10 bg-brand-900/80 backdrop-blur">
+        <div class="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-6 md:flex-row md:items-center md:justify-between">
+            <div>
+                <div class="flex items-center gap-3">
+                    <span
+                        class="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider">PaperX</span>
+                    <span class="text-lg font-semibold text-white/90">Learning Tracks Dashboard</span>
+                </div>
+                <h1 id="planTitle" class="mt-2 text-3xl font-bold tracking-tight"></h1>
+                <p id="planSubtitle" class="text-sm text-white/70"></p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 text-xs uppercase tracking-wider text-white/70">
+                <span id="planLanguage" class="rounded-full bg-white/10 px-3 py-1"></span>
+                <span id="planStack" class="rounded-full bg-white/10 px-3 py-1"></span>
+                <span id="planGoal" class="rounded-full bg-white/10 px-3 py-1"></span>
+                <span id="planCompanies" class="rounded-full bg-white/10 px-3 py-1"></span>
+            </div>
+        </div>
+    </header>
+
+    <main class="mx-auto max-w-6xl space-y-10 px-6 py-10">
+        <section class="grid gap-4 md:grid-cols-4">
+            <article class="rounded-3xl bg-white/10 p-6 shadow-lg shadow-black/30">
+                <p class="text-sm text-white/70">Overall progress</p>
+                <p id="progressRate" class="mt-3 text-4xl font-bold">0%</p>
+                <p class="mt-2 text-xs text-white/60">Completion across all modules</p>
+            </article>
+            <article class="rounded-3xl bg-white/10 p-6 shadow-lg shadow-black/30">
+                <p class="text-sm text-white/70">Topics completed</p>
+                <p id="completedCount" class="mt-3 text-3xl font-semibold">0</p>
+                <p class="mt-2 text-xs text-white/60">Out of <span id="totalCount">0</span></p>
+            </article>
+            <article class="rounded-3xl bg-white/10 p-6 shadow-lg shadow-black/30">
+                <p class="text-sm text-white/70">In progress</p>
+                <p id="inProgressCount" class="mt-3 text-3xl font-semibold">0</p>
+                <p class="mt-2 text-xs text-white/60">Actively being mastered</p>
+            </article>
+            <article class="rounded-3xl bg-gradient-to-br from-brand-500 to-brand-300 p-6 shadow-lg shadow-black/30">
+                <p class="text-sm text-white/80">Next actions</p>
+                <div class="mt-3 flex flex-col gap-2 text-sm font-semibold text-brand-900">
+                    <a href="topic.html" class="inline-flex items-center gap-2">Resume last topic <span
+                            class="material-symbols-rounded text-base">play_arrow</span></a>
+                    <a href="mock.html" class="inline-flex items-center gap-2">Mock arena <span
+                            class="material-symbols-rounded text-base">stadia_controller</span></a>
+                    <a href="analytics.html" class="inline-flex items-center gap-2">Analytics <span
+                            class="material-symbols-rounded text-base">stacked_line_chart</span></a>
+                </div>
+            </article>
+        </section>
+
+        <section class="rounded-3xl bg-white/5 p-8 shadow-card">
+            <div class="flex items-center justify-between gap-4">
+                <h2 class="text-xl font-semibold text-white">Modules</h2>
+                <span class="text-xs uppercase tracking-wider text-white/60">Automatically generated & refreshed with
+                    SerpAPI sources</span>
+            </div>
+            <div id="moduleContainer" class="mt-6 space-y-6"></div>
+        </section>
+    </main>
+
+    <template id="moduleTemplate">
+        <article class="rounded-2xl border border-white/10 bg-brand-900/40 p-6">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Module title</h3>
+                    <p class="text-sm text-white/60">Description</p>
+                </div>
+                <span class="text-xs text-white/50">Estimated hours: <span class="module-duration">~4</span></span>
+            </div>
+            <div class="mt-5 grid gap-4 md:grid-cols-2" data-topics></div>
+        </article>
+    </template>
+
+    <template id="topicTemplate">
+        <div class="topic-card rounded-2xl border border-white/10 bg-brand-900/60 p-4 transition hover:border-white/30">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h4 class="text-base font-semibold text-white">Topic</h4>
+                    <p class="mt-1 text-xs text-white/60">Summary</p>
+                </div>
+                <span
+                    class="status-indicator rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white/70">Not
+                    started</span>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-white/60">
+                <button type="button" class="mark-progress rounded-full bg-white/10 px-3 py-1">Mark in progress</button>
+                <button type="button" class="mark-complete rounded-full bg-white/10 px-3 py-1">Mark complete</button>
+                <a class="view-topic inline-flex items-center gap-1 rounded-full bg-brand-500 px-3 py-1 font-semibold text-brand-900"
+                    href="topic.html">Open topic<span class="material-symbols-rounded text-base">open_in_new</span></a>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const plan = PaperXLearning.ensurePlan();
+            const progress = PaperXLearning.getProgress();
+            const planTitle = document.getElementById('planTitle');
+            const planSubtitle = document.getElementById('planSubtitle');
+            const planLanguage = document.getElementById('planLanguage');
+            const planStack = document.getElementById('planStack');
+            const planGoal = document.getElementById('planGoal');
+            const planCompanies = document.getElementById('planCompanies');
+            const moduleContainer = document.getElementById('moduleContainer');
+            const moduleTemplate = document.getElementById('moduleTemplate');
+            const topicTemplate = document.getElementById('topicTemplate');
+
+            planTitle.textContent = plan.plan_title || 'Learning Track';
+            planSubtitle.textContent = plan.overview || 'Company-aware modules for your upcoming interview goals.';
+            planLanguage.textContent = 'Language: ' + (plan.language || '').toUpperCase();
+            planStack.textContent = 'Stack: ' + (plan.stack || '').toUpperCase();
+            planGoal.textContent = 'Goal: ' + (plan.goal || '').replace(/_/g, ' ').toUpperCase();
+            planCompanies.textContent = 'Companies: ' + (plan.companies || []).map(c => c.toUpperCase()).join(', ');
+
+            function updateSummary() {
+                const metrics = PaperXLearning.computeProgressMetrics(plan, PaperXLearning.getProgress());
+                document.getElementById('progressRate').textContent = metrics.completionRate + '%';
+                document.getElementById('completedCount').textContent = metrics.completedTopics;
+                document.getElementById('inProgressCount').textContent = metrics.inProgressTopics;
+                document.getElementById('totalCount').textContent = metrics.totalTopics;
+            }
+
+            function applyStatus(topicCard, status) {
+                const indicator = topicCard.querySelector('.status-indicator');
+                indicator.classList.remove('bg-white/10', 'bg-brand-500/20', 'bg-brand-300/20');
+                let label = 'Not started';
+                if (status === 'in_progress') {
+                    indicator.classList.add('bg-brand-500/20');
+                    label = 'In progress';
+                } else if (status === 'completed') {
+                    indicator.classList.add('bg-brand-300/20');
+                    label = 'Completed';
+                } else {
+                    indicator.classList.add('bg-white/10');
+                }
+                indicator.textContent = label.toUpperCase();
+            }
+
+            function renderModules() {
+                moduleContainer.innerHTML = '';
+                (plan.modules || []).forEach(function (module) {
+                    const moduleNode = moduleTemplate.content.firstElementChild.cloneNode(true);
+                    moduleNode.querySelector('h3').textContent = module.title;
+                    moduleNode.querySelector('p').textContent = module.description || 'Focus on mastering core concepts with curated notes and practice.';
+                    moduleNode.querySelector('.module-duration').textContent = module.duration_hours ? Math.round(module.duration_hours) : '~4';
+                    const topicsBucket = moduleNode.querySelector('[data-topics]');
+
+                    (module.topics || []).forEach(function (topic) {
+                        const topicNode = topicTemplate.content.firstElementChild.cloneNode(true);
+                        topicNode.querySelector('h4').textContent = topic.title;
+                        topicNode.querySelector('p').textContent = topic.description || 'Explore company-specific patterns, curated notes, and coding drills.';
+                        const status = (progress[topic.topic_id] && progress[topic.topic_id].status) || 'not_started';
+                        applyStatus(topicNode, status);
+                        topicNode.querySelector('.mark-progress').addEventListener('click', function () {
+                            PaperXLearning.updateProgress(topic.topic_id, 'in_progress');
+                            applyStatus(topicNode, 'in_progress');
+                            updateSummary();
+                        });
+                        topicNode.querySelector('.mark-complete').addEventListener('click', function () {
+                            PaperXLearning.updateProgress(topic.topic_id, 'completed');
+                            applyStatus(topicNode, 'completed');
+                            updateSummary();
+                        });
+                        const viewLink = topicNode.querySelector('.view-topic');
+                        viewLink.href = 'topic.html?topic=' + encodeURIComponent(topic.topic_id);
+                        viewLink.addEventListener('click', function () {
+                            PaperXLearning.setLastTopic(topic.topic_id);
+                        });
+                        topicsBucket.appendChild(topicNode);
+                    });
+                    moduleContainer.appendChild(moduleNode);
+                });
+            }
+
+            renderModules();
+            updateSummary();
+        });
+    </script>
+</body>
+
+</html>

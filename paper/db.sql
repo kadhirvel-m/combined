@@ -604,3 +604,63 @@ CREATE UNIQUE INDEX degree_allowed_domains_unique_key ON public.degree_allowed_d
 
 -- Helpful index to query by degree
 CREATE INDEX degree_allowed_domains_degree_key_idx ON public.degree_allowed_domains (degree_key);
+
+-- Learning track preferences per user (last selections from onboarding/goals)
+CREATE TABLE public.learning_track_goals (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL UNIQUE,
+  profile_id uuid NOT NULL,
+  language text NOT NULL,
+  stack text NOT NULL,
+  goal text NOT NULL,
+  companies text[] DEFAULT '{}'::text[],
+  experience_level text,
+  focus_areas jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT learning_track_goals_pkey PRIMARY KEY (id),
+  CONSTRAINT learning_track_goals_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT learning_track_goals_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id)
+);
+
+-- Generated learning plans (latest JSON snapshot per run)
+CREATE TABLE public.learning_track_plans (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  plan_id text NOT NULL UNIQUE,
+  auth_user_id uuid NOT NULL,
+  profile_id uuid NOT NULL,
+  language text NOT NULL,
+  stack text NOT NULL,
+  goal text NOT NULL,
+  companies text[] DEFAULT '{}'::text[],
+  experience_level text,
+  focus_areas jsonb DEFAULT '[]'::jsonb,
+  generated_at timestamp with time zone,
+  plan_json jsonb NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT learning_track_plans_pkey PRIMARY KEY (id),
+  CONSTRAINT learning_track_plans_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT learning_track_plans_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id)
+);
+CREATE INDEX learning_track_plans_user_idx ON public.learning_track_plans (auth_user_id);
+
+-- Per-topic learner progress snapshots
+CREATE TABLE public.learning_track_progress (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL,
+  profile_id uuid NOT NULL,
+  plan_id text NOT NULL,
+  topic_id text NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['not_started'::text, 'in_progress'::text, 'completed'::text])),
+  score numeric,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT learning_track_progress_pkey PRIMARY KEY (id),
+  CONSTRAINT learning_track_progress_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT learning_track_progress_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT learning_track_progress_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.learning_track_plans(plan_id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX learning_track_progress_unique_topic ON public.learning_track_progress (auth_user_id, plan_id, topic_id);
+CREATE INDEX learning_track_progress_plan_idx ON public.learning_track_progress (plan_id);

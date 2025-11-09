@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PaperX Learning Tracks — Faculty Brief</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <script>
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            900: '#1E1E2F',
+                            700: '#4C2A59',
+                            500: '#9E4B8A',
+                            300: '#C88DBA'
+                        },
+                        surface: '#FFFFFF'
+                    }
+                }
+            }
+        };
+    </script>
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script defer src="../config.js"></script>
+    <script defer src="tracks.js"></script>
+</head>
+
+<body class="bg-surface text-brand-900">
+    <header class="border-b border-brand-900/10 bg-white/80 backdrop-blur">
+        <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+            <div>
+                <a href="dashboard.html"
+                    class="inline-flex items-center gap-2 text-sm font-semibold text-brand-700 hover:text-brand-900">
+                    <span class="material-symbols-rounded text-base">arrow_back</span>
+                    Back to dashboard
+                </a>
+                <h1 class="mt-2 text-3xl font-bold tracking-tight text-brand-900">Faculty & Mentor Console</h1>
+                <p class="text-sm text-brand-900/60">Monitor learner progress and plan interventions quickly.</p>
+            </div>
+            <div id="planMeta" class="flex flex-col items-end text-xs uppercase tracking-wider text-brand-900/50"></div>
+        </div>
+    </header>
+
+    <main class="mx-auto grid max-w-6xl gap-6 px-6 py-10 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)]">
+        <section class="space-y-6">
+            <article class="rounded-3xl bg-white p-6 shadow-lg shadow-brand-900/10">
+                <h2 class="text-lg font-semibold text-brand-900">Plan snapshot</h2>
+                <div id="planSnapshot" class="mt-4 space-y-3 text-sm text-brand-900/70"></div>
+            </article>
+            <article class="rounded-3xl bg-white p-6 shadow-lg shadow-brand-900/10">
+                <h2 class="text-lg font-semibold text-brand-900">AI faculty brief</h2>
+                <div id="briefOverview" class="mt-3 text-sm text-brand-900/70">Generating tailored briefing…</div>
+                <div class="mt-6 grid gap-5 md:grid-cols-2">
+                    <div>
+                        <h3 class="text-sm font-semibold text-brand-900">Action items</h3>
+                        <ul id="briefActions" class="mt-2 space-y-2 text-sm text-brand-900/70"></ul>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-semibold text-brand-900">Support requests</h3>
+                        <ul id="briefSupport" class="mt-2 space-y-2 text-sm text-brand-900/70"></ul>
+                    </div>
+                </div>
+            </article>
+        </section>
+        <aside class="space-y-6">
+            <article class="rounded-3xl border border-brand-900/10 bg-white p-6 shadow-lg shadow-brand-900/10">
+                <h2 class="text-lg font-semibold text-brand-900">At-risk learners</h2>
+                <ul id="briefRisk" class="mt-4 space-y-3 text-sm text-rose-600"></ul>
+            </article>
+            <article class="rounded-3xl border border-brand-900/10 bg-white p-6 shadow-lg shadow-brand-900/10">
+                <h2 class="text-lg font-semibold text-brand-900">Upcoming milestones</h2>
+                <ul id="briefMilestones" class="mt-4 space-y-3 text-sm text-brand-900/70"></ul>
+            </article>
+        </aside>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function () {
+            const plan = PaperXLearning.ensurePlan();
+            const progress = PaperXLearning.getProgress();
+            const metrics = PaperXLearning.computeProgressMetrics(plan, progress);
+            const planMeta = document.getElementById('planMeta');
+            planMeta.innerHTML = '';
+            ['language', 'stack', 'goal'].forEach(function (key) {
+                const span = document.createElement('span');
+                span.textContent = key + ': ' + (plan[key] || '').toUpperCase();
+                planMeta.appendChild(span);
+            });
+            const companySpan = document.createElement('span');
+            companySpan.textContent = 'companies: ' + (plan.companies || []).map(c => c.toUpperCase()).join(', ');
+            planMeta.appendChild(companySpan);
+
+            const snapshot = document.getElementById('planSnapshot');
+            snapshot.innerHTML = '';
+            snapshot.appendChild(document.createTextNode('Modules: ' + (plan.modules || []).length));
+            snapshot.appendChild(document.createElement('br'));
+            snapshot.appendChild(document.createTextNode('Topics completed: ' + metrics.completedTopics + ' / ' + metrics.totalTopics));
+            snapshot.appendChild(document.createElement('br'));
+            snapshot.appendChild(document.createTextNode('In progress: ' + metrics.inProgressTopics));
+
+            const outline = {
+                modules: (plan.modules || []).map(function (module) {
+                    return {
+                        title: module.title,
+                        topics: (module.topics || []).map(function (topic) {
+                            return {
+                                title: topic.title,
+                                status: progress[topic.topic_id]?.status || 'not_started'
+                            };
+                        })
+                    };
+                })
+            };
+
+            const progressSnapshot = {
+                completion_rate: metrics.completionRate,
+                completed_topics: metrics.completedTopics,
+                in_progress_topics: metrics.inProgressTopics,
+                total_topics: metrics.totalTopics
+            };
+
+            try {
+                const brief = await PaperXLearning.requestFacultyBrief({
+                    language: plan.language,
+                    stack: plan.stack,
+                    goal: plan.goal,
+                    companies: plan.companies,
+                    cohort_name: 'PaperX Learning Tracks',
+                    plan_outline: outline,
+                    progress_snapshot: progressSnapshot
+                });
+                renderBrief(brief);
+            } catch (err) {
+                document.getElementById('briefOverview').textContent = 'Unable to build faculty brief: ' + err.message;
+            }
+
+            function renderBrief(data) {
+                const overview = document.getElementById('briefOverview');
+                const actions = document.getElementById('briefActions');
+                const support = document.getElementById('briefSupport');
+                const risk = document.getElementById('briefRisk');
+                const milestones = document.getElementById('briefMilestones');
+
+                overview.textContent = data.overview || 'Learners are progressing steadily. Focus on reinforcing company-specific drills.';
+                actions.innerHTML = '';
+                (data.action_items || []).forEach(function (item) {
+                    const li = document.createElement('li');
+                    li.textContent = '• ' + item;
+                    actions.appendChild(li);
+                });
+                support.innerHTML = '';
+                (data.support_requests || []).forEach(function (item) {
+                    const li = document.createElement('li');
+                    li.textContent = '• ' + item;
+                    support.appendChild(li);
+                });
+                risk.innerHTML = '';
+                (data.at_risk_learners || []).forEach(function (item) {
+                    const li = document.createElement('li');
+                    li.textContent = '• ' + (item.name || item);
+                    if (item.status) { li.textContent += ' (' + item.status + ')'; }
+                    risk.appendChild(li);
+                });
+                milestones.innerHTML = '';
+                (data.upcoming_milestones || []).forEach(function (item) {
+                    const li = document.createElement('li');
+                    li.textContent = '• ' + item;
+                    milestones.appendChild(li);
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>

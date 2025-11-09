@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PaperX Learning Tracks — Topic Workspace</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <script>
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            900: '#1E1E2F',
+                            800: '#26263A',
+                            700: '#4C2A59',
+                            500: '#9E4B8A',
+                            300: '#C88DBA'
+                        },
+                        surface: '#F7F2F9'
+                    }
+                }
+            }
+        };
+    </script>
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script defer src="../config.js"></script>
+    <script defer src="tracks.js"></script>
+</head>
+
+<body class="bg-surface text-brand-900">
+    <header class="border-b border-brand-900/5 bg-white/90 backdrop-blur">
+        <div class="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-6 md:flex-row md:items-center md:justify-between">
+            <div>
+                <a href="dashboard.html"
+                    class="inline-flex items-center gap-2 text-sm font-semibold text-brand-700 hover:text-brand-900">
+                    <span class="material-symbols-rounded text-base">arrow_back</span>
+                    Back to dashboard
+                </a>
+                <h1 id="topicTitle" class="mt-2 text-3xl font-bold tracking-tight text-brand-900"></h1>
+                <p id="topicSubtitle" class="text-sm text-brand-900/70"></p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 text-xs uppercase tracking-wider text-brand-900/60">
+                <span id="topicStatus" class="rounded-full bg-brand-500/10 px-3 py-1 font-semibold">NOT STARTED</span>
+                <button id="markInProgress" class="rounded-full bg-brand-700 px-3 py-1 text-white">Mark in
+                    progress</button>
+                <button id="markComplete" class="rounded-full bg-brand-500 px-3 py-1 text-white">Mark complete</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="mx-auto grid max-w-6xl gap-6 px-6 py-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)]">
+        <section class="space-y-6">
+            <article class="rounded-3xl bg-white p-6 shadow-lg shadow-brand-900/10">
+                <h2 class="text-lg font-semibold text-brand-900">Learning objectives</h2>
+                <ul id="objectiveList" class="mt-4 space-y-2 text-sm text-brand-900/70"></ul>
+            </article>
+            <article class="rounded-3xl bg-white p-6 shadow-lg shadow-brand-900/10">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-brand-900">Activities & practice</h2>
+                    <button id="generatePractice"
+                        class="inline-flex items-center gap-2 rounded-full bg-brand-700 px-4 py-2 text-sm font-semibold text-white">
+                        <span class="material-symbols-rounded text-base">quiz</span>
+                        Generate MCQs & flashcards
+                    </button>
+                </div>
+                <div id="activityList" class="mt-4 space-y-3 text-sm text-brand-900/70"></div>
+                <div id="practiceList" class="mt-4 space-y-3 text-sm text-brand-900/70"></div>
+                <div id="practiceOutput" class="mt-6 space-y-6"></div>
+            </article>
+            <article class="rounded-3xl bg-white p-6 shadow-lg shadow-brand-900/10">
+                <h2 class="text-lg font-semibold text-brand-900">Curated notes</h2>
+                <p class="mt-2 text-xs text-brand-900/60">Sourced live from trusted domains via SerpAPI</p>
+                <div id="notesList" class="mt-6 space-y-6"></div>
+            </article>
+        </section>
+
+        <aside class="space-y-6">
+            <section class="rounded-3xl bg-brand-900 p-6 text-white shadow-2xl shadow-brand-900/40">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-lg font-semibold">Live compiler</h2>
+                    <span class="text-xs uppercase tracking-wider text-white/60">Powered by Piston API</span>
+                </div>
+                <div class="mt-4 flex flex-col gap-3">
+                    <label class="text-xs text-white/60" for="compilerLanguage">Language</label>
+                    <select id="compilerLanguage"
+                        class="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/50">
+                    </select>
+                </div>
+                <div class="mt-4">
+                    <label class="text-xs text-white/60" for="codeEditor">Code</label>
+                    <textarea id="codeEditor" rows="12"
+                        class="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 font-mono text-sm text-white outline-none focus:border-brand-300"
+                        spellcheck="false"></textarea>
+                </div>
+                <div class="mt-4">
+                    <label class="text-xs text-white/60" for="codeInput">Input (optional)</label>
+                    <textarea id="codeInput" rows="3"
+                        class="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none focus:border-brand-300"></textarea>
+                </div>
+                <div class="mt-4 flex flex-wrap items-center gap-3">
+                    <button id="runCode"
+                        class="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-brand-900">
+                        <span class="material-symbols-rounded text-base">play_arrow</span>
+                        Run
+                    </button>
+                    <button id="explainCode"
+                        class="inline-flex items-center gap-2 rounded-full bg-brand-300 px-4 py-2 text-sm font-semibold text-brand-900">
+                        <span class="material-symbols-rounded text-base">psychology</span>
+                        Explain with Gemini
+                    </button>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-sm font-semibold text-white/80">Output</h3>
+                    <pre id="codeOutput"
+                        class="mt-2 max-h-60 overflow-y-auto rounded-xl bg-black/60 px-3 py-3 text-xs text-green-200"></pre>
+                    <pre id="codeError"
+                        class="mt-2 max-h-40 overflow-y-auto rounded-xl bg-black/40 px-3 py-3 text-xs text-red-200"></pre>
+                </div>
+            </section>
+            <section class="rounded-3xl bg-white p-6 shadow-lg shadow-brand-900/10">
+                <h2 class="text-lg font-semibold text-brand-900">AI explanation</h2>
+                <div id="explainOutput" class="mt-4 space-y-3 text-sm text-brand-900/70"></div>
+            </section>
+        </aside>
+    </main>
+
+    <template id="noteTemplate">
+        <div class="rounded-2xl border border-brand-900/10 bg-brand-500/5 p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <a class="note-link text-base font-semibold text-brand-700 hover:text-brand-900" target="_blank"
+                    rel="noopener">Resource title</a>
+                <span class="text-xs text-brand-900/50">trusted domain</span>
+            </div>
+            <div class="mt-4 space-y-3 text-sm text-brand-900/70" data-sections></div>
+        </div>
+    </template>
+
+    <template id="sectionTemplate">
+        <div>
+            <h4 class="text-sm font-semibold text-brand-900">Section</h4>
+            <p class="mt-1 text-sm text-brand-900/70">Summary text</p>
+        </div>
+    </template>
+
+    <template id="activityTemplate">
+        <div class="rounded-xl border border-brand-900/10 bg-brand-500/5 px-4 py-3">
+            <p class="text-sm font-semibold text-brand-900">Title</p>
+            <p class="text-xs text-brand-900/60">Description</p>
+            <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-brand-900/50"></div>
+        </div>
+    </template>
+
+    <template id="practiceBlockTemplate">
+        <div class="rounded-2xl border border-brand-900/10 bg-brand-500/5 p-4">
+            <h3 class="text-sm font-semibold text-brand-900">Heading</h3>
+            <div class="mt-3 space-y-3 text-sm text-brand-900/70"></div>
+        </div>
+    </template>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function () {
+            const params = new URLSearchParams(window.location.search);
+            const topicId = params.get('topic') || PaperXLearning.getLastTopic();
+            const plan = PaperXLearning.ensurePlan();
+            const config = await PaperXLearning.fetchLearningConfig();
+            let currentTopic = null;
+
+            outer: for (const module of plan.modules || []) {
+                for (const topic of module.topics || []) {
+                    if (!topicId || topic.topic_id === topicId) {
+                        currentTopic = topic;
+                        PaperXLearning.setLastTopic(topic.topic_id);
+                        break outer;
+                    }
+                }
+            }
+            if (!currentTopic) {
+                currentTopic = (plan.modules?.[0]?.topics?.[0]) || null;
+            }
+            if (!currentTopic) {
+                document.getElementById('topicTitle').textContent = 'Topic unavailable';
+                return;
+            }
+
+            const progress = PaperXLearning.getProgress();
+            const topicStatus = progress[currentTopic.topic_id]?.status || 'not_started';
+
+            const titleEl = document.getElementById('topicTitle');
+            const subtitleEl = document.getElementById('topicSubtitle');
+            const statusEl = document.getElementById('topicStatus');
+            const objectivesEl = document.getElementById('objectiveList');
+            const activityList = document.getElementById('activityList');
+            const practiceList = document.getElementById('practiceList');
+            const notesList = document.getElementById('notesList');
+            const codeLanguageSelect = document.getElementById('compilerLanguage');
+            const codeEditor = document.getElementById('codeEditor');
+            const codeInput = document.getElementById('codeInput');
+            const codeOutput = document.getElementById('codeOutput');
+            const codeError = document.getElementById('codeError');
+            const practiceOutput = document.getElementById('practiceOutput');
+            const explainOutput = document.getElementById('explainOutput');
+
+            const markInProgress = document.getElementById('markInProgress');
+            const markComplete = document.getElementById('markComplete');
+            const generatePractice = document.getElementById('generatePractice');
+            const runCode = document.getElementById('runCode');
+            const explainCode = document.getElementById('explainCode');
+
+            function updateStatus(label) {
+                statusEl.textContent = label.toUpperCase();
+                statusEl.classList.remove('bg-brand-500', 'bg-brand-700', 'bg-brand-500/10', 'text-white');
+                if (label === 'in_progress') {
+                    statusEl.classList.add('bg-brand-700', 'text-white');
+                } else if (label === 'completed') {
+                    statusEl.classList.add('bg-brand-500', 'text-white');
+                } else {
+                    statusEl.classList.add('bg-brand-500/10');
+                }
+            }
+
+            titleEl.textContent = currentTopic.title;
+            subtitleEl.textContent = currentTopic.description || 'Company-aware practice with curated notes and interview tasks.';
+            updateStatus(topicStatus);
+
+            objectivesEl.innerHTML = '';
+            (currentTopic.objectives || []).forEach(function (obj) {
+                const li = document.createElement('li');
+                li.textContent = obj;
+                li.className = 'rounded-xl bg-brand-500/10 px-4 py-2';
+                objectivesEl.appendChild(li);
+            });
+
+            const activityTemplate = document.getElementById('activityTemplate');
+            function renderActivity(target, data) {
+                const node = activityTemplate.content.firstElementChild.cloneNode(true);
+                node.querySelector('p.text-sm').textContent = data.title || 'Activity';
+                node.querySelector('p.text-xs').textContent = data.description || data.type || '';
+                const meta = node.querySelector('div.flex');
+                meta.innerHTML = '';
+                ['type', 'difficulty', 'source'].forEach(function (key) {
+                    if (data[key]) {
+                        const span = document.createElement('span');
+                        span.textContent = (key + ': ' + data[key]).toUpperCase();
+                        meta.appendChild(span);
+                    }
+                });
+                if (data.url) {
+                    const link = document.createElement('a');
+                    link.href = data.url;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.textContent = 'Open resource';
+                    link.className = 'inline-flex items-center gap-1 font-semibold text-brand-700';
+                    meta.appendChild(link);
+                }
+                target.appendChild(node);
+            }
+
+            activityList.innerHTML = '';
+            (currentTopic.activities || []).forEach(function (activity) { renderActivity(activityList, activity); });
+            practiceList.innerHTML = '';
+            (currentTopic.practice || []).forEach(function (activity) { renderActivity(practiceList, activity); });
+
+            const noteTemplate = document.getElementById('noteTemplate');
+            const sectionTemplate = document.getElementById('sectionTemplate');
+            notesList.innerHTML = '';
+            (currentTopic.notes || []).forEach(function (note) {
+                const node = noteTemplate.content.firstElementChild.cloneNode(true);
+                const sectionsTarget = node.querySelector('[data-sections]');
+                node.querySelector('.note-link').textContent = note.title || note.url;
+                node.querySelector('.note-link').href = note.url;
+                sectionsTarget.innerHTML = '';
+                (note.sections || []).forEach(function (section) {
+                    const sNode = sectionTemplate.content.firstElementChild.cloneNode(true);
+                    sNode.querySelector('h4').textContent = section.heading || 'Section';
+                    sNode.querySelector('p').textContent = section.summary || '';
+                    sectionsTarget.appendChild(sNode);
+                });
+                notesList.appendChild(node);
+            });
+
+            (config.compiler_languages || []).forEach(function (entry) {
+                const option = document.createElement('option');
+                option.value = entry.id;
+                option.textContent = entry.name || entry.id;
+                codeLanguageSelect.appendChild(option);
+            });
+
+            markInProgress.addEventListener('click', function () {
+                PaperXLearning.updateProgress(currentTopic.topic_id, 'in_progress');
+                updateStatus('in_progress');
+            });
+            markComplete.addEventListener('click', function () {
+                PaperXLearning.updateProgress(currentTopic.topic_id, 'completed');
+                updateStatus('completed');
+            });
+
+            generatePractice.addEventListener('click', async function () {
+                generatePractice.disabled = true;
+                generatePractice.textContent = 'Generating…';
+                practiceOutput.innerHTML = '';
+                try {
+                    const practice = await PaperXLearning.requestPractice({
+                        topic_title: currentTopic.title,
+                        language: plan.language,
+                        stack: plan.stack,
+                        goal: plan.goal,
+                        companies: plan.companies,
+                        context: (currentTopic.description || '') + '\nObjectives: ' + (currentTopic.objectives || []).join(', ')
+                    });
+
+                    const blockTemplate = document.getElementById('practiceBlockTemplate');
+                    if (practice.mcqs && practice.mcqs.length) {
+                        const block = blockTemplate.content.firstElementChild.cloneNode(true);
+                        block.querySelector('h3').textContent = 'MCQ Set';
+                        const section = block.querySelector('div');
+                        practice.mcqs.forEach(function (mcq, idx) {
+                            const wrapper = document.createElement('div');
+                            wrapper.innerHTML = '<p class="font-semibold">' + (idx + 1) + '. ' + mcq.question + '</p>';
+                            const list = document.createElement('ul');
+                            list.className = 'mt-1 list-disc pl-6 text-xs';
+                            (mcq.options || []).forEach(function (opt) {
+                                const li = document.createElement('li');
+                                li.textContent = opt;
+                                list.appendChild(li);
+                            });
+                            const answer = document.createElement('p');
+                            answer.className = 'mt-1 text-xs font-semibold text-brand-700';
+                            answer.textContent = 'Answer: ' + (mcq.answer || '');
+                            const explanation = document.createElement('p');
+                            explanation.className = 'text-xs text-brand-900/60';
+                            explanation.textContent = mcq.explanation || '';
+                            wrapper.appendChild(list);
+                            wrapper.appendChild(answer);
+                            wrapper.appendChild(explanation);
+                            section.appendChild(wrapper);
+                        });
+                        practiceOutput.appendChild(block);
+                    }
+                    if (practice.flashcards && practice.flashcards.length) {
+                        const block = blockTemplate.content.firstElementChild.cloneNode(true);
+                        block.querySelector('h3').textContent = 'Flashcards';
+                        const section = block.querySelector('div');
+                        practice.flashcards.forEach(function (card) {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'rounded-xl bg-white px-3 py-2 text-xs shadow';
+                            wrapper.innerHTML = '<p class="font-semibold text-brand-900">' + (card.front || '') + '</p>' +
+                                '<p class="mt-1 text-brand-900/70">' + (card.back || '') + '</p>' +
+                                (card.mnemonic ? '<p class="mt-1 text-brand-500">Mnemonic: ' + card.mnemonic + '</p>' : '') +
+                                (card.company_hint ? '<p class="mt-1 text-brand-500">Company focus: ' + card.company_hint + '</p>' : '');
+                            section.appendChild(wrapper);
+                        });
+                        practiceOutput.appendChild(block);
+                    }
+                } catch (err) {
+                    const error = document.createElement('p');
+                    error.className = 'rounded-xl bg-rose-100 px-3 py-2 text-sm text-rose-700';
+                    error.textContent = 'Practice generation failed: ' + err.message;
+                    practiceOutput.appendChild(error);
+                } finally {
+                    generatePractice.disabled = false;
+                    generatePractice.textContent = 'Generate MCQs & flashcards';
+                }
+            });
+
+            runCode.addEventListener('click', async function () {
+                runCode.disabled = true;
+                runCode.textContent = 'Running…';
+                codeOutput.textContent = '';
+                codeError.textContent = '';
+                try {
+                    const result = await PaperXLearning.executeCode({
+                        language_id: codeLanguageSelect.value,
+                        source: codeEditor.value,
+                        stdin: codeInput.value
+                    });
+                    codeOutput.textContent = result.output || '';
+                    if (result.stderr) { codeError.textContent = result.stderr; }
+                } catch (err) {
+                    codeError.textContent = err.message;
+                } finally {
+                    runCode.disabled = false;
+                    runCode.textContent = 'Run';
+                }
+            });
+
+            explainCode.addEventListener('click', async function () {
+                explainCode.disabled = true;
+                explainCode.textContent = 'Explaining…';
+                explainOutput.innerHTML = '';
+                try {
+                    const explanation = await PaperXLearning.explainCode({
+                        language: plan.language,
+                        stack: plan.stack,
+                        goal: plan.goal,
+                        companies: plan.companies,
+                        code: codeEditor.value,
+                        question: codeInput.value,
+                        language_preference: plan.language
+                    });
+                    const summary = document.createElement('p');
+                    summary.className = 'font-semibold text-brand-900';
+                    summary.textContent = explanation.summary || 'Explanation unavailable';
+                    explainOutput.appendChild(summary);
+                    if (explanation.suggestions) {
+                        const list = document.createElement('ul');
+                        list.className = 'mt-2 list-disc pl-5 text-xs';
+                        explanation.suggestions.forEach(function (s) {
+                            const li = document.createElement('li');
+                            li.textContent = s;
+                            list.appendChild(li);
+                        });
+                        explainOutput.appendChild(list);
+                    }
+                    if (explanation.localized_explanation) {
+                        const para = document.createElement('p');
+                        para.className = 'mt-3 text-xs text-brand-900/60';
+                        para.textContent = explanation.localized_explanation;
+                        explainOutput.appendChild(para);
+                    }
+                } catch (err) {
+                    const error = document.createElement('p');
+                    error.className = 'rounded-xl bg-rose-100 px-3 py-2 text-sm text-rose-700';
+                    error.textContent = 'Explain failed: ' + err.message;
+                    explainOutput.appendChild(error);
+                } finally {
+                    explainCode.disabled = false;
+                    explainCode.textContent = 'Explain with Gemini';
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
