@@ -168,6 +168,26 @@
     }).catch(() => {});
   }
 
+  async function loadLatestPlan(){
+    const token = resolveAuthToken();
+    if (!token) return null;
+    try {
+      const snapshot = await apiFetch('/api/learning-tracks/plan/latest');
+      if (!snapshot) return null;
+      if (snapshot.filters){
+        storeFilters(snapshot.filters);
+        if (snapshot.filters.language) setLanguage(snapshot.filters.language);
+      }
+      if (snapshot.plan){
+        storePlan(snapshot.plan);
+        if (!snapshot.filters && snapshot.plan.language) setLanguage(snapshot.plan.language);
+      }
+      return snapshot;
+    } catch (_) {
+      return null;
+    }
+  }
+
   async function requestLearningPath(payload){
     const plan = await apiFetch('/api/learning-tracks/path', {
       method: 'POST',
@@ -255,5 +275,6 @@
     getFilters,
     requireAuth,
     resolveAuthToken,
+    loadLatestPlan,
   };
 })();
