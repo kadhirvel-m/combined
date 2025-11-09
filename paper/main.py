@@ -205,6 +205,12 @@ PROJECT_MEDIA_EXTENSIONS = {
     "gallery": {".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".mov", ".webm"},
 }
 
+# --- Learning track table names ---
+
+LEARNING_TRACK_GOALS_TABLE = os.getenv("LEARNING_TRACK_GOALS_TABLE", "learning_track_goals")
+LEARNING_TRACK_PLANS_TABLE = os.getenv("LEARNING_TRACK_PLANS_TABLE", "learning_track_plans")
+LEARNING_TRACK_PROGRESS_TABLE = os.getenv("LEARNING_TRACK_PROGRESS_TABLE", "learning_track_progress")
+
 # --- Print/Orders table names ---
 PRINT_SHOPS_TABLE = os.getenv("PRINT_SHOPS_TABLE") or "print_shops"
 PRINT_PRICING_TABLE = os.getenv("PRINT_PRICING_TABLE") or "print_pricing"
@@ -826,6 +832,14 @@ if not notes_logger.handlers:
     notes_logger.addHandler(handler)
 notes_logger.setLevel(logging.INFO)
 
+learning_logger = logging.getLogger("paperx.learning_tracks")
+if not learning_logger.handlers:
+    l_handler = logging.StreamHandler(sys.stdout)
+    l_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    l_handler.setFormatter(l_fmt)
+    learning_logger.addHandler(l_handler)
+learning_logger.setLevel(logging.INFO)
+
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY", "") or "").strip()
 SERPAPI_API_KEY = (os.getenv("SERPAPI_API_KEY", "") or "").strip()
@@ -845,6 +859,103 @@ DEFAULT_ALLOWED_DOMAINS = [
 
 # Table to store degree-specific allowed domains
 DEGREE_ALLOWED_DOMAINS_TABLE = os.getenv("DEGREE_ALLOWED_DOMAINS_TABLE", "degree_allowed_domains")
+
+
+LEARNING_TRACK_DEFAULT_LANGUAGES = [
+    "en",
+    "ta",
+    "hi",
+    "es",
+]
+
+LEARNING_TRACK_DEFAULT_STACKS = [
+    "python",
+    "javascript",
+    "java",
+    "dsa",
+    "react",
+]
+
+LEARNING_TRACK_DEFAULT_GOALS = [
+    "company_interview",
+    "full_stack",
+    "semester_prep",
+]
+
+LEARNING_TRACK_DEFAULT_COMPANIES = [
+    "tcs",
+    "zoho",
+    "infosys",
+    "product",
+]
+
+LEARNING_TRACK_DEFAULT_COMPILER_LANGUAGES = [
+    {"id": "python", "runtime": "python3", "name": "Python 3"},
+    {"id": "javascript", "runtime": "javascript", "name": "JavaScript (Node.js)"},
+    {"id": "java", "runtime": "java", "name": "Java 17"},
+    {"id": "cpp", "runtime": "cpp", "name": "C++ 17"},
+    {"id": "go", "runtime": "go", "name": "Go"},
+]
+
+
+def _parse_env_list(name: str, default: List[str]) -> List[str]:
+    raw = os.getenv(name, "")
+    if not raw:
+        return list(default)
+    try:
+        parts = [item.strip() for item in re.split(r"[,|]", raw) if item.strip()]
+    except Exception:
+        return list(default)
+    return parts or list(default)
+
+
+def _parse_env_json_array(name: str, default: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return [dict(item) for item in default]
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            cleaned: List[Dict[str, Any]] = []
+            for entry in data:
+                if isinstance(entry, dict) and entry.get("id") and entry.get("runtime"):
+                    cleaned.append({
+                        "id": str(entry["id"]).strip(),
+                        "runtime": str(entry["runtime"]).strip(),
+                        "name": str(entry.get("name") or entry["id"]).strip(),
+                    })
+            if cleaned:
+                return cleaned
+    except Exception:
+        pass
+    return [dict(item) for item in default]
+
+
+@lru_cache()
+def load_learning_tracks_config() -> Dict[str, Any]:
+    allowed_domains = _parse_env_list("LEARNING_TRACK_ALLOWED_DOMAINS", DEFAULT_ALLOWED_DOMAINS)
+    languages = _parse_env_list("LEARNING_TRACK_LANGUAGES", LEARNING_TRACK_DEFAULT_LANGUAGES)
+    stacks = _parse_env_list("LEARNING_TRACK_STACKS", LEARNING_TRACK_DEFAULT_STACKS)
+    goals = _parse_env_list("LEARNING_TRACK_GOALS", LEARNING_TRACK_DEFAULT_GOALS)
+    companies = _parse_env_list("LEARNING_TRACK_COMPANIES", LEARNING_TRACK_DEFAULT_COMPANIES)
+    compiler_languages = _parse_env_json_array("LEARNING_TRACK_COMPILER_LANGUAGES", LEARNING_TRACK_DEFAULT_COMPILER_LANGUAGES)
+    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-2.5-flash"))
+    flashcard_model = os.getenv("LEARNING_TRACK_FLASHCARD_MODEL", GEMINI_NOTES_MODEL)
+    code_explainer_model = os.getenv("LEARNING_TRACK_CODE_MODEL", GEMINI_NOTES_MODEL)
+    mcq_model = os.getenv("LEARNING_TRACK_MCQ_MODEL", GEMINI_NOTES_MODEL)
+    return {
+        "languages": languages,
+        "stacks": stacks,
+        "goals": goals,
+        "companies": companies,
+        "allowed_domains": allowed_domains,
+        "compiler_languages": compiler_languages,
+        "planner_model": planner_model,
+        "flashcard_model": flashcard_model,
+        "code_explainer_model": code_explainer_model,
+        "mcq_model": mcq_model,
+        "notes_model": GEMINI_NOTES_MODEL,
+    }
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (PaperX; +https://example.com) AppleWebKit/537.36 "
@@ -12298,6 +12409,655 @@ def api_pdf_from_markdown(payload: dict):
     headers = {"Content-Disposition": f"attachment; filename={safe}.pdf"}
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
+
+# --- Learning Tracks API ---
+
+
+learning_tracks_router = APIRouter(prefix="/api/learning-tracks", tags=["learning tracks"])
+
+
+def _upsert_learning_track_preferences(
+    user_id: str,
+    profile_id: str,
+    payload: LearningTrackPlanRequest,
+    companies: List[str],
+) -> None:
+    supabase = get_service_client()
+    data = {
+        "auth_user_id": user_id,
+        "profile_id": profile_id,
+        "language": payload.language,
+        "stack": payload.stack,
+        "goal": payload.goal,
+        "companies": companies,
+        "experience_level": payload.experience_level,
+        "focus_areas": payload.focus_areas or [],
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    res = (
+        supabase.table(LEARNING_TRACK_GOALS_TABLE)
+        .upsert(_supabase_payload(data), on_conflict="auth_user_id")
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (learning goals): {res.error}")
+
+
+def _upsert_learning_track_plan(
+    user_id: str,
+    profile_id: str,
+    plan: Dict[str, Any],
+    payload: LearningTrackPlanRequest,
+    companies: List[str],
+) -> None:
+    supabase = get_service_client()
+    now = datetime.utcnow().isoformat()
+    data = {
+        "plan_id": plan.get("plan_id"),
+        "auth_user_id": user_id,
+        "profile_id": profile_id,
+        "language": plan.get("language"),
+        "stack": plan.get("stack"),
+        "goal": plan.get("goal"),
+        "companies": companies,
+        "experience_level": payload.experience_level,
+        "focus_areas": payload.focus_areas or [],
+        "generated_at": plan.get("generated_at"),
+        "plan_json": plan,
+        "updated_at": now,
+    }
+    res = (
+        supabase.table(LEARNING_TRACK_PLANS_TABLE)
+        .upsert(_supabase_payload(data), on_conflict="plan_id")
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (learning plan): {res.error}")
+
+
+def _upsert_learning_track_progress(
+    user_id: str,
+    profile_id: str,
+    payload: "LearningTrackProgressUpdate",
+) -> Dict[str, Any]:
+    supabase = get_service_client()
+    data = {
+        "auth_user_id": user_id,
+        "profile_id": profile_id,
+        "plan_id": payload.plan_id,
+        "topic_id": payload.topic_id,
+        "status": payload.status,
+        "score": payload.score,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    res = (
+        supabase.table(LEARNING_TRACK_PROGRESS_TABLE)
+        .upsert(
+            _supabase_payload(data),
+            on_conflict="auth_user_id,plan_id,topic_id",
+            returning="representation",
+        )
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (learning progress): {res.error}")
+    rows = getattr(res, "data", None) or []
+    if rows:
+        return rows[0]
+    fetch = (
+        supabase.table(LEARNING_TRACK_PROGRESS_TABLE)
+        .select("auth_user_id,plan_id,topic_id,status,score,updated_at")
+        .eq("auth_user_id", user_id)
+        .eq("plan_id", payload.plan_id)
+        .eq("topic_id", payload.topic_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(fetch, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch learning progress): {fetch.error}")
+    return (fetch.data or [data])[0]
+
+
+class LearningTrackPlanRequest(BaseModel):
+    language: str = Field(..., min_length=2, max_length=16)
+    stack: str = Field(..., min_length=2, max_length=64)
+    goal: str = Field(..., min_length=2, max_length=64)
+    companies: List[str] = Field(default_factory=list)
+    experience_level: Optional[str] = Field(None, max_length=64)
+    focus_areas: Optional[List[str]] = Field(default=None)
+
+
+class LearningTrackPracticeRequest(BaseModel):
+    topic_title: str = Field(..., min_length=2, max_length=256)
+    language: str = Field(..., min_length=2, max_length=16)
+    stack: str = Field(..., min_length=2, max_length=64)
+    goal: str = Field(..., min_length=2, max_length=64)
+    companies: List[str] = Field(default_factory=list)
+    context: Optional[str] = Field(default=None, max_length=4000)
+
+
+class LearningTrackMockRequest(BaseModel):
+    stack: str = Field(..., min_length=2, max_length=64)
+    goal: str = Field(..., min_length=2, max_length=64)
+    companies: List[str] = Field(default_factory=list)
+    focus_round: Optional[str] = Field(default=None, max_length=64)
+    language: str = Field(..., min_length=2, max_length=16)
+    recent_topics: Optional[List[str]] = Field(default=None)
+
+
+class LearningTrackAnalyticsRequest(BaseModel):
+    language: str = Field(..., min_length=2, max_length=16)
+    stack: str = Field(..., min_length=2, max_length=64)
+    goal: str = Field(..., min_length=2, max_length=64)
+    companies: List[str] = Field(default_factory=list)
+    metrics: Dict[str, Any]
+    highlights: Optional[List[str]] = Field(default=None)
+    blockers: Optional[List[str]] = Field(default=None)
+
+
+class LearningTrackFacultyBriefRequest(BaseModel):
+    language: str = Field(..., min_length=2, max_length=16)
+    stack: str = Field(..., min_length=2, max_length=64)
+    goal: str = Field(..., min_length=2, max_length=64)
+    cohort_name: Optional[str] = Field(default=None, max_length=128)
+    companies: List[str] = Field(default_factory=list)
+    plan_outline: Dict[str, Any]
+    progress_snapshot: Optional[Dict[str, Any]] = None
+
+
+class LearningTrackCodeExecuteRequest(BaseModel):
+    language_id: str = Field(..., min_length=1, max_length=32)
+    source: str = Field(..., min_length=1, max_length=5000)
+    stdin: Optional[str] = Field(default="", max_length=2000)
+
+
+class LearningTrackCodeExplainRequest(BaseModel):
+    language: str = Field(..., min_length=2, max_length=32)
+    stack: str = Field(..., min_length=2, max_length=64)
+    goal: str = Field(..., min_length=2, max_length=64)
+    companies: List[str] = Field(default_factory=list)
+    code: str = Field(..., min_length=1, max_length=6000)
+    question: Optional[str] = Field(default=None, max_length=1000)
+    language_preference: Optional[str] = Field(default=None, max_length=16)
+
+
+class LearningTrackProgressUpdate(BaseModel):
+    plan_id: str = Field(..., min_length=6, max_length=64)
+    topic_id: str = Field(..., min_length=4, max_length=64)
+    status: Literal["not_started", "in_progress", "completed"]
+    score: Optional[float] = Field(default=None)
+
+
+def _coerce_float(value: Any) -> Optional[float]:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _ensure_list_of_strings(value: Any) -> List[str]:
+    if isinstance(value, list):
+        out = []
+        for item in value:
+            text = str(item).strip()
+            if text:
+                out.append(text)
+        return out
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    return []
+
+
+def _normalize_activity_list(value: Any) -> List[Dict[str, Any]]:
+    activities: List[Dict[str, Any]] = []
+    if not isinstance(value, list):
+        return activities
+    for entry in value:
+        if not isinstance(entry, dict):
+            continue
+        title = str(entry.get("title") or entry.get("name") or "").strip()
+        if not title:
+            continue
+        activity = {
+            "title": title,
+            "type": str(entry.get("type") or entry.get("kind") or "activity").strip() or "activity",
+            "description": (str(entry.get("description") or entry.get("summary") or "").strip() or None),
+            "url": (str(entry.get("url") or entry.get("link") or "").strip() or None),
+            "source": (str(entry.get("source") or "").strip() or None),
+            "difficulty": (str(entry.get("difficulty") or entry.get("level") or "").strip() or None),
+        }
+        activities.append(activity)
+    return activities
+
+
+def _extract_json_payload(text: str) -> Dict[str, Any]:
+    candidate = (text or "").strip()
+    if not candidate:
+        raise ValueError("Empty response")
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\{[\s\S]*\}", candidate)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except Exception:
+            pass
+    match = re.search(r"```json\s*([\s\S]*?)```", candidate)
+    if match:
+        snippet = match.group(1).strip()
+        try:
+            return json.loads(snippet)
+        except Exception:
+            pass
+    raise ValueError("Failed to parse JSON from model response")
+
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+
+def _normalize_modules(raw_modules: Any, payload: LearningTrackPlanRequest) -> List[Dict[str, Any]]:
+    modules: List[Dict[str, Any]] = []
+    if not isinstance(raw_modules, list):
+        return modules
+    for idx, raw_module in enumerate(raw_modules):
+        if not isinstance(raw_module, dict):
+            continue
+        m_title = str(raw_module.get("title") or raw_module.get("name") or f"Module {idx + 1}").strip()
+        m_desc = str(raw_module.get("description") or raw_module.get("summary") or "").strip()
+        module_id = _new_id("module")
+        topics_data = raw_module.get("topics") or []
+        module_topics: List[Dict[str, Any]] = []
+        if isinstance(topics_data, list):
+            for t_idx, raw_topic in enumerate(topics_data):
+                if not isinstance(raw_topic, dict):
+                    continue
+                t_title = str(raw_topic.get("title") or raw_topic.get("name") or f"Topic {t_idx + 1}").strip()
+                if not t_title:
+                    continue
+                topic_id = _new_id("topic")
+                t_desc = str(raw_topic.get("description") or raw_topic.get("summary") or "").strip()
+                objectives = _ensure_list_of_strings(raw_topic.get("objectives"))
+                practice_items = _normalize_activity_list(raw_topic.get("practice"))
+                activities = _normalize_activity_list(raw_topic.get("activities"))
+                company_focus = _ensure_list_of_strings(raw_topic.get("company_focus")) or payload.companies
+                references = _normalize_activity_list(raw_topic.get("references"))
+                module_topics.append({
+                    "topic_id": topic_id,
+                    "title": t_title,
+                    "description": t_desc,
+                    "objectives": objectives,
+                    "activities": activities,
+                    "practice": practice_items,
+                    "company_focus": company_focus,
+                    "references": references,
+                    "notes": [],
+                })
+        modules.append({
+            "module_id": module_id,
+            "title": m_title,
+            "description": m_desc,
+            "duration_hours": _coerce_float(raw_module.get("duration_hours")),
+            "topics": module_topics,
+        })
+    return modules
+
+
+def _collect_topic_notes(topic_title: str, stack: str, config: Dict[str, Any], *, limit: int = 3) -> List[Dict[str, Any]]:
+    if not SERPAPI_API_KEY:
+        raise HTTPException(status_code=501, detail="SerpAPI key not configured. Set SERPAPI_API_KEY.")
+    query = f"{topic_title} {stack} tutorial"
+    urls = serpapi_search(query, num=limit, allowed_domains=config.get("allowed_domains"))
+    extracts: List[Dict[str, Any]] = []
+    for url in urls[:limit]:
+        try:
+            html = fetch(url)
+            page = extract_sections_from_html(url, html)
+            sections: List[Dict[str, Any]] = []
+            for section in page.sections[:4]:
+                sections.append({
+                    "heading": section.title,
+                    "summary": section.text[:600],
+                })
+            extracts.append({
+                "url": page.url,
+                "title": page.title,
+                "sections": sections,
+            })
+        except Exception as exc:
+            learning_logger.warning("Learning track notes fetch failed", extra={"topic": topic_title, "url": url, "error": str(exc)})
+    return extracts
+
+
+def _run_learning_agent(agent_name: str, system_message: str, user_payload: Dict[str, Any]) -> Dict[str, Any]:
+    assistant = AssistantAgent(
+        agent_name,
+        model_client=gemini_model_client,
+        system_message=system_message,
+    )
+    result = _run_assistant_blocking(assistant, json.dumps(user_payload))
+    if not result or not result.messages:
+        raise HTTPException(status_code=502, detail="Model did not return a response")
+    try:
+        return _extract_json_payload(result.messages[-1].content)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+LEARNING_TRACK_PLANNER_SYSTEM = """You are PaperX's Learning Track planner. Respond ONLY with compact JSON.
+Fields: plan_title (string), overview (string), modules (list of objects with keys title, description, duration_hours, topics).
+Each topic is an object with keys title, description, objectives (list of strings), activities (list of objects title/type/description/url/source),
+practice (list of objects title/type/description/url/source/difficulty), company_focus (list of strings), references (list of objects title/url/source/type).
+Align content with Indian college learners preparing for company interviews and academic goals. Keep JSON under 6000 chars.
+"""
+
+
+LEARNING_TRACK_PRACTICE_SYSTEM = """You generate MCQs and flashcards for PaperX learners. Respond ONLY with JSON with keys mcqs (list) and flashcards (list).
+Each mcq object: question, options (list of 4), answer, explanation, difficulty, source.
+Each flashcard object: front, back, mnemonic, company_hint.
+Localize the text when language != 'en'.
+"""
+
+
+LEARNING_TRACK_MOCK_SYSTEM = """You design mock interview drills for PaperX. Respond with JSON keys: warmup_questions, coding_round, system_design, behavioral.
+Each should be a list of question objects {title, prompt, rubric, difficulty, estimated_minutes}.
+"""
+
+
+LEARNING_TRACK_ANALYTICS_SYSTEM = """You are an analytics coach. Return JSON with keys summary (string), wins (list of strings), risks (list of strings), recommendations (list of strings), scorecard (object with keys velocity, mastery, retention each 0-100).
+Use the provided metrics to ground your analysis.
+"""
+
+
+LEARNING_TRACK_FACULTY_SYSTEM = """You brief faculty coordinators. Return JSON with keys overview (string), action_items (list of strings), at_risk_learners (list), support_requests (list of strings), upcoming_milestones (list of strings).
+"""
+
+
+def _validate_choice(value: str, allowed: List[str], label: str) -> str:
+    if value not in allowed:
+        raise HTTPException(status_code=400, detail=f"Unsupported {label}: {value}")
+    return value
+
+
+def _validate_companies(companies: List[str], allowed: List[str]) -> List[str]:
+    valid = []
+    for company in companies:
+        c = company.strip()
+        if c and c in allowed:
+            valid.append(c)
+    if not valid:
+        return allowed[:2] if allowed else []
+    return valid
+
+
+def _map_language_runtime(language_id: str, config: Dict[str, Any]) -> Dict[str, str]:
+    for entry in config.get("compiler_languages", []):
+        if entry.get("id") == language_id:
+            return entry
+    raise HTTPException(status_code=400, detail=f"Unsupported compiler language: {language_id}")
+
+
+@learning_tracks_router.get("/config")
+def api_learning_tracks_config():
+    config = load_learning_tracks_config()
+    return {
+        "languages": config["languages"],
+        "stacks": config["stacks"],
+        "goals": config["goals"],
+        "companies": config["companies"],
+        "allowed_domains": config["allowed_domains"],
+        "planner_model": config["planner_model"],
+        "notes_model": config["notes_model"],
+        "mcq_model": config["mcq_model"],
+        "flashcard_model": config["flashcard_model"],
+        "code_explainer_model": config["code_explainer_model"],
+        "compiler_languages": config["compiler_languages"],
+    }
+
+
+@learning_tracks_router.post("/path")
+def api_learning_tracks_plan(payload: LearningTrackPlanRequest, authorization: Optional[str] = Header(default=None)):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured. Set GEMINI_API_KEY.")
+    token = _bearer_token_from_header(authorization)
+    user_id, profile_id = _require_user_and_profile(token)
+    config = load_learning_tracks_config()
+    language = _validate_choice(payload.language, config["languages"], "language")
+    stack = _validate_choice(payload.stack, config["stacks"], "stack")
+    goal = _validate_choice(payload.goal, config["goals"], "goal")
+    companies = _validate_companies(payload.companies, config["companies"])
+
+    planner_payload = {
+        "language": language,
+        "stack": stack,
+        "goal": goal,
+        "companies": companies,
+        "experience_level": payload.experience_level,
+        "focus_areas": payload.focus_areas or [],
+        "model": config["planner_model"],
+    }
+    learning_logger.info("Learning track plan requested", extra={"stack": stack, "goal": goal, "companies": companies})
+    try:
+        plan_raw = _run_learning_agent("paperx_learning_planner", LEARNING_TRACK_PLANNER_SYSTEM, planner_payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Planner model error: {exc}") from exc
+
+    modules = _normalize_modules(plan_raw.get("modules"), payload)
+    for module in modules:
+        for topic in module.get("topics", []):
+            topic["notes"] = _collect_topic_notes(topic["title"], stack, config)
+
+    plan = {
+        "plan_id": str(uuid.uuid4()),
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "language": language,
+        "stack": stack,
+        "goal": goal,
+        "companies": companies,
+        "plan_title": plan_raw.get("plan_title") or f"{stack.title()} Track",
+        "overview": plan_raw.get("overview") or "",
+        "modules": modules,
+        "planner_model": config["planner_model"],
+        "serp_allowed_domains": config["allowed_domains"],
+    }
+    _upsert_learning_track_preferences(user_id, profile_id, payload, companies)
+    _upsert_learning_track_plan(user_id, profile_id, plan, payload, companies)
+    return plan
+
+
+@learning_tracks_router.post("/topic/practice")
+def api_learning_track_practice(payload: LearningTrackPracticeRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured. Set GEMINI_API_KEY.")
+    config = load_learning_tracks_config()
+    language = _validate_choice(payload.language, config["languages"], "language")
+    stack = _validate_choice(payload.stack, config["stacks"], "stack")
+    goal = _validate_choice(payload.goal, config["goals"], "goal")
+    companies = _validate_companies(payload.companies, config["companies"])
+
+    practice_payload = {
+        "topic": payload.topic_title,
+        "language": language,
+        "stack": stack,
+        "goal": goal,
+        "companies": companies,
+        "context": (payload.context or "")[:3000],
+        "model": config["mcq_model"],
+    }
+    try:
+        practice = _run_learning_agent("paperx_learning_practice", LEARNING_TRACK_PRACTICE_SYSTEM, practice_payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Practice model error: {exc}") from exc
+    return practice
+
+
+@learning_tracks_router.post("/mock")
+def api_learning_track_mock(payload: LearningTrackMockRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured. Set GEMINI_API_KEY.")
+    config = load_learning_tracks_config()
+    language = _validate_choice(payload.language, config["languages"], "language")
+    stack = _validate_choice(payload.stack, config["stacks"], "stack")
+    goal = _validate_choice(payload.goal, config["goals"], "goal")
+    companies = _validate_companies(payload.companies, config["companies"])
+
+    mock_payload = {
+        "stack": stack,
+        "goal": goal,
+        "companies": companies,
+        "focus_round": payload.focus_round or "",
+        "language": language,
+        "recent_topics": payload.recent_topics or [],
+    }
+    try:
+        plan = _run_learning_agent("paperx_learning_mock", LEARNING_TRACK_MOCK_SYSTEM, mock_payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Mock planner error: {exc}") from exc
+    return plan
+
+
+@learning_tracks_router.post("/analytics")
+def api_learning_track_analytics(payload: LearningTrackAnalyticsRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured. Set GEMINI_API_KEY.")
+    config = load_learning_tracks_config()
+    language = _validate_choice(payload.language, config["languages"], "language")
+    stack = _validate_choice(payload.stack, config["stacks"], "stack")
+    goal = _validate_choice(payload.goal, config["goals"], "goal")
+    companies = _validate_companies(payload.companies, config["companies"])
+
+    analytics_payload = {
+        "language": language,
+        "stack": stack,
+        "goal": goal,
+        "companies": companies,
+        "metrics": payload.metrics,
+        "highlights": payload.highlights or [],
+        "blockers": payload.blockers or [],
+    }
+    try:
+        analysis = _run_learning_agent("paperx_learning_analytics", LEARNING_TRACK_ANALYTICS_SYSTEM, analytics_payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Analytics model error: {exc}") from exc
+    return analysis
+
+
+@learning_tracks_router.post("/faculty-brief")
+def api_learning_track_faculty_brief(payload: LearningTrackFacultyBriefRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured. Set GEMINI_API_KEY.")
+    config = load_learning_tracks_config()
+    language = _validate_choice(payload.language, config["languages"], "language")
+    stack = _validate_choice(payload.stack, config["stacks"], "stack")
+    goal = _validate_choice(payload.goal, config["goals"], "goal")
+    companies = _validate_companies(payload.companies, config["companies"])
+
+    brief_payload = {
+        "language": language,
+        "stack": stack,
+        "goal": goal,
+        "companies": companies,
+        "cohort_name": payload.cohort_name or "",
+        "plan_outline": payload.plan_outline,
+        "progress_snapshot": payload.progress_snapshot or {},
+    }
+    try:
+        brief = _run_learning_agent("paperx_learning_faculty", LEARNING_TRACK_FACULTY_SYSTEM, brief_payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Faculty brief error: {exc}") from exc
+    return brief
+
+
+@learning_tracks_router.post("/code/execute")
+def api_learning_track_execute(payload: LearningTrackCodeExecuteRequest):
+    config = load_learning_tracks_config()
+    language_entry = _map_language_runtime(payload.language_id, config)
+    request_payload = {
+        "language": language_entry["runtime"],
+        "source": payload.source,
+        "stdin": payload.stdin or "",
+    }
+    try:
+        resp = requests.post(
+            "https://emkc.org/api/v2/piston/execute",
+            json=request_payload,
+            timeout=25,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Execution service error: {exc}") from exc
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    data = resp.json()
+    return {
+        "language": language_entry["id"],
+        "runtime": language_entry["runtime"],
+        "output": data.get("output") or data.get("stdout") or "",
+        "stderr": data.get("stderr") or "",
+        "exit_code": data.get("code") or data.get("exitCode"),
+    }
+
+
+@learning_tracks_router.post("/code/explain")
+def api_learning_track_explain(payload: LearningTrackCodeExplainRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured. Set GEMINI_API_KEY.")
+    config = load_learning_tracks_config()
+    language = _validate_choice(payload.language, config["languages"], "language")
+    stack = _validate_choice(payload.stack, config["stacks"], "stack")
+    goal = _validate_choice(payload.goal, config["goals"], "goal")
+    companies = _validate_companies(payload.companies, config["companies"])
+
+    explain_payload = {
+        "language": language,
+        "stack": stack,
+        "goal": goal,
+        "companies": companies,
+        "code": payload.code,
+        "question": payload.question or "",
+        "model": config["code_explainer_model"],
+        "language_preference": payload.language_preference or language,
+    }
+    system_message = "You explain source code to PaperX learners clearly. Respond with JSON {summary, complexity, suggestions (list), localized_explanation}."
+    try:
+        explanation = _run_learning_agent("paperx_learning_code", system_message, explain_payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Code explanation error: {exc}") from exc
+    return explanation
+
+
+@learning_tracks_router.post("/progress")
+def api_learning_track_progress_update(
+    payload: LearningTrackProgressUpdate, authorization: Optional[str] = Header(default=None)
+):
+    token = _bearer_token_from_header(authorization)
+    user_id, profile_id = _require_user_and_profile(token)
+    record = _upsert_learning_track_progress(user_id, profile_id, payload)
+    return {
+        "plan_id": record.get("plan_id"),
+        "topic_id": record.get("topic_id"),
+        "status": record.get("status"),
+        "score": record.get("score"),
+        "updated_at": record.get("updated_at"),
+    }
+
+
 # --- YouTube transcript endpoints ---
 
 youtube_transcript_router = APIRouter(prefix="/api/transcripts", tags=["youtube transcripts"])
@@ -12678,6 +13438,7 @@ def create_app() -> FastAPI:
 
     app.include_router(projects_router)
     app.include_router(notes_router)
+    app.include_router(learning_tracks_router)
     app.include_router(print_router)
     app.include_router(academics_router)
     app.include_router(marketplace_router)
