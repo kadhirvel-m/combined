@@ -1998,6 +1998,7 @@
     // ===== State =====
     let es = null;
     let lastMarkdown = '';
+    let lastImageUrls = [];
     const VARIANTS = ['detailed', 'cheatsheet', 'simple'];
     let currentVariant = 'detailed';
     try { localStorage.setItem('paperx:lastVariant', currentVariant); } catch { }
@@ -2061,6 +2062,7 @@
             .then(data => {
               if (data && data.markdown) {
                 renderMarkdown(data.markdown);
+                renderImageGallery(data.image_urls || []);
                 $meta.textContent = `Loaded • ${data.id || lastId} • ${currentVariant}`;
                 currentNoteId = data.id || lastId;
                 const loadedTopic = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
@@ -2398,11 +2400,34 @@
       resetFlashcardAccess();
       resetMCQAccess();
       currentNoteId = '';
+      lastImageUrls = [];
       // reset images skeleton (keep for images only)
       ['', '', ''].forEach(() => {
         const sk = document.createElement('div');
         sk.className = 'h-24 rounded-lg skeleton';
         $images.appendChild(sk);
+      });
+    }
+
+    function renderImageGallery(urls) {
+      if (!$images) return;
+      const listRaw = Array.isArray(urls) ? urls.map(u => String(u || '').trim()).filter(u => !!u) : [];
+      const list = Array.from(new Set(listRaw));
+      lastImageUrls = list;
+      $images.innerHTML = '';
+      if (!list.length) return;
+      list.slice(0, 9).forEach(url => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = 'reference image';
+        img.className = 'w-full h-24 object-cover rounded-lg border';
+        img.style.borderColor = 'var(--outline)';
+        a.appendChild(img);
+        $images.appendChild(a);
       });
     }
 
@@ -2477,16 +2502,11 @@
       on('llm_done', (d) => logEvent('LLM done', `${d.md_chars} chars`));
       on('images', (d) => {
         logEvent('Images', `${d.count} found`);
-        $images.innerHTML = '';
-        (d.urls || d.image_urls || []).slice(0, 9).forEach(u => {
-          const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener';
-          const img = document.createElement('img'); img.src = u; img.alt = 'image';
-          img.className = 'w-full h-24 object-cover rounded-lg border'; img.style.borderColor = 'var(--outline)';
-          a.appendChild(img); $images.appendChild(a);
-        });
+        renderImageGallery(d.image_urls || d.urls || []);
       });
       on('error', (d) => { logEvent('Error', d.message); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
       on('final', (d) => {
+        renderImageGallery(d.image_urls || d.urls || lastImageUrls);
         renderMarkdown(d.markdown);
         setEmphasis(emphasis);
         hideOutputLoader();
@@ -2783,6 +2803,7 @@
         const data = await res.json();
         if (data?.markdown) {
           renderMarkdown(data.markdown);
+          renderImageGallery(data.image_urls || []);
           $meta.textContent = `Loaded • ${id} • ${currentVariant}`;
           currentNoteId = data?.id || id;
           const derivedTopic = (
@@ -2831,7 +2852,7 @@
         const res = await fetch(`${apiBase}/notes?variant=${encodeURIComponent(currentVariant)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic, markdown: md })
+          body: JSON.stringify({ topic, markdown: md, image_urls: lastImageUrls })
         });
         if (res.ok) {
           const data = await res.json();
@@ -2841,6 +2862,7 @@
             if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
           } catch { }
           $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
+          renderImageGallery(data.image_urls || lastImageUrls);
           renderMarkdown(md);
           isEditing = false; setEditMode(false);
           logEvent('Saved', currentNoteId);
@@ -2851,9 +2873,11 @@
       const res = await fetch(`${apiBase}/notes/${encodeURIComponent(currentNoteId)}?variant=${encodeURIComponent(currentVariant)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown: md })
+        body: JSON.stringify({ markdown: md, image_urls: lastImageUrls })
       });
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        renderImageGallery((data && data.image_urls) || lastImageUrls);
         renderMarkdown(md);
         isEditing = false; setEditMode(false);
         $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;

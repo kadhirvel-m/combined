@@ -292,7 +292,7 @@ def db_get_ai_note_by_title_exact_variant(title: str, *, variant: Optional[str] 
     try:
         res = (
             supabase.table(table)
-            .select("id,title,markdown,created_at,updated_at")
+            .select("id,title,markdown,image_urls,created_at,updated_at")
             .eq("title_ci", t.lower())
             .limit(1)
             .execute()
@@ -302,11 +302,21 @@ def db_get_ai_note_by_title_exact_variant(title: str, *, variant: Optional[str] 
     except Exception:
         return None
 
-def db_upsert_ai_note_by_title(title: str, markdown: str) -> Dict[str, Any]:
+def db_upsert_ai_note_by_title(
+    title: str,
+    markdown: str,
+    image_urls: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Insert or update a detailed-variant note by title; returns the stored row."""
-    return db_upsert_ai_note_by_title_variant(title, markdown, variant="detailed")
+    return db_upsert_ai_note_by_title_variant(title, markdown, variant="detailed", image_urls=image_urls)
 
-def db_upsert_ai_note_by_title_variant(title: str, markdown: str, *, variant: Optional[str] = None) -> Dict[str, Any]:
+def db_upsert_ai_note_by_title_variant(
+    title: str,
+    markdown: str,
+    *,
+    variant: Optional[str] = None,
+    image_urls: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Insert or update a note by title in the variant-specific table; returns the stored row."""
     supabase = get_service_client()
     now = datetime.utcnow().isoformat()
@@ -315,6 +325,9 @@ def db_upsert_ai_note_by_title_variant(title: str, markdown: str, *, variant: Op
         "markdown": markdown or "",
         "updated_at": now,
     }
+    if image_urls is not None:
+        cleaned_images = [str(url).strip() for url in image_urls if str(url or "").strip()]
+        payload["image_urls"] = cleaned_images
     table = _table_for_variant(variant)
     try:
         res = supabase.table(table).upsert(payload, on_conflict="title_ci", returning="representation").execute()
@@ -326,7 +339,7 @@ def db_upsert_ai_note_by_title_variant(title: str, markdown: str, *, variant: Op
         # Fallback: refetch by title_ci
         ref = (
             supabase.table(table)
-            .select("id,title,markdown,created_at,updated_at")
+            .select("id,title,markdown,image_urls,created_at,updated_at")
             .eq("title_ci", payload["title"].lower())
             .limit(1)
             .execute()
@@ -348,7 +361,7 @@ def db_get_ai_note_by_id_variant(note_id: str, *, variant: Optional[str] = None)
     try:
         res = (
             supabase.table(table)
-            .select("id,title,markdown,created_at,updated_at")
+            .select("id,title,markdown,image_urls,created_at,updated_at")
             .eq("id", note_id)
             .limit(1)
             .execute()
@@ -366,20 +379,28 @@ def db_get_ai_note_by_id_any(note_id: str) -> Tuple[Optional[Dict[str, Any]], Op
             return row, v
     return None, None
 
-def db_update_ai_note_markdown(note_id: str, markdown: str) -> Optional[Dict[str, Any]]:
+def db_update_ai_note_markdown(
+    note_id: str,
+    markdown: str,
+    image_urls: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
     """Backward compat: update only detailed table."""
-    return db_update_ai_note_markdown_variant(note_id, markdown, variant="detailed")
+    return db_update_ai_note_markdown_variant(note_id, markdown, variant="detailed", image_urls=image_urls)
 
-def db_update_ai_note_markdown_variant(note_id: str, markdown: str, *, variant: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def db_update_ai_note_markdown_variant(
+    note_id: str,
+    markdown: str,
+    *,
+    variant: Optional[str] = None,
+    image_urls: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
     supabase = get_service_client()
     table = _table_for_variant(variant)
     try:
-        res = (
-            supabase.table(table)
-            .update({"markdown": markdown or "", "updated_at": datetime.utcnow().isoformat()})
-            .eq("id", note_id)
-            .execute()
-        )
+        update_payload: Dict[str, Any] = {"markdown": markdown or "", "updated_at": datetime.utcnow().isoformat()}
+        if image_urls is not None:
+            update_payload["image_urls"] = [str(url).strip() for url in image_urls if str(url or "").strip()]
+        res = supabase.table(table).update(update_payload).eq("id", note_id).execute()
         if getattr(res, 'error', None):
             raise Exception(res.error)
         out = db_get_ai_note_by_id_variant(note_id, variant=variant)
@@ -11300,6 +11321,7 @@ async def generate(payload: dict):
                     "cached": True,
                     "title": row.get("title"),
                     "variant": variant,
+                    "image_urls": row.get("image_urls") or [],
                 }
         # Non-streaming generation: use detailed pipeline for detailed, or transform detailed into variant
         md_detailed = generate_notes_markdown(topic, degree=degree)
@@ -11333,8 +11355,22 @@ async def generate(payload: dict):
                     md = resp.choices[0].message["content"] if resp.choices else md_detailed
             except Exception:
                 md = md_detailed
-        row = db_upsert_ai_note_by_title_variant(topic, md, variant=variant)
-        return {"id": row.get("id"), "markdown": row.get("markdown", md), "cached": False, "title": row.get("title"), "variant": variant}
+        image_urls: List[str] = []
+        try:
+            related_pages = serpapi_search(topic, num=8, degree=degree)
+            image_urls = collect_image_urls(topic, related_pages)
+        except Exception:
+            image_urls = []
+        row = db_upsert_ai_note_by_title_variant(topic, md, variant=variant, image_urls=image_urls)
+        stored_images = row.get("image_urls") or image_urls
+        return {
+            "id": row.get("id"),
+            "markdown": row.get("markdown", md),
+            "cached": False,
+            "title": row.get("title"),
+            "variant": variant,
+            "image_urls": stored_images,
+        }
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -11354,6 +11390,7 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
                     "cached": True,
                     "title": row.get("title"),
                     "variant": _normalize_variant(variant),
+                    "image_urls": row.get("image_urls") or [],
                 }
                 line = f"event: final\n".encode("utf-8")
                 data_json = json.dumps(payload, ensure_ascii=False)
@@ -11389,11 +11426,21 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
                     try:
                         if name == "final" and isinstance(payload, dict) and payload.get("markdown"):
                             try:
-                                row = db_upsert_ai_note_by_title_variant(topic, payload.get("markdown", ""), variant=_normalize_variant(variant))
+                                images_input = payload.get("image_urls")
+                                if not isinstance(images_input, list):
+                                    urls_input = payload.get("urls")
+                                    images_input = urls_input if isinstance(urls_input, list) else None
+                                row = db_upsert_ai_note_by_title_variant(
+                                    topic,
+                                    payload.get("markdown", ""),
+                                    variant=_normalize_variant(variant),
+                                    image_urls=images_input,
+                                )
                                 payload["id"] = row.get("id")
                                 payload["title"] = row.get("title")
                                 payload["cached"] = False
                                 payload["variant"] = _normalize_variant(variant)
+                                payload["image_urls"] = row.get("image_urls") or (images_input or [])
                             except Exception:
                                 pass
                             finally:
@@ -12268,8 +12315,17 @@ def api_list_notes(variant: str = Query("detailed")):
 def api_create_note(payload: dict, variant: str = Query("detailed")):
     title = (payload or {}).get("topic", "").strip() or (payload or {}).get("title", "Untitled").strip() or "Untitled"
     markdown = (payload or {}).get("markdown", "")
-    row = db_upsert_ai_note_by_title_variant(title, markdown, variant=_normalize_variant(variant))
-    return {"id": row.get("id"), "title": row.get("title"), "created_at": row.get("created_at"), "updated_at": row.get("updated_at"), "variant": _normalize_variant(variant)}
+    raw_images = (payload or {}).get("image_urls")
+    image_urls = raw_images if isinstance(raw_images, list) else None
+    row = db_upsert_ai_note_by_title_variant(title, markdown, variant=_normalize_variant(variant), image_urls=image_urls)
+    return {
+        "id": row.get("id"),
+        "title": row.get("title"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+        "variant": _normalize_variant(variant),
+        "image_urls": row.get("image_urls") or (image_urls or []),
+    }
 
 
 @notes_router.get("/notes/{note_id}")
@@ -12284,21 +12340,44 @@ def api_read_note(note_id: str, variant: Optional[str] = Query(default=None)):
         row, used_variant = db_get_ai_note_by_id_any(note_id)
     if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
-    return {"id": row.get("id"), "title": row.get("title"), "markdown": row.get("markdown", ""), "updated_at": row.get("updated_at"), "variant": used_variant}
+    return {
+        "id": row.get("id"),
+        "title": row.get("title"),
+        "markdown": row.get("markdown", ""),
+        "updated_at": row.get("updated_at"),
+        "variant": used_variant,
+        "image_urls": row.get("image_urls") or [],
+    }
 
 
 @notes_router.put("/notes/{note_id}")
 @notes_router.put("/api/notes/{note_id}")
 def api_update_note(note_id: str, payload: dict, variant: Optional[str] = Query(default=None)):
     markdown = (payload or {}).get("markdown", "")
+    raw_images = (payload or {}).get("image_urls")
+    image_urls = raw_images if isinstance(raw_images, list) else None
     if variant:
-        row = db_update_ai_note_markdown_variant(note_id, markdown, variant=_normalize_variant(variant))
+        row = db_update_ai_note_markdown_variant(
+            note_id,
+            markdown,
+            variant=_normalize_variant(variant),
+            image_urls=image_urls,
+        )
     else:
         found, found_variant = db_get_ai_note_by_id_any(note_id)
         if not found:
             raise HTTPException(status_code=404, detail="Not found")
-        row = db_update_ai_note_markdown_variant(note_id, markdown, variant=found_variant)
-    return {"id": note_id, "updated_at": row.get("updated_at") if row else None}
+        row = db_update_ai_note_markdown_variant(
+            note_id,
+            markdown,
+            variant=found_variant,
+            image_urls=image_urls,
+        )
+    return {
+        "id": note_id,
+        "updated_at": row.get("updated_at") if row else None,
+        "image_urls": (row.get("image_urls") if row else None) or (image_urls or []),
+    }
 
 
 @notes_router.get("/notes/{note_id}/download")
