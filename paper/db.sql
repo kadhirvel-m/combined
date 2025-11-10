@@ -535,6 +535,7 @@ CREATE TABLE public.ai_notes (
   -- stored lowercase for fast exact-title lookups (case-insensitive)
   title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
   markdown text NOT NULL,
+  image_urls text[] DEFAULT '{}'::text[],
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT ai_notes_pkey PRIMARY KEY (id)
@@ -549,6 +550,7 @@ CREATE TABLE public.ai_notes_cheatsheet (
   title text NOT NULL,
   title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
   markdown text NOT NULL,
+  image_urls text[] DEFAULT '{}'::text[],
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT ai_notes_cheatsheet_pkey PRIMARY KEY (id)
@@ -562,6 +564,7 @@ CREATE TABLE public.ai_notes_simple (
   title text NOT NULL,
   title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
   markdown text NOT NULL,
+  image_urls text[] DEFAULT '{}'::text[],
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT ai_notes_simple_pkey PRIMARY KEY (id)
