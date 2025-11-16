@@ -1,0 +1,1229 @@
+<!-- CHATGPT PROMPT:
+Create a single-page personal portfolio website for [YOUR_NAME], a [YOUR_ROLE] focused on [TYPE_OF_WORK, e.g. “frontend engineering and interactive 3D visuals”].
+
+Audience: [e.g. “startup hiring managers” / “SaaS founders” / “art directors at gaming studios”].
+Main goal: [e.g. “get interviews for front-end roles”, “attract freelance clients”].
+
+Design style: modern futuristic dark mode with glassmorphism cards, neon cyan and magenta accents, subtle holographic gradients, and smooth micro-interactions. Think “sleek tech UI” rather than “gimmicky sci-fi”.
+
+Must-have sections:
+- Hero: name, role, punchy tagline, primary CTA button to view projects.
+- About: short bio and 3–5 bullet highlights.
+- Skills/Services: grouped into 3–4 categories with short descriptions.
+- Projects: 4–6 project tiles with image, role, short description, and tags.
+- Testimonials: space for 2–3 quotes (placeholder text).
+- Contact: simple form + social links.
+
+Make the layout fully responsive for mobile and desktop. Use strong visual hierarchy, large bold headings, and enough whitespace so it feels premium rather than cluttered. Auto-generate professional placeholder text where needed that matches this profile and tone.
+
+use html  js tailwind cdn and others also -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Aria Khatri — Frontend Engineer & Creative Technologist</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta
+    name="description"
+    content="Portfolio of Aria Khatri, a frontend engineer & creative technologist focused on immersive product UI, interactive 3D, and design systems."
+  />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            'accent-cyan': '#22d3ee',
+            'accent-magenta': '#e879f9',
+          },
+          boxShadow: {
+            'neon-soft':
+              '0 0 0 1px rgba(56,189,248,0.35), 0 0 35px rgba(244,114,182,0.45)',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* Glass & neon helpers */
+    .glass-panel {
+      background: radial-gradient(
+          circle at top left,
+          rgba(56, 189, 248, 0.18),
+          transparent 55%
+        ),
+        radial-gradient(
+          circle at bottom right,
+          rgba(244, 114, 182, 0.12),
+          transparent 55%
+        );
+      background-color: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      backdrop-filter: blur(20px);
+    }
+
+    .neon-ring {
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5),
+        0 0 24px rgba(56, 189, 248, 0.5),
+        0 0 48px rgba(244, 114, 182, 0.45);
+    }
+
+    /* Reveal-on-scroll */
+    [data-reveal] {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.9s ease, transform 0.9s ease;
+    }
+
+    [data-reveal].revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Hide the default focus outline but keep accessibility */
+    .focus-outline-none:focus-visible {
+      outline: 2px solid rgba(56, 189, 248, 0.9);
+      outline-offset: 3px;
+    }
+  </style>
+</head>
+
+<body
+  class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-cyan-400/30 selection:text-white"
+>
+  <!-- Background aurora -->
+  <div
+    class="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+    aria-hidden="true"
+  >
+    <div
+      class="absolute -top-40 -left-32 h-72 w-72 rounded-full bg-cyan-500/40 blur-3xl"
+    ></div>
+    <div
+      class="absolute top-40 -right-40 h-96 w-96 rounded-full bg-fuchsia-500/40 blur-3xl"
+    ></div>
+    <div
+      class="absolute bottom-[-12rem] left-1/2 h-80 w-[32rem] -translate-x-1/2 rounded-[999px] bg-gradient-to-r from-cyan-500/30 via-transparent to-fuchsia-500/30 blur-3xl"
+    ></div>
+  </div>
+
+  <!-- Navigation -->
+  <header class="fixed inset-x-0 top-0 z-40">
+    <div class="mx-auto max-w-6xl px-4 pt-4">
+      <nav
+        class="glass-panel flex items-center justify-between rounded-2xl px-4 py-3 md:px-6"
+        aria-label="Main navigation"
+      >
+        <!-- Logo -->
+        <a
+          href="#hero"
+          class="flex items-center gap-2 focus-outline-none"
+        >
+          <div
+            class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-fuchsia-500 text-sm font-semibold text-slate-950 shadow-neon-soft"
+          >
+            AK
+          </div>
+          <div class="flex flex-col leading-tight">
+            <span class="font-display text-sm font-semibold tracking-tight"
+              >Aria Khatri</span
+            >
+            <span class="text-[11px] text-slate-400"
+              >Frontend · Creative Tech</span
+            >
+          </div>
+        </a>
+
+        <!-- Desktop nav -->
+        <div
+          id="primary-nav"
+          class="hidden items-center gap-6 text-xs font-medium text-slate-300 md:flex"
+        >
+          <a
+            href="#about"
+            class="hover:text-cyan-300 transition-colors focus-outline-none"
+            >About</a
+          >
+          <a
+            href="#skills"
+            class="hover:text-cyan-300 transition-colors focus-outline-none"
+            >Skills</a
+          >
+          <a
+            href="#projects"
+            class="hover:text-cyan-300 transition-colors focus-outline-none"
+            >Projects</a
+          >
+          <a
+            href="#testimonials"
+            class="hover:text-cyan-300 transition-colors focus-outline-none"
+            >Testimonials</a
+          >
+          <a
+            href="#contact"
+            class="hover:text-cyan-300 transition-colors focus-outline-none"
+            >Contact</a
+          >
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-3">
+          <a
+            href="#contact"
+            class="hidden rounded-full border border-slate-500/60 px-3 py-1.5 text-xs font-medium text-slate-200 shadow-sm transition hover:border-cyan-400/80 hover:text-cyan-200 md:inline-flex focus-outline-none"
+          >
+            Let’s collaborate
+          </a>
+
+          <!-- Mobile menu button -->
+          <button
+            id="mobile-menu-button"
+            class="flex h-9 w-9 items-center justify-center rounded-full border border-slate-600/70 bg-slate-900/80 text-slate-200 md:hidden focus-outline-none"
+            aria-label="Toggle navigation menu"
+          >
+            <svg
+              id="icon-menu"
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="18" x2="20" y2="18" />
+            </svg>
+            <svg
+              id="icon-close"
+              xmlns="http://www.w3.org/2000/svg"
+              class="hidden h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      </nav>
+
+      <!-- Mobile nav drawer -->
+      <div
+        id="mobile-nav-drawer"
+        class="mt-2 hidden rounded-2xl border border-slate-700/70 bg-slate-900/95 px-4 py-3 text-sm text-slate-200 backdrop-blur-lg md:hidden"
+      >
+        <div class="flex flex-col gap-2">
+          <a
+            href="#about"
+            class="py-1 text-slate-200 hover:text-cyan-300 focus-outline-none"
+            >About</a
+          >
+          <a
+            href="#skills"
+            class="py-1 text-slate-200 hover:text-cyan-300 focus-outline-none"
+            >Skills</a
+          >
+          <a
+            href="#projects"
+            class="py-1 text-slate-200 hover:text-cyan-300 focus-outline-none"
+            >Projects</a
+          >
+          <a
+            href="#testimonials"
+            class="py-1 text-slate-200 hover:text-cyan-300 focus-outline-none"
+            >Testimonials</a
+          >
+          <a
+            href="#contact"
+            class="py-1 text-slate-200 hover:text-cyan-300 focus-outline-none"
+            >Contact</a
+          >
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl px-4 pt-32 pb-16 md:pt-36">
+    <!-- Hero -->
+    <section
+      id="hero"
+      class="grid gap-10 pb-20 md:grid-cols-[1.3fr,1fr] md:items-center lg:gap-16"
+    >
+      <!-- Left -->
+      <div data-reveal>
+        <p class="text-xs font-medium uppercase tracking-[0.3em] text-cyan-300">
+          FRONTEND ENGINEER · CREATIVE TECHNOLOGIST
+        </p>
+        <h1
+          class="mt-4 font-display text-4xl font-semibold leading-tight tracking-tight text-slate-50 sm:text-5xl lg:text-6xl"
+        >
+          I craft
+          <span
+            class="bg-gradient-to-r from-cyan-300 via-sky-400 to-fuchsia-400 bg-clip-text text-transparent"
+            >futuristic product interfaces</span
+          >
+          that feel effortless.
+        </h1>
+        <p class="mt-5 max-w-xl text-sm text-slate-300 md:text-[15px]">
+          I’m <span class="font-medium text-slate-100">Aria Khatri</span>, a
+          frontend engineer focused on immersive product UI, interactive 3D, and
+          design systems for fast-moving SaaS teams. I help startups ship
+          interfaces that are fast, intuitive, and just a little bit magical.
+        </p>
+
+        <!-- Hero CTAs -->
+        <div
+          class="mt-7 flex flex-wrap items-center gap-3 text-sm font-medium"
+        >
+          <a
+            href="#projects"
+            class="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-400 px-5 py-2.5 text-slate-950 shadow-neon-soft transition hover:brightness-110 focus-outline-none"
+          >
+            View highlighted projects
+            <span
+              class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-950/10 text-[11px] transition group-hover:translate-x-0.5"
+              >↗</span
+            >
+          </a>
+          <a
+            href="#contact"
+            class="inline-flex items-center gap-2 rounded-full border border-slate-600/80 bg-slate-900/70 px-4 py-2 text-slate-100 shadow-sm transition hover:border-cyan-400/80 hover:text-cyan-200 focus-outline-none"
+          >
+            Book a 20-min intro
+          </a>
+        </div>
+
+        <!-- Hero meta -->
+        <dl
+          class="mt-8 flex flex-wrap gap-6 text-xs text-slate-400 md:text-[13px]"
+        >
+          <div>
+            <dt class="font-medium text-slate-300">Ideal collaborators</dt>
+            <dd>Startup hiring managers · Product design leads</dd>
+          </div>
+          <div>
+            <dt class="font-medium text-slate-300">Primary goal</dt>
+            <dd>Get interviews for senior frontend / UI roles</dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Right: preview / stats -->
+      <div
+        class="relative max-w-md md:justify-self-end"
+        data-reveal
+      >
+        <div
+          class="absolute -inset-[1px] rounded-[1.7rem] bg-gradient-to-br from-cyan-400/60 via-slate-900 to-fuchsia-500/40 opacity-60 blur-xl"
+        ></div>
+        <div
+          class="glass-panel relative overflow-hidden rounded-[1.5rem] px-5 pb-5 pt-6"
+        >
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-300">
+                CURRENT FOCUS
+              </p>
+              <p class="mt-2 text-sm text-slate-100">
+                Frontend engineering for
+                <span class="font-semibold">data-heavy SaaS</span> and
+                <span class="font-semibold">interactive 3D</span> interfaces.
+              </p>
+            </div>
+            <div
+              class="rounded-2xl bg-slate-900/80 px-3 py-2 text-right text-[11px] text-slate-300"
+            >
+              <div class="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                Availability
+              </div>
+              <div class="mt-1 font-semibold text-cyan-300">
+                Open to roles
+              </div>
+              <div class="text-[10px] text-slate-400">
+                Hybrid · Remote · Berlin / EU
+              </div>
+            </div>
+          </div>
+
+          <!-- Mini stats -->
+          <div class="mt-5 grid grid-cols-3 gap-3 text-center text-[11px]">
+            <div
+              class="rounded-xl border border-slate-600/70 bg-slate-900/70 px-2 py-3"
+            >
+              <div class="font-display text-lg font-semibold text-cyan-300">
+                7+
+              </div>
+              <div class="mt-1 text-[10px] uppercase tracking-[0.18em]">
+                Years experience
+              </div>
+            </div>
+            <div
+              class="rounded-xl border border-slate-600/70 bg-slate-900/70 px-2 py-3"
+            >
+              <div class="font-display text-lg font-semibold text-fuchsia-300">
+                20+
+              </div>
+              <div class="mt-1 text-[10px] uppercase tracking-[0.18em]">
+                Products shipped
+              </div>
+            </div>
+            <div
+              class="rounded-xl border border-slate-600/70 bg-slate-900/70 px-2 py-3"
+            >
+              <div class="font-display text-lg font-semibold text-sky-300">
+                3x
+              </div>
+              <div class="mt-1 text-[10px] uppercase tracking-[0.18em]">
+                Design awards
+              </div>
+            </div>
+          </div>
+
+          <!-- Faux project thumbnail -->
+          <div
+            class="mt-5 overflow-hidden rounded-xl border border-slate-600/60 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950"
+          >
+            <div
+              class="flex items-center justify-between border-b border-slate-700/60 px-3 py-2 text-[10px] text-slate-400"
+            >
+              <span class="flex items-center gap-1.5">
+                <span class="h-2 w-2 rounded-full bg-emerald-400/90"></span>
+                live preview · dashboard.explore
+              </span>
+              <span>Next.js · Three.js</span>
+            </div>
+            <div
+              class="relative h-32 overflow-hidden bg-gradient-to-tr from-cyan-500/30 via-slate-900 to-fuchsia-500/30"
+            >
+              <div
+                class="absolute inset-5 rounded-2xl border border-slate-400/40 bg-slate-950/40"
+              ></div>
+              <div
+                class="absolute -top-10 left-6 h-32 w-32 rounded-full bg-cyan-400/40 blur-2xl"
+              ></div>
+              <div
+                class="absolute bottom-[-3.5rem] right-4 h-28 w-28 rounded-full bg-fuchsia-400/40 blur-2xl"
+              ></div>
+              <div
+                class="absolute inset-7 flex items-end justify-between text-[10px] text-slate-200"
+              >
+                <div>
+                  <div class="font-medium text-xs text-sky-100">
+                    Realtime metrics
+                  </div>
+                  <p class="mt-1 max-w-[11rem] text-[11px] text-slate-300">
+                    Motion-driven KPI dashboard for growth & ops teams.
+                  </p>
+                </div>
+                <div class="rounded-lg bg-slate-900/80 px-2 py-1">
+                  <p class="text-[10px] text-slate-400">Interaction</p>
+                  <p class="text-xs font-semibold text-cyan-300">Orbit view</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p class="mt-3 text-[11px] text-slate-400">
+            Ideal for startups needing polished UI, design systems, and
+            production-ready animations — without sacrificing performance.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section id="about" class="pb-16" data-reveal>
+      <div
+        class="flex flex-col gap-6 rounded-3xl border border-slate-700/70 bg-slate-900/60 p-6 md:flex-row md:items-start md:justify-between md:p-8"
+      >
+        <div class="max-w-xl">
+          <h2
+            class="inline-flex items-center gap-2 rounded-full bg-slate-900/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.28em] text-slate-300"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+            ABOUT
+          </h2>
+          <p
+            class="mt-4 font-display text-2xl font-semibold tracking-tight text-slate-50 md:text-[26px]"
+          >
+            I bridge product thinking, thoughtful motion, and reliable frontend
+            engineering.
+          </p>
+          <p class="mt-3 text-sm text-slate-300 md:text-[15px]">
+            Over the past 7+ years, I’ve helped SaaS teams turn complex
+            workflows into interfaces that feel as smooth as consumer apps.
+            I specialise in design–dev collaboration, interactive prototypes,
+            and building robust UI systems in modern web stacks.
+          </p>
+        </div>
+
+        <div class="w-full max-w-sm md:w-auto">
+          <ul class="space-y-2 text-sm text-slate-200 md:text-[14px]">
+            <li class="flex gap-2">
+              <span class="mt-[5px] h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+              <span
+                >Partner comfortably with founders, PMs, and design leads in
+                early-stage environments.</span
+              >
+            </li>
+            <li class="flex gap-2">
+              <span class="mt-[5px] h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+              <span
+                >Obsessed with interaction details — microstates, loading
+                flows, and empty states included.</span
+              >
+            </li>
+            <li class="flex gap-2">
+              <span class="mt-[5px] h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+              <span
+                >Comfortable owning frontends from UX prototypes to production
+                rollouts and documentation.</span
+              >
+            </li>
+            <li class="flex gap-2">
+              <span class="mt-[5px] h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+              <span
+                >Performance-minded: Lighthouse, Core Web Vitals, accessibility
+                and real-world usage matter.</span
+              >
+            </li>
+            <li class="flex gap-2">
+              <span class="mt-[5px] h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+              <span
+                >Enjoys mentoring designers and engineers on UI engineering
+                practices and tooling.</span
+              >
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Skills / Services -->
+    <section id="skills" class="pb-16" data-reveal>
+      <div class="flex items-end justify-between gap-4 pb-6">
+        <div>
+          <h2
+            class="font-display text-2xl font-semibold tracking-tight text-slate-50 md:text-[26px]"
+          >
+            Skills & collaboration zones
+          </h2>
+          <p class="mt-1 text-sm text-slate-300 md:text-[14px]">
+            How I can plug into your team and start delivering value quickly.
+          </p>
+        </div>
+      </div>
+
+      <div
+        class="grid gap-5 md:grid-cols-2 lg:grid-cols-4"
+        aria-label="Skill categories"
+      >
+        <!-- Category 1 -->
+        <article
+          class="group glass-panel relative overflow-hidden rounded-2xl p-5 text-sm"
+        >
+          <div
+            class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-cyan-400/20 blur-2xl transition duration-500 group-hover:bg-cyan-400/35"
+          ></div>
+          <h3
+            class="font-display text-[17px] font-semibold text-slate-50 flex items-center justify-between gap-2"
+          >
+            Interface engineering
+            <span
+              class="rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-cyan-300"
+              >Core</span
+            >
+          </h3>
+          <p class="mt-2 text-[13px] text-slate-300">
+            Crafting robust, accessible, production-grade frontends.
+          </p>
+          <ul class="mt-3 space-y-1.5 text-[12px] text-slate-300">
+            <li>• React, Next.js, TypeScript, Tailwind</li>
+            <li>• Design systems & component libraries</li>
+            <li>• State management, forms, data grids</li>
+            <li>• Accessibility & performance optimization</li>
+          </ul>
+        </article>
+
+        <!-- Category 2 -->
+        <article
+          class="group glass-panel relative overflow-hidden rounded-2xl p-5 text-sm"
+        >
+          <div
+            class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-fuchsia-400/16 blur-2xl transition duration-500 group-hover:bg-fuchsia-400/32"
+          ></div>
+          <h3 class="font-display text-[17px] font-semibold text-slate-50">
+            Interactive 3D & motion
+          </h3>
+          <p class="mt-2 text-[13px] text-slate-300">
+            Bringing narratives to life with subtle, performant motion.
+          </p>
+          <ul class="mt-3 space-y-1.5 text-[12px] text-slate-300">
+            <li>• Three.js, React Three Fiber basics</li>
+            <li>• Micro-interactions & transitions</li>
+            <li>• Scroll-driven narratives & reveals</li>
+            <li>• Prototyping animations with Framer</li>
+          </ul>
+        </article>
+
+        <!-- Category 3 -->
+        <article
+          class="group glass-panel relative overflow-hidden rounded-2xl p-5 text-sm"
+        >
+          <div
+            class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-sky-400/18 blur-2xl transition duration-500 group-hover:bg-sky-400/32"
+          ></div>
+          <h3 class="font-display text-[17px] font-semibold text-slate-50">
+            Design systems & UI scale
+          </h3>
+          <p class="mt-2 text-[13px] text-slate-300">
+            Systematising UI so teams can move faster without chaos.
+          </p>
+          <ul class="mt-3 space-y-1.5 text-[12px] text-slate-300">
+            <li>• Token-driven theming & dark mode</li>
+            <li>• Figma × code collaboration</li>
+            <li>• Storybook & documentation</li>
+            <li>• Governance & contribution models</li>
+          </ul>
+        </article>
+
+        <!-- Category 4 -->
+        <article
+          class="group glass-panel relative overflow-hidden rounded-2xl p-5 text-sm"
+        >
+          <div
+            class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-emerald-400/16 blur-2xl transition duration-500 group-hover:bg-emerald-400/32"
+          ></div>
+          <h3 class="font-display text-[17px] font-semibold text-slate-50">
+            Product collaboration
+          </h3>
+          <p class="mt-2 text-[13px] text-slate-300">
+            Working closely with founders, PMs, and designers.
+          </p>
+          <ul class="mt-3 space-y-1.5 text-[12px] text-slate-300">
+            <li>• Translating fuzzy ideas to clickable UI</li>
+            <li>• Running quick UI/UX experiments</li>
+            <li>• Balancing delivery & craft</li>
+            <li>• Mentoring in UI engineering practices</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <!-- Projects -->
+    <section id="projects" class="pb-16" data-reveal>
+      <div class="flex items-end justify-between gap-4 pb-5">
+        <div>
+          <h2
+            class="font-display text-2xl font-semibold tracking-tight text-slate-50 md:text-[26px]"
+          >
+            Selected projects
+          </h2>
+          <p class="mt-1 text-sm text-slate-300 md:text-[14px]">
+            A snapshot of how I approach complex interfaces, motion, and system
+            thinking.
+          </p>
+        </div>
+        <p class="hidden text-xs text-slate-400 md:block">
+          More work & code samples available on request.
+        </p>
+      </div>
+
+      <div class="grid gap-6 md:grid-cols-2">
+        <!-- Project 1 -->
+        <article
+          class="group glass-panel relative flex flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/70 transition hover:border-cyan-400/70 hover:shadow-neon-soft"
+        >
+          <div class="relative h-40 overflow-hidden">
+            <div
+              class="absolute inset-0 bg-gradient-to-br from-cyan-400/30 via-slate-900 to-fuchsia-500/30"
+            ></div>
+            <div
+              class="absolute inset-4 rounded-2xl border border-slate-500/40 bg-slate-950/50"
+            ></div>
+            <div
+              class="absolute -right-6 top-4 h-20 w-20 rounded-full bg-cyan-300/30 blur-2xl"
+            ></div>
+            <div
+              class="absolute bottom-[-2rem] left-6 h-24 w-24 rounded-full bg-fuchsia-300/30 blur-2xl"
+            ></div>
+            <div
+              class="absolute inset-4 flex items-end justify-between px-4 pb-3 text-[11px] text-slate-100"
+            >
+              <div>
+                <p class="text-xs font-semibold text-sky-100">
+                  Orbit Analytics
+                </p>
+                <p class="mt-1 max-w-[14rem] text-[11px] text-slate-200">
+                  Interactive 3D KPI cockpit for growth & ops teams.
+                </p>
+              </div>
+              <div
+                class="rounded-full bg-slate-900/80 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-cyan-300"
+              >
+                SaaS · B2B
+              </div>
+            </div>
+          </div>
+          <div class="flex flex-1 flex-col gap-3 px-5 py-4 text-sm">
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="font-display text-[17px] font-semibold text-slate-50">
+                Orbit Analytics · 3D metrics workspace
+              </h3>
+              <span class="text-[11px] text-slate-400">Lead Frontend</span>
+            </div>
+            <p class="text-[13px] text-slate-300">
+              Led the end-to-end implementation of a 3D metrics workspace using
+              React, WebGL, and motion-driven navigation. Reduced time-to-insight
+              for growth teams by surfacing key signals in one interactive scene.
+            </p>
+            <div class="flex flex-wrap gap-2 text-[11px]">
+              <span
+                class="rounded-full bg-slate-900/80 px-2.5 py-1 text-cyan-300"
+                >React · Three.js</span
+              >
+              <span class="rounded-full bg-slate-900/80 px-2.5 py-1"
+                >Design systems</span
+              >
+              <span class="rounded-full bg-slate-900/80 px-2.5 py-1"
+                >Micro-interactions</span
+              >
+            </div>
+          </div>
+        </article>
+
+        <!-- Project 2 -->
+        <article
+          class="group glass-panel relative flex flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/70 transition hover:border-cyan-400/70 hover:shadow-neon-soft"
+        >
+          <div class="relative h-40 overflow-hidden">
+            <div
+              class="absolute inset-0 bg-gradient-to-br from-sky-400/30 via-slate-900 to-emerald-400/25"
+            ></div>
+            <div
+              class="absolute inset-4 rounded-2xl border border-slate-500/40 bg-slate-950/50"
+            ></div>
+            <div
+              class="absolute -left-6 top-2 h-20 w-20 rounded-full bg-emerald-300/30 blur-2xl"
+            ></div>
+            <div
+              class="absolute bottom-[-2rem] right-8 h-24 w-24 rounded-full bg-sky-300/30 blur-2xl"
+            ></div>
+            <div
+              class="absolute inset-4 flex items-end justify-between px-4 pb-3 text-[11px] text-slate-100"
+            >
+              <div>
+                <p class="text-xs font-semibold text-sky-100">
+                  Flux OS
+                </p>
+                <p class="mt-1 max-w-[14rem] text-[11px] text-slate-200">
+                  System-level design language for a productivity suite.
+                </p>
+              </div>
+              <div
+                class="rounded-full bg-slate-900/80 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-sky-300"
+              >
+                Design system
+              </div>
+            </div>
+          </div>
+          <div class="flex flex-1 flex-col gap-3 px-5 py-4 text-sm">
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="font-display text-[17px] font-semibold text-slate-50">
+                Flux OS · Cross-platform design system
+              </h3>
+              <span class="text-[11px] text-slate-400"
+                >System Architect</span
+              >
+            </div>
+            <p class="text-[13px] text-slate-300">
+              Defined and implemented a token-based design system powering web
+              and desktop apps. Introduced a unified component library in React
+              with Storybook docs, cutting UI build time by ~40%.
+            </p>
+            <div class="flex flex-wrap gap-2 text-[11px]">
+              <span
+                class="rounded-full bg-slate-900/80 px-2.5 py-1 text-cyan-300"
+                >Tokens · Theming</span
+              >
+              <span class="rounded-full bg-slate-900/80 px-2.5 py-1"
+                >Storybook</span
+              >
+              <span class="rounded-full bg-slate-900/80 px-2.5 py-1"
+                >Accessibility</span
+              >
+            </div>
+          </div>
+        </article>
+
+        <!-- Project 3 -->
+        <article
+          class="group glass-panel relative flex flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/70 transition hover:border-cyan-400/70 hover:shadow-neon-soft"
+        >
+          <div class="relative h-40 overflow-hidden">
+            <div
+              class="absolute inset-0 bg-gradient-to-br from-fuchsia-400/30 via-slate-900 to-rose-500/25"
+            ></div>
+            <div
+              class="absolute inset-4 rounded-2xl border border-slate-500/40 bg-slate-950/50"
+            ></div>
+            <div
+              class="absolute -right-4 bottom-3 h-20 w-20 rounded-full bg-fuchsia-300/30 blur-2xl"
+            ></div>
+            <div
+              class="absolute top-0 left-10 h-24 w-24 rounded-full bg-rose-300/40 blur-2xl"
+            ></div>
+            <div
+              class="absolute inset-4 flex items-end justify-between px-4 pb-3 text-[11px] text-slate-100"
+            >
+              <div>
+                <p class="text-xs font-semibold text-sky-100">
+                  Studio Lumos
+                </p>
+                <p class="mt-1 max-w-[14rem] text-[11px] text-slate-200">
+                  Experimental showroom for a gaming studio portfolio.
+                </p>
+              </div>
+              <div
+                class="rounded-full bg-slate-900/80 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-fuchsia-300"
+              >
+                Creative
+              </div>
+            </div>
+          </div>
+          <div class="flex flex-1 flex-col gap-3 px-5 py-4 text-sm">
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="font-display text-[17px] font-semibold text-slate-50">
+                Studio Lumos · Interactive portfolio
+              </h3>
+              <span class="text-[11px] text-slate-400"
+                >Creative Technologist</span
+              >
+            </div>
+            <p class="text-[13px] text-slate-300">
+              Built an interactive, game-inspired portfolio experience for a
+              boutique studio. Used scroll-driven storytelling, soft 3D,
+              and ambient sound cues to showcase work without overwhelming users.
+            </p>
+            <div class="flex flex-wrap gap-2 text-[11px]">
+              <span
+                class="rounded-full bg-slate-900/80 px-2.5 py-1 text-cyan-300"
+                >Scroll narratives</span
+              >
+              <span class="rounded-full bg-slate-900/80 px-2.5 py-1"
+                >Framer Motion</span
+              >
+              <span class="rounded-full bg-slate-900/80 px-2.5 py-1"
+                >Creative direction</span
+              >
+            </div>
+          </div>
+        </article>
+
+        <!-- Project 4 -->
+        <article
+          class="group glass-panel relative flex flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/70 transition hover:border-cyan-400/70 hover:shadow-neon-soft"
+        >
+          <div class="relative h-40 overflow-hidden">
+            <div
+              class="absolute inset-0 bg-gradient-to-br from-emerald-400/26 via-slate-900 to-cyan-500/26"
+            ></div>
+            <div
+              class="absolute inset-4 rounded-2xl border border-slate-500/40 bg-slate-950/50"
+            ></div>
+            <div
+              class="absolute -left-4 bottom-3 h-20 w-20 rounded-full bg-cyan-300/30 blur-2xl"
+            ></div>
+            <div
+              class="absolute top-1 right-7 h-24 w-24 rounded-full bg-emerald-300/35 blur-2xl"
+            ></div>
+            <div
+              class="absolute inset-4 flex items-end justify-between px-4 pb-3 text-[11px] text-slate-100"
+            >
+              <div>
+                <p class="text-xs font-semibold text-sky-100">
+                  Flowline
+                </p>
+                <p class="mt-1 max-w-[14rem] text-[11px] text-slate-200">
+                  Workflow builder for ops teams, with visual nodes and rules.
+                </p>
+              </div>
+              <div
+                class="rounded-full bg-slate-900/80 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-emerald-300"
+              >
+                Builder
+              </div>
+            </div>
+          </div>
+          <div class="flex flex-1 flex-col gap-3 px-5 py-4 text-sm">
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="font-display text-[17px] font-semibold text-slate-50">
+                Flowline · Visual automation builder
+              </h3>
+              <span class="text-[11px] text-slate-400"
+                >Senior Frontend</span
+              >
+            </div>
+            <p class="text-[13px] text-slate-300">
+              Delivered a drag-and-drop automation builder with real-time
+              simulation. Focused on clarity, error states, and discoverable
+              advanced options to reduce support tickets and onboarding time.
+            </p>
+            <div class="flex flex-wrap gap-2 text-[11px]">
+              <span
+                class="rounded-full bg-slate-900/80 px-2.5 py-1 text-cyan-300"
+                >React · DnD</span
+              >
+              <span class="rounded-full bg-slate-900/80 px-2.5 py-1"
+                >Complex UX</span
+              >
+              <span class="rounded-full bg-slate-900/80 px-2.5 py-1"
+                >Onboarding flows</span
+              >
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section id="testimonials" class="pb-16" data-reveal>
+      <div class="flex items-end justify-between gap-4 pb-6">
+        <div>
+          <h2
+            class="font-display text-2xl font-semibold tracking-tight text-slate-50 md:text-[26px]"
+          >
+            Words from collaborators
+          </h2>
+          <p class="mt-1 text-sm text-slate-300 md:text-[14px]">
+            Placeholder quotes to be replaced with real testimonials.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid gap-5 md:grid-cols-3">
+        <!-- Testimonial 1 -->
+        <figure
+          class="glass-panel flex flex-col justify-between rounded-2xl p-5 text-sm"
+        >
+          <blockquote class="text-[13px] text-slate-200">
+            “Aria quickly became the go-to person for anything UI or motion.
+            She translated rough product ideas into interfaces that felt
+            surprisingly refined for an early-stage team.”
+          </blockquote>
+          <figcaption class="mt-4 text-[12px] text-slate-300">
+            <div class="font-medium text-slate-100">Placeholder Name</div>
+            <div class="text-slate-400">
+              VP Product · High-growth SaaS startup
+            </div>
+          </figcaption>
+        </figure>
+
+        <!-- Testimonial 2 -->
+        <figure
+          class="glass-panel flex flex-col justify-between rounded-2xl p-5 text-sm"
+        >
+          <blockquote class="text-[13px] text-slate-200">
+            “She has that rare combination of strong visual taste and pragmatic
+            engineering. Our design system would not exist in its current form
+            without her leadership.”
+          </blockquote>
+          <figcaption class="mt-4 text-[12px] text-slate-300">
+            <div class="font-medium text-slate-100">Placeholder Name</div>
+            <div class="text-slate-400">
+              Head of Design · Productivity platform
+            </div>
+          </figcaption>
+        </figure>
+
+        <!-- Testimonial 3 -->
+        <figure
+          class="glass-panel flex flex-col justify-between rounded-2xl p-5 text-sm"
+        >
+          <blockquote class="text-[13px] text-slate-200">
+            “Every feature Aria touched shipped with thoughtful interaction
+            details and clear documentation. She elevated the whole team’s bar
+            for front-end craft.”
+          </blockquote>
+          <figcaption class="mt-4 text-[12px] text-slate-300">
+            <div class="font-medium text-slate-100">Placeholder Name</div>
+            <div class="text-slate-400">
+              Engineering Manager · B2B data product
+            </div>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Contact -->
+    <section id="contact" class="pb-10" data-reveal>
+      <div
+        class="grid gap-8 rounded-3xl border border-slate-700/80 bg-slate-900/70 p-6 md:grid-cols-[1.1fr,1fr] md:p-8"
+      >
+        <!-- Text -->
+        <div>
+          <h2
+            class="font-display text-2xl font-semibold tracking-tight text-slate-50 md:text-[26px]"
+          >
+            Let’s create something your users remember
+          </h2>
+          <p class="mt-2 text-sm text-slate-300 md:text-[14px]">
+            I’m currently open to senior frontend roles and select collaborations
+            with SaaS founders. Tell me a bit about your product and what you’re
+            hoping to improve, and I’ll respond with concrete ways I could help.
+          </p>
+
+          <div class="mt-5 space-y-3 text-sm text-slate-300">
+            <div class="flex items-center gap-3">
+              <div
+                class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900/90"
+              >
+                <span class="text-lg">✉️</span>
+              </div>
+              <div>
+                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">
+                  Email
+                </div>
+                <a
+                  href="mailto:aria.khatri@placeholder.dev"
+                  class="text-sm text-cyan-300 hover:text-cyan-200"
+                  >aria.khatri@placeholder.dev</a
+                >
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <div
+                class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900/90"
+              >
+                <span class="text-lg">🌐</span>
+              </div>
+              <div>
+                <div class="text-xs uppercase tracking-[0.18em] text-slate-400">
+                  Social
+                </div>
+                <div class="flex flex-wrap gap-3 text-sm">
+                  <a
+                    href="#"
+                    class="text-slate-300 hover:text-cyan-300"
+                    >LinkedIn</a
+                  >
+                  <a
+                    href="#"
+                    class="text-slate-300 hover:text-cyan-300"
+                    >GitHub</a
+                  >
+                  <a
+                    href="#"
+                    class="text-slate-300 hover:text-cyan-300"
+                    >Dribbble</a
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form -->
+        <div>
+          <form
+            action="#"
+            method="post"
+            class="space-y-4 text-sm"
+          >
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  for="name"
+                  class="text-xs font-medium uppercase tracking-[0.18em] text-slate-400"
+                  >Name</label
+                >
+                <input
+                  id="name"
+                  name="name"
+                  type="text"
+                  placeholder="Your name"
+                  class="mt-1 w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 hover:border-cyan-400/60 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/70"
+                />
+              </div>
+              <div>
+                <label
+                  for="email"
+                  class="text-xs font-medium uppercase tracking-[0.18em] text-slate-400"
+                  >Email</label
+                >
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="you@company.com"
+                  class="mt-1 w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 hover:border-cyan-400/60 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/70"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                for="project-type"
+                class="text-xs font-medium uppercase tracking-[0.18em] text-slate-400"
+                >What are you looking for?</label
+              >
+              <select
+                id="project-type"
+                name="project-type"
+                class="mt-1 w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-cyan-400/60 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/70"
+              >
+                <option value="">Choose an option…</option>
+                <option>Senior frontend role</option>
+                <option>Design system collaboration</option>
+                <option>Interactive marketing / product site</option>
+                <option>UI/UX consultation</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                for="message"
+                class="text-xs font-medium uppercase tracking-[0.18em] text-slate-400"
+                >Project / role details</label
+              >
+              <textarea
+                id="message"
+                name="message"
+                rows="4"
+                placeholder="Tell me about your product, timelines, and what success looks like for you."
+                class="mt-1 w-full rounded-xl border border-slate-600/80 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 hover:border-cyan-400/60 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/70"
+              ></textarea>
+            </div>
+
+            <div class="flex items-center justify-between gap-3">
+              <button
+                type="submit"
+                class="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-400 px-5 py-2.5 text-sm font-medium text-slate-950 shadow-neon-soft transition hover:brightness-110 focus:outline-none"
+              >
+                Send message
+                <span
+                  class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-950/10 text-[12px]"
+                  >➜</span
+                >
+              </button>
+              <p class="text-[11px] text-slate-400">
+                No spam. I usually reply within
+                <span class="text-slate-200">1–2 business days</span>.
+              </p>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/70 pt-6 text-[11px] text-slate-400">
+      <div
+        class="flex flex-col items-start justify-between gap-3 pb-2 md:flex-row md:items-center"
+      >
+        <p>
+          © <span id="year"></span> Aria Khatri. Crafted with care, motion, and
+          just enough neon.
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="text-slate-500">Portfolio v1.0</span>
+          <span class="hidden text-slate-500 md:inline">·</span>
+          <span class="text-slate-500"
+            >Built with HTML, Tailwind, and vanilla JS.</span
+          >
+        </div>
+      </div>
+    </footer>
+  </main>
+
+  <!-- Scripts -->
+  <script>
+    // Dynamic year
+    document.getElementById('year').textContent =
+      new Date().getFullYear().toString();
+
+    // Smooth scroll for internal links
+    const OFFSET = 88; // account for fixed header
+    document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href');
+        if (!targetId || targetId === '#') return;
+        const targetEl = document.querySelector(targetId);
+        if (!targetEl) return;
+
+        e.preventDefault();
+        const rect = targetEl.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const offsetTop = rect.top + scrollTop - OFFSET;
+
+        window.scrollTo({
+          top: offsetTop,
+          behavior: 'smooth',
+        });
+
+        // Close mobile nav when clicking items
+        if (window.innerWidth < 768) {
+          mobileNavDrawer.classList.add('hidden');
+          iconMenu.classList.remove('hidden');
+          iconClose.classList.add('hidden');
+        }
+      });
+    });
+
+    // Reveal on scroll using IntersectionObserver
+    const revealElements = document.querySelectorAll('[data-reveal]');
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('revealed');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.14 }
+    );
+    revealElements.forEach((el) => observer.observe(el));
+
+    // Mobile nav toggle
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+    const mobileNavDrawer = document.getElementById('mobile-nav-drawer');
+    const iconMenu = document.getElementById('icon-menu');
+    const iconClose = document.getElementById('icon-close');
+
+    if (mobileMenuButton && mobileNavDrawer) {
+      mobileMenuButton.addEventListener('click', () => {
+        const isHidden = mobileNavDrawer.classList.contains('hidden');
+        mobileNavDrawer.classList.toggle('hidden', !isHidden);
+        iconMenu.classList.toggle('hidden', !isHidden);
+        iconClose.classList.toggle('hidden', isHidden);
+      });
+    }
+  </script>
+</body>
+</html>
