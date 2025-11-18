@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import os
-import re
-import math
-import time
-import json
-from typing import List, Dict, Any, Optional, Set, Iterable
-from urllib.parse import urlparse
+from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
+
+from shared_utils import (
+    normalize_text,
+    skill_in_text,
+    domain_as_channel,
+    chunks,
+    safe_int,
+    rank_tiebreak_key,
+    greedy_cover_from_candidates,
+)
 
 # ---------------------------------------------------------------------
 # ENV & CONSTANTS
@@ -38,126 +43,6 @@ def _require_serpapi():
 def _require_youtube():
     if not YOUTUBE_API_KEY:
         raise RuntimeError("Missing YOUTUBE_API_KEY environment variable.")
-
-def _safe_int(x: Optional[str]) -> Optional[int]:
-    try:
-        return int(x)  # may raise ValueError/TypeError
-    except Exception:
-        return None
-
-def _norm(s: str) -> str:
-    return re.sub(r"\s+", " ", (s or "").strip().lower())
-
-def _skill_in_text(text: str, skill: str) -> bool:
-    """Word-boundary match for single-token skills; substring for multi-word skills."""
-    t = _norm(text)
-    s = _norm(skill)
-    if not s:
-        return False
-    if " " in s:
-        return s in t
-    return re.search(rf"\b{re.escape(s)}\b", t) is not None
-
-def _chunks(lst: List[Any], n: int) -> Iterable[List[Any]]:
-    for i in range(0, len(lst), n):
-        yield lst[i:i+n]
-
-def _domain_as_channel(url: Optional[str]) -> Optional[str]:
-    if not url:
-        return None
-    try:
-        host = urlparse(url).netloc or ""
-        return host.replace("www.", "") if host else None
-    except Exception:
-        return None
-
-def _rank_tiebreak_key(cand: Dict[str, Any]) -> int:
-    """Lower is better; falls back to a large number if undefined."""
-    try:
-        return int(cand.get("_rank", 10_000))
-    except Exception:
-        return 10_000
-
-def _greedy_cover_from_candidates(
-    candidates: List[Dict[str, Any]],
-    norm_to_orig: Dict[str, str],
-    item_key: str = "item",
-    tie_key_func=_rank_tiebreak_key,
-) -> List[Dict[str, Any]]:
-    """
-    Generic greedy set cover over 'candidates', each carrying:
-      {
-        "_rank": int (lower = better),
-        "matched_norm": [normalized skills it covers],
-        # plus display fields (title/url/channel_title/published_at/thumbnail/views)
-      }
-
-    Returns selection list with shape:
-      [{ "group_skills": [...], item_key: {...} }, ...]
-    """
-    if not candidates:
-        return []
-
-    # sort once for stable tiebreaks
-    items_sorted = sorted(candidates, key=tie_key_func)
-
-    uncovered: Set[str] = set(norm_to_orig.keys())
-    selected: List[Dict[str, Any]] = []
-
-    while uncovered:
-        best = None
-        best_new = 0
-        best_tie = 10_000
-
-        for cand in items_sorted:
-            matched_norm = cand.get("matched_norm") or []
-            new_cover = uncovered.intersection(matched_norm)
-            c = len(new_cover)
-            if c > best_new or (c == best_new and tie_key_func(cand) < best_tie):
-                if c > 0:
-                    best = (cand, list(new_cover))
-                    best_new = c
-                    best_tie = tie_key_func(cand)
-
-        if not best:
-            break
-
-        cand, new_cover_norm = best
-        group_skills = [norm_to_orig[n] for n in sorted(new_cover_norm, key=str.lower)]
-        payload = {
-            "title":         cand.get("title"),
-            "url":           cand.get("url"),
-            "channel_title": cand.get("channel_title"),
-            "views":         cand.get("views"),         # None for blogs/news
-            "published_at":  cand.get("published_at"),
-            "thumbnail":     cand.get("thumbnail"),
-        }
-        selected.append({"group_skills": group_skills, item_key: payload})
-
-        # mark covered and remove candidate
-        uncovered.difference_update(new_cover_norm)
-        items_sorted.remove(cand)
-
-    # fallback for any remaining skills: pick top-ranked candidate containing it
-    if uncovered:
-        for nsk in list(uncovered):
-            cands = [c for c in items_sorted if nsk in (c.get("matched_norm") or [])]
-            if not cands:
-                continue
-            cands.sort(key=tie_key_func)
-            best = cands[0]
-            payload = {
-                "title":         best.get("title"),
-                "url":           best.get("url"),
-                "channel_title": best.get("channel_title"),
-                "views":         best.get("views"),
-                "published_at":  best.get("published_at"),
-                "thumbnail":     best.get("thumbnail"),
-            }
-            selected.append({"group_skills": [norm_to_orig[nsk]], item_key: payload})
-            uncovered.discard(nsk)
-
-    return selected
 
 
 # ---------------------------------------------------------------------
@@ -188,8 +73,8 @@ def fetch_blogs_grouped_cover(
     if not skills:
         return []
 
-    norm_to_orig = { _norm(s): s for s in skills }
-    norm_skills  = list(norm_to_orig.keys())
+    norm_to_orig = {normalize_text(s): s for s in skills}
+    norm_skills = list(norm_to_orig.keys())
 
     candidates: List[Dict[str, Any]] = []
 
@@ -224,7 +109,7 @@ def fetch_blogs_grouped_cover(
                     continue
                 snippet = (o.get("snippet") or "") if include_snippet else ""
                 text = f"{title}\n{snippet}"
-                matched_norm = [nsk for nsk in norm_skills if _skill_in_text(text, nsk)]
+                matched_norm = [nsk for nsk in norm_skills if skill_in_text(text, nsk)]
                 if not matched_norm:
                     continue
 
@@ -232,7 +117,7 @@ def fetch_blogs_grouped_cover(
                     "_rank": rank,  # tie-breaker
                     "title": title,
                     "url": url,
-                    "channel_title": _domain_as_channel(url) or (o.get("source") or o.get("displayed_link")),
+                    "channel_title": domain_as_channel(url) or (o.get("source") or o.get("displayed_link")),
                     "published_at": o.get("date"),   # may be relative like "2 days ago"
                     "thumbnail": None,               # blogs rarely have reliable thumbs from SerpAPI
                     "views": None,                   # schema parity
@@ -252,11 +137,11 @@ def fetch_blogs_grouped_cover(
             except Exception:
                 pass  # Skip failed requests
 
-    return _greedy_cover_from_candidates(
+    return greedy_cover_from_candidates(
         candidates=candidates,
         norm_to_orig=norm_to_orig,
         item_key="item",
-        tie_key_func=_rank_tiebreak_key
+        tie_key_func=rank_tiebreak_key
     )
 
 
@@ -284,8 +169,8 @@ def fetch_news_grouped_cover(
     if not skills:
         return []
 
-    norm_to_orig = { _norm(s): s for s in skills }
-    norm_skills  = list(norm_to_orig.keys())
+    norm_to_orig = {normalize_text(s): s for s in skills}
+    norm_skills = list(norm_to_orig.keys())
 
     candidates: List[Dict[str, Any]] = []
 
@@ -329,7 +214,7 @@ def fetch_news_grouped_cover(
                     thumb = None
 
                 text = f"{title}\n{snippet}"
-                matched_norm = [nsk for nsk in norm_skills if _skill_in_text(text, nsk)]
+                matched_norm = [nsk for nsk in norm_skills if skill_in_text(text, nsk)]
                 if not matched_norm:
                     continue
 
@@ -337,7 +222,7 @@ def fetch_news_grouped_cover(
                     "_rank": rank,  # tie-breaker
                     "title": title,
                     "url": url,
-                    "channel_title": (n.get("source") or {}).get("name") or _domain_as_channel(url),
+                    "channel_title": (n.get("source") or {}).get("name") or domain_as_channel(url),
                     "published_at": n.get("date"),  # may be relative
                     "thumbnail": thumb,
                     "views": None,                  # schema parity
@@ -357,11 +242,11 @@ def fetch_news_grouped_cover(
             except Exception:
                 pass  # Skip failed requests
 
-    return _greedy_cover_from_candidates(
+    return greedy_cover_from_candidates(
         candidates=candidates,
         norm_to_orig=norm_to_orig,
         item_key="item",
-        tie_key_func=_rank_tiebreak_key
+        tie_key_func=rank_tiebreak_key
     )
 
 
@@ -387,8 +272,8 @@ def fetch_youtube_grouped_cover(
     if not skills:
         return []
 
-    norm_to_orig = { _norm(s): s for s in skills }
-    norm_skills  = list(norm_to_orig.keys())
+    norm_to_orig = {normalize_text(s): s for s in skills}
+    norm_skills = list(norm_to_orig.keys())
 
     # 1) search per skill -> candidate ids
     candidate_ids: List[str] = []
@@ -416,7 +301,7 @@ def fetch_youtube_grouped_cover(
             candidate_ids.append(vid)
 
     # dedup while preserving order
-    seen: Set[str] = set()
+    seen: set[str] = set()
     dedup_ids: List[str] = []
     for vid in candidate_ids:
         if vid not in seen:
@@ -427,7 +312,7 @@ def fetch_youtube_grouped_cover(
 
     # 2) fetch details/stats
     candidates: List[Dict[str, Any]] = []
-    for batch in _chunks(dedup_ids, 50):
+    for batch in chunks(dedup_ids, 50):
         v = requests.get(
             YOUTUBE_VIDEOS,
             params={"key": YOUTUBE_API_KEY, "part": "snippet,statistics", "id": ",".join(batch)},
@@ -443,17 +328,17 @@ def fetch_youtube_grouped_cover(
             title = sn.get("title", "") or ""
             desc  = sn.get("description", "") or ""
             text  = f"{title}\n{desc}"
-            view_count = _safe_int(st.get("viewCount")) or 0
+            view_count = safe_int(st.get("viewCount")) or 0
             if view_count < min_views:
                 continue
 
-            matched_norm = [nsk for nsk in norm_skills if _skill_in_text(text, nsk)]
+            matched_norm = [nsk for nsk in norm_skills if skill_in_text(text, nsk)]
             if not matched_norm:
                 continue
 
             thumb = (sn.get("thumbnails", {}) or {}).get("medium", {}) or {}
             candidates.append({
-                # We invert views for tie-breaker (lower is better in _rank_tiebreak_key),
+                # We invert views for tie-breaker (lower is better in rank_tiebreak_key),
                 # but instead of hijacking _rank, we'll sort separately later.
                 "title": title,
                 "url": f"https://www.youtube.com/watch?v={it.get('id')}",
@@ -477,7 +362,7 @@ def fetch_youtube_grouped_cover(
             return 0
 
     # Reuse greedy engine but rename item_key to "video"
-    selections = _greedy_cover_from_candidates(
+    selections = greedy_cover_from_candidates(
         candidates=sorted(candidates, key=_yt_tie_key),  # pre-sort for stable ties
         norm_to_orig=norm_to_orig,
         item_key="video",

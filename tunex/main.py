@@ -1392,33 +1392,29 @@ SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 YOUTUBE_SEARCH = "https://www.googleapis.com/youtube/v3/search"
 YOUTUBE_VIDEOS = "https://www.googleapis.com/youtube/v3/videos"
 
-# Helpers
-
-def _norm_text(s: str) -> str:
-    return re.sub(r"\s+", " ", (s or "").strip().lower())
-
-def _skill_in_text_block(text: str, skill: str) -> bool:
-    t = _norm_text(text)
-    s = _norm_text(skill)
-    if not s:
-        return False
-    if " " in s:
-        return s in t
-    return re.search(rf"\b{re.escape(s)}\b", t) is not None
-
-def _chunks(lst: List[Any], n: int) -> Iterable[List[Any]]:
-    for i in range(0, len(lst), n):
-        yield lst[i:i+n]
-
-def _domain_as_channel(url: Optional[str]) -> Optional[str]:
-    from urllib.parse import urlparse
-    if not url:
-        return None
-    try:
-        host = urlparse(url).netloc or ""
-        return host.replace("www.", "") if host else None
-    except Exception:
-        return None
+# Import shared utilities to avoid duplication
+try:
+    from shared_utils import (
+        normalize_text as _norm_text,
+        skill_in_text as _skill_in_text_block,
+        domain_as_channel as _domain_as_channel,
+        chunks as _chunks,
+        greedy_cover_from_candidates as _greedy_cover_from_candidates,
+        rank_tiebreak_key,
+    )
+except ImportError:
+    # Fallback if module not found in path
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(__file__))
+    from shared_utils import (
+        normalize_text as _norm_text,
+        skill_in_text as _skill_in_text_block,
+        domain_as_channel as _domain_as_channel,
+        chunks as _chunks,
+        greedy_cover_from_candidates as _greedy_cover_from_candidates,
+        rank_tiebreak_key,
+    )
 
 # Tool offers (SerpAPI Google)
 class ToolSearchIn(BaseModel):
@@ -1489,65 +1485,6 @@ class AllCoverResponse(BaseModel):
     blogs: List[Dict[str, Any]]
     news: List[Dict[str, Any]]
     youtube: List[Dict[str, Any]]
-
-
-def _greedy_cover_from_candidates(
-    candidates: List[Dict[str, Any]],
-    norm_to_orig: Dict[str, str],
-    item_key: str = "item",
-    tie_key_func=lambda c: int(c.get("_rank", 10_000)) if isinstance(c.get("_rank"), int) else 10_000,
-) -> List[Dict[str, Any]]:
-    if not candidates:
-        return []
-    items_sorted = sorted(candidates, key=tie_key_func)
-    uncovered: Set[str] = set(norm_to_orig.keys())
-    selected: List[Dict[str, Any]] = []
-    while uncovered:
-        best = None
-        best_new = 0
-        best_tie = 10_000
-        for cand in items_sorted:
-            matched_norm = cand.get("matched_norm") or []
-            new_cover = uncovered.intersection(matched_norm)
-            c = len(new_cover)
-            if c > best_new or (c == best_new and tie_key_func(cand) < best_tie):
-                if c > 0:
-                    best = (cand, list(new_cover))
-                    best_new = c
-                    best_tie = tie_key_func(cand)
-        if not best:
-            break
-        cand, new_cover_norm = best
-        group_skills = [norm_to_orig[n] for n in sorted(new_cover_norm, key=str.lower)]
-        payload = {
-            "title": cand.get("title"),
-            "url": cand.get("url"),
-            "channel_title": cand.get("channel_title"),
-            "views": cand.get("views"),
-            "published_at": cand.get("published_at"),
-            "thumbnail": cand.get("thumbnail"),
-        }
-        selected.append({"group_skills": group_skills, item_key: payload})
-        uncovered.difference_update(new_cover_norm)
-        items_sorted.remove(cand)
-    if uncovered:
-        for nsk in list(uncovered):
-            cands = [c for c in items_sorted if nsk in (c.get("matched_norm") or [])]
-            if not cands:
-                continue
-            cands.sort(key=tie_key_func)
-            best = cands[0]
-            payload = {
-                "title": best.get("title"),
-                "url": best.get("url"),
-                "channel_title": best.get("channel_title"),
-                "views": best.get("views"),
-                "published_at": best.get("published_at"),
-                "thumbnail": best.get("thumbnail"),
-            }
-            selected.append({"group_skills": [norm_to_orig[nsk]], item_key: payload})
-            uncovered.discard(nsk)
-    return selected
 
 
 def _fetch_blogs_grouped_cover(skills: List[str], search_per_skill: int = 20, language: str = "en", country: str = "in", site_bias: Optional[str] = (
