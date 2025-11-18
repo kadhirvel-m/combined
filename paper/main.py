@@ -26,6 +26,47 @@ from typing import Any, AsyncGenerator, Dict, Iterator, List, Literal, Optional,
 from urllib.parse import quote, urlparse
 import threading
 
+# Performance: Pre-compile frequently used regex patterns
+_SLUGIFY_PATTERN = re.compile(r"[^a-zA-Z0-9_.-]+")
+_WHITESPACE_PATTERN = re.compile(r"\s+")
+_NORMALIZE_KEY_PATTERN = re.compile(r"[^a-zA-Z0-9]+")
+_EXTRACT_HEADING_PATTERN = re.compile(r"^(#{1,3})\s+(.+)$", re.MULTILINE)
+
+# Performance: Simple TTL cache for expensive operations
+class _SimpleCache:
+    """Thread-safe LRU cache with TTL for expensive operations."""
+    def __init__(self, maxsize: int = 100, ttl_seconds: int = 300):
+        self._cache: Dict[str, Tuple[Any, float]] = {}
+        self._maxsize = maxsize
+        self._ttl_seconds = ttl_seconds
+        self._lock = threading.Lock()
+    
+    def get(self, key: str) -> Optional[Any]:
+        with self._lock:
+            if key in self._cache:
+                value, timestamp = self._cache[key]
+                if time.time() - timestamp < self._ttl_seconds:
+                    return value
+                else:
+                    del self._cache[key]
+        return None
+    
+    def set(self, key: str, value: Any) -> None:
+        with self._lock:
+            if len(self._cache) >= self._maxsize:
+                # Remove oldest entry
+                oldest = min(self._cache.items(), key=lambda x: x[1][1])
+                del self._cache[oldest[0]]
+            self._cache[key] = (value, time.time())
+    
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+# Global caches for different operations
+_search_cache = _SimpleCache(maxsize=100, ttl_seconds=300)  # 5 min TTL
+_page_extract_cache = _SimpleCache(maxsize=50, ttl_seconds=600)  # 10 min TTL
+
 from autogen_agentchat.agents import AssistantAgent
 from autogen_core.models import ModelInfo
 from autogen_ext.models.openai import OpenAIChatCompletionClient
@@ -475,7 +516,8 @@ def db_upsert_user_edit(user_id: str, title: str, markdown: str, *, variant: Opt
 
 
 def _slugify_topic(topic: str) -> str:
-    s = re.sub(r"[^a-zA-Z0-9_.-]+", "-", (topic or "").strip()).strip("-")
+    """Slugify topic using pre-compiled regex pattern for better performance."""
+    s = _SLUGIFY_PATTERN.sub("-", (topic or "").strip()).strip("-")
     if not s:
         s = "note"
     return s[:60]
@@ -571,11 +613,14 @@ def note_path(note_id: str) -> str:
 
 
 # -------------------- Fuzzy/Semantic search helpers --------------------
+# Pre-compiled regex patterns for text normalization
+_TEXT_NORM_PATTERN = re.compile(r"[^a-z0-9\s]")
 
 def _normalize_text(s: str) -> str:
+    """Normalize text using pre-compiled regex for better performance."""
     s = (s or "").lower()
-    s = re.sub(r"[^a-z0-9\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
+    s = _TEXT_NORM_PATTERN.sub(" ", s)
+    s = _WHITESPACE_PATTERN.sub(" ", s).strip()
     return s
 
 
@@ -1002,9 +1047,10 @@ class PageExtract:
 
 
 def _normalize_degree_key(degree: Optional[str]) -> Optional[str]:
+    """Normalize degree key using pre-compiled regex for better performance."""
     if not degree:
         return None
-    s = re.sub(r"[^a-zA-Z0-9]+", "", degree).upper()
+    s = _NORMALIZE_KEY_PATTERN.sub("", degree).upper()
     return s or None
 
 
@@ -1053,7 +1099,7 @@ def is_allowed(url: str, allowed_domains: Optional[List[str]] = None) -> bool:
 
 
 def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, allowed_domains: Optional[List[str]] = None) -> List[str]:
-    """Search Google via SerpAPI.
+    """Search Google via SerpAPI with caching for better performance.
 
     Preference order for domain restriction:
       1) allowed_domains param if provided (non-empty)
@@ -1062,6 +1108,13 @@ def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, a
 
     Fallback: If no URLs matched the domain filter, retry WITHOUT any site filter (top web results).
     """
+    # Check cache first
+    cache_key = f"serpapi:{topic}:{num}:{degree}:{','.join(sorted(allowed_domains or []))}"
+    cached_result = _search_cache.get(cache_key)
+    if cached_result is not None:
+        notes_logger.debug("SerpAPI cache hit for topic: %s", topic)
+        return cached_result
+    
     # Resolve domains according to priority
     domains: List[str] = []
     if allowed_domains:
@@ -1134,7 +1187,9 @@ def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, a
             "SerpAPI search success",
             extra={"topic": topic, "selected_urls": filtered[: min(3, len(filtered))], "total": len(filtered), "domains": domains},
         )
-        return filtered[:num]
+        result = filtered[:num]
+        _search_cache.set(cache_key, result)  # Cache the result
+        return result
 
     # Fallback: re-run without site restriction to get top results
     notes_logger.warning("No URLs matched allowed domains; falling back to unrestricted search", extra={"topic": topic})
@@ -1155,7 +1210,9 @@ def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, a
         if u not in seen2:
             seen2.add(u)
             out2.append(u)
-    return out2[:num]
+    result2 = out2[:num]
+    _search_cache.set(cache_key, result2)  # Cache fallback result
+    return result2
 
 
 def fetch(url: str) -> str:
@@ -1217,7 +1274,8 @@ def serpapi_image_urls(topic: str, num: int = 10) -> List[str]:
 
 
 def normalize_text(txt: str) -> str:
-    txt = re.sub(r"\s+", " ", txt).strip()
+    """Normalize text using pre-compiled regex for better performance."""
+    txt = _WHITESPACE_PATTERN.sub(" ", txt).strip()
     return txt
 
 
