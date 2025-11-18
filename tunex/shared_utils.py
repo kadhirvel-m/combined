@@ -7,8 +7,9 @@ across the codebase.
 
 from __future__ import annotations
 
+import functools
 import re
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Union
 from urllib.parse import urlparse
 
 
@@ -16,15 +17,50 @@ from urllib.parse import urlparse
 # Text normalization and matching
 # ---------------------------------------------------------------------
 
+@functools.lru_cache(maxsize=256)
 def normalize_text(s: str) -> str:
-    """Normalize text by collapsing whitespace and converting to lowercase."""
+    """
+    Normalize text by collapsing whitespace and converting to lowercase.
+    
+    This function is cached for performance as it's frequently called with
+    the same inputs during skill matching operations.
+    
+    Args:
+        s: Input string to normalize
+        
+    Returns:
+        Normalized lowercase string with collapsed whitespace
+        
+    Examples:
+        >>> normalize_text("Hello   World")
+        'hello world'
+        >>> normalize_text("  Python  ")
+        'python'
+    """
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
 
 def skill_in_text(text: str, skill: str) -> bool:
     """
     Check if skill appears in text.
-    Word-boundary match for single-token skills; substring for multi-word skills.
+    
+    Uses word-boundary matching for single-token skills and substring
+    matching for multi-word skills. Matching is case-insensitive.
+    
+    Args:
+        text: Text to search in
+        skill: Skill name to search for
+        
+    Returns:
+        True if skill is found in text, False otherwise
+        
+    Examples:
+        >>> skill_in_text("Python programming", "python")
+        True
+        >>> skill_in_text("Machine Learning course", "machine learning")
+        True
+        >>> skill_in_text("Pythonic code", "python")
+        False  # Word boundary not matched
     """
     t = normalize_text(text)
     s = normalize_text(skill)
@@ -40,7 +76,25 @@ def skill_in_text(text: str, skill: str) -> bool:
 # ---------------------------------------------------------------------
 
 def domain_as_channel(url: Optional[str]) -> Optional[str]:
-    """Extract domain name from URL to use as channel name."""
+    """
+    Extract domain name from URL to use as channel name.
+    
+    Removes 'www.' prefix if present.
+    
+    Args:
+        url: URL string to extract domain from
+        
+    Returns:
+        Domain name without 'www.' prefix, or None if URL is invalid
+        
+    Examples:
+        >>> domain_as_channel("https://www.example.com/path")
+        'example.com'
+        >>> domain_as_channel("https://blog.example.com")
+        'blog.example.com'
+        >>> domain_as_channel(None)
+        None
+    """
     if not url:
         return None
     try:
@@ -55,16 +109,45 @@ def domain_as_channel(url: Optional[str]) -> Optional[str]:
 # ---------------------------------------------------------------------
 
 def chunks(lst: List[Any], n: int) -> Iterable[List[Any]]:
-    """Split list into chunks of size n."""
+    """
+    Split list into chunks of size n.
+    
+    Args:
+        lst: List to split into chunks
+        n: Size of each chunk
+        
+    Yields:
+        Sublists of size n (last chunk may be smaller)
+        
+    Examples:
+        >>> list(chunks([1, 2, 3, 4, 5], 2))
+        [[1, 2], [3, 4], [5]]
+    """
     for i in range(0, len(lst), n):
         yield lst[i : i + n]
 
 
-def safe_int(x: Optional[str]) -> Optional[int]:
-    """Safely convert string to int, returning None on failure."""
+def safe_int(x: Optional[Union[str, int]]) -> Optional[int]:
+    """
+    Safely convert value to int, returning None on failure.
+    
+    Args:
+        x: Value to convert (string or int)
+        
+    Returns:
+        Integer value or None if conversion fails
+        
+    Examples:
+        >>> safe_int("123")
+        123
+        >>> safe_int("not a number")
+        None
+        >>> safe_int(None)
+        None
+    """
     try:
-        return int(x)  # may raise ValueError/TypeError
-    except Exception:
+        return int(x)  # type: ignore
+    except (ValueError, TypeError):
         return None
 
 
@@ -73,10 +156,26 @@ def safe_int(x: Optional[str]) -> Optional[int]:
 # ---------------------------------------------------------------------
 
 def rank_tiebreak_key(cand: Dict[str, Any]) -> int:
-    """Lower is better; falls back to a large number if undefined."""
+    """
+    Extract rank for tiebreaking in sorting.
+    
+    Lower ranks are better. Falls back to 10,000 if rank is missing or invalid.
+    
+    Args:
+        cand: Candidate dictionary that may contain '_rank' key
+        
+    Returns:
+        Rank value (lower is better), or 10,000 as default
+        
+    Examples:
+        >>> rank_tiebreak_key({"_rank": 5})
+        5
+        >>> rank_tiebreak_key({})
+        10000
+    """
     try:
         return int(cand.get("_rank", 10_000))
-    except Exception:
+    except (ValueError, TypeError):
         return 10_000
 
 
@@ -84,21 +183,51 @@ def greedy_cover_from_candidates(
     candidates: List[Dict[str, Any]],
     norm_to_orig: Dict[str, str],
     item_key: str = "item",
-    tie_key_func=rank_tiebreak_key,
+    tie_key_func: Optional[Callable[[Dict[str, Any]], int]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Generic greedy set cover over 'candidates', each carrying:
-      {
-        "_rank": int (lower = better),
-        "matched_norm": [normalized skills it covers],
-        # plus display fields (title/url/channel_title/published_at/thumbnail/views)
-      }
-
-    Returns selection list with shape:
-      [{ "group_skills": [...], item_key: {...} }, ...]
+    Perform greedy set cover algorithm on candidates.
+    
+    Selects minimal set of candidates that cover all skills in norm_to_orig.
+    Each candidate specifies which normalized skills it matches via 'matched_norm' key.
+    
+    Args:
+        candidates: List of candidate items, each with:
+            - '_rank': int (lower is better, for tiebreaking)
+            - 'matched_norm': List[str] (normalized skills this item covers)
+            - Display fields: title, url, channel_title, views, published_at, thumbnail
+        norm_to_orig: Mapping from normalized skill names to original names
+        item_key: Key name for the item payload in output (default: "item")
+        tie_key_func: Custom tiebreaker function (default: rank_tiebreak_key)
+        
+    Returns:
+        List of selections, each with:
+            - 'group_skills': List[str] (original skill names covered by this item)
+            - {item_key}: Dict (item payload with display fields)
+            
+    Examples:
+        >>> candidates = [{
+        ...     "_rank": 1,
+        ...     "title": "Python Tutorial",
+        ...     "url": "https://example.com",
+        ...     "channel_title": "Example",
+        ...     "views": 1000,
+        ...     "published_at": "2023-01-01",
+        ...     "thumbnail": None,
+        ...     "matched_norm": ["python"]
+        ... }]
+        >>> norm_to_orig = {"python": "Python"}
+        >>> result = greedy_cover_from_candidates(candidates, norm_to_orig)
+        >>> len(result)
+        1
+        >>> result[0]["group_skills"]
+        ['Python']
     """
     if not candidates:
         return []
+    
+    if tie_key_func is None:
+        tie_key_func = rank_tiebreak_key
 
     # sort once for stable tiebreaks
     items_sorted = sorted(candidates, key=tie_key_func)
