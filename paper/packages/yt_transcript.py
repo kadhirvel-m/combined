@@ -135,13 +135,19 @@ def extract_video_id(url_or_id: str) -> str:
 
 
 # ---------------------------------------------------------------------
-# Cleaning utilities
+# Cleaning utilities - Pre-compiled regex patterns for performance
 # ---------------------------------------------------------------------
 TAG_TS_RE        = rx.compile(r"<\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?>", flags=rx.I)
 TAG_C_OPEN_RE    = rx.compile(r"<c(?:\.[^>]*)?>", flags=rx.I)
 TAG_C_CLOSE_RE   = rx.compile(r"</c>", flags=rx.I)
 BRACKET_NOISE_RE = rx.compile(r"\[(?:music|applause|__|noise|silence)\]", flags=rx.I)
 WS_RE            = rx.compile(r"[ \t\u00A0]+")
+TOKEN_RE         = rx.compile(r"\p{L}+\p{M}*|\d+|[^\s\p{L}\p{N}]", rx.UNICODE)
+STUTTER_RE       = rx.compile(r"\b(\p{L}+)\s+\1\b", flags=rx.IGNORECASE)
+PUNCT_SPACE_RE   = rx.compile(r"\s+([.,!?;:])")
+OPEN_BRACKET_RE  = rx.compile(r"([(\[{])\s+")
+CLOSE_BRACKET_RE = rx.compile(r"\s+([)\]}])")
+MULTI_SPACE_RE   = rx.compile(r"\s{2,}")
 
 def strip_inline_tags(text: str) -> str:
     t = TAG_TS_RE.sub("", text)
@@ -166,9 +172,6 @@ def smart_sentence_join(chunks: List[str]) -> str:
     raw = re.sub(r"\s+([.,!?;:])", r"\1", raw)
     return raw
 
-# Tokenize/untokenize for repetition compaction
-TOKEN_RE = rx.compile(r"\p{L}+\p{M}*|\d+|[^\s\p{L}\p{N}]", rx.UNICODE)
-
 def _tokens(s: str) -> List[str]:
     return TOKEN_RE.findall(s)
 
@@ -185,12 +188,13 @@ def compact_repetitions(text: str, max_ngram: int = 12, min_chars_per_span: int 
     Removes consecutive duplicated spans like:
     'hello everyone welcome ... hello everyone welcome ...'
     Works token-wise, preferring longest repeated spans up to max_ngram.
+    Uses pre-compiled regex patterns for better performance.
     """
     if not text or len(text) < 2:
         return text
 
-    # quick stutter fix: 'the the', 'and and'
-    text = rx.sub(r"\b(\p{L}+)\s+\1\b", r"\1", text, flags=rx.IGNORECASE)
+    # quick stutter fix: 'the the', 'and and' - use pre-compiled pattern
+    text = STUTTER_RE.sub(r"\1", text)
 
     toks = _tokens(text)
     i = 0
@@ -206,7 +210,7 @@ def compact_repetitions(text: str, max_ngram: int = 12, min_chars_per_span: int 
                 continue
             if a == b:
                 span_txt = _untokenize(a)
-                if len(rx.sub(r"\s+", "", span_txt)) >= min_chars_per_span:
+                if len(WS_RE.sub("", span_txt)) >= min_chars_per_span:
                     j = i + n
                     while j + n <= len(toks) and toks[j:j+n] == a:
                         j += n
@@ -219,10 +223,11 @@ def compact_repetitions(text: str, max_ngram: int = 12, min_chars_per_span: int 
             i += 1
 
     s = _untokenize(out)
-    s = rx.sub(r"\s+([.,!?;:])", r" \1", s)
-    s = rx.sub(r"([(\[{])\s+", r"\1", s)
-    s = rx.sub(r"\s+([)\]}])", r"\1", s)
-    s = rx.sub(r"\s{2,}", " ", s).strip()
+    # Use pre-compiled patterns for better performance
+    s = PUNCT_SPACE_RE.sub(r" \1", s)
+    s = OPEN_BRACKET_RE.sub(r"\1", s)
+    s = CLOSE_BRACKET_RE.sub(r"\1", s)
+    s = MULTI_SPACE_RE.sub(" ", s).strip()
     return s
 
 

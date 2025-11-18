@@ -61,40 +61,72 @@ def compose_nup_pdf(inp: str, outp: str, n_up: int=2, page_size: str='A4', orien
     sw, sh = page_size_from_name(page_size)
     if orientation=='landscape': sw, sh = sh, sw
     rects = build_nup_rects(sw, sh, rows, cols, margin, gap, fit='shrink')
-    src, dst = fitz.open(inp), fitz.open(); pack=len(rects); i=0; total=len(src)
-    while i<total:
-        page = dst.new_page(width=sw, height=sh)
-        for k in range(pack):
-            if i+k>=total: break
-            page.show_pdf_page(rects[k], src, i+k)
-        i += pack
-    dst.save(outp, deflate=True, garbage=4, clean=True); dst.close(); src.close()
+    src = None
+    dst = None
+    try:
+        src = fitz.open(inp)
+        dst = fitz.open()
+        pack=len(rects)
+        i=0
+        total=len(src)
+        while i<total:
+            page = dst.new_page(width=sw, height=sh)
+            for k in range(pack):
+                if i+k>=total: break
+                page.show_pdf_page(rects[k], src, i+k)
+            i += pack
+        dst.save(outp, deflate=True, garbage=4, clean=True)
+    finally:
+        if dst: dst.close()
+        if src: src.close()
 
 def render_preview_png(inp: str, n_up: int, page_size: str='A4', orientation: str='portrait', margin: float=18.0, gap: float=6.0, dpi: int=110, sheet_index: int=0) -> bytes:
     rows, cols = LAYOUTS[n_up]; sw, sh = page_size_from_name(page_size)
     if orientation=='landscape': sw, sh = sh, sw
     rects = build_nup_rects(sw, sh, rows, cols, margin, gap, fit='shrink')
-    src, dst = fitz.open(inp), fitz.open(); pack=n_up; start=sheet_index*pack
-    if start>=len(src): start=max(0,(len(src)-1)//pack)*pack
-    page = dst.new_page(width=sw, height=sh)
-    for k in range(pack):
-        idx=start+k
-        if idx>=len(src): break
-        page.show_pdf_page(rects[k], src, idx)
-    zoom=dpi/72.0; pix=page.get_pixmap(matrix=fitz.Matrix(zoom,zoom), alpha=False); png=pix.tobytes('png'); dst.close(); src.close(); return png
+    src = None
+    dst = None
+    try:
+        src = fitz.open(inp)
+        dst = fitz.open()
+        pack=n_up; start=sheet_index*pack
+        if start>=len(src): start=max(0,(len(src)-1)//pack)*pack
+        page = dst.new_page(width=sw, height=sh)
+        for k in range(pack):
+            idx=start+k
+            if idx>=len(src): break
+            page.show_pdf_page(rects[k], src, idx)
+        zoom=dpi/72.0
+        pix=page.get_pixmap(matrix=fitz.Matrix(zoom,zoom), alpha=False)
+        png=pix.tobytes('png')
+        return png
+    finally:
+        if dst: dst.close()
+        if src: src.close()
 
 def render_preview_bmp(inp: str, n_up: int, page_size: str='A4', orientation: str='portrait', margin: float=18.0, gap: float=6.0, dpi: int=110, sheet_index: int=0) -> bytes:
     rows, cols = LAYOUTS[n_up]; sw, sh = page_size_from_name(page_size)
     if orientation=='landscape': sw, sh = sh, sw
     rects = build_nup_rects(sw, sh, rows, cols, margin, gap, fit='shrink')
-    src, dst = fitz.open(inp), fitz.open(); pack=n_up; start=sheet_index*pack
-    if start>=len(src): start=max(0,(len(src)-1)//pack)*pack
-    page = dst.new_page(width=sw, height=sh)
-    for k in range(pack):
-        idx=start+k
-        if idx>=len(src): break
-        page.show_pdf_page(rects[k], src, idx)
-    zoom=dpi/72.0; pix=page.get_pixmap(matrix=fitz.Matrix(zoom,zoom), alpha=False); bmp=pix.tobytes('bmp'); dst.close(); src.close(); return bmp
+    src = None
+    dst = None
+    try:
+        src = fitz.open(inp)
+        dst = fitz.open()
+        pack=n_up; start=sheet_index*pack
+        if start>=len(src): start=max(0,(len(src)-1)//pack)*pack
+        page = dst.new_page(width=sw, height=sh)
+        for k in range(pack):
+            idx=start+k
+            if idx>=len(src): break
+            page.show_pdf_page(rects[k], src, idx)
+        zoom=dpi/72.0
+        pix=page.get_pixmap(matrix=fitz.Matrix(zoom,zoom), alpha=False)
+        bmp=pix.tobytes('bmp')
+        return bmp
+    finally:
+        if dst: dst.close()
+        if src: src.close()
 
 def _dm_duplex_value(mode: str) -> int:
     return {"simplex": 1, "long": 2, "short": 3}.get((mode or '').lower(), 1)
