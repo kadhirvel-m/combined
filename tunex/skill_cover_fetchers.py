@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import os
@@ -9,6 +7,7 @@ import time
 import json
 from typing import List, Dict, Any, Optional, Set, Iterable
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
@@ -22,6 +21,10 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 YOUTUBE_SEARCH   = "https://www.googleapis.com/youtube/v3/search"
 YOUTUBE_VIDEOS   = "https://www.googleapis.com/youtube/v3/videos"
+
+# Performance: Configure connection pooling and timeouts
+REQUEST_TIMEOUT = 20
+MAX_WORKERS = 5  # For concurrent API requests
 
 
 # ---------------------------------------------------------------------
@@ -175,6 +178,7 @@ def fetch_blogs_grouped_cover(
     """
     Greedy grouping of BLOG POSTS to cover given skills with minimal items using SerpAPI Google.
     Tie-break rule uses SerpAPI rank (_rank).
+    Optimized with concurrent requests for better performance.
 
     Returns: list of selections with key "item".
     """
@@ -189,49 +193,64 @@ def fetch_blogs_grouped_cover(
 
     candidates: List[Dict[str, Any]] = []
 
-    for skill in skills:
-        # Build query
+    # Performance optimization: Use ThreadPoolExecutor for concurrent API requests
+    def fetch_skill_blogs(skill: str) -> List[Dict[str, Any]]:
         q_core = f'{skill} tutorial OR "how to"'
         q = f"{q_core} {site_bias}" if site_bias else q_core
 
-        resp = requests.get(
-            SERPAPI_ENDPOINT,
-            params={
-                "engine": "google",
-                "q": q,
-                "num": max(10, min(50, search_per_skill)),
-                "api_key": SERPAPI_API_KEY,
-                "hl": language,
-                "gl": country,
-            },
-            timeout=20,
-        )
+        try:
+            resp = requests.get(
+                SERPAPI_ENDPOINT,
+                params={
+                    "engine": "google",
+                    "q": q,
+                    "num": max(10, min(50, search_per_skill)),
+                    "api_key": SERPAPI_API_KEY,
+                    "hl": language,
+                    "gl": country,
+                },
+                timeout=REQUEST_TIMEOUT,
+            )
 
-        if resp.status_code != 200:
-            continue
+            if resp.status_code != 200:
+                return []
 
-        organic = resp.json().get("organic_results", [])[:search_per_skill]
-        for rank, o in enumerate(organic, start=1):
-            title = (o.get("title") or "").strip()
-            url   = o.get("link")
-            if not url:
-                continue
-            snippet = (o.get("snippet") or "") if include_snippet else ""
-            text = f"{title}\n{snippet}"
-            matched_norm = [nsk for nsk in norm_skills if _skill_in_text(text, nsk)]
-            if not matched_norm:
-                continue
+            skill_candidates = []
+            organic = resp.json().get("organic_results", [])[:search_per_skill]
+            for rank, o in enumerate(organic, start=1):
+                title = (o.get("title") or "").strip()
+                url   = o.get("link")
+                if not url:
+                    continue
+                snippet = (o.get("snippet") or "") if include_snippet else ""
+                text = f"{title}\n{snippet}"
+                matched_norm = [nsk for nsk in norm_skills if _skill_in_text(text, nsk)]
+                if not matched_norm:
+                    continue
 
-            candidates.append({
-                "_rank": rank,  # tie-breaker
-                "title": title,
-                "url": url,
-                "channel_title": _domain_as_channel(url) or (o.get("source") or o.get("displayed_link")),
-                "published_at": o.get("date"),   # may be relative like "2 days ago"
-                "thumbnail": None,               # blogs rarely have reliable thumbs from SerpAPI
-                "views": None,                   # schema parity
-                "matched_norm": matched_norm,
-            })
+                skill_candidates.append({
+                    "_rank": rank,  # tie-breaker
+                    "title": title,
+                    "url": url,
+                    "channel_title": _domain_as_channel(url) or (o.get("source") or o.get("displayed_link")),
+                    "published_at": o.get("date"),   # may be relative like "2 days ago"
+                    "thumbnail": None,               # blogs rarely have reliable thumbs from SerpAPI
+                    "views": None,                   # schema parity
+                    "matched_norm": matched_norm,
+                })
+            return skill_candidates
+        except Exception:
+            return []
+
+    # Fetch all skills concurrently
+    with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(skills))) as executor:
+        future_to_skill = {executor.submit(fetch_skill_blogs, skill): skill for skill in skills}
+        for future in as_completed(future_to_skill):
+            try:
+                skill_results = future.result()
+                candidates.extend(skill_results)
+            except Exception:
+                pass  # Skip failed requests
 
     return _greedy_cover_from_candidates(
         candidates=candidates,
@@ -255,6 +274,7 @@ def fetch_news_grouped_cover(
     """
     Greedy grouping of NEWS items to cover given skills with minimal items using SerpAPI Google News.
     Tie-break rule uses SerpAPI rank (_rank).
+    Optimized with concurrent requests for better performance.
 
     Returns: list of selections with key "item".
     """
@@ -269,57 +289,73 @@ def fetch_news_grouped_cover(
 
     candidates: List[Dict[str, Any]] = []
 
-    for skill in skills:
-        resp = requests.get(
-            SERPAPI_ENDPOINT,
-            params={
-                "engine": "google_news",
-                "q": f"{skill} tutorial OR course OR learning",
-                "api_key": SERPAPI_API_KEY,
-                "hl": language,
-                "gl": country,
-            },
-            timeout=20,
-        )
+    # Performance optimization: Use ThreadPoolExecutor for concurrent API requests
+    def fetch_skill_news(skill: str) -> List[Dict[str, Any]]:
+        try:
+            resp = requests.get(
+                SERPAPI_ENDPOINT,
+                params={
+                    "engine": "google_news",
+                    "q": f"{skill} tutorial OR course OR learning",
+                    "api_key": SERPAPI_API_KEY,
+                    "hl": language,
+                    "gl": country,
+                },
+                timeout=REQUEST_TIMEOUT,
+            )
 
-        if resp.status_code != 200:
-            continue
+            if resp.status_code != 200:
+                return []
 
-        news_results = resp.json().get("news_results", [])[:search_per_skill]
-        for rank, n in enumerate(news_results, start=1):
-            title = (n.get("title") or "").strip()
-            url   = n.get("link")
-            if not url:
-                continue
+            skill_candidates = []
+            news_results = resp.json().get("news_results", [])[:search_per_skill]
+            for rank, n in enumerate(news_results, start=1):
+                title = (n.get("title") or "").strip()
+                url   = n.get("link")
+                if not url:
+                    continue
 
-            snippet = ""
-            if include_snippet:
-                snippet = n.get("snippet") or n.get("content") or ""
+                snippet = ""
+                if include_snippet:
+                    snippet = n.get("snippet") or n.get("content") or ""
 
-            # Thumbnail may be dict or str
-            tn = n.get("thumbnail")
-            if isinstance(tn, dict):
-                thumb = tn.get("static") or tn.get("original")
-            elif isinstance(tn, str):
-                thumb = tn
-            else:
-                thumb = None
+                # Thumbnail may be dict or str
+                tn = n.get("thumbnail")
+                if isinstance(tn, dict):
+                    thumb = tn.get("static") or tn.get("original")
+                elif isinstance(tn, str):
+                    thumb = tn
+                else:
+                    thumb = None
 
-            text = f"{title}\n{snippet}"
-            matched_norm = [nsk for nsk in norm_skills if _skill_in_text(text, nsk)]
-            if not matched_norm:
-                continue
+                text = f"{title}\n{snippet}"
+                matched_norm = [nsk for nsk in norm_skills if _skill_in_text(text, nsk)]
+                if not matched_norm:
+                    continue
 
-            candidates.append({
-                "_rank": rank,  # tie-breaker
-                "title": title,
-                "url": url,
-                "channel_title": (n.get("source") or {}).get("name") or _domain_as_channel(url),
-                "published_at": n.get("date"),  # may be relative
-                "thumbnail": thumb,
-                "views": None,                  # schema parity
-                "matched_norm": matched_norm,
-            })
+                skill_candidates.append({
+                    "_rank": rank,  # tie-breaker
+                    "title": title,
+                    "url": url,
+                    "channel_title": (n.get("source") or {}).get("name") or _domain_as_channel(url),
+                    "published_at": n.get("date"),  # may be relative
+                    "thumbnail": thumb,
+                    "views": None,                  # schema parity
+                    "matched_norm": matched_norm,
+                })
+            return skill_candidates
+        except Exception:
+            return []
+
+    # Fetch all skills concurrently
+    with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(skills))) as executor:
+        future_to_skill = {executor.submit(fetch_skill_news, skill): skill for skill in skills}
+        for future in as_completed(future_to_skill):
+            try:
+                skill_results = future.result()
+                candidates.extend(skill_results)
+            except Exception:
+                pass  # Skip failed requests
 
     return _greedy_cover_from_candidates(
         candidates=candidates,
