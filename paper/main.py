@@ -1979,6 +1979,8 @@ class TopicOut(BaseModel):
     topic: str
     order_in_unit: int
     image_url: Optional[str] = None
+    video_url: Optional[str] = None
+    ppt_url: Optional[str] = None
 
 
 class UnitOut(BaseModel):
@@ -3612,7 +3614,7 @@ def sync_units_and_topics(course_id: uuid.UUID, units: List[UnitIn]) -> List[Uni
         uid = uuid.UUID(ur["id"])
         tops = (
             supabase.table("syllabus_topics")
-            .select("id,topic,order_in_unit,image_url")
+            .select("id,topic,order_in_unit,image_url,video_url,ppt_url")
             .eq("unit_id", str(uid))
             .order("order_in_unit")
             .execute()
@@ -3630,6 +3632,8 @@ def sync_units_and_topics(course_id: uuid.UUID, units: List[UnitIn]) -> List[Uni
                         topic=tr["topic"],
                         order_in_unit=tr["order_in_unit"],
                         image_url=tr.get("image_url"),
+                        video_url=tr.get("video_url"),
+                        ppt_url=tr.get("ppt_url"),
                     )
                     for tr in (tops.data or [])
                 ],
@@ -3667,7 +3671,7 @@ def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
         unit_id = uuid.UUID(unit_row["id"])
         topics_rows = (
             supabase.table("syllabus_topics")
-            .select("id,topic,order_in_unit,image_url")
+            .select("id,topic,order_in_unit,image_url,video_url,ppt_url")
             .eq("unit_id", str(unit_id))
             .order("order_in_unit")
             .execute()
@@ -3685,6 +3689,8 @@ def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
                         topic=topic_row["topic"],
                         order_in_unit=topic_row["order_in_unit"],
                         image_url=topic_row.get("image_url"),
+                        video_url=topic_row.get("video_url"),
+                        ppt_url=topic_row.get("ppt_url"),
                     )
                     for topic_row in (topics_rows.data or [])
                 ],
@@ -3719,7 +3725,7 @@ def load_unit_with_topics(unit_id: uuid.UUID) -> UnitOut:
     unit_row = unit_res.data[0]
     topics_res = (
         supabase.table("syllabus_topics")
-        .select("id,topic,order_in_unit,image_url")
+        .select("id,topic,order_in_unit,image_url,video_url,ppt_url")
         .eq("unit_id", str(unit_id))
         .order("order_in_unit")
         .execute()
@@ -3737,6 +3743,8 @@ def load_unit_with_topics(unit_id: uuid.UUID) -> UnitOut:
                 topic=topic_row.get("topic"),
                 order_in_unit=int(topic_row.get("order_in_unit", 0)),
                 image_url=topic_row.get("image_url"),
+                video_url=topic_row.get("video_url"),
+                ppt_url=topic_row.get("ppt_url"),
             )
             for topic_row in (topics_res.data or [])
         ],
@@ -9064,6 +9072,105 @@ def clear_topic_image_url(topic_id: uuid.UUID):
         raise HTTPException(status_code=500, detail=f"Supabase error (clear topic image): {upd.error}")
 
     return {"id": str(topic_id), "image_url": None}
+
+
+def _update_topic_url_field(topic_id: uuid.UUID, field: str, value: Optional[str]) -> Dict[str, Any]:
+    """Internal helper to validate topic existence and update a single URL field."""
+
+    supabase = get_service_client()
+
+    topic_q = (
+        supabase.table("syllabus_topics")
+        .select("id")
+        .eq("id", str(topic_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(topic_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find topic): {topic_q.error}")
+    if not topic_q.data:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    upd = (
+        supabase.table("syllabus_topics")
+        .update({field: value})
+        .eq("id", str(topic_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update topic {field}): {upd.error}")
+
+    return {"id": str(topic_id), field: value}
+
+
+@academics_router.put(
+    "/api/syllabus/topics/{topic_id}/video",
+    summary="Set or update video URL for a syllabus topic",
+)
+def set_topic_video_url(topic_id: uuid.UUID, payload: Dict[str, Any]):
+    """Update the video_url for a single topic.
+
+    Expects JSON body: {"video_url": "https://..."}.
+    Use the DELETE endpoint to clear.
+    """
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    raw_url = payload.get("video_url")
+    if raw_url is None:
+        video_url = None
+    else:
+        if not isinstance(raw_url, str):
+            raise HTTPException(status_code=400, detail="video_url must be a string or null")
+        video_url = raw_url.strip() or None
+
+    return _update_topic_url_field(topic_id, "video_url", video_url)
+
+
+@academics_router.delete(
+    "/api/syllabus/topics/{topic_id}/video",
+    summary="Clear video URL for a syllabus topic",
+)
+def clear_topic_video_url(topic_id: uuid.UUID):
+    """Clear (set to null) the video_url for a single topic."""
+
+    return _update_topic_url_field(topic_id, "video_url", None)
+
+
+@academics_router.put(
+    "/api/syllabus/topics/{topic_id}/ppt",
+    summary="Set or update PPT URL for a syllabus topic",
+)
+def set_topic_ppt_url(topic_id: uuid.UUID, payload: Dict[str, Any]):
+    """Update the ppt_url for a single topic.
+
+    Expects JSON body: {"ppt_url": "https://..."}.
+    Use the DELETE endpoint to clear.
+    """
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    raw_url = payload.get("ppt_url")
+    if raw_url is None:
+        ppt_url = None
+    else:
+        if not isinstance(raw_url, str):
+            raise HTTPException(status_code=400, detail="ppt_url must be a string or null")
+        ppt_url = raw_url.strip() or None
+
+    return _update_topic_url_field(topic_id, "ppt_url", ppt_url)
+
+
+@academics_router.delete(
+    "/api/syllabus/topics/{topic_id}/ppt",
+    summary="Clear PPT URL for a syllabus topic",
+)
+def clear_topic_ppt_url(topic_id: uuid.UUID):
+    """Clear (set to null) the ppt_url for a single topic."""
+
+    return _update_topic_url_field(topic_id, "ppt_url", None)
 
     return {"ok": True, "deleted_topics": len(topic_ids or [])}
 
