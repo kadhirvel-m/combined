@@ -10,6 +10,48 @@ CREATE TABLE public.admin_roles (
   CONSTRAINT admin_roles_pkey PRIMARY KEY (auth_user_id),
   CONSTRAINT admin_roles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.ai_notes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  title_ci text DEFAULT lower(title),
+  markdown text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  image_urls ARRAY DEFAULT '{}'::text[],
+  CONSTRAINT ai_notes_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ai_notes_cheatsheet (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  title_ci text DEFAULT lower(title),
+  markdown text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  image_urls ARRAY DEFAULT '{}'::text[],
+  CONSTRAINT ai_notes_cheatsheet_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ai_notes_simple (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  title_ci text DEFAULT lower(title),
+  markdown text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  image_urls ARRAY DEFAULT '{}'::text[],
+  CONSTRAINT ai_notes_simple_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ai_notes_user_edits (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  title_ci text DEFAULT lower(title),
+  variant text NOT NULL DEFAULT 'detailed'::text,
+  markdown text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_user_edits_pkey PRIMARY KEY (id),
+  CONSTRAINT ai_notes_user_edits_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.batches (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   college_id uuid NOT NULL,
@@ -27,6 +69,16 @@ CREATE TABLE public.colleges (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   logo_url text,
   CONSTRAINT colleges_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.degree_allowed_domains (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  degree_key text NOT NULL,
+  degree_label text NOT NULL,
+  domain text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT degree_allowed_domains_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.degrees (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -47,6 +99,56 @@ CREATE TABLE public.departments (
   CONSTRAINT departments_pkey PRIMARY KEY (id),
   CONSTRAINT departments_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
   CONSTRAINT departments_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id)
+);
+CREATE TABLE public.learning_track_goals (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL UNIQUE,
+  profile_id uuid NOT NULL,
+  language text NOT NULL,
+  stack text NOT NULL,
+  goal text NOT NULL,
+  companies ARRAY DEFAULT '{}'::text[],
+  experience_level text,
+  focus_areas jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT learning_track_goals_pkey PRIMARY KEY (id),
+  CONSTRAINT learning_track_goals_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT learning_track_goals_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.learning_track_plans (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  plan_id text NOT NULL UNIQUE,
+  auth_user_id uuid NOT NULL,
+  profile_id uuid NOT NULL,
+  language text NOT NULL,
+  stack text NOT NULL,
+  goal text NOT NULL,
+  companies ARRAY DEFAULT '{}'::text[],
+  experience_level text,
+  focus_areas jsonb DEFAULT '[]'::jsonb,
+  generated_at timestamp with time zone,
+  plan_json jsonb NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT learning_track_plans_pkey PRIMARY KEY (id),
+  CONSTRAINT learning_track_plans_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT learning_track_plans_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.learning_track_progress (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL,
+  profile_id uuid NOT NULL,
+  plan_id text NOT NULL,
+  topic_id text NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['not_started'::text, 'in_progress'::text, 'completed'::text])),
+  score numeric,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT learning_track_progress_pkey PRIMARY KEY (id),
+  CONSTRAINT learning_track_progress_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT learning_track_progress_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT learning_track_progress_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.learning_track_plans(plan_id)
 );
 CREATE TABLE public.marketplace_notes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -76,6 +178,7 @@ CREATE TABLE public.marketplace_notes (
   cover_path text,
   subject_id uuid,
   subject_href text,
+  url text,
   CONSTRAINT marketplace_notes_pkey PRIMARY KEY (id),
   CONSTRAINT marketplace_notes_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES auth.users(id),
   CONSTRAINT marketplace_notes_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
@@ -123,7 +226,6 @@ CREATE TABLE public.print_jobs (
   otp text,
   settings jsonb NOT NULL DEFAULT '{}'::jsonb,
   estimated_pages integer,
-  estimated_price numeric(10,2),
   file_size bigint,
   marketplace_note_id uuid,
   pickup_window text,
@@ -131,6 +233,7 @@ CREATE TABLE public.print_jobs (
   contact_phone text,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  estimated_price numeric,
   CONSTRAINT print_jobs_pkey PRIMARY KEY (id),
   CONSTRAINT print_jobs_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
   CONSTRAINT print_jobs_shop_fkey FOREIGN KEY (shop_id) REFERENCES public.print_shops(id)
@@ -268,6 +371,7 @@ CREATE TABLE public.syllabus_topics (
   order_in_unit integer NOT NULL DEFAULT 0,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  image_url text,
   CONSTRAINT syllabus_topics_pkey PRIMARY KEY (id),
   CONSTRAINT syllabus_topics_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.syllabus_units(id)
 );
@@ -527,143 +631,3 @@ CREATE TABLE public.youtube_ai_notes (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
 );
-
--- AI-generated topic notes (exact-title cache)
-CREATE TABLE public.ai_notes (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  title text NOT NULL,
-  -- stored lowercase for fast exact-title lookups (case-insensitive)
-  title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
-  markdown text NOT NULL,
-  image_urls text[] DEFAULT '{}'::text[],
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT ai_notes_pkey PRIMARY KEY (id)
-);
-
--- Enforce uniqueness on title (case-insensitive)
-CREATE UNIQUE INDEX ai_notes_title_ci_key ON public.ai_notes (title_ci);
-
--- Variant: exam-ready cheat sheet notes (very concise)
-CREATE TABLE public.ai_notes_cheatsheet (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  title text NOT NULL,
-  title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
-  markdown text NOT NULL,
-  image_urls text[] DEFAULT '{}'::text[],
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT ai_notes_cheatsheet_pkey PRIMARY KEY (id)
-);
-
-CREATE UNIQUE INDEX ai_notes_cheatsheet_title_ci_key ON public.ai_notes_cheatsheet (title_ci);
-
--- Variant: simple/easy-to-understand medium version
-CREATE TABLE public.ai_notes_simple (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  title text NOT NULL,
-  title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
-  markdown text NOT NULL,
-  image_urls text[] DEFAULT '{}'::text[],
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT ai_notes_simple_pkey PRIMARY KEY (id)
-);
-
-CREATE UNIQUE INDEX ai_notes_simple_title_ci_key ON public.ai_notes_simple (title_ci);
-
--- User-edited notes: per-user saved custom versions of notes by topic/title and variant
-CREATE TABLE public.ai_notes_user_edits (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  title text NOT NULL,
-  title_ci text GENERATED ALWAYS AS (lower(title)) STORED,
-  variant text NOT NULL DEFAULT 'detailed',
-  markdown text NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT ai_notes_user_edits_pkey PRIMARY KEY (id),
-  CONSTRAINT ai_notes_user_edits_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
-);
-
--- Enforce one saved edit per user per title (case-insensitive) and variant
-CREATE UNIQUE INDEX ai_notes_user_edits_unique_key ON public.ai_notes_user_edits (user_id, title_ci, variant);
-
--- Degree-specific allowed domains for notes/web search
--- Normalizes degree as degree_key (e.g., 'BTECH', 'MTECH', 'MBBS') and stores one domain per row.
-CREATE TABLE public.degree_allowed_domains (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  degree_key text NOT NULL,
-  degree_label text NOT NULL,
-  domain text NOT NULL,
-  enabled boolean NOT NULL DEFAULT true,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT degree_allowed_domains_pkey PRIMARY KEY (id)
-);
-
--- Ensure there are no duplicate domains per degree
-CREATE UNIQUE INDEX degree_allowed_domains_unique_key ON public.degree_allowed_domains (degree_key, domain);
-
--- Helpful index to query by degree
-CREATE INDEX degree_allowed_domains_degree_key_idx ON public.degree_allowed_domains (degree_key);
-
--- Learning track preferences per user (last selections from onboarding/goals)
-CREATE TABLE public.learning_track_goals (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  auth_user_id uuid NOT NULL UNIQUE,
-  profile_id uuid NOT NULL,
-  language text NOT NULL,
-  stack text NOT NULL,
-  goal text NOT NULL,
-  companies text[] DEFAULT '{}'::text[],
-  experience_level text,
-  focus_areas jsonb DEFAULT '[]'::jsonb,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT learning_track_goals_pkey PRIMARY KEY (id),
-  CONSTRAINT learning_track_goals_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
-  CONSTRAINT learning_track_goals_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id)
-);
-
--- Generated learning plans (latest JSON snapshot per run)
-CREATE TABLE public.learning_track_plans (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  plan_id text NOT NULL UNIQUE,
-  auth_user_id uuid NOT NULL,
-  profile_id uuid NOT NULL,
-  language text NOT NULL,
-  stack text NOT NULL,
-  goal text NOT NULL,
-  companies text[] DEFAULT '{}'::text[],
-  experience_level text,
-  focus_areas jsonb DEFAULT '[]'::jsonb,
-  generated_at timestamp with time zone,
-  plan_json jsonb NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT learning_track_plans_pkey PRIMARY KEY (id),
-  CONSTRAINT learning_track_plans_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
-  CONSTRAINT learning_track_plans_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id)
-);
-CREATE INDEX learning_track_plans_user_idx ON public.learning_track_plans (auth_user_id);
-
--- Per-topic learner progress snapshots
-CREATE TABLE public.learning_track_progress (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  auth_user_id uuid NOT NULL,
-  profile_id uuid NOT NULL,
-  plan_id text NOT NULL,
-  topic_id text NOT NULL,
-  status text NOT NULL CHECK (status = ANY (ARRAY['not_started'::text, 'in_progress'::text, 'completed'::text])),
-  score numeric,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT learning_track_progress_pkey PRIMARY KEY (id),
-  CONSTRAINT learning_track_progress_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
-  CONSTRAINT learning_track_progress_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id),
-  CONSTRAINT learning_track_progress_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.learning_track_plans(plan_id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX learning_track_progress_unique_topic ON public.learning_track_progress (auth_user_id, plan_id, topic_id);
-CREATE INDEX learning_track_progress_plan_idx ON public.learning_track_progress (plan_id);
