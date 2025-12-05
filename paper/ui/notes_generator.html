@@ -649,6 +649,8 @@
             class="ripple px-3 py-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-600 text-white text-sm hidden">Save</button>
           <button id="myNoteBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)] hidden"
             style="border-color: var(--outline)">My note</button>
+          <button id="editToggle" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
+            style="border-color: var(--outline)">Edit</button>
           <button id="downloadBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
             style="border-color: var(--outline)">Download</button>
           <button id="emphBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
@@ -2838,12 +2840,29 @@
       if (typeof $editToggle !== 'undefined' && $editToggle) {
         $editToggle.textContent = on ? 'Preview' : 'Edit';
       }
-      if (on) { $editor.value = lastMarkdown; }
-      else { renderMarkdown($editor.value); }
+      if (on) {
+        $editor.value = lastMarkdown;
+        requestAnimationFrame(() => {
+          if ($editor && typeof $editor.focus === 'function') {
+            try {
+              $editor.focus({ preventScroll: true });
+            } catch (err) {
+              $editor.focus();
+            }
+          }
+        });
+      } else {
+        renderMarkdown($editor.value);
+      }
     }
     let isEditing = false;
     if (typeof $editToggle !== 'undefined' && $editToggle) {
-      $editToggle.addEventListener('click', () => { isEditing = !isEditing; setEditMode(isEditing); });
+      $editToggle.addEventListener('click', () => {
+        const hasMarkdown = !!(lastMarkdown && lastMarkdown.trim());
+        if (!hasMarkdown) { snack('Generate notes first'); return; }
+        isEditing = !isEditing;
+        setEditMode(isEditing);
+      });
     }
     $save.addEventListener('click', async () => {
       const md = $editor.value || '';

@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive DC Motor: Torque & EMF</title>
+
+    <!-- Tailwind CSS for UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- GSAP for smooth animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        /* Custom Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 10px #38bdf8;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 2px;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .math-font {
+            font-family: 'Courier New', monospace;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #emf-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .active-tab {
+            border-bottom: 2px solid #38bdf8;
+            color: #38bdf8;
+        }
+    </style>
+</head>
+
+<body class="text-white">
+
+    <!-- UI Overlay -->
+    <div class="absolute inset-0 pointer-events-none z-10 flex flex-col h-full">
+
+        <!-- Header -->
+        <header class="p-6 flex justify-between items-center glass-panel pointer-events-auto">
+            <div>
+                <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+                    DC Motor Physics
+                </h1>
+                <p class="text-sm text-slate-400">Interactive Visualization of Torque & EMF</p>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="flex space-x-6 text-sm font-medium">
+                <button id="btn-torque" class="active-tab pb-1 transition-colors hover:text-cyan-300"
+                    onclick="switchMode('torque')">
+                    TORQUE MODE (T ∝ ΦIa)
+                </button>
+                <button id="btn-emf" class="pb-1 text-slate-400 transition-colors hover:text-cyan-300"
+                    onclick="switchMode('emf')">
+                    EMF MODE (E ∝ ΦNP)
+                </button>
+            </nav>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex relative">
+
+            <!-- Left Control Panel -->
+            <aside class="w-80 p-6 glass-panel m-4 rounded-xl pointer-events-auto flex flex-col gap-6 overflow-y-auto">
+
+                <!-- Torque Controls -->
+                <div id="torque-controls" class="space-y-6">
+                    <div class="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                        <h3 class="text-cyan-400 font-bold mb-2">Equation</h3>
+                        <div class="math-font text-lg text-center">
+                            T ∝ <span class="text-purple-400">Φ</span> × <span
+                                class="text-orange-400">I<sub>a</sub></span>
+                        </div>
+                        <div class="text-center mt-2 text-2xl font-bold" id="torque-display">
+                            0.0 Nm
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm text-purple-400 font-bold">Field Flux (Φ)</label>
+                            <span id="val-flux-t" class="text-xs font-mono">0.5</span>
+                        </div>
+                        <input type="range" id="input-flux-t" min="0" max="1" step="0.01" value="0.5">
+                        <p class="text-xs text-slate-500 mt-1">Strength of magnetic field.</p>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm text-orange-400 font-bold">Armature Current (I<sub>a</sub>)</label>
+                            <span id="val-current" class="text-xs font-mono">5.0 A</span>
+                        </div>
+                        <input type="range" id="input-current" min="0" max="10" step="0.1" value="5.0">
+                        <p class="text-xs text-slate-500 mt-1">Current flowing through coil.</p>
+                    </div>
+
+                    <div class="text-xs text-slate-400 bg-slate-900 p-3 rounded">
+                        <span class="text-cyan-400">Visual Guide:</span><br>
+                        • Purple Lines = Magnetic Flux<br>
+                        • Orange Glow = Armature Current<br>
+                        • Spin Speed = Resulting Torque
+                    </div>
+                </div>
+
+                <!-- EMF Controls (Hidden by default) -->
+                <div id="emf-controls" class="space-y-6 hidden">
+                    <div class="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                        <h3 class="text-green-400 font-bold mb-2">Equation</h3>
+                        <div class="math-font text-lg text-center">
+                            E ∝ <span class="text-purple-400">Φ</span> × <span class="text-blue-400">N</span> × <span
+                                class="text-pink-400">P</span>
+                        </div>
+                        <div class="text-center mt-2 text-2xl font-bold" id="emf-display">
+                            0.0 V
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm text-blue-400 font-bold">Speed (N)</label>
+                            <span id="val-speed" class="text-xs font-mono">1000 RPM</span>
+                        </div>
+                        <input type="range" id="input-speed" min="0" max="3000" step="10" value="1000">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm text-purple-400 font-bold">Field Flux (Φ)</label>
+                            <span id="val-flux-e" class="text-xs font-mono">0.5</span>
+                        </div>
+                        <input type="range" id="input-flux-e" min="0" max="1" step="0.01" value="0.5">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm text-pink-400 font-bold">Poles (P)</label>
+                            <span id="val-poles" class="text-xs font-mono">2</span>
+                        </div>
+                        <input type="range" id="input-poles" min="2" max="12" step="2" value="2">
+                        <p class="text-xs text-slate-500 mt-1">More poles = Higher Frequency</p>
+                    </div>
+                </div>
+
+            </aside>
+        </main>
+    </div>
+
+    <!-- Visualization Container -->
+    <div id="canvas-container">
+        <!-- Three.js will inject canvas here -->
+    </div>
+
+    <!-- 2D Canvas for EMF (Hidden by default) -->
+    <canvas id="emf-canvas" class="hidden absolute top-0 left-0 w-full h-full z-0 bg-slate-900"></canvas>
+
+    <script>
+        // --- State Management ---
+        const state = {
+            mode: 'torque', // 'torque' or 'emf'
+            flux: 0.5,      // 0 to 1
+            current: 5.0,   // 0 to 10 Amps
+            speed: 1000,    // 0 to 3000 RPM
+            poles: 2,       // 2, 4, 6, 8...
+            torque: 0,
+            emf: 0
+        };
+
+        // DOM Elements
+        const controls = {
+            torque: document.getElementById('torque-controls'),
+            emf: document.getElementById('emf-controls'),
+            btnTorque: document.getElementById('btn-torque'),
+            btnEmf: document.getElementById('btn-emf'),
+            displayTorque: document.getElementById('torque-display'),
+            displayEmf: document.getElementById('emf-display'),
+            inputs: {
+                fluxT: document.getElementById('input-flux-t'),
+                current: document.getElementById('input-current'),
+                speed: document.getElementById('input-speed'),
+                fluxE: document.getElementById('input-flux-e'),
+                poles: document.getElementById('input-poles'),
+            },
+            labels: {
+                fluxT: document.getElementById('val-flux-t'),
+                current: document.getElementById('val-current'),
+                speed: document.getElementById('val-speed'),
+                fluxE: document.getElementById('val-flux-e'),
+                poles: document.getElementById('val-poles'),
+            }
+        };
+
+        const canvasContainer = document.getElementById('canvas-container');
+        const emfCanvas = document.getElementById('emf-canvas');
+        const emfCtx = emfCanvas.getContext('2d');
+
+        // --- THREE.JS SETUP (Torque Mode) ---
+        let scene, camera, renderer, rotor, stator, fluxLinesGroup;
+        let fluxParticles = [];
+
+        function initThree() {
+            scene = new THREE.Scene();
+            // Fog for depth
+            scene.fog = new THREE.FogExp2(0x0f172a, 0.02);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 15, 25);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            canvasContainer.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 2);
+            scene.add(ambientLight);
+
+            const pointLight = new THREE.PointLight(0xffffff, 1, 100);
+            pointLight.position.set(10, 10, 10);
+            scene.add(pointLight);
+
+            const blueLight = new THREE.PointLight(0x0088ff, 2, 20);
+            blueLight.position.set(-8, 5, 0);
+            scene.add(blueLight);
+
+            const redLight = new THREE.PointLight(0xff0044, 2, 20);
+            redLight.position.set(8, 5, 0);
+            scene.add(redLight);
+
+            createMotor();
+            createFluxLines();
+
+            window.addEventListener('resize', onWindowResize, false);
+            animateThree();
+        }
+
+        function createMotor() {
+            // 1. Stator (Magnets)
+            stator = new THREE.Group();
+            const magnetGeo = new THREE.BoxGeometry(4, 6, 8);
+
+            // North Pole (Red)
+            const matN = new THREE.MeshStandardMaterial({
+                color: 0xcc0000,
+                roughness: 0.4,
+                metalness: 0.6
+            });
+            const north = new THREE.Mesh(magnetGeo, matN);
+            north.position.set(-6, 0, 0);
+
+            // South Pole (Blue)
+            const matS = new THREE.MeshStandardMaterial({
+                color: 0x0000cc,
+                roughness: 0.4,
+                metalness: 0.6
+            });
+            const south = new THREE.Mesh(magnetGeo, matS);
+            south.position.set(6, 0, 0);
+
+            // Labels
+            addTextLabel("N", -6, 4, 0);
+            addTextLabel("S", 6, 4, 0);
+
+            stator.add(north, south);
+            scene.add(stator);
+
+            // 2. Rotor (Armature)
+            rotor = new THREE.Group();
+
+            // Core
+            const coreGeo = new THREE.CylinderGeometry(2.5, 2.5, 7, 32);
+            coreGeo.rotateZ(Math.PI / 2);
+            const coreMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            rotor.add(core);
+
+            // Shaft
+            const shaftGeo = new THREE.CylinderGeometry(0.3, 0.3, 14, 16);
+            shaftGeo.rotateZ(Math.PI / 2);
+            const shaftMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.9, roughness: 0.1 });
+            const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+            rotor.add(shaft);
+
+            // Coils (Copper)
+            const coilGeo = new THREE.TorusGeometry(2.6, 0.2, 8, 30);
+            const coilMat = new THREE.MeshStandardMaterial({
+                color: 0xff8800,
+                emissive: 0xff4400,
+                emissiveIntensity: 0.2
+            });
+
+            // Multiple loops to look like windings
+            for (let i = 0; i < 6; i++) {
+                const coil = new THREE.Mesh(coilGeo, coilMat);
+                coil.rotation.x = i * (Math.PI / 3);
+                coil.name = "coil"; // Tag for animation
+                rotor.add(coil);
+            }
+
+            scene.add(rotor);
+        }
+
+        function addTextLabel(text, x, y, z) {
+            // Simple canvas sprite for text
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const context = canvas.getContext('2d');
+            context.font = "Bold 80px Arial";
+            context.fillStyle = "white";
+            context.textAlign = "center";
+            context.textBaseline = "middle";
+            context.fillText(text, 64, 64);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.position.set(x, y, z);
+            sprite.scale.set(3, 3, 3);
+            scene.add(sprite);
+        }
+
+        function createFluxLines() {
+            fluxLinesGroup = new THREE.Group();
+            const particleCount = 200;
+            const geo = new THREE.BufferGeometry();
+            const positions = [];
+            const speeds = [];
+
+            for (let i = 0; i < particleCount; i++) {
+                // Random position in the gap between magnets
+                const x = (Math.random() - 0.5) * 8; // Spread across gap
+                const y = (Math.random() - 0.5) * 4;
+                const z = (Math.random() - 0.5) * 6;
+                positions.push(x, y, z);
+                speeds.push(0.05 + Math.random() * 0.1);
+            }
+
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+            const mat = new THREE.PointsMaterial({
+                color: 0xa855f7, // Purple
+                size: 0.15,
+                transparent: true,
+                opacity: 0.5,
+                blending: THREE.AdditiveBlending
+            });
+
+            const particles = new THREE.Points(geo, mat);
+            particles.userData = { speeds: speeds };
+            fluxLinesGroup.add(particles);
+            scene.add(fluxLinesGroup);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            resizeEmfCanvas();
+        }
+
+        // --- ANIMATION LOOP (3D) ---
+        let currentRotationSpeed = 0;
+
+        function animateThree() {
+            requestAnimationFrame(animateThree);
+
+            if (state.mode !== 'torque') return;
+
+            // 1. Calculate Torque: T = Flux * Current
+            const targetTorque = state.flux * state.current * 2; // Multiplier for visual effect
+            state.torque = targetTorque;
+
+            // Update UI Number
+            controls.displayTorque.innerText = (state.flux * state.current).toFixed(2) + " Nm";
+
+            // 2. Physics: Torque -> Speed
+            // Simple lerp to simulate inertia
+            currentRotationSpeed += (targetTorque * 0.05 - currentRotationSpeed) * 0.05;
+
+            rotor.rotation.x += currentRotationSpeed;
+
+            // 3. Visuals: Coil Glow based on Current
+            rotor.children.forEach(child => {
+                if (child.name === "coil") {
+                    child.material.emissiveIntensity = state.current * 0.2; // Max 2.0
+                }
+            });
+
+            // 4. Visuals: Flux Lines
+            // Move particles from N (-x) to S (+x) - actually usually N to S, let's say Left to Right
+            const particles = fluxLinesGroup.children[0];
+            const positions = particles.geometry.attributes.position.array;
+            const speeds = particles.userData.speeds;
+
+            // Adjust opacity based on flux slider
+            particles.material.opacity = state.flux;
+            particles.visible = state.flux > 0.05;
+
+            for (let i = 0; i < positions.length / 3; i++) {
+                // Move along X axis
+                positions[i * 3] += speeds[i] * 5; // Flow direction
+
+                // Reset if out of bounds (approx magnet position 6)
+                if (positions[i * 3] > 6) {
+                    positions[i * 3] = -6;
+                }
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+
+
+        // --- EMF CANVAS SETUP (2D) ---
+        let animationFrameId;
+        let time = 0;
+
+        function resizeEmfCanvas() {
+            emfCanvas.width = window.innerWidth;
+            emfCanvas.height = window.innerHeight;
+        }
+
+        function drawGrid(ctx, w, h) {
+            ctx.strokeStyle = "rgba(51, 65, 85, 0.5)";
+            ctx.lineWidth = 1;
+
+            // Horizontal center line
+            ctx.beginPath();
+            ctx.moveTo(0, h / 2);
+            ctx.lineTo(w, h / 2);
+            ctx.stroke();
+
+            // Grid lines
+            for (let x = 0; x < w; x += 50) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h);
+                ctx.stroke();
+            }
+        }
+
+        function drawWave() {
+            if (state.mode !== 'emf') return;
+
+            const w = emfCanvas.width;
+            const h = emfCanvas.height;
+            const ctx = emfCtx;
+
+            ctx.clearRect(0, 0, w, h);
+            drawGrid(ctx, w, h);
+
+            // Calculate EMF Logic
+            // E = Flux * Speed * Poles
+            // Amplitude depends on Flux * Speed
+            // Frequency depends on Speed * Poles
+
+            // Normalize inputs for visuals
+            const normSpeed = state.speed / 3000;
+            const normFlux = state.flux;
+            const normPoles = state.poles;
+
+            // Math for display
+            const calculatedEmf = (normFlux * state.speed * state.poles) / 100; // Arbitrary divisor
+            controls.displayEmf.innerText = calculatedEmf.toFixed(1) + " V";
+
+            // Visual Params
+            const amplitude = h * 0.35 * normFlux * (0.2 + normSpeed); // Base amp + speed factor
+            const frequency = 0.002 * (state.speed + 100) * (state.poles / 2); // Base freq
+
+            ctx.beginPath();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = "#38bdf8"; // Cyan
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#38bdf8";
+
+            for (let x = 0; x < w; x++) {
+                // Sine wave equation: y = A * sin(freq * x + phase)
+                const y = h / 2 + amplitude * Math.sin((x * frequency * 0.01) - time);
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Draw Labels
+            ctx.font = "20px monospace";
+            ctx.fillStyle = "#a855f7";
+            ctx.fillText(`Flux (Φ): ${state.flux}`, 50, 50);
+            ctx.fillStyle = "#60a5fa";
+            ctx.fillText(`Speed (N): ${state.speed} RPM`, 50, 80);
+            ctx.fillStyle = "#f472b6";
+            ctx.fillText(`Poles (P): ${state.poles}`, 50, 110);
+
+            time += 0.2; // Animation speed (traveling wave)
+
+            animationFrameId = requestAnimationFrame(drawWave);
+        }
+
+        // --- LOGIC HANDLING ---
+
+        function switchMode(newMode) {
+            state.mode = newMode;
+
+            if (newMode === 'torque') {
+                // UI
+                controls.btnTorque.classList.add('active-tab', 'text-cyan-400');
+                controls.btnTorque.classList.remove('text-slate-400');
+                controls.btnEmf.classList.remove('active-tab', 'text-cyan-400');
+                controls.btnEmf.classList.add('text-slate-400');
+
+                controls.torque.classList.remove('hidden');
+                controls.emf.classList.add('hidden');
+
+                // Visuals
+                canvasContainer.style.display = 'block';
+                emfCanvas.classList.add('hidden');
+            } else {
+                // UI
+                controls.btnEmf.classList.add('active-tab', 'text-cyan-400');
+                controls.btnEmf.classList.remove('text-slate-400');
+                controls.btnTorque.classList.remove('active-tab', 'text-cyan-400');
+                controls.btnTorque.classList.add('text-slate-400');
+
+                controls.emf.classList.remove('hidden');
+                controls.torque.classList.add('hidden');
+
+                // Visuals
+                canvasContainer.style.display = 'none';
+                emfCanvas.classList.remove('hidden');
+                resizeEmfCanvas();
+                drawWave();
+            }
+        }
+
+        function updateValues() {
+            // Update State from DOM
+            state.flux = parseFloat(state.mode === 'torque' ? controls.inputs.fluxT.value : controls.inputs.fluxE.value);
+            state.current = parseFloat(controls.inputs.current.value);
+            state.speed = parseInt(controls.inputs.speed.value);
+            state.poles = parseInt(controls.inputs.poles.value);
+
+            // Sync Flux sliders if user switches tabs (optional, but good UX)
+            if (state.mode === 'torque') controls.inputs.fluxE.value = state.flux;
+            else controls.inputs.fluxT.value = state.flux;
+
+            // Update Labels
+            controls.labels.fluxT.innerText = state.flux;
+            controls.labels.fluxE.innerText = state.flux;
+            controls.labels.current.innerText = state.current + " A";
+            controls.labels.speed.innerText = state.speed + " RPM";
+            controls.labels.poles.innerText = state.poles;
+        }
+
+        // --- EVENT LISTENERS ---
+
+        Object.values(controls.inputs).forEach(input => {
+            input.addEventListener('input', updateValues);
+        });
+
+        // Initialize
+        initThree();
+        resizeEmfCanvas();
+        updateValues();
+
+    </script>
+</body>
+
+</html>

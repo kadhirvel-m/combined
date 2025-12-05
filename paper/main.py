@@ -1978,6 +1978,7 @@ class TopicOut(BaseModel):
     id: uuid.UUID
     topic: str
     order_in_unit: int
+    image_url: Optional[str] = None
 
 
 class UnitOut(BaseModel):
@@ -3715,7 +3716,7 @@ def load_unit_with_topics(unit_id: uuid.UUID) -> UnitOut:
     unit_row = unit_res.data[0]
     topics_res = (
         supabase.table("syllabus_topics")
-        .select("id,topic,order_in_unit")
+        .select("id,topic,order_in_unit,image_url")
         .eq("unit_id", str(unit_id))
         .order("order_in_unit")
         .execute()
@@ -3732,6 +3733,7 @@ def load_unit_with_topics(unit_id: uuid.UUID) -> UnitOut:
                 id=uuid.UUID(topic_row["id"]),
                 topic=topic_row.get("topic"),
                 order_in_unit=int(topic_row.get("order_in_unit", 0)),
+                image_url=topic_row.get("image_url"),
             )
             for topic_row in (topics_res.data or [])
         ],
@@ -7983,6 +7985,105 @@ def update_department_simple(department_id: uuid.UUID, payload: DepartmentSimple
     return _locate_department_from_snapshot(college_snapshot, degree_uuid, department_id)
 
 
+def _cascade_delete_department_batches(supabase: Client, department_id: uuid.UUID) -> Dict[str, int]:
+    """Delete all batches (and their subjects) owned by a department."""
+    stats = {"batches": 0, "courses": 0}
+    batch_res = (
+        supabase.table("batches").select("id").eq("department_id", str(department_id)).execute()
+    )
+    if getattr(batch_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list batches for department): {batch_res.error}")
+
+    for batch_row in batch_res.data or []:
+        batch_id_str = batch_row.get("id")
+        if not batch_id_str:
+            continue
+
+        course_res = (
+            supabase.table("syllabus_courses").select("id").eq("batch_id", batch_id_str).execute()
+        )
+        if getattr(course_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (list courses for batch): {course_res.error}")
+
+        for course_row in course_res.data or []:
+            course_id_str = course_row.get("id")
+            if not course_id_str:
+                continue
+            delete_course_cascade(uuid.UUID(course_id_str))
+            stats["courses"] += 1
+
+        batch_del = supabase.table("batches").delete().eq("id", batch_id_str).execute()
+        if getattr(batch_del, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete batch): {batch_del.error}")
+        stats["batches"] += 1
+
+    return stats
+
+
+@academics_router.delete(
+    "/api/departments/{department_id}",
+    summary="Delete a department, its batches, and related syllabus data",
+)
+def delete_department(department_id: uuid.UUID):
+    supabase = get_service_client()
+
+    dept_res = (
+        supabase.table("departments")
+        .select("id,college_id,degree_id,name")
+        .eq("id", str(department_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(dept_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find department): {dept_res.error}")
+    if not dept_res.data:
+        raise HTTPException(status_code=404, detail="Department not found")
+
+    blocking_sources: List[str] = []
+    dependency_checks = [
+        ("marketplace_notes", "marketplace notes"),
+        ("teacher_applications", "teacher applications"),
+        ("teacher_classes", "teacher classes"),
+        ("teacher_profiles", "teacher profiles"),
+        ("user_education", "user education records"),
+    ]
+    for table_name, label in dependency_checks:
+        check = (
+            supabase.table(table_name)
+            .select("department_id")
+            .eq("department_id", str(department_id))
+            .limit(1)
+            .execute()
+        )
+        if getattr(check, "error", None):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Supabase error (check {label} for department): {check.error}",
+            )
+        if check.data:
+            blocking_sources.append(label)
+
+    if blocking_sources:
+        formatted = ", ".join(blocking_sources)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete department because related data exists: {formatted}. Remove or reassign those records first.",
+        )
+
+    batch_stats = _cascade_delete_department_batches(supabase, department_id)
+
+    del_res = supabase.table("departments").delete().eq("id", str(department_id)).execute()
+    if getattr(del_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete department): {del_res.error}")
+
+    return {
+        "ok": True,
+        "deleted_department_id": str(department_id),
+        "deleted_batches": batch_stats["batches"],
+        "deleted_courses": batch_stats["courses"],
+    }
+
+
 @academics_router.put(
     "/api/colleges/{college_id}",
     response_model=College,
@@ -8876,6 +8977,90 @@ def delete_unit_cascade(unit_id: uuid.UUID):
     )
     if getattr(u_del, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (delete unit): {u_del.error}")
+
+
+@academics_router.put(
+    "/api/syllabus/topics/{topic_id}/image",
+    summary="Set or update image URL for a syllabus topic",
+)
+def set_topic_image_url(topic_id: uuid.UUID, payload: Dict[str, Any]):
+    """Update the image_url for a single topic.
+
+    Expects JSON body: {"image_url": "https://..."}.
+    Pass null/empty string to clear via the dedicated DELETE endpoint instead.
+    """
+
+    supabase = get_service_client()
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    raw_url = payload.get("image_url")
+    image_url: Optional[str]
+    if raw_url is None:
+        image_url = None
+    else:
+        if not isinstance(raw_url, str):
+            raise HTTPException(status_code=400, detail="image_url must be a string or null")
+        trimmed = raw_url.strip()
+        image_url = trimmed or None
+
+    # Ensure topic exists first
+    topic_q = (
+        supabase.table("syllabus_topics")
+        .select("id")
+        .eq("id", str(topic_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(topic_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find topic): {topic_q.error}")
+    if not topic_q.data:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    upd = (
+        supabase.table("syllabus_topics")
+        .update({"image_url": image_url})
+        .eq("id", str(topic_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update topic image): {upd.error}")
+
+    return {"id": str(topic_id), "image_url": image_url}
+
+
+@academics_router.delete(
+    "/api/syllabus/topics/{topic_id}/image",
+    summary="Clear image URL for a syllabus topic",
+)
+def clear_topic_image_url(topic_id: uuid.UUID):
+    """Clear (set to null) the image_url for a single topic."""
+
+    supabase = get_service_client()
+
+    topic_q = (
+        supabase.table("syllabus_topics")
+        .select("id")
+        .eq("id", str(topic_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(topic_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find topic): {topic_q.error}")
+    if not topic_q.data:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    upd = (
+        supabase.table("syllabus_topics")
+        .update({"image_url": None})
+        .eq("id", str(topic_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (clear topic image): {upd.error}")
+
+    return {"id": str(topic_id), "image_url": None}
 
     return {"ok": True, "deleted_topics": len(topic_ids or [])}
 

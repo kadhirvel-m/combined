@@ -244,11 +244,11 @@
             </div>
         </section>
     </main>
-    <div id="unitModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
+    <div id="unitModal" class="fixed inset-0 z-50 hidden px-4 py-12 sm:px-6 lg:px-8 flex items-center justify-center"
         role="dialog" aria-modal="true" aria-labelledby="unitModalTitle">
-        <div id="unitModalBackdrop" class="fixed inset-0 bg-brand-900/70 dark:bg-black/70 backdrop-blur-sm"></div>
+        <div id="unitModalBackdrop" class="fixed inset-0 bg-ink/70 dark:bg-black/80 backdrop-blur-sm"></div>
         <div id="unitModalPanel"
-            class="relative w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)] max-h-[90vh] h-[90vh] overflow-y-auto">
+            class="relative w-full max-w-2xl overflow-y-auto rounded-3xl border border-brandlt-200/80 dark:border-white/10 bg-gradient-to-b from-white/98 via-white/96 to-brandlt-50/95 dark:from-brand-900/98 dark:via-brand-900/96 dark:to-plum/95 shadow-[0_22px_60px_rgba(30,30,47,0.55)] max-h-[90vh] h-[90vh]">
             <div class="flex items-start justify-between gap-4 border-b border-black/5 dark:border-white/10 px-6 py-5">
                 <div>
                     <h2 id="unitModalTitle" class="text-xl font-semibold text-neutral-900 dark:text-white">Add a new
@@ -276,6 +276,12 @@
                     <div id="topicsContainer" class="space-y-3"></div>
                 </div>
                 <p id="unitModalMessage" class="hidden text-sm text-red-500"></p>
+                <div class="flex justify-end">
+                    <button id="addTopicRowBottom" type="button"
+                        class="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-4 py-2 text-xs font-medium text-neutral-700 dark:text-white/80 hover:border-brand-500/50 transition">
+                        <span class="material-symbols-rounded text-base">add</span>Add topic
+                    </button>
+                </div>
                 <div class="flex items-center justify-between gap-3">
                     <button id="unitDeleteBtn" type="button"
                         class="hidden inline-flex items-center justify-center gap-2 rounded-full border border-red-300/60 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200 px-4 py-2 text-sm font-medium hover:border-red-400/80 transition">
@@ -330,6 +336,7 @@
         const unitTitleInput = document.getElementById('unitTitle');
         const topicsContainer = document.getElementById('topicsContainer');
         const addTopicRowButton = document.getElementById('addTopicRow');
+        const addTopicRowBottomButton = document.getElementById('addTopicRowBottom');
 
         let syllabusCourse = null;
         let unitModalMode = 'add';
@@ -431,7 +438,6 @@
             const row = document.createElement('div');
             row.className = 'flex items-center gap-2';
             row.setAttribute('data-topic-row', '');
-            row.setAttribute('draggable', 'true');
             row.innerHTML = `
                 <button type="button" data-drag-handle aria-label="Drag to reorder"
                     class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 cursor-grab active:cursor-grabbing transition">
@@ -452,6 +458,7 @@
         }
 
         addTopicRowButton.addEventListener('click', () => addTopicRow());
+        addTopicRowBottomButton?.addEventListener('click', () => addTopicRow());
 
         // Drag and drop reordering with auto-scroll inside modal
         let dragEl = null;
@@ -638,7 +645,7 @@
                 return;
             }
             results.innerHTML = units.map(u => {
-                const topics = Array.isArray(u.topics) ? u.topics : [];
+                    const topics = Array.isArray(u.topics) ? u.topics : [];
                 return `
           <article class="group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur p-6 shadow-soft">
             <div class="absolute inset-x-6 top-6 h-24 rounded-3xl bg-gradient-to-r from-brand-500/40 via-brandlt-300/30 to-brand-700/40 opacity-20 blur-2xl"></div>
@@ -648,12 +655,84 @@
                 <span class="material-symbols-rounded text-base">edit</span>
               </button>
             </div>
-            <ul class="relative mt-4 space-y-2 text-sm text-neutral-700 dark:text-white/75">
-                            ${topics.map(t => `<li class=\"flex items-start gap-2\"><span class=\"material-symbols-rounded text-base text-brand-500 mt-0.5\">check_small</span><span>${Collage.escapeHtml(t.topic_title || t.topic || '')}</span></li>`).join('') || '<li class=\"italic opacity-70\">No topics recorded.</li>'}
+                        <ul class="relative mt-4 space-y-2 text-sm text-neutral-700 dark:text-white/75">
+                                                        ${topics.map(t => {
+                                                                const label = Collage.escapeHtml(t.topic_title || t.topic || '');
+                                                                const imgUrl = (t.image_url || '').trim ? (t.image_url || '').trim() : (t.image_url || '');
+                                                                const hasImage = !!imgUrl;
+                                const btnLabel = hasImage ? 'Remove image' : 'Upload image';
+                                const btnIcon = hasImage ? 'image_not_supported' : 'add_photo_alternate';
+                                const btnAttr = hasImage ? 'data-topic-image-remove' : 'data-topic-image-upload';
+                                                                const imgIndicator = hasImage ? `<span class=\"ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-500/40\"><span class=\"material-symbols-rounded text-[14px]\">image</span><span>Image set</span></span>` : '';
+                                return `<li class=\"flex items-start justify-between gap-3\">
+  <div class=\"flex items-start gap-2\">
+    <span class=\"material-symbols-rounded text-base text-brand-500 mt-0.5\">check_small</span>
+    <span>${label}${imgIndicator}</span>
+  </div>
+  <button type=\"button\" ${btnAttr}=\"${t.id}\" class=\"inline-flex items-center gap-1 rounded-full border border-black/8 dark:border-white/15 bg-white/80 dark:bg-white/5 px-2.5 py-1 text-xs font-medium text-neutral-600 dark:text-neutral-200 hover:border-brand-500/60 hover:text-brand-600 hover:bg-brand-50/80 dark:hover:bg-brand-500/10 transition\">
+    <span class=\"material-symbols-rounded text-sm\">${btnIcon}</span>
+    <span>${btnLabel}</span>
+  </button>
+</li>`;
+                            }).join('') || '<li class=\"italic opacity-70\">No topics recorded.</li>'}
             </ul>
           </article>`;
             }).join('');
             attachUnitEditHandlers();
+            attachTopicImageHandlers();
+        }
+
+        function attachTopicImageHandlers() {
+            if (!results) return;
+
+            results.querySelectorAll('[data-topic-image-upload]').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const topicId = btn.getAttribute('data-topic-image-upload');
+                    if (!topicId) return;
+                    const current = btn.getAttribute('data-current-url') || '';
+                    const value = window.prompt('Enter image URL for this topic:', current);
+                    if (value === null) return;
+                    const trimmed = (value || '').trim();
+                    if (!trimmed) {
+                        alert('Image URL cannot be empty.');
+                        return;
+                    }
+                    try {
+                        await Collage.fetchJson(`/api/syllabus/topics/${topicId}/image`, {
+                            method: 'PUT',
+                            body: { image_url: trimmed },
+                            skipAuth: true,
+                        });
+                        await loadSyllabus();
+                    } catch (err) {
+                        console.error(err);
+                        alert(err?.message || 'Unable to save image URL.');
+                    }
+                });
+            });
+
+            results.querySelectorAll('[data-topic-image-remove]').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const topicId = btn.getAttribute('data-topic-image-remove');
+                    if (!topicId) return;
+                    const ok = window.confirm('Remove the image URL for this topic?');
+                    if (!ok) return;
+                    try {
+                        await Collage.fetchJson(`/api/syllabus/topics/${topicId}/image`, {
+                            method: 'DELETE',
+                            skipAuth: true,
+                        });
+                        await loadSyllabus();
+                    } catch (err) {
+                        console.error(err);
+                        alert(err?.message || 'Unable to remove image URL.');
+                    }
+                });
+            });
         }
 
         function attachUnitEditHandlers() {
