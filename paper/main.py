@@ -3348,7 +3348,7 @@ def get_current_user_profile(token: Optional[str]):
                     if unit_ids:
                         topics_q = (
                             supabase.table("syllabus_topics")
-                            .select("id,unit_id,topic,order_in_unit")
+                            .select("id,unit_id,topic,order_in_unit,image_url")
                             .in_("unit_id", [str(uid) for uid in unit_ids])
                             .order("unit_id")
                             .order("order_in_unit")
@@ -3366,6 +3366,7 @@ def get_current_user_profile(token: Optional[str]):
                                     "id": raw_topic.get("id"),
                                     "topic": raw_topic.get("topic"),
                                     "order_in_unit": raw_topic.get("order_in_unit"),
+                                    "image_url": raw_topic.get("image_url"),
                                 }
                             )
 
@@ -3611,7 +3612,7 @@ def sync_units_and_topics(course_id: uuid.UUID, units: List[UnitIn]) -> List[Uni
         uid = uuid.UUID(ur["id"])
         tops = (
             supabase.table("syllabus_topics")
-            .select("id,topic,order_in_unit")
+            .select("id,topic,order_in_unit,image_url")
             .eq("unit_id", str(uid))
             .order("order_in_unit")
             .execute()
@@ -3628,6 +3629,7 @@ def sync_units_and_topics(course_id: uuid.UUID, units: List[UnitIn]) -> List[Uni
                         id=uuid.UUID(tr["id"]),
                         topic=tr["topic"],
                         order_in_unit=tr["order_in_unit"],
+                        image_url=tr.get("image_url"),
                     )
                     for tr in (tops.data or [])
                 ],
@@ -3665,7 +3667,7 @@ def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
         unit_id = uuid.UUID(unit_row["id"])
         topics_rows = (
             supabase.table("syllabus_topics")
-            .select("id,topic,order_in_unit")
+            .select("id,topic,order_in_unit,image_url")
             .eq("unit_id", str(unit_id))
             .order("order_in_unit")
             .execute()
@@ -3682,6 +3684,7 @@ def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
                         id=uuid.UUID(topic_row["id"]),
                         topic=topic_row["topic"],
                         order_in_unit=topic_row["order_in_unit"],
+                        image_url=topic_row.get("image_url"),
                     )
                     for topic_row in (topics_rows.data or [])
                 ],
