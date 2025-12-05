@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMFT Pro: Interactive Wave Lab</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+        rel="stylesheet" />
+
+    <style>
+        :root {
+            /* Material Design 3 Color Tokens - Dark Default */
+            --md-sys-color-background: #000000;
+            --md-sys-color-surface: #1e1e1e;
+            --md-sys-color-surface-variant: #2d2d2d;
+            --md-sys-color-primary: #a8c7fa;
+            --md-sys-color-on-surface: #e3e3e3;
+            --md-sys-color-secondary-container: #004a77;
+            --md-sys-color-on-secondary-container: #c2e7ff;
+            --md-sys-color-outline: #8e918f;
+
+            /* Graph Colors */
+            --color-e-field: #ff5252;
+            --color-b-field: #448aff;
+            --color-grid: #333333;
+        }
+
+        /* Light Theme Overrides */
+        body.light-theme {
+            --md-sys-color-background: #fdfdfd;
+            --md-sys-color-surface: #f0f4f8;
+            --md-sys-color-surface-variant: #dde3ea;
+            --md-sys-color-primary: #0b57d0;
+            --md-sys-color-on-surface: #1f1f1f;
+            --md-sys-color-secondary-container: #d3e3fd;
+            --md-sys-color-on-secondary-container: #041e49;
+            --md-sys-color-outline: #747775;
+
+            --color-e-field: #d32f2f;
+            --color-b-field: #1565c0;
+            --color-grid: #e0e0e0;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--md-sys-color-background);
+            color: var(--md-sys-color-on-surface);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        /* --- UI CONTAINER --- */
+        #ui-panel {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            width: 320px;
+            background: var(--md-sys-color-surface);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 500;
+            margin: 0;
+        }
+
+        .badge {
+            font-size: 11px;
+            background: var(--md-sys-color-secondary-container);
+            color: var(--md-sys-color-on-secondary-container);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: 700;
+        }
+
+        /* Controls */
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .label-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .value-display {
+            font-family: monospace;
+            color: var(--md-sys-color-primary);
+        }
+
+        /* Sliders */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            background: var(--md-sys-color-surface-variant);
+            border-radius: 3px;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: var(--md-sys-color-primary);
+            -webkit-appearance: none;
+            margin-top: -7px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: transform 0.1s;
+        }
+
+        input[type=range]::-webkit-slider-thumb:active {
+            transform: scale(1.2);
+        }
+
+        /* Toggles & Buttons */
+        .btn-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        button.icon-btn {
+            background: var(--md-sys-color-surface-variant);
+            border: none;
+            border-radius: 12px;
+            height: 48px;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--md-sys-color-on-surface);
+            transition: background 0.2s;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        button.icon-btn:hover {
+            background: var(--md-sys-color-outline);
+            opacity: 0.2;
+        }
+
+        button.icon-btn.active {
+            background: var(--md-sys-color-secondary-container);
+            color: var(--md-sys-color-on-secondary-container);
+        }
+
+        .material-symbols-rounded {
+            font-size: 20px;
+            margin-right: 8px;
+        }
+
+        /* Math Display */
+        .math-card {
+            background: var(--md-sys-color-surface-variant);
+            border-radius: 16px;
+            padding: 16px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .math-row {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+            padding-bottom: 4px;
+            margin-bottom: 4px;
+        }
+
+        .math-row:last-child {
+            border: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Floating Theme Toggle */
+        #theme-fab {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background: var(--md-sys-color-primary);
+            color: #fff;
+            /* Always white icon for contrast */
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: transform 0.2s;
+        }
+
+        #theme-fab:hover {
+            transform: scale(1.05);
+        }
+
+        /* Legend */
+        .legend-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+    </style>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body class="dark-theme">
+
+    <button id="theme-fab" title="Toggle Theme">
+        <span class="material-symbols-rounded">light_mode</span>
+    </button>
+
+    <div id="ui-panel">
+        <header>
+            <h1>EM Field Theory</h1>
+            <span class="badge">v2.0</span>
+        </header>
+
+        <div class="btn-row">
+            <button class="icon-btn active" id="play-btn">
+                <span class="material-symbols-rounded">play_arrow</span> Run
+            </button>
+            <button class="icon-btn" id="polarization-btn">
+                <span class="material-symbols-rounded">rotate_right</span> Linear
+            </button>
+        </div>
+
+        <hr style="width:100%; border:0; border-top:1px solid var(--md-sys-color-outline); opacity: 0.3;">
+
+        <div class="control-group">
+            <div class="label-row">
+                Frequency (ω)
+                <span id="freq-val" class="value-display">1.0 Hz</span>
+            </div>
+            <input type="range" id="freq" min="0.5" max="4.0" step="0.1" value="1.0">
+        </div>
+
+        <div class="control-group">
+            <div class="label-row">
+                Amplitude (E₀)
+                <span id="amp-val" class="value-display">2.0</span>
+            </div>
+            <input type="range" id="amp" min="0.5" max="4.0" step="0.1" value="2.0">
+        </div>
+
+        <div class="control-group">
+            <div class="label-row">
+                Wave Speed (c)
+                <span id="speed-val" class="value-display">1.0</span>
+            </div>
+            <input type="range" id="speed" min="0.5" max="3.0" step="0.1" value="1.0">
+        </div>
+
+        <div class="math-card">
+            <div class="math-row">
+                <span>Wavelength (λ)</span>
+                <span id="lambda-val" style="font-weight:bold;">1.00 m</span>
+            </div>
+            <div class="math-row">
+                <span>Phase</span>
+                <span id="phase-val">0 rad</span>
+            </div>
+            <div style="margin-top:10px; font-size:11px; opacity:0.7;">
+                λ = c / f
+            </div>
+        </div>
+
+        <div style="font-size:13px;">
+            <div style="margin-bottom:6px;"><span class="legend-dot" style="background:var(--color-e-field);"></span>
+                Electric Field (E)</div>
+            <div><span class="legend-dot" style="background:var(--color-b-field);"></span> Magnetic Field (B)</div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- STATE & CONFIG ---
+        const state = {
+            frequency: 1.0,
+            amplitude: 2.0,
+            speed: 1.0,
+            isPlaying: true,
+            polarization: 'linear', // 'linear' or 'circular'
+            theme: 'dark'
+        };
+
+        // --- THEME COLORS (Matches CSS) ---
+        const colors = {
+            dark: { bg: 0x000000, grid: 0x333333, fog: 0x000000 },
+            light: { bg: 0xfdfdfd, grid: 0xe0e0e0, fog: 0xfdfdfd },
+            eField: { dark: 0xff5252, light: 0xd32f2f },
+            bField: { dark: 0x448aff, light: 0x1565c0 }
+        };
+
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(colors.dark.bg);
+        scene.fog = new THREE.FogExp2(colors.dark.bg, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(12, 8, 12);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.autoRotate = false;
+
+        // --- OBJECTS ---
+
+        // 1. Grid
+        const gridHelper = new THREE.GridHelper(40, 40, colors.dark.grid, colors.dark.grid);
+        scene.add(gridHelper);
+
+        // 2. Axes
+        const axesHelper = new THREE.AxesHelper(2);
+        scene.add(axesHelper);
+
+        // 3. The Wave Geometry
+        const segments = 300;
+        const waveLength = 25;
+
+        // E-Field (Red)
+        const eGeo = new THREE.BufferGeometry();
+        const ePos = new Float32Array(segments * 3);
+        eGeo.setAttribute('position', new THREE.BufferAttribute(ePos, 3));
+        const eMat = new THREE.LineBasicMaterial({ color: colors.dark.eField, linewidth: 2 });
+        const eLine = new THREE.Line(eGeo, eMat);
+        scene.add(eLine);
+
+        // E-Vectors
+        const eVecGeo = new THREE.BufferGeometry();
+        const eVecPos = new Float32Array(segments * 6);
+        eVecGeo.setAttribute('position', new THREE.BufferAttribute(eVecPos, 3));
+        const eVecMat = new THREE.LineBasicMaterial({ color: colors.dark.eField, transparent: true, opacity: 0.3 });
+        const eVecLine = new THREE.LineSegments(eVecGeo, eVecMat);
+        scene.add(eVecLine);
+
+        // B-Field (Blue)
+        const bGeo = new THREE.BufferGeometry();
+        const bPos = new Float32Array(segments * 3);
+        bGeo.setAttribute('position', new THREE.BufferAttribute(bPos, 3));
+        const bMat = new THREE.LineBasicMaterial({ color: colors.dark.bField, linewidth: 2 });
+        const bLine = new THREE.Line(bGeo, bMat);
+        scene.add(bLine);
+
+        // B-Vectors
+        const bVecGeo = new THREE.BufferGeometry();
+        const bVecPos = new Float32Array(segments * 6);
+        bVecGeo.setAttribute('position', new THREE.BufferAttribute(bVecPos, 3));
+        const bVecMat = new THREE.LineBasicMaterial({ color: colors.dark.bField, transparent: true, opacity: 0.3 });
+        const bVecLine = new THREE.LineSegments(bVecGeo, bVecMat);
+        scene.add(bVecLine);
+
+        // Source Particle
+        const particle = new THREE.Mesh(
+            new THREE.SphereGeometry(0.3, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        scene.add(particle);
+
+        // --- INTERACTIVITY FUNCTIONS ---
+
+        function updateTheme() {
+            const isDark = state.theme === 'dark';
+            const themeColors = isDark ? colors.dark : colors.light;
+
+            // HTML Classes
+            document.body.className = isDark ? '' : 'light-theme';
+            document.querySelector('#theme-fab span').textContent = isDark ? 'light_mode' : 'dark_mode';
+
+            // Three.js Colors
+            scene.background.setHex(themeColors.bg);
+            scene.fog.color.setHex(themeColors.fog);
+
+            // Grid Lines color update requires rebuilding or accessing material internally
+            // Simpler approach: update existing material color
+            gridHelper.material.color.setHex(themeColors.grid);
+
+            // Wave Colors
+            eMat.color.setHex(isDark ? colors.eField.dark : colors.eField.light);
+            eVecMat.color.setHex(isDark ? colors.eField.dark : colors.eField.light);
+            bMat.color.setHex(isDark ? colors.bField.dark : colors.bField.light);
+            bVecMat.color.setHex(isDark ? colors.bField.dark : colors.bField.light);
+        }
+
+        function calculatePhysics() {
+            // lambda = v / f
+            const lambda = state.speed / (state.frequency * 0.1); // scaling factor
+            // Display logic
+            const realLambda = (state.speed / state.frequency).toFixed(2);
+            document.getElementById('lambda-val').innerText = `${realLambda} m`;
+        }
+
+        // --- EVENT LISTENERS ---
+
+        document.getElementById('theme-fab').addEventListener('click', () => {
+            state.theme = state.theme === 'dark' ? 'light' : 'dark';
+            updateTheme();
+        });
+
+        const playBtn = document.getElementById('play-btn');
+        playBtn.addEventListener('click', () => {
+            state.isPlaying = !state.isPlaying;
+            playBtn.innerHTML = state.isPlaying
+                ? '<span class="material-symbols-rounded">play_arrow</span> Run'
+                : '<span class="material-symbols-rounded">pause</span> Pause';
+            playBtn.classList.toggle('active');
+        });
+
+        const polBtn = document.getElementById('polarization-btn');
+        polBtn.addEventListener('click', () => {
+            state.polarization = state.polarization === 'linear' ? 'circular' : 'linear';
+            polBtn.innerHTML = state.polarization === 'linear'
+                ? '<span class="material-symbols-rounded">rotate_right</span> Linear'
+                : '<span class="material-symbols-rounded">cyclone</span> Circular';
+        });
+
+        // Sliders
+        document.getElementById('freq').addEventListener('input', (e) => {
+            state.frequency = parseFloat(e.target.value);
+            document.getElementById('freq-val').innerText = state.frequency.toFixed(1) + " Hz";
+            calculatePhysics();
+        });
+        document.getElementById('amp').addEventListener('input', (e) => {
+            state.amplitude = parseFloat(e.target.value);
+            document.getElementById('amp-val').innerText = state.amplitude.toFixed(1);
+        });
+        document.getElementById('speed').addEventListener('input', (e) => {
+            state.speed = parseFloat(e.target.value);
+            document.getElementById('speed-val').innerText = state.speed.toFixed(1);
+            calculatePhysics();
+        });
+
+        // --- ANIMATION LOOP ---
+        let time = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (state.isPlaying) {
+                time += 0.05 * state.speed;
+            }
+
+            const eAttr = eGeo.attributes.position;
+            const eVecAttr = eVecGeo.attributes.position;
+            const bAttr = bGeo.attributes.position;
+            const bVecAttr = bVecGeo.attributes.position;
+
+            // Physics Loop
+            for (let i = 0; i < segments; i++) {
+                const z = (i / segments) * waveLength;
+
+                // The Wave Equation: k*z - w*t
+                const phase = (z * state.frequency) - (time * state.frequency);
+
+                // Base Sine
+                const sineVal = Math.sin(phase);
+
+                // Polarization Logic
+                let ex = 0, ey = 0; // Electric Field
+                let bx = 0, by = 0; // Magnetic Field
+
+                if (state.polarization === 'linear') {
+                    // Standard: E is Y, B is X
+                    ey = sineVal * state.amplitude;
+                    bx = sineVal * state.amplitude;
+                } else {
+                    // Circular: E rotates, B rotates (90 deg offset)
+                    const cosVal = Math.cos(phase);
+
+                    // Electric Field rotates
+                    ex = cosVal * state.amplitude;
+                    ey = sineVal * state.amplitude;
+
+                    // Magnetic Field is perpendicular to E
+                    // B must be cross product of k (Z-axis) and E
+                    bx = -sineVal * state.amplitude;
+                    by = cosVal * state.amplitude;
+                }
+
+                // Update Line Geometry
+                eAttr.setXYZ(i, ex, ey, z);
+                bAttr.setXYZ(i, bx, by, z);
+
+                // Update Vector Geometry (The vertical lines)
+                // Point 1: On the axis (0,0,z) or (ex, ey, z)? 
+                // Actually axis is always (0,0,z) for Linear. For circular, it helps to see origin to point.
+
+                eVecAttr.setXYZ(i * 2, 0, 0, z);
+                eVecAttr.setXYZ(i * 2 + 1, ex, ey, z);
+
+                bVecAttr.setXYZ(i * 2, 0, 0, z);
+                bVecAttr.setXYZ(i * 2 + 1, bx, by, z);
+            }
+
+            // Update Particle Position
+            if (state.polarization === 'linear') {
+                particle.position.set(0, Math.sin(-time * state.frequency) * state.amplitude, 0);
+            } else {
+                particle.position.set(
+                    Math.cos(-time * state.frequency) * state.amplitude,
+                    Math.sin(-time * state.frequency) * state.amplitude,
+                    0
+                );
+            }
+
+            // Notify Three.js that data changed
+            eAttr.needsUpdate = true;
+            eVecAttr.needsUpdate = true;
+            bAttr.needsUpdate = true;
+            bVecAttr.needsUpdate = true;
+
+            // Update Phase Text occasionally
+            document.getElementById('phase-val').innerText = (time % (2 * Math.PI)).toFixed(2) + " rad";
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Init
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start
+        calculatePhysics();
+        animate();
+    </script>
+</body>
+
+</html>

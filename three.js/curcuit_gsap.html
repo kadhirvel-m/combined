@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Series vs. Parallel Circuit Simulation</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* Circuit Board Background */
+        .circuit-board {
+            background-image: radial-gradient(#2d2d2d 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* SVG Styles */
+        svg {
+            width: 100%;
+            height: 300px;
+            overflow: visible;
+        }
+
+        .wire {
+            fill: none;
+            stroke: #4a5568;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .wire-active {
+            stroke: #38bdf8;
+            /* Cyan color for electricity */
+            stroke-dasharray: 20;
+            opacity: 0;
+        }
+
+        .bulb-glass {
+            fill: #4a5568;
+            stroke: #718096;
+            stroke-width: 2;
+            transition: fill 0.3s ease;
+        }
+
+        .bulb-filament {
+            fill: none;
+            stroke: #a0aec0;
+            stroke-width: 1.5;
+        }
+
+        .bulb.lit .bulb-glass {
+            fill: #fcd34d;
+            /* Yellow */
+            filter: drop-shadow(0 0 15px #fcd34d);
+        }
+
+        .bulb.lit .bulb-filament {
+            stroke: #fff;
+        }
+
+        /* Switch Styles */
+        .switch-rect {
+            fill: #ef4444;
+            cursor: pointer;
+            transition: fill 0.3s;
+        }
+
+        .switch-rect.closed {
+            fill: #22c55e;
+        }
+
+        .switch-arm {
+            stroke: #fff;
+            stroke-width: 4;
+            transform-origin: 0% 50%;
+            /* Pivot point */
+            transition: transform 0.3s;
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid #38bdf8;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center justify-center p-6">
+
+    <header class="text-center mb-8">
+        <h1 class="text-4xl font-bold text-white mb-2">Circuit Logic: <span class="text-blue-400">Series</span> vs <span
+                class="text-green-400">Parallel</span></h1>
+        <p class="text-gray-400">Toggle the switches to observe how electricity flows.</p>
+    </header>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-6xl">
+
+        <div class="circuit-board bg-gray-900 rounded-xl p-6 shadow-xl border border-gray-700 relative">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold text-blue-400">Series Circuit</h2>
+                <div class="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded">Current is Constant</div>
+            </div>
+
+            <div class="relative">
+                <svg id="series-svg" viewBox="0 0 400 200">
+                    <path class="wire" d="M50,100 L50,150 L350,150 L350,50 L250,50" />
+                    <path class="wire" d="M150,50 L50,50 L50,80" />
+                    <path class="wire wire-active" id="series-flow"
+                        d="M50,100 L50,150 L350,150 L350,50 L250,50 M150,50 L50,50 L50,80" />
+
+                    <g transform="translate(30, 80)">
+                        <rect x="0" y="0" width="40" height="20" rx="2" fill="#4a5568" />
+                        <text x="12" y="15" fill="white" font-size="10" font-family="monospace">BAT</text>
+                    </g>
+
+                    <g id="s-switch-1" class="switch" transform="translate(150, 40)" onclick="toggleSeries(1)">
+                        <rect class="switch-rect" x="-10" y="-10" width="40" height="20" rx="4" />
+                        <line class="switch-arm" x1="0" y1="10" x2="20" y2="10" />
+                    </g>
+
+                    <g id="s-bulb-1" class="bulb" transform="translate(200, 50)">
+                        <circle class="bulb-glass" cx="0" cy="0" r="15" />
+                        <path class="bulb-filament" d="M-5,5 L-2,-2 L2,-2 L5,5" />
+                    </g>
+
+                    <g id="s-bulb-2" class="bulb" transform="translate(250, 50)"> </g>
+
+                    <line class="wire" x1="170" y1="50" x2="200" y2="50" />
+                    <line class="wire" x1="215" y1="50" x2="280" y2="50" />
+
+                    <g id="s-bulb-1-g" class="bulb" transform="translate(200, 50)">
+                        <circle class="bulb-glass" cx="0" cy="0" r="15" />
+                        <path class="bulb-filament" d="M-5,5 L0,-5 L5,5" />
+                    </g>
+
+                    <g id="s-bulb-2-g" class="bulb" transform="translate(280, 50)">
+                        <circle class="bulb-glass" cx="0" cy="0" r="15" />
+                        <path class="bulb-filament" d="M-5,5 L0,-5 L5,5" />
+                    </g>
+
+                </svg>
+            </div>
+
+            <div class="info-card p-3 mt-4 text-sm text-gray-300">
+                <p><strong>Logic:</strong> In a series circuit, there is only <span class="text-white font-bold">ONE
+                        path</span>. If the switch opens, or a bulb breaks, the entire circuit stops.</p>
+                <p class="mt-2 text-blue-300 status" id="series-status">Status: Circuit Open (No Flow)</p>
+            </div>
+        </div>
+
+        <div class="circuit-board bg-gray-900 rounded-xl p-6 shadow-xl border border-gray-700 relative">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold text-green-400">Parallel Circuit</h2>
+                <div class="text-xs bg-green-900 text-green-200 px-2 py-1 rounded">Voltage is Constant</div>
+            </div>
+
+            <div class="relative">
+                <svg id="parallel-svg" viewBox="0 0 400 200">
+                    <path class="wire" d="M50,100 L50,150 L350,150 L350,50 L250,50" />
+                    <path class="wire" d="M150,50 L50,50 L50,80" />
+                    <line class="wire" x1="200" y1="50" x2="200" y2="100" />
+                    <line class="wire" x1="200" y1="100" x2="300" y2="100" />
+                    <line class="wire" x1="300" y1="100" x2="300" y2="50" />
+                    <line class="wire" x1="170" y1="50" x2="300" y2="50" />
+
+                    <path class="wire wire-active" id="p-flow-main" d="M50,100 L50,150 L350,150 L350,50 L300,50" />
+                    <path class="wire wire-active" id="p-flow-branch1" d="M150,50 L50,50 L50,80" />
+                    <path class="wire wire-active" id="p-flow-top" d="M170,50 L300,50" />
+                    <path class="wire wire-active" id="p-flow-bottom" d="M200,50 L200,100 L300,100 L300,50" />
+
+                    <g transform="translate(30, 80)">
+                        <rect x="0" y="0" width="40" height="20" rx="2" fill="#4a5568" />
+                        <text x="12" y="15" fill="white" font-size="10" font-family="monospace">BAT</text>
+                    </g>
+
+                    <g id="p-switch-main" class="switch" transform="translate(150, 40)"
+                        onclick="toggleParallel('main')">
+                        <rect class="switch-rect" x="-10" y="-10" width="40" height="20" rx="4" />
+                        <line class="switch-arm" x1="0" y1="10" x2="20" y2="10" />
+                        <text x="-10" y="-15" fill="#aaa" font-size="10">Main</text>
+                    </g>
+
+                    <g id="p-switch-branch" class="switch" transform="translate(220, 90)"
+                        onclick="toggleParallel('branch')">
+                        <rect class="switch-rect" x="-10" y="-10" width="40" height="20" rx="4" />
+                        <line class="switch-arm" x1="0" y1="10" x2="20" y2="10" />
+                        <text x="-10" y="25" fill="#aaa" font-size="10">Branch</text>
+                    </g>
+
+                    <g id="p-bulb-1" class="bulb" transform="translate(250, 50)">
+                        <circle class="bulb-glass" cx="0" cy="0" r="15" />
+                        <path class="bulb-filament" d="M-5,5 L0,-5 L5,5" />
+                    </g>
+
+                    <g id="p-bulb-2" class="bulb" transform="translate(280, 100)">
+                        <circle class="bulb-glass" cx="0" cy="0" r="15" />
+                        <path class="bulb-filament" d="M-5,5 L0,-5 L5,5" />
+                    </g>
+
+                </svg>
+            </div>
+
+            <div class="info-card p-3 mt-4 text-sm text-gray-300">
+                <p><strong>Logic:</strong> In parallel, current <span class="text-white font-bold">SPLITS</span>. The
+                    top bulb works even if the bottom branch switch is off. If the Main switch is off, everything stops.
+                </p>
+                <p class="mt-2 text-green-300 status" id="parallel-status">Status: Main Open</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- SERIES LOGIC ---
+        let seriesOn = false;
+
+        // GSAP Timeline for Series Flow
+        const seriesTimeline = gsap.timeline({ repeat: -1, paused: true });
+
+        // Animate the stroke-dashoffset to simulate moving electrons
+        seriesTimeline.to("#series-flow", {
+            strokeDashoffset: -200,
+            duration: 2,
+            ease: "none"
+        });
+
+        function toggleSeries(id) {
+            seriesOn = !seriesOn;
+            const switchEl = document.querySelector("#s-switch-1");
+            const rect = switchEl.querySelector(".switch-rect");
+            const arm = switchEl.querySelector(".switch-arm");
+            const bulbs = document.querySelectorAll("#s-bulb-1-g, #s-bulb-2-g");
+            const status = document.getElementById("series-status");
+            const flowPath = document.getElementById("series-flow");
+
+            if (seriesOn) {
+                // Animate Switch Closing
+                gsap.to(rect, { fill: "#22c55e", duration: 0.2 });
+                gsap.to(arm, { rotation: 15, x: 5, y: 5, duration: 0.2 }); // Simplify visual close
+
+                // Turn on Bulbs
+                bulbs.forEach(b => b.classList.add("lit"));
+
+                // Start Flow
+                gsap.to(flowPath, { opacity: 1, duration: 0.5 });
+                seriesTimeline.play();
+
+                status.innerText = "Status: Circuit CLOSED (Power On)";
+                status.classList.replace("text-blue-300", "text-green-400");
+            } else {
+                // Animate Switch Opening
+                gsap.to(rect, { fill: "#ef4444", duration: 0.2 });
+                gsap.to(arm, { rotation: 0, x: 0, y: 0, duration: 0.2 });
+
+                // Turn off Bulbs
+                bulbs.forEach(b => b.classList.remove("lit"));
+
+                // Stop Flow
+                gsap.to(flowPath, { opacity: 0, duration: 0.2 });
+                seriesTimeline.pause();
+
+                status.innerText = "Status: Circuit OPEN (Power Off)";
+                status.classList.replace("text-green-400", "text-blue-300");
+            }
+        }
+
+        // --- PARALLEL LOGIC ---
+        let pMainOn = false;
+        let pBranchOn = false;
+
+        // Create animation references
+        const pAnimMain = gsap.to(["#p-flow-main", "#p-flow-branch1"], {
+            strokeDashoffset: -200, duration: 2, ease: "none", repeat: -1, paused: true
+        });
+        const pAnimTop = gsap.to("#p-flow-top", {
+            strokeDashoffset: -200, duration: 2, ease: "none", repeat: -1, paused: true
+        });
+        const pAnimBottom = gsap.to("#p-flow-bottom", {
+            strokeDashoffset: -200, duration: 2, ease: "none", repeat: -1, paused: true
+        });
+
+        function toggleParallel(type) {
+            if (type === 'main') pMainOn = !pMainOn;
+            if (type === 'branch') pBranchOn = !pBranchOn;
+
+            updateParallelVisuals();
+        }
+
+        function updateParallelVisuals() {
+            // Main Switch UI
+            const mainSwitch = document.querySelector("#p-switch-main");
+            gsap.to(mainSwitch.querySelector(".switch-rect"), { fill: pMainOn ? "#22c55e" : "#ef4444" });
+
+            // Branch Switch UI
+            const branchSwitch = document.querySelector("#p-switch-branch");
+            gsap.to(branchSwitch.querySelector(".switch-rect"), { fill: pBranchOn ? "#22c55e" : "#ef4444" });
+
+            // Bulbs UI
+            const topBulb = document.querySelector("#p-bulb-1");
+            const bottomBulb = document.querySelector("#p-bulb-2");
+            const status = document.getElementById("parallel-status");
+
+            // Logic Tree
+            if (pMainOn) {
+                // Main power is flowing
+                gsap.to(["#p-flow-main", "#p-flow-branch1"], { opacity: 1 });
+                pAnimMain.play();
+
+                // Top Branch (Always on if Main is on in this simplified diagram)
+                topBulb.classList.add("lit");
+                gsap.to("#p-flow-top", { opacity: 1 });
+                pAnimTop.play();
+
+                // Bottom Branch (Dependent on Branch Switch)
+                if (pBranchOn) {
+                    bottomBulb.classList.add("lit");
+                    gsap.to("#p-flow-bottom", { opacity: 1 });
+                    pAnimBottom.play();
+                    status.innerText = "Status: Both Branches Active";
+                } else {
+                    bottomBulb.classList.remove("lit");
+                    gsap.to("#p-flow-bottom", { opacity: 0 });
+                    pAnimBottom.pause();
+                    status.innerText = "Status: Top Branch Only";
+                }
+            } else {
+                // Main power OFF - Everything OFF
+                gsap.to(".wire-active", { opacity: 0 }); // Hide all flows
+                topBulb.classList.remove("lit");
+                bottomBulb.classList.remove("lit");
+
+                pAnimMain.pause();
+                pAnimTop.pause();
+                pAnimBottom.pause();
+
+                status.innerText = "Status: Main Power OFF";
+            }
+        }
+    </script>
+</body>
+
+</html>
