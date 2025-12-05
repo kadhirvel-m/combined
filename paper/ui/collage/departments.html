@@ -300,14 +300,21 @@
                         placeholder="e.g. Computer Science Engineering" />
                 </label>
                 <p id="departmentModalMessage" class="hidden text-sm text-red-500"></p>
-                <div class="flex items-center justify-end gap-3">
-                    <button id="departmentModalCancel" type="button"
-                        class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">Cancel</button>
-                    <button id="departmentSubmitBtn" type="submit"
-                        class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition">
-                        <span class="material-symbols-rounded text-base">save</span>
-                        Save department
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <button id="departmentDeleteBtn" type="button"
+                        class="hidden inline-flex items-center justify-center gap-2 rounded-full border border-red-300/60 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200 px-4 py-2 text-sm font-medium hover:border-red-400/80 transition">
+                        <span class="material-symbols-rounded text-base">delete</span>
+                        Delete
                     </button>
+                    <div class="flex items-center gap-3 ml-auto">
+                        <button id="departmentModalCancel" type="button"
+                            class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">Cancel</button>
+                        <button id="departmentSubmitBtn" type="submit"
+                            class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition">
+                            <span class="material-symbols-rounded text-base">save</span>
+                            Save department
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -366,6 +373,7 @@
         const departmentModalCancel = document.getElementById('departmentModalCancel');
         const departmentModalClose = document.getElementById('departmentModalClose');
         const departmentSubmitBtn = document.getElementById('departmentSubmitBtn');
+        const departmentDeleteBtn = document.getElementById('departmentDeleteBtn');
         const themeAccentPalette = [
             'from-brand-500/70 via-brandlt-300/60 to-brand-700/80',
             'from-[#FF7FD1]/55 via-[#B06AB3]/60 to-brand-700/80',
@@ -385,19 +393,102 @@
         function showError(message) { results.innerHTML = `<div class="col-span-full rounded-3xl border border-red-400/35 bg-red-100/70 dark:bg-red-500/10 dark:border-red-400/25 p-8 shadow-soft"><h2 class="text-lg font-semibold text-red-700 dark:text-red-200">Unable to load departments</h2><p class="mt-2 text-sm text-red-600/85 dark:text-red-200/80">${Collage.escapeHtml(message || 'Please verify the degree context and try again.')}</p></div>`; }
         function showEmpty() { results.innerHTML = `<div class="col-span-full rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur p-8 text-sm text-neutral-600 dark:text-white/65"><h2 class="text-lg font-semibold text-neutral-900 dark:text-white">No departments yet</h2><p class="mt-2">Add department information for this degree to continue building the academic hierarchy.</p></div>`; }
 
-        function resetDepartmentModal() { departmentForm?.reset(); departmentModalMessage.textContent = ''; departmentModalMessage.classList.add('hidden'); editingDepartmentId = null; departmentModalMode = 'add'; departmentSubmitBtn.innerHTML = `<span class="material-symbols-rounded text-base">save</span>Save department`; }
-        function setDepartmentModalLoading(isLoading) { departmentSubmitBtn.disabled = isLoading; departmentSubmitBtn.innerHTML = isLoading ? `<span class=\"material-symbols-rounded animate-spin text-base\">progress_activity</span> Saving…` : (departmentModalMode === 'edit' ? `<span class=\"material-symbols-rounded text-base\">save</span>Save changes` : `<span class=\"material-symbols-rounded text-base\">save</span>Save department`); }
-        function closeDepartmentModal() { departmentModal.classList.add('hidden'); document.body.classList.remove('overflow-hidden'); resetDepartmentModal(); }
+        const deleteBtnDefaultHTML = `<span class="material-symbols-rounded text-base">delete</span>Delete`;
+
+        function resetDepartmentModal() {
+            departmentForm?.reset();
+            departmentModalMessage.textContent = '';
+            departmentModalMessage.classList.add('hidden');
+            editingDepartmentId = null;
+            departmentModalMode = 'add';
+            departmentSubmitBtn.innerHTML = `<span class="material-symbols-rounded text-base">save</span>Save department`;
+            if (departmentDeleteBtn) {
+                departmentDeleteBtn.classList.add('hidden');
+                departmentDeleteBtn.disabled = false;
+                departmentDeleteBtn.innerHTML = deleteBtnDefaultHTML;
+            }
+        }
+
+        function setDepartmentModalLoading(isLoading) {
+            departmentSubmitBtn.disabled = isLoading;
+            departmentSubmitBtn.innerHTML = isLoading
+                ? `<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Saving…`
+                : (departmentModalMode === 'edit'
+                    ? `<span class="material-symbols-rounded text-base">save</span>Save changes`
+                    : `<span class="material-symbols-rounded text-base">save</span>Save department`);
+        }
+
+        function setDepartmentDeleteLoading(isLoading) {
+            if (!departmentDeleteBtn) return;
+            departmentDeleteBtn.disabled = isLoading;
+            departmentModalCancel.disabled = isLoading;
+            departmentSubmitBtn.disabled = isLoading;
+            departmentDeleteBtn.innerHTML = isLoading
+                ? `<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Deleting…`
+                : deleteBtnDefaultHTML;
+        }
+
+        function closeDepartmentModal() {
+            departmentModal.classList.add('hidden');
+            departmentModal.classList.remove('flex');
+            document.body.classList.remove('overflow-hidden');
+            resetDepartmentModal();
+        }
+
         function openDepartmentModal(mode = 'add', department) {
-            if (!degreeId) return; resetDepartmentModal(); departmentModalMode = mode; if (mode === 'edit' && department) { editingDepartmentId = department.id; departmentNameInput.value = department.name || ''; }
+            if (!degreeId) return;
+            resetDepartmentModal();
+            departmentModalMode = mode;
+            if (mode === 'edit' && department) {
+                editingDepartmentId = department.id;
+                departmentNameInput.value = department.name || '';
+            }
             departmentModalTitle.textContent = mode === 'edit' ? 'Edit department' : `Add a new department for ${currentDegreeLabel}`;
-            departmentSubmitBtn.innerHTML = mode === 'edit' ? `<span class=\"material-symbols-rounded text-base\">save</span>Save changes` : `<span class=\"material-symbols-rounded text-base\">save</span>Save department`;
-            departmentModal.classList.remove('hidden'); document.body.classList.add('overflow-hidden'); setTimeout(() => { if (mode === 'edit') { departmentNameInput?.select(); } else { departmentNameInput?.focus(); } }, 80);
+            departmentSubmitBtn.innerHTML = mode === 'edit'
+                ? `<span class="material-symbols-rounded text-base">save</span>Save changes`
+                : `<span class="material-symbols-rounded text-base">save</span>Save department`;
+            if (departmentDeleteBtn) {
+                if (mode === 'edit') departmentDeleteBtn.classList.remove('hidden');
+                else departmentDeleteBtn.classList.add('hidden');
+                departmentDeleteBtn.disabled = false;
+                departmentDeleteBtn.innerHTML = deleteBtnDefaultHTML;
+            }
+            departmentModal.classList.remove('hidden');
+            departmentModal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => {
+                if (mode === 'edit') { departmentNameInput?.select(); }
+                else { departmentNameInput?.focus(); }
+            }, 80);
         }
 
         async function handleDepartmentSubmit(e) { e.preventDefault(); if (!collegeId || !degreeId) { departmentModalMessage.textContent = 'Missing college or degree context. Please navigate from the degrees page again.'; departmentModalMessage.classList.remove('hidden'); return; } const name = (departmentNameInput.value || '').trim(); if (!name) { departmentModalMessage.textContent = 'Please enter the department name.'; departmentModalMessage.classList.remove('hidden'); departmentNameInput.focus(); return; } departmentModalMessage.classList.add('hidden'); setDepartmentModalLoading(true); const payload = { name }; try { if (departmentModalMode === 'edit' && editingDepartmentId) { await Collage.fetchJson(`/api/departments/${editingDepartmentId}`, { method: 'PUT', body: payload, skipAuth: true }); } else { await Collage.fetchJson(`/api/degrees/${degreeId}/departments`, { method: 'POST', body: payload, skipAuth: true }); } closeDepartmentModal(); await loadDepartments(); } catch (error) { let message = error?.message ?? 'Unable to save department. Please try again.'; if (typeof message !== 'string') { try { message = JSON.stringify(message); } catch (_) { message = 'Unable to save department. Please try again.'; } } if (message === '[object Object]') message = 'Unexpected response from server. Please try again.'; departmentModalMessage.textContent = message; departmentModalMessage.classList.remove('hidden'); console.error(error); } finally { setDepartmentModalLoading(false); } }
 
-        function initDepartmentModal() { if (!addDepartmentBtn) return; if (!degreeId) { addDepartmentBtn.disabled = true; addDepartmentBtn.classList.add('opacity-60', 'cursor-not-allowed'); } addDepartmentBtn.addEventListener('click', () => openDepartmentModal('add')); departmentModalCancel?.addEventListener('click', closeDepartmentModal); departmentModalClose?.addEventListener('click', closeDepartmentModal); departmentModalBackdrop?.addEventListener('click', closeDepartmentModal); departmentForm?.addEventListener('submit', handleDepartmentSubmit); document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !departmentModal.classList.contains('hidden')) closeDepartmentModal(); }); }
+        async function handleDepartmentDelete() {
+            if (!editingDepartmentId) return;
+            const ok = window.confirm('Delete this department and its batches? This cannot be undone.');
+            if (!ok) return;
+            setDepartmentDeleteLoading(true);
+            departmentModalMessage.classList.add('hidden');
+            try {
+                await Collage.fetchJson(`/api/departments/${editingDepartmentId}`, { method: 'DELETE', skipAuth: true });
+                closeDepartmentModal();
+                await loadDepartments();
+            } catch (error) {
+                let message = error?.message ?? 'Unable to delete department. Please try again.';
+                if (typeof message !== 'string') {
+                    try { message = JSON.stringify(message); } catch (_) { message = 'Unable to delete department. Please try again.'; }
+                }
+                if (message === '[object Object]') message = 'Unexpected response from server. Please try again.';
+                departmentModalMessage.textContent = message;
+                departmentModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setDepartmentDeleteLoading(false);
+            }
+        }
+
+        function initDepartmentModal() { if (!addDepartmentBtn) return; if (!degreeId) { addDepartmentBtn.disabled = true; addDepartmentBtn.classList.add('opacity-60', 'cursor-not-allowed'); } addDepartmentBtn.addEventListener('click', () => openDepartmentModal('add')); departmentModalCancel?.addEventListener('click', closeDepartmentModal); departmentModalClose?.addEventListener('click', closeDepartmentModal); departmentModalBackdrop?.addEventListener('click', closeDepartmentModal); departmentForm?.addEventListener('submit', handleDepartmentSubmit); departmentDeleteBtn?.addEventListener('click', handleDepartmentDelete); document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !departmentModal.classList.contains('hidden')) closeDepartmentModal(); }); }
 
         function attachDepartmentEditHandlers() { const editButtons = results.querySelectorAll('[data-department-edit]'); editButtons.forEach(btn => { btn.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation(); const id = btn.getAttribute('data-department-edit'); const department = departmentsCache.find(item => String(item.id) === String(id)); if (department) openDepartmentModal('edit', department); }); }); }
         function attachDepartmentCardNavigation() { const cards = results.querySelectorAll('[data-department-card]'); cards.forEach(card => { const href = card.getAttribute('data-department-card'); if (!href) return; card.addEventListener('click', (ev) => { if (ev.target.closest('[data-department-edit]')) return; if (ev.target.closest('a')) return; window.location.href = href; }); card.addEventListener('keydown', (ev) => { if ((ev.key === 'Enter' || ev.key === ' ') && !ev.target.closest('[data-department-edit]')) { ev.preventDefault(); window.location.href = href; } }); }); }

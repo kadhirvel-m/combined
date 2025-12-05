@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DC Machine Characteristics Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-amber: #ffaa00;
+            --neon-red: #ff3333;
+            --bg-dark: #0f111a;
+            --panel-bg: rgba(20, 25, 40, 0.9);
+            --grid-color: rgba(255, 255, 255, 0.05);
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #e0e0e0;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f111a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+        }
+
+        /* Canvas Grid Background */
+        .graph-container {
+            background-image:
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            position: relative;
+        }
+
+        /* Custom Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            height: 30px;
+            /* Increased hit area */
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 28px;
+            /* Larger thumb */
+            width: 28px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 0 20px var(--neon-blue);
+            cursor: pointer;
+            margin-top: -12px;
+            transition: transform 0.1s;
+            border: 2px solid var(--neon-blue);
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #333;
+            border-radius: 3px;
+        }
+
+        /* Motor Visualizer Animation */
+        .motor-rotor {
+            transition: transform 0.1s linear;
+            transform-origin: center;
+        }
+
+        .spark {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: var(--neon-amber);
+            border-radius: 50%;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 50;
+        }
+
+        .mode-btn.active {
+            background: rgba(0, 243, 255, 0.15);
+            border-color: var(--neon-blue);
+            color: var(--neon-blue);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.1);
+        }
+
+        /* Animations */
+        @keyframes pulse-green {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .animate-pulse-green {
+            animation: pulse-green 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="h-16 shrink-0 border-b border-gray-800 flex items-center justify-between px-6 bg-[#0a0c12] z-30">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-bolt text-yellow-400 text-xl"></i>
+            <h1 class="text-xl font-bold tracking-wide">ELECTRO<span class="text-cyan-400">LAB</span> <span
+                    class="hidden sm:inline text-xs text-gray-500 font-normal ml-2">VIRTUAL MACHINES LAB</span></h1>
+        </div>
+        <div class="flex gap-4 text-sm">
+            <div id="connection-status" class="flex items-center gap-2 text-green-400 font-mono text-xs">
+                <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse-green"></span> ONLINE
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+
+        <!-- Sidebar: Configuration (Added shrink-0 to prevent collapsing) -->
+        <aside
+            class="w-full md:w-80 shrink-0 glass-panel m-4 flex flex-col gap-6 p-5 overflow-y-auto z-20 order-2 md:order-1 h-1/3 md:h-auto border-r border-gray-800">
+
+            <!-- Mode Selection -->
+            <div>
+                <h3 class="text-xs uppercase tracking-wider text-gray-400 mb-3 font-semibold">1. Select Machine</h3>
+                <div class="flex gap-2 p-1 bg-black/40 rounded-lg border border-gray-800">
+                    <button onclick="switchMachine('motor')" id="btn-motor"
+                        class="mode-btn active flex-1 py-3 rounded-md text-sm font-bold transition-all duration-300 border border-transparent">
+                        <i class="fas fa-cog mr-2"></i>Motor
+                    </button>
+                    <button onclick="switchMachine('generator')" id="btn-generator"
+                        class="mode-btn flex-1 py-3 rounded-md text-sm font-bold transition-all duration-300 border border-transparent">
+                        <i class="fas fa-charging-station mr-2"></i>Generator
+                    </button>
+                </div>
+            </div>
+
+            <!-- Experiment Selection -->
+            <div>
+                <h3 class="text-xs uppercase tracking-wider text-gray-400 mb-3 font-semibold">2. Experiment</h3>
+                <select id="experiment-select" onchange="changeExperiment(true)"
+                    class="w-full bg-[#151925] border border-gray-700 text-gray-200 text-sm rounded-lg p-3 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none transition-colors shadow-lg">
+                    <!-- Options populated by JS -->
+                </select>
+            </div>
+
+            <!-- Context Info -->
+            <div class="mt-auto">
+                <div class="p-4 bg-cyan-900/10 border border-cyan-500/20 rounded-lg">
+                    <div class="flex items-start gap-3">
+                        <i class="fas fa-lightbulb text-yellow-400 mt-1"></i>
+                        <div>
+                            <h4 class="text-sm font-bold text-cyan-100 mb-1">Observation</h4>
+                            <p id="concept-text" class="text-xs text-gray-400 leading-relaxed font-medium">
+                                Select an experiment to begin the simulation.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Visualization & Graph -->
+        <section class="flex-1 flex flex-col m-4 md:ml-0 gap-4 relative order-1 md:order-2 overflow-hidden">
+
+            <!-- Graph Area -->
+            <div class="flex-1 glass-panel relative flex flex-col overflow-hidden min-h-[300px]">
+                <div class="absolute top-4 left-4 z-10 flex flex-wrap gap-2 pointer-events-none">
+                    <div
+                        class="bg-black/80 px-3 py-1.5 rounded text-xs text-cyan-400 font-mono border border-cyan-900 shadow-lg backdrop-blur-sm">
+                        X: <span id="x-axis-label">LOAD CURRENT</span>
+                    </div>
+                    <div
+                        class="bg-black/80 px-3 py-1.5 rounded text-xs text-amber-400 font-mono border border-yellow-900 shadow-lg backdrop-blur-sm">
+                        Y: <span id="y-axis-label">TERMINAL VOLTAGE</span>
+                    </div>
+                </div>
+
+                <div class="graph-container w-full h-full" id="canvas-wrapper">
+                    <canvas id="mainChart"></canvas>
+                    <!-- Floating marker label -->
+                    <div id="plot-marker"
+                        class="absolute pointer-events-none opacity-0 bg-gray-900/90 text-white text-xs px-2 py-1 rounded border border-gray-600 transform -translate-x-1/2 -translate-y-full mb-3 shadow-xl whitespace-nowrap z-20 backdrop-blur-md">
+                        0, 0
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control Deck -->
+            <div
+                class="shrink-0 h-auto md:h-48 glass-panel p-4 md:p-6 flex flex-col md:flex-row gap-6 items-center overflow-x-auto">
+
+                <!-- Physical Visualizer (Left) - Added shrink-0 -->
+                <div
+                    class="w-full md:w-56 shrink-0 flex md:flex-col items-center justify-between md:justify-center md:border-r border-gray-700 md:pr-6 relative">
+                    <div class="relative w-20 h-20 md:w-24 md:h-24 mb-0 md:mb-2">
+                        <!-- SVG Motor Representation -->
+                        <svg viewBox="0 0 100 100" class="w-full h-full drop-shadow-[0_0_15px_rgba(0,243,255,0.3)]">
+                            <!-- Stator -->
+                            <circle cx="50" cy="50" r="45" stroke="#333" stroke-width="4" fill="#1a1a1a" />
+                            <path d="M50 5 L50 15 M50 85 L50 95 M5 50 L15 50 M85 50 L95 50" stroke="#555"
+                                stroke-width="2" />
+
+                            <!-- Rotor (This spins) -->
+                            <g id="rotor-group">
+                                <circle cx="50" cy="50" r="30" stroke="#00f3ff" stroke-width="2" fill="none"
+                                    stroke-dasharray="5,5" />
+                                <rect x="45" y="20" width="10" height="60" fill="#444" rx="2" />
+                                <rect x="20" y="45" width="60" height="10" fill="#444" rx="2" />
+                                <circle cx="50" cy="50" r="8" fill="#ffaa00" />
+                            </g>
+                        </svg>
+                        <div id="spark-container"
+                            class="absolute inset-0 overflow-hidden rounded-full pointer-events-none"></div>
+                    </div>
+                    <div class="text-right md:text-center">
+                        <span id="machine-label"
+                            class="block text-[10px] font-bold tracking-widest text-gray-500 uppercase">DC MOTOR</span>
+                        <div id="rpm-display" class="text-cyan-400 font-mono text-lg font-bold">0 RPM</div>
+                    </div>
+                </div>
+
+                <!-- Sliders & Meters (Middle) -->
+                <div class="flex-1 w-full flex flex-col justify-center gap-4">
+                    <!-- Dynamic Controls generated by JS -->
+                    <div id="controls-container" class="w-full">
+                        <div class="mb-2 flex justify-between items-end">
+                            <span id="control-label" class="text-sm font-semibold text-gray-300">Load Current</span>
+                            <span id="control-val"
+                                class="text-2xl font-mono text-white font-bold text-shadow-glow">0.0</span>
+                        </div>
+
+                        <div class="relative h-10 flex items-center">
+                            <input type="range" id="main-slider" min="0" max="100" value="0" step="0.5">
+                        </div>
+
+                        <div
+                            class="flex justify-between text-[10px] text-gray-500 font-bold tracking-wider font-mono uppercase mt-1">
+                            <span>Zero Load</span>
+                            <span>Rated Capacity</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Digital Readout (Right) -->
+                <div class="w-full md:w-64 shrink-0 grid grid-cols-2 gap-3">
+                    <div class="bg-black/40 p-2 md:p-3 rounded border border-gray-800/50">
+                        <div class="text-[9px] md:text-[10px] text-gray-500 uppercase font-bold">Voltage</div>
+                        <div class="text-base md:text-lg font-mono text-cyan-300" id="val-v">0.0 V</div>
+                    </div>
+                    <div class="bg-black/40 p-2 md:p-3 rounded border border-gray-800/50">
+                        <div class="text-[9px] md:text-[10px] text-gray-500 uppercase font-bold">Current</div>
+                        <div class="text-base md:text-lg font-mono text-yellow-300" id="val-i">0.0 A</div>
+                    </div>
+                    <div class="bg-black/40 p-2 md:p-3 rounded border border-gray-800/50">
+                        <div class="text-[9px] md:text-[10px] text-gray-500 uppercase font-bold">Torque</div>
+                        <div class="text-base md:text-lg font-mono text-green-300" id="val-t">0.0 Nm</div>
+                    </div>
+                    <div class="bg-black/40 p-2 md:p-3 rounded border border-gray-800/50">
+                        <div class="text-[9px] md:text-[10px] text-gray-500 uppercase font-bold">Efficiency</div>
+                        <div class="text-base md:text-lg font-mono text-purple-300" id="val-eff">0 %</div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        /**
+         * DC Machines Characteristics Simulator
+         * Uses HTML Canvas for graphing and GSAP for animations.
+         */
+
+        // --- Configuration & Physics Models ---
+
+        const CONFIG = {
+            canvasPadding: 50,
+            axisColor: '#6b7280',
+            gridColor: '#374151',
+            motor: {
+                v_rated: 220, // Volts
+                r_a: 0.5,     // Armature Resistance
+                r_sh: 110,    // Shunt Resistance
+                k_phi: 1.2,   // Flux constant (simplified)
+                no_load_speed: 1500, // RPM
+                no_load_current: 2   // Amps
+            },
+            generator: {
+                rated_speed: 1500,
+                residual_voltage: 12,
+                saturation_factor: 0.05
+            }
+        };
+
+        // Physics logic for different curves
+        const EXPERIMENTS = {
+            // --- MOTOR EXPERIMENTS ---
+            'motor_torque_speed': {
+                type: 'motor',
+                title: 'Torque vs Speed',
+                xLabel: 'Torque (N.m)',
+                yLabel: 'Speed (RPM)',
+                xMax: 50,
+                yMax: 1600,
+                controlLabel: 'Mechanical Load (Torque)',
+                description: 'Observation: As you increase the Torque (Load), the Speed decreases slightly. This drop is due to the IR voltage drop in the armature circuit. This is why Shunt motors are called "Constant Speed" motors.',
+                calculate: (inputPercent) => {
+                    // Input is 0-100% of Max Torque
+                    const T = (inputPercent / 100) * 50;
+
+                    // Speed equation: N = V - IaRa / kPhi
+                    const drop = T * 5.5;
+                    let N = CONFIG.motor.no_load_speed - drop;
+                    if (N < 0) N = 0;
+
+                    const Ia = (T / CONFIG.motor.k_phi) + CONFIG.motor.no_load_current;
+
+                    return { x: T, y: N, aux: { v: 220, i: Ia, t: T, eff: calcEff(220, Ia, T, N) } };
+                }
+            },
+            'motor_current_torque': {
+                type: 'motor',
+                title: 'Armature Current vs Torque',
+                xLabel: 'Armature Current (A)',
+                yLabel: 'Torque (N.m)',
+                xMax: 60,
+                yMax: 70,
+                controlLabel: 'Armature Current (via Load)',
+                description: 'Observation: The Torque is directly proportional to the Armature Current. Notice the linear graph. This linear relationship makes DC motors excellent for control applications.',
+                calculate: (inputPercent) => {
+                    const Ia = (inputPercent / 100) * 60;
+                    const T = CONFIG.motor.k_phi * (Ia > 1 ? Ia - 1 : 0); // Slight offset for friction
+                    const N = CONFIG.motor.no_load_speed - (T * 2);
+
+                    return { x: Ia, y: T, aux: { v: 220, i: Ia, t: T, eff: calcEff(220, Ia, T, N) } };
+                }
+            },
+            'motor_eff_load': {
+                type: 'motor',
+                title: 'Efficiency vs Output Power',
+                xLabel: 'Output Power (kW)',
+                yLabel: 'Efficiency (%)',
+                xMax: 10,
+                yMax: 100,
+                controlLabel: 'Load',
+                description: 'Observation: Efficiency rises initially as output increases, peaks when Variable Losses = Constant Losses, then drops as Copper Losses (I²R) increase drastically.',
+                calculate: (inputPercent) => {
+                    // Simulate typical efficiency curve
+                    const loadFactor = inputPercent / 100; // 0 to 1
+                    if (loadFactor === 0) return { x: 0, y: 0, aux: { v: 220, i: 2, t: 0, eff: 0 } };
+
+                    // Math approximation for eff curve
+                    let eff = (2.8 * loadFactor - 1.9 * (loadFactor * loadFactor)) * 100;
+                    if (eff > 88) eff = 88; // Realistic cap
+                    if (eff < 0) eff = 0;
+
+                    const Pout = loadFactor * 8; // Max 8kW
+
+                    return { x: Pout, y: eff, aux: { v: 220, i: loadFactor * 40, t: loadFactor * 30, eff: eff } };
+                }
+            },
+
+            // --- GENERATOR EXPERIMENTS ---
+            'gen_occ': {
+                type: 'generator',
+                title: 'Open Circuit Characteristics (OCC)',
+                xLabel: 'Field Current (If) [A]',
+                yLabel: 'Generated Voltage (Eg) [V]',
+                xMax: 2.5,
+                yMax: 300,
+                controlLabel: 'Field Rheostat (Current)',
+                description: 'Observation: Notice the curve starts above 0V due to Residual Magnetism. It rises linearly then bends. The bending point is "Saturation" where increasing current yields less voltage gain.',
+                calculate: (inputPercent) => {
+                    const If = (inputPercent / 100) * 2.5;
+
+                    // Saturation Math: Linear region + Tanh for knee + Offset
+                    const linearPart = If * 40;
+                    const saturationPart = 240 * Math.tanh(If * 0.8);
+
+                    let Eg = CONFIG.generator.residual_voltage + saturationPart;
+
+                    return { x: If, y: Eg, aux: { v: Eg, i: 0, t: 0, eff: 0 } };
+                }
+            },
+            'gen_load': {
+                type: 'generator',
+                title: 'Load Characteristics (V vs IL)',
+                xLabel: 'Load Current (IL) [A]',
+                yLabel: 'Terminal Voltage (V)',
+                xMax: 50,
+                yMax: 250,
+                controlLabel: 'Electrical Load',
+                description: 'Observation: As you increase load current, voltage drops. This drop is caused by Armature Resistance (IaRa) and Armature Reaction (weakening of main flux).',
+                calculate: (inputPercent) => {
+                    const Il = (inputPercent / 100) * 50;
+                    const NoLoadV = 230;
+
+                    // Drops
+                    const IaRa = Il * 0.8;
+                    const ArmatureReaction = 0.04 * (Il * Il);
+
+                    let V = NoLoadV - IaRa - ArmatureReaction;
+                    if (V < 0) V = 0;
+
+                    return { x: Il, y: V, aux: { v: V, i: Il, t: Il * 0.5, eff: (V * Il) / ((V * Il) + (Il * Il * 0.5) + 200) * 100 } };
+                }
+            }
+        };
+
+        // Helper for efficiency
+        function calcEff(V, I, T, N) {
+            if (I === 0 || V === 0) return 0;
+            const P_in = V * I;
+            const P_out = (2 * Math.PI * N * T) / 60;
+            return (P_out / P_in) * 100;
+        }
+
+        // --- Application State ---
+
+        let currentState = {
+            experimentKey: 'motor_torque_speed',
+            sliderValue: 20, // Start with some value to show graph immediately
+            points: [],
+            animationFrameId: null
+        };
+
+        // --- DOM Elements ---
+
+        const canvas = document.getElementById('mainChart');
+        const ctx = canvas.getContext('2d');
+        const slider = document.getElementById('main-slider');
+        const rotorGroup = document.getElementById('rotor-group');
+        const sparkContainer = document.getElementById('spark-container');
+
+        // --- Initialization ---
+
+        function init() {
+            // Populate Select Dropdown
+            updateExperimentDropdown('motor');
+
+            // Resize Observer for Canvas
+            const resizeObserver = new ResizeObserver(() => {
+                requestAnimationFrame(resizeCanvas);
+            });
+            resizeObserver.observe(document.getElementById('canvas-wrapper'));
+
+            // Event Listeners
+            slider.addEventListener('input', handleInput);
+
+            // Initial State Setup
+            slider.value = 30; // Set visual slider
+            currentState.sliderValue = 30; // Set internal state
+
+            // Start Loops
+            startSimulationLoop();
+
+            // Force initial calculation and draw
+            setTimeout(() => {
+                resizeCanvas();
+                handleInput({ target: { value: 30 } });
+            }, 100);
+        }
+
+        function switchMachine(type) {
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`btn-${type}`).classList.add('active');
+            updateExperimentDropdown(type);
+        }
+
+        function updateExperimentDropdown(type) {
+            const select = document.getElementById('experiment-select');
+            select.innerHTML = '';
+
+            Object.keys(EXPERIMENTS).forEach(key => {
+                if (EXPERIMENTS[key].type === type) {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.innerText = EXPERIMENTS[key].title;
+                    select.appendChild(opt);
+                }
+            });
+
+            select.value = select.options[0].value;
+            // When switching machine, reset to default safe value
+            changeExperiment(false);
+        }
+
+        function changeExperiment(resetSlider = true) {
+            const key = document.getElementById('experiment-select').value;
+            currentState.experimentKey = key;
+            const exp = EXPERIMENTS[key];
+
+            if (resetSlider) {
+                slider.value = 20;
+                currentState.sliderValue = 20;
+            }
+
+            // Update UI Labels
+            document.getElementById('x-axis-label').innerText = exp.xLabel;
+            document.getElementById('y-axis-label').innerText = exp.yLabel;
+            document.getElementById('control-label').innerText = exp.controlLabel;
+            document.getElementById('concept-text').innerText = exp.description;
+
+            // Animate Text Change
+            gsap.from('#concept-text', { opacity: 0, x: -10, duration: 0.3 });
+
+            // Update Machine Visualizer Label
+            document.getElementById('machine-label').innerText = exp.type === 'motor' ? 'DC SHUNT MOTOR' : 'DC GENERATOR';
+        }
+
+        function resizeCanvas() {
+            const parent = canvas.parentElement;
+            if (!parent) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            // Set display size (css pixels)
+            const displayWidth = parent.clientWidth;
+            const displayHeight = parent.clientHeight;
+
+            if (canvas.width !== displayWidth * dpr || canvas.height !== displayHeight * dpr) {
+                canvas.width = displayWidth * dpr;
+                canvas.height = displayHeight * dpr;
+                ctx.scale(dpr, dpr);
+            }
+
+            drawGraph();
+        }
+
+        function handleInput(e) {
+            const targetVal = parseFloat(e.target.value);
+
+            // Smoothly animate the value
+            gsap.to(currentState, {
+                sliderValue: targetVal,
+                duration: 0.3,
+                ease: "power2.out",
+                onUpdate: () => {
+                    document.getElementById('control-val').innerText = currentState.sliderValue.toFixed(1);
+                }
+            });
+        }
+
+        // --- Core Drawing & Animation Logic ---
+
+        function startSimulationLoop() {
+            gsap.ticker.add(() => {
+                calculateData();
+                drawGraph();
+                updateVisuals();
+            });
+        }
+
+        function calculateData() {
+            const exp = EXPERIMENTS[currentState.experimentKey];
+            const result = exp.calculate(currentState.sliderValue);
+
+            currentState.points = [];
+
+            // Dynamic resolution based on slider position to ensure clean line
+            const currentVal = Math.max(0.5, currentState.sliderValue); // Ensure at least one point
+            const steps = Math.ceil(currentVal);
+
+            // Always start at 0
+            for (let i = 0; i <= steps; i += 0.5) {
+                currentState.points.push(exp.calculate(i));
+            }
+
+            // Ensure the very last point is exactly the current value
+            if (currentState.points.length > 0) {
+                currentState.points[currentState.points.length - 1] = exp.calculate(currentState.sliderValue);
+            }
+
+            currentState.aux = result.aux;
+        }
+
+        function updateVisuals() {
+            if (!currentState.aux) return;
+
+            // 1. Digital Meters
+            document.getElementById('val-v').innerText = currentState.aux.v.toFixed(1) + ' V';
+            document.getElementById('val-i').innerText = currentState.aux.i.toFixed(1) + ' A';
+            document.getElementById('val-t').innerText = currentState.aux.t.toFixed(1) + ' Nm';
+            document.getElementById('val-eff').innerText = currentState.aux.eff.toFixed(1) + ' %';
+
+            // 2. Rotor Animation
+            const speed = currentState.aux.v > 10 ? (currentState.experimentKey.includes('speed') ? currentState.points[currentState.points.length - 1].y : 1500) : 0;
+
+            // Continuous Rotation Logic
+            if (!window.rotorTween) {
+                window.rotorTween = gsap.to(rotorGroup, { rotation: 360, duration: 1, repeat: -1, ease: "none" });
+            }
+
+            if (speed < 10) {
+                window.rotorTween.pause();
+            } else {
+                window.rotorTween.play();
+                // Adjust speed: 2000 is base factor. Higher speed = Lower Duration
+                const dur = Math.max(0.05, 1000 / (speed || 1));
+                window.rotorTween.duration(dur);
+            }
+
+            document.getElementById('rpm-display').innerText = Math.round(speed) + ' RPM';
+
+            // 3. Sparks Logic (Only at high current)
+            if (currentState.aux.i > 45 && Math.random() > 0.92) {
+                createSpark();
+            }
+        }
+
+        function createSpark() {
+            const spark = document.createElement('div');
+            spark.classList.add('spark');
+            sparkContainer.appendChild(spark);
+
+            const angle = Math.random() * Math.PI * 2;
+            const r = 20; // Radius relative to container %
+            const x = 50 + Math.cos(angle) * r;
+            const y = 50 + Math.sin(angle) * r;
+
+            spark.style.left = x + '%';
+            spark.style.top = y + '%';
+
+            gsap.fromTo(spark,
+                { opacity: 1, scale: 0.5 },
+                { opacity: 0, scale: 2, x: (Math.random() - 0.5) * 30, y: (Math.random() - 0.5) * 30, duration: 0.4, onComplete: () => spark.remove() }
+            );
+        }
+
+        function drawGraph() {
+            const dpr = window.devicePixelRatio || 1;
+            // Use logic coordinates
+            const w = canvas.width / dpr;
+            const h = canvas.height / dpr;
+
+            if (w === 0 || h === 0) return;
+
+            const exp = EXPERIMENTS[currentState.experimentKey];
+
+            // Clear
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Reset Transform for crisp lines
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            const pad = CONFIG.canvasPadding;
+            const graphW = w - (pad * 1.5);
+            const graphH = h - (pad * 1.5);
+            const originX = pad;
+            const originY = h - pad;
+
+            // --- Draw Grid & Axes ---
+            ctx.lineWidth = 1;
+
+            // X Grid
+            const xSteps = 5;
+            ctx.textAlign = 'center';
+            ctx.font = '10px JetBrains Mono';
+            ctx.fillStyle = '#9ca3af';
+
+            for (let i = 0; i <= xSteps; i++) {
+                const xPos = originX + (graphW / xSteps) * i;
+                const val = (exp.xMax / xSteps) * i;
+
+                ctx.beginPath();
+                ctx.strokeStyle = i === 0 ? CONFIG.axisColor : CONFIG.gridColor;
+                ctx.lineWidth = i === 0 ? 2 : 1;
+                ctx.moveTo(xPos, originY);
+                ctx.lineTo(xPos, pad);
+                ctx.stroke();
+
+                ctx.fillText(val.toFixed(1), xPos, originY + 15);
+            }
+
+            // Y Grid
+            const ySteps = 5;
+            ctx.textAlign = 'right';
+            for (let i = 0; i <= ySteps; i++) {
+                const yPos = originY - (graphH / ySteps) * i;
+                const val = (exp.yMax / ySteps) * i;
+
+                ctx.beginPath();
+                ctx.strokeStyle = i === 0 ? CONFIG.axisColor : CONFIG.gridColor;
+                ctx.lineWidth = i === 0 ? 2 : 1;
+                ctx.moveTo(originX, yPos);
+                ctx.lineTo(originX + graphW, yPos);
+                ctx.stroke();
+
+                ctx.fillText(val.toFixed(0), originX - 8, yPos + 3);
+            }
+
+            // --- Draw Curve ---
+            if (currentState.points.length > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = exp.type === 'motor' ? '#00f3ff' : '#ffaa00';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                // Glow effect
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = ctx.strokeStyle;
+
+                currentState.points.forEach((pt, index) => {
+                    const px = originX + (pt.x / exp.xMax) * graphW;
+                    const py = originY - (pt.y / exp.yMax) * graphH;
+
+                    // Clamp visual range to graph area
+                    // (Optional: pure canvas clip would be better but this is simpler)
+
+                    if (index === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                });
+                ctx.stroke();
+
+                // Remove glow
+                ctx.shadowBlur = 0;
+
+                // Draw Head Dot
+                const lastPt = currentState.points[currentState.points.length - 1];
+                const hx = originX + (lastPt.x / exp.xMax) * graphW;
+                const hy = originY - (lastPt.y / exp.yMax) * graphH;
+
+                ctx.beginPath();
+                ctx.fillStyle = '#fff';
+                ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Update HTML Marker
+                const marker = document.getElementById('plot-marker');
+                marker.style.left = (hx) + 'px';
+                marker.style.top = (hy) + 'px';
+                marker.style.opacity = 1;
+                marker.innerText = `(${lastPt.x.toFixed(1)}, ${lastPt.y.toFixed(1)})`;
+            }
+        }
+
+        // Start App
+        window.onload = init;
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DC Machine Characteristics Lab</title>
+
+    <!-- Tailwind CSS for Layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js for Plotting -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- GSAP for Animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --accent-motor: #3b82f6;
+            /* Blue */
+            --accent-gen: #10b981;
+            /* Green */
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Custom Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            transition: transform 0.1s;
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #475569;
+            border-radius: 2px;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-btn.active {
+            background-color: rgba(59, 130, 246, 0.2);
+            border-left: 4px solid #3b82f6;
+            color: white;
+        }
+
+        .gen-btn.active {
+            background-color: rgba(16, 185, 129, 0.2);
+            border-left: 4px solid #10b981;
+            color: white;
+        }
+
+        /* Chart Container aspect ratio */
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col md:flex-row">
+
+    <!-- Sidebar / Navigation -->
+    <aside class="w-full md:w-64 bg-slate-900 border-r border-slate-700 flex flex-col shrink-0 z-20">
+        <div class="p-6 border-b border-slate-700">
+            <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-green-400">
+                <i class="ph ph-circuitry mr-2"></i>ElectroLab
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">Machine Characteristics</p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto py-4">
+
+            <!-- Motor Section -->
+            <div class="mb-6">
+                <h3 class="px-6 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">DC Motor</h3>
+                <button onclick="setSimulation('motor_torque_speed')" id="btn-motor_torque_speed"
+                    class="nav-btn w-full text-left px-6 py-3 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center group">
+                    <i class="ph ph-speedometer text-lg mr-3 group-hover:text-blue-400"></i>
+                    Torque vs Speed
+                </button>
+                <button onclick="setSimulation('motor_current_torque')" id="btn-motor_current_torque"
+                    class="nav-btn w-full text-left px-6 py-3 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center group">
+                    <i class="ph ph-lightning text-lg mr-3 group-hover:text-blue-400"></i>
+                    Current vs Torque
+                </button>
+                <button onclick="setSimulation('motor_efficiency')" id="btn-motor_efficiency"
+                    class="nav-btn w-full text-left px-6 py-3 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center group">
+                    <i class="ph ph-trend-up text-lg mr-3 group-hover:text-blue-400"></i>
+                    Efficiency vs Load
+                </button>
+            </div>
+
+            <!-- Generator Section -->
+            <div>
+                <h3 class="px-6 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">DC Generator</h3>
+                <button onclick="setSimulation('gen_occ')" id="btn-gen_occ"
+                    class="gen-btn w-full text-left px-6 py-3 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center group">
+                    <i class="ph ph-wave-sine text-lg mr-3 group-hover:text-green-400"></i>
+                    OCC (Open Circuit)
+                </button>
+                <button onclick="setSimulation('gen_load')" id="btn-gen_load"
+                    class="gen-btn w-full text-left px-6 py-3 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center group">
+                    <i class="ph ph-battery-charging text-lg mr-3 group-hover:text-green-400"></i>
+                    Load Characteristics
+                </button>
+            </div>
+        </div>
+
+        <div class="p-4 border-t border-slate-700">
+            <div class="text-xs text-slate-500 text-center">v1.0 Interactive Simulation</div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col bg-slate-900 relative overflow-hidden">
+
+        <!-- Background Grid Effect -->
+        <div class="absolute inset-0 opacity-10 pointer-events-none"
+            style="background-image: radial-gradient(#4b5563 1px, transparent 1px); background-size: 20px 20px;">
+        </div>
+
+        <!-- Top Bar -->
+        <header
+            class="h-16 border-b border-slate-700 flex items-center justify-between px-8 bg-slate-900/80 backdrop-blur z-10">
+            <h2 id="page-title" class="text-xl font-semibold text-white">Select a Simulation</h2>
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
+                <span class="text-xs text-green-400 font-mono">SYSTEM ACTIVE</span>
+            </div>
+        </header>
+
+        <!-- Workspace -->
+        <div class="flex-1 p-6 md:p-8 overflow-y-auto flex flex-col lg:flex-row gap-6">
+
+            <!-- Left: Visualization -->
+            <div class="flex-1 flex flex-col gap-6">
+                <!-- Chart Area -->
+                <div class="glass-panel rounded-xl p-4 shadow-2xl relative">
+                    <div class="absolute top-4 right-4 flex gap-2">
+                        <span class="text-xs font-mono text-slate-400 border border-slate-600 px-2 py-1 rounded">X:
+                            <span id="val-x" class="text-white">0</span></span>
+                        <span class="text-xs font-mono text-slate-400 border border-slate-600 px-2 py-1 rounded">Y:
+                            <span id="val-y" class="text-white">0</span></span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Theory Box -->
+                <div id="theory-box"
+                    class="glass-panel rounded-xl p-6 border-l-4 border-blue-500 transition-all duration-300">
+                    <h3 class="text-lg font-semibold mb-2 flex items-center">
+                        <i class="ph ph-info text-blue-400 mr-2"></i> Analysis
+                    </h3>
+                    <p id="theory-text" class="text-slate-300 leading-relaxed text-sm">
+                        Select a characteristic curve from the sidebar to begin the simulation.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Right: Controls & Metrics -->
+            <div class="w-full lg:w-80 flex flex-col gap-6 shrink-0">
+
+                <!-- Controls Panel -->
+                <div class="glass-panel rounded-xl p-6">
+                    <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-6">Input Controls</h3>
+
+                    <div class="space-y-8">
+                        <div class="relative">
+                            <div class="flex justify-between mb-2">
+                                <label id="slider-label" class="text-sm font-medium text-white">Load Current
+                                    (Ia)</label>
+                                <span id="slider-val-display" class="text-sm font-mono text-blue-400">0 A</span>
+                            </div>
+                            <input type="range" id="main-slider" min="0" max="100" value="0" step="1" class="w-full">
+                            <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                                <span>Min</span>
+                                <span>Max</span>
+                            </div>
+                        </div>
+
+                        <!-- Status Indicators -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-800/50 p-3 rounded border border-slate-700 text-center">
+                                <div class="text-xs text-slate-500 mb-1">Status</div>
+                                <div id="status-indicator" class="text-sm font-bold text-green-400">Running</div>
+                            </div>
+                            <div class="bg-slate-800/50 p-3 rounded border border-slate-700 text-center">
+                                <div class="text-xs text-slate-500 mb-1">Drop</div>
+                                <div id="drop-indicator" class="text-sm font-bold text-red-400">0 V</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Schematic / Info -->
+                <div
+                    class="glass-panel rounded-xl p-6 flex-1 flex flex-col justify-center items-center text-center relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5"></div>
+
+                    <i id="mode-icon" class="ph ph-engine text-6xl text-slate-600 mb-4 transition-all duration-500"></i>
+                    <h4 id="mode-subtitle" class="text-lg font-semibold text-white mb-1">Waiting for Input</h4>
+                    <p class="text-xs text-slate-400 px-4">Adjust the slider to simulate changing load conditions.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- 1. State & Configuration ---
+        let chartInstance = null;
+        let currentMode = '';
+
+        // Simulation Data & Logic
+        const simulations = {
+            'motor_torque_speed': {
+                title: 'DC Shunt Motor: Torque vs Speed',
+                xLabel: 'Torque (N.m)',
+                yLabel: 'Speed (RPM)',
+                color: '#3b82f6', // Blue
+                icon: 'ph-fan',
+                // N = V - IaRa / k*phi. As Torque increases, Ia increases, IaRa drop increases, N drops.
+                formula: (x) => {
+                    const noLoadSpeed = 1500;
+                    const dropFactor = 4; // Simplified slope
+                    return noLoadSpeed - (x * dropFactor);
+                },
+                xMax: 100,
+                xUnit: ' N.m',
+                yUnit: ' RPM',
+                explanation: (x) => {
+                    if (x < 10) return "At <strong>No Load</strong>, the speed is maximum. The back EMF (Eb) is almost equal to the supply voltage (V).";
+                    if (x < 50) return "As <strong>Load Torque increases</strong>, the armature current (Ia) rises to produce more torque. This causes a voltage drop (IaRa), reducing Back EMF slightly.";
+                    return "At <strong>High Load</strong>, the speed drops linearly. Unlike a series motor, a shunt motor maintains a relatively constant speed, making it suitable for lathes and industrial tools.";
+                }
+            },
+            'motor_current_torque': {
+                title: 'DC Motor: Armature Current vs Torque',
+                xLabel: 'Armature Current (Ia)',
+                yLabel: 'Torque (N.m)',
+                color: '#8b5cf6', // Purple
+                icon: 'ph-lightning',
+                // T is proportional to Ia (assuming constant flux for shunt)
+                formula: (x) => {
+                    return x * 1.2; // Linear relationship
+                },
+                xMax: 80,
+                xUnit: ' A',
+                yUnit: ' N.m',
+                explanation: (x) => {
+                    return "In a DC Shunt Motor, flux (Φ) is constant. Since <strong>Torque ∝ Φ × Ia</strong>, the graph is a straight line passing through the origin. Heavy current produces heavy torque.";
+                }
+            },
+            'motor_efficiency': {
+                title: 'DC Motor: Efficiency vs Load Current',
+                xLabel: 'Load Current (A)',
+                yLabel: 'Efficiency (%)',
+                color: '#f43f5e', // Rose
+                icon: 'ph-chart-line-up',
+                // Efficiency = Output/Input. Low at start (fixed losses dominate), peaks when variable = fixed, drops (copper losses dominate)
+                formula: (x) => {
+                    if (x === 0) return 0;
+                    // Mathematical approximation of efficiency curve
+                    return -0.025 * Math.pow(x - 45, 2) + 90;
+                },
+                xMax: 100,
+                xUnit: ' A',
+                yUnit: '%',
+                explanation: (x) => {
+                    if (x < 30) return "At <strong>Light Load</strong>, efficiency is low because the constant losses (iron & friction) are large compared to the output power.";
+                    if (x >= 30 && x <= 60) return "<strong>Maximum Efficiency</strong> occurs when Variable Losses (Copper loss) equal Constant Losses. This is the optimal operating point.";
+                    return "At <strong>Overload</strong>, efficiency drops rapidly because Copper Losses ($I^2R$) increase exponentially with current, generating excessive heat.";
+                }
+            },
+            'gen_occ': {
+                title: 'DC Generator: Open Circuit Characteristics (OCC)',
+                xLabel: 'Field Current (If)',
+                yLabel: 'Generated Voltage (Eg)',
+                color: '#10b981', // Emerald
+                icon: 'ph-wave-sine',
+                // Saturation curve
+                formula: (x) => {
+                    // Sigmoid-like saturation
+                    return 240 * (x / (x + 2)) + 10; // +10 for residual magnetism
+                },
+                xMax: 10,
+                xUnit: ' A',
+                yUnit: ' V',
+                explanation: (x) => {
+                    if (x < 0.5) return "Even with 0 field current, there is a small voltage due to <strong>Residual Magnetism</strong> in the poles.";
+                    if (x < 4) return "<strong>Linear Region:</strong> As Field Current increases, Flux increases linearly, causing generated voltage to rise proportionally.";
+                    return "<strong>Saturation Region:</strong> The magnetic core is saturated. Increasing field current further yields diminishing returns in voltage generation.";
+                }
+            },
+            'gen_load': {
+                title: 'DC Generator: Load Characteristics (V vs IL)',
+                xLabel: 'Load Current (IL)',
+                yLabel: 'Terminal Voltage (Vt)',
+                color: '#f59e0b', // Amber
+                icon: 'ph-battery-charging',
+                // Vt = Eg - IaRa - Armature Reaction
+                formula: (x) => {
+                    const noLoadV = 240;
+                    const drop = (0.5 * x) + (0.01 * x * x); // Linear drop + Armature reaction
+                    return Math.max(0, noLoadV - drop);
+                },
+                xMax: 100,
+                xUnit: ' A',
+                yUnit: ' V',
+                explanation: (x) => {
+                    return "As Load Current increases, Terminal Voltage drops due to two factors: <strong>Armature Resistance Drop ($I_aR_a$)</strong> and <strong>Armature Reaction</strong> (which weakens the main flux).";
+                }
+            }
+        };
+
+        // --- 2. Chart Initialization ---
+        function initChart() {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+
+            // Gradient fill setup
+            let gradient = ctx.createLinearGradient(0, 400, 0, 0);
+            gradient.addColorStop(0, 'rgba(59, 130, 246, 0)');
+            gradient.addColorStop(1, 'rgba(59, 130, 246, 0.2)');
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Characteristic Curve',
+                            data: [],
+                            borderColor: '#3b82f6',
+                            borderWidth: 3,
+                            tension: 0.4,
+                            pointRadius: 0, // Hide points on the main line
+                            fill: true,
+                            backgroundColor: gradient
+                        },
+                        {
+                            label: 'Operating Point',
+                            data: [],
+                            borderColor: '#ffffff',
+                            backgroundColor: '#ffffff',
+                            borderWidth: 2,
+                            pointRadius: 8,
+                            pointHoverRadius: 10,
+                            pointBorderColor: '#fff',
+                            showLine: false // Just a dot
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 0 // We handle animation manually for performance
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            grid: { color: '#334155' },
+                            title: { display: true, text: 'X Axis', color: '#94a3b8' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y: {
+                            grid: { color: '#334155' },
+                            title: { display: true, text: 'Y Axis', color: '#94a3b8' },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false } // Custom UI used instead
+                    }
+                }
+            });
+        }
+
+        // --- 3. Core Simulation Logic ---
+
+        function setSimulation(modeKey) {
+            currentMode = modeKey;
+            const config = simulations[modeKey];
+
+            // 1. Update UI Elements
+            document.getElementById('page-title').innerText = config.title;
+            document.getElementById('slider-label').innerText = config.xLabel;
+
+            // Active Tab Styling
+            document.querySelectorAll('.nav-btn, .gen-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${modeKey}`).classList.add('active');
+
+            // Set Slider Limits
+            const slider = document.getElementById('main-slider');
+            slider.max = config.xMax;
+            slider.value = 0; // Reset slider
+
+            // Icon & Subtitle Update with GSAP Flip
+            const iconEl = document.getElementById('mode-icon');
+            gsap.to(iconEl, {
+                opacity: 0, scale: 0.5, duration: 0.2, onComplete: () => {
+                    iconEl.className = `ph ${config.icon} text-6xl mb-4`;
+                    iconEl.style.color = config.color;
+                    gsap.to(iconEl, { opacity: 1, scale: 1, duration: 0.3 });
+                }
+            });
+            document.getElementById('mode-subtitle').innerText = config.title.split(':')[0];
+            document.getElementById('theory-box').style.borderColor = config.color;
+
+            // 2. Generate Full Static Curve Data
+            const fullCurveData = [];
+            // Generate 100 points for smoothness
+            const step = config.xMax / 100;
+            for (let i = 0; i <= config.xMax; i += step) {
+                fullCurveData.push({ x: i, y: config.formula(i) });
+            }
+
+            // 3. Update Chart Axes & Color
+            chartInstance.options.scales.x.title.text = config.xLabel;
+            chartInstance.options.scales.y.title.text = config.yLabel;
+            chartInstance.data.datasets[0].borderColor = config.color;
+
+            // Update Gradient Color dynamically
+            const ctx = chartInstance.ctx;
+            let gradient = ctx.createLinearGradient(0, 400, 0, 0);
+            gradient.addColorStop(0, hexToRgbA(config.color, 0));
+            gradient.addColorStop(1, hexToRgbA(config.color, 0.2));
+            chartInstance.data.datasets[0].backgroundColor = gradient;
+
+            // 4. Animate the Drawing of the Curve (GSAP + Chart.js)
+            chartInstance.data.datasets[0].data = [];
+            chartInstance.data.datasets[1].data = [{ x: 0, y: config.formula(0) }]; // Reset dot
+            chartInstance.update();
+
+            // Animate adding data points looks like drawing
+            let animationObj = { index: 0 };
+            gsap.to(animationObj, {
+                index: fullCurveData.length - 1,
+                duration: 1.5,
+                ease: "power2.out",
+                onUpdate: () => {
+                    const currentIdx = Math.floor(animationObj.index);
+                    // Slice array up to current index
+                    chartInstance.data.datasets[0].data = fullCurveData.slice(0, currentIdx + 1);
+                    chartInstance.update('none'); // Efficient update
+                }
+            });
+
+            // Trigger initial explanation
+            updateInteraction(0);
+        }
+
+        // Helper for colors
+        function hexToRgbA(hex, alpha) {
+            let c;
+            if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)) {
+                c = hex.substring(1).split('');
+                if (c.length == 3) {
+                    c = [c[0], c[0], c[1], c[1], c[2], c[2]];
+                }
+                c = '0x' + c.join('');
+                return 'rgba(' + [(c >> 16) & 255, (c >> 8) & 255, c & 255].join(',') + ',' + alpha + ')';
+            }
+            return hex; // fallback
+        }
+
+        function updateInteraction(sliderValue) {
+            if (!currentMode) return;
+            const config = simulations[currentMode];
+            const xVal = parseFloat(sliderValue);
+            const yVal = config.formula(xVal);
+
+            // Update Chart Dot Position
+            chartInstance.data.datasets[1].data = [{ x: xVal, y: yVal }];
+            chartInstance.update('none'); // High performance update
+
+            // Update Numerical Displays
+            document.getElementById('slider-val-display').innerText = xVal.toFixed(1) + config.xUnit;
+            document.getElementById('val-x').innerText = xVal.toFixed(1);
+            document.getElementById('val-y').innerText = yVal.toFixed(1);
+
+            // Update Theory Text with typewriter effect if drastically changed, else simple text
+            document.getElementById('theory-text').innerHTML = config.explanation(xVal);
+
+            // Update secondary metrics (simulated logic for visual flair)
+            const dropVal = (xVal * 0.15).toFixed(1);
+            document.getElementById('drop-indicator').innerText = dropVal + " V";
+        }
+
+        // --- 4. Event Listeners ---
+
+        document.getElementById('main-slider').addEventListener('input', (e) => {
+            updateInteraction(e.target.value);
+        });
+
+        // Initialize
+        window.addEventListener('load', () => {
+            initChart();
+            setSimulation('motor_torque_speed'); // Default start
+        });
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced DC Machine: Motor & Generator</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f1016;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 320px;
+            background: rgba(15, 16, 22, 0.9);
+            padding: 24px;
+            border-radius: 16px;
+            border: 1px solid #333;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            user-select: none;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 22px;
+            color: #4db6ac;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .section-title {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin: 20px 0 10px 0;
+            font-weight: bold;
+        }
+
+        /* Mode Switcher */
+        .mode-switch {
+            display: flex;
+            background: #1a1a24;
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        }
+
+        .mode-opt {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #888;
+            transition: all 0.3s;
+        }
+
+        .mode-opt.active {
+            background: #4db6ac;
+            color: #000;
+            box-shadow: 0 2px 10px rgba(77, 182, 172, 0.3);
+        }
+
+        .mode-opt.generator.active {
+            background: #ffb74d;
+            color: #000;
+            box-shadow: 0 2px 10px rgba(255, 183, 77, 0.3);
+        }
+
+        /* Controls */
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .value-display {
+            font-family: 'Courier New', monospace;
+            background: #222;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #444;
+        }
+
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            appearance: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #4db6ac;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            margin-top: -6px;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+        }
+
+        /* Generator specific slider color */
+        body.generator-mode input[type=range]::-webkit-slider-thumb {
+            background: #ffb74d;
+        }
+
+        /* Toggles */
+        .toggle-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .toggle-btn {
+            padding: 8px;
+            font-size: 12px;
+            background: #222;
+            border: 1px solid #333;
+            color: #aaa;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            transition: 0.2s;
+        }
+
+        .toggle-btn:hover {
+            background: #333;
+            color: #fff;
+        }
+
+        .toggle-btn.active {
+            background: #2d4059;
+            border-color: #4db6ac;
+            color: #4db6ac;
+            font-weight: bold;
+        }
+
+        /* Status Panel */
+        .status-panel {
+            background: #15161c;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            border: 1px solid #333;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #aaa;
+        }
+
+        .status-val {
+            color: #fff;
+            font-weight: bold;
+        }
+
+        /* 3D Labels */
+        .label {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.85);
+            color: #eee;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid #4db6ac;
+            opacity: 0;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+            cursor: help;
+            pointer-events: auto;
+            /* Enable hover */
+            z-index: 10;
+        }
+
+        /* Triangle indicator */
+        .label::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: #4db6ac transparent transparent transparent;
+        }
+
+        /* Tooltip Description on Hover */
+        .label .tooltip {
+            visibility: hidden;
+            width: 200px;
+            background-color: #222;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            /* Position above label */
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            border: 1px solid #666;
+            font-size: 11px;
+            line-height: 1.4;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .label:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .label.visible {
+            opacity: 1;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #4db6ac;
+            font-size: 24px;
+        }
+    </style>
+    <!-- Import Maps -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+
+<body>
+
+    <div id="ui-layer">
+        <h1>DC Machine Lab</h1>
+        <span class="subtitle">Interactive Physics Simulation</span>
+
+        <div class="mode-switch">
+            <div class="mode-opt active" id="mode-motor">DC MOTOR</div>
+            <div class="mode-opt" id="mode-generator">DC GENERATOR</div>
+        </div>
+
+        <div class="control-group" id="motor-controls">
+            <label>Input Voltage (Battery) <span class="value-display" id="voltage-val">0V</span></label>
+            <input type="range" id="voltage-slider" min="-12" max="12" step="0.1" value="0">
+        </div>
+
+        <div class="control-group" id="generator-controls" style="display:none;">
+            <label>Input Speed (Crank RPM) <span class="value-display" id="rpm-input-val">0</span></label>
+            <input type="range" id="rpm-slider" min="-1000" max="1000" step="10" value="0">
+        </div>
+
+        <div class="section-title">Visualizations</div>
+        <div class="toggle-grid">
+            <div class="toggle-btn active" data-target="field">Magnetic Field</div>
+            <div class="toggle-btn active" data-target="current">Electron Flow</div>
+            <div class="toggle-btn active" data-target="force">Forces / Torque</div>
+            <div class="toggle-btn active" data-target="labels">Part Labels</div>
+        </div>
+
+        <div class="status-panel">
+            <div class="status-row">
+                <span>Mode Status:</span>
+                <span class="status-val" id="status-mode">Idle</span>
+            </div>
+            <div class="status-row">
+                <span>Rotor Speed:</span>
+                <span class="status-val" id="status-speed">0 RPM</span>
+            </div>
+            <div class="status-row">
+                <span id="lbl-io">Current Draw:</span>
+                <span class="status-val" id="status-current">0.0 A</span>
+            </div>
+        </div>
+
+        <div style="margin-top:20px; font-size:12px; color:#666; line-height:1.4;">
+            <strong style="color:#4db6ac">Tip:</strong> Hover over labels to see part descriptions. Adjust controls to
+            see the flow.
+        </div>
+    </div>
+
+    <div id="labels-container"></div>
+    <div id="canvas-container"></div>
+    <div class="loading" id="loading">Initializing Physics...</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Configuration ---
+        const CONFIG = {
+            poleColorN: 0xd32f2f,
+            poleColorS: 0x1976d2,
+            copperColor: 0xb87333,
+            steelColor: 0x546e7a,
+            frameColor: 0x263238,
+            commutatorColor: 0xffb74d,
+            electronColor: 0xffff00
+        };
+
+        // --- Global Variables ---
+        let scene, camera, renderer, controls;
+        let clock = new THREE.Clock();
+
+        // Parts
+        let rotorAssembly, commutatorGroup, crankGroup, fanGroup;
+        let fieldLines, electronSystem;
+        let forceArrows = [];
+        let circuitGroup, bulbMesh, batteryMesh;
+        let bulbLight;
+
+        // State
+        const state = {
+            mode: 'motor',
+            voltage: 0,
+            inputRpm: 0,
+            realRpm: 0,
+            showField: true,
+            showCurrent: true,
+            showForce: true,
+            showLabels: true
+        };
+
+        // DOM Elements
+        const labelsContainer = document.getElementById('labels-container');
+        const voltageVal = document.getElementById('voltage-val');
+        const rpmVal = document.getElementById('rpm-input-val');
+        const statusMode = document.getElementById('status-mode');
+        const statusSpeed = document.getElementById('status-speed');
+        const statusCurrent = document.getElementById('status-current');
+        const lblIo = document.getElementById('lbl-io');
+
+        // Labels Data (Updated positions and descriptions)
+        const labels = [
+            {
+                text: "North Pole",
+                pos: new THREE.Vector3(-3.5, 2, 0),
+                desc: "Stationary magnet providing the magnetic field (flux) needed for operation."
+            },
+            {
+                text: "South Pole",
+                pos: new THREE.Vector3(3.5, 2, 0),
+                desc: "The opposite magnetic pole. Flux flows from North to South."
+            },
+            {
+                text: "Armature",
+                pos: new THREE.Vector3(0, 2, 0),
+                desc: "The rotating part (rotor) containing copper windings. Current flows here to create torque."
+            },
+            {
+                text: "Commutator",
+                pos: new THREE.Vector3(0, 0.9, 2.5),
+                desc: "Split ring that reverses current direction every half-turn to keep rotation continuous."
+            },
+            {
+                text: "Brushes",
+                pos: new THREE.Vector3(0.5, -1, 2.5),
+                desc: "Carbon contacts that slide on the commutator to transfer electricity to the moving rotor."
+            },
+            {
+                text: "Load/Source",
+                pos: new THREE.Vector3(6, 3, 2.5),
+                desc: "Battery (Input) for Motor mode, or Light Bulb (Output) for Generator mode."
+            }
+        ];
+
+        init();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f1016);
+            scene.fog = new THREE.FogExp2(0x0f1016, 0.03);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(8, 6, 12);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxDistance = 25;
+
+            // Lights
+            const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambient);
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            mainLight.position.set(5, 10, 5);
+            mainLight.castShadow = true;
+            scene.add(mainLight);
+            const rimLight = new THREE.SpotLight(0x4db6ac, 3);
+            rimLight.position.set(-5, 5, -5);
+            scene.add(rimLight);
+
+            // Build Machine
+            buildStator();
+            buildRotor();
+            buildCircuit();
+            buildAccessories();
+            buildFieldLines();
+            buildVisualizations();
+            createLabelElements();
+
+            setupUI();
+            document.getElementById('loading').style.display = 'none';
+
+            animate();
+        }
+
+        function buildStator() {
+            const group = new THREE.Group();
+            const baseGeo = new THREE.BoxGeometry(10, 0.5, 6);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = -2.5;
+            base.receiveShadow = true;
+            group.add(base);
+
+            const poleGeo = new THREE.BoxGeometry(2, 4, 4);
+            const nMat = new THREE.MeshStandardMaterial({ color: CONFIG.poleColorN, roughness: 0.2, metalness: 0.1 });
+            const nPole = new THREE.Mesh(poleGeo, nMat);
+            nPole.position.set(-3.5, 0, 0);
+            nPole.castShadow = true;
+            group.add(nPole);
+
+            const sMat = new THREE.MeshStandardMaterial({ color: CONFIG.poleColorS, roughness: 0.2, metalness: 0.1 });
+            const sPole = new THREE.Mesh(poleGeo, sMat);
+            sPole.position.set(3.5, 0, 0);
+            sPole.castShadow = true;
+            group.add(sPole);
+            scene.add(group);
+        }
+
+        function buildRotor() {
+            rotorAssembly = new THREE.Group();
+
+            const shaft = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.2, 0.2, 11, 16),
+                new THREE.MeshStandardMaterial({ color: 0xeeeeee, metalness: 0.8 })
+            );
+            shaft.rotation.x = Math.PI / 2;
+            rotorAssembly.add(shaft);
+
+            const coreGroup = new THREE.Group();
+            const coreMat = new THREE.MeshStandardMaterial({ color: CONFIG.steelColor, roughness: 0.7 });
+            const coreCyl = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 3.5, 32), coreMat);
+            coreCyl.rotation.x = Math.PI / 2;
+            coreGroup.add(coreCyl);
+
+            const windingMat = new THREE.MeshStandardMaterial({ color: CONFIG.copperColor, metalness: 0.5, roughness: 0.3 });
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI * i) / 3;
+                const coil = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.3, 3.6), windingMat);
+                coil.rotation.x = angle;
+                coreGroup.add(coil);
+            }
+            rotorAssembly.add(coreGroup);
+
+            commutatorGroup = new THREE.Group();
+            const commMat = new THREE.MeshStandardMaterial({ color: CONFIG.commutatorColor, metalness: 0.6 });
+            for (let i = 0; i < 8; i++) {
+                const segGeo = new THREE.CylinderGeometry(0.6, 0.6, 1, 16, 1, false, (i * Math.PI * 2) / 8 + 0.05, (Math.PI * 2) / 8 - 0.1);
+                const seg = new THREE.Mesh(segGeo, commMat);
+                seg.rotation.x = Math.PI / 2;
+                commutatorGroup.add(seg);
+            }
+            commutatorGroup.position.z = 2.5;
+            rotorAssembly.add(commutatorGroup);
+
+            scene.add(rotorAssembly);
+
+            const brushMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const brushTop = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.4), brushMat);
+            brushTop.position.set(0, 1.0, 2.5);
+            scene.add(brushTop);
+            const brushBot = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.4), brushMat);
+            brushBot.position.set(0, -1.0, 2.5);
+            scene.add(brushBot);
+        }
+
+        function buildAccessories() {
+            fanGroup = new THREE.Group();
+            const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+            hub.rotation.x = Math.PI / 2;
+            fanGroup.add(hub);
+
+            const bladeGeo = new THREE.BoxGeometry(0.1, 3.5, 0.8);
+            bladeGeo.translate(0, 1.5, 0);
+            const bladeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, transparent: true, opacity: 0.9 });
+            for (let i = 0; i < 4; i++) {
+                const blade = new THREE.Mesh(bladeGeo, bladeMat);
+                blade.rotation.z = (Math.PI / 2) * i;
+                blade.rotation.y = 0.2;
+                fanGroup.add(blade);
+            }
+            fanGroup.position.z = -5;
+            scene.add(fanGroup);
+
+            crankGroup = new THREE.Group();
+            const arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.5, 0.2), new THREE.MeshStandardMaterial({ color: 0x888888 }));
+            arm.position.y = 1;
+            const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.8), new THREE.MeshStandardMaterial({ color: 0xd32f2f }));
+            handle.rotation.z = Math.PI / 2;
+            handle.position.set(0, 2, 0.4);
+            crankGroup.add(arm, handle);
+            crankGroup.position.z = -5;
+            crankGroup.visible = false;
+            scene.add(crankGroup);
+        }
+
+        function buildCircuit() {
+            circuitGroup = new THREE.Group();
+
+            // Circuit Path
+            const wireMat = new THREE.LineBasicMaterial({ color: 0xff4444, linewidth: 3 });
+            const pathPoints = [
+                new THREE.Vector3(0, 1.4, 2.5), // Top Brush
+                new THREE.Vector3(0, 4, 2.5),   // Top Bend
+                new THREE.Vector3(6, 4, 2.5),   // Right Top Corner
+                new THREE.Vector3(6, -4, 2.5),  // Right Bot Corner
+                new THREE.Vector3(0, -4, 2.5),  // Bot Bend
+                new THREE.Vector3(0, -1.4, 2.5) // Bot Brush
+            ];
+            const wireGeo = new THREE.BufferGeometry().setFromPoints(pathPoints);
+            const wireLine = new THREE.Line(wireGeo, wireMat);
+            circuitGroup.add(wireLine);
+            scene.add(circuitGroup);
+
+            // 1. Battery Model (Motor Mode)
+            batteryMesh = new THREE.Group();
+            const batBody = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 2), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+            const batTerm = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.5), new THREE.MeshStandardMaterial({ color: 0xdddddd }));
+            batTerm.position.y = 1.6;
+            batTerm.position.x = 0.5;
+            // Battery Logo
+            const logo = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+            logo.position.z = 1.01;
+            batBody.add(logo);
+
+            batteryMesh.add(batBody, batTerm);
+            batteryMesh.position.set(6, 0, 2.5); // Move to X=6
+            scene.add(batteryMesh);
+
+            // 2. Realistic Light Bulb (Generator Mode)
+            bulbMesh = new THREE.Group();
+
+            // Stand/Holder
+            const holder = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.2, 0.5, 32), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            holder.position.y = -2;
+            bulbMesh.add(holder);
+
+            // Screw Base
+            const screwBase = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1, 16), new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 1.0, roughness: 0.4 }));
+            screwBase.position.y = -1.2;
+            bulbMesh.add(screwBase);
+
+            // Glass Envelope (Lathe or simple shape)
+            const glassGeo = new THREE.SphereGeometry(1.2, 32, 32);
+            // Scale to look like a bulb
+            glassGeo.scale(1, 1.3, 1);
+            const glassMat = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff, transparent: true, opacity: 0.2, transmission: 0.9, roughness: 0.05, clearcoat: 1.0
+            });
+            const glass = new THREE.Mesh(glassGeo, glassMat);
+            glass.position.y = 0.5;
+            bulbMesh.add(glass);
+
+            // Filament
+            const filGeo = new THREE.TorusGeometry(0.3, 0.02, 8, 20);
+            const filMat = new THREE.MeshStandardMaterial({ color: 0x555555, emissive: 0x000000 });
+            const filament = new THREE.Mesh(filGeo, filMat);
+            filament.position.y = 0.5;
+            filament.rotation.x = Math.PI / 2;
+            bulbMesh.add(filament);
+
+            // Point Light
+            bulbLight = new THREE.PointLight(0xffaa00, 0, 10);
+            bulbLight.position.set(0, 0.5, 0);
+            bulbMesh.add(bulbLight);
+
+            bulbMesh.position.set(6, 0, 2.5); // Same pos as battery
+            bulbMesh.visible = false;
+            scene.add(bulbMesh);
+        }
+
+        function buildFieldLines() {
+            fieldLines = new THREE.Group();
+            const mat = new THREE.LineBasicMaterial({ color: 0x00ffff, opacity: 0.15, transparent: true });
+            for (let y = -1.5; y <= 1.5; y += 0.5) {
+                for (let z = -1.5; z <= 1.5; z += 0.5) {
+                    const points = [new THREE.Vector3(-3.5, y, z), new THREE.Vector3(3.5, y, z)];
+                    fieldLines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), mat));
+                }
+            }
+            scene.add(fieldLines);
+        }
+
+        function buildVisualizations() {
+            // Updated Electron System
+            const count = 40;
+            // Larger, brighter particles
+            const geo = new THREE.SphereGeometry(0.12, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+            electronSystem = new THREE.InstancedMesh(geo, mat, count);
+            scene.add(electronSystem);
+
+            const arrow1 = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1.8, 0), 2, 0x00ff00);
+            const arrow2 = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, -1.8, 0), 2, 0x00ff00);
+            rotorAssembly.add(arrow1, arrow2);
+            forceArrows.push(arrow1, arrow2);
+        }
+
+        function createLabelElements() {
+            labelsContainer.innerHTML = '';
+            labels.forEach((l, index) => {
+                const div = document.createElement('div');
+                div.className = 'label';
+                div.textContent = l.text;
+
+                // Add Tooltip
+                const tip = document.createElement('div');
+                tip.className = 'tooltip';
+                tip.textContent = l.desc;
+                div.appendChild(tip);
+
+                l.element = div;
+                labelsContainer.appendChild(div);
+            });
+        }
+
+        function setupUI() {
+            document.getElementById('mode-motor').onclick = () => setMode('motor');
+            document.getElementById('mode-generator').onclick = () => setMode('generator');
+
+            document.getElementById('voltage-slider').addEventListener('input', (e) => {
+                state.voltage = parseFloat(e.target.value);
+                voltageVal.textContent = state.voltage.toFixed(1) + "V";
+            });
+
+            document.getElementById('rpm-slider').addEventListener('input', (e) => {
+                state.inputRpm = parseFloat(e.target.value);
+                rpmVal.textContent = state.inputRpm;
+            });
+
+            document.querySelectorAll('.toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    btn.classList.toggle('active');
+                    const key = 'show' + btn.dataset.target.charAt(0).toUpperCase() + btn.dataset.target.slice(1);
+                    state[key] = !state[key];
+                    updateVisuals();
+                });
+            });
+        }
+
+        function setMode(mode) {
+            state.mode = mode;
+            const body = document.body;
+
+            document.getElementById('mode-motor').classList.toggle('active', mode === 'motor');
+            document.getElementById('mode-generator').classList.toggle('active', mode === 'generator');
+
+            document.getElementById('motor-controls').style.display = mode === 'motor' ? 'block' : 'none';
+            document.getElementById('generator-controls').style.display = mode === 'generator' ? 'block' : 'none';
+
+            if (mode === 'generator') {
+                body.classList.add('generator-mode');
+                batteryMesh.visible = false;
+                bulbMesh.visible = true;
+                fanGroup.visible = false;
+                crankGroup.visible = true;
+                lblIo.textContent = "Output Current:";
+                document.getElementById('voltage-slider').value = 0;
+                state.voltage = 0;
+                voltageVal.textContent = "0V";
+            } else {
+                body.classList.remove('generator-mode');
+                batteryMesh.visible = true;
+                bulbMesh.visible = false;
+                fanGroup.visible = true;
+                crankGroup.visible = false;
+                lblIo.textContent = "Current Draw:";
+                document.getElementById('rpm-slider').value = 0;
+                state.inputRpm = 0;
+                rpmVal.textContent = "0";
+            }
+        }
+
+        function updateVisuals() {
+            fieldLines.visible = state.showField;
+            electronSystem.visible = state.showCurrent;
+            forceArrows.forEach(a => a.visible = state.showForce);
+            labelsContainer.style.display = state.showLabels ? 'block' : 'none';
+        }
+
+        function updateLabels() {
+            if (!state.showLabels) return;
+
+            labels.forEach(l => {
+                const v = l.pos.clone();
+                // Project 3D coordinate to 2D screen space
+                v.project(camera);
+
+                const x = (v.x * .5 + .5) * window.innerWidth;
+                const y = (-(v.y * .5) + .5) * window.innerHeight;
+
+                const el = l.element;
+                el.style.left = `${x}px`;
+                el.style.top = `${y}px`;
+                el.style.transform = 'translate(-50%, -100%)'; // Anchor bottom-center
+
+                // Hide if behind camera or out of view
+                if (Math.abs(v.z) > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) {
+                    el.style.opacity = 0;
+                    el.style.pointerEvents = 'none';
+                } else {
+                    el.style.opacity = 1;
+                    el.style.pointerEvents = 'auto';
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+
+            // --- Physics & Logic ---
+            let targetRpm = 0;
+            let current = 0;
+
+            if (state.mode === 'motor') {
+                targetRpm = state.voltage * 150;
+                state.realRpm += (targetRpm - state.realRpm) * 0.05;
+                current = (state.voltage - (state.realRpm * 0.006)) * 0.8;
+                if (Math.abs(state.voltage) < 0.1) current = 0;
+
+                statusMode.textContent = "Motoring";
+                statusMode.style.color = "#4db6ac";
+                bulbLight.intensity = 0;
+            } else {
+                state.realRpm += (state.inputRpm - state.realRpm) * 0.1;
+                const genVoltage = state.realRpm * 0.015;
+                current = genVoltage / 8;
+
+                statusMode.textContent = "Generating";
+                statusMode.style.color = "#ffb74d";
+
+                // Bulb physics
+                const brightness = Math.min(Math.abs(genVoltage) / 10, 1.5);
+                bulbLight.intensity = brightness * 3;
+                bulbMesh.children[3].material.emissive.setHSL(0.08, 1, brightness * 0.8);
+            }
+
+            statusSpeed.textContent = Math.round(state.realRpm) + " RPM";
+            statusCurrent.textContent = Math.abs(current).toFixed(2) + " A";
+
+            // Rotate components
+            const speedRad = (state.realRpm / 60) * 2 * Math.PI * dt;
+            rotorAssembly.rotation.z -= speedRad;
+            fanGroup.rotation.z -= speedRad;
+            crankGroup.rotation.z -= speedRad;
+
+            // Force Arrows
+            const torqueDir = Math.sign(current);
+            if (state.showForce && Math.abs(current) > 0.1) {
+                forceArrows[0].setDirection(new THREE.Vector3(0, torqueDir, 0));
+                forceArrows[0].visible = true;
+                forceArrows[1].setDirection(new THREE.Vector3(0, -torqueDir, 0));
+                forceArrows[1].visible = true;
+            } else {
+                forceArrows[0].visible = false;
+                forceArrows[1].visible = false;
+            }
+
+            // --- Updated Electron Animation ---
+            if (state.showCurrent) {
+                const dummy = new THREE.Object3D();
+                // Direction depends on current sign
+                const time = Date.now() * 0.001 * Math.sign(current);
+                const instanceCount = electronSystem.count;
+
+                for (let i = 0; i < instanceCount; i++) {
+                    const t = (i / instanceCount + time) % 1;
+                    const tt = t < 0 ? 1 + t : t;
+
+                    let px, py, pz;
+                    // Precise path matching the wire geometry
+                    // Points: (0,1.4)->(0,4)->(6,4)->(6,-4)->(0,-4)->(0,-1.4)
+                    // Total length approx: 2.6 + 6 + 8 + 6 + 2.6 = ~25 units
+
+                    // 1. Up leg (0, 1.4) to (0, 4) ~ 10%
+                    if (tt < 0.1) {
+                        const segT = tt / 0.1;
+                        px = 0; py = THREE.MathUtils.lerp(1.4, 4, segT); pz = 2.5;
+                    }
+                    // 2. Top horiz (0, 4) to (6, 4) ~ 25%
+                    else if (tt < 0.35) {
+                        const segT = (tt - 0.1) / 0.25;
+                        px = THREE.MathUtils.lerp(0, 6, segT); py = 4; pz = 2.5;
+                    }
+                    // 3. Right vertical (6, 4) to (6, -4) ~ 30%
+                    else if (tt < 0.65) {
+                        const segT = (tt - 0.35) / 0.3;
+                        px = 6; py = THREE.MathUtils.lerp(4, -4, segT); pz = 2.5;
+                    }
+                    // 4. Bot horiz (6, -4) to (0, -4) ~ 25%
+                    else if (tt < 0.9) {
+                        const segT = (tt - 0.65) / 0.25;
+                        px = THREE.MathUtils.lerp(6, 0, segT); py = -4; pz = 2.5;
+                    }
+                    // 5. Up leg (0, -4) to (0, -1.4) ~ 10%
+                    else {
+                        const segT = (tt - 0.9) / 0.1;
+                        px = 0; py = THREE.MathUtils.lerp(-4, -1.4, segT); pz = 2.5;
+                    }
+
+                    dummy.position.set(px, py, pz);
+                    dummy.updateMatrix();
+                    electronSystem.setMatrixAt(i, dummy.matrix);
+                }
+                electronSystem.instanceMatrix.needsUpdate = true;
+            }
+
+            // CRITICAL: Update labels every frame to track camera
+            updateLabels();
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+
+</html>
