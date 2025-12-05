@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulmo-Viz: Respiratory Mechanics</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;600&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+        rel="stylesheet" />
+
+    <style>
+        :root {
+            --bg: #0f1218;
+            --panel: rgba(20, 25, 35, 0.9);
+            --border: #2a3f55;
+            --accent: #4cc9f0;
+            --healthy: #ff8fa3;
+            --smoker: #4a4a4a;
+            --oxygen: #4cc9f0;
+            --co2: #a0a0a0;
+            --text: #e0f7ff;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: var(--bg);
+            font-family: 'Inter', sans-serif;
+            color: var(--text);
+        }
+
+        #viewport {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        .ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* HEADER */
+        .header {
+            padding: 24px;
+            pointer-events: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
+        }
+
+        .brand {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 24px;
+            color: var(--accent);
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(76, 201, 240, 0.4);
+        }
+
+        .sub-brand {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        /* CONTROLS */
+        .controls {
+            pointer-events: auto;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            width: 320px;
+            padding: 20px;
+            margin: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 8px;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        /* BUTTONS */
+        .btn-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn.active {
+            background: var(--accent);
+            color: #000;
+            border-color: var(--accent);
+            font-weight: bold;
+        }
+
+        .btn.smoker-active {
+            background: #555;
+            color: #fff;
+            border-color: #888;
+        }
+
+        /* SPIROMETER GRAPH */
+        .graph-container {
+            background: #000;
+            border: 1px solid #333;
+            height: 100px;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        /* SLIDERS */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #2a3f55;
+            border-radius: 2px;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: var(--accent);
+            margin-top: -6px;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--accent);
+        }
+
+        /* LEGEND */
+        .legend-item {
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            margin-bottom: 6px;
+            color: #ccc;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        #tooltip {
+            position: absolute;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            font-family: 'Share Tech Mono', monospace;
+        }
+    </style>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body>
+
+    <div id="tooltip"></div>
+
+    <div class="ui-container">
+        <div class="header">
+            <div>
+                <div class="brand">PULMO-VIZ</div>
+                <div class="sub-brand">Respiratory Mechanics Simulator</div>
+            </div>
+        </div>
+
+        <div style="flex:1;"></div>
+
+        <div class="controls">
+            <div class="control-group">
+                <div class="label">Condition</div>
+                <div class="btn-row">
+                    <button class="btn active" id="btn-healthy" onclick="setCondition('healthy')">
+                        <span class="material-symbols-rounded">favorite</span> Healthy
+                    </button>
+                    <button class="btn" id="btn-smoker" onclick="setCondition('smoker')">
+                        <span class="material-symbols-rounded">smoking_rooms</span> Smoker
+                    </button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="label">Visualization</div>
+                <div class="btn-row">
+                    <button class="btn active" id="btn-solid" onclick="setView('solid')">
+                        <span class="material-symbols-rounded">visibility</span> Lungs
+                    </button>
+                    <button class="btn" id="btn-xray" onclick="setView('xray')">
+                        <span class="material-symbols-rounded">radiology</span> Bronchi
+                    </button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="label">Respiration Rate (BPM) <span id="bpm-val" style="float:right; color:white;">12</span>
+                </div>
+                <input type="range" id="bpm-slider" min="5" max="30" value="12">
+            </div>
+
+            <div class="control-group">
+                <div class="label">Spirometer (Tidal Volume)</div>
+                <div class="graph-container">
+                    <canvas id="spiro-canvas"></canvas>
+                </div>
+                <div class="legend-item">
+                    <div class="dot" style="background:var(--oxygen);"></div> Inhale (Oxygen)
+                </div>
+                <div class="legend-item">
+                    <div class="dot" style="background:var(--co2);"></div> Exhale (CO2)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="viewport"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- CONFIG ---
+        const config = {
+            bpm: 12,
+            cycleDuration: 5.0, // 60 / 12
+            condition: 'healthy', // healthy or smoker
+            view: 'solid', // solid or xray
+            colors: {
+                healthy: 0xff8fa3,
+                smoker: 0x2a2a2a,
+                bronchi: 0xffffff,
+                diaphragm: 0xbd5e5e,
+                bg: 0x0f1218
+            }
+        };
+
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(config.colors.bg);
+        scene.fog = new THREE.FogExp2(config.colors.bg, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 2, 18);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.toneMapping = THREE.ReinhardToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        document.getElementById('viewport').appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.enablePan = false;
+        controls.minDistance = 10;
+        controls.maxDistance = 25;
+
+        // --- LIGHTING (High Visibility) ---
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6)); // Base brightness
+
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        keyLight.position.set(5, 10, 10);
+        scene.add(keyLight);
+
+        const fillLight = new THREE.DirectionalLight(0xddeeff, 0.8);
+        fillLight.position.set(-5, 5, 10);
+        scene.add(fillLight);
+
+        const backLight = new THREE.SpotLight(0x4cc9f0, 2);
+        backLight.position.set(0, 5, -10);
+        scene.add(backLight);
+
+        // --- MATERIALS ---
+        const lungMaterial = new THREE.MeshPhysicalMaterial({
+            color: config.colors.healthy,
+            roughness: 0.4,
+            metalness: 0.1,
+            clearcoat: 0.5,
+            clearcoatRoughness: 0.2,
+            transmission: 0, // Solid by default
+            opacity: 1,
+            side: THREE.DoubleSide
+        });
+
+        const bronchiMaterial = new THREE.MeshStandardMaterial({
+            color: 0xeeeeee,
+            roughness: 0.3
+        });
+
+        const diaphragmMaterial = new THREE.MeshLambertMaterial({
+            color: config.colors.diaphragm
+        });
+
+        // --- GEOMETRY GENERATION ---
+        const anatomyGroup = new THREE.Group();
+        scene.add(anatomyGroup);
+
+        // 1. Lungs (Procedural Deformed Spheres)
+        const lungGeo = new THREE.SphereGeometry(3, 64, 64);
+        const pos = lungGeo.attributes.position;
+        const v = new THREE.Vector3();
+
+        for (let i = 0; i < pos.count; i++) {
+            v.fromBufferAttribute(pos, i);
+
+            // Flatten (Anterior-Posterior)
+            v.z *= 0.7;
+
+            // Taper Top (Apex)
+            if (v.y > 0) v.x *= (1.0 - v.y * 0.15);
+
+            // Flatten Medial side (where heart is)
+            if (v.x < 0) v.x += Math.max(0, (v.y + 1) * 0.5); // Indent left lung slightly
+
+            pos.setXYZ(i, v.x, v.y, v.z);
+        }
+        lungGeo.computeVertexNormals();
+
+        const leftLung = new THREE.Mesh(lungGeo, lungMaterial);
+        leftLung.position.set(1.6, 1, 0);
+        leftLung.userData = { name: "Left Lung (2 Lobes)" };
+
+        const rightLung = new THREE.Mesh(lungGeo, lungMaterial);
+        rightLung.scale.x = -1; // Mirror
+        rightLung.position.set(-1.6, 1, 0);
+        rightLung.userData = { name: "Right Lung (3 Lobes)" };
+
+        anatomyGroup.add(leftLung, rightLung);
+
+        // 2. Trachea & Bronchial Tree (Recursive Fractal)
+        const airwaysGroup = new THREE.Group();
+        anatomyGroup.add(airwaysGroup);
+
+        function createBranch(start, direction, length, radius, depth) {
+            if (depth === 0) return;
+
+            // Draw Cylinder
+            const end = new THREE.Vector3().copy(start).add(direction.clone().multiplyScalar(length));
+            const path = new THREE.LineCurve3(start, end);
+            const tube = new THREE.TubeGeometry(path, 4, radius, 8, false);
+            const mesh = new THREE.Mesh(tube, bronchiMaterial);
+            mesh.userData = { name: depth === 5 ? "Trachea" : "Bronchus" };
+            airwaysGroup.add(mesh);
+
+            // Branching Logic
+            const angle = 0.6; // Branch angle
+            const shrinkage = 0.8; // Length reduction
+
+            // Left Branch
+            const dirLeft = direction.clone().applyAxisAngle(new THREE.Vector3(0, 0, 1), angle);
+            dirLeft.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 0.5); // 3D twist
+            createBranch(end, dirLeft, length * shrinkage, radius * 0.7, depth - 1);
+
+            // Right Branch
+            const dirRight = direction.clone().applyAxisAngle(new THREE.Vector3(0, 0, 1), -angle);
+            dirRight.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.random() * 0.5);
+            createBranch(end, dirRight, length * shrinkage, radius * 0.7, depth - 1);
+        }
+
+        // Start Trachea Generation
+        createBranch(new THREE.Vector3(0, 4.5, 0), new THREE.Vector3(0, -1, 0), 2.0, 0.4, 6);
+
+
+        // 3. Diaphragm (Muscle Sheet)
+        // Using a section of a sphere
+        const diaGeo = new THREE.SphereGeometry(5, 64, 32, 0, Math.PI * 2, 0, 1.0);
+        const diaphragm = new THREE.Mesh(diaGeo, diaphragmMaterial);
+        diaphragm.position.set(0, -2.5, 0); // Position below lungs
+        diaphragm.rotation.x = Math.PI; // Concave up
+        diaphragm.scale.set(1.2, 0.5, 0.8);
+        diaphragm.userData = { name: "Diaphragm (Muscle)" };
+        anatomyGroup.add(diaphragm);
+
+
+        // --- PARTICLES (GAS EXCHANGE) ---
+        const particles = [];
+        const partGeo = new THREE.SphereGeometry(0.1, 4, 4);
+        const o2Mat = new THREE.MeshBasicMaterial({ color: config.colors.oxygen });
+        const co2Mat = new THREE.MeshBasicMaterial({ color: config.colors.co2 });
+
+        for (let i = 0; i < 100; i++) {
+            const isO2 = i < 50;
+            const mesh = new THREE.Mesh(partGeo, isO2 ? o2Mat : co2Mat);
+            mesh.visible = false;
+            scene.add(mesh);
+            particles.push({ mesh, isO2, active: false, t: 0, pathOffset: Math.random() });
+        }
+
+
+        // --- UI LOGIC ---
+
+        // 1. Canvas Graph (Spirometer)
+        const canvas = document.getElementById('spiro-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 300; canvas.height = 100;
+        const history = [];
+
+        function updateGraph(volume) {
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 100);
+
+            // Grid
+            ctx.strokeStyle = '#222'; ctx.beginPath();
+            ctx.moveTo(0, 50); ctx.lineTo(300, 50);
+            ctx.stroke();
+
+            history.push(volume);
+            if (history.length > 300) history.shift();
+
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < history.length; i++) {
+                // Color based on Inhale/Exhale
+                const y = 50 - (history[i] * 40); // Scale amplitude
+                const prevY = i > 0 ? 50 - (history[i - 1] * 40) : y;
+
+                // Gradient stroke hack
+                if (y < 50) ctx.strokeStyle = '#4cc9f0'; // Inhale (Up)
+                else ctx.strokeStyle = '#a0a0a0'; // Exhale (Down)
+
+                ctx.lineTo(i, y);
+                ctx.stroke();
+                ctx.beginPath(); // Reset path to change color per segment
+                ctx.moveTo(i, y);
+            }
+        }
+
+        // 2. Button Handlers (Exposed to window)
+        window.setCondition = (mode) => {
+            config.condition = mode;
+            document.getElementById('btn-healthy').className = mode === 'healthy' ? 'btn active' : 'btn';
+            const smokerBtn = document.getElementById('btn-smoker');
+            smokerBtn.className = mode === 'smoker' ? 'btn smoker-active' : 'btn';
+
+            // Update Material
+            const targetColor = mode === 'healthy' ? config.colors.healthy : config.colors.smoker;
+            const targetRoughness = mode === 'healthy' ? 0.4 : 0.9;
+
+            lungMaterial.color.setHex(targetColor);
+            lungMaterial.roughness = targetRoughness;
+        };
+
+        window.setView = (mode) => {
+            config.view = mode;
+            document.getElementById('btn-solid').className = mode === 'solid' ? 'btn active' : 'btn';
+            document.getElementById('btn-xray').className = mode === 'xray' ? 'btn active' : 'btn';
+
+            if (mode === 'xray') {
+                lungMaterial.transmission = 0.8; // Glassy
+                lungMaterial.opacity = 0.3;
+                lungMaterial.transparent = true;
+                lungMaterial.depthWrite = false;
+            } else {
+                lungMaterial.transmission = 0;
+                lungMaterial.opacity = 1;
+                lungMaterial.transparent = false;
+                lungMaterial.depthWrite = true;
+            }
+        };
+
+        document.getElementById('bpm-slider').addEventListener('input', (e) => {
+            config.bpm = parseInt(e.target.value);
+            document.getElementById('bpm-val').innerText = config.bpm;
+        });
+
+        // --- RAYCASTER (Tooltip) ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const tooltip = document.getElementById('tooltip');
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(anatomyGroup.children, true);
+
+            if (intersects.length > 0) {
+                const name = intersects[0].object.userData.name;
+                if (name) {
+                    tooltip.innerText = name;
+                    tooltip.style.opacity = 1;
+                    tooltip.style.left = e.clientX + 15 + 'px';
+                    tooltip.style.top = e.clientY + 15 + 'px';
+                    document.body.style.cursor = 'help';
+                    return;
+                }
+            }
+            tooltip.style.opacity = 0;
+            document.body.style.cursor = 'default';
+        });
+
+
+        // --- ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+
+            // Calculate Breathing Cycle
+            // Sine wave: -1 to 1.
+            const cycleSpeed = (config.bpm / 60) * (Math.PI * 2);
+            const cycle = Math.sin(time * cycleSpeed);
+            // Normalize for logic: 0 (Neutral) -> 1 (Max Inhale) -> 0 (Neutral) -> -1 (Max Exhale)
+
+            // 1. Lung Expansion/Contraction
+            // Lungs expand during Inhale (cycle > 0)
+            const expansion = 1 + (cycle * 0.15);
+            leftLung.scale.set(expansion, expansion, expansion);
+            rightLung.scale.set(-expansion, expansion, expansion); // Maintain mirror
+
+            // 2. Diaphragm Movement
+            // Inhale (cycle goes up): Diaphragm moves DOWN (flattens)
+            // Exhale (cycle goes down): Diaphragm moves UP (domes)
+            const diaY = -2.5 - (cycle * 0.6);
+            diaphragm.position.y = diaY;
+            // Flatten effect: Scale Y decreases as it moves down
+            diaphragm.scale.y = 0.5 - (cycle * 0.1);
+
+            // 3. Update Graph
+            updateGraph(cycle);
+
+            // 4. Particle System (Gas Flow)
+            const inhale = cycle > 0 && cycle < 0.8; // Flowing in
+            const exhale = cycle < 0 && cycle > -0.8; // Flowing out
+
+            particles.forEach((p, i) => {
+                if (p.isO2) {
+                    // Oxygen: Moves DOWN into lungs during Inhale
+                    if (inhale) {
+                        p.mesh.visible = true;
+                        p.mesh.position.y = 5 - (cycle * 8 * (1 + p.pathOffset)); // Simple linear drop
+                        p.mesh.position.x = Math.sin(time * 5 + i) * 1.5; // Spread
+                        p.mesh.position.z = Math.cos(time * 5 + i) * 0.5;
+                    } else {
+                        p.mesh.visible = false;
+                    }
+                } else {
+                    // CO2: Moves UP out of lungs during Exhale
+                    if (exhale) {
+                        p.mesh.visible = true;
+                        const invCycle = Math.abs(cycle);
+                        p.mesh.position.y = -2 + (invCycle * 8 * (1 + p.pathOffset)); // Rise up
+                        p.mesh.position.x = Math.sin(time * 5 + i) * 1.5;
+                        p.mesh.position.z = Math.cos(time * 5 + i) * 0.5;
+                    } else {
+                        p.mesh.visible = false;
+                    }
+                }
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+
+    </script>
+</body>
+
+</html>
