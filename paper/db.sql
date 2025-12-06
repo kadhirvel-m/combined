@@ -372,6 +372,8 @@ CREATE TABLE public.syllabus_topics (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   image_url text,
+  video_url text,
+  ppt_url text,
   CONSTRAINT syllabus_topics_pkey PRIMARY KEY (id),
   CONSTRAINT syllabus_topics_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.syllabus_units(id)
 );
@@ -505,6 +507,7 @@ CREATE TABLE public.user_education (
   degree_id uuid,
   department_id uuid,
   batch_id uuid,
+  section text,
   CONSTRAINT user_education_pkey PRIMARY KEY (id),
   CONSTRAINT user_education_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_education_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),

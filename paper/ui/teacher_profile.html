@@ -321,7 +321,14 @@
 
         function classCard(c) {
             const tags = []; if (c.batch_range) tags.push(c.batch_range); if (c.section) tags.push('Sec ' + c.section);
-            const syllabusHref = c.subject_id ? `./teacher_class_syllabus.html?course_id=${encodeURIComponent(c.subject_id)}&subject=${encodeURIComponent(c.subject || '')}` : '';
+            const params = new URLSearchParams();
+            if (c.subject_id) params.set('course_id', c.subject_id);
+            if (c.subject) params.set('subject', c.subject);
+            if (c.id) params.set('class_id', c.id);
+            if (c.batch_id) params.set('batch_id', c.batch_id);
+            if (c.section) params.set('section', c.section);
+            if (c.semester) params.set('semester', c.semester);
+            const syllabusHref = c.subject_id ? `./teacher_class_syllabus.html?${params.toString()}` : '';
             const disabled = !syllabusHref;
             const baseCls = 'group relative rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 p-4 transition-shadow block';
             const hoverCls = disabled ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-card hover:-translate-y-0.5 cursor-pointer';
