@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Class Syllabus • Paper X</title>
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script>
+        // Guarded tailwind config to avoid SES/lockdown errors when tailwind global is missing
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
+                    },
+                    boxShadow: {
+                        card: '0 6px 24px rgba(0,0,0,.10)',
+                        glow: '0 8px 30px rgba(158,75,138,.35)'
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        .dark body {
+            background-image: linear-gradient(to left top, #1e1e2f, #242138, #2b2440, #332649, #3d2850, #3f254a, #402244, #401f3e, #34182d, #26131e, #190b11, #000000);
+            background-repeat: no-repeat;
+            background-size: cover;
+        }
+    </style>
+    <script>(function () { const s = localStorage.getItem('px_theme'); const p = matchMedia('(prefers-color-scheme: dark)').matches; const m = s ? s : (p ? 'dark' : 'light'); if (m === 'dark') document.documentElement.classList.add('dark'); })();</script>
+    <script src="./config.js"></script>
+    <script src="./auth.js" defer></script>
+    <script>
+        const __rawApiBase = window.API_BASE || 'http://127.0.0.1:8000';
+        window.API_BASE = String(__rawApiBase || '').replace(/\/$/, '');
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3">
+            <a href="./index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X">
+                <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X">
+            </a>
+            <div class="flex items-center gap-2">
+                <button id="backBtn"
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">
+                    <span class="material-symbols-rounded text-base">arrow_back</span>
+                    Back
+                </button>
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">
+                    <span class="material-symbols-rounded text-base">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container py-8 space-y-6">
+        <section class="glass rounded-3xl p-6 md:p-8 ring-1 ring-black/5 dark:ring-white/10 shadow-card space-y-4">
+            <div class="flex items-start gap-4 flex-wrap">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500/30 to-brand-700/20 grid place-items-center text-lg font-bold text-brand-700 dark:text-fuchsia-200"
+                    id="subjectInitial">-</div>
+                <div class="flex-1 min-w-0 space-y-1">
+                    <p class="text-xs uppercase tracking-[0.1em] text-neutral-500 dark:text-white/60">Class syllabus</p>
+                    <h1 id="subjectTitle" class="text-2xl md:text-3xl font-extrabold leading-tight">Loading…</h1>
+                    <div class="flex flex-wrap gap-2 text-[11px] font-medium" id="subjectMeta"></div>
+                </div>
+            </div>
+            <div id="status" class="text-sm text-neutral-600 dark:text-white/70">Fetching syllabus…</div>
+        </section>
+
+        <section class="space-y-4">
+            <div id="unitsWrap" class="grid gap-4"></div>
+            <div id="emptyState" class="hidden text-sm text-neutral-600 dark:text-white/65">No units found for this
+                subject.</div>
+        </section>
+    </main>
+
+    <div class="fixed bottom-3 right-3 z-40">
+        <button id="scrollTop"
+            class="hidden size-10 rounded-full bg-brand-500 hover:bg-brand-600 text-white shadow-glow flex items-center justify-center"><span
+                class="material-symbols-rounded">north</span></button>
+    </div>
+
+    <script>
+        const $ = (s, r = document) => r.querySelector(s);
+        const esc = (s = '') => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const params = new URLSearchParams(location.search);
+        const courseId = params.get('course_id') || params.get('subject_id');
+        const subjectQuery = params.get('subject') || '';
+
+        function getToken() {
+            const primary = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+            for (const k of primary) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } }
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (/token/i.test(key || '')) {
+                        const v = localStorage.getItem(key);
+                        if (v && v.length > 10) return v;
+                    }
+                }
+            } catch { }
+            return '';
+        }
+
+        const themeRoot = document.documentElement;
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-theme-toggle]');
+            if (!btn) return;
+            const isDark = themeRoot.classList.toggle('dark');
+            localStorage.setItem('px_theme', isDark ? 'dark' : 'light');
+            const icon = btn.querySelector('.material-symbols-rounded');
+            if (icon) icon.textContent = isDark ? 'light_mode' : 'dark_mode';
+        });
+
+        $('#backBtn').addEventListener('click', () => { history.back(); });
+        const st = $('#scrollTop');
+        window.addEventListener('scroll', () => { if (scrollY > 400) st.classList.remove('hidden'); else st.classList.add('hidden'); });
+        st.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+        async function loadSyllabus() {
+            if (!courseId) { renderStatus('Missing course id', true); return; }
+            try {
+                const baseRaw = window.__API_BASE || window.API_BASE || 'http://127.0.0.1:8000';
+                const base = String(baseRaw || '').replace(/\/$/, '');
+                const token = getToken();
+                const headers = token ? { Authorization: 'Bearer ' + token } : {};
+                const res = await fetch(`${base}/api/syllabus/courses/${encodeURIComponent(courseId)}`, { headers });
+                if (!res.ok) { throw new Error(`Failed to load syllabus (${res.status})`); }
+                const data = await res.json();
+                renderCourse(data);
+            } catch (err) {
+                console.error('[syllabus] load failed', err);
+                renderStatus(err.message || 'Unable to load syllabus', true);
+            }
+        }
+
+        function renderStatus(msg, isError = false) {
+            const node = $('#status');
+            if (node) {
+                node.textContent = msg;
+                node.className = 'text-sm ' + (isError ? 'text-red-600 dark:text-red-400' : 'text-neutral-600 dark:text-white/70');
+            }
+        }
+
+        let currentCourseTitle = '';
+
+        function renderCourse(course) {
+            if (!course) { renderStatus('No syllabus found', true); return; }
+            const title = course.title || subjectQuery || 'Subject';
+            currentCourseTitle = title;
+            const code = course.course_code ? course.course_code.toUpperCase() : '';
+            $('#subjectTitle').textContent = title;
+            $('#subjectInitial').textContent = (title || 'S').charAt(0).toUpperCase();
+            const meta = $('#subjectMeta');
+            meta.innerHTML = '';
+            if (code) meta.insertAdjacentHTML('beforeend', `<span class="px-2 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-[11px]">${esc(code)}</span>`);
+            if (course.semester) meta.insertAdjacentHTML('beforeend', `<span class="px-2 py-1 rounded-full bg-brand-500/10 text-brand-700 dark:text-brandlt-200 text-[11px]">Sem ${esc(course.semester)}</span>`);
+            if (course.batch_id) meta.insertAdjacentHTML('beforeend', `<span class="px-2 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-[11px]">Batch ${esc(course.batch_id)}</span>`);
+            renderStatus('');
+            renderUnits(course.units || []);
+        }
+
+        function renderUnits(units) {
+            const wrap = $('#unitsWrap');
+            const empty = $('#emptyState');
+            wrap.innerHTML = '';
+            if (!units.length) { empty.classList.remove('hidden'); return; }
+            empty.classList.add('hidden');
+            units.forEach((u, idx) => {
+                const topics = Array.isArray(u.topics) ? u.topics : [];
+                const unitId = `unit-${idx}`;
+                const unitUuid = u.id || u.unit_id || '';
+                const hasBlink = topics.some(t => (t.image_url || '').trim() !== '');
+                const li = document.createElement('div');
+                li.className = 'rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 overflow-hidden';
+                const blinkHtml = hasBlink && unitUuid ? `
+                        <button type="button" class="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-3 py-1 text-[11px] font-semibold text-white shadow-[0_10px_28px_rgba(158,75,138,0.35)] hover:shadow-[0_14px_34px_rgba(158,75,138,0.45)] transition" data-blink="${unitUuid}">
+                            <span class="material-symbols-rounded text-sm">bolt</span>
+                            Blink
+                        </button>` : '';
+                li.innerHTML = `
+                    <div class="px-4 py-3 flex items-center justify-between gap-3 hover:bg-white/60 dark:hover:bg-white/10 transition-colors">
+                        <button type="button" class="flex-1 flex items-center justify-between gap-3 text-left" aria-expanded="false" data-toggle="${unitId}">
+                            <span class="flex items-center gap-2 text-sm font-semibold">
+                                <span class="material-symbols-rounded text-neutral-500 -rotate-90" aria-hidden="true">expand_more</span>
+                                ${esc(u.unit_title || 'Unit')}
+                            </span>
+                            <span class="text-[11px] text-neutral-500 dark:text-white/60">${topics.length} topics</span>
+                        </button>
+                        ${blinkHtml}
+                    </div>
+                    <div id="${unitId}" class="px-4 pb-4 hidden">
+                        <ul class="space-y-1 text-sm"></ul>
+                    </div>
+                `;
+                const list = li.querySelector('ul');
+                topics.forEach(t => {
+                    const row = document.createElement('li');
+                    row.className = 'flex items-center justify-between gap-3 py-1 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5';
+                    const left = document.createElement('div');
+                    left.className = 'flex items-center gap-2 min-w-0';
+                    const dot = document.createElement('span');
+                    dot.className = 'size-2 rounded-full bg-brand-500/70 flex-shrink-0';
+                    const link = document.createElement('a');
+                    link.href = 'notes_generator.html?topic=' + encodeURIComponent(t.topic || '');
+                    link.textContent = t.topic || 'Topic';
+                    link.className = 'text-brand-600 dark:text-brand-200 hover:underline truncate';
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    left.appendChild(dot);
+                    left.appendChild(link);
+                    row.appendChild(left);
+
+                    const pptUrl = t.ppt_url || t.ppt || '';
+                    if (pptUrl) {
+                        const pptBtn = document.createElement('button');
+                        pptBtn.type = 'button';
+                        pptBtn.className = 'inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-brand-600 dark:text-brand-200 hover:bg-brand-500/10';
+                        pptBtn.innerHTML = '<span class="material-symbols-rounded text-sm">slideshow</span>PPT';
+                        pptBtn.addEventListener('click', () => window.open(pptUrl, '_blank', 'noopener'));
+                        row.appendChild(pptBtn);
+                    }
+                    list.appendChild(row);
+                });
+                const btn = li.querySelector('[data-toggle]');
+                const caret = btn.querySelector('.material-symbols-rounded');
+                const panel = li.querySelector(`#${unitId}`);
+                btn.addEventListener('click', () => {
+                    const isHidden = panel.classList.toggle('hidden');
+                    btn.setAttribute('aria-expanded', (!isHidden).toString());
+                    caret.classList.toggle('-rotate-90', isHidden);
+                    caret.classList.toggle('rotate-0', !isHidden);
+                });
+                const blinkBtn = li.querySelector('[data-blink]');
+                if (blinkBtn && !blinkBtn.disabled) {
+                    blinkBtn.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        const url = `syllabus_blink.html?unit_id=${encodeURIComponent(unitUuid)}&course_title=${encodeURIComponent(currentCourseTitle || '')}&unit_title=${encodeURIComponent(u.unit_title || '')}`;
+                        window.open(url, '_blank', 'noopener');
+                    });
+                }
+                wrap.appendChild(li);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', loadSyllabus);
+    </script>
+</body>
+
+</html>

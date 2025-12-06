@@ -3644,40 +3644,53 @@ def sync_units_and_topics(course_id: uuid.UUID, units: List[UnitIn]) -> List[Uni
 
 def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
     supabase = get_service_client()
-    course_q = (
+
+    def _safe_exec(builder, label: str):
+        # Lightweight retry loop so transient disconnects (RemoteProtocolError, etc.) don't crash the endpoint
+        retries = 3
+        delay = 0.15
+        last_err = None
+        for attempt in range(retries):
+            try:
+                res = builder.execute()
+                break
+            except Exception as e:  # httpx / network-level errors are fine to retry
+                last_err = e
+                if attempt == retries - 1:
+                    raise HTTPException(status_code=503, detail=f"Supabase error ({label}): {e}")
+                time.sleep(delay * (attempt + 1))
+        if getattr(res, "error", None):
+            raise HTTPException(status_code=503, detail=f"Supabase error ({label}): {res.error}")
+        return res
+
+    course_builder = (
         supabase.table("syllabus_courses")
         .select("id,batch_id,semester,course_code,title")
         .eq("id", str(course_id))
         .single()
-        .execute()
     )
-    if getattr(course_q, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get course): {course_q.error}")
+    course_q = _safe_exec(course_builder, "get course")
     if not course_q.data:
         raise HTTPException(status_code=404, detail="Course not found")
 
-    units_rows = (
+    units_builder = (
         supabase.table("syllabus_units")
         .select("id,unit_title,order_in_course")
         .eq("course_id", str(course_id))
         .order("order_in_course")
-        .execute()
     )
-    if getattr(units_rows, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get units): {units_rows.error}")
+    units_rows = _safe_exec(units_builder, "get units")
 
     units_out: List[UnitOut] = []
     for unit_row in units_rows.data or []:
         unit_id = uuid.UUID(unit_row["id"])
-        topics_rows = (
+        topics_builder = (
             supabase.table("syllabus_topics")
             .select("id,topic,order_in_unit,image_url,video_url,ppt_url")
             .eq("unit_id", str(unit_id))
             .order("order_in_unit")
-            .execute()
         )
-        if getattr(topics_rows, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (get topics): {topics_rows.error}")
+        topics_rows = _safe_exec(topics_builder, "get topics")
         units_out.append(
             UnitOut(
                 id=unit_id,
@@ -4105,6 +4118,7 @@ def _prepare_education_rows(rows: Optional[List[Dict[str, Any]]]) -> List[Dict[s
             "degree": _strip_or_none(row.get("degree")),
             "department": _strip_or_none(row.get("department")),
             "batch_range": _strip_or_none(row.get("batch_range")),
+            "section": _strip_or_none(row.get("section")),
             "regno": _strip_or_none(row.get("regno")),
             "current_semester": row.get("current_semester") if isinstance(row.get("current_semester"), int) else None,
             "grade": _strip_or_none(row.get("grade")),
@@ -9334,6 +9348,7 @@ class EducationIn(BaseModel):
     degree: Optional[str] = None
     department: Optional[str] = None
     batch_range: Optional[str] = None  # e.g. "2022-2026"
+    section: Optional[str] = None
     regno: Optional[str] = None
     current_semester: Optional[int] = None
     grade: Optional[str] = None
@@ -9345,6 +9360,7 @@ class EducationIn(BaseModel):
         "degree",
         "department",
         "batch_range",
+        "section",
         "regno",
         "grade",
         "activities",
@@ -10002,21 +10018,6 @@ def shop_me_update(payload: UpdateShopIn, authorization: Optional[str] = Header(
 
 
 # ---- Admin endpoints: roles + shops listing ----
-
-def _require_admin(authorization: Optional[str]) -> str:
-    token = _bearer_token_from_header(authorization)
-    uid = _require_auth_user_id(token)
-    supabase = get_service_client()
-    try:
-        r = supabase.table("admin_roles").select("role,permissions").eq("auth_user_id", uid).limit(1).execute()
-        row = (getattr(r, 'data', []) or [{}])[0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to resolve admin role: {e}")
-    role = (row.get("role") or "").lower()
-    if role != "admin":
-        raise HTTPException(status_code=403, detail="Admins only")
-    return uid
-
 
 @print_router.get("/api/admin/roles/me", summary="Return current user's admin role")
 def admin_role_me(authorization: Optional[str] = Header(default=None)):
