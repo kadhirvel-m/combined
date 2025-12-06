@@ -7281,6 +7281,9 @@ class TeacherClassStudent(BaseModel):
     batch_label: Optional[str] = None
     current_semester: Optional[int] = None
     avatar_url: Optional[str] = None
+    completed_topics: int = 0
+    total_topics: int = 0
+    progress_pct: Optional[float] = None
 
 
 class TeacherClassStudentsResponse(BaseModel):
@@ -7631,6 +7634,33 @@ def list_teacher_class_students(class_id: uuid.UUID, authorization: Optional[str
     if class_row.get("teacher_user_id") != uid:
         raise HTTPException(status_code=403, detail="Cannot view another teacher's class")
 
+    course_topic_ids: List[str] = []
+    total_course_topics = 0
+    subject_id_value = class_row.get("subject_id")
+    if subject_id_value:
+        units_res = _supabase_retry(
+            lambda: supabase
+            .table("syllabus_units")
+            .select("id")
+            .eq("course_id", str(subject_id_value))
+            .execute()
+        )
+        if getattr(units_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (units for course): {units_res.error}")
+        unit_ids = [row.get("id") for row in (units_res.data or []) if row.get("id")]
+        if unit_ids:
+            topics_res = _supabase_retry(
+                lambda: supabase
+                .table("syllabus_topics")
+                .select("id")
+                .in_("unit_id", unit_ids)
+                .execute()
+            )
+            if getattr(topics_res, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (topics for course): {topics_res.error}")
+            course_topic_ids = [row.get("id") for row in (topics_res.data or []) if row.get("id")]
+            total_course_topics = len(course_topic_ids)
+
     applied_filters: Dict[str, Any] = {}
     def _track_filter(key: str, value: Any):
         if value is None:
@@ -7711,12 +7741,34 @@ def list_teacher_class_students(class_id: uuid.UUID, authorization: Optional[str
             if fy and ty:
                 batch_labels[fid] = f"{fy}-{ty}"
 
+    progress_counts: Dict[str, int] = {}
+    if profile_ids and course_topic_ids:
+        prog_res = _supabase_retry(
+            lambda: supabase
+            .table("user_topic_progress")
+            .select("user_profile_id,topic_id")
+            .in_("user_profile_id", list(profile_ids))
+            .in_("topic_id", course_topic_ids)
+            .execute()
+        )
+        if getattr(prog_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (topic progress): {prog_res.error}")
+        for row in prog_res.data or []:
+            pid = row.get("user_profile_id")
+            if pid:
+                progress_counts[pid] = progress_counts.get(pid, 0) + 1
+
     students: List[TeacherClassStudent] = []
     for edu in edu_rows:
         prof_id = edu.get("user_profile_id")
         prof = profiles.get(prof_id)
         if not prof_id or not prof:
             continue
+        completed = progress_counts.get(prof_id, 0)
+        total_topics = total_course_topics
+        progress_pct = None
+        if total_topics > 0:
+            progress_pct = round((completed / total_topics) * 100, 1)
         try:
             entry = TeacherClassStudent(
                 profile_id=uuid.UUID(prof_id),
@@ -7731,6 +7783,9 @@ def list_teacher_class_students(class_id: uuid.UUID, authorization: Optional[str
                 batch_label=batch_labels.get(edu.get("batch_id")),
                 current_semester=edu.get("current_semester") or prof.get("semester"),
                 avatar_url=prof.get("profile_image_url"),
+                completed_topics=completed,
+                total_topics=total_topics,
+                progress_pct=progress_pct,
             )
         except (KeyError, ValueError):
             continue
