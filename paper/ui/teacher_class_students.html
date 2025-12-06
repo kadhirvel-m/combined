@@ -42,6 +42,11 @@
             background-repeat: no-repeat;
             background-size: cover;
         }
+
+        .student-card {
+            max-width: 340px;
+            width: 100%;
+        }
     </style>
     <script>(function () { const s = localStorage.getItem('px_theme'); const p = matchMedia('(prefers-color-scheme: dark)').matches; const m = s ? s : (p ? 'dark' : 'light'); if (m === 'dark') document.documentElement.classList.add('dark'); })();</script>
     <script src="./config.js"></script>
@@ -101,7 +106,7 @@
                         autocomplete="off" />
                 </div>
             </div>
-            <div id="studentsWrap" class="grid gap-3 lg:grid-cols-2"></div>
+            <div id="studentsWrap" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 justify-items-center"></div>
             <div id="emptyState" class="hidden text-sm text-neutral-600 dark:text-white/70">No students match the
                 current filters.</div>
         </section>
@@ -226,46 +231,43 @@
             empty.classList.add('hidden');
             list.forEach(s => {
                 const avatar = s.avatar_url ? `<img src="${s.avatar_url}" alt="" class="w-full h-full object-cover"/>` : `<div class="w-full h-full grid place-items-center bg-gradient-to-br from-brand-500/25 to-brand-700/20 text-lg font-bold">${esc((s.name || 'S').charAt(0).toUpperCase())}</div>`;
-                const reg = s.regno ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/10">${esc(s.regno)}</span>` : '';
-                const semLabel = s.current_semester ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-700 dark:text-brandlt-200">Sem ${esc(s.current_semester)}</span>` : '';
-                const batchLabel = s.batch_label ? `<span class="text-[11px] px-2 py-0.5 rounded-full ring-1 ring-black/10 dark:ring-white/15">Batch ${esc(s.batch_label)}</span>` : '';
+                const reg = s.regno ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/10 text-neutral-700 dark:text-white">${esc(s.regno)}</span>` : '';
                 const contact = [];
                 if (s.email) contact.push(`<a href="mailto:${encodeURIComponent(s.email)}" class="hover:underline">${esc(s.email)}</a>`);
                 if (s.phone) contact.push(`<a href="tel:${encodeURIComponent(s.phone)}" class="hover:underline">${esc(s.phone)}</a>`);
-                const sectionChip = s.section ? `<span class="text-[11px] px-2 py-0.5 rounded-full ring-1 ring-black/10 dark:ring-white/15">Section ${esc(s.section)}</span>` : '';
                 const totalTopics = Number(s.total_topics || 0);
                 const completedTopics = Number(s.completed_topics || 0);
                 const rawPct = typeof s.progress_pct === 'number'
                     ? s.progress_pct
                     : (totalTopics > 0 ? (completedTopics / totalTopics) * 100 : 0);
                 const pct = Math.max(0, Math.min(100, Math.round((rawPct + Number.EPSILON) * 10) / 10));
-                const ratioLabel = totalTopics ? `${completedTopics}/${totalTopics} topics` : `${completedTopics}/— topics`;
+                const ratioLabel = totalTopics ? `${completedTopics}/${totalTopics}` : 'N/A';
                 const pctLabel = totalTopics ? `${pct}%` : '—';
-                const progressBlock = totalTopics
-                    ? `<div class="pt-2 mt-2 border-t border-black/5 dark:border-white/5 space-y-1">
-                            <div class="flex items-center justify-between text-[11px] text-neutral-500 dark:text-white/60 font-medium">
-                                <span>Progress</span>
-                                <span>${ratioLabel} (${pctLabel})</span>
+                const baseTrack = 'rgba(148,163,184,0.25)';
+                const fillColor = totalTopics ? 'rgba(158,75,138,0.95)' : 'rgba(148,163,184,0.35)';
+                const circleStyle = `background: conic-gradient(${fillColor} ${pct}%, ${baseTrack} ${pct}%);`;
+                const progressCircle = `
+                    <div class="flex flex-col items-center gap-1 ml-4 min-w-[4.5rem] text-[10px] text-neutral-500 dark:text-white/60">
+                        <div class="relative w-14 h-14 rounded-full shadow-inner" style="${circleStyle}">
+                            <div class="absolute inset-[3px] rounded-full bg-white/90 dark:bg-brand-950 flex items-center justify-center text-[11px] font-semibold text-brand-700 dark:text-brandlt-100">
+                                ${pctLabel}
                             </div>
-                            <div class="h-1.5 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
-                                <div class="h-full rounded-full bg-gradient-to-r from-brand-500 via-brand-600 to-brand-700" style="width:${pct}%;"></div>
-                            </div>
-                        </div>`
-                    : `<div class="pt-2 mt-2 border-t border-black/5 dark:border-white/5 text-[11px] text-neutral-400 dark:text-white/40">
-                            ${ratioLabel} — link this class to a syllabus to track progress.
-                        </div>`;
+                        </div>
+        	            <span class="text-[11px] font-semibold text-neutral-800 dark:text-white">${ratioLabel}</span>
+                        ${totalTopics ? '<span class="text-[9px] uppercase tracking-wide text-neutral-400 dark:text-white/40">topics</span>' : '<span class="text-[9px] uppercase tracking-wide text-neutral-400 dark:text-white/40">link syllabus</span>'}
+                    </div>`;
                 const card = document.createElement('div');
-                card.className = 'rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 p-4 flex gap-4 items-start';
+                card.className = 'student-card rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 p-4 flex gap-4 items-center justify-self-center';
                 card.innerHTML = `
                     <div class="w-14 h-14 rounded-2xl overflow-hidden ring-1 ring-black/5 dark:ring-white/15 flex-shrink-0">${avatar}</div>
-                    <div class="flex-1 space-y-1 min-w-0">
-                        <div class="flex flex-wrap items-center gap-2 justify-between">
+                    <div class="flex-1 min-w-0 space-y-1">
+                        ${reg ? `<div class="flex justify-between items-center">${reg}</div>` : ''}
+                        <div class="flex items-center justify-between gap-2">
                             <h3 class="text-base font-semibold leading-tight truncate">${esc(s.name || 'Student')}</h3>
-                            <div class="flex flex-wrap gap-1">${semLabel}${sectionChip}${batchLabel}${reg}</div>
                         </div>
                         <div class="text-[12px] text-neutral-500 dark:text-white/60 space-x-2 break-all">${contact.join('<span class="opacity-40">•</span>')}</div>
-                        ${progressBlock}
-                    </div>`;
+                    </div>
+                    ${progressCircle}`;
                 wrap.appendChild(card);
             });
         }
