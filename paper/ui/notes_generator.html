@@ -69,6 +69,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
     rel="stylesheet" />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
 
   <!-- Code highlight / markdown / mermaid -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
@@ -303,6 +305,7 @@
       text-decoration: none;
       color: inherit;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      position: relative;
     }
 
     .yt-card:hover {
@@ -336,6 +339,72 @@
       font-weight: 600;
     }
 
+    .yt-hover-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(155deg, rgba(8, 7, 31, 0.75), rgba(88, 28, 135, 0.45));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.8rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 2;
+    }
+
+    .yt-card:hover .yt-hover-overlay,
+    .yt-card:focus-within .yt-hover-overlay {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .yt-hover-overlay .yt-hover-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 9999px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 12px 22px rgba(15, 23, 42, 0.35);
+      font-size: 0;
+    }
+
+    .yt-hover-overlay .yt-hover-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 24px rgba(15, 23, 42, 0.45);
+    }
+
+    .yt-hover-overlay .yt-hover-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .yt-hover-btn-play {
+      background: linear-gradient(135deg, #4C2A59, #B06AB3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .yt-hover-btn-notes {
+      background: linear-gradient(135deg, #4C2A59, #B06AB3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .yt-hover-btn-icon {
+      font-size: 22px;
+      line-height: 1;
+      color: inherit;
+      font-family: 'Material Symbols Rounded', 'Material Symbols Outlined', sans-serif;
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+
     .yt-body {
       padding: 0.75rem 0.95rem 1rem;
       display: flex;
@@ -349,6 +418,7 @@
       line-height: 1.3;
       overflow: hidden;
       display: -webkit-box;
+      line-clamp: 2;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
     }
@@ -1776,18 +1846,11 @@
     }
 
     function createRelatedVideoCard(video) {
-      const anchor = document.createElement('a');
+      const card = document.createElement('div');
       const link = (typeof video.link === 'string' && video.link.trim()) || '';
-      const notesUrl = link ? `./youtube-notes.html?video=${encodeURIComponent(link)}` : '#';
-      anchor.href = notesUrl;
-      anchor.className = 'yt-card';
-      anchor.setAttribute('data-video-card', '1');
-      if (notesUrl && notesUrl !== '#') {
-        anchor.addEventListener('click', (event) => {
-          event.preventDefault();
-          window.location.href = notesUrl;
-        });
-      }
+      const notesUrl = link ? `./youtube-notes.html?video=${encodeURIComponent(link)}` : '';
+      card.className = 'yt-card';
+      card.setAttribute('data-video-card', '1');
 
       const thumb = document.createElement('div');
       thumb.className = 'yt-thumb';
@@ -1806,7 +1869,21 @@
         badge.textContent = video.duration;
         thumb.appendChild(badge);
       }
-      anchor.appendChild(thumb);
+      if (video.recommended) {
+        const recBadge = document.createElement('span');
+        // Solid brand background so it remains clearly visible
+        recBadge.className = 'absolute left-2 top-2 z-[1] inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white shadow-[0_10px_26px_rgba(15,23,42,0.45)]';
+        const star = document.createElement('span');
+        star.className = 'text-[15px] leading-none';
+        star.style.color = '#FBBF24';
+        star.textContent = '\u2605';
+        const label = document.createElement('span');
+        label.textContent = 'Recommended';
+        recBadge.appendChild(star);
+        recBadge.appendChild(label);
+        thumb.appendChild(recBadge);
+      }
+      card.appendChild(thumb);
 
       const body = document.createElement('div');
       body.className = 'yt-body';
@@ -1842,13 +1919,69 @@
       }
 
       body.appendChild(meta);
-      anchor.appendChild(body);
+      card.appendChild(body);
+
+      // Add a soft brand-colored glow for recommended videos
+      if (video.recommended) {
+        card.classList.add('shadow-[0_0_0_1px_rgba(158,75,138,0.4)]', 'shadow-neon');
+      }
 
       const channelPage = (typeof video.channel_page === 'string' ? video.channel_page : '').trim();
       const logoIsDefault = Boolean(video.channel_logo_is_default) || !video.channel_logo || video.channel_logo === fallbackChannelLogo;
       hydrateChannelLogo(logoImg, channelPage, logoIsDefault && !!channelPage);
 
-      return anchor;
+      const overlay = document.createElement('div');
+      overlay.className = 'yt-hover-overlay';
+
+      const playBtn = document.createElement('button');
+      playBtn.type = 'button';
+      playBtn.className = 'yt-hover-btn yt-hover-btn-play';
+      playBtn.setAttribute('aria-label', 'Play on YouTube');
+      playBtn.title = 'Play on YouTube';
+      const playIcon = document.createElement('span');
+      playIcon.className = 'yt-hover-btn-icon';
+      playIcon.textContent = 'play_arrow';
+      playBtn.appendChild(playIcon);
+      if (!link) {
+        playBtn.disabled = true;
+        playBtn.style.opacity = '0.6';
+        playBtn.style.cursor = 'not-allowed';
+      }
+      playBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (link) {
+          window.open(link, '_blank', 'noopener');
+        }
+      });
+
+      const notesBtn = document.createElement('button');
+      notesBtn.type = 'button';
+      notesBtn.className = 'yt-hover-btn yt-hover-btn-notes';
+      notesBtn.setAttribute('aria-label', 'Open PaperX notes');
+      notesBtn.title = 'Open PaperX notes';
+      const notesIcon = document.createElement('span');
+      notesIcon.className = 'yt-hover-btn-icon';
+      notesIcon.textContent = 'description';
+      notesBtn.appendChild(notesIcon);
+      if (!notesUrl || notesUrl === '#') {
+        notesBtn.disabled = true;
+        notesBtn.style.opacity = '0.6';
+        notesBtn.style.cursor = 'not-allowed';
+      }
+      notesBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (notesUrl && notesUrl !== '#') {
+          window.open(notesUrl, '_blank', 'noopener');
+        }
+      });
+
+      overlay.appendChild(playBtn);
+      overlay.appendChild(notesBtn);
+
+      thumb.appendChild(overlay);
+      return card;
     }
 
     function renderRelatedVideos(videos, displayTopic, baseTopic, language) {
@@ -1941,6 +2074,88 @@
       $relatedVideosEmpty?.classList.add('hidden');
 
       try {
+        // First, try to fetch a syllabus-linked video_url for this topic
+        let recommended = null;
+        try {
+          const recRes = await fetch(`${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(baseQuery)}`);
+          if (recRes.ok) {
+            const recData = await recRes.json();
+            if (Array.isArray(recData) && recData.length) {
+              const first = recData.find(t => typeof t.video_url === 'string' && t.video_url.trim());
+              if (first && first.video_url) {
+                const vurl = first.video_url.trim();
+                // extract YouTube id if possible
+                let vidId = '';
+                const ytMatch = vurl.match(/[?&]v=([^&#]+)/) || vurl.match(/youtu\.be\/([^?#]+)/);
+                if (ytMatch && ytMatch[1]) {
+                  vidId = ytMatch[1];
+                }
+                recommended = {
+                  id: vidId || '',
+                  link: vurl,
+                  title: (first.topic || baseQuery || '').toString(),
+                  channel: 'Syllabus recommended',
+                  channel_page: '',
+                  thumbnail: '',
+                  views: '',
+                  channel_logo: '',
+                  channel_logo_is_default: true,
+                  duration: '',
+                  recommended: true,
+                };
+
+                // Attempt to hydrate channel metadata from backend so logo/name show like other videos
+                try {
+                  const metaRes = await fetch(`${apiBase}/api/transcripts/meta`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: vurl }),
+                  });
+                  if (metaRes.ok) {
+                    const meta = await metaRes.json();
+                    if (meta && typeof meta === 'object') {
+                      if (meta.channel_name) {
+                        recommended.channel = meta.channel_name;
+                      }
+                      if (meta.channel_logo) {
+                        recommended.channel_logo = meta.channel_logo;
+                        recommended.channel_logo_is_default = false;
+                      }
+                      if (meta.channel_url) {
+                        recommended.channel_page = meta.channel_url;
+                      }
+                    }
+                  }
+                } catch (metaErr) {
+                  console.warn('Recommended video metadata lookup failed:', metaErr);
+                }
+
+                // Fallback to YouTube oEmbed for channel name + URL if backend metadata unavailable
+                if (!recommended.channel_page || recommended.channel === 'Syllabus recommended') {
+                  try {
+                    const oembedRes = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(vurl)}`);
+                    if (oembedRes.ok) {
+                      const oembed = await oembedRes.json();
+                      if (oembed && typeof oembed === 'object') {
+                        if (oembed.author_name) {
+                          recommended.channel = oembed.author_name;
+                        }
+                        if (oembed.author_url) {
+                          recommended.channel_page = oembed.author_url;
+                        }
+                      }
+                    }
+                  } catch (oembedErr) {
+                    console.warn('YouTube oEmbed lookup failed:', oembedErr);
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Recommended topic video lookup failed:', e);
+        }
+
         const fetchOptions = relatedVideosAbort ? { signal: relatedVideosAbort.signal } : undefined;
         const response = await fetch(`${apiBase}/api/youtube/search?query=${encodeURIComponent(searchQuery)}&num=8`, fetchOptions);
         if (!response.ok) {
@@ -1969,7 +2184,9 @@
           }
           return;
         }
-        renderRelatedVideos(videos.slice(0, 8), searchQuery, baseQuery, relatedVideosLanguage);
+        const limited = videos.slice(0, 8);
+        const finalList = recommended ? [recommended, ...limited] : limited;
+        renderRelatedVideos(finalList, searchQuery, baseQuery, relatedVideosLanguage);
       } catch (error) {
         if (error?.name === 'AbortError') return;
         console.error('Related videos error:', error);

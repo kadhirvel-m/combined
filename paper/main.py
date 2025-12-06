@@ -8749,6 +8749,47 @@ def api_list_topics_for_unit(unit_id: uuid.UUID):
 
 
 @academics_router.get(
+    "/api/syllabus/topics/by-title",
+    response_model=List[TopicOut],
+    summary="Find syllabus topics by exact title (with URLs)",
+)
+def api_find_topics_by_title(topic: str = Query(..., min_length=1, max_length=512)):
+    """Lookup topics in syllabus_topics by exact topic title.
+
+    This is used by the notes generator to attach a recommended video
+    from the structured syllabus (video_url) ahead of generic search
+    results.
+    """
+    clean = (topic or "").strip()
+    if not clean:
+        return []
+
+    supabase = get_service_client()
+    res = (
+        supabase.table("syllabus_topics")
+        .select("id,topic,order_in_unit,image_url,video_url,ppt_url")
+        .eq("topic", clean)
+        .order("order_in_unit")
+        .limit(5)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find topic by title): {res.error}")
+
+    return [
+        TopicOut(
+            id=uuid.UUID(row["id"]),
+            topic=row.get("topic"),
+            order_in_unit=int(row.get("order_in_unit", 0)),
+            image_url=row.get("image_url"),
+            video_url=row.get("video_url"),
+            ppt_url=row.get("ppt_url"),
+        )
+        for row in (res.data or [])
+    ]
+
+
+@academics_router.get(
     "/api/batches/{batch_id}/courses",
     response_model=List[SyllabusCourseSummaryOut],
     summary="List syllabus courses (subjects) for a batch",
