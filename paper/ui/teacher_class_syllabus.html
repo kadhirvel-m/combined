@@ -86,7 +86,7 @@
                     <div class="flex flex-wrap gap-2 text-[11px] font-medium" id="subjectMeta"></div>
                 </div>
             </div>
-            <div id="classActions" class="flex flex-wrap gap-2 hidden"></div>
+            <div class="flex flex-wrap gap-2 items-center" id="classActions"></div>
             <div id="status" class="text-sm text-neutral-600 dark:text-white/70">Fetching syllabus…</div>
         </section>
 
@@ -103,6 +103,72 @@
                 class="material-symbols-rounded">north</span></button>
     </div>
 
+    <!-- Unit + topics modal -->
+    <div id="unitModal"
+        class="fixed inset-0 z-50 hidden flex items-start justify-center p-4 overflow-y-auto overscroll-contain">
+        <div id="unitModalBackdrop" class="fixed inset-0 bg-black/40 backdrop-blur-sm"></div>
+        <div id="unitModalPanel"
+            class="relative mx-auto my-8 max-h-[90vh] overflow-y-auto overscroll-contain rounded-3xl bg-white dark:bg-brand-900 shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
+            style="width:min(760px, calc(100% - 1.5rem));">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-black/5 dark:border-white/10">
+                <div>
+                    <p class="text-xs uppercase tracking-[0.08em] text-neutral-500 dark:text-white/60">Syllabus unit</p>
+                    <h2 id="unitModalTitle" class="text-lg font-semibold">Add unit</h2>
+                </div>
+                <button type="button" id="unitModalClose"
+                    class="rounded-full p-2 text-neutral-500 hover:text-brand-500 hover:bg-black/5 dark:hover:bg-white/10">
+                    <span class="material-symbols-rounded text-xl">close</span>
+                </button>
+            </div>
+            <form id="unitForm" class="space-y-4 px-5 py-4">
+                <div class="space-y-2">
+                    <label for="unitTitle" class="text-sm font-medium">Unit title</label>
+                    <input id="unitTitle" name="unitTitle" type="text" maxlength="180"
+                        placeholder="e.g., Unit 1: Introduction"
+                        class="w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+                        required />
+                </div>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium">Topics</label>
+                        <button type="button" id="addTopicRow"
+                            class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold bg-brand-500 text-white hover:bg-brand-600">
+                            <span class="material-symbols-rounded text-sm">add</span>
+                            Add topic
+                        </button>
+                    </div>
+                    <div id="topicsContainer" class="space-y-2"></div>
+                    <div class="pt-2">
+                        <button type="button" id="addTopicRowBottom"
+                            class="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 dark:text-brandlt-200">
+                            <span class="material-symbols-rounded text-sm">add</span>
+                            Add another
+                        </button>
+                    </div>
+                </div>
+                <p id="unitModalMessage" class="hidden text-sm text-red-600 dark:text-red-400"></p>
+                <div class="flex items-center justify-between gap-3 border-t border-black/5 dark:border-white/10 pt-4">
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="unitDeleteBtn"
+                            class="hidden inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold text-red-600 dark:text-red-300 ring-1 ring-red-200 dark:ring-red-500/40 hover:bg-red-50 dark:hover:bg-red-500/10">
+                            <span class="material-symbols-rounded text-sm">delete</span>
+                            Delete
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="unitModalCancel"
+                            class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">Cancel</button>
+                        <button type="submit" id="unitSubmitBtn"
+                            class="inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 shadow-glow">
+                            <span class="material-symbols-rounded text-base">save</span>
+                            Save unit
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const $ = (s, r = document) => r.querySelector(s);
         const esc = (s = '') => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -113,6 +179,19 @@
         const batchIdParam = params.get('batch_id') || '';
         const sectionParam = params.get('section') || '';
         const semesterParam = params.get('semester') || '';
+        const unitModal = $('#unitModal');
+        const unitModalBackdrop = $('#unitModalBackdrop');
+        const unitModalClose = $('#unitModalClose');
+        const unitModalCancel = $('#unitModalCancel');
+        const unitModalTitle = $('#unitModalTitle');
+        const unitSubmitBtn = $('#unitSubmitBtn');
+        const unitDeleteBtn = $('#unitDeleteBtn');
+        const unitForm = $('#unitForm');
+        const unitTitleInput = $('#unitTitle');
+        const topicsContainer = $('#topicsContainer');
+        const addTopicRowButton = $('#addTopicRow');
+        const addTopicRowBottomButton = $('#addTopicRowBottom');
+        const unitModalMessage = $('#unitModalMessage');
 
         function getToken() {
             const primary = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
@@ -144,33 +223,156 @@
         window.addEventListener('scroll', () => { if (scrollY > 400) st.classList.remove('hidden'); else st.classList.add('hidden'); });
         st.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
+        let syllabusCourse = null;
+        let unitModalMode = 'add';
+
+        function resetUnitModal() {
+            unitForm?.reset();
+            unitModalMessage.textContent = '';
+            unitModalMessage.classList.add('hidden');
+            unitModalMode = 'add';
+            if (unitDeleteBtn) unitDeleteBtn.classList.add('hidden');
+            unitSubmitBtn.innerHTML = '<span class="material-symbols-rounded text-base">save</span>Save unit';
+            topicsContainer.innerHTML = '';
+            addTopicRow();
+        }
+
+        function closeUnitModal() {
+            unitModal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            document.documentElement.classList.remove('overflow-hidden');
+            resetUnitModal();
+            if (syllabusCourse) syllabusCourse.editingUnitId = null;
+        }
+
+        function openUnitModal(mode = 'add', unit) {
+            if (!courseId) return;
+            resetUnitModal();
+            unitModalMode = mode;
+            if (mode === 'edit' && unit) {
+                unitTitleInput.value = unit.unit_title || '';
+                topicsContainer.innerHTML = '';
+                (unit.topics || []).forEach(t => addTopicRow(t.topic || t.topic_title || ''));
+                if (unitDeleteBtn) unitDeleteBtn.classList.remove('hidden');
+                syllabusCourse = syllabusCourse || {};
+                syllabusCourse.editingUnitId = unit.id || unit.unit_id;
+            }
+            unitModalTitle.textContent = mode === 'edit' ? 'Edit unit' : 'Add unit';
+            unitSubmitBtn.innerHTML = mode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save unit';
+            unitModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            document.documentElement.classList.add('overflow-hidden');
+            setTimeout(() => unitTitleInput?.focus(), 50);
+        }
+
+        function addTopicRow(value = '') {
+            const id = Math.random().toString(36).slice(2, 9);
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-2';
+            row.setAttribute('data-topic-row', '');
+            row.innerHTML = `
+                <button type="button" data-drag-handle aria-label="Drag to reorder"
+                    class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 cursor-grab active:cursor-grabbing transition">
+                    <span class="material-symbols-rounded text-base">drag_indicator</span>
+                </button>
+                <input type="text" data-topic-input id="topic-${id}" placeholder="Topic title" value="${esc(value)}" class="flex-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40" maxlength="256" />
+                <button type="button" aria-label="Remove topic" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition"><span class="material-symbols-rounded text-base">close</span></button>`;
+            const removeBtn = row.querySelector('button[aria-label="Remove topic"]');
+            removeBtn.addEventListener('click', () => {
+                row.remove();
+                if (!topicsContainer.querySelector('[data-topic-input]')) addTopicRow();
+            });
+            topicsContainer.appendChild(row);
+            const handleBtn = row.querySelector('[data-drag-handle]');
+            if (handleBtn) handleBtn.setAttribute('draggable', 'true');
+            enableTopicDrag();
+        }
+
+        function enableTopicDrag() {
+            if (!topicsContainer || topicsContainer.__dragBound) return;
+            topicsContainer.__dragBound = true;
+            let dragEl = null;
+            topicsContainer.addEventListener('dragstart', (e) => {
+                const row = e.target.closest('[data-topic-row]');
+                const handle = e.target.closest('[data-drag-handle]');
+                if (!row || !handle) { e.preventDefault(); return; }
+                dragEl = row;
+                dragEl.classList.add('opacity-50');
+                try { e.dataTransfer.setData('text/plain', ''); } catch { }
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            topicsContainer.addEventListener('dragover', (e) => {
+                if (!dragEl) return;
+                e.preventDefault();
+                const after = getDragAfterElement(topicsContainer, e.clientY);
+                if (after == null) topicsContainer.appendChild(dragEl); else topicsContainer.insertBefore(dragEl, after);
+            });
+            topicsContainer.addEventListener('drop', (e) => { if (dragEl) e.preventDefault(); });
+            topicsContainer.addEventListener('dragend', () => { if (dragEl) dragEl.classList.remove('opacity-50'); dragEl = null; });
+        }
+
+        function getDragAfterElement(container, y) {
+            const els = [...container.querySelectorAll('[data-topic-row]:not(.opacity-50)')];
+            let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
+            for (const child of els) {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) closest = { offset, element: child };
+            }
+            return closest.element;
+        }
+
+        function setUnitModalLoading(isLoading) {
+            unitSubmitBtn.disabled = isLoading;
+            unitModalCancel.disabled = isLoading;
+            if (unitDeleteBtn) unitDeleteBtn.disabled = isLoading;
+            unitSubmitBtn.innerHTML = isLoading
+                ? '<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Saving…'
+                : (unitModalMode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save unit');
+        }
+
+        function setUnitDeleteLoading(isLoading) {
+            if (!unitDeleteBtn) return;
+            unitDeleteBtn.disabled = isLoading;
+            unitModalCancel.disabled = isLoading;
+            unitSubmitBtn.disabled = isLoading;
+            unitDeleteBtn.innerHTML = isLoading
+                ? '<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Deleting…'
+                : '<span class="material-symbols-rounded text-base">delete</span>Delete';
+        }
+
         function setupStudentsButton() {
             const wrap = $('#classActions');
             if (!wrap) return;
-            if (!classId) {
-                wrap.classList.add('hidden');
-                wrap.innerHTML = '';
-                return;
-            }
             wrap.classList.remove('hidden');
             wrap.innerHTML = `
-                <button type="button" id="studentsBtn"
-                    class="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/10 hover:bg-white/90 dark:hover:bg-white/20">
-                    <span class="material-symbols-rounded text-base">group</span>
-                    Students
-                </button>`;
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" id="addUnitBtn"
+                        class="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 bg-brand-500 text-white shadow-glow hover:bg-brand-600">
+                        <span class="material-symbols-rounded text-base">add</span>
+                        Add unit
+                    </button>
+                    ${classId ? `<button type="button" id="studentsBtn"
+                        class="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/10 hover:bg-white/90 dark:hover:bg-white/20">
+                        <span class="material-symbols-rounded text-base">group</span>
+                        Students
+                    </button>` : ''}
+                </div>`;
             const btn = $('#studentsBtn');
-            if (!btn) return;
-            btn.addEventListener('click', () => {
-                const next = new URLSearchParams();
-                next.set('class_id', classId);
-                if (courseId) next.set('course_id', courseId);
-                if (subjectQuery) next.set('subject', subjectQuery);
-                if (batchIdParam) next.set('batch_id', batchIdParam);
-                if (sectionParam) next.set('section', sectionParam);
-                if (semesterParam) next.set('semester', semesterParam);
-                window.location.href = `teacher_class_students.html?${next.toString()}`;
-            });
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    const next = new URLSearchParams();
+                    next.set('class_id', classId);
+                    if (courseId) next.set('course_id', courseId);
+                    if (subjectQuery) next.set('subject', subjectQuery);
+                    if (batchIdParam) next.set('batch_id', batchIdParam);
+                    if (sectionParam) next.set('section', sectionParam);
+                    if (semesterParam) next.set('semester', semesterParam);
+                    window.location.href = `teacher_class_students.html?${next.toString()}`;
+                });
+            }
+            const addUnitBtn = $('#addUnitBtn');
+            if (addUnitBtn) addUnitBtn.addEventListener('click', () => openUnitModal('add'));
         }
 
         async function loadSyllabus() {
@@ -183,6 +385,7 @@
                 const res = await fetch(`${base}/api/syllabus/courses/${encodeURIComponent(courseId)}`, { headers });
                 if (!res.ok) { throw new Error(`Failed to load syllabus (${res.status})`); }
                 const data = await res.json();
+                syllabusCourse = data;
                 renderCourse(data);
             } catch (err) {
                 console.error('[syllabus] load failed', err);
@@ -244,7 +447,13 @@
                             </span>
                             <span class="text-[11px] text-neutral-500 dark:text-white/60">${topics.length} topics</span>
                         </button>
-                        ${blinkHtml}
+                        <div class="flex items-center gap-2">
+                            <button type="button" class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-black/10 dark:ring-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10" data-unit-edit="${unitUuid}" data-unit-index="${idx}">
+                                <span class="material-symbols-rounded text-sm">edit</span>
+                                Edit
+                            </button>
+                            ${blinkHtml}
+                        </div>
                     </div>
                     <div id="${unitId}" class="px-4 pb-4 hidden">
                         <ul class="space-y-1 text-sm"></ul>
@@ -296,12 +505,98 @@
                         window.open(url, '_blank', 'noopener');
                     });
                 }
+                const editBtn = li.querySelector('[data-unit-edit]');
+                if (editBtn) {
+                    editBtn.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        const unitsArr = syllabusCourse?.units || [];
+                        const idxNum = Number(editBtn.getAttribute('data-unit-index'));
+                        const unitData = unitsArr[idxNum];
+                        openUnitModal('edit', unitData);
+                    });
+                }
                 wrap.appendChild(li);
             });
         }
 
+        async function handleUnitSubmit(e) {
+            e.preventDefault();
+            if (!courseId) {
+                unitModalMessage.textContent = 'Missing course context.';
+                unitModalMessage.classList.remove('hidden');
+                return;
+            }
+            const unit_title = (unitTitleInput.value || '').trim();
+            if (!unit_title) {
+                unitModalMessage.textContent = 'Enter a unit title.';
+                unitModalMessage.classList.remove('hidden');
+                unitTitleInput.focus();
+                return;
+            }
+            const topicInputs = [...topicsContainer.querySelectorAll('[data-topic-input]')];
+            const topics = topicInputs.map(inp => (inp.value || '').trim()).filter(Boolean).map(t => ({ topic: t }));
+            const payload = { unit_title, topics };
+            unitModalMessage.classList.add('hidden');
+            setUnitModalLoading(true);
+            try {
+                const baseRaw = window.__API_BASE || window.API_BASE || 'http://127.0.0.1:8000';
+                const base = String(baseRaw || '').replace(/\/$/, '');
+                const token = getToken();
+                const headers = token ? { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token } : { 'Content-Type': 'application/json' };
+                if (unitModalMode === 'edit' && syllabusCourse?.editingUnitId) {
+                    const res = await fetch(`${base}/api/syllabus/units/${encodeURIComponent(syllabusCourse.editingUnitId)}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+                    if (!res.ok) throw new Error(`Failed to save (${res.status})`);
+                } else {
+                    const res = await fetch(`${base}/api/syllabus/courses/${encodeURIComponent(courseId)}/units`, { method: 'POST', headers, body: JSON.stringify(payload) });
+                    if (!res.ok) throw new Error(`Failed to save (${res.status})`);
+                }
+                closeUnitModal();
+                await loadSyllabus();
+            } catch (error) {
+                const m = error?.message || 'Unable to save unit.';
+                unitModalMessage.textContent = m;
+                unitModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setUnitModalLoading(false);
+            }
+        }
+
+        async function handleUnitDelete() {
+            if (!syllabusCourse || !syllabusCourse.editingUnitId) return;
+            const ok = window.confirm('Delete this unit and its topics? This cannot be undone.');
+            if (!ok) return;
+            setUnitDeleteLoading(true);
+            unitModalMessage.classList.add('hidden');
+            try {
+                const baseRaw = window.__API_BASE || window.API_BASE || 'http://127.0.0.1:8000';
+                const base = String(baseRaw || '').replace(/\/$/, '');
+                const token = getToken();
+                const headers = token ? { Authorization: 'Bearer ' + token } : {};
+                const res = await fetch(`${base}/api/syllabus/units/${encodeURIComponent(syllabusCourse.editingUnitId)}`, { method: 'DELETE', headers });
+                if (!res.ok) throw new Error(`Failed to delete (${res.status})`);
+                closeUnitModal();
+                await loadSyllabus();
+            } catch (error) {
+                const m = error?.message || 'Unable to delete unit.';
+                unitModalMessage.textContent = m;
+                unitModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setUnitDeleteLoading(false);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             setupStudentsButton();
+            if (unitForm) unitForm.addEventListener('submit', handleUnitSubmit);
+            if (unitDeleteBtn) unitDeleteBtn.addEventListener('click', handleUnitDelete);
+            if (unitModalCancel) unitModalCancel.addEventListener('click', closeUnitModal);
+            if (unitModalClose) unitModalClose.addEventListener('click', closeUnitModal);
+            if (unitModalBackdrop) unitModalBackdrop.addEventListener('click', closeUnitModal);
+            if (addTopicRowButton) addTopicRowButton.addEventListener('click', () => addTopicRow());
+            if (addTopicRowBottomButton) addTopicRowBottomButton.addEventListener('click', () => addTopicRow());
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !unitModal.classList.contains('hidden')) closeUnitModal(); });
             loadSyllabus();
         });
     </script>
