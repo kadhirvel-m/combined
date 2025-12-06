@@ -103,7 +103,25 @@
     <script>
         const API_BASE = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
         const $ = (id) => document.getElementById(id);
-        function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
+        function getToken() {
+            const keys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+            for (const key of keys) {
+                try {
+                    const val = localStorage.getItem(key);
+                    if (val) return val;
+                } catch { }
+            }
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const name = localStorage.key(i);
+                    if (/token/i.test(name || '')) {
+                        const val = localStorage.getItem(name);
+                        if (val && val.length > 10) return val;
+                    }
+                }
+            } catch { }
+            return null;
+        }
         function authHeaders() { const t = getToken(); return t ? { Authorization: `Bearer ${t}` } : {}; }
 
         async function fetchJson(url, opts = {}) {
