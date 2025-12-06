@@ -123,7 +123,7 @@
     <!-- ================= NAVBAR ================= -->
     <header
         class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
-        <div class="container flex items-center justify-between py-3.5">    
+        <div class="container flex items-center justify-between py-3.5">
             <a href="index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
                 <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
                 <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
@@ -400,13 +400,21 @@
 
     <template id="unitItemTpl">
         <div class="rounded-xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-brand-900/40">
-            <button type="button"
-                class="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-white/60 dark:hover:bg-brand-900/30 transition-colors"
-                data-unit-toggle aria-expanded="false">
-                <div class="font-medium flex items-center gap-2 text-sm" data-unit-title></div>
-                <span class="material-symbols-rounded text-neutral-500 transition-transform duration-200 -rotate-90"
-                    data-unit-caret>expand_more</span>
-            </button>
+            <div
+                class="w-full px-4 py-3 flex items-center justify-between hover:bg-white/60 dark:hover:bg-brand-900/30 transition-colors">
+                <button type="button" class="flex-1 text-left flex items-center gap-2 text-sm font-medium"
+                    data-unit-toggle aria-expanded="false">
+                    <span class="material-symbols-rounded text-neutral-500 transition-transform duration-200 -rotate-90"
+                        data-unit-caret>expand_more</span>
+                    <span data-unit-title></span>
+                </button>
+                <button type="button"
+                    class="ml-3 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-4 py-1.5 text-[11px] font-semibold text-white shadow-[0_10px_28px_rgba(158,75,138,0.35)] hover:shadow-[0_14px_34px_rgba(158,75,138,0.45)] transition disabled:opacity-60 disabled:cursor-not-allowed"
+                    data-unit-blink>
+                    <span class="material-symbols-rounded text-sm">bolt</span>
+                    Blink
+                </button>
+            </div>
             <div class="px-4 pb-4">
                 <div class="flex items-center gap-3 mb-2">
                     <div class="w-36 h-2 rounded bg-black/5 dark:bg-white/10 overflow-hidden"
@@ -582,16 +590,51 @@
                 const courseKey = courseId ? String(courseId) : null;
                 const courseCounts = { done: 0, total: 0 };
                 (c.units || []).forEach(u => {
-                    const uNode = uTpl.content.cloneNode(true); const uHeader = uNode.querySelector('[data-unit-toggle]'); const uCaret = uNode.querySelector('[data-unit-caret]'); const topicsWrap = uNode.querySelector('[data-topics]'); const unitTitle = uNode.querySelector('[data-unit-title]'); const unitProgBar = uNode.querySelector('[data-unit-progress-bar]'); const unitProgText = uNode.querySelector('[data-unit-progress-text]'); topicsWrap.classList.add('hidden'); uHeader.setAttribute('aria-expanded', 'false');
+                    const uNode = uTpl.content.cloneNode(true);
+                    const uHeader = uNode.querySelector('[data-unit-toggle]');
+                    const uCaret = uNode.querySelector('[data-unit-caret]');
+                    const topicsWrap = uNode.querySelector('[data-topics]');
+                    const unitTitle = uNode.querySelector('[data-unit-title]');
+                    const unitProgBar = uNode.querySelector('[data-unit-progress-bar]');
+                    const unitProgText = uNode.querySelector('[data-unit-progress-text]');
+                    const blinkBtn = uNode.querySelector('[data-unit-blink]');
+                    const hasImageTopic = Array.isArray(u.topics) && u.topics.some(t => (t.image_url || '').trim() !== '');
+                    topicsWrap.classList.add('hidden');
+                    uHeader.setAttribute('aria-expanded', 'false');
                     unitTitle.textContent = u.unit_title || u.title || 'Unit';
-                    uHeader.addEventListener('click', () => { const collapsed = topicsWrap.classList.toggle('hidden'); const expanded = !collapsed; uHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false'); uCaret.classList.toggle('-rotate-90', !expanded); uCaret.classList.toggle('rotate-0', expanded); });
+
+                    uHeader.addEventListener('click', (ev) => {
+                        if (ev.target.closest('[data-unit-blink]')) return;
+                        const collapsed = topicsWrap.classList.toggle('hidden');
+                        const expanded = !collapsed;
+                        uHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                        uCaret.classList.toggle('-rotate-90', !expanded);
+                        uCaret.classList.toggle('rotate-0', expanded);
+                    });
+
+                    if (blinkBtn) {
+                        blinkBtn.classList.toggle('hidden', !hasImageTopic);
+                        const unitId = u.id || u.unit_id;
+                        blinkBtn.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            if (!unitId) return;
+                            const url = `syllabus_blink.html?unit_id=${encodeURIComponent(unitId)}&course_title=${encodeURIComponent(c.title || '')}&unit_title=${encodeURIComponent(u.unit_title || u.title || '')}`;
+                            window.open(url, '_blank', 'noopener');
+                        });
+                    }
                     const unitCounts = { done: 0, total: 0 };
                     (u.topics || []).forEach(t => {
                         const li = document.createElement('li'); li.className = 'flex items-center gap-2 py-0.5 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm leading-tight';
                         const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'p-1 rounded focus:outline-none focus:ring-2 focus:ring-brand-500/40'; const icon = document.createElement('span'); icon.className = 'material-symbols-rounded text-[20px]';
                         const initChecked = completedTopicIds.has(t.id); icon.textContent = initChecked ? 'check_circle' : 'radio_button_unchecked'; icon.style.color = initChecked ? '#10b981' : 'currentColor'; btn.appendChild(icon); btn.dataset.topicId = t.id;
                         btn.addEventListener('click', () => toggleTopic(t.id, icon, unitCounts, courseCounts, unitProgBar, unitProgText, progBar, progText, unitTitle)); li.appendChild(btn);
-                        const a = document.createElement('a'); a.href = 'notes_generator.html?topic=' + encodeURIComponent(t.topic); a.textContent = t.topic; a.className = 'text-brand-600 dark:text-brand-300 hover:underline'; li.appendChild(a);
+                        const a = document.createElement('a');
+                        a.href = 'notes_generator.html?topic=' + encodeURIComponent(t.topic);
+                        a.textContent = t.topic;
+                        a.target = '_blank';
+                        a.rel = 'noopener';
+                        a.className = 'text-brand-600 dark:text-brand-300 hover:underline';
+                        li.appendChild(a);
                         unitCounts.total++; if (initChecked) unitCounts.done++; topicsWrap.appendChild(li);
                     });
                     courseCounts.total += unitCounts.total; courseCounts.done += unitCounts.done; updateUnitProgress(unitCounts, unitProgBar, unitProgText); updateUnitCompletedStyle(unitCounts, unitTitle); unitsWrap.appendChild(uNode);

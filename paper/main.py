@@ -8719,6 +8719,36 @@ def delete_course_cascade(course_id: uuid.UUID):
 
 
 @academics_router.get(
+    "/api/syllabus/units/{unit_id}/topics",
+    response_model=List[TopicOut],
+    summary="List topics for a unit (direct from syllabus_topics)",
+)
+def api_list_topics_for_unit(unit_id: uuid.UUID):
+    supabase = get_service_client()
+    res = (
+        supabase.table("syllabus_topics")
+        .select("id,topic,order_in_unit,image_url,video_url,ppt_url")
+        .eq("unit_id", str(unit_id))
+        .order("order_in_unit")
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get topics for unit): {res.error}")
+
+    return [
+        TopicOut(
+            id=uuid.UUID(row["id"]),
+            topic=row.get("topic"),
+            order_in_unit=int(row.get("order_in_unit", 0)),
+            image_url=row.get("image_url"),
+            video_url=row.get("video_url"),
+            ppt_url=row.get("ppt_url"),
+        )
+        for row in (res.data or [])
+    ]
+
+
+@academics_router.get(
     "/api/batches/{batch_id}/courses",
     response_model=List[SyllabusCourseSummaryOut],
     summary="List syllabus courses (subjects) for a batch",
