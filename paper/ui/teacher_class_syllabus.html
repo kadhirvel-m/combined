@@ -86,6 +86,7 @@
                     <div class="flex flex-wrap gap-2 text-[11px] font-medium" id="subjectMeta"></div>
                 </div>
             </div>
+            <div id="classActions" class="flex flex-wrap gap-2 hidden"></div>
             <div id="status" class="text-sm text-neutral-600 dark:text-white/70">Fetching syllabus…</div>
         </section>
 
@@ -108,6 +109,10 @@
         const params = new URLSearchParams(location.search);
         const courseId = params.get('course_id') || params.get('subject_id');
         const subjectQuery = params.get('subject') || '';
+        const classId = params.get('class_id') || '';
+        const batchIdParam = params.get('batch_id') || '';
+        const sectionParam = params.get('section') || '';
+        const semesterParam = params.get('semester') || '';
 
         function getToken() {
             const primary = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
@@ -138,6 +143,35 @@
         const st = $('#scrollTop');
         window.addEventListener('scroll', () => { if (scrollY > 400) st.classList.remove('hidden'); else st.classList.add('hidden'); });
         st.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+        function setupStudentsButton() {
+            const wrap = $('#classActions');
+            if (!wrap) return;
+            if (!classId) {
+                wrap.classList.add('hidden');
+                wrap.innerHTML = '';
+                return;
+            }
+            wrap.classList.remove('hidden');
+            wrap.innerHTML = `
+                <button type="button" id="studentsBtn"
+                    class="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/10 hover:bg-white/90 dark:hover:bg-white/20">
+                    <span class="material-symbols-rounded text-base">group</span>
+                    Students
+                </button>`;
+            const btn = $('#studentsBtn');
+            if (!btn) return;
+            btn.addEventListener('click', () => {
+                const next = new URLSearchParams();
+                next.set('class_id', classId);
+                if (courseId) next.set('course_id', courseId);
+                if (subjectQuery) next.set('subject', subjectQuery);
+                if (batchIdParam) next.set('batch_id', batchIdParam);
+                if (sectionParam) next.set('section', sectionParam);
+                if (semesterParam) next.set('semester', semesterParam);
+                window.location.href = `teacher_class_students.html?${next.toString()}`;
+            });
+        }
 
         async function loadSyllabus() {
             if (!courseId) { renderStatus('Missing course id', true); return; }
@@ -178,6 +212,7 @@
             if (code) meta.insertAdjacentHTML('beforeend', `<span class="px-2 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-[11px]">${esc(code)}</span>`);
             if (course.semester) meta.insertAdjacentHTML('beforeend', `<span class="px-2 py-1 rounded-full bg-brand-500/10 text-brand-700 dark:text-brandlt-200 text-[11px]">Sem ${esc(course.semester)}</span>`);
             if (course.batch_id) meta.insertAdjacentHTML('beforeend', `<span class="px-2 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-[11px]">Batch ${esc(course.batch_id)}</span>`);
+            if (sectionParam) meta.insertAdjacentHTML('beforeend', `<span class="px-2 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-[11px]">Section ${esc(sectionParam)}</span>`);
             renderStatus('');
             renderUnits(course.units || []);
         }
@@ -265,7 +300,10 @@
             });
         }
 
-        document.addEventListener('DOMContentLoaded', loadSyllabus);
+        document.addEventListener('DOMContentLoaded', () => {
+            setupStudentsButton();
+            loadSyllabus();
+        });
     </script>
 </body>
 

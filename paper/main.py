@@ -7267,6 +7267,28 @@ class TeacherClassOut(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+
+class TeacherClassStudent(BaseModel):
+    profile_id: uuid.UUID
+    user_education_id: uuid.UUID
+    user_auth_id: Optional[uuid.UUID] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    regno: Optional[str] = None
+    phone: Optional[str] = None
+    section: Optional[str] = None
+    batch_id: Optional[uuid.UUID] = None
+    batch_label: Optional[str] = None
+    current_semester: Optional[int] = None
+    avatar_url: Optional[str] = None
+
+
+class TeacherClassStudentsResponse(BaseModel):
+    class_info: TeacherClassOut
+    students: List[TeacherClassStudent]
+    total: int
+    applied_filters: Dict[str, Any] = Field(default_factory=dict)
+
 def _map_teacher_class_row(row: Dict[str, Any]) -> TeacherClassOut:
     return TeacherClassOut(
         id=uuid.UUID(row["id"]),
@@ -7513,6 +7535,21 @@ def list_my_teacher_classes(authorization: Optional[str] = Header(default=None))
     rows = res.data or []
     return [_map_teacher_class_row(r) for r in rows]
 
+
+@teacher_router.get("/api/teacher/classes/{class_id}", response_model=TeacherClassOut, summary="Get a teacher class")
+def get_teacher_class(class_id: uuid.UUID, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    res = supabase.table("teacher_classes").select("*").eq("id", str(class_id)).limit(1).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get class): {res.error}")
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Class not found")
+    row = res.data[0]
+    if row.get("teacher_user_id") != uid:
+        raise HTTPException(status_code=403, detail="Cannot view another teacher's class")
+    return _map_teacher_class_row(row)
+
 @teacher_router.post("/api/teacher/classes", response_model=TeacherClassOut, summary="Create a teacher class")
 def create_teacher_class(payload: TeacherClassIn, authorization: Optional[str] = Header(default=None)):
     uid = _require_teacher(authorization)
@@ -7573,6 +7610,142 @@ def delete_teacher_class(class_id: uuid.UUID, authorization: Optional[str] = Hea
     if getattr(del_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (delete class): {del_res.error}")
     return {"ok": True, "deleted": True, "id": str(class_id)}
+
+
+@teacher_router.get(
+    "/api/teacher/classes/{class_id}/students",
+    response_model=TeacherClassStudentsResponse,
+    summary="List students for a teacher class",
+)
+def list_teacher_class_students(class_id: uuid.UUID, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    class_res = _supabase_retry(
+        lambda: supabase.table("teacher_classes").select("*").eq("id", str(class_id)).limit(1).execute()
+    )
+    if getattr(class_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get class): {class_res.error}")
+    if not class_res.data:
+        raise HTTPException(status_code=404, detail="Class not found")
+    class_row = class_res.data[0]
+    if class_row.get("teacher_user_id") != uid:
+        raise HTTPException(status_code=403, detail="Cannot view another teacher's class")
+
+    applied_filters: Dict[str, Any] = {}
+    def _track_filter(key: str, value: Any):
+        if value is None:
+            return
+        if isinstance(value, str) and value == "":
+            return
+        if isinstance(value, (list, tuple, set, dict)) and not value:
+            return
+        applied_filters[key] = value
+
+    edu_query = supabase.table("user_education").select(
+        "id,user_profile_id,batch_id,section,current_semester,regno,degree_id,department_id,college_id"
+    )
+    filter_count = 0
+    for column, value in (
+        ("batch_id", class_row.get("batch_id")),
+        ("section", class_row.get("section")),
+        ("current_semester", class_row.get("semester")),
+        ("degree_id", class_row.get("degree_id")),
+        ("department_id", class_row.get("department_id")),
+        ("college_id", class_row.get("college_id")),
+    ):
+        if value not in {None, ""}:
+            eq_value = str(value) if column.endswith("_id") or column == "batch_id" else value
+            edu_query = edu_query.eq(column, eq_value)
+            filter_count += 1
+            _track_filter(column, value)
+
+    if filter_count == 0:
+        return TeacherClassStudentsResponse(
+            class_info=_map_teacher_class_row(class_row),
+            students=[],
+            total=0,
+            applied_filters={"missing_filters": True},
+        )
+
+    edu_query = edu_query.order("updated_at", desc=True).limit(500)
+    edu_res = _supabase_retry(lambda: edu_query.execute())
+    if getattr(edu_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (student list): {edu_res.error}")
+    edu_rows = edu_res.data or []
+    profile_ids = {row.get("user_profile_id") for row in edu_rows if row.get("user_profile_id")}
+
+    profiles: Dict[str, Dict[str, Any]] = {}
+    if profile_ids:
+        prof_res = _supabase_retry(
+            lambda: supabase
+            .table("user_profiles")
+            .select("id,auth_user_id,name,email,regno,phone,semester,profile_image_url")
+            .in_("id", list(profile_ids))
+            .execute()
+        )
+        if getattr(prof_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (profiles): {prof_res.error}")
+        for row in prof_res.data or []:
+            profiles[row.get("id")] = row
+
+    batch_ids = {row.get("batch_id") for row in edu_rows if row.get("batch_id")}
+    if class_row.get("batch_id"):
+        batch_ids.add(class_row.get("batch_id"))
+    batch_labels: Dict[str, str] = {}
+    if batch_ids:
+        batch_res = _supabase_retry(
+            lambda: supabase
+            .table("batches")
+            .select("id,from_year,to_year")
+            .in_("id", list(batch_ids))
+            .execute()
+        )
+        if getattr(batch_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (batches): {batch_res.error}")
+        for row in batch_res.data or []:
+            fid = row.get("id")
+            if not fid:
+                continue
+            fy = row.get("from_year")
+            ty = row.get("to_year")
+            if fy and ty:
+                batch_labels[fid] = f"{fy}-{ty}"
+
+    students: List[TeacherClassStudent] = []
+    for edu in edu_rows:
+        prof_id = edu.get("user_profile_id")
+        prof = profiles.get(prof_id)
+        if not prof_id or not prof:
+            continue
+        try:
+            entry = TeacherClassStudent(
+                profile_id=uuid.UUID(prof_id),
+                user_education_id=uuid.UUID(edu["id"]),
+                user_auth_id=uuid.UUID(prof["auth_user_id"]) if prof.get("auth_user_id") else None,
+                name=prof.get("name"),
+                email=prof.get("email"),
+                regno=(prof.get("regno") or edu.get("regno")),
+                phone=prof.get("phone"),
+                section=edu.get("section"),
+                batch_id=uuid.UUID(edu["batch_id"]) if edu.get("batch_id") else None,
+                batch_label=batch_labels.get(edu.get("batch_id")),
+                current_semester=edu.get("current_semester") or prof.get("semester"),
+                avatar_url=prof.get("profile_image_url"),
+            )
+        except (KeyError, ValueError):
+            continue
+        students.append(entry)
+
+    students.sort(key=lambda s: ((s.name or "").lower(), s.regno or ""))
+    if class_row.get("batch_id") and class_row.get("batch_id") in batch_labels:
+        applied_filters["batch_label"] = batch_labels[class_row.get("batch_id")]
+
+    return TeacherClassStudentsResponse(
+        class_info=_map_teacher_class_row(class_row),
+        students=students,
+        total=len(students),
+        applied_filters=applied_filters,
+    )
 
 
 def _asset_debug(msg: str, **extra):  # lightweight conditional debug
