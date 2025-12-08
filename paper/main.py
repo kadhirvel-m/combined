@@ -240,7 +240,7 @@ deepseek_model_client =  OpenAIChatCompletionClient(
 
 gemini_model_client = OpenAIChatCompletionClient(
     base_url=os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-    model="gemini-2.5-pro",
+    model="gemini-2.5-flash",
     api_key=(os.getenv("GEMINI_API_KEY", "") or "").strip(),
     model_info=ModelInfo(
         vision=True,
@@ -865,7 +865,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY", "") or "").strip()
 SERPAPI_API_KEY = (os.getenv("SERPAPI_API_KEY", "") or "").strip()
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or "").strip()
-GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-2.5-pro")
+GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-2.5-flash")
 MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
 # Default domains for notes/web search when DB has no config yet
@@ -960,7 +960,7 @@ def load_learning_tracks_config() -> Dict[str, Any]:
     goals = _parse_env_list("LEARNING_TRACK_GOALS", LEARNING_TRACK_DEFAULT_GOALS)
     companies = _parse_env_list("LEARNING_TRACK_COMPANIES", LEARNING_TRACK_DEFAULT_COMPANIES)
     compiler_languages = _parse_env_json_array("LEARNING_TRACK_COMPILER_LANGUAGES", LEARNING_TRACK_DEFAULT_COMPILER_LANGUAGES)
-    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-2.5-pro"))
+    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-2.5-flash"))
     flashcard_model = os.getenv("LEARNING_TRACK_FLASHCARD_MODEL", GEMINI_NOTES_MODEL)
     code_explainer_model = os.getenv("LEARNING_TRACK_CODE_MODEL", GEMINI_NOTES_MODEL)
     mcq_model = os.getenv("LEARNING_TRACK_MCQ_MODEL", GEMINI_NOTES_MODEL)
@@ -2866,7 +2866,7 @@ def _normalize_parsed_struct(parsed: dict, hints: dict) -> ParsedSyllabusOut:
     return ParsedSyllabusOut(course_code=cc, title=ttl, units=units_in)
 
 
-GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-2.5-pro").strip()
+GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-2.5-flash").strip()
 
 
 def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
@@ -2879,7 +2879,7 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-2.5-pro")
+        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-2.5-flash")
         prompt = (
             "You are a strict JSON parser for academic syllabi. Given the raw syllabus text, return ONLY JSON with keys: "
             "semester (integer 1-12, optional), course_code (string, optional), title (string, optional), "
