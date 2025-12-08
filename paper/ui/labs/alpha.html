@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aloha Protocol Master Simulator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            /* User Defined Palette */
+            --primary: #9E4B8A;
+            /* Main Pink/Purple */
+            --secondary: #4C2A59;
+            /* Deep Purple */
+            --dark: #1E1E2F;
+            /* Dark/Black text */
+
+            /* UI System Colors */
+            --bg-app: #f3f4f6;
+            --surface: #ffffff;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --border: #e5e7eb;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-app);
+            color: var(--dark);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* --- Header --- */
+        nav {
+            width: 100%;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            z-index: 100;
+        }
+
+        .brand {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--secondary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mode-switch {
+            background: #f3f4f6;
+            padding: 4px;
+            border-radius: 8px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn-mode {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            font-weight: 600;
+            color: #6b7280;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: 0.3s;
+        }
+
+        .btn-mode.active {
+            background: var(--surface);
+            color: var(--primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* --- Layout Grid --- */
+        .dashboard {
+            display: grid;
+            grid-template-columns: 2.5fr 1fr;
+            /* 2.5 parts Sim, 1 part Stats */
+            gap: 20px;
+            width: 95%;
+            max-width: 1400px;
+            margin-top: 20px;
+            height: calc(100vh - 100px);
+            /* Fill screen */
+        }
+
+        .panel {
+            background: var(--surface);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .panel-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            background: #fafafa;
+            font-weight: 700;
+            color: var(--secondary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* --- Simulation Track --- */
+        .sim-view {
+            flex: 1;
+            background: #f8fafc;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Moving Grid (Background) */
+        .grid-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: linear-gradient(90deg, #cbd5e1 1px, transparent 1px);
+            background-size: 100px 100%;
+            /* Slot Width */
+            opacity: 0;
+            /* Hidden in Pure mode */
+            transition: opacity 0.5s;
+        }
+
+        .playhead {
+            position: absolute;
+            right: 20%;
+            height: 100%;
+            width: 2px;
+            background: var(--secondary);
+            z-index: 10;
+            border-left: 2px dashed var(--secondary);
+        }
+
+        .playhead::after {
+            content: "NOW";
+            position: absolute;
+            top: 10px;
+            right: 5px;
+            background: var(--secondary);
+            color: white;
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        /* Packets */
+        .packet {
+            position: absolute;
+            height: 40px;
+            width: 80px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.8rem;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            will-change: transform;
+            z-index: 5;
+        }
+
+        .packet.waiting {
+            opacity: 0.5;
+            background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.2) 0, rgba(255, 255, 255, 0.2) 10px, transparent 10px, transparent 20px);
+            border: 2px dashed rgba(0, 0, 0, 0.2);
+        }
+
+        .packet.collision {
+            background-color: var(--error) !important;
+            animation: shake 0.4s ease-in-out;
+            box-shadow: 0 0 15px var(--error);
+            z-index: 20;
+        }
+
+        .packet.success {
+            border: 2px solid #fff;
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        /* --- Bottom Controls --- */
+        .control-deck {
+            padding: 20px;
+            background: #fff;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .manual-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-station {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-station:active {
+            transform: scale(0.95);
+        }
+
+        .divider-v {
+            width: 1px;
+            height: 40px;
+            background: var(--border);
+            margin: 0 10px;
+        }
+
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 0.85rem;
+            color: var(--secondary);
+            width: 150px;
+        }
+
+        /* --- Right Panel: Stats & Log --- */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            padding: 20px;
+            background: #f9fafb;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .stat-val {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--secondary);
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* The New Log System */
+        .log-container {
+            flex: 1;
+            overflow-y: auto;
+            /* Scrollable */
+            padding: 10px;
+            background: #ffffff;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-entry {
+            padding: 8px 10px;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            gap: 10px;
+            animation: fadeIn 0.3s;
+        }
+
+        .log-time {
+            color: #9ca3af;
+        }
+
+        .log-msg {
+            color: var(--dark);
+        }
+
+        .log-entry.success .log-msg {
+            color: var(--success);
+        }
+
+        .log-entry.error .log-msg {
+            color: var(--error);
+            font-weight: bold;
+        }
+
+        .log-entry.info .log-msg {
+            color: var(--primary);
+        }
+
+        /* Animations */
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-4px) rotate(-4deg);
+            }
+
+            75% {
+                transform: translateX(4px) rotate(4deg);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Custom Colors for Stations */
+        .bg-s1 {
+            background-color: var(--primary);
+        }
+
+        .bg-s2 {
+            background-color: var(--secondary);
+        }
+
+        .bg-s3 {
+            background-color: #0ea5e9;
+        }
+
+        /* Sky Blue */
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <div class="brand">
+            <span>📶</span> Aloha Master Sim
+        </div>
+        <div class="mode-switch">
+            <button class="btn-mode active" id="btnPure" onclick="setMode('pure')">Pure Aloha</button>
+            <button class="btn-mode" id="btnSlotted" onclick="setMode('slotted')">Slotted Aloha</button>
+        </div>
+    </nav>
+
+    <div class="dashboard">
+        <div class="panel">
+            <div class="panel-header">
+                <span>Visual Channel</span>
+                <span style="font-size:0.8rem; font-weight:400; color:#666;">Time moves left ←</span>
+            </div>
+
+            <div class="sim-view" id="simTrack">
+                <div class="grid-bg" id="gridBg"></div>
+                <div class="playhead"></div>
+            </div>
+
+            <div class="control-deck">
+                <div class="manual-group">
+                    <button class="btn-station bg-s1" onclick="manualSend(1)">Stn 1</button>
+                    <button class="btn-station bg-s2" onclick="manualSend(2)">Stn 2</button>
+                    <button class="btn-station bg-s3" onclick="manualSend(3)">Stn 3</button>
+                </div>
+
+                <div class="divider-v"></div>
+
+                <button id="btnAuto" class="btn-station" style="background:var(--dark);" onclick="toggleAuto()">Start
+                    Auto-Pilot</button>
+
+                <div class="slider-group">
+                    <label>Traffic Load (G): <span id="lblLoad">Low</span></label>
+                    <input type="range" min="1" max="10" value="3" id="rangeLoad" oninput="updateLoad(this.value)">
+                </div>
+
+                <div class="slider-group">
+                    <label>Sim Speed</label>
+                    <input type="range" min="1" max="5" value="2" id="rangeSpeed"
+                        oninput="speed = parseInt(this.value)">
+                </div>
+
+                <div style="flex:1;"></div>
+                <button onclick="resetSim()"
+                    style="color:var(--error); border:1px solid var(--border); background:#fff; padding:8px 12px; border-radius:4px; cursor:pointer;">Reset</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">Real-time Statistics</div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-val" id="valSent">0</span>
+                    <span class="stat-label">Sent</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val" id="valSuccess" style="color:var(--success)">0</span>
+                    <span class="stat-label">Success</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val" id="valCollision" style="color:var(--error)">0</span>
+                    <span class="stat-label">Collisions</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-val" id="valEff">0%</span>
+                    <span class="stat-label">Efficiency</span>
+                </div>
+            </div>
+
+            <div class="panel-header" style="border-top:1px solid var(--border); background:white; font-size:0.9rem;">
+                Activity Log
+                <button onclick="clearLog()" style="font-size:0.7rem; cursor:pointer;">Clear</button>
+            </div>
+            <div class="log-container" id="logBox">
+                <div class="log-entry info">
+                    <span class="log-time">00:00</span>
+                    <span class="log-msg">System Ready. Select a mode or click 'Send'.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Config & State ---
+        let mode = 'pure';
+        let speed = 2; // px per frame
+        const packetWidth = 80;
+        const slotSize = 100;
+
+        let isAuto = false;
+        let autoTimer = null;
+        let packetId = 0;
+
+        let stats = { sent: 0, success: 0, collision: 0 };
+
+        // DOM Elements
+        const track = document.getElementById('simTrack');
+        const gridBg = document.getElementById('gridBg');
+        const logBox = document.getElementById('logBox');
+
+        // --- Mode Control ---
+        function setMode(newMode) {
+            mode = newMode;
+            resetSim();
+
+            // UI
+            document.getElementById('btnPure').classList.toggle('active', mode === 'pure');
+            document.getElementById('btnSlotted').classList.toggle('active', mode === 'slotted');
+            gridBg.style.opacity = mode === 'slotted' ? '1' : '0';
+
+            addLog(`Switched to <b>${mode.toUpperCase()} Aloha</b>.`, 'info');
+            if (mode === 'slotted') {
+                addLog("System is now synchronized to time slots.", 'info');
+            }
+        }
+
+        // --- Packet Generator ---
+        function manualSend(stnId) {
+            createPacket(stnId);
+        }
+
+        function createPacket(stnId) {
+            packetId++;
+            stats.sent++;
+            updateStats();
+
+            const p = document.createElement('div');
+            p.className = 'packet';
+            p.innerText = `DATA ${stnId}`;
+            p.id = `pkt-${packetId}`;
+
+            // Colors
+            if (stnId === 1) p.classList.add('bg-s1');
+            if (stnId === 2) p.classList.add('bg-s2');
+            if (stnId === 3) p.classList.add('bg-s3');
+
+            // Initial Position (Relative to Playhead which is at 20% from right)
+            // track width is dynamic. Playhead is at 80% of width (from left).
+            const playheadX = track.offsetWidth * 0.8;
+
+            p.dataset.x = playheadX;
+            p.dataset.station = stnId;
+            p.dataset.status = 'created'; // created -> waiting -> active -> collided/success
+
+            // MODE LOGIC
+            if (mode === 'pure') {
+                // Send Immediately
+                p.dataset.status = 'active';
+                track.appendChild(p);
+                gsap.set(p, { x: playheadX });
+                addLog(`Station ${stnId}: Transmitting data immediately.`, 'neutral');
+            } else {
+                // Wait for slot
+                p.classList.add('waiting');
+                p.innerText = "WAIT";
+                p.dataset.status = 'waiting';
+                track.appendChild(p);
+                gsap.set(p, { x: playheadX });
+                addLog(`Station ${stnId}: Request received. Waiting for next slot...`, 'neutral');
+            }
+        }
+
+        // --- Main Physics Loop (Runs every frame) ---
+        let gridOffset = 0;
+
+        gsap.ticker.add(() => {
+            // 1. Move Grid
+            gridOffset -= speed;
+            if (mode === 'slotted') {
+                gridBg.style.backgroundPosition = `${gridOffset}px 0`;
+            }
+
+            const packets = document.querySelectorAll('.packet');
+            const activePackets = [];
+
+            packets.forEach(p => {
+                let x = parseFloat(p.dataset.x);
+                let status = p.dataset.status;
+
+                // 2. Handle Waiting (Slotted Only)
+                if (status === 'waiting') {
+                    // Check if grid line passes the injection point
+                    // Current Grid Offset vs Packet Initial X
+                    // We want the packet to start moving when the "grid line" hits it.
+                    // Grid lines are at: gridOffset + N*slotSize
+
+                    // Relative position inside the sliding grid
+                    const rel = (x - gridOffset) % slotSize;
+
+                    // Trigger when line is close (speed buffer)
+                    if (rel < speed * 1.5) {
+                        p.classList.remove('waiting');
+                        p.innerText = `DATA ${p.dataset.station}`;
+                        p.dataset.status = 'active';
+                        //addLog(`Slot Boundary: Station ${p.dataset.station} begins transmission.`, 'info');
+                    }
+                }
+
+                // 3. Move Active Packets
+                if (status === 'active' || status === 'collided' || status === 'success') {
+                    x -= speed;
+                    p.dataset.x = x;
+                    gsap.set(p, { x: x });
+
+                    // Detect if it survived (went off screen to left)
+                    if (x < -100) {
+                        if (status !== 'collided' && status !== 'processed_success') {
+                            stats.success++;
+                            p.dataset.status = 'processed_success';
+                            updateStats();
+                            addLog(`Packet ${p.id.split('-')[1]} delivered successfully!`, 'success');
+                        }
+                        p.remove();
+                    } else {
+                        if (status !== 'collided') activePackets.push(p);
+                    }
+                }
+            });
+
+            // 4. Collision Detection
+            // Compare every active packet with every other active packet
+            for (let i = 0; i < activePackets.length; i++) {
+                for (let j = i + 1; j < activePackets.length; j++) {
+                    let p1 = activePackets[i];
+                    let p2 = activePackets[j];
+
+                    // Check overlap
+                    let x1 = parseFloat(p1.dataset.x);
+                    let x2 = parseFloat(p2.dataset.x);
+
+                    if (Math.abs(x1 - x2) < packetWidth - 10) { // -10 buffer so they don't crash at very edges
+                        triggerCollision(p1, p2);
+                    }
+                }
+            }
+        });
+
+        function triggerCollision(p1, p2) {
+            // Mark as collided
+            if (p1.dataset.status !== 'collided') {
+                p1.classList.add('collision');
+                p1.innerText = "ERR";
+                p1.dataset.status = 'collided';
+                stats.collision++;
+            }
+            if (p2.dataset.status !== 'collided') {
+                p2.classList.add('collision');
+                p2.innerText = "ERR";
+                p2.dataset.status = 'collided';
+                stats.collision++;
+            }
+            updateStats();
+            // Log only once per visual event roughly (debounce via status check above)
+            addLog(`Collision detected! Packets corrupted.`, 'error');
+        }
+
+        // --- Automation ---
+        function toggleAuto() {
+            const btn = document.getElementById('btnAuto');
+            if (isAuto) {
+                isAuto = false;
+                clearInterval(autoTimer);
+                btn.innerText = "Start Auto-Pilot";
+                btn.style.background = "var(--dark)";
+                addLog("Auto-Pilot stopped.", 'info');
+            } else {
+                isAuto = true;
+                btn.innerText = "Stop Auto-Pilot";
+                btn.style.background = "var(--error)";
+                addLog("Auto-Pilot started. Generating traffic...", 'info');
+                runAutoCycle();
+            }
+        }
+
+        function runAutoCycle() {
+            if (!isAuto) return;
+            const load = parseInt(document.getElementById('rangeLoad').value);
+            // Map 1-10 to milliseconds (High load = low ms)
+            // 1 = 2000ms, 10 = 200ms
+            const delay = 2200 - (load * 200);
+
+            // Random station
+            const stn = Math.floor(Math.random() * 3) + 1;
+            createPacket(stn);
+
+            autoTimer = setTimeout(runAutoCycle, delay);
+        }
+
+        function updateLoad(val) {
+            const labels = ["Minimal", "Very Low", "Low", "Medium-Low", "Medium", "Medium-High", "High", "Very High", "Intense", "Overload"];
+            document.getElementById('lblLoad').innerText = labels[val - 1];
+        }
+
+        // --- Helpers ---
+        function updateStats() {
+            document.getElementById('valSent').innerText = stats.sent;
+            document.getElementById('valSuccess').innerText = stats.success;
+            document.getElementById('valCollision').innerText = stats.collision;
+
+            let eff = 0;
+            if (stats.sent > 0) eff = ((stats.success / stats.sent) * 100).toFixed(1);
+            document.getElementById('valEff').innerText = eff + "%";
+        }
+
+        function addLog(msg, type) {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+            entry.innerHTML = `<span class="log-time">${timeStr}</span> <span class="log-msg">${msg}</span>`;
+            logBox.prepend(entry);
+
+            // Keep log clean
+            if (logBox.children.length > 50) logBox.lastChild.remove();
+        }
+
+        function clearLog() {
+            logBox.innerHTML = '';
+        }
+
+        function resetSim() {
+            stats = { sent: 0, success: 0, collision: 0 };
+            updateStats();
+            document.querySelectorAll('.packet').forEach(p => p.remove());
+            addLog("Simulation Reset.", 'info');
+        }
+
+    </script>
+</body>
+
+</html>
