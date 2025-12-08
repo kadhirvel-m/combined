@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logic Lab — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        .lab-container {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+            max-width: 1200px;
+            width: 95%;
+            margin: 2.5rem auto 3rem auto;
+        }
+
+        @media (max-width: 900px) {
+            .lab-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* --- NAVIGATION CHIPS --- */
+        .chips-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            padding-bottom: 1rem;
+        }
+
+        .chip {
+            background: rgba(250, 245, 251, 0.96);
+            border: 1px solid rgba(158, 75, 138, 0.18);
+            color: #4C2A59;
+            padding: 8px 16px;
+            border-radius: 24px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .chip:hover {
+            background-color: rgba(158, 75, 138, 0.12);
+            border-color: #9E4B8A;
+            color: #9E4B8A;
+        }
+
+        .chip.active {
+            background: linear-gradient(135deg, #9E4B8A, #B06AB3);
+            color: #FFFFFF;
+            border-color: transparent;
+            box-shadow: 0 8px 26px rgba(158, 75, 138, 0.6);
+        }
+
+        /* --- SIMULATION CARD --- */
+        .card {
+            border-radius: 1rem;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.35);
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dark .card {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.8);
+        }
+
+        .sim-area {
+            position: relative;
+            height: 420px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* SVG Styles */
+        .sim-area svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .wire {
+            fill: none;
+            stroke: #B0BEC5;
+            stroke-width: 6;
+            stroke-linecap: round;
+            transition: stroke 0.3s;
+        }
+
+        .gate-body {
+            fill: rgba(255, 255, 255, 0.95);
+            stroke: #4C2A59;
+            stroke-width: 3;
+        }
+
+        .dark .gate-body {
+            fill: #1E1E2F;
+            stroke: #C88DBA;
+        }
+
+        /* --- MATERIAL SWITCHES (Input) --- */
+        .input-wrapper {
+            position: absolute;
+            left: 48px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            cursor: pointer;
+            z-index: 5;
+            background: rgba(255, 255, 255, 0.96);
+            padding: 10px 14px;
+            border-radius: 999px;
+            box-shadow: 0 10px 26px rgba(30, 30, 47, 0.35);
+            border: 1px solid rgba(158, 75, 138, 0.18);
+            height: 46px;
+            transform: translateY(-50%);
+        }
+
+        .dark .input-wrapper {
+            background: rgba(30, 30, 47, 0.96);
+            border-color: rgba(200, 141, 186, 0.55);
+        }
+
+        .switch-label {
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: var(--text-head);
+        }
+
+        /* Material Switch Design */
+        .md-switch {
+            position: relative;
+            width: 40px;
+            height: 20px;
+        }
+
+        .md-track {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #9e9e9e;
+            border-radius: 20px;
+            opacity: 0.5;
+            transition: 0.3s;
+        }
+
+        .md-thumb {
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            width: 24px;
+            height: 24px;
+            background-color: #f5f5f5;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            transition: 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+
+        /* Active State */
+        .input-wrapper.active .md-track {
+            background-color: #9E4B8A;
+            opacity: 0.5;
+        }
+
+        .input-wrapper.active .md-thumb {
+            transform: translateX(20px);
+            background-color: #9E4B8A;
+        }
+
+        /* positions are adjusted via JS (swA/swB.style.top) */
+
+        /* --- LED OUTPUT LIGHT --- */
+        .output-wrapper {
+            position: absolute;
+            right: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .led-casing {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            border: 2px solid #b0b0c0;
+            position: relative;
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* The glowing inner part */
+        .led-core {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transition: 0.3s;
+        }
+
+        /* ACTIVE GLOW STATE */
+        .led-casing.on {
+            background: #9E4B8A;
+            border-color: #9E4B8A;
+            /* Complex glow for realism */
+            box-shadow:
+                inset 0 0 10px rgba(255, 255, 255, 0.6),
+                /* Inner Highlight */
+                0 0 20px rgba(158, 75, 138, 0.9),
+                /* Outer Glow */
+                0 0 50px rgba(158, 75, 138, 0.8);
+            /* Distant Haze */
+        }
+
+        .led-casing.on .led-core {
+            background: #fff;
+            box-shadow: 0 0 10px #fff;
+        }
+
+        /* --- INFO TABS --- */
+        .info-header {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 16px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: var(--text-sub);
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content {
+            padding: 24px;
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .tab-content h2 {
+            margin-top: 0;
+            color: #4C2A59;
+        }
+
+        .tab-content p,
+        .tab-content li {
+            line-height: 1.6;
+            color: #424242;
+        }
+
+        /* Truth Table */
+        .table-container {
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            margin-top: 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        th {
+            background-color: var(--bg-app);
+            color: var(--text-head);
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-body);
+        }
+
+        tr.highlight {
+            background-color: rgba(158, 75, 138, 0.15);
+            /* Primary tint */
+            font-weight: 700;
+        }
+
+        tr.highlight td {
+            color: var(--primary);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+    <script src="../config.js"></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="lab-shell pb-10">
+
+        <section class="pt-8 pb-4">
+            <div class="container max-w-4xl mx-auto px-4">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <h1 class="text-2xl md:text-3xl font-bold tracking-tight text-brand-900 dark:text-white mb-1">
+                            Logic Gate Playground
+                        </h1>
+                    </div>
+                    <div class="hidden sm:flex flex-col items-end gap-2 text-xs text-neutral-500 dark:text-white/60">
+                        <span
+                            class="inline-flex items-center gap-1 rounded-full border border-black/5 dark:border-white/10 px-3 py-1">
+                            <span class="material-symbols-rounded text-base">bolt</span>
+                            Real-time truth table
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="pb-2">
+            <div class="container max-w-4xl mx-auto px-4">
+                <div class="chips-container" id="navChips"></div>
+            </div>
+        </section>
+
+        <section>
+            <div class="lab-container">
+
+                <div class="card">
+                    <div class="sim-area">
+
+                        <div class="input-wrapper" id="swA" onclick="toggleSwitch('A')">
+                            <span class="switch-label">A</span>
+                            <div class="md-switch">
+                                <div class="md-track"></div>
+                                <div class="md-thumb"></div>
+                            </div>
+                        </div>
+
+                        <div class="input-wrapper" id="swB" onclick="toggleSwitch('B')">
+                            <span class="switch-label">B</span>
+                            <div class="md-switch">
+                                <div class="md-track"></div>
+                                <div class="md-thumb"></div>
+                            </div>
+                        </div>
+
+                        <svg viewBox="0 0 800 450" id="circuit">
+                            <defs>
+                                <filter id="neon">
+                                    <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
+                                    <feMerge>
+                                        <feMergeNode in="coloredBlur" />
+                                        <feMergeNode in="SourceGraphic" />
+                                    </feMerge>
+                                </filter>
+                            </defs>
+
+                            <path id="wireA" class="wire" d="M 100 170 L 350 170" />
+                            <path id="wireB" class="wire" d="M 100 320 L 350 320" />
+                            <path id="wireOut" class="wire" d="M 550 225 L 680 225" />
+
+                            <g id="gateIcon" transform="translate(350, 125)">
+                            </g>
+                        </svg>
+
+                        <div class="output-wrapper">
+                            <div class="led-casing" id="led">
+                                <div class="led-core"></div>
+                            </div>
+                            <span class="switch-label" style="font-size: 0.9rem; margin-top:5px;">OUT</span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="info-header">
+                        <button class="tab-btn active" onclick="setTab('logic')">Logic</button>
+                        <button class="tab-btn" onclick="setTab('tech')">Internals</button>
+                        <button class="tab-btn" onclick="setTab('use')">Uses</button>
+                    </div>
+
+                    <div id="tab-logic" class="tab-content active">
+                        <h2 id="gateTitle">AND Gate</h2>
+                        <p id="gateDesc">Outputs High only if all inputs are High.</p>
+                        <div class="table-container">
+                            <table id="truthTable">
+                                <thead>
+                                    <tr>
+                                        <th>A</th>
+                                        <th>B</th>
+                                        <th>Out</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="tab-tech" class="tab-content">
+                        <h2>How it works</h2>
+                        <p id="techDesc">...</p>
+                        <div
+                            style="background: var(--bg-app); padding: 15px; border-radius: 8px; font-family: monospace; color: var(--text-head);">
+                            <span class="material-icons"
+                                style="font-size:16px; vertical-align:text-bottom;">developer_board</span> Transistor
+                            Logic
+                        </div>
+                    </div>
+
+                    <div id="tab-use" class="tab-content">
+                        <h2>Applications</h2>
+                        <ul id="useList"></ul>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- CONFIGURATION ---
+        const GATES = ['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'XNOR', 'BUFFER'];
+
+        const DB = {
+            AND: {
+                desc: "The Logical AND. Output is 1 only if <b>A</b> AND <b>B</b> are 1.",
+                tech: "CMOS: series nMOS on pull-down, parallel pMOS on pull-up; TTL: stacked multi-emitter input transistors.",
+                apps: ["Safety interlocks (door closed AND armed)", "Address decoding", "Enable gating for buses"],
+                logic: (a, b) => a & b,
+                single: false
+            },
+            OR: {
+                desc: "The Logical OR. Output is 1 if <b>A</b> OR <b>B</b> (or both) are 1.",
+                tech: "CMOS: parallel nMOS on pull-down, series pMOS on pull-up; TTL: diode OR then transistor buffer.",
+                apps: ["Interrupt aggregation", "Door-open lights (any door)", "Alarm fan-in"],
+                logic: (a, b) => a | b,
+                single: false
+            },
+            NOT: {
+                desc: "The Inverter. Output is the opposite of the input.",
+                tech: "CMOS: complementary pMOS/nMOS pair; TTL: single transistor with resistor network and phase-splitter.",
+                apps: ["Level restoration", "Clock buffering", "Signal inversion"],
+                logic: (a) => !a ? 1 : 0,
+                single: true
+            },
+            NAND: {
+                desc: "Not-AND. Output is 0 only if both inputs are 1. Universal Gate.",
+                tech: "CMOS: parallel pMOS on pull-up, series nMOS on pull-down (preferred for density/speed); universal gate basis.",
+                apps: ["NAND flash memory arrays", "Universal gate synthesis", "Glitch filtering (active-low)"],
+                logic: (a, b) => !(a & b) ? 1 : 0,
+                single: false
+            },
+            NOR: {
+                desc: "Not-OR. Output is 1 only if both inputs are 0.",
+                tech: "CMOS: series pMOS on pull-up, parallel nMOS on pull-down; widely used as building block in dynamic logic.",
+                apps: ["Control stop conditions", "Latch implementations", "Universal gate synthesis"],
+                logic: (a, b) => !(a | b) ? 1 : 0,
+                single: false
+            },
+            XOR: {
+                desc: "Exclusive OR. Output is 1 if inputs are <b>different</b>.",
+                tech: "CMOS: built from transmission gates or pass-transistor networks; often 8–12 transistors for 2-input XOR.",
+                apps: ["Half/full adders", "Parity generation", "Bitwise cryptographic mixing"],
+                logic: (a, b) => (a ^ b) ? 1 : 0,
+                single: false
+            },
+            XNOR: {
+                desc: "Exclusive NOR. Output is 1 if inputs are the <b>same</b>.",
+                tech: "Inverted XOR; CMOS implementations often reuse XOR core plus output inverter for timing symmetry.",
+                apps: ["Equality comparators", "Error detection (even parity)", "XNOR-based XAI ops"],
+                logic: (a, b) => !(a ^ b) ? 1 : 0,
+                single: false
+            },
+            BUFFER: {
+                desc: "Output equals Input. Used to strengthen signals.",
+                tech: "Two inverters back-to-back for gain and edge restoration; often tapered for drive strength.",
+                apps: ["Fan-out driving", "Clock tree buffering", "Level restoring"],
+                logic: (a) => a,
+                single: true
+            }
+        };
+
+        const PATHS = {
+            AND: "M0,0 V200 H100 A100,100 0 0,0 100,0 H0 Z",
+            OR: "M20,0 Q110,0 200,100 Q110,200 20,200 Q60,100 20,0",
+            NOT: "M0,20 L0,180 L160,100 Z", // Bubble added programmatically
+            XOR: "M40,0 Q130,0 220,100 Q130,200 40,200 Q80,100 40,0 M10,0 Q70,100 10,200",
+            BUFFER: "M0,20 V180 L160,100 Z"
+        };
+
+        // --- STATE ---
+        let state = {
+            gate: 'AND',
+            a: 0,
+            b: 0,
+            theme: 'light'
+        };
+
+        // --- DOM ELEMENTS ---
+        const ui = {
+            chips: document.getElementById('navChips'),
+            swA: document.getElementById('swA'),
+            swB: document.getElementById('swB'),
+            gateGroup: document.getElementById('gateIcon'),
+            wireA: document.getElementById('wireA'),
+            wireB: document.getElementById('wireB'),
+            wireOut: document.getElementById('wireOut'),
+            led: document.getElementById('led'),
+            tableBody: document.getElementById('tableBody'),
+            tabLogic: document.getElementById('tab-logic'),
+            tabTech: document.getElementById('tab-tech'),
+            tabUse: document.getElementById('tab-use'),
+            title: document.getElementById('gateTitle'),
+            desc: document.getElementById('gateDesc'),
+            techDesc: document.getElementById('techDesc'),
+            useList: document.getElementById('useList')
+        };
+
+        // --- INITIALIZATION ---
+        function init() {
+            // Build Nav Chips
+            GATES.forEach(g => {
+                const btn = document.createElement('div');
+                btn.className = 'chip';
+                if (g === 'AND') btn.classList.add('active');
+                btn.innerText = g;
+                btn.onclick = () => loadGate(g);
+                ui.chips.appendChild(btn);
+            });
+
+            loadGate('AND');
+        }
+
+        // --- LOGIC FUNCTIONS ---
+        function loadGate(type) {
+            state.gate = type;
+            const data = DB[type];
+
+            // Update UI Chips
+            Array.from(ui.chips.children).forEach(c => {
+                c.classList.toggle('active', c.innerText === type);
+            });
+
+            // Update Content
+            ui.title.innerText = `${type} Gate`;
+            ui.desc.innerHTML = data.desc;
+            ui.techDesc.innerText = data.tech;
+            ui.useList.innerHTML = data.apps.map(a => `<li>${a}</li>`).join('');
+
+            // Draw SVG
+            drawGate(type);
+
+            // Handle Inputs (Single vs Dual)
+            if (data.single) {
+                ui.swB.style.display = 'none';
+                ui.wireB.style.display = 'none';
+                ui.swA.style.top = '230px'; // pill center aligns with wire y
+                gsap.set(ui.wireA, { attr: { d: "M 100 230 L 350 230" } });
+            } else {
+                ui.swB.style.display = 'flex';
+                ui.wireB.style.display = 'block';
+                ui.swA.style.top = '170px';
+                ui.swB.style.top = '320px';
+                gsap.set(ui.wireA, { attr: { d: "M 100 170 L 350 170" } });
+                gsap.set(ui.wireB, { attr: { d: "M 100 320 L 350 320" } });
+            }
+
+            // Build Table
+            buildTable(data);
+
+            // Run Sim
+            simulate();
+        }
+
+        function drawGate(type) {
+            let path = "";
+            let hasBubble = false;
+
+            if (['AND', 'NAND'].includes(type)) path = PATHS.AND;
+            else if (['OR', 'NOR'].includes(type)) path = PATHS.OR;
+            else if (['XOR', 'XNOR'].includes(type)) path = PATHS.XOR;
+            else if (type === 'NOT') path = PATHS.NOT;
+            else path = PATHS.BUFFER;
+
+            if (['NAND', 'NOR', 'XNOR', 'NOT'].includes(type)) hasBubble = true;
+
+            // Render
+            let html = `<path class="gate-body" d="${path}" />`;
+
+            if (hasBubble) {
+                // Adjust bubble position based on shape
+                let cx = 0;
+                if (type === 'NOT') cx = 172;
+                else if (type === 'NAND' || type === 'NOR') cx = 212;
+                else cx = 242; // XNOR
+
+                html += `<circle class="gate-body" cx="${cx}" cy="100" r="12" fill="var(--bg-card)" />`;
+            }
+
+            ui.gateGroup.innerHTML = html;
+        }
+
+        function toggleSwitch(id) {
+            if (id === 'A') state.a = state.a ? 0 : 1;
+            if (id === 'B') state.b = state.b ? 0 : 1;
+
+            // UI Update
+            const el = id === 'A' ? ui.swA : ui.swB;
+            el.classList.toggle('active', (id === 'A' ? state.a : state.b) === 1);
+
+            simulate();
+        }
+
+        function simulate() {
+            const data = DB[state.gate];
+            let out = 0;
+
+            if (data.single) out = data.logic(state.a);
+            else out = data.logic(state.a, state.b);
+
+            // Animate Wires
+            animWire(ui.wireA, state.a);
+            if (!data.single) animWire(ui.wireB, state.b);
+            animWire(ui.wireOut, out);
+
+            // Animate LED
+            if (out) ui.led.classList.add('on');
+            else ui.led.classList.remove('on');
+
+            // Highlight Table
+            highlightTable(data.single, out);
+        }
+
+        function animWire(el, on) {
+            if (on) {
+                gsap.to(el, { stroke: "#9E4B8A", 'stroke-width': 8, filter: "url(#neon)", duration: 0.2 });
+            } else {
+                gsap.to(el, { stroke: "#B0BEC5", 'stroke-width': 6, filter: "none", duration: 0.2 });
+            }
+        }
+
+        // --- TAB & TABLE LOGIC ---
+        function setTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            // Activate clicked (logic depends on order, using simplest selection here)
+            const index = name === 'logic' ? 0 : name === 'tech' ? 1 : 2;
+            document.querySelectorAll('.tab-btn')[index].classList.add('active');
+            document.getElementById(`tab-${name}`).classList.add('active');
+        }
+
+        function buildTable(data) {
+            ui.tableBody.innerHTML = '';
+            // Table Header Update
+            const headRow = document.querySelector('#truthTable thead tr');
+            headRow.innerHTML = data.single ? '<th>In</th><th>Out</th>' : '<th>A</th><th>B</th><th>Out</th>';
+
+            const combs = data.single ? [[0], [1]] : [[0, 0], [0, 1], [1, 0], [1, 1]];
+
+            combs.forEach(r => {
+                const res = data.single ? data.logic(r[0]) : data.logic(r[0], r[1]);
+                const tr = document.createElement('tr');
+                tr.id = data.single ? `r-${r[0]}` : `r-${r[0]}${r[1]}`;
+
+                if (data.single) tr.innerHTML = `<td>${r[0]}</td><td>${res}</td>`;
+                else tr.innerHTML = `<td>${r[0]}</td><td>${r[1]}</td><td>${res}</td>`;
+
+                ui.tableBody.appendChild(tr);
+            });
+        }
+
+        function highlightTable(single, res) {
+            document.querySelectorAll('tr.highlight').forEach(e => e.classList.remove('highlight'));
+            const id = single ? `r-${state.a}` : `r-${state.a}${state.b}`;
+            const row = document.getElementById(id);
+            if (row) row.classList.add('highlight');
+        }
+
+        // Boot
+        init();
+
+        // Shared Paper X theme toggle wiring
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+            });
+        });
+
+    </script>
+</body>
+
+</html>
