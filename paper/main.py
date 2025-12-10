@@ -1455,8 +1455,11 @@ Start with '# {topic}' and then the sections in a logical order.
 
 # ---------------- New: Streaming events generator for UI/API ----------------
 
-def _build_variant_user_prompt(context: str, topic: str, variant: str) -> str:
+def _build_variant_user_prompt(context: str, topic: str, variant: str, course_type: Optional[str] = None) -> str:
     v = _normalize_variant(variant)
+    practical_hint = ""
+    if isinstance(course_type, str) and course_type.strip().lower() == "practical":
+        practical_hint = "- Include an H2 section titled 'Working' that provides only the step-by-step procedure of how the experiment is performed. Give clear, numbered steps describing the exact working process (summarize even if sources omit details)."
     if v == "cheatsheet":
         return f"""
 You will compose an EXAM-READY CHEAT SHEET for the topic "{topic}" based ONLY on the source excerpts below.
@@ -1465,18 +1468,19 @@ Context:
 {context}
 
 Output rules (STRICT):
-- Keep it ultra concise (â‰ˆ 250â€“400 words). Use bullets and tables.
+- Keep it ultra concise (250-400 words). Use bullets and tables.
 - Start with a single H1: '# {topic} â€” Cheat Sheet'.
 - Sections (H2):
   1) Core Concepts (5â€“10 bullets, crisp one-liners)
   2) Key Definitions & Formulas (bullets; inline math where relevant)
   3) Quick Steps / Algorithms (bulleted steps)
-  4) Pitfalls / Gotchas (3â€“6 bullets)
+  4) Pitfalls / Gotchas (3-6 bullets)
   5) Keywords (comma-separated list)
 - Bold key terms and symbols with **...**. Prefer compact phrasing over full sentences.
 - If any fact is uncertain, mark [needs review].
- - Do NOT include sections titled 'TL;DR', 'Common Mistakes', or 'Memory Aids'.
- - Do NOT include a 'CITATIONS' section or any citation list.
+- Do NOT include sections titled 'TL;DR', 'Common Mistakes', or 'Memory Aids'.
+- Do NOT include a 'CITATIONS' section or any citation list.
+{practical_hint}
 """.strip()
     if v == "simple":
         return f"""
@@ -1486,13 +1490,14 @@ Context:
 {context}
 
 Output rules (STRICT):
-- Target length: 600â€“900 words, plain language, short sentences.
-- Start with '# {topic} â€” Simple Notes'.
+- Target length: 600-“900 words, plain language, short sentences.
+- Start with '# {topic} ” Simple Notes'.
 - Structure with logical H2 sections, including: Introduction, Concepts, Examples, TL;DR, Common Mistakes, Conclusion.
 - Explain in everyday words without dumbing down definitions.
 - Use bullets and small tables where helpful.
 - Bold important terms with **...**.
 - Include a final '## CITATIONS' section with labelâ†’URL list for the sources you used.
+{practical_hint}
 """.strip()
     # default detailed prompt remains as before
     return f"""
@@ -1507,12 +1512,20 @@ Instructions:
 - Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
 - Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
 - Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+- Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+{practical_hint}
 
 Start with '# {topic}' and then the sections in a logical order.
 """.strip()
 
-def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None, variant: str = "detailed", degree: Optional[str] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
+def generate_notes_events(
+    topic: str,
+    *,
+    stop_event: Optional[threading.Event] = None,
+    variant: str = "detailed",
+    degree: Optional[str] = None,
+    course_type: Optional[str] = None,
+) -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Yield (event_name, payload) tuples describing real-time progress and final output.
 
     Events emitted in order (names):
@@ -1532,7 +1545,15 @@ def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] =
         dyn_domains = db_get_allowed_domains_for_degree(degree) if degree else []
         if not dyn_domains:
             dyn_domains = list(DEFAULT_ALLOWED_DOMAINS)
-        yield ("start", {"topic": topic, "allowed_domains": dyn_domains, "degree": degree})
+        yield (
+            "start",
+            {
+                "topic": topic,
+                "allowed_domains": dyn_domains,
+                "degree": degree,
+                "course_type": (course_type or "").strip().lower() or None,
+            },
+        )
         if stop_event and stop_event.is_set():
             return
         urls = serpapi_search(topic, num=10, degree=degree)
@@ -1572,7 +1593,7 @@ def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] =
         yield ("context_ready", {"chars": len(context)})
 
         assistant = build_agent()
-        user_prompt = _build_variant_user_prompt(context, topic, variant)
+        user_prompt = _build_variant_user_prompt(context, topic, variant, course_type)
         yield ("llm_start", {})
         try:
             # Use safe runner in case we're under FastAPI's loop
@@ -1971,7 +1992,18 @@ class SyllabusCourseIn(BaseModel):
     semester: int = Field(..., ge=1, le=12)
     course_code: str = Field(..., min_length=1, max_length=64)
     title: str = Field(..., min_length=1, max_length=256)
+    type: Optional[str] = Field(default="practical")
     units: List[UnitIn]
+
+    @validator("type", pre=True, always=True)
+    def _normalize_type(cls, value: Any):  # noqa: N805
+        allowed = {"maths", "theorey", "practical"}
+        if value is None:
+            return "practical"
+        if isinstance(value, str):
+            v = value.strip().lower()
+            return v if v in allowed else "practical"
+        return "practical"
 
 
 class TopicOut(BaseModel):
@@ -1996,6 +2028,7 @@ class SyllabusCourseOut(BaseModel):
     semester: int
     course_code: str
     title: str
+    type: Optional[str] = None
     units: List[UnitOut]
 
 
@@ -2005,12 +2038,14 @@ class SyllabusCourseSummaryOut(BaseModel):
     semester: int
     course_code: str
     title: str
+    type: Optional[str] = None
 
 
 class SyllabusCourseSimpleBase(BaseModel):
     semester: int = Field(..., ge=1, le=12)
     course_code: str = Field(..., min_length=1, max_length=64)
     title: str = Field(..., min_length=1, max_length=256)
+    type: Optional[str] = Field(default="practical")
 
     @validator("course_code", "title", pre=True)
     def _strip_text(cls, value: Any):  # noqa: N805
@@ -2026,6 +2061,16 @@ class SyllabusCourseSimpleBase(BaseModel):
     @validator("course_code")
     def _uppercase_code(cls, value: str):  # noqa: N805
         return value.upper()
+
+    @validator("type", pre=True, always=True)
+    def _normalize_type(cls, value: Any):  # noqa: N805
+        allowed = {"maths", "theorey", "practical"}
+        if value is None:
+            return "practical"
+        if isinstance(value, str):
+            v = value.strip().lower()
+            return v if v in allowed else "practical"
+        return "practical"
 
 
 class SyllabusCourseSimpleCreateIn(SyllabusCourseSimpleBase):
@@ -3454,7 +3499,7 @@ def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
     supabase = get_service_client()
     existing = _supabase_retry(lambda: (
         supabase.table("syllabus_courses")
-        .select("id,title")
+        .select("id,title,type")
         .eq("batch_id", str(payload.batch_id))
         .eq("semester", payload.semester)
         .eq("course_code", payload.course_code)
@@ -3465,10 +3510,12 @@ def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
         raise HTTPException(status_code=500, detail=f"Supabase error (find course): {existing.error}")
     if existing.data:
         course_id = uuid.UUID(existing.data[0]["id"])
-        if existing.data[0].get("title") != payload.title:
+        existing_type = existing.data[0].get("type")
+        desired_type = payload.type or "practical"
+        if existing.data[0].get("title") != payload.title or existing_type != desired_type:
             upd = _supabase_retry(lambda: (
                 supabase.table("syllabus_courses")
-                .update({"title": payload.title})
+                .update({"title": payload.title, "type": desired_type})
                 .eq("id", str(course_id))
                 .execute()
             ))
@@ -3483,6 +3530,7 @@ def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
                     "semester": payload.semester,
                     "course_code": payload.course_code,
                     "title": payload.title,
+                    "type": payload.type or "practical",
                 }
             )
             .execute()
@@ -3499,6 +3547,7 @@ def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
         semester=payload.semester,
         course_code=payload.course_code,
         title=payload.title,
+        type=payload.type,
         units=units,
     )
 
@@ -3665,7 +3714,7 @@ def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
 
     course_builder = (
         supabase.table("syllabus_courses")
-        .select("id,batch_id,semester,course_code,title")
+        .select("id,batch_id,semester,course_code,title,type")
         .eq("id", str(course_id))
         .single()
     )
@@ -3717,6 +3766,7 @@ def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
         semester=int(data["semester"]),
         course_code=data.get("course_code"),
         title=data.get("title"),
+        type=data.get("type"),
         units=units_out,
     )
 
@@ -8682,6 +8732,7 @@ def create_course_for_batch(batch_id: uuid.UUID, payload: SyllabusCourseSimpleCr
         "semester": payload.semester,
         "course_code": payload.course_code,
         "title": payload.title,
+        "type": getattr(payload, "type", None) or "practical",
     }
     ins = supabase.table("syllabus_courses").insert(insert_payload).execute()
     if getattr(ins, "error", None):
@@ -8698,7 +8749,7 @@ def create_course_for_batch(batch_id: uuid.UUID, payload: SyllabusCourseSimpleCr
     else:
         refetch = (
             supabase.table("syllabus_courses")
-            .select("id,semester,course_code,title")
+            .select("id,semester,course_code,title,type")
             .eq("batch_id", str(batch_id))
             .eq("semester", payload.semester)
             .eq("course_code", payload.course_code)
@@ -8715,6 +8766,7 @@ def create_course_for_batch(batch_id: uuid.UUID, payload: SyllabusCourseSimpleCr
         semester=int(row.get("semester", payload.semester)),
         course_code=row.get("course_code", payload.course_code),
         title=row.get("title", payload.title),
+        type=row.get("type", getattr(payload, "type", None)),
     )
 
 
@@ -8833,6 +8885,7 @@ def update_course_metadata(course_id: uuid.UUID, payload: SyllabusCourseSimpleUp
         "semester": payload.semester,
         "course_code": payload.course_code,
         "title": payload.title,
+        "type": getattr(payload, "type", None) or "practical",
     }
     upd = (
         supabase.table("syllabus_courses")
@@ -8855,6 +8908,7 @@ def update_course_metadata(course_id: uuid.UUID, payload: SyllabusCourseSimpleUp
         semester=payload.semester,
         course_code=payload.course_code,
         title=payload.title,
+        type=updates.get("type"),
     )
 
 # Alias route to support existing UI paths
@@ -9032,6 +9086,65 @@ def api_find_topics_by_title(topic: str = Query(..., min_length=1, max_length=51
 
 
 @academics_router.get(
+    "/api/syllabus/course-type",
+    summary="Lookup course type for a topic title",
+)
+def api_get_course_type_for_topic(topic: str = Query(..., min_length=1, max_length=512)):
+    clean = (topic or "").strip()
+    if not clean:
+        return {"course_id": None, "course_title": None, "type": None}
+
+    supabase = get_service_client()
+    topic_res = (
+        supabase.table("syllabus_topics")
+        .select("unit_id")
+        .eq("topic", clean)
+        .limit(1)
+        .execute()
+    )
+    if getattr(topic_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find topic for course type): {topic_res.error}")
+    if not topic_res.data:
+        return {"course_id": None, "course_title": None, "type": None}
+
+    unit_id = topic_res.data[0].get("unit_id")
+    if not unit_id:
+        return {"course_id": None, "course_title": None, "type": None}
+
+    unit_res = (
+        supabase.table("syllabus_units")
+        .select("course_id")
+        .eq("id", str(unit_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(unit_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find unit for course type): {unit_res.error}")
+    if not unit_res.data:
+        return {"course_id": None, "course_title": None, "type": None}
+
+    course_id = unit_res.data[0].get("course_id")
+    if not course_id:
+        return {"course_id": None, "course_title": None, "type": None}
+
+    course_res = (
+        supabase.table("syllabus_courses")
+        .select("id,title,type")
+        .eq("id", str(course_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(course_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find course for type): {course_res.error}")
+    if not course_res.data:
+        return {"course_id": None, "course_title": None, "type": None}
+
+    row = course_res.data[0]
+    course_type = (row.get("type") or "").strip().lower() or None
+    return {"course_id": row.get("id"), "course_title": row.get("title"), "type": course_type}
+
+
+@academics_router.get(
     "/api/batches/{batch_id}/courses",
     response_model=List[SyllabusCourseSummaryOut],
     summary="List syllabus courses (subjects) for a batch",
@@ -9043,7 +9156,7 @@ def api_list_courses_for_batch(
     supabase = get_service_client()
     query = (
         supabase.table("syllabus_courses")
-        .select("id,batch_id,semester,course_code,title")
+        .select("id,batch_id,semester,course_code,title,type")
         .eq("batch_id", str(batch_id))
     )
     if semester is not None:
@@ -9058,6 +9171,7 @@ def api_list_courses_for_batch(
             semester=int(row["semester"]),
             course_code=row.get("course_code"),
             title=row.get("title"),
+            type=row.get("type"),
         )
         for row in (res.data or [])
     ]
@@ -11972,11 +12086,18 @@ async def generate(payload: dict):
 
 @notes_router.get("/generate/stream")
 @notes_router.get("/api/notes/generate/stream")
-async def generate_stream(topic: str, force: bool = False, variant: str = "detailed", degree: Optional[str] = None):
+async def generate_stream(
+    topic: str,
+    force: bool = False,
+    variant: str = "detailed",
+    degree: Optional[str] = None,
+    course_type: Optional[str] = None,
+):
     async def event_source() -> AsyncGenerator[bytes, None]:
         yield b"event: open\n\n"
+        course_type_norm = (course_type or "").strip().lower() or None
         # Early cache hit: exact-title lookup in DB
-        if not force:
+        if not force and course_type_norm != "practical":
             row = db_get_ai_note_by_title_exact_variant(topic, variant=_normalize_variant(variant))
             if row and (row.get("markdown") or "").strip():
                 payload = {
@@ -12003,7 +12124,13 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
 
         def worker() -> None:
             try:
-                for name, payload in generate_notes_events(topic, stop_event=stop_event, variant=_normalize_variant(variant), degree=degree):
+                for name, payload in generate_notes_events(
+                    topic,
+                    stop_event=stop_event,
+                    variant=_normalize_variant(variant),
+                    degree=degree,
+                    course_type=course_type_norm,
+                ):
                     if stop_event.is_set():
                         break
                     dispatch(("event", name, payload))

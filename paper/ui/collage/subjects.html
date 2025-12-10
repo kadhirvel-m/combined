@@ -271,7 +271,7 @@
                         class="material-symbols-rounded text-lg">close</span></button>
             </div>
             <form id="subjectForm" class="space-y-5 px-6 py-6">
-                <div class="grid gap-4 sm:grid-cols-2">
+                <div class="grid gap-4 sm:grid-cols-3">
                     <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Course code
                         <input id="subjectCourseCode" name="course_code" type="text" required maxlength="64"
                             class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
@@ -280,6 +280,14 @@
                     <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Semester
                         <select id="subjectSemester" name="semester" required
                             class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"></select>
+                    </label>
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Type
+                        <select id="subjectType" name="type" required
+                            class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40">
+                            <option value="maths">Maths</option>
+                            <option value="theorey">Theorey</option>
+                            <option value="practical" selected>Practical</option>
+                        </select>
                     </label>
                 </div>
                 <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Subject title
@@ -322,14 +330,14 @@
             return q;
         })();
         // Recover missing context (including batch) from storage if query lacks it
-        (function restoreCtx(){
-            function getStored(){
-                try { const s = sessionStorage.getItem('px_ctx_batches'); if (s) return JSON.parse(s); } catch(_){}
-                try { const l = localStorage.getItem('px_ctx_batches_last'); if (l) return JSON.parse(l); } catch(_){}
+        (function restoreCtx() {
+            function getStored() {
+                try { const s = sessionStorage.getItem('px_ctx_batches'); if (s) return JSON.parse(s); } catch (_) { }
+                try { const l = localStorage.getItem('px_ctx_batches_last'); if (l) return JSON.parse(l); } catch (_) { }
                 return {};
             }
             const st = getStored();
-            const keys = ['collegeId','collegeName','degreeId','degreeName','departmentId','departmentName','batchId','batchRange'];
+            const keys = ['collegeId', 'collegeName', 'degreeId', 'degreeName', 'departmentId', 'departmentName', 'batchId', 'batchRange'];
             keys.forEach(k => { if (!params[k] && st[k]) params[k] = st[k]; });
         })();
         const collegeId = params.collegeId;
@@ -359,6 +367,7 @@
         const subjectForm = document.getElementById('subjectForm');
         const subjectCourseCodeInput = document.getElementById('subjectCourseCode');
         const subjectSemesterSelect = document.getElementById('subjectSemester');
+        const subjectTypeSelect = document.getElementById('subjectType');
         const subjectTitleInput = document.getElementById('subjectTitle');
         const subjectCreditsInput = document.getElementById('subjectCredits');
         const backLink = document.getElementById('backLink');
@@ -404,6 +413,7 @@
             subjectModalMode = 'add';
             editingSubjectId = null;
             subjectSubmitBtn.innerHTML = '<span class="material-symbols-rounded text-base">save</span>Save subject';
+            if (subjectTypeSelect) subjectTypeSelect.value = 'practical';
         }
 
         function setSubjectModalLoading(isLoading) {
@@ -428,6 +438,7 @@
                 subjectCourseCodeInput.value = subject.course_code || '';
                 subjectTitleInput.value = subject.title || '';
                 subjectSemesterSelect.value = subject.semester || '';
+                if (subjectTypeSelect) subjectTypeSelect.value = subject.type || 'practical';
                 subjectCreditsInput.value = subject.credits != null ? subject.credits : '';
             }
 
@@ -463,7 +474,8 @@
             const payload = {
                 course_code,
                 title,
-                semester: Number(semesterRaw)
+                semester: Number(semesterRaw),
+                type: (subjectTypeSelect?.value || 'practical')
             };
             if (creditsRaw) {
                 const c = parseInt(creditsRaw, 10);
@@ -627,7 +639,8 @@
                     course_code: s.course_code,
                     title: s.title,
                     semester: Number(s.semester),
-                    credits: s.credits != null ? Number(s.credits) : null
+                    credits: s.credits != null ? Number(s.credits) : null,
+                    type: s.type || 'practical'
                 }));
                 titleEl.innerHTML = `Subjects <span class=\"opacity-70\">· ${Collage.escapeHtml(batchRange || 'Batch')}</span>`;
                 subtitleEl.textContent = `${subjectsCache.length} subject${subjectsCache.length === 1 ? '' : 's'} found.`;

@@ -2670,90 +2670,113 @@
       setBusy(false);
     });
 
+    async function fetchCourseType(topic) {
+      const q = (topic || '').trim();
+      if (!q) return null;
+      try {
+        const res = await fetch(`${apiBase}/api/syllabus/course-type?topic=${encodeURIComponent(q)}`);
+        if (!res.ok) return null;
+        const data = await res.json().catch(() => ({}));
+        const t = (data && data.type) ? String(data.type).trim().toLowerCase() : '';
+        return t || null;
+      } catch {
+        return null;
+      }
+    }
+
     // Unified generator: supports force to bypass cache
-    function startGeneration(topic, force = false) {
+    async function startGeneration(topic, force = false) {
       const t = (topic || '').trim();
       if (!t) { alert('Enter a topic'); return; }
-      loadRelatedVideos(t, { force: true });
-      if (es) { try { es.close(); } catch { } es = null; }
-      clearUI();
-      setBusy(true);
-      showOutputLoader();
-      const url = new URL(`${apiBase}/generate/stream`);
-      url.searchParams.set('topic', t);
-      if (force) url.searchParams.set('force', 'true');
-      url.searchParams.set('variant', currentVariant);
-      const degree = getSelectedDegree();
-      if (degree) url.searchParams.set('degree', degree);
-      es = new EventSource(url.toString());
+      try {
+        loadRelatedVideos(t, { force: true });
+        if (es) { try { es.close(); } catch { } es = null; }
+        clearUI();
+        setBusy(true);
+        showOutputLoader();
+        const courseType = await fetchCourseType(t);
+        const url = new URL(`${apiBase}/generate/stream`);
+        url.searchParams.set('topic', t);
+        if (force) url.searchParams.set('force', 'true');
+        url.searchParams.set('variant', currentVariant);
+        const degree = getSelectedDegree();
+        if (degree) url.searchParams.set('degree', degree);
+        if (courseType) url.searchParams.set('course_type', courseType);
+        es = new EventSource(url.toString());
 
-      es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
-      es.addEventListener('error', () => { logEvent('Stream error'); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
-      es.addEventListener('close', () => { hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+        es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
+        es.addEventListener('error', () => { logEvent('Stream error'); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+        es.addEventListener('close', () => { hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
 
-      const on = (name, fn) => es.addEventListener(name, (ev) => { try { fn(JSON.parse(ev.data)); setProgress(name); } catch { } });
+        const on = (name, fn) => es.addEventListener(name, (ev) => { try { fn(JSON.parse(ev.data)); setProgress(name); } catch { } });
 
-      on('start', (d) => {
-        const allowed = Array.isArray(d.allowed_domains) ? d.allowed_domains : [];
-        const deg = (d.degree || '').trim();
-        logEvent('Start', `Allowed: ${allowed.join(', ')}`);
-        if ($domainsHint) {
-          if (deg && allowed.length) {
-            const preview = allowed.slice(0, 4).join(', ');
-            $domainsHint.textContent = `Degree: ${deg} • ${preview}${allowed.length > 4 ? '…' : ''}`;
-          } else if (deg && !allowed.length) {
-            $domainsHint.textContent = `Degree: ${deg} • web (fallback)`;
-          } else if (!deg && allowed.length) {
-            // No degree param, but backend allowed domains present (likely default)
-            const preview = allowed.slice(0, 4).join(', ');
-            $domainsHint.textContent = `Sources: ${preview}${allowed.length > 4 ? '…' : ''}`;
-          } else {
-            $domainsHint.textContent = 'Sources: auto';
+        on('start', (d) => {
+          const allowed = Array.isArray(d.allowed_domains) ? d.allowed_domains : [];
+          const deg = (d.degree || '').trim();
+          logEvent('Start', `Allowed: ${allowed.join(', ')}`);
+          if ($domainsHint) {
+            if (deg && allowed.length) {
+              const preview = allowed.slice(0, 4).join(', ');
+              $domainsHint.textContent = `Degree: ${deg} • ${preview}${allowed.length > 4 ? '…' : ''}`;
+            } else if (deg && !allowed.length) {
+              $domainsHint.textContent = `Degree: ${deg} • web (fallback)`;
+            } else if (!deg && allowed.length) {
+              // No degree param, but backend allowed domains present (likely default)
+              const preview = allowed.slice(0, 4).join(', ');
+              $domainsHint.textContent = `Sources: ${preview}${allowed.length > 4 ? '…' : ''}`;
+            } else {
+              $domainsHint.textContent = 'Sources: auto';
+            }
           }
-        }
-      });
-      on('search_results', (d) => logEvent('Searching', `${d.urls.length} results`));
-      on('fetch_start', (d) => logEvent('Fetching', d.url));
-      on('fetch_done', (d) => logEvent('Parsed', `${d.title} (${d.sections} sections)`));
-      on('fetch_error', (d) => logEvent('Fetch error', d.error));
-      on('merged_titles', (d) => logEvent('Merged titles', `${d.titles.length} unique`));
-      on('context_ready', (d) => logEvent('Context ready', `${d.chars} chars`));
-      on('llm_start', () => logEvent('LLM generating…'));
-      on('llm_done', (d) => logEvent('LLM done', `${d.md_chars} chars`));
-      on('images', (d) => {
-        logEvent('Images', `${d.count} found`);
-        renderImageGallery(d.image_urls || d.urls || []);
-      });
-      on('error', (d) => { logEvent('Error', d.message); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
-      on('final', (d) => {
-        renderImageGallery(d.image_urls || d.urls || lastImageUrls);
-        renderMarkdown(d.markdown);
-        setEmphasis(emphasis);
+        });
+        on('search_results', (d) => logEvent('Searching', `${d.urls.length} results`));
+        on('fetch_start', (d) => logEvent('Fetching', d.url));
+        on('fetch_done', (d) => logEvent('Parsed', `${d.title} (${d.sections} sections)`));
+        on('fetch_error', (d) => logEvent('Fetch error', d.error));
+        on('merged_titles', (d) => logEvent('Merged titles', `${d.titles.length} unique`));
+        on('context_ready', (d) => logEvent('Context ready', `${d.chars} chars`));
+        on('llm_start', () => logEvent('LLM generating…'));
+        on('llm_done', (d) => logEvent('LLM done', `${d.md_chars} chars`));
+        on('images', (d) => {
+          logEvent('Images', `${d.count} found`);
+          renderImageGallery(d.image_urls || d.urls || []);
+        });
+        on('error', (d) => { logEvent('Error', d.message); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+        on('final', (d) => {
+          renderImageGallery(d.image_urls || d.urls || lastImageUrls);
+          renderMarkdown(d.markdown);
+          setEmphasis(emphasis);
+          hideOutputLoader();
+          if (d.id) {
+            currentNoteId = d.id;
+            try {
+              localStorage.setItem(noteKey(currentVariant), currentNoteId);
+              if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+            } catch { }
+            $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
+          }
+          const detectedTopic = (() => {
+            const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
+            if (fromHeading) return fromHeading;
+            const fromPayload = (d.title || d.topic || '').trim();
+            if (fromPayload) return fromPayload;
+            const fromInput = ($topic.value || '').trim();
+            if (fromInput) return fromInput;
+            return relatedVideosTopic || '';
+          })();
+          if (currentNoteId) {
+            enableFlashcardAccess(currentNoteId, detectedTopic);
+            enableMCQAccess(currentNoteId, detectedTopic);
+          }
+          logEvent('Complete');
+          setBusy(false); es && es.close(); es = null;
+        });
+      } catch (err) {
+        console.error('[Generate] start failed', err);
         hideOutputLoader();
-        if (d.id) {
-          currentNoteId = d.id;
-          try {
-            localStorage.setItem(noteKey(currentVariant), currentNoteId);
-            if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
-          } catch { }
-          $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
-        }
-        const detectedTopic = (() => {
-          const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
-          if (fromHeading) return fromHeading;
-          const fromPayload = (d.title || d.topic || '').trim();
-          if (fromPayload) return fromPayload;
-          const fromInput = ($topic.value || '').trim();
-          if (fromInput) return fromInput;
-          return relatedVideosTopic || '';
-        })();
-        if (currentNoteId) {
-          enableFlashcardAccess(currentNoteId, detectedTopic);
-          enableMCQAccess(currentNoteId, detectedTopic);
-        }
-        logEvent('Complete');
-        setBusy(false); es && es.close(); es = null;
-      });
+        setBusy(false);
+        snack('Generation failed. Please try again.');
+      }
     }
 
     // Regenerate from current topic or rendered H1 (force=true)
