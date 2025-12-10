@@ -2221,6 +2221,7 @@
     let lastImageUrls = [];
     const VARIANTS = ['detailed', 'cheatsheet', 'simple'];
     let currentVariant = 'detailed';
+    let currentCourseType = '';
     try { localStorage.setItem('paperx:lastVariant', currentVariant); } catch { }
     const noteKey = (v) => `paperx:lastNoteId:${v}`;
     let currentNoteId = localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? (localStorage.getItem('paperx:lastNoteId') || '') : '');
@@ -2663,6 +2664,44 @@
       });
     }
 
+    function normalizeCourseType(type) {
+      const v = (type || '').trim().toLowerCase();
+      return ['practical', 'theorey', 'maths'].includes(v) ? v : '';
+    }
+
+    function ensureWorkingSection(md, topic, courseType) {
+      if (normalizeCourseType(courseType) !== 'practical') return md || '';
+      const text = md || '';
+      if (/^##\s*working\b/imu.test(text)) return text;
+      const trimmed = text.trim();
+      const working = [
+        '## Working',
+        `1. Prepare the required setup and apparatus for ${topic || 'this experiment'}.`,
+        '2. Configure the environment and verify all safety constraints.',
+        '3. Execute each step of the procedure methodically, capturing observations.',
+        '4. Record measurements/results with units after every key action.',
+        '5. Analyze the observations to derive the outcome, then clean up the setup.',
+      ].join('\n');
+      if (!trimmed) return working + '\n';
+      return `${trimmed}\n\n${working}\n`;
+    }
+
+    async function fetchCourseTypeForTopic(topic) {
+      const clean = (topic || '').trim();
+      if (!clean) return '';
+      try {
+        const res = await fetch(`${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(clean)}`);
+        if (!res.ok) return '';
+        const data = await res.json();
+        if (!Array.isArray(data) || !data.length) return '';
+        const match = data.find(t => t && t.course_type) || data[0];
+        return normalizeCourseType(match && match.course_type);
+      } catch (err) {
+        console.warn('Course type lookup failed', err);
+        return '';
+      }
+    }
+
     // ===== Streaming events =====
     document.getElementById('cancelBtn').addEventListener('click', () => {
       if (es) { es.close(); es = null; logEvent('Cancelled'); }
@@ -2671,7 +2710,7 @@
     });
 
     // Unified generator: supports force to bypass cache
-    function startGeneration(topic, force = false) {
+    async function startGeneration(topic, force = false) {
       const t = (topic || '').trim();
       if (!t) { alert('Enter a topic'); return; }
       loadRelatedVideos(t, { force: true });
@@ -2679,12 +2718,19 @@
       clearUI();
       setBusy(true);
       showOutputLoader();
+      currentCourseType = '';
+      try {
+        currentCourseType = await fetchCourseTypeForTopic(t);
+      } catch (err) {
+        console.warn('Course type lookup error', err);
+      }
       const url = new URL(`${apiBase}/generate/stream`);
       url.searchParams.set('topic', t);
       if (force) url.searchParams.set('force', 'true');
       url.searchParams.set('variant', currentVariant);
       const degree = getSelectedDegree();
       if (degree) url.searchParams.set('degree', degree);
+      if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
       es = new EventSource(url.toString());
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
@@ -2727,7 +2773,9 @@
       on('error', (d) => { logEvent('Error', d.message); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
       on('final', (d) => {
         renderImageGallery(d.image_urls || d.urls || lastImageUrls);
-        renderMarkdown(d.markdown);
+        const workingTopic = (d.title || d.topic || t);
+        const mdToRender = ensureWorkingSection(d.markdown, workingTopic, currentCourseType);
+        renderMarkdown(mdToRender);
         setEmphasis(emphasis);
         hideOutputLoader();
         if (d.id) {
