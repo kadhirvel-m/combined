@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X — Test Results</title>
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script src="./config.js"></script>
+    <script src="./auth.js" defer></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-slate-50 dark:bg-brand-900/90">
+    <main class="container mx-auto px-4 py-8 space-y-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold" id="title">Test Results</h1>
+                <p id="meta" class="text-sm text-neutral-600 dark:text-white/70"></p>
+            </div>
+            <div class="flex gap-2">
+                <a id="viewTest"
+                    class="px-4 py-2 rounded-lg ring-1 ring-black/5 dark:ring-white/15 text-sm hover:bg-black/5 dark:hover:bg-white/10">Open
+                    Test</a>
+                <a href="./teacher_tests.html"
+                    class="px-4 py-2 rounded-lg ring-1 ring-black/5 dark:ring-white/15 text-sm hover:bg-black/5 dark:hover:bg-white/10">Back</a>
+            </div>
+        </div>
+        <div id="alert"
+            class="hidden text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-4 py-3 rounded-xl ring-1 ring-red-100 dark:ring-red-800">
+        </div>
+
+        <section class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 space-y-2">
+            <div class="flex gap-4 text-sm">
+                <div>Completed: <span id="completed" class="font-semibold">-</span></div>
+                <div>Status: <span id="status" class="font-semibold"></span></div>
+            </div>
+            <div class="text-sm text-neutral-600 dark:text-white/70">Students who have not attempted appear below when
+                class enrollments are available.</div>
+        </section>
+
+        <section class="grid md:grid-cols-2 gap-4">
+            <div class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10">
+                <h2 class="font-semibold mb-2">Attempts</h2>
+                <div id="attempts" class="space-y-2 text-sm"></div>
+            </div>
+            <div class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10">
+                <h2 class="font-semibold mb-2">Not Attempted</h2>
+                <div id="missing" class="space-y-2 text-sm"></div>
+            </div>
+        </section>
+
+        <section class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10">
+            <div class="flex items-center justify-between mb-2">
+                <div>
+                    <h2 class="font-semibold">Class Roster</h2>
+                    <p class="text-sm text-neutral-600 dark:text-white/70">All enrolled students for this class with
+                        status.</p>
+                </div>
+            </div>
+            <div id="roster" class="space-y-2 text-sm"></div>
+        </section>
+    </main>
+
+    <script>
+        const $ = (s, r = document) => r.querySelector(s);
+        const params = new URLSearchParams(location.search);
+        let API_BASE = '';
+        async function resolveApi() { if (API_BASE) return API_BASE; const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, ''); if (b) { API_BASE = b; return b; } await new Promise(r => setTimeout(r, 60)); return resolveApi(); }
+        function getToken() { const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token']; for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } } return ''; }
+        function showAlert(msg) { const a = $('#alert'); a.textContent = msg; a.classList.remove('hidden'); }
+
+        async function load() {
+            const id = params.get('test_id') || params.get('id');
+            if (!id) return showAlert('Missing test id');
+            const token = getToken(); if (!token) { showAlert('Sign in as teacher'); return; }
+            try {
+                const base = await resolveApi();
+                const res = await fetch(`${base}/api/teacher/tests/${id}/results`, { headers: { Authorization: 'Bearer ' + token } });
+                if (!res.ok) { showAlert('Could not load results'); return; }
+                const data = await res.json();
+                $('#title').textContent = data.test?.title || 'Test Results';
+                $('#meta').textContent = `Max ${data.test?.max_score || 0}`;
+                $('#viewTest').href = `./test_take.html?test_id=${id}`;
+                $('#status').textContent = data.test?.accepting_submissions === false ? 'Closed' : 'Open';
+                $('#completed').textContent = data.completed_count ?? 0;
+                const classId = data.test?.class_id;
+
+                const attempts = data.attempts || [];
+                const mWrap = $('#missing');
+
+                const rWrap = $('#roster');
+                const renderRoster = (list) => {
+                    if (!rWrap) return;
+                    rWrap.innerHTML = list.length ? list.map(s => {
+                        const name = (s.name && s.name.trim()) || s.email || s.auth_user_id || 'Student';
+                        const statusLabel = s.status === 'completed' ? 'Completed' : (s.status === 'in_progress' ? 'In progress' : 'Not attempted');
+                        const badgeClass = s.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-200' : (s.status === 'in_progress' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200' : 'bg-neutral-100 text-neutral-700 dark:bg-white/10 dark:text-white');
+                        const when = s.submitted_at ? ` • ${new Date(s.submitted_at).toLocaleString()}` : '';
+                        const score = typeof s.score === 'number' ? ` • Score ${s.score}` : '';
+                        return `<div class="p-3 rounded-lg ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 flex justify-between gap-4">
+              <div>
+                <div class="font-medium">${name}</div>
+                <div class="text-xs text-neutral-500">${(s.email && s.email !== name ? s.email : '')}${when}${score}</div>
+              </div>
+              <div class="px-3 py-1 rounded-full text-xs font-semibold ${badgeClass}">${statusLabel}</div>
+            </div>`;
+                    }).join('') : '<div class="text-sm text-neutral-500">No class roster found for this test.</div>';
+                };
+
+                let roster = data.class_students || [];
+                if ((!roster || !roster.length) && classId) {
+                    try {
+                        const rs = await fetch(`${base}/api/teacher/classes/${classId}/students`, { headers: { Authorization: 'Bearer ' + token } });
+                        if (rs.ok) {
+                            const cls = await rs.json();
+                            const students = (cls.students || cls.data || []).map(s => ({
+                                auth_user_id: s.auth_user_id || s.user_id || s.id,
+                                name: s.name,
+                                email: s.email,
+                                status: 'not_attempted'
+                            }));
+                            roster = students;
+                        }
+                    } catch (_) { }
+                }
+                // Merge and dedupe roster + attempts by any shared identifier (auth_user_id, student_user_id, email)
+                const alias = new Map(); // key -> canonicalKey
+                const canonMap = new Map(); // canonicalKey -> merged entry
+                const keysFor = (e) => {
+                    return [e.auth_user_id, e.student_user_id, e.email]
+                        .filter(Boolean)
+                        .map(v => String(v).trim().toLowerCase())
+                        .filter(Boolean);
+                };
+
+                const mergeEntry = (entry) => {
+                    if (!entry) return;
+                    const keys = keysFor(entry);
+                    if (!keys.length) return;
+                    let canon = null;
+                    for (const k of keys) {
+                        const found = alias.get(k);
+                        if (found) { canon = found; break; }
+                    }
+                    if (!canon) { canon = keys[0]; }
+                    const prev = canonMap.get(canon) || {};
+                    const merged = { ...prev, ...entry };
+                    canonMap.set(canon, merged);
+                    keys.forEach(k => alias.set(k, canon));
+                };
+
+                (roster || []).forEach(mergeEntry);
+                (attempts || []).forEach(a => {
+                    mergeEntry({
+                        auth_user_id: a.student_user_id,
+                        student_user_id: a.student_user_id,
+                        name: a.name,
+                        email: a.email,
+                        status: a.submitted_at ? 'completed' : (a.submitted_at === null ? 'in_progress' : a.status || 'in_progress'),
+                        score: a.score,
+                        submitted_at: a.submitted_at,
+                    });
+                });
+
+                roster = Array.from(canonMap.values()).map(r => {
+                    const status = r.submitted_at ? 'completed' : (r.status === 'in_progress' ? 'in_progress' : 'not_attempted');
+                    return { ...r, status };
+                });
+                roster.sort((a, b) => ((a.name || '').localeCompare(b.name || '')) || ((a.email || '').localeCompare(b.email || '')) || ((a.auth_user_id || '').localeCompare(b.auth_user_id || '')));
+
+                // Split by completion: attempted = submitted, pending = in-progress or never started
+                const attemptedList = roster.filter(s => s.submitted_at);
+                const pending = roster.filter(s => !s.submitted_at);
+
+                // Attempts section shows completed submissions only
+                const atWrap = $('#attempts');
+                atWrap.innerHTML = attemptedList.length ? attemptedList.map(a => {
+                    const when = a.submitted_at ? new Date(a.submitted_at).toLocaleString() : 'In progress';
+                    const label = (a.name && a.name.trim()) || a.email || a.auth_user_id || a.student_user_id || 'Student';
+                    const secondary = a.email && a.email !== label ? `${a.email} - ${when}` : when;
+                    return `<div class="p-3 rounded-lg ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 flex justify-between">
+            <div>
+              <div class="font-medium">${label}</div>
+              <div class="text-xs text-neutral-500">${secondary}</div>
+            </div>
+            <div class="text-sm font-semibold">${a.score ?? 0}</div>
+          </div>`;
+                }).join('') : '<div class="text-sm text-neutral-500">No completed submissions yet.</div>';
+
+                // Not attempted = in progress or not started
+                if (pending.length) {
+                    mWrap.innerHTML = pending.map(m => `<div class="p-3 rounded-lg ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5">
+            <div class="font-medium">${m.name || 'Student'}</div>
+            <div class="text-xs text-neutral-500">${m.email || m.auth_user_id || ''}</div>
+          </div>`).join('');
+                } else if (roster.length) {
+                    mWrap.innerHTML = '<div class="text-sm text-neutral-500">All enrolled students completed.</div>';
+                }
+
+                renderRoster(roster || []);
+            } catch (e) { console.error(e); showAlert('Failed to load'); }
+        }
+
+        document.addEventListener('DOMContentLoaded', load);
+    </script>
+</body>
+
+</html>

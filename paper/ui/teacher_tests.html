@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X — My Tests</title>
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script src="./config.js"></script>
+    <script src="./auth.js" defer></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-slate-50 dark:bg-brand-900/90">
+    <main class="container mx-auto px-4 py-8 space-y-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold">My Tests</h1>
+                <p class="text-sm text-neutral-600 dark:text-white/70">Manage, edit, and review your tests.</p>
+            </div>
+            <div class="flex gap-2">
+                <a href="./teacher_test_builder.html"
+                    class="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm hover:bg-brand-600">Create Test</a>
+                <a href="./teacher_profile.html"
+                    class="px-4 py-2 rounded-lg ring-1 ring-black/5 dark:ring-white/15 text-sm hover:bg-black/5 dark:hover:bg-white/10">Back</a>
+            </div>
+        </div>
+        <div id="alert"
+            class="hidden text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-4 py-3 rounded-xl ring-1 ring-red-100 dark:ring-red-800">
+        </div>
+        <div id="tests" class="grid gap-4 md:grid-cols-2"></div>
+    </main>
+
+    <script>
+        const $ = (s, r = document) => r.querySelector(s);
+        const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+        let API_BASE = '';
+        async function resolveApi() { if (API_BASE) return API_BASE; const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, ''); if (b) { API_BASE = b; return b; } await new Promise(r => setTimeout(r, 60)); return resolveApi(); }
+        function getToken() { const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token']; for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } } return ''; }
+        function showAlert(msg) { const a = $('#alert'); if (!a) return; a.textContent = msg; a.classList.remove('hidden'); setTimeout(() => a.classList.add('hidden'), 3200); }
+
+        async function loadTests() {
+            const token = getToken();
+            if (!token) { showAlert('Sign in as teacher.'); return; }
+            const wrap = $('#tests');
+            wrap.innerHTML = '<div class="col-span-2 text-sm text-neutral-500">Loading…</div>';
+            try {
+                const base = await resolveApi();
+                const res = await fetch(`${base}/api/teacher/tests`, { headers: { Authorization: 'Bearer ' + token } });
+                if (!res.ok) { showAlert('Could not load tests'); return; }
+                const data = await res.json();
+                if (!data.length) { wrap.innerHTML = '<div class="col-span-2 text-sm text-neutral-500">No tests yet.</div>'; return; }
+                wrap.innerHTML = data.map(t => {
+                    const status = t.accepting_submissions === false ? '<span class="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">Closed</span>' : '<span class="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">Open</span>';
+                    return `<div class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 space-y-2">
+            <div class="flex items-start justify-between gap-3">
+              <div><div class="font-semibold">${t.title || 'Untitled'}</div><div class="text-xs text-neutral-500">Max ${t.max_score || 0}</div></div>
+              ${status}
+            </div>
+            <div class="text-sm text-neutral-600 dark:text-white/70 line-clamp-2">${t.description || ''}</div>
+            <div class="flex flex-wrap gap-2 text-xs">
+              <button data-action="results" data-id="${t.id}" class="px-3 py-1.5 rounded-lg ring-1 ring-black/5 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">View Results</button>
+              <button data-action="edit" data-id="${t.id}" class="px-3 py-1.5 rounded-lg ring-1 ring-black/5 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">Edit</button>
+              <button data-action="toggle" data-id="${t.id}" data-on="${t.accepting_submissions !== false}" class="px-3 py-1.5 rounded-lg ring-1 ring-black/5 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">${t.accepting_submissions === false ? 'Turn On' : 'Turn Off'}</button>
+              <button data-action="delete" data-id="${t.id}" class="px-3 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200">Delete</button>
+            </div>
+          </div>`;
+                }).join('');
+                $$('button[data-action]', wrap).forEach(btn => btn.addEventListener('click', () => handleAction(btn)));
+            } catch (e) { console.error(e); showAlert('Failed to load tests'); }
+        }
+
+        async function handleAction(btn) {
+            const action = btn.dataset.action; const id = btn.dataset.id; const token = getToken(); if (!token) return showAlert('Sign in.'); const base = await resolveApi();
+            try {
+                if (action === 'delete') {
+                    if (!confirm('Delete this test?')) return;
+                    const res = await fetch(`${base}/api/teacher/tests/${id}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+                    if (!res.ok) throw new Error('Delete failed');
+                    loadTests();
+                }
+                if (action === 'results') location.href = `./teacher_test_results.html?test_id=${id}`;
+                if (action === 'edit') location.href = `./teacher_test_edit.html?test_id=${id}`;
+                if (action === 'toggle') {
+                    const on = btn.dataset.on === 'true';
+                    const res = await fetch(`${base}/api/teacher/tests/${id}/accepting?accepting=${on ? 'false' : 'true'}`, { method: 'PATCH', headers: { Authorization: 'Bearer ' + token } });
+                    if (!res.ok) throw new Error('Toggle failed');
+                    loadTests();
+                }
+            } catch (e) { console.error(e); showAlert(e.message || 'Action failed'); }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadTests);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X — Take Test</title>
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script src="./config.js"></script>
+    <script src="./auth.js" defer></script>
+    <script>(function () { const s = localStorage.getItem('px_theme'); const p = matchMedia('(prefers-color-scheme: dark)').matches; const m = s ? s : (p ? 'dark' : 'light'); if (m === 'dark') document.documentElement.classList.add('dark'); })();</script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -5px;
+        }
+
+        body {
+            background: radial-gradient(1100px 540px at 10% 20%, rgba(158, 75, 138, .16), transparent 60%), linear-gradient(180deg, #ffffff, #fbf7fd 40%, #f4eef7 100%);
+        }
+
+        .dark body {
+            background: radial-gradient(900px 600px at 10% 15%, rgba(158, 75, 138, .24), transparent 60%), linear-gradient(180deg, #1e1e2f, #201934 35%, #141321 100%);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
+    <header
+        class="sticky top-0 z-30 bg-white/80 dark:bg-brand-900/70 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container mx-auto flex items-center justify-between py-3 px-4">
+            <a href="./index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X">
+                <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X">
+            </a>
+            <button id="themeToggle"
+                class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                    class="material-symbols-rounded">dark_mode</span></button>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8 space-y-6">
+        <section id="hero"
+            class="rounded-3xl p-6 md:p-8 ring-1 ring-black/5 dark:ring-white/10 bg-white/80 dark:bg-white/5 shadow-card">
+            <div class="flex items-start gap-3">
+                <div
+                    class="size-12 rounded-2xl bg-gradient-to-br from-brand-500/25 to-brand-700/20 grid place-items-center text-brand-700 dark:text-fuchsia-100">
+                    <span class="material-symbols-rounded text-2xl">quiz</span></div>
+                <div class="flex-1 min-w-0">
+                    <h1 id="testTitle" class="text-2xl md:text-3xl font-bold tracking-tight">Loading test…</h1>
+                    <p id="testMeta" class="text-sm text-neutral-600 dark:text-white/70"></p>
+                </div>
+            </div>
+            <p id="testDesc" class="mt-3 text-sm text-neutral-700 dark:text-white/75"></p>
+            <div id="notice" class="mt-3 text-sm text-red-600 dark:text-red-400 hidden"></div>
+        </section>
+
+        <section id="testSection"
+            class="rounded-3xl p-6 md:p-8 ring-1 ring-black/5 dark:ring-white/10 bg-white/80 dark:bg-white/5 shadow-card">
+            <form id="testForm" class="space-y-6"></form>
+            <div class="mt-4 flex items-center gap-3">
+                <button id="submitBtn"
+                    class="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm hover:bg-brand-700">Submit</button>
+                <button id="resetBtn"
+                    class="px-4 py-2 rounded-lg ring-1 ring-black/5 dark:ring-white/15 text-sm hover:bg-black/5 dark:hover:bg-white/10"
+                    type="button">Clear selections</button>
+            </div>
+            <div id="result" class="mt-4 text-sm font-semibold text-brand-700 dark:text-fuchsia-100"></div>
+        </section>
+    </main>
+
+    <script>
+        const $ = (s, r = document) => r.querySelector(s);
+        const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+        const params = new URLSearchParams(location.search);
+        const themeBtn = $('#themeToggle');
+        if (themeBtn) {
+            themeBtn.addEventListener('click', () => {
+                const root = document.documentElement;
+                const dark = root.classList.toggle('dark');
+                localStorage.setItem('px_theme', dark ? 'dark' : 'light');
+                const ic = themeBtn.querySelector('.material-symbols-rounded');
+                if (ic) ic.textContent = dark ? 'light_mode' : 'dark_mode';
+            });
+        }
+
+        let API_BASE = '';
+        async function resolveApi() {
+            if (API_BASE) return API_BASE;
+            const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, '');
+            if (b) { API_BASE = b; return b; }
+            await new Promise(r => setTimeout(r, 60));
+            return resolveApi();
+        }
+        function extractToken(raw) {
+            if (!raw) return '';
+            try {
+                const obj = JSON.parse(raw);
+                if (obj && typeof obj === 'object') {
+                    if (obj.access_token) return obj.access_token;
+                    if (obj.currentSession && obj.currentSession.access_token) return obj.currentSession.access_token;
+                    if (obj.data && obj.data.session && obj.data.session.access_token) return obj.data.session.access_token;
+                }
+            } catch (_) { /* raw string */ }
+            return raw;
+        }
+
+        function getToken() {
+            const primaryKeys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+            for (const k of primaryKeys) {
+                try {
+                    const v = localStorage.getItem(k);
+                    if (v) return extractToken(v);
+                } catch { }
+            }
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (!key) continue;
+                    if (/auth-token/i.test(key) || /sb-.*access-token/i.test(key)) {
+                        const val = localStorage.getItem(key);
+                        const tok = extractToken(val);
+                        if (tok) return tok;
+                    }
+                }
+            } catch { }
+            // Fallback: read supabase.auth.token JSON session structure
+            try {
+                const raw = localStorage.getItem('supabase.auth.token');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && parsed.currentSession && parsed.currentSession.access_token) {
+                        return parsed.currentSession.access_token;
+                    }
+                    if (parsed && parsed.access_token) {
+                        return parsed.access_token;
+                    }
+                }
+            } catch { }
+            return '';
+        }
+
+        const state = { questions: [], testId: '', startedAt: null, duration: null, timer: null };
+
+        function renderEmpty(msg) {
+            $('#testTitle').textContent = 'Test unavailable';
+            $('#testMeta').textContent = '';
+            $('#testDesc').textContent = msg || 'Missing or invalid test link.';
+            $('#notice').classList.remove('hidden');
+            $('#notice').textContent = 'Sign in and ask your teacher for help.';
+            $('#testSection').classList.add('hidden');
+        }
+
+        function renderCountdown(seconds) {
+            const meta = $('#testMeta');
+            if (!meta) return;
+            meta.dataset.baseText = meta.dataset.baseText || meta.textContent || '';
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            meta.textContent = `${meta.dataset.baseText} • Timer ${mins}:${secs.toString().padStart(2, '0')}`.trim();
+        }
+
+        function startTimer(durationSec) {
+            if (!durationSec) return;
+            state.duration = durationSec;
+            state.startedAt = Date.now();
+            renderCountdown(durationSec);
+            state.timer = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
+                const remaining = Math.max(durationSec - elapsed, 0);
+                renderCountdown(remaining);
+                if (remaining <= 0) {
+                    clearInterval(state.timer);
+                    $('#submitBtn').click();
+                }
+            }, 1000);
+        }
+
+        function renderTest(payload) {
+            const qs = Array.isArray(payload.questions) ? payload.questions : [];
+            if (!qs.length) { renderEmpty('No questions in this test.'); return; }
+            $('#testTitle').textContent = payload.title || 'Untitled test';
+            const parts = [];
+            if (payload.description) parts.push(payload.description);
+            if (payload.max_score) parts.push(`Max score ${payload.max_score}`);
+            $('#testMeta').textContent = parts.join(' • ');
+            $('#testMeta').dataset.baseText = $('#testMeta').textContent;
+            $('#testDesc').textContent = '';
+
+            const form = $('#testForm');
+            form.innerHTML = qs.map((q, idx) => {
+                const opts = (q.options || []).map((opt, i) => {
+                    const id = `q${idx}-o${i}`;
+                    return `<label for="${id}" class="flex items-center gap-2 px-3 py-2 rounded-lg ring-1 ring-black/5 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">` +
+                        `<input type="radio" name="q${idx}" id="${id}" value="${i}" class="size-4" />` +
+                        `<span class="flex-1 text-sm">${opt}</span>` +
+                        `</label>`;
+                }).join('');
+                return `<div class="space-y-2"><div class="font-semibold">Q${idx + 1}. ${q.prompt}</div><div class="space-y-1">${opts}</div></div>`;
+            }).join('<hr class="my-4 border-black/5 dark:border-white/10">');
+
+            $('#submitBtn').onclick = async (ev) => {
+                ev.preventDefault();
+                await submitAnswers();
+            };
+
+            $('#resetBtn').onclick = () => {
+                $$('input[type="radio"]', form).forEach(r => r.checked = false);
+                $('#result').textContent = '';
+            };
+        }
+
+        async function fetchTest() {
+            const testId = params.get('test_id') || params.get('id');
+            state.testId = testId;
+            if (!testId) { renderEmpty('No test specified.'); return; }
+            const token = getToken();
+            if (!token) { renderEmpty('Please sign in to take this test.'); return; }
+            try {
+                const base = await resolveApi();
+                const res = await fetch(`${base}/api/tests/${testId}`, { headers: { Authorization: 'Bearer ' + token } });
+                if (res.status === 401) { renderEmpty('Session expired. Sign in again.'); return; }
+                if (!res.ok) {
+                    // Retry once after a short delay for transient backend errors
+                    await new Promise(r => setTimeout(r, 150));
+                    const res2 = await fetch(`${base}/api/tests/${testId}`, { headers: { Authorization: 'Bearer ' + token } });
+                    if (res2.status === 401) { renderEmpty('Session expired. Sign in again.'); return; }
+                    if (!res2.ok) { renderEmpty('Could not load this test.'); return; }
+                    var data = await res2.json();
+                } else {
+                    var data = await res.json();
+                }
+                state.questions = data.questions || [];
+                renderTest({ ...data, title: data.title, description: data.description });
+                if (data.accepting_submissions === false) {
+                    $('#notice').classList.remove('hidden');
+                    $('#notice').textContent = 'This test is closed.';
+                    $('#submitBtn').disabled = true;
+                    $$('input', $('#testForm')).forEach(i => i.disabled = true);
+                    return;
+                }
+                if (data.attempt && data.attempt.submitted_at) {
+                    $('#notice').classList.remove('hidden');
+                    $('#notice').textContent = `Already submitted. Score ${data.attempt.score ?? 0}/${data.max_score ?? data.questions.length}`;
+                    $('#submitBtn').disabled = true;
+                    $$('input', $('#testForm')).forEach(i => i.disabled = true);
+                    return;
+                }
+                await startAttempt();
+                if (data.duration_seconds) startTimer(parseInt(data.duration_seconds, 10));
+            } catch (e) {
+                console.error(e);
+                renderEmpty('Could not load test.');
+            }
+        }
+
+        async function startAttempt() {
+            const token = getToken();
+            if (!state.testId || !token) return;
+            const base = await resolveApi();
+            const res = await fetch(`${base}/api/tests/${state.testId}/start`, {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + token }
+            });
+            if (res.status === 410) {
+                $('#notice').classList.remove('hidden');
+                $('#notice').textContent = 'This test is closed.';
+                $('#submitBtn').disabled = true;
+                $$('input', $('#testForm')).forEach(i => i.disabled = true);
+                return;
+            }
+            if (res.status === 409) {
+                $('#notice').classList.remove('hidden');
+                $('#notice').textContent = 'You already submitted this test.';
+                $('#submitBtn').disabled = true;
+                $$('input', $('#testForm')).forEach(i => i.disabled = true);
+            }
+        }
+
+        async function submitAnswers() {
+            const token = getToken();
+            if (!state.testId || !token) { renderEmpty('Please sign in to submit.'); return; }
+            const form = $('#testForm');
+            const answers = state.questions.map((_, idx) => {
+                const chosen = form.querySelector(`input[name="q${idx}"]:checked`);
+                return chosen ? parseInt(chosen.value, 10) : -1;
+            });
+            const elapsed = state.startedAt ? Math.round((Date.now() - state.startedAt) / 1000) : null;
+
+            try {
+                const base = await resolveApi();
+                const res = await fetch(`${base}/api/tests/${state.testId}/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    body: JSON.stringify({ answers, elapsed_seconds: elapsed }),
+                });
+                if (res.status === 410) {
+                    $('#notice').classList.remove('hidden');
+                    $('#notice').textContent = 'This test is closed.';
+                    return;
+                }
+                if (res.status === 409) {
+                    $('#notice').classList.remove('hidden');
+                    $('#notice').textContent = 'You already submitted this test.';
+                    return;
+                }
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Submit failed');
+                }
+                const data = await res.json();
+                $('#result').textContent = `Score: ${data.score}/${data.max_score}`;
+                $('#notice').classList.add('hidden');
+                $('#submitBtn').disabled = true;
+                $$('input', $('#testForm')).forEach(i => i.disabled = true);
+                if (state.timer) clearInterval(state.timer);
+            } catch (e) {
+                console.error(e);
+                $('#notice').classList.remove('hidden');
+                $('#notice').textContent = e.message || 'Submit failed';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', fetchTest);
+    </script>
+</body>
+
+</html>

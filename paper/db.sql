@@ -634,3 +634,52 @@ CREATE TABLE public.youtube_ai_notes (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
 );
+
+-- Assessments: tests, questions, attempts
+CREATE TABLE public.tests (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  teacher_user_id uuid NOT NULL,
+  class_id uuid,
+  title text NOT NULL,
+  description text,
+  duration_seconds integer CHECK (duration_seconds >= 0),
+  accepting_submissions boolean NOT NULL DEFAULT true,
+  max_score integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT tests_pkey PRIMARY KEY (id),
+  CONSTRAINT tests_teacher_user_id_fkey FOREIGN KEY (teacher_user_id) REFERENCES auth.users(id)
+);
+
+CREATE TABLE public.test_questions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  test_id uuid NOT NULL,
+  prompt text NOT NULL,
+  options text[] NOT NULL,
+  correct_index integer NOT NULL,
+  points integer NOT NULL DEFAULT 1,
+  question_order integer NOT NULL DEFAULT 0,
+  CONSTRAINT test_questions_pkey PRIMARY KEY (id),
+  CONSTRAINT test_questions_test_id_fkey FOREIGN KEY (test_id) REFERENCES public.tests(id) ON DELETE CASCADE,
+  CONSTRAINT test_questions_options_size CHECK (cardinality(options) BETWEEN 2 AND 8),
+  CONSTRAINT test_questions_correct_index_valid CHECK (correct_index >= 0 AND correct_index < cardinality(options))
+);
+
+CREATE INDEX test_questions_test_id_idx ON public.test_questions (test_id);
+
+CREATE TABLE public.test_attempts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  test_id uuid NOT NULL,
+  student_user_id uuid NOT NULL,
+  answers jsonb NOT NULL DEFAULT '[]',
+  score integer NOT NULL DEFAULT 0,
+  elapsed_seconds integer,
+  started_at timestamp with time zone NOT NULL DEFAULT now(),
+  submitted_at timestamp with time zone,
+  CONSTRAINT test_attempts_pkey PRIMARY KEY (id),
+  CONSTRAINT test_attempts_test_id_fkey FOREIGN KEY (test_id) REFERENCES public.tests(id) ON DELETE CASCADE,
+  CONSTRAINT test_attempts_student_user_id_fkey FOREIGN KEY (student_user_id) REFERENCES auth.users(id),
+  CONSTRAINT test_attempts_single_attempt UNIQUE (test_id, student_user_id)
+);
+
+CREATE INDEX test_attempts_test_id_idx ON public.test_attempts (test_id);

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X — Create Test</title>
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script>(function () { const s = localStorage.getItem('px_theme'); const p = matchMedia('(prefers-color-scheme: dark)').matches; const m = s ? s : (p ? 'dark' : 'light'); if (m === 'dark') document.documentElement.classList.add('dark'); })();</script>
+    <script src="./config.js"></script>
+    <script src="./auth.js" defer></script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -5px;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, .78);
+            backdrop-filter: blur(14px);
+        }
+
+        .dark .glass {
+            background: rgba(30, 30, 47, .55);
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, rgba(0, 0, 0, .06)25%, rgba(0, 0, 0, .12)37%, rgba(0, 0, 0, .06)63%);
+            background-size: 900px 100%;
+        }
+
+        .dark .skeleton {
+            background: linear-gradient(90deg, rgba(255, 255, 255, .06)25%, rgba(255, 255, 255, .12)37%, rgba(255, 255, 255, .06)63%);
+        }
+
+        body {
+            background: radial-gradient(1100px 540px at 10% 20%, rgba(158, 75, 138, .16), transparent 60%), linear-gradient(180deg, #ffffff, #fbf7fd 40%, #f4eef7 100%);
+        }
+
+        .dark body {
+            background: radial-gradient(900px 600px at 10% 15%, rgba(158, 75, 138, .24), transparent 60%), linear-gradient(180deg, #1e1e2f, #201934 35%, #141321 100%);
+        }
+
+        .chip {
+            border: 1px solid rgba(0, 0, 0, .08);
+        }
+
+        .dark .chip {
+            border-color: rgba(255, 255, 255, .12);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
+    <header
+        class="sticky top-0 z-30 bg-white/80 dark:bg-brand-900/70 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container mx-auto flex items-center justify-between py-3 px-4">
+            <a href="./index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X">
+                <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X">
+            </a>
+            <div class="flex items-center gap-3">
+                <a href="./teacher_profile.html"
+                    class="text-sm px-3 py-1.5 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">Back
+                    to profile</a>
+                <button id="themeToggle"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                        class="material-symbols-rounded">dark_mode</span></button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8 space-y-8">
+        <section class="glass rounded-3xl p-6 md:p-8 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+            <div class="flex flex-col gap-4">
+                <div class="flex items-start gap-3">
+                    <div
+                        class="size-12 rounded-2xl bg-gradient-to-br from-brand-500/25 to-brand-700/20 grid place-items-center text-brand-700 dark:text-fuchsia-100">
+                        <span class="material-symbols-rounded text-2xl">quiz</span></div>
+                    <div>
+                        <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Create a Test</h1>
+                        <p class="text-sm text-neutral-600 dark:text-white/70">Pick a class (or Others), add MCQ
+                            questions, and share the generated link with students.</p>
+                    </div>
+                </div>
+                <div id="alert"
+                    class="hidden text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-4 py-3 rounded-xl ring-1 ring-red-100 dark:ring-red-800">
+                </div>
+            </div>
+        </section>
+
+        <section class="grid gap-6 lg:grid-cols-3">
+            <div class="lg:col-span-1 space-y-4">
+                <div class="glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="font-semibold">1) Pick a class</h2>
+                        <button id="refreshClasses"
+                            class="text-xs px-2 py-1 rounded-md ring-1 ring-black/5 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">Refresh</button>
+                    </div>
+                    <div id="classesList" class="space-y-3 text-sm">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="h-20 rounded-xl skeleton"></div>
+                            <div class="h-20 rounded-xl skeleton"></div>
+                            <div class="h-20 rounded-xl skeleton"></div>
+                            <div class="h-20 rounded-xl skeleton"></div>
+                        </div>
+                    </div>
+                    <button id="selectOther"
+                        class="mt-3 w-full text-sm px-3 py-2 rounded-xl ring-1 ring-brand-500/40 text-brand-700 dark:text-fuchsia-100 bg-brand-500/10 hover:bg-brand-500/20">Others</button>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2 space-y-6">
+                <div class="glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-semibold">2) Test details</h2>
+                        <span id="selectedClassLabel" class="text-xs text-brand-700 dark:text-fuchsia-100"></span>
+                    </div>
+                    <div class="grid gap-3 md:grid-cols-2">
+                        <label class="text-sm space-y-1"><span
+                                class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Test
+                                title</span>
+                            <input id="testTitle" type="text"
+                                class="w-full px-3 py-2 rounded-lg bg-white/80 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/15 focus:outline-none focus:ring-brand-500"
+                                placeholder="Unit 3 MCQ" />
+                        </label>
+                        <label class="text-sm space-y-1"><span
+                                class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Instructions
+                                (optional)</span>
+                            <input id="testDesc" type="text"
+                                class="w-full px-3 py-2 rounded-lg bg-white/80 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/15 focus:outline-none focus:ring-brand-500"
+                                placeholder="Answer all questions" />
+                        </label>
+                    </div>
+                </div>
+
+                <div class="glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="font-semibold">3) Add questions</h2>
+                        <button id="addQuestion"
+                            class="text-xs px-3 py-1.5 rounded-lg bg-brand-500 text-white hover:bg-brand-600">Add to
+                            list</button>
+                    </div>
+                    <div class="space-y-3">
+                        <label class="text-sm space-y-1 block"><span
+                                class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Question</span>
+                            <textarea id="qText" rows="2"
+                                class="w-full px-3 py-2 rounded-lg bg-white/80 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/15 focus:outline-none focus:ring-brand-500"
+                                placeholder="Enter the question"></textarea>
+                        </label>
+                        <div class="grid gap-2 md:grid-cols-2" id="optionsWrap">
+                            <div class="flex items-center gap-2">
+                                <input type="radio" name="correct" value="0" class="size-4" />
+                                <input type="text" data-idx="0"
+                                    class="flex-1 px-3 py-2 rounded-lg bg-white/80 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/15 focus:outline-none focus:ring-brand-500"
+                                    placeholder="Option 1" />
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="radio" name="correct" value="1" class="size-4" />
+                                <input type="text" data-idx="1"
+                                    class="flex-1 px-3 py-2 rounded-lg bg-white/80 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/15 focus:outline-none focus:ring-brand-500"
+                                    placeholder="Option 2" />
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="radio" name="correct" value="2" class="size-4" />
+                                <input type="text" data-idx="2"
+                                    class="flex-1 px-3 py-2 rounded-lg bg-white/80 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/15 focus:outline-none focus:ring-brand-500"
+                                    placeholder="Option 3" />
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="radio" name="correct" value="3" class="size-4" />
+                                <input type="text" data-idx="3"
+                                    class="flex-1 px-3 py-2 rounded-lg bg-white/80 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/15 focus:outline-none focus:ring-brand-500"
+                                    placeholder="Option 4" />
+                            </div>
+                        </div>
+                        <p class="text-xs text-neutral-500 dark:text-white/60">Select the correct option before adding
+                            to the list.</p>
+                        <div id="questionsList" class="space-y-2 text-sm"></div>
+                    </div>
+                </div>
+
+                <div class="glass rounded-2xl p-5 ring-1 ring-black/5 dark:ring-white/10 shadow-card">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="font-semibold">4) Share</h2>
+                        <button id="generateLink"
+                            class="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-sm hover:bg-brand-700">Generate
+                            link</button>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="text-sm text-neutral-600 dark:text-white/70">Students must sign in to take the test.
+                            One attempt per student; scores are stored for you.</div>
+                        <div class="flex gap-2">
+                            <input id="shareLink" type="text"
+                                class="flex-1 px-3 py-2 rounded-lg bg-white/80 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/15 focus:outline-none focus:ring-brand-500"
+                                placeholder="Click Generate link" readonly />
+                            <button id="copyLink"
+                                class="px-3 py-2 rounded-lg bg-black/80 text-white text-sm hover:bg-black"
+                                disabled>Copy</button>
+                        </div>
+                        <div id="shareStatus" class="text-xs text-neutral-500 dark:text-white/60"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const $ = (s, r = document) => r.querySelector(s);
+        const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+        const themeBtn = $('#themeToggle');
+        if (themeBtn) {
+            themeBtn.addEventListener('click', () => {
+                const root = document.documentElement;
+                const dark = root.classList.toggle('dark');
+                localStorage.setItem('px_theme', dark ? 'dark' : 'light');
+                const ic = themeBtn.querySelector('.material-symbols-rounded');
+                if (ic) ic.textContent = dark ? 'light_mode' : 'dark_mode';
+            });
+        }
+
+        let API_BASE = '';
+        async function resolveApi() {
+            if (API_BASE) return API_BASE;
+            const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, '');
+            if (b) { API_BASE = b; return b; }
+            await new Promise(r => setTimeout(r, 60));
+            return resolveApi();
+        }
+        function getToken() {
+            const keys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+            for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } }
+            return '';
+        }
+
+        const classesList = $('#classesList');
+        const selectedLabel = $('#selectedClassLabel');
+        const alertBox = $('#alert');
+        const questionsList = $('#questionsList');
+        const shareLink = $('#shareLink');
+        const shareStatus = $('#shareStatus');
+        const copyBtn = $('#copyLink');
+        const durationInput = document.createElement('input');
+        let classes = [];
+        let selectedClass = null;
+        let questions = [];
+
+        // Inject timer input near details
+        const testDetails = document.querySelector('div.glass.rounded-2xl.p-5');
+        if (testDetails) {
+            const grid = testDetails.querySelector('.grid');
+            if (grid) {
+                const wrap = document.createElement('label');
+                wrap.className = 'text-sm space-y-1';
+                wrap.innerHTML = '<span class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Timer (minutes, optional)</span>';
+                durationInput.type = 'number';
+                durationInput.min = '0';
+                durationInput.max = '120';
+                durationInput.placeholder = '30';
+                durationInput.className = 'w-full px-3 py-2 rounded-lg bg-white/80 dark:bg-white/10 ring-1 ring-black/5 dark:ring-white/15 focus:outline-none focus:ring-brand-500';
+                wrap.appendChild(durationInput);
+                grid.appendChild(wrap);
+            }
+        }
+
+        function showAlert(msg) {
+            if (!alertBox) return;
+            alertBox.textContent = msg;
+            alertBox.classList.remove('hidden');
+            setTimeout(() => alertBox.classList.add('hidden'), 3200);
+        }
+
+        function renderClasses() {
+            if (!classesList) return;
+            if (!classes.length) {
+                classesList.innerHTML = '<div class="text-sm text-neutral-500 dark:text-white/60">No classes found. Use "Others" to proceed.</div>';
+                return;
+            }
+            classesList.innerHTML = classes.map(c => {
+                const label = [c.subject, c.section ? `Sec ${c.section}` : '', c.batch_range || '', c.semester ? `Sem ${c.semester}` : ''].filter(Boolean).join(' • ');
+                return `<button data-class='${JSON.stringify(c)}' class="w-full text-left p-3 rounded-xl ring-1 ring-black/5 dark:ring-white/10 bg-white/80 dark:bg-white/5 hover:ring-brand-500/50 transition">
+          <div class="flex items-start gap-2">
+            <input type="radio" name="classPick" class="mt-1" ${selectedClass && selectedClass.id === c.id ? 'checked' : ''} />
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold text-sm line-clamp-1">${c.subject || 'Class'}</div>
+              <div class="text-xs text-neutral-500 dark:text-white/60 line-clamp-2">${label}</div>
+            </div>
+          </div>
+        </button>`;
+            }).join('');
+            $$('button[data-class]', classesList).forEach(btn => {
+                btn.addEventListener('click', () => {
+                    try { selectedClass = JSON.parse(btn.dataset.class || '{}'); } catch { selectedClass = null; }
+                    selectedLabel.textContent = selectedClass ? (selectedClass.subject || 'Selected class') : '';
+                    renderClasses();
+                });
+            });
+        }
+
+        async function loadClasses() {
+            classesList.innerHTML = '<div class="grid grid-cols-2 gap-2"><div class="h-20 rounded-xl skeleton"></div><div class="h-20 rounded-xl skeleton"></div></div>';
+            const token = getToken();
+            if (!token) { showAlert('Please sign in as teacher.'); return; }
+            try {
+                const base = await resolveApi();
+                const res = await fetch(`${base}/api/teacher/profile/me?strict=1`, { headers: { Authorization: 'Bearer ' + token } });
+                if (res.status === 401) { showAlert('Session expired. Please sign in.'); return; }
+                const data = await res.json();
+                classes = Array.isArray(data.classes) ? data.classes : [];
+                renderClasses();
+            } catch (e) {
+                console.error(e);
+                showAlert('Could not load classes.');
+            }
+        }
+
+        function resetQuestionForm() {
+            $('#qText').value = '';
+            $$('#optionsWrap input[type="text"]').forEach(inp => inp.value = '');
+            $$('#optionsWrap input[type="radio"]').forEach(r => r.checked = false);
+        }
+
+        function renderQuestions() {
+            if (!questions.length) {
+                questionsList.innerHTML = '<div class="text-xs text-neutral-500 dark:text-white/60">No questions added yet.</div>';
+                return;
+            }
+            questionsList.innerHTML = questions.map((q, idx) => {
+                const opts = q.options.map((opt, i) => `<li class="text-xs ${i === q.correct_index ? 'text-brand-700 dark:text-fuchsia-100 font-semibold' : ''}">${String.fromCharCode(65 + i)}. ${opt}</li>`).join('');
+                return `<div class="p-3 rounded-lg ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5">
+          <div class="flex items-start gap-2">
+            <div class="text-xs font-semibold text-neutral-500">Q${idx + 1}</div>
+            <div class="flex-1">
+              <div class="text-sm font-semibold mb-1">${q.prompt}</div>
+              <ul class="space-y-0.5">${opts}</ul>
+            </div>
+            <button data-del="${idx}" class="text-xs text-red-500 hover:underline">Remove</button>
+          </div>
+        </div>`;
+            }).join('');
+            $$('button[data-del]', questionsList).forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const i = parseInt(btn.dataset.del, 10);
+                    if (!isNaN(i)) {
+                        questions.splice(i, 1);
+                        renderQuestions();
+                    }
+                });
+            });
+        }
+
+        $('#addQuestion').addEventListener('click', () => {
+            const text = ($('#qText').value || '').trim();
+            const optionInputs = $$('#optionsWrap input[type="text"]');
+            const options = optionInputs.map(inp => (inp.value || '').trim()).filter(Boolean);
+            const radios = $$('#optionsWrap input[type="radio"]');
+            const checked = radios.find(r => r.checked);
+            const correctIdx = checked ? parseInt(checked.value, 10) : -1;
+            if (!text) { showAlert('Enter the question.'); return; }
+            if (options.length < 2) { showAlert('Add at least two options.'); return; }
+            if (correctIdx < 0 || !optionInputs[correctIdx] || !(optionInputs[correctIdx].value || '').trim()) { showAlert('Select the correct option.'); return; }
+            const normalizedOptions = optionInputs.map(inp => (inp.value || '').trim()).filter(Boolean);
+            const normalizedCorrect = normalizedOptions.findIndex((_, i) => {
+                const originalIdx = optionInputs[i];
+                return originalIdx && radios[i] && radios[i].checked;
+            });
+            questions.push({ prompt: text, options: normalizedOptions, correct_index: normalizedCorrect, points: 1 });
+            resetQuestionForm();
+            renderQuestions();
+        });
+
+        function buildShareLink(testId) {
+            const dest = new URL('test_take.html', window.location.href);
+            dest.searchParams.set('test_id', testId);
+            return dest.toString();
+        }
+
+        async function createTest() {
+            const title = ($('#testTitle').value || '').trim();
+            if (!title) { showAlert('Add a test title.'); return; }
+            if (!questions.length) { showAlert('Add at least one question.'); return; }
+            const token = getToken();
+            if (!token) { showAlert('Login as teacher to create tests.'); return; }
+
+            const durationVal = parseInt(durationInput.value || '0', 10);
+            const durationSeconds = durationVal > 0 ? durationVal * 60 : null;
+            const payload = {
+                title,
+                description: ($('#testDesc').value || '').trim(),
+                duration_seconds: durationSeconds,
+                class_id: selectedClass ? selectedClass.id || null : null,
+                questions: questions.map((q, idx) => ({ ...q, order: idx })),
+            };
+
+            try {
+                const base = await resolveApi();
+                const res = await fetch(`${base}/api/teacher/tests`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    body: JSON.stringify(payload),
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Failed to create test');
+                }
+                const data = await res.json();
+                const link = buildShareLink(data.id);
+                shareLink.value = link;
+                copyBtn.disabled = false;
+                shareStatus.textContent = `Created. Shareable link requires student login. Max score ${data.max_score ?? questions.length}`;
+            } catch (e) {
+                console.error(e);
+                showAlert(e.message || 'Could not create test');
+            }
+        }
+
+        $('#generateLink').addEventListener('click', createTest);
+
+        copyBtn.addEventListener('click', async () => {
+            if (!shareLink.value) { return; }
+            try { await navigator.clipboard.writeText(shareLink.value); shareStatus.textContent = 'Link copied.'; }
+            catch { shareStatus.textContent = 'Copy failed. Select and copy manually.'; }
+        });
+
+        $('#refreshClasses').addEventListener('click', loadClasses);
+        $('#selectOther').addEventListener('click', () => {
+            selectedClass = { id: null, subject: 'Other' };
+            selectedLabel.textContent = 'Other';
+            renderClasses();
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadClasses();
+            renderQuestions();
+        });
+    </script>
+</body>
+
+</html>
