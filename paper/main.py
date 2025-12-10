@@ -266,6 +266,15 @@ AI_NOTES_USER_EDITS_TABLE = os.getenv("AI_NOTES_USER_EDITS_TABLE", "ai_notes_use
 
 VALID_NOTE_VARIANTS = {"detailed", "cheatsheet", "simple"}
 
+
+def _normalize_course_type(course_type: Optional[str]) -> Optional[str]:
+    if course_type is None:
+        return None
+    value = str(course_type).strip().lower()
+    if value in {"maths", "theorey", "practical"}:
+        return value
+    return None
+
 def _normalize_variant(variant: Optional[str]) -> str:
     v = (variant or "detailed").strip().lower()
     return v if v in VALID_NOTE_VARIANTS else "detailed"
@@ -1455,8 +1464,37 @@ Start with '# {topic}' and then the sections in a logical order.
 
 # ---------------- New: Streaming events generator for UI/API ----------------
 
-def _build_variant_user_prompt(context: str, topic: str, variant: str) -> str:
+def _ensure_working_section(md: str, topic: str, course_type: Optional[str]) -> str:
+    normalized = _normalize_course_type(course_type)
+    if normalized != "practical":
+        return md
+    # If Working section already exists, keep as-is
+    if re.search(r"^##\s*working\b", md or "", flags=re.IGNORECASE | re.MULTILINE):
+        return md
+    working_section = textwrap.dedent(
+        f"""
+        ## Working
+        1. Prepare the required setup and apparatus for {topic}.
+        2. Configure the environment and verify all safety constraints.
+        3. Execute each step of the procedure methodically, capturing observations.
+        4. Record measurements/results with units after every key action.
+        5. Analyze the observations to derive the outcome for {topic}, then clean up the setup.
+        """
+    ).strip()
+    base = (md or "").rstrip()
+    if not base:
+        return working_section + "\n"
+    return base + "\n\n" + working_section + "\n"
+
+
+def _build_variant_user_prompt(context: str, topic: str, variant: str, course_type: Optional[str] = None) -> str:
     v = _normalize_variant(variant)
+    practical_hint = ""
+    if _normalize_course_type(course_type) == "practical":
+        practical_hint = (
+            "Practical course requirement:\n"
+            "- Include a dedicated '## Working' section with a numbered, step-by-step procedure tailored to the topic."
+        )
     if v == "cheatsheet":
         return f"""
 You will compose an EXAM-READY CHEAT SHEET for the topic "{topic}" based ONLY on the source excerpts below.
@@ -1475,8 +1513,9 @@ Output rules (STRICT):
   5) Keywords (comma-separated list)
 - Bold key terms and symbols with **...**. Prefer compact phrasing over full sentences.
 - If any fact is uncertain, mark [needs review].
- - Do NOT include sections titled 'TL;DR', 'Common Mistakes', or 'Memory Aids'.
- - Do NOT include a 'CITATIONS' section or any citation list.
+- Do NOT include sections titled 'TL;DR', 'Common Mistakes', or 'Memory Aids'.
+- Do NOT include a 'CITATIONS' section or any citation list.
+{practical_hint}
 """.strip()
     if v == "simple":
         return f"""
@@ -1493,6 +1532,7 @@ Output rules (STRICT):
 - Use bullets and small tables where helpful.
 - Bold important terms with **...**.
 - Include a final '## CITATIONS' section with labelâ†’URL list for the sources you used.
+{practical_hint}
 """.strip()
     # default detailed prompt remains as before
     return f"""
@@ -1507,12 +1547,20 @@ Instructions:
 - Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
 - Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
 - Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+- Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+{practical_hint}
 
 Start with '# {topic}' and then the sections in a logical order.
 """.strip()
 
-def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None, variant: str = "detailed", degree: Optional[str] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
+def generate_notes_events(
+    topic: str,
+    *,
+    stop_event: Optional[threading.Event] = None,
+    variant: str = "detailed",
+    degree: Optional[str] = None,
+    course_type: Optional[str] = None,
+) -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Yield (event_name, payload) tuples describing real-time progress and final output.
 
     Events emitted in order (names):
@@ -1572,7 +1620,7 @@ def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] =
         yield ("context_ready", {"chars": len(context)})
 
         assistant = build_agent()
-        user_prompt = _build_variant_user_prompt(context, topic, variant)
+        user_prompt = _build_variant_user_prompt(context, topic, variant, course_type=course_type)
         yield ("llm_start", {})
         try:
             # Use safe runner in case we're under FastAPI's loop
@@ -1581,6 +1629,7 @@ def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] =
         except Exception as e:
             yield ("error", {"message": f"LLM error: {e}"})
             return
+        content = _ensure_working_section(content, topic, course_type)
         yield ("llm_done", {"md_chars": len(content)})
 
         if stop_event and stop_event.is_set():
@@ -1992,6 +2041,9 @@ class TopicOut(BaseModel):
     image_url: Optional[str] = None
     video_url: Optional[str] = None
     ppt_url: Optional[str] = None
+    unit_id: Optional[uuid.UUID] = None
+    course_id: Optional[uuid.UUID] = None
+    course_type: Optional[str] = None
 
 
 class UnitOut(BaseModel):
@@ -9042,7 +9094,7 @@ def api_find_topics_by_title(topic: str = Query(..., min_length=1, max_length=51
     supabase = get_service_client()
     res = (
         supabase.table("syllabus_topics")
-        .select("id,topic,order_in_unit,image_url,video_url,ppt_url")
+        .select("id,topic,order_in_unit,image_url,video_url,ppt_url,unit_id")
         .eq("topic", clean)
         .order("order_in_unit")
         .limit(5)
@@ -9051,17 +9103,56 @@ def api_find_topics_by_title(topic: str = Query(..., min_length=1, max_length=51
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (find topic by title): {res.error}")
 
-    return [
-        TopicOut(
-            id=uuid.UUID(row["id"]),
-            topic=row.get("topic"),
-            order_in_unit=int(row.get("order_in_unit", 0)),
-            image_url=row.get("image_url"),
-            video_url=row.get("video_url"),
-            ppt_url=row.get("ppt_url"),
+    unit_ids = [row.get("unit_id") for row in (res.data or []) if row.get("unit_id")]
+    course_by_unit: Dict[str, str] = {}
+    course_types: Dict[str, str] = {}
+    if unit_ids:
+        units_res = (
+            supabase.table("syllabus_units")
+            .select("id,course_id")
+            .in_("id", list({uid for uid in unit_ids}))
+            .execute()
         )
-        for row in (res.data or [])
-    ]
+        if getattr(units_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (lookup units for topics): {units_res.error}")
+        course_ids = [row.get("course_id") for row in (units_res.data or []) if row.get("course_id")]
+        for row in (units_res.data or []):
+            uid = row.get("id")
+            cid = row.get("course_id")
+            if uid and cid:
+                course_by_unit[str(uid)] = str(cid)
+        if course_ids:
+            courses_res = (
+                supabase.table("syllabus_courses")
+                .select("id,type")
+                .in_("id", list({cid for cid in course_ids}))
+                .execute()
+            )
+            if getattr(courses_res, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (lookup course types): {courses_res.error}")
+            for crow in (courses_res.data or []):
+                if crow.get("id"):
+                    course_types[str(crow["id"])] = crow.get("type")
+
+    out: List[TopicOut] = []
+    for row in (res.data or []):
+        uid_raw = row.get("unit_id")
+        uid_key = str(uid_raw) if uid_raw else None
+        cid_raw = course_by_unit.get(uid_key) if uid_key else None
+        out.append(
+            TopicOut(
+                id=uuid.UUID(row["id"]),
+                topic=row.get("topic"),
+                order_in_unit=int(row.get("order_in_unit", 0)),
+                image_url=row.get("image_url"),
+                video_url=row.get("video_url"),
+                ppt_url=row.get("ppt_url"),
+                unit_id=uuid.UUID(uid_key) if uid_key else None,
+                course_id=uuid.UUID(cid_raw) if cid_raw else None,
+                course_type=course_types.get(str(cid_raw)) if cid_raw else None,
+            )
+        )
+    return out
 
 
 @academics_router.get(
@@ -12006,16 +12097,34 @@ async def generate(payload: dict):
 
 @notes_router.get("/generate/stream")
 @notes_router.get("/api/notes/generate/stream")
-async def generate_stream(topic: str, force: bool = False, variant: str = "detailed", degree: Optional[str] = None):
+async def generate_stream(
+    topic: str,
+    force: bool = False,
+    variant: str = "detailed",
+    degree: Optional[str] = None,
+    course_type: Optional[str] = Query(default=None),
+):
     async def event_source() -> AsyncGenerator[bytes, None]:
         yield b"event: open\n\n"
+        normalized_course_type = _normalize_course_type(course_type)
         # Early cache hit: exact-title lookup in DB
         if not force:
             row = db_get_ai_note_by_title_exact_variant(topic, variant=_normalize_variant(variant))
             if row and (row.get("markdown") or "").strip():
+                md_cached = _ensure_working_section(row.get("markdown", ""), topic, normalized_course_type)
+                if normalized_course_type == "practical" and md_cached != row.get("markdown"):
+                    try:
+                        row = db_upsert_ai_note_by_title_variant(
+                            topic,
+                            md_cached,
+                            variant=_normalize_variant(variant),
+                            image_urls=row.get("image_urls") or [],
+                        )
+                    except Exception:
+                        row["markdown"] = md_cached
                 payload = {
                     "id": row.get("id"),
-                    "markdown": row.get("markdown", ""),
+                    "markdown": md_cached,
                     "cached": True,
                     "title": row.get("title"),
                     "variant": _normalize_variant(variant),
@@ -12037,7 +12146,13 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
 
         def worker() -> None:
             try:
-                for name, payload in generate_notes_events(topic, stop_event=stop_event, variant=_normalize_variant(variant), degree=degree):
+                for name, payload in generate_notes_events(
+                    topic,
+                    stop_event=stop_event,
+                    variant=_normalize_variant(variant),
+                    degree=degree,
+                    course_type=normalized_course_type,
+                ):
                     if stop_event.is_set():
                         break
                     dispatch(("event", name, payload))
