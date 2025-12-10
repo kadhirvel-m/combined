@@ -14297,6 +14297,529 @@ def api_youtube_saved(video_id: str):
         raise HTTPException(status_code=502, detail=f"Storage error: {exc}") from exc
 
 
+# --- Tests & Assessments ---
+
+
+class TestQuestionIn(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4000)
+    options: List[str] = Field(..., min_items=2, max_items=8)
+    correct_index: int = Field(..., ge=0)
+    points: int = Field(1, ge=1, le=100)
+    order: Optional[int] = Field(None, ge=0)
+
+    @validator("options", pre=True)
+    def _clean_options(cls, v):
+        if not v:
+            return []
+        opts: List[str] = []
+        for o in v:
+            s = str(o or "").strip()
+            if s:
+                opts.append(s[:500])
+        return opts
+
+    @validator("correct_index")
+    def _check_correct_index(cls, v, values):
+        opts = values.get("options", []) or []
+        if not opts:
+            return v
+        if v < 0 or v >= len(opts):
+            raise ValueError("correct_index must point to an option")
+        return v
+
+
+class CreateTestIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=2000)
+    duration_seconds: Optional[int] = Field(None, ge=0, le=7200)
+    class_id: Optional[str] = Field(None, description="Optional class/group association")
+    questions: List[TestQuestionIn]
+    accepting_submissions: Optional[bool] = True
+
+    @validator("questions")
+    def _must_have_questions(cls, v):
+        if not v:
+            raise ValueError("At least one question is required")
+        return v
+
+
+class SubmitAttemptIn(BaseModel):
+    answers: List[int]
+    elapsed_seconds: Optional[int] = Field(None, ge=0, le=7200)
+
+    @validator("answers")
+    def _non_empty(cls, v):
+        if not v:
+            raise ValueError("answers cannot be empty")
+        return v
+
+
+def _fetch_test_row(supabase, test_id: str) -> Dict[str, Any]:
+    res = _supabase_retry(lambda: supabase.table("tests").select("*").eq("id", test_id).limit(1).execute())
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get test): {res.error}")
+    rows = getattr(res, "data", None) or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="Test not found")
+    return rows[0]
+
+
+def _fetch_test_questions(supabase, test_id: str) -> List[Dict[str, Any]]:
+    res = _supabase_retry(lambda: (
+        supabase
+        .table("test_questions")
+        .select("id,prompt,options,correct_index,points,question_order")
+        .eq("test_id", test_id)
+        .order("question_order", desc=False)
+        .order("id", desc=False)
+        .execute()
+    ), retries=5, base_delay=0.25)
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get questions): {res.error}")
+    return getattr(res, "data", None) or []
+
+
+@teacher_router.post("/api/teacher/tests", summary="Create a test (MCQ)")
+def api_create_test(payload: CreateTestIn, authorization: Optional[str] = Header(default=None)):
+    teacher_id = _require_teacher(authorization)
+    supabase = get_service_client()
+
+    max_score = sum(max(q.points, 1) for q in payload.questions)
+    test_row = _supabase_payload({
+        "title": payload.title,
+        "description": payload.description,
+        "duration_seconds": payload.duration_seconds,
+        "class_id": payload.class_id,
+        "teacher_user_id": teacher_id,
+        "max_score": max_score,
+        "accepting_submissions": True if payload.accepting_submissions is None else bool(payload.accepting_submissions),
+    })
+
+    res = supabase.table("tests").insert(test_row).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (create test): {res.error}")
+    test_id = (getattr(res, "data", None) or [{}])[0].get("id")
+    if not test_id:
+        raise HTTPException(status_code=500, detail="Failed to create test")
+
+    question_rows = []
+    for idx, q in enumerate(payload.questions):
+        question_rows.append(_supabase_payload({
+            "test_id": test_id,
+            "prompt": q.prompt,
+            "options": q.options,
+            "correct_index": q.correct_index,
+            "points": q.points,
+            "question_order": q.order if q.order is not None else idx,
+        }))
+
+    qres = supabase.table("test_questions").insert(question_rows).execute()
+    if getattr(qres, "error", None):
+        # Best-effort cleanup of orphan test
+        try:
+            supabase.table("tests").delete().eq("id", test_id).execute()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"Supabase error (create questions): {qres.error}")
+
+    return {"id": test_id, "max_score": max_score}
+
+
+@teacher_router.get("/api/teacher/tests/{test_id}/attempts", summary="Teacher: view attempts and scores")
+def api_list_attempts(test_id: str, authorization: Optional[str] = Header(default=None)):
+    teacher_id = _require_teacher(authorization)
+    supabase = get_service_client()
+    test_row = _fetch_test_row(supabase, test_id)
+    if test_row.get("teacher_user_id") != teacher_id:
+        raise HTTPException(status_code=403, detail="You do not own this test")
+
+    res = (
+        supabase
+        .table("test_attempts")
+        .select("id,student_user_id,score,elapsed_seconds,started_at,submitted_at")
+        .eq("test_id", test_id)
+        .order("submitted_at", desc=True)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list attempts): {res.error}")
+    return {
+        "test": {"id": test_id, "title": test_row.get("title"), "max_score": test_row.get("max_score")},
+        "attempts": getattr(res, "data", None) or [],
+    }
+
+
+@teacher_router.get("/api/teacher/tests", summary="Teacher: list my tests")
+def api_list_tests(authorization: Optional[str] = Header(default=None)):
+    teacher_id = _require_teacher(authorization)
+    supabase = get_service_client()
+    res = (
+        supabase
+        .table("tests")
+        .select("id,title,description,class_id,duration_seconds,max_score,accepting_submissions,created_at,updated_at")
+        .eq("teacher_user_id", teacher_id)
+        .order("created_at", desc=True)
+        .limit(200)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list tests): {res.error}")
+    return res.data or []
+
+
+@teacher_router.delete("/api/teacher/tests/{test_id}", summary="Teacher: delete a test")
+def api_delete_test(test_id: str, authorization: Optional[str] = Header(default=None)):
+    teacher_id = _require_teacher(authorization)
+    supabase = get_service_client()
+    test_row = _fetch_test_row(supabase, test_id)
+    if test_row.get("teacher_user_id") != teacher_id:
+        raise HTTPException(status_code=403, detail="You do not own this test")
+    res = supabase.table("tests").delete().eq("id", test_id).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete test): {res.error}")
+    return {"deleted": True, "id": test_id}
+
+
+class UpdateTestIn(CreateTestIn):
+    accepting_submissions: Optional[bool] = None
+
+
+@teacher_router.put("/api/teacher/tests/{test_id}", summary="Teacher: update a test")
+def api_update_test(test_id: str, payload: UpdateTestIn, authorization: Optional[str] = Header(default=None)):
+    teacher_id = _require_teacher(authorization)
+    supabase = get_service_client()
+    test_row = _fetch_test_row(supabase, test_id)
+    if test_row.get("teacher_user_id") != teacher_id:
+        raise HTTPException(status_code=403, detail="You do not own this test")
+
+    max_score = sum(max(q.points, 1) for q in payload.questions)
+    updates = _supabase_payload({
+        "title": payload.title,
+        "description": payload.description,
+        "duration_seconds": payload.duration_seconds,
+        "class_id": payload.class_id,
+        "max_score": max_score,
+    })
+    if payload.accepting_submissions is not None:
+        updates["accepting_submissions"] = bool(payload.accepting_submissions)
+
+    up = supabase.table("tests").update(updates).eq("id", test_id).execute()
+    if getattr(up, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update test): {up.error}")
+
+    # Replace questions: delete old then insert new
+    delq = supabase.table("test_questions").delete().eq("test_id", test_id).execute()
+    if getattr(delq, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete old questions): {delq.error}")
+
+    question_rows = []
+    for idx, q in enumerate(payload.questions):
+        question_rows.append(_supabase_payload({
+            "test_id": test_id,
+            "prompt": q.prompt,
+            "options": q.options,
+            "correct_index": q.correct_index,
+            "points": q.points,
+            "question_order": q.order if q.order is not None else idx,
+        }))
+    qres = supabase.table("test_questions").insert(question_rows).execute()
+    if getattr(qres, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (insert new questions): {qres.error}")
+
+    return {"id": test_id, "max_score": max_score, "accepting_submissions": updates.get("accepting_submissions", test_row.get("accepting_submissions", True))}
+
+
+@teacher_router.patch("/api/teacher/tests/{test_id}/accepting", summary="Teacher: toggle accepting submissions")
+def api_toggle_accepting(test_id: str, accepting: bool = Query(...), authorization: Optional[str] = Header(default=None)):
+    teacher_id = _require_teacher(authorization)
+    supabase = get_service_client()
+    test_row = _fetch_test_row(supabase, test_id)
+    if test_row.get("teacher_user_id") != teacher_id:
+        raise HTTPException(status_code=403, detail="You do not own this test")
+    res = supabase.table("tests").update({"accepting_submissions": bool(accepting)}).eq("id", test_id).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (toggle accepting): {res.error}")
+    return {"id": test_id, "accepting_submissions": bool(accepting)}
+
+
+@teacher_router.get("/api/teacher/tests/{test_id}/results", summary="Teacher: results and participation")
+def api_test_results(test_id: str, authorization: Optional[str] = Header(default=None)):
+    teacher_id = _require_teacher(authorization)
+    supabase = get_service_client()
+    test_row = _fetch_test_row(supabase, test_id)
+    if test_row.get("teacher_user_id") != teacher_id:
+        raise HTTPException(status_code=403, detail="You do not own this test")
+
+    attempts_res = (
+        supabase
+        .table("test_attempts")
+        .select("id,student_user_id,score,elapsed_seconds,started_at,submitted_at")
+        .eq("test_id", test_id)
+        .order("submitted_at", desc=True)
+        .limit(500)
+        .execute()
+    )
+    if getattr(attempts_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (results attempts): {attempts_res.error}")
+    attempts = attempts_res.data or []
+
+    class_students: List[Dict[str, Any]] = []
+    profile_by_id: Dict[str, Dict[str, Any]] = {}
+    class_id = test_row.get("class_id")
+
+    # Collect IDs for attempts and class roster to hydrate names in a single profile lookup
+    attempted_ids = {a.get("student_user_id") for a in attempts if a.get("student_user_id")}
+    enrolled_ids: Set[str] = set()
+
+    if class_id:
+        try:
+            enrolled = supabase.table("teacher_class_students").select("student_user_id").eq("class_id", class_id).execute()
+            if not getattr(enrolled, "error", None):
+                enrolled_ids = {r.get("student_user_id") for r in (enrolled.data or []) if r.get("student_user_id")}
+        except Exception:
+            enrolled_ids = set()
+
+    try:
+        need_ids = list({sid for sid in (attempted_ids | enrolled_ids) if sid})
+        if need_ids:
+            prof_res = (
+                supabase
+                .table("user_profiles")
+                .select("auth_user_id,name,email")
+                .in_("auth_user_id", need_ids)
+                .execute()
+            )
+            if not getattr(prof_res, "error", None):
+                for p in prof_res.data or []:
+                    pid = p.get("auth_user_id")
+                    if pid:
+                        profile_by_id[pid] = {"name": p.get("name"), "email": p.get("email")}
+    except Exception:
+        profile_by_id = {}
+
+    for attempt in attempts:
+        sid = attempt.get("student_user_id")
+        prof = profile_by_id.get(sid or "")
+        if prof:
+            attempt["name"] = prof.get("name")
+            attempt["email"] = prof.get("email")
+
+    students_not_attempted: List[Dict[str, Any]] = []
+    if class_id and enrolled_ids:
+        try:
+            missing_ids = list(enrolled_ids - attempted_ids)
+            if missing_ids:
+                missing_profiles = [profile_by_id.get(mid) for mid in missing_ids]
+                students_not_attempted = [
+                    {"auth_user_id": mid, "name": (mp or {}).get("name"), "email": (mp or {}).get("email")}
+                    for mid, mp in zip(missing_ids, missing_profiles)
+                ]
+        except Exception:
+            students_not_attempted = []
+
+    # Build full class roster with status when class is linked
+    if class_id and enrolled_ids:
+        attempt_map = {a.get("student_user_id"): a for a in attempts if a.get("student_user_id")}
+        class_students = []
+        for sid in enrolled_ids:
+            att = attempt_map.get(sid)
+            prof = profile_by_id.get(sid, {})
+            status = "pending"
+            if att:
+                status = "in_progress" if not att.get("submitted_at") else "completed"
+            class_students.append({
+                "auth_user_id": sid,
+                "name": prof.get("name"),
+                "email": prof.get("email"),
+                "status": status,
+                "score": att.get("score") if att else None,
+                "submitted_at": att.get("submitted_at") if att else None,
+            })
+        # Optional: keep deterministic order by name/email
+        class_students.sort(key=lambda r: (r.get("name") or "", r.get("email") or "", r.get("auth_user_id") or ""))
+
+    completed = len([a for a in attempts if a.get("submitted_at")])
+    return {
+        "test": {
+            "id": test_id,
+            "title": test_row.get("title"),
+            "class_id": test_row.get("class_id"),
+            "max_score": test_row.get("max_score"),
+            "accepting_submissions": test_row.get("accepting_submissions", True),
+        },
+        "completed_count": completed,
+        "attempts": attempts,
+        "students_not_attempted": students_not_attempted,
+        "class_students": class_students,
+    }
+
+
+@academics_router.get("/api/tests/{test_id}", summary="Fetch a test for taking")
+def api_get_test(test_id: str, authorization: Optional[str] = Header(default=None)):
+    user_id, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    test_row = _fetch_test_row(supabase, test_id)
+    questions = _fetch_test_questions(supabase, test_id)
+
+    attempt_res = (
+        supabase
+        .table("test_attempts")
+        .select("id,submitted_at,score")
+        .eq("test_id", test_id)
+        .eq("student_user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(attempt_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (attempt check): {attempt_res.error}")
+    attempt = (getattr(attempt_res, "data", None) or [None])[0]
+
+    is_owner = test_row.get("teacher_user_id") == user_id
+    sanitized_questions = []
+    for q in questions:
+        entry = {
+            "id": q.get("id"),
+            "prompt": q.get("prompt"),
+            "options": q.get("options"),
+            "points": q.get("points", 1),
+            "order": q.get("question_order", 0),
+        }
+        if is_owner:
+            entry["correct_index"] = q.get("correct_index")
+        sanitized_questions.append(entry)
+
+    return {
+        "id": test_row.get("id"),
+        "title": test_row.get("title"),
+        "description": test_row.get("description"),
+        "duration_seconds": test_row.get("duration_seconds"),
+        "max_score": test_row.get("max_score"),
+        "accepting_submissions": test_row.get("accepting_submissions", True),
+        "attempt": attempt,
+        "questions": sanitized_questions,
+    }
+
+
+@academics_router.post("/api/tests/{test_id}/start", summary="Start a test attempt (one per student)")
+def api_start_attempt(test_id: str, authorization: Optional[str] = Header(default=None)):
+    user_id, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    _ = _fetch_test_row(supabase, test_id)  # ensure exists
+    test_row = _fetch_test_row(supabase, test_id)
+    if not test_row.get("accepting_submissions", True):
+        raise HTTPException(status_code=410, detail="Test submissions are closed")
+
+    def _attempt_lookup():
+        return (
+            supabase
+            .table("test_attempts")
+            .select("id,submitted_at,started_at")
+            .eq("test_id", test_id)
+            .eq("student_user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+
+    check = _supabase_retry(_attempt_lookup, retries=5, base_delay=0.25)
+    if getattr(check, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (attempt check): {check.error}")
+    existing = (getattr(check, "data", None) or [])
+    if existing:
+        att = existing[0]
+        if att.get("submitted_at"):
+            raise HTTPException(status_code=409, detail="You already submitted this test")
+        return {"id": att.get("id"), "started_at": att.get("started_at")}
+
+    def _attempt_insert():
+        return supabase.table("test_attempts").insert({
+            "test_id": test_id,
+            "student_user_id": user_id,
+        }).execute()
+
+    try:
+        ins = _supabase_retry(_attempt_insert, retries=5, base_delay=0.25)
+    except RETRYABLE_EXCEPTIONS as e:  # pragma: no cover - network timing dependent
+        # If the insert actually succeeded server-side but the connection closed, a follow-up
+        # lookup will return the row; otherwise we bubble a retryable error to the client.
+        verify = _supabase_retry(_attempt_lookup, retries=5, base_delay=0.25)
+        existing = (getattr(verify, "data", None) or [])
+        if existing:
+            att = existing[0]
+            if att.get("submitted_at"):
+                raise HTTPException(status_code=409, detail="You already submitted this test")
+            return {"id": att.get("id"), "started_at": att.get("started_at")}
+        raise HTTPException(status_code=503, detail="Temporary connection issue starting attempt; please retry") from e
+
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (start attempt): {ins.error}")
+    row = (getattr(ins, "data", None) or [{}])[0]
+    return {"id": row.get("id"), "started_at": row.get("started_at")}
+
+
+@academics_router.post("/api/tests/{test_id}/submit", summary="Submit a test attempt and score")
+def api_submit_attempt(test_id: str, payload: SubmitAttemptIn, authorization: Optional[str] = Header(default=None)):
+    user_id, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    test_row = _fetch_test_row(supabase, test_id)
+    if not test_row.get("accepting_submissions", True):
+        raise HTTPException(status_code=410, detail="Test submissions are closed")
+    questions = _fetch_test_questions(supabase, test_id)
+
+    # Fetch or create attempt record
+    att_res = (
+        supabase
+        .table("test_attempts")
+        .select("id,submitted_at")
+        .eq("test_id", test_id)
+        .eq("student_user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(att_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (attempt lookup): {att_res.error}")
+    att_rows = getattr(att_res, "data", None) or []
+    if att_rows and att_rows[0].get("submitted_at"):
+        raise HTTPException(status_code=409, detail="You already submitted this test")
+    attempt_id = att_rows[0].get("id") if att_rows else None
+
+    if not attempt_id:
+        ins = supabase.table("test_attempts").insert({
+            "test_id": test_id,
+            "student_user_id": user_id,
+        }).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (start attempt late): {ins.error}")
+        attempt_id = (getattr(ins, "data", None) or [{}])[0].get("id")
+
+    if len(payload.answers) != len(questions):
+        raise HTTPException(status_code=400, detail="Answer count does not match questions")
+
+    score = 0
+    for q, ans in zip(questions, payload.answers):
+        try:
+            ans_int = int(ans)
+        except Exception:
+            ans_int = -1
+        if ans_int == q.get("correct_index"):
+            score += int(q.get("points", 1))
+
+    upd = supabase.table("test_attempts").update({
+        "answers": payload.answers,
+        "score": score,
+        "elapsed_seconds": payload.elapsed_seconds,
+        "submitted_at": datetime.utcnow().isoformat(),
+    }).eq("id", attempt_id).execute()
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (submit attempt): {upd.error}")
+
+    return {
+        "test_id": test_id,
+        "attempt_id": attempt_id,
+        "score": score,
+        "max_score": test_row.get("max_score"),
+    }
+
+
 # --- YouTube Video Search endpoints ---
 
 youtube_search_router = APIRouter(prefix="/api/youtube", tags=["youtube search"])
