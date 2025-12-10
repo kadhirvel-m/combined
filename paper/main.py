@@ -1455,11 +1455,8 @@ Start with '# {topic}' and then the sections in a logical order.
 
 # ---------------- New: Streaming events generator for UI/API ----------------
 
-def _build_variant_user_prompt(context: str, topic: str, variant: str, course_type: Optional[str] = None) -> str:
+def _build_variant_user_prompt(context: str, topic: str, variant: str) -> str:
     v = _normalize_variant(variant)
-    practical_hint = ""
-    if isinstance(course_type, str) and course_type.strip().lower() == "practical":
-        practical_hint = "- Include an H2 section titled 'Working' that provides only the step-by-step procedure of how the experiment is performed. Give clear, numbered steps describing the exact working process (summarize even if sources omit details)."
     if v == "cheatsheet":
         return f"""
 You will compose an EXAM-READY CHEAT SHEET for the topic "{topic}" based ONLY on the source excerpts below.
@@ -1468,19 +1465,18 @@ Context:
 {context}
 
 Output rules (STRICT):
-- Keep it ultra concise (250-400 words). Use bullets and tables.
+- Keep it ultra concise (â‰ˆ 250â€“400 words). Use bullets and tables.
 - Start with a single H1: '# {topic} â€” Cheat Sheet'.
 - Sections (H2):
   1) Core Concepts (5â€“10 bullets, crisp one-liners)
   2) Key Definitions & Formulas (bullets; inline math where relevant)
   3) Quick Steps / Algorithms (bulleted steps)
-  4) Pitfalls / Gotchas (3-6 bullets)
+  4) Pitfalls / Gotchas (3â€“6 bullets)
   5) Keywords (comma-separated list)
 - Bold key terms and symbols with **...**. Prefer compact phrasing over full sentences.
 - If any fact is uncertain, mark [needs review].
-- Do NOT include sections titled 'TL;DR', 'Common Mistakes', or 'Memory Aids'.
-- Do NOT include a 'CITATIONS' section or any citation list.
-{practical_hint}
+ - Do NOT include sections titled 'TL;DR', 'Common Mistakes', or 'Memory Aids'.
+ - Do NOT include a 'CITATIONS' section or any citation list.
 """.strip()
     if v == "simple":
         return f"""
@@ -1490,14 +1486,13 @@ Context:
 {context}
 
 Output rules (STRICT):
-- Target length: 600-“900 words, plain language, short sentences.
-- Start with '# {topic} ” Simple Notes'.
+- Target length: 600â€“900 words, plain language, short sentences.
+- Start with '# {topic} â€” Simple Notes'.
 - Structure with logical H2 sections, including: Introduction, Concepts, Examples, TL;DR, Common Mistakes, Conclusion.
 - Explain in everyday words without dumbing down definitions.
 - Use bullets and small tables where helpful.
 - Bold important terms with **...**.
 - Include a final '## CITATIONS' section with labelâ†’URL list for the sources you used.
-{practical_hint}
 """.strip()
     # default detailed prompt remains as before
     return f"""
@@ -1512,20 +1507,12 @@ Instructions:
 - Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
 - Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
 - Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
-- Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
-{practical_hint}
+ - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
 
 Start with '# {topic}' and then the sections in a logical order.
 """.strip()
 
-def generate_notes_events(
-    topic: str,
-    *,
-    stop_event: Optional[threading.Event] = None,
-    variant: str = "detailed",
-    degree: Optional[str] = None,
-    course_type: Optional[str] = None,
-) -> Iterator[Tuple[str, Dict[str, Any]]]:
+def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None, variant: str = "detailed", degree: Optional[str] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Yield (event_name, payload) tuples describing real-time progress and final output.
 
     Events emitted in order (names):
@@ -1545,15 +1532,7 @@ def generate_notes_events(
         dyn_domains = db_get_allowed_domains_for_degree(degree) if degree else []
         if not dyn_domains:
             dyn_domains = list(DEFAULT_ALLOWED_DOMAINS)
-        yield (
-            "start",
-            {
-                "topic": topic,
-                "allowed_domains": dyn_domains,
-                "degree": degree,
-                "course_type": (course_type or "").strip().lower() or None,
-            },
-        )
+        yield ("start", {"topic": topic, "allowed_domains": dyn_domains, "degree": degree})
         if stop_event and stop_event.is_set():
             return
         urls = serpapi_search(topic, num=10, degree=degree)
@@ -1593,7 +1572,7 @@ def generate_notes_events(
         yield ("context_ready", {"chars": len(context)})
 
         assistant = build_agent()
-        user_prompt = _build_variant_user_prompt(context, topic, variant, course_type)
+        user_prompt = _build_variant_user_prompt(context, topic, variant)
         yield ("llm_start", {})
         try:
             # Use safe runner in case we're under FastAPI's loop
@@ -9086,65 +9065,6 @@ def api_find_topics_by_title(topic: str = Query(..., min_length=1, max_length=51
 
 
 @academics_router.get(
-    "/api/syllabus/course-type",
-    summary="Lookup course type for a topic title",
-)
-def api_get_course_type_for_topic(topic: str = Query(..., min_length=1, max_length=512)):
-    clean = (topic or "").strip()
-    if not clean:
-        return {"course_id": None, "course_title": None, "type": None}
-
-    supabase = get_service_client()
-    topic_res = (
-        supabase.table("syllabus_topics")
-        .select("unit_id")
-        .eq("topic", clean)
-        .limit(1)
-        .execute()
-    )
-    if getattr(topic_res, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (find topic for course type): {topic_res.error}")
-    if not topic_res.data:
-        return {"course_id": None, "course_title": None, "type": None}
-
-    unit_id = topic_res.data[0].get("unit_id")
-    if not unit_id:
-        return {"course_id": None, "course_title": None, "type": None}
-
-    unit_res = (
-        supabase.table("syllabus_units")
-        .select("course_id")
-        .eq("id", str(unit_id))
-        .limit(1)
-        .execute()
-    )
-    if getattr(unit_res, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (find unit for course type): {unit_res.error}")
-    if not unit_res.data:
-        return {"course_id": None, "course_title": None, "type": None}
-
-    course_id = unit_res.data[0].get("course_id")
-    if not course_id:
-        return {"course_id": None, "course_title": None, "type": None}
-
-    course_res = (
-        supabase.table("syllabus_courses")
-        .select("id,title,type")
-        .eq("id", str(course_id))
-        .limit(1)
-        .execute()
-    )
-    if getattr(course_res, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (find course for type): {course_res.error}")
-    if not course_res.data:
-        return {"course_id": None, "course_title": None, "type": None}
-
-    row = course_res.data[0]
-    course_type = (row.get("type") or "").strip().lower() or None
-    return {"course_id": row.get("id"), "course_title": row.get("title"), "type": course_type}
-
-
-@academics_router.get(
     "/api/batches/{batch_id}/courses",
     response_model=List[SyllabusCourseSummaryOut],
     summary="List syllabus courses (subjects) for a batch",
@@ -12086,18 +12006,11 @@ async def generate(payload: dict):
 
 @notes_router.get("/generate/stream")
 @notes_router.get("/api/notes/generate/stream")
-async def generate_stream(
-    topic: str,
-    force: bool = False,
-    variant: str = "detailed",
-    degree: Optional[str] = None,
-    course_type: Optional[str] = None,
-):
+async def generate_stream(topic: str, force: bool = False, variant: str = "detailed", degree: Optional[str] = None):
     async def event_source() -> AsyncGenerator[bytes, None]:
         yield b"event: open\n\n"
-        course_type_norm = (course_type or "").strip().lower() or None
         # Early cache hit: exact-title lookup in DB
-        if not force and course_type_norm != "practical":
+        if not force:
             row = db_get_ai_note_by_title_exact_variant(topic, variant=_normalize_variant(variant))
             if row and (row.get("markdown") or "").strip():
                 payload = {
@@ -12124,13 +12037,7 @@ async def generate_stream(
 
         def worker() -> None:
             try:
-                for name, payload in generate_notes_events(
-                    topic,
-                    stop_event=stop_event,
-                    variant=_normalize_variant(variant),
-                    degree=degree,
-                    course_type=course_type_norm,
-                ):
+                for name, payload in generate_notes_events(topic, stop_event=stop_event, variant=_normalize_variant(variant), degree=degree):
                     if stop_event.is_set():
                         break
                     dispatch(("event", name, payload))
