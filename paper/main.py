@@ -1503,7 +1503,7 @@ Context:
 {context}
 
 Output rules (STRICT):
-- Keep it ultra concise (â‰ˆ 250â€“400 words). Use bullets and tables.
+- Keep it ultra concise (500-400 words). Use bullets and tables.
 - Start with a single H1: '# {topic} â€” Cheat Sheet'.
 - Sections (H2):
   1) Core Concepts (5â€“10 bullets, crisp one-liners)
@@ -1515,7 +1515,6 @@ Output rules (STRICT):
 - If any fact is uncertain, mark [needs review].
 - Do NOT include sections titled 'TL;DR', 'Common Mistakes', or 'Memory Aids'.
 - Do NOT include a 'CITATIONS' section or any citation list.
-{practical_hint}
 """.strip()
     if v == "simple":
         return f"""
@@ -1527,12 +1526,13 @@ Context:
 Output rules (STRICT):
 - Target length: 600â€“900 words, plain language, short sentences.
 - Start with '# {topic} â€” Simple Notes'.
+{practical_hint}
 - Structure with logical H2 sections, including: Introduction, Concepts, Examples, TL;DR, Common Mistakes, Conclusion.
 - Explain in everyday words without dumbing down definitions.
 - Use bullets and small tables where helpful.
 - Bold important terms with **...**.
 - Include a final '## CITATIONS' section with labelâ†’URL list for the sources you used.
-{practical_hint}
+
 """.strip()
     # default detailed prompt remains as before
     return f"""
@@ -1543,12 +1543,12 @@ Context:
 
 Instructions:
 - Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" â†’ pick one).
+{practical_hint}
 - Include the compulsory sections even if they were not present in sources.
 - Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
 - Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
 - Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
 - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
-{practical_hint}
 
 Start with '# {topic}' and then the sections in a logical order.
 """.strip()

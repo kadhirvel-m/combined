@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Von Neumann Architecture - Interactive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;400;600;800&display=swap');
+
+        /* --- THEME VARIABLES (Your Palette) --- */
+        :root {
+            /* PaperX Dark Palette (Default) */
+            --bg-main: #1E1E2F;
+            --bg-panel: #27273a;
+            --bg-input: #151521;
+            --primary: #9E4B8A;
+            /* Pink/Magenta */
+            --primary-dim: #4C2A59;
+            /* Dark Purple */
+            --text-main: #e2e8f0;
+            --text-dim: #94a3b8;
+            --accent: #f472b6;
+            --border: #4C2A59;
+            --highlight: rgba(158, 75, 138, 0.3);
+        }
+
+        [data-theme="light"] {
+            --bg-main: #f0f4f8;
+            --bg-panel: #ffffff;
+            --bg-input: #e2e8f0;
+            --primary: #9E4B8A;
+            --primary-dim: #e9d5e5;
+            --text-main: #1e293b;
+            --text-dim: #64748b;
+            --accent: #8b3a75;
+            --border: #cbd5e1;
+            --highlight: rgba(158, 75, 138, 0.15);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* --- UI COMPONENTS --- */
+        .glass-panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .accent-text {
+            color: var(--primary);
+        }
+
+        .accent-bg {
+            background-color: var(--primary);
+        }
+
+        .glow-active {
+            box-shadow: 0 0 15px var(--primary);
+            border-color: var(--primary);
+        }
+
+        /* Animation Objects */
+        .data-packet {
+            position: absolute;
+            background: var(--primary);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            pointer-events: none;
+        }
+
+        /* Narrative Box */
+        .narrator-box {
+            border-left: 4px solid var(--primary);
+            background: var(--bg-input);
+        }
+
+        /* Toggle Switch */
+        .theme-toggle {
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen pb-20">
+
+    <nav class="sticky top-0 z-50 glass-panel border-b border-t-0 border-x-0">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded bg-[var(--primary)] flex items-center justify-center text-white font-bold">P
+                </div>
+                <span class="font-bold text-xl tracking-tight">Paper<span class="accent-text">X</span> Simulators</span>
+            </div>
+
+            <button onclick="toggleTheme()" class="theme-toggle" title="Toggle Light/Dark Mode">
+                <i data-lucide="sun" id="theme-icon" class="w-5 h-5 text-[var(--text-main)]"></i>
+            </button>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-6 mt-12 space-y-20">
+
+        <section class="grid md:grid-cols-2 gap-12 items-center">
+            <div class="space-y-6">
+                <div
+                    class="inline-block px-3 py-1 rounded-full bg-[var(--primary-dim)] text-[var(--primary)] text-xs font-bold uppercase tracking-wider">
+                    The Mental Model
+                </div>
+                <h1 class="text-5xl font-extrabold leading-tight">
+                    The <span class="accent-text">Chef</span> in the Kitchen.
+                </h1>
+                <p class="text-lg text-[var(--text-dim)] leading-relaxed">
+                    Computers seem complex, but they follow a simple loop. Imagine a Chef (The CPU) in a kitchen.
+                    The Chef is very fast but has <strong>zero memory</strong>. They must constantly look at a Recipe
+                    Board to know what to do next.
+                </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm mt-4">
+                    <div class="p-4 rounded-lg bg-[var(--bg-panel)] border border-[var(--border)]">
+                        <strong class="block accent-text mb-1">Fetch</strong>
+                        Look at the recipe board to see the next step.
+                    </div>
+                    <div class="p-4 rounded-lg bg-[var(--bg-panel)] border border-[var(--border)]">
+                        <strong class="block accent-text mb-1">Decode</strong>
+                        Figure out what "Chop" actually means.
+                    </div>
+                    <div class="p-4 rounded-lg bg-[var(--bg-panel)] border border-[var(--border)]">
+                        <strong class="block accent-text mb-1">Execute</strong>
+                        Actually chop the onion.
+                    </div>
+                </div>
+            </div>
+
+            <div class="relative h-80 glass-panel rounded-2xl flex items-center justify-center p-8">
+                <svg viewBox="0 0 400 200" class="w-full h-full">
+                    <line x1="120" y1="100" x2="280" y2="100" stroke="var(--border)" stroke-width="2"
+                        stroke-dasharray="5,5" />
+
+                    <g transform="translate(40, 60)">
+                        <rect width="80" height="80" rx="8" fill="var(--bg-input)" stroke="var(--primary)"
+                            stroke-width="2" />
+                        <text x="40" y="45" text-anchor="middle" fill="var(--text-main)" font-size="12"
+                            font-family="sans-serif">RECIPE</text>
+                        <text x="40" y="60" text-anchor="middle" fill="var(--text-dim)" font-size="10">(Memory)</text>
+                    </g>
+
+                    <g transform="translate(280, 60)">
+                        <rect width="80" height="80" rx="40" fill="var(--primary)" />
+                        <text x="40" y="45" text-anchor="middle" fill="white" font-size="12"
+                            font-weight="bold">CHEF</text>
+                        <text x="40" y="60" text-anchor="middle" fill="rgba(255,255,255,0.8)"
+                            font-size="10">(CPU)</text>
+                    </g>
+
+                    <circle r="6" fill="var(--text-main)">
+                        <animateMotion dur="2s" repeatCount="indefinite" path="M120,100 L280,100 L120,100" />
+                    </circle>
+                </svg>
+            </div>
+        </section>
+
+
+        <section id="simulator">
+            <div
+                class="flex flex-col md:flex-row justify-between items-end gap-4 mb-6 border-b border-[var(--border)] pb-6">
+                <div>
+                    <h2 class="text-3xl font-bold">The Von Neumann Engine</h2>
+                    <p class="text-[var(--text-dim)] mt-1">Don't guess. Watch the data move.</p>
+                </div>
+
+                <div class="flex gap-2">
+                    <button onclick="resetSim()"
+                        class="px-4 py-2 rounded-lg bg-[var(--bg-panel)] border border-[var(--border)] text-[var(--text-dim)] hover:text-[var(--text-main)] transition-colors text-sm font-bold flex items-center gap-2">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> RESET
+                    </button>
+                    <button onclick="stepSim()" id="btn-step"
+                        class="px-6 py-2 rounded-lg bg-[var(--primary)] hover:bg-opacity-90 text-white shadow-lg shadow-purple-900/20 text-sm font-bold tracking-wide transition-all flex items-center gap-2">
+                        <i data-lucide="play" class="w-4 h-4 fill-current"></i> STEP FORWARD
+                    </button>
+                </div>
+            </div>
+
+            <div class="narrator-box p-4 mb-6 rounded-r-lg shadow-sm transition-all duration-300">
+                <h4 class="text-xs font-bold uppercase tracking-widest text-[var(--primary)] mb-1">System Narrator</h4>
+                <p id="narrator-text" class="text-lg font-medium text-[var(--text-main)]">
+                    System Ready. Click "STEP FORWARD" to begin the Fetch-Decode-Execute cycle.
+                </p>
+            </div>
+
+            <div class="grid lg:grid-cols-12 gap-8 relative">
+
+                <div class="lg:col-span-5 space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm font-bold text-[var(--text-dim)] uppercase tracking-wider">Memory (RAM)</h3>
+                        <select id="program-select" onchange="loadProgram()"
+                            class="bg-[var(--bg-input)] border border-[var(--border)] text-xs rounded px-2 py-1 outline-none text-[var(--text-main)]">
+                            <option value="add">Program: Simple Addition</option>
+                            <option value="loop">Program: Count to 5</option>
+                            <option value="sub">Program: Subtraction</option>
+                        </select>
+                    </div>
+
+                    <div class="glass-panel rounded-xl overflow-hidden">
+                        <div
+                            class="grid grid-cols-12 bg-[var(--primary-dim)] p-2 text-[10px] font-bold uppercase text-[var(--text-main)] border-b border-[var(--border)]">
+                            <div class="col-span-2 text-center">Addr</div>
+                            <div class="col-span-3 text-center">Value</div>
+                            <div class="col-span-7 pl-4">Meaning (Human Readable)</div>
+                        </div>
+                        <div id="memory-container" class="max-h-[400px] overflow-y-auto">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hidden lg:flex lg:col-span-2 justify-center items-center relative">
+                    <div class="w-2 h-[90%] bg-[var(--bg-input)] rounded-full border border-[var(--border)] relative">
+                        <div
+                            class="absolute top-1/2 -translate-y-1/2 -left-8 text-[10px] text-[var(--text-dim)] -rotate-90">
+                            DATA BUS</div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-5 space-y-6">
+                    <h3 class="text-sm font-bold text-[var(--text-dim)] uppercase tracking-wider">CPU Internals</h3>
+
+                    <div class="glass-panel p-6 rounded-xl space-y-6 relative">
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div id="comp-pc"
+                                class="bg-[var(--bg-input)] p-3 rounded border border-[var(--border)] transition-colors duration-300">
+                                <span class="text-[10px] uppercase text-[var(--text-dim)] block mb-1">Program Counter
+                                    (PC)</span>
+                                <div class="flex justify-between items-end">
+                                    <span id="val-pc"
+                                        class="text-2xl font-mono font-bold text-[var(--primary)]">00</span>
+                                    <span class="text-[10px] text-[var(--text-dim)] text-right leading-tight">Address
+                                        of<br>next step</span>
+                                </div>
+                            </div>
+
+                            <div id="comp-ir"
+                                class="bg-[var(--bg-input)] p-3 rounded border border-[var(--border)] transition-colors duration-300">
+                                <span class="text-[10px] uppercase text-[var(--text-dim)] block mb-1">Instruction Reg
+                                    (IR)</span>
+                                <div class="flex justify-between items-end">
+                                    <span id="val-ir" class="text-lg font-mono font-bold text-[var(--accent)]">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-[var(--border)] pt-6 relative">
+                            <div id="comp-acc"
+                                class="bg-[var(--bg-main)] p-6 rounded-xl border-2 border-dashed border-[var(--border)] flex flex-col items-center justify-center transition-all duration-300">
+                                <span class="text-xs font-bold text-[var(--text-dim)] uppercase mb-2">Accumulator (The
+                                    Hand)</span>
+                                <span id="val-acc" class="text-5xl font-mono font-bold text-[var(--text-main)]">0</span>
+                                <span id="alu-activity" class="text-xs text-[var(--primary)] mt-2 font-bold h-4"></span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div
+                        class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-[var(--text-dim)] bg-[var(--bg-input)] p-3 rounded-full border border-[var(--border)]">
+                        <div id="phase-fetch" class="flex-1 text-center transition-colors">1. Fetch</div>
+                        <div id="phase-decode"
+                            class="flex-1 text-center border-l border-[var(--border)] transition-colors">2. Decode</div>
+                        <div id="phase-exec"
+                            class="flex-1 text-center border-l border-[var(--border)] transition-colors">3. Execute
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section class="grid md:grid-cols-3 gap-6 pt-12 border-t border-[var(--border)]">
+            <div class="glass-panel p-6 rounded-xl">
+                <i data-lucide="cpu" class="w-8 h-8 text-[var(--primary)] mb-4"></i>
+                <h3 class="text-lg font-bold mb-2">The Bottleneck</h3>
+                <p class="text-sm text-[var(--text-dim)]">Notice how the CPU has to stop calculating to fetch data?
+                    That's the "Von Neumann Bottleneck." It can't read and write at the same time.</p>
+            </div>
+            <div class="glass-panel p-6 rounded-xl">
+                <i data-lucide="binary" class="w-8 h-8 text-[var(--primary)] mb-4"></i>
+                <h3 class="text-lg font-bold mb-2">Stored Program</h3>
+                <p class="text-sm text-[var(--text-dim)]">Instructions (Code) and Ingredients (Data) live in the same
+                    memory grid. The computer just interprets them differently based on context.</p>
+            </div>
+            <div class="glass-panel p-6 rounded-xl">
+                <i data-lucide="layers" class="w-8 h-8 text-[var(--primary)] mb-4"></i>
+                <h3 class="text-lg font-bold mb-2">Registers</h3>
+                <p class="text-sm text-[var(--text-dim)]">These are tiny, ultra-fast memory slots inside the CPU (like
+                    PC, IR, ACC). They hold the "hot" data currently being used.</p>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- CONSTANTS & CONFIG ---
+        const MEMORY_SIZE = 16;
+        const OPCODES = {
+            LDA: 1, // Load into Accumulator
+            ADD: 2, // Add to Accumulator
+            SUB: 3, // Subtract from Accumulator
+            STA: 4, // Store Accumulator to Memory
+            HLT: 0  // Stop
+        };
+
+        // Current State
+        let memory = new Array(MEMORY_SIZE).fill(0);
+        let PC = 0;   // Program Counter
+        let ACC = 0;  // Accumulator
+        let IR = 0;   // Instruction Register
+        let phase = 'IDLE'; // IDLE, FETCH, DECODE, EXECUTE
+        let isAnimating = false;
+
+        // UI References
+        const uiMemContainer = document.getElementById('memory-container');
+        const uiPC = document.getElementById('val-pc');
+        const uiIR = document.getElementById('val-ir');
+        const uiACC = document.getElementById('val-acc');
+        const uiNarrator = document.getElementById('narrator-text');
+        const uiALUText = document.getElementById('alu-activity');
+
+        // --- INITIALIZATION ---
+        function init() {
+            lucide.createIcons();
+            loadProgram();
+        }
+
+        function loadProgram() {
+            const type = document.getElementById('program-select').value;
+            resetState();
+
+            if (type === 'add') {
+                // 5 + 8
+                memory[0] = 114; // LDA 14 (Load value from addr 14)
+                memory[1] = 215; // ADD 15 (Add value from addr 15)
+                memory[2] = 413; // STA 13 (Store result in addr 13)
+                memory[3] = 0;   // HLT
+                memory[13] = 0;  // Result slot
+                memory[14] = 5;  // Data 1
+                memory[15] = 8;  // Data 2
+            } else if (type === 'sub') {
+                // 20 - 5
+                memory[0] = 114; // LDA 14 (20)
+                memory[1] = 315; // SUB 15 (5)
+                memory[2] = 413; // STA 13
+                memory[3] = 0;
+                memory[13] = 0;
+                memory[14] = 20;
+                memory[15] = 5;
+            } else if (type === 'loop') {
+                // Simplest logic: Load, Add, Store.
+                // Real loops need JMP (Jump), simplified here for clarity
+                memory[0] = 110;
+                memory[1] = 211;
+                memory[2] = 412;
+                memory[3] = 0;
+                memory[10] = 10;
+                memory[11] = 1;
+                memory[12] = 0;
+            }
+
+            renderMemory();
+            narrate("Program Loaded. Ready to start.");
+        }
+
+        function resetState() {
+            PC = 0;
+            ACC = 0;
+            IR = 0;
+            phase = 'IDLE';
+            uiPC.innerText = '00';
+            uiACC.innerText = '0';
+            uiIR.innerText = '--';
+            uiALUText.innerText = '';
+            memory.fill(0);
+            document.querySelectorAll('.glow-active').forEach(el => el.classList.remove('glow-active'));
+            document.querySelectorAll('.bg-purple-900').forEach(el => el.classList.remove('bg-purple-900'));
+        }
+
+        function renderMemory() {
+            uiMemContainer.innerHTML = '';
+            memory.forEach((val, idx) => {
+                const row = document.createElement('div');
+                row.id = `mem-row-${idx}`;
+                row.className = "grid grid-cols-12 text-sm p-2 border-b border-[var(--border)] items-center transition-colors duration-300";
+
+                // Human Readable Decoder
+                let humanText = "";
+                let valText = val;
+
+                if (idx >= 13 || (val < 100 && val > 0 && idx > 5)) {
+                    // Likely Data
+                    humanText = `<span class="text-[var(--primary)]">DATA:</span> Number ${val}`;
+                } else if (val === 0) {
+                    humanText = idx > 5 ? "Empty" : "HALT";
+                } else {
+                    // Decode Opcode
+                    const op = Math.floor(val / 100);
+                    const addr = val % 100;
+                    const opName = Object.keys(OPCODES).find(k => OPCODES[k] === op);
+                    humanText = `<span class="text-[var(--accent)] font-bold">${opName}</span> from Addr ${addr}`;
+                }
+
+                row.innerHTML = `
+                    <div class="col-span-2 text-center font-mono text-[var(--text-dim)]">${idx.toString().padStart(2, '0')}</div>
+                    <div class="col-span-3 text-center font-mono font-bold text-[var(--text-main)]">${val}</div>
+                    <div class="col-span-7 pl-4 text-[var(--text-dim)] truncate">${humanText}</div>
+                `;
+                uiMemContainer.appendChild(row);
+            });
+        }
+
+        // --- CORE SIMULATION LOGIC ---
+
+        async function stepSim() {
+            if (isAnimating) return; // Prevent double clicks
+            isAnimating = true;
+
+            if (phase === 'IDLE' || phase === 'EXECUTE') {
+                await doFetch();
+                phase = 'DECODE';
+            } else if (phase === 'DECODE') {
+                await doDecode();
+                phase = 'EXECUTE';
+            } else if (phase === 'EXECUTE') {
+                // Actually this block handles the execution logic inside doExecute
+                // This structure is handled by the buttons usually, but here we loop phases
+            }
+
+            // Correction: The button says "STEP". 
+            // If we just finished Execute, we are back to start.
+            // Let's make the button cycle: Fetch -> Decode -> Execute -> Fetch...
+        }
+
+        // 1. FETCH
+        async function doFetch() {
+            setActivePhase('phase-fetch');
+            narrate(`<strong>FETCH:</strong> Checking Program Counter. We need to look at Address ${PC}.`);
+
+            highlight('comp-pc');
+            await wait(800);
+
+            // Visual: Scroll to memory row
+            const memRow = document.getElementById(`mem-row-${PC}`);
+            memRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            memRow.classList.add('glow-active'); // Highlight Row
+
+            narrate(`Found instruction <strong>${memory[PC]}</strong> at Address ${PC}. Moving it to the CPU.`);
+
+            // Animate Packet
+            await animatePacket(memRow, document.getElementById('comp-ir'), memory[PC]);
+
+            IR = memory[PC];
+            uiIR.innerText = IR;
+            memRow.classList.remove('glow-active');
+            highlight('comp-pc', false);
+
+            isAnimating = false;
+        }
+
+        // 2. DECODE
+        async function doDecode() {
+            setActivePhase('phase-decode');
+            highlight('comp-ir');
+
+            const opcode = Math.floor(IR / 100);
+            const operand = IR % 100;
+            const opName = Object.keys(OPCODES).find(k => OPCODES[k] === opcode) || "HLT";
+
+            narrate(`<strong>DECODE:</strong> The code <strong>${IR}</strong> means <strong>${opName}</strong> using Address <strong>${operand}</strong>.`);
+            await wait(1000);
+
+            highlight('comp-ir', false);
+
+            // Trigger Execute immediately or wait? Let's trigger execute logic but wait for user click? 
+            // The logic above in stepSim says: if decode -> next click is execute.
+            isAnimating = false;
+        }
+
+        // 3. EXECUTE
+        async function doExecute() {
+            setActivePhase('phase-exec');
+            const opcode = Math.floor(IR / 100);
+            const operand = IR % 100;
+            const memRow = document.getElementById(`mem-row-${operand}`); // Target memory row
+
+            if (opcode === OPCODES.HLT) {
+                narrate("<strong>HALT:</strong> The program has finished.");
+                isAnimating = false;
+                phase = 'IDLE'; // Reset loop
+                return;
+            }
+
+            // Logic Switch
+            switch (opcode) {
+                case OPCODES.LDA: // Load
+                    narrate(`<strong>EXECUTE (LOAD):</strong> Go to Address ${operand}, grab the value, and put it in the Accumulator.`);
+                    memRow.classList.add('glow-active');
+                    await animatePacket(memRow, document.getElementById('comp-acc'), memory[operand]);
+                    ACC = memory[operand];
+                    updateACC();
+                    memRow.classList.remove('glow-active');
+                    break;
+
+                case OPCODES.ADD: // Add
+                    narrate(`<strong>EXECUTE (ADD):</strong> Fetch value from Address ${operand} and ADD it to the Accumulator.`);
+                    memRow.classList.add('glow-active');
+                    await animatePacket(memRow, document.getElementById('comp-acc'), memory[operand]);
+                    ACC += memory[operand];
+                    uiALUText.innerText = "+ Adding...";
+                    updateACC();
+                    memRow.classList.remove('glow-active');
+                    break;
+
+                case OPCODES.SUB: // Sub
+                    narrate(`<strong>EXECUTE (SUB):</strong> Fetch value from Address ${operand} and SUBTRACT it.`);
+                    memRow.classList.add('glow-active');
+                    await animatePacket(memRow, document.getElementById('comp-acc'), memory[operand]);
+                    ACC -= memory[operand];
+                    uiALUText.innerText = "- Subtracting...";
+                    updateACC();
+                    memRow.classList.remove('glow-active');
+                    break;
+
+                case OPCODES.STA: // Store
+                    narrate(`<strong>EXECUTE (STORE):</strong> Take the value ${ACC} from Accumulator and write it to Address ${operand}.`);
+                    highlight('comp-acc');
+                    await animatePacket(document.getElementById('comp-acc'), memRow, ACC);
+                    memory[operand] = ACC;
+                    renderMemory(); // Refresh grid to show new val
+                    highlight('comp-acc', false);
+                    break;
+            }
+
+            // Increment PC
+            PC++;
+            if (PC >= MEMORY_SIZE) PC = 0;
+            uiPC.innerText = PC.toString().padStart(2, '0');
+
+            await wait(500);
+            uiALUText.innerText = "";
+
+            phase = 'IDLE'; // Ready for next Fetch
+            narrate("Cycle Complete. Ready for next instruction.");
+            isAnimating = false;
+        }
+
+
+        // --- HELPER FUNCTIONS ---
+
+        function narrate(html) {
+            uiNarrator.innerHTML = html;
+            gsap.fromTo(uiNarrator, { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.3 });
+        }
+
+        function highlight(id, active = true) {
+            const el = document.getElementById(id);
+            if (active) el.classList.add('glow-active');
+            else el.classList.remove('glow-active');
+        }
+
+        function setActivePhase(id) {
+            ['phase-fetch', 'phase-decode', 'phase-exec'].forEach(p => {
+                document.getElementById(p).classList.remove('text-[var(--primary)]', 'bg-[var(--primary-dim)]');
+            });
+            document.getElementById(id).classList.add('text-[var(--primary)]', 'bg-[var(--primary-dim)]');
+        }
+
+        function updateACC() {
+            // Pop effect
+            gsap.to(uiACC, { scale: 1.5, duration: 0.1, yoyo: true, repeat: 1 });
+            uiACC.innerText = ACC;
+        }
+
+        function animatePacket(fromEl, toEl, val) {
+            return new Promise(resolve => {
+                const rect1 = fromEl.getBoundingClientRect();
+                const rect2 = toEl.getBoundingClientRect();
+
+                const pkt = document.createElement('div');
+                pkt.className = 'data-packet';
+                pkt.innerText = val;
+                document.body.appendChild(pkt);
+
+                // Start pos
+                gsap.set(pkt, {
+                    x: rect1.left + rect1.width / 2,
+                    y: rect1.top + rect1.height / 2
+                });
+
+                // Move
+                gsap.to(pkt, {
+                    x: rect2.left + rect2.width / 2,
+                    y: rect2.top + rect2.height / 2,
+                    duration: 1.2,
+                    ease: "power2.inOut",
+                    onComplete: () => {
+                        pkt.remove();
+                        resolve();
+                    }
+                });
+            });
+        }
+
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function toggleTheme() {
+            const body = document.body;
+            const icon = document.getElementById('theme-icon');
+            if (body.getAttribute('data-theme') === 'light') {
+                body.removeAttribute('data-theme');
+                icon.innerHTML = '<circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>';
+            } else {
+                body.setAttribute('data-theme', 'light');
+                // Moon icon
+                icon.innerHTML = '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>';
+            }
+            lucide.createIcons();
+        }
+
+        function resetSim() {
+            location.reload(); // Simplest reset to clear all async states
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
