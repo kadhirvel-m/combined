@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abstraction: The Invisible Engine</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        paper: {
+                            bg: '#1E1E2F',    // Deep Blue/Slate
+                            panel: '#4C2A59', // Dark Purple
+                            accent: '#9E4B8A', // Magenta/Pink
+                            light: '#E2E8F0'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            /* Default Dark Theme (PaperX Palette) */
+            --bg-body: #1E1E2F;
+            --bg-panel: rgba(76, 42, 89, 0.4);
+            --border-panel: rgba(158, 75, 138, 0.3);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #9E4B8A;
+        }
+
+        html.light {
+            /* Light Theme */
+            --bg-body: #f8fafc;
+            --bg-panel: rgba(255, 255, 255, 0.8);
+            --border-panel: rgba(76, 42, 89, 0.1);
+            --text-main: #1E1E2F;
+            --text-muted: #64748b;
+            --accent: #9E4B8A;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .glass-panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-panel);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        /* Custom Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            margin-top: -10px;
+            box-shadow: 0 0 15px var(--accent);
+            border: 2px solid white;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: var(--text-muted);
+            border-radius: 2px;
+            opacity: 0.3;
+        }
+
+        /* 3D Perspective */
+        .sim-container {
+            perspective: 1200px;
+            transform-style: preserve-3d;
+        }
+
+        .layer-card {
+            transform-style: preserve-3d;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Binary Grid Bits */
+        .bit {
+            aspect-ratio: 1;
+            background: rgba(158, 75, 138, 0.2);
+            border-radius: 2px;
+            transition: background 0.1s;
+        }
+
+        .bit.on {
+            background: #9E4B8A;
+            box-shadow: 0 0 8px #9E4B8A;
+        }
+
+        /* Interactive SVG Elements */
+        .clickable-btn {
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+
+        .clickable-btn:hover {
+            filter: brightness(1.2);
+        }
+
+        .clickable-btn:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+
+<body class="antialiased selection:bg-[#9E4B8A] selection:text-white">
+
+    <nav
+        class="w-full px-6 py-4 flex justify-between items-center sticky top-0 z-50 glass-panel border-b-0 rounded-none">
+        <div class="flex items-center gap-2">
+            <i data-lucide="layers" class="text-[#9E4B8A]"></i>
+            <span class="font-bold tracking-tight text-xl">ARCH<span class="text-[#9E4B8A]">viz</span></span>
+        </div>
+
+        <button id="themeToggle" class="p-2 rounded-full hover:bg-black/10 transition flex items-center gap-2">
+            <i data-lucide="moon" id="themeIcon" class="w-5 h-5"></i>
+        </button>
+    </nav>
+
+    <section class="max-w-5xl mx-auto px-6 pt-24 pb-20">
+        <div class="grid md:grid-cols-2 gap-16 items-center">
+
+            <div class="order-2 md:order-1 space-y-8">
+                <div
+                    class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#9E4B8A] text-[#9E4B8A] text-xs font-mono font-bold">
+                    <span class="w-2 h-2 rounded-full bg-[#9E4B8A] animate-pulse"></span>
+                    CONCEPT: ABSTRACTION
+                </div>
+
+                <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight leading-tight">
+                    The Dashboard is<br>
+                    <span class="text-[#9E4B8A]">Not The Engine.</span>
+                </h1>
+
+                <p class="text-lg opacity-80 leading-relaxed">
+                    Software is a lie. When you write code, you aren't moving electrons—you're interacting with a
+                    <strong>simplified interface</strong>.
+                    <br><br>
+                    Just like a car dashboard hides the pistons and explosions, <strong>Abstraction</strong> hides the
+                    binary and logic gates.
+                </p>
+
+                <div class="p-4 rounded-lg bg-[#9E4B8A]/10 border-l-4 border-[#9E4B8A]">
+                    <p class="text-sm font-bold opacity-90">TRY IT 👉</p>
+                    <p class="text-sm opacity-70">Click the blue button on the dashboard. Watch the engine react without
+                        you touching it directly.</p>
+                </div>
+            </div>
+
+            <div class="order-1 md:order-2 flex justify-center">
+                <div class="relative w-full max-w-[400px] aspect-square">
+                    <svg viewBox="0 0 300 300" class="w-full h-full drop-shadow-2xl">
+                        <path d="M150 110 L150 150" stroke="#9E4B8A" stroke-width="4" stroke-dasharray="5,5"
+                            class="opacity-30" id="wire-connect" />
+
+                        <g id="engine-group" transform="translate(150, 200)">
+                            <circle r="60" fill="var(--bg-panel)" stroke="#4C2A59" stroke-width="4" />
+                            <g id="gear-spin">
+                                <path d="M-40 0 L40 0 M0 -40 L0 40 M-28 -28 L28 28 M-28 28 L28 -28" stroke="#94a3b8"
+                                    stroke-width="8" stroke-linecap="round" />
+                                <circle r="20" fill="#1E1E2F" />
+                            </g>
+                            <text y="80" text-anchor="middle" font-size="12" fill="currentColor" font-family="monospace"
+                                opacity="0.6">THE HARDWARE</text>
+                        </g>
+
+                        <g id="dashboard-group" transform="translate(150, 80)">
+                            <rect x="-80" y="-30" width="160" height="60" rx="10" fill="#1E1E2F" stroke="#9E4B8A"
+                                stroke-width="2" />
+                            <g id="start-btn" class="clickable-btn">
+                                <rect x="-60" y="-15" width="120" height="30" rx="5" fill="#9E4B8A" />
+                                <text x="0" y="5" text-anchor="middle" fill="white" font-weight="bold" font-size="12"
+                                    style="pointer-events: none;">PRESS TO START</text>
+                            </g>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="w-full bg-black/10 py-20 border-y border-white/5 relative">
+        <div class="max-w-6xl mx-auto px-6">
+
+            <div class="flex flex-col md:flex-row gap-8 mb-12 items-end">
+                <div class="md:w-1/3">
+                    <h2 class="text-3xl font-bold mb-2">The Stack Diver</h2>
+                    <p class="opacity-70 text-sm">Drag the slider to peel back the layers of a simple addition command.
+                    </p>
+                </div>
+
+                <div class="md:w-2/3 w-full glass-panel p-6 rounded-xl">
+                    <div class="flex justify-between text-[10px] font-mono uppercase tracking-widest opacity-60 mb-4">
+                        <span>Python (Simple)</span>
+                        <span>Assembly (Detailed)</span>
+                        <span>Binary (Raw)</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="0" id="abstractionSlider">
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-12 gap-6 h-[600px]">
+
+                <div class="lg:col-span-3 glass-panel rounded-xl p-6 flex flex-col gap-6">
+                    <div
+                        class="flex items-center gap-2 text-[#9E4B8A] font-bold text-sm uppercase tracking-wide border-b border-white/10 pb-2">
+                        <i data-lucide="terminal" class="w-4 h-4"></i> Input
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs opacity-60 mb-1 block">Value A</label>
+                            <input type="number" id="inputA" value="5"
+                                class="w-full bg-black/20 border border-white/10 rounded p-2 text-center font-mono focus:border-[#9E4B8A] focus:outline-none transition">
+                        </div>
+                        <div>
+                            <label class="text-xs opacity-60 mb-1 block">Value B</label>
+                            <input type="number" id="inputB" value="3"
+                                class="w-full bg-black/20 border border-white/10 rounded p-2 text-center font-mono focus:border-[#9E4B8A] focus:outline-none transition">
+                        </div>
+                    </div>
+
+                    <button id="runBtn"
+                        class="mt-auto w-full bg-[#9E4B8A] hover:bg-[#863d74] text-white font-bold py-3 rounded-lg shadow-lg shadow-[#9E4B8A]/20 transition-all flex items-center justify-center gap-2">
+                        <i data-lucide="play" class="w-4 h-4"></i> Run
+                    </button>
+
+                    <div class="bg-black/20 rounded p-3 text-center">
+                        <div class="text-xs opacity-50 mb-1">RESULT</div>
+                        <div id="outputDisplay" class="font-mono text-xl font-bold text-[#9E4B8A]">--</div>
+                    </div>
+                </div>
+
+                <div
+                    class="lg:col-span-9 relative sim-container flex items-center justify-center bg-black/5 rounded-xl border border-white/5 overflow-hidden">
+
+                    <div class="absolute inset-0 opacity-10"
+                        style="background-image: radial-gradient(#9E4B8A 1px, transparent 1px); background-size: 20px 20px;">
+                    </div>
+
+                    <div id="layer-high"
+                        class="layer-card absolute w-[400px] glass-panel p-8 rounded-xl z-30 border-t-4 border-blue-400">
+                        <div class="flex justify-between mb-4">
+                            <span class="font-bold text-blue-400">High Level</span>
+                            <i data-lucide="code" class="w-5 h-5 opacity-50"></i>
+                        </div>
+                        <code class="block font-mono text-sm leading-7">
+                            <span class="text-[#9E4B8A]">def</span> add(a, b):<br>
+                            &nbsp;&nbsp;<span class="text-blue-300">return</span> a + b
+                        </code>
+                        <div class="mt-4 pt-4 border-t border-white/10 text-center">
+                            <span class="text-xs opacity-50">Current Execution:</span>
+                            <div class="font-mono text-lg mt-1" id="highLevelCode">result = 5 + 3</div>
+                        </div>
+                    </div>
+
+                    <div id="layer-mid"
+                        class="layer-card absolute w-[400px] glass-panel p-8 rounded-xl z-20 border-t-4 border-purple-400"
+                        style="opacity:0; transform: translateY(50px) scale(0.9);">
+                        <div class="flex justify-between mb-4">
+                            <span class="font-bold text-purple-400">Assembly (ISA)</span>
+                            <i data-lucide="cpu" class="w-5 h-5 opacity-50"></i>
+                        </div>
+                        <div class="font-mono text-xs space-y-2 opacity-90">
+                            <div class="flex justify-between p-2 rounded hover:bg-white/5 transition" id="asm-1">
+                                <span>MOV R1, <span id="asm-val-a" class="text-[#9E4B8A]">5</span></span>
+                                <span class="opacity-40">; Load A</span>
+                            </div>
+                            <div class="flex justify-between p-2 rounded hover:bg-white/5 transition" id="asm-2">
+                                <span>MOV R2, <span id="asm-val-b" class="text-[#9E4B8A]">3</span></span>
+                                <span class="opacity-40">; Load B</span>
+                            </div>
+                            <div class="flex justify-between p-2 rounded hover:bg-white/5 transition" id="asm-3">
+                                <span>ADD R1, R2</span>
+                                <span class="opacity-40">; Calculate</span>
+                            </div>
+                            <div class="flex justify-between p-2 rounded hover:bg-white/5 transition" id="asm-4">
+                                <span>RET R1</span>
+                                <span class="opacity-40">; Return</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="layer-low"
+                        class="layer-card absolute w-[400px] glass-panel p-8 rounded-xl z-10 border-t-4 border-green-400"
+                        style="opacity:0; transform: translateY(100px) scale(0.8);">
+                        <div class="flex justify-between mb-4">
+                            <span class="font-bold text-green-400">Logic Gates</span>
+                            <i data-lucide="zap" class="w-5 h-5 opacity-50"></i>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <div class="flex-1">
+                                <div class="text-[10px] uppercase opacity-50 mb-1">Instruction Stream</div>
+                                <div id="binaryStream"
+                                    class="font-mono text-[10px] break-all leading-tight text-green-400 opacity-80 h-20 overflow-hidden">
+                                </div>
+                            </div>
+                            <div
+                                class="w-16 flex flex-col items-center justify-center border border-white/10 rounded bg-black/20">
+                                <div class="text-[9px] mb-1 opacity-50">ALU</div>
+                                <div id="alu-flash"
+                                    class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center font-bold text-xs">
+                                    +
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="transistorGrid" class="grid grid-cols-8 gap-1 mt-4">
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="max-w-6xl mx-auto px-6 py-20">
+        <h2 class="text-3xl font-bold mb-10 text-center">Technical Breakdown</h2>
+
+        <div class="grid md:grid-cols-3 gap-6">
+
+            <div class="glass-panel p-6 rounded-2xl hover:-translate-y-1 transition duration-300">
+                <div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center mb-4 text-blue-400">
+                    <i data-lucide="monitor"></i>
+                </div>
+                <h3 class="font-bold text-lg mb-2">High Level</h3>
+                <p class="text-sm opacity-70">Where we live. Memory is abstract, loops are English words. Prioritizes
+                    developer speed over machine control.</p>
+            </div>
+
+            <div
+                class="glass-panel p-6 rounded-2xl hover:-translate-y-1 transition duration-300 md:col-span-2 bg-gradient-to-br from-[#4C2A59] to-[#1E1E2F]">
+                <div
+                    class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center mb-4 text-purple-400">
+                    <i data-lucide="cpu"></i>
+                </div>
+                <h3 class="font-bold text-lg mb-2">The ISA (Instruction Set Architecture)</h3>
+                <p class="text-sm opacity-70">
+                    The contract between software and hardware. This is where "x = a + b" becomes "LOAD, ADD, STORE".
+                    This layer ensures your Python code runs on both an Intel laptop and an AMD desktop without
+                    rewriting.
+                </p>
+            </div>
+
+            <div class="glass-panel p-6 rounded-2xl hover:-translate-y-1 transition duration-300 md:col-span-3">
+                <div class="flex flex-col md:flex-row gap-6 items-center">
+                    <div class="flex-1">
+                        <div
+                            class="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center mb-4 text-green-400">
+                            <i data-lucide="zap"></i>
+                        </div>
+                        <h3 class="font-bold text-lg mb-2">Micro-Architecture & Physics</h3>
+                        <p class="text-sm opacity-70">
+                            At the bottom, it's just physics. Electricity flowing through billions of microscopic
+                            switches (transistors).
+                            0 is low voltage, 1 is high voltage.
+                        </p>
+                    </div>
+
+                    <div class="flex gap-1 opacity-50">
+                        <div class="w-2 h-8 bg-green-500 rounded-full animate-pulse"></div>
+                        <div class="w-2 h-12 bg-green-500 rounded-full animate-pulse" style="animation-delay: 0.1s">
+                        </div>
+                        <div class="w-2 h-6 bg-green-500 rounded-full animate-pulse" style="animation-delay: 0.2s">
+                        </div>
+                        <div class="w-2 h-10 bg-green-500 rounded-full animate-pulse" style="animation-delay: 0.3s">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <script>
+        // --- 1. SETUP ICONS & THEME ---
+        lucide.createIcons();
+
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+
+        themeToggle.addEventListener('click', () => {
+            html.classList.toggle('dark');
+            html.classList.toggle('light');
+
+            if (html.classList.contains('light')) {
+                themeIcon.setAttribute('data-lucide', 'sun');
+                // Ensure text is dark in light mode explicitly where needed if CSS vars fail
+                gsap.to("body", { backgroundColor: "#f8fafc", color: "#1e293b" });
+            } else {
+                themeIcon.setAttribute('data-lucide', 'moon');
+                gsap.to("body", { backgroundColor: "#1E1E2F", color: "#e2e8f0" });
+            }
+            lucide.createIcons();
+        });
+
+        // --- 2. ANALOGY INTERACTIVITY ---
+        const startBtn = document.getElementById('start-btn');
+        const gearSpin = document.getElementById('gear-spin');
+        const wireConnect = document.getElementById('wire-connect');
+
+        let isSpinning = false;
+
+        startBtn.addEventListener('click', () => {
+            if (isSpinning) return;
+            isSpinning = true;
+
+            // Animate Button Press
+            gsap.to(startBtn, { scale: 0.95, yoyo: true, repeat: 1, duration: 0.1 });
+
+            // Animate Wire Signal
+            gsap.fromTo(wireConnect,
+                { strokeDashoffset: 10 },
+                {
+                    strokeDashoffset: 0, stroke: "#fff", opacity: 1, duration: 0.5, onComplete: () => {
+                        gsap.set(wireConnect, { stroke: "#9E4B8A", opacity: 0.3 });
+                    }
+                }
+            );
+
+            // Spin Engine
+            gsap.to(gearSpin, {
+                rotation: 360 * 2,
+                duration: 2,
+                ease: "power2.inOut",
+                onComplete: () => {
+                    gsap.set(gearSpin, { rotation: 0 });
+                    isSpinning = false;
+                }
+            });
+        });
+
+        // --- 3. STACK DIVER LOGIC ---
+        const slider = document.getElementById('abstractionSlider');
+        const layerHigh = document.getElementById('layer-high');
+        const layerMid = document.getElementById('layer-mid');
+        const layerLow = document.getElementById('layer-low');
+
+        slider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+
+            // Animations based on slider value (0-100)
+
+            // HIGH LEVEL: Fades out as you go deeper
+            gsap.to(layerHigh, {
+                opacity: 1 - (val / 50),
+                y: -val * 2,
+                scale: 1 + (val * 0.01),
+                filter: `blur(${val / 20}px)`,
+                duration: 0.3
+            });
+
+            // MID LEVEL: Enters around 20, leaves around 80
+            let midOp = 0;
+            if (val > 20 && val < 80) midOp = 1;
+            else if (val <= 20) midOp = (val - 10) / 10;
+            else midOp = 1 - ((val - 80) / 20);
+
+            gsap.to(layerMid, {
+                opacity: Math.max(0, midOp),
+                y: 50 - val,
+                scale: 0.9 + (val * 0.005),
+                duration: 0.3
+            });
+
+            // LOW LEVEL: Enters around 70
+            let lowOp = (val - 70) / 30;
+            gsap.to(layerLow, {
+                opacity: Math.max(0, lowOp),
+                y: 100 - val,
+                scale: 0.85 + (val * 0.005),
+                duration: 0.3
+            });
+        });
+
+        // --- 4. SIMULATION EXECUTION ---
+        const runBtn = document.getElementById('runBtn');
+        const inputA = document.getElementById('inputA');
+        const inputB = document.getElementById('inputB');
+        const outputDisplay = document.getElementById('outputDisplay');
+
+        // Elements to update
+        const highLevelCode = document.getElementById('highLevelCode');
+        const asmValA = document.getElementById('asm-val-a');
+        const asmValB = document.getElementById('asm-val-b');
+        const asmRows = [
+            document.getElementById('asm-1'),
+            document.getElementById('asm-2'),
+            document.getElementById('asm-3'),
+            document.getElementById('asm-4')
+        ];
+        const transistorGrid = document.getElementById('transistorGrid');
+        const binaryStream = document.getElementById('binaryStream');
+        const aluFlash = document.getElementById('alu-flash');
+
+        // Populate Transistors
+        for (let i = 0; i < 32; i++) {
+            let div = document.createElement('div');
+            div.className = 'bit';
+            transistorGrid.appendChild(div);
+        }
+        const bits = document.querySelectorAll('.bit');
+
+        runBtn.addEventListener('click', () => {
+            let a = inputA.value || 0;
+            let b = inputB.value || 0;
+            let sum = parseInt(a) + parseInt(b);
+
+            // Reset UI
+            outputDisplay.textContent = "...";
+
+            // Update Text
+            highLevelCode.textContent = `result = ${a} + ${b}`;
+            asmValA.textContent = a;
+            asmValB.textContent = b;
+
+            let tl = gsap.timeline();
+
+            // 1. High Level Pulse
+            tl.fromTo(highLevelCode, { color: "#fff" }, { color: "inherit", duration: 0.5 });
+
+            // 2. Assembly Scan
+            asmRows.forEach(row => {
+                tl.to(row, { backgroundColor: "rgba(255,255,255,0.2)", duration: 0.1 })
+                    .to(row, { backgroundColor: "transparent", duration: 0.1 });
+            });
+
+            // 3. Hardware Flash
+            tl.add(() => {
+                // Fill binary stream
+                let bin = "";
+                for (let i = 0; i < 100; i++) bin += Math.round(Math.random());
+                binaryStream.textContent = bin;
+
+                // Flash bits
+                bits.forEach(bit => {
+                    if (Math.random() > 0.6) {
+                        bit.classList.add('on');
+                        setTimeout(() => bit.classList.remove('on'), 300);
+                    }
+                });
+
+                // Flash ALU
+                gsap.fromTo(aluFlash,
+                    { backgroundColor: "#9E4B8A", scale: 1.5 },
+                    { backgroundColor: "rgba(255,255,255,0.1)", scale: 1, duration: 0.4 }
+                );
+            });
+
+            // 4. Output
+            tl.add(() => {
+                outputDisplay.textContent = sum;
+                gsap.from(outputDisplay, { scale: 2, color: "#fff", duration: 0.5, ease: "elastic.out" });
+            }, "+=0.2");
+        });
+
+    </script>
+</body>
+
+</html>

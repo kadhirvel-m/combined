@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaperX Learning: Inside Moore's Law</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        paperDark: '#1E1E2F',
+                        paperDeep: '#4C2A59',
+                        paperPink: '#9E4B8A',
+                        paperLight: '#F3F4F6'
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4C2A59;
+            border-radius: 4px;
+        }
+
+        /* Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #9E4B8A;
+            cursor: pointer;
+            margin-top: -10px;
+            border: 2px solid white;
+            box-shadow: 0 0 10px rgba(158, 75, 138, 0.5);
+            transition: transform 0.1s;
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #4C2A59;
+            border-radius: 3px;
+        }
+
+        /* Dynamic Classes for Light/Dark transitions */
+        body {
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .light .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .grid-bg {
+            background-image: radial-gradient(rgba(158, 75, 138, 0.2) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        .bar-hover:hover {
+            filter: brightness(1.2);
+            transform: scaleY(1.02);
+        }
+    </style>
+</head>
+
+<body class="bg-paperDark text-white selection:bg-paperPink selection:text-white">
+
+    <nav
+        class="fixed top-0 w-full z-50 border-b border-paperDeep/30 bg-paperDark/80 backdrop-blur-md dark:bg-paperDark/80 light:bg-white/80">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div
+                    class="w-8 h-8 bg-gradient-to-br from-paperPink to-paperDeep rounded-lg flex items-center justify-center font-bold text-white">
+                    P</div>
+                <span class="font-bold text-xl tracking-tight text-white dark:text-white light:text-paperDeep">PaperX
+                    Learning</span>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <a href="#calculator" class="text-sm font-semibold hover:text-paperPink hidden md:block">Calculator</a>
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-white/10 transition-colors">
+                    <i data-lucide="sun" class="w-5 h-5 hidden light:block text-paperDeep"></i>
+                    <i data-lucide="moon" class="w-5 h-5 block light:hidden text-paperPink"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <section class="pt-32 pb-20 px-6 relative overflow-hidden grid-bg">
+        <div class="max-w-4xl mx-auto text-center relative z-10">
+            <div
+                class="inline-block px-4 py-1 rounded-full border border-paperPink/50 bg-paperDeep/30 text-paperPink text-sm font-bold mb-6 animate-pulse">
+                INTERACTIVE CONCEPT SIMULATOR
+            </div>
+            <h1
+                class="text-5xl md:text-7xl font-extrabold mb-6 leading-tight text-white dark:text-white light:text-paperDeep">
+                Why Do Computers Get <br>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-paperPink to-purple-400">Faster Every
+                    Year?</span>
+            </h1>
+            <p class="text-xl text-gray-400 max-w-2xl mx-auto mb-10 dark:text-gray-400 light:text-gray-600">
+                Explore <strong>Moore's Law</strong>: The golden rule that drove 50 years of human progress. See how
+                shrinking parts led to expanding minds.
+            </p>
+
+            <div class="flex flex-wrap justify-center gap-4">
+                <a href="#simulator"
+                    class="px-8 py-3 bg-paperPink hover:bg-paperDeep text-white rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg shadow-paperPink/25">
+                    Start Simulation
+                </a>
+                <a href="#calculator"
+                    class="px-8 py-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl font-semibold transition-all dark:text-white light:text-paperDeep">
+                    Try the Calculator
+                </a>
+            </div>
+        </div>
+
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-paperDeep/20 rounded-full blur-[100px] -z-10">
+        </div>
+    </section>
+
+    <section id="simulator" class="py-20 px-4 md:px-12 max-w-7xl mx-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <div class="lg:col-span-1 space-y-6">
+                <div class="glass-panel p-6 rounded-2xl border-l-4 border-paperPink">
+                    <h3
+                        class="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2 dark:text-gray-400 light:text-gray-500">
+                        Timeline Explorer</h3>
+                    <div class="flex justify-between items-end mb-4">
+                        <span class="text-6xl font-black text-white dark:text-white light:text-paperDeep"
+                            id="year-display">2000</span>
+                        <span class="text-sm text-paperPink font-mono mb-2" id="era-label">The Pentium Era</span>
+                    </div>
+                    <input type="range" min="1971" max="2023" value="2000" id="year-slider" class="w-full mb-6">
+
+                    <div class="bg-paperDeep/20 rounded-xl p-4">
+                        <div class="text-xs text-gray-400 mb-1">REAL WORLD ANALOGY</div>
+                        <p class="text-lg font-medium leading-snug" id="analogy-text">
+                            A computer in this year is powerful enough to process basic text and spreadsheets, but would
+                            crash if you tried to watch a YouTube video.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-6 rounded-2xl">
+                    <h3
+                        class="text-gray-400 text-sm font-bold uppercase tracking-wider mb-4 dark:text-gray-400 light:text-gray-500">
+                        The "Why" Factor</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-start gap-3">
+                            <div class="p-2 bg-paperPink/20 rounded-lg text-paperPink"><i data-lucide="zap"
+                                    class="w-5 h-5"></i></div>
+                            <div>
+                                <h4 class="font-bold text-white dark:text-white light:text-paperDeep">Shrinking = Speed
+                                </h4>
+                                <p class="text-sm text-gray-400 dark:text-gray-400 light:text-gray-600">Smaller
+                                    transistors are closer together. Electricity travels shorter distances.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <div class="p-2 bg-blue-500/20 rounded-lg text-blue-400"><i data-lucide="box"
+                                    class="w-5 h-5"></i></div>
+                            <div>
+                                <h4 class="font-bold text-white dark:text-white light:text-paperDeep">Density =
+                                    Efficiency</h4>
+                                <p class="text-sm text-gray-400 dark:text-gray-400 light:text-gray-600">We fit more
+                                    "brains" into the same space. In <span id="density-year">2000</span>, we fit <span
+                                        id="density-count">42M</span> switches on a chip.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2 flex flex-col gap-6">
+                <div class="glass-panel p-6 rounded-2xl h-[400px] flex flex-col relative overflow-hidden">
+                    <div class="flex justify-between items-start mb-6 z-10">
+                        <div>
+                            <h2 class="text-2xl font-bold text-white dark:text-white light:text-paperDeep">Transistor
+                                Count Growth</h2>
+                            <p class="text-sm text-gray-400">Scale: Logarithmic (Each step is 10x larger)</p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-3xl font-bold text-paperPink" id="chart-main-count">42,000,000</div>
+                            <div class="text-xs text-gray-500 uppercase">Transistors on chip</div>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 flex items-end justify-between gap-1 md:gap-2" id="chart-bars">
+                    </div>
+
+                    <div class="absolute inset-0 z-0 flex flex-col justify-end pointer-events-none opacity-20">
+                        <div class="border-t border-gray-500 w-full h-[25%]"></div>
+                        <div class="border-t border-gray-500 w-full h-[25%]"></div>
+                        <div class="border-t border-gray-500 w-full h-[25%]"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div
+                        class="glass-panel p-5 rounded-xl border border-dashed border-gray-600 hover:border-paperPink transition-colors cursor-help group">
+                        <h4 class="text-paperPink font-bold mb-2 flex items-center gap-2">
+                            <i data-lucide="microscope" class="w-4 h-4"></i> What is a Transistor?
+                        </h4>
+                        <p
+                            class="text-sm text-gray-400 group-hover:text-gray-200 transition-colors light:group-hover:text-gray-600">
+                            Think of it as a tiny light switch. <br>
+                            <strong>On (1)</strong> or <strong>Off (0)</strong>. <br>
+                            Millions of these switches flipping together creates logic, math, and video games.
+                        </p>
+                    </div>
+                    <div
+                        class="glass-panel p-5 rounded-xl border border-dashed border-gray-600 hover:border-paperPink transition-colors cursor-help group">
+                        <h4 class="text-paperPink font-bold mb-2 flex items-center gap-2">
+                            <i data-lucide="trending-up" class="w-4 h-4"></i> What is the "Law"?
+                        </h4>
+                        <p
+                            class="text-sm text-gray-400 group-hover:text-gray-200 transition-colors light:group-hover:text-gray-600">
+                            Gordon Moore predicted we would find ways to make these switches <strong>half the
+                                size</strong> every two years, doubling power for the same price.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="calculator" class="py-20 bg-paperDeep/10 border-y border-white/5 relative">
+        <div class="max-w-6xl mx-auto px-4 md:px-12">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold mb-2 text-white dark:text-white light:text-paperDeep">Moore's Law
+                    Calculator</h2>
+                <p class="text-gray-400">Prove the theory yourself. Pick a year and see if reality kept up with the
+                    math.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <div class="space-y-8">
+                    <div>
+                        <div class="flex justify-between mb-4">
+                            <label class="text-gray-300 font-semibold dark:text-gray-300 light:text-gray-600">Time
+                                Travel</label>
+                            <span class="text-4xl font-mono text-paperPink font-bold" id="calc-year-display">1987</span>
+                        </div>
+                        <input type="range" min="1971" max="2025" value="1987" id="calc-slider" class="w-full">
+                        <div class="flex justify-between text-xs text-gray-500 mt-2 font-mono">
+                            <span>1971</span>
+                            <span>2000</span>
+                            <span>2025</span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="glass-panel p-6 rounded-xl border-t-2 border-gray-500 bg-gray-500/5">
+                            <p class="text-xs text-gray-500 uppercase tracking-wider mb-2 font-bold">Predicted (Theory)
+                            </p>
+                            <div class="text-2xl font-bold text-gray-300 dark:text-gray-300 light:text-gray-600"
+                                id="calc-predicted">588.8 K</div>
+                            <p class="text-xs text-gray-500 mt-2">Based on 2-year doubling</p>
+                        </div>
+
+                        <div class="glass-panel p-6 rounded-xl border-t-2 border-paperPink bg-paperPink/10">
+                            <p class="text-xs text-paperPink uppercase tracking-wider mb-2 font-bold">Actual / Best
+                                Available</p>
+                            <div class="text-3xl font-bold text-white dark:text-white light:text-paperDeep"
+                                id="calc-actual">275.0 K</div>
+                            <p class="text-xs text-paperPink/80 mt-2" id="calc-chip-name">Intel 386 (1985)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="glass-panel p-8 rounded-2xl h-full flex flex-col justify-center relative overflow-hidden group">
+                    <div class="absolute -right-20 -top-20 w-64 h-64 bg-paperPink/20 rounded-full blur-[80px]"></div>
+
+                    <h3 class="text-2xl font-bold mb-4 relative z-10 text-white dark:text-white light:text-paperDeep"
+                        id="calc-context-title">The PC Revolution</h3>
+                    <p class="text-gray-400 leading-relaxed mb-6 relative z-10 dark:text-gray-400 light:text-gray-600"
+                        id="calc-context-desc">
+                        Personal computing goes mainstream. GUIs appear. Gaming begins to evolve.
+                    </p>
+                    <div class="inline-flex items-center gap-2 px-3 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 w-max text-xs font-bold relative z-10"
+                        id="calc-status">
+                        STATUS: ON TRACK
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-20 bg-black/20 border-b border-white/5">
+        <div class="max-w-5xl mx-auto px-6 text-center">
+            <h2 class="text-3xl font-bold mb-12 text-white dark:text-white light:text-paperDeep">Visualizing the
+                Impossible Scale</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="group">
+                    <div
+                        class="w-32 h-32 mx-auto bg-gray-800 rounded-lg relative mb-4 border border-gray-600 overflow-hidden">
+                        <div class="absolute inset-0 grid grid-cols-5 grid-rows-5 gap-1 p-2">
+                            <div class="bg-paperPink rounded-full w-full h-full"></div>
+                            <div class="bg-paperPink rounded-full w-full h-full"></div>
+                            <div class="bg-paperPink rounded-full w-full h-full"></div>
+                        </div>
+                    </div>
+                    <h3 class="text-xl font-bold text-white dark:text-white light:text-paperDeep">1971</h3>
+                    <p class="text-sm text-gray-400">Like a small village.<br> ~2,300 inhabitants.</p>
+                </div>
+
+                <div class="group">
+                    <div
+                        class="w-32 h-32 mx-auto bg-gray-800 rounded-lg relative mb-4 border border-gray-600 overflow-hidden">
+                        <div
+                            class="absolute inset-0 opacity-50 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjOWU0YjhjIi8+CjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmZmYiLz4KPC9zdmc+')]">
+                        </div>
+                    </div>
+                    <h3 class="text-xl font-bold text-white dark:text-white light:text-paperDeep">2000</h3>
+                    <p class="text-sm text-gray-400">Like Tokyo.<br> ~42 Million inhabitants.</p>
+                </div>
+
+                <div class="group">
+                    <div
+                        class="w-32 h-32 mx-auto bg-paperPink rounded-lg relative mb-4 border border-white overflow-hidden shadow-[0_0_30px_rgba(158,75,138,0.6)]">
+                        <div class="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
+                        <div class="absolute inset-0 flex items-center justify-center font-bold text-paperDeep">GLOWING
+                        </div>
+                    </div>
+                    <h3 class="text-xl font-bold text-white dark:text-white light:text-paperDeep">2023</h3>
+                    <p class="text-sm text-gray-400">Like the entire Earth x 10.<br> ~80 Billion inhabitants.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-20 px-4">
+        <h2 class="text-3xl font-bold mb-8 text-center text-white dark:text-white light:text-paperDeep">Is Moore's Law
+            Dead?</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <div class="glass-panel p-8 rounded-2xl text-left border-l-4 border-red-500 relative overflow-hidden">
+                <i data-lucide="quote" class="absolute top-4 right-4 w-12 h-12 text-red-500/10"></i>
+                <p class="italic text-lg text-gray-300 mb-6 dark:text-gray-300 light:text-gray-600">"Moore's Law is
+                    dead... it's completely over. The idea that the chip is going to go down in cost over time,
+                    unfortunately, is a story of the past."</p>
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center font-bold text-white">
+                        J</div>
+                    <div>
+                        <p class="text-sm font-bold text-white dark:text-white light:text-paperDeep">Jensen Huang</p>
+                        <p class="text-xs text-red-400">CEO, NVIDIA</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-8 rounded-2xl text-left border-l-4 border-green-500 relative overflow-hidden">
+                <i data-lucide="quote" class="absolute top-4 right-4 w-12 h-12 text-green-500/10"></i>
+                <p class="italic text-lg text-gray-300 mb-6 dark:text-gray-300 light:text-gray-600">"Moore's Law is not
+                    dead... we will reach 1 trillion transistors in a single package by 2030. We are just getting
+                    started."</p>
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center font-bold text-white">
+                        P</div>
+                    <div>
+                        <p class="text-sm font-bold text-white dark:text-white light:text-paperDeep">Pat Gelsinger</p>
+                        <p class="text-xs text-green-400">CEO, Intel</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="py-12 text-center text-gray-500 text-sm border-t border-white/5">
+        <p>Built for PaperX Learning • Concepts simplified for educational use.</p>
+    </footer>
+
+    <script>
+        // --- 1. THEME TOGGLE LOGIC ---
+        const themeBtn = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+        const body = document.body;
+
+        themeBtn.addEventListener('click', () => {
+            html.classList.toggle('dark');
+            html.classList.toggle('light');
+
+            if (html.classList.contains('light')) {
+                body.classList.remove('bg-paperDark', 'text-white');
+                body.classList.add('bg-paperLight', 'text-paperDeep');
+            } else {
+                body.classList.remove('bg-paperLight', 'text-paperDeep');
+                body.classList.add('bg-paperDark', 'text-white');
+            }
+            lucide.createIcons();
+        });
+        lucide.createIcons();
+
+        // --- 2. DATASET ---
+        const chips = [
+            { year: 1971, count: 2300, name: "Intel 4004", analogy: "A calculator. It could do simple math, but slowly." },
+            { year: 1978, count: 29000, name: "8086", analogy: "An arcade machine. Could handle basic input and blocky graphics." },
+            { year: 1985, count: 275000, name: "Intel 386", analogy: "Early Windows. You could type documents and play solitaire." },
+            { year: 1989, count: 1200000, name: "Intel 486", analogy: "The transition to color screens and basic desktop publishing." },
+            { year: 1993, count: 3100000, name: "Pentium", analogy: "Multimedia. CDs, rough video, and the very early internet." },
+            { year: 2000, count: 42000000, name: "Pentium 4", analogy: "The Digital Age. DVD quality video, MP3 music, and full web surfing." },
+            { year: 2006, count: 291000000, name: "Core 2 Duo", analogy: "Multi-tasking. Running music, web, and word processing all at once." },
+            { year: 2010, count: 731000000, name: "Core i7", analogy: "HD Era. Streaming movies, editing photos, and running complex 3D games." },
+            { year: 2017, count: 19200000000, name: "AMD Epyc", analogy: "Cloud Computing. Servers running thousands of users at once." },
+            { year: 2023, count: 80000000000, name: "Nvidia H100", analogy: "AI & Neural Networks. Simulating human thought patterns and generating art." }
+        ];
+
+        // --- 3. HELPER FUNCTIONS ---
+        const formatNum = (num) => {
+            if (num >= 1e9) return (num / 1e9).toFixed(1) + " Billion";
+            if (num >= 1e6) return (num / 1e6).toFixed(1) + " Million";
+            if (num >= 1e3) return (num / 1e3).toFixed(1) + " K";
+            return num.toLocaleString();
+        };
+
+        // --- 4. VISUALIZER LOGIC (Top Section) ---
+        const slider = document.getElementById('year-slider');
+        const yearDisplay = document.getElementById('year-display');
+        const eraLabel = document.getElementById('era-label');
+        const analogyText = document.getElementById('analogy-text');
+        const densityYear = document.getElementById('density-year');
+        const densityCount = document.getElementById('density-count');
+        const chartBarsContainer = document.getElementById('chart-bars');
+        const mainCount = document.getElementById('chart-main-count');
+
+        function initChart() {
+            chartBarsContainer.innerHTML = '';
+            const maxLog = Math.log10(100000000000);
+            const minLog = Math.log10(1000);
+
+            chips.forEach((chip, i) => {
+                const el = document.createElement('div');
+                const val = Math.log10(chip.count);
+                const percent = ((val - minLog) / (maxLog - minLog)) * 100;
+
+                el.className = "w-full rounded-t-lg transition-all duration-300 bg-paperDeep/50 hover:bg-paperPink bar-hover cursor-pointer relative group";
+                el.style.height = `${percent}%`;
+
+                el.innerHTML = `
+                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 bg-black text-white text-xs p-2 rounded opacity-0 group-hover:opacity-100 pointer-events-none z-20 text-center">
+                        ${chip.name}<br>${chip.year}
+                    </div>
+                `;
+                el.onclick = () => {
+                    slider.value = chip.year;
+                    updateUI(chip.year);
+                };
+                chartBarsContainer.appendChild(el);
+            });
+        }
+
+        function updateUI(year) {
+            yearDisplay.innerText = year;
+            densityYear.innerText = year;
+
+            const currentChip = chips.reduce((prev, curr) => {
+                return (curr.year <= year && curr.year > prev.year) ? curr : prev;
+            }, chips[0]);
+
+            densityCount.innerText = formatNum(currentChip.count);
+            mainCount.innerText = currentChip.count.toLocaleString();
+
+            analogyText.innerText = currentChip.analogy;
+            eraLabel.innerText = "The " + currentChip.name + " Era";
+
+            const bars = chartBarsContainer.children;
+            chips.forEach((chip, idx) => {
+                if (chip.year === currentChip.year) {
+                    bars[idx].classList.remove('bg-paperDeep/50');
+                    bars[idx].classList.add('bg-paperPink', 'shadow-[0_0_15px_rgba(158,75,138,0.5)]');
+                } else {
+                    bars[idx].classList.add('bg-paperDeep/50');
+                    bars[idx].classList.remove('bg-paperPink', 'shadow-[0_0_15px_rgba(158,75,138,0.5)]');
+                }
+            });
+        }
+
+        slider.addEventListener('input', (e) => updateUI(parseInt(e.target.value)));
+        initChart();
+        updateUI(2000);
+
+
+        // --- 5. CALCULATOR LOGIC (Bottom Section) ---
+        const calcSlider = document.getElementById('calc-slider');
+        const calcYearDisplay = document.getElementById('calc-year-display');
+        const calcPredicted = document.getElementById('calc-predicted');
+        const calcActual = document.getElementById('calc-actual');
+        const calcChipName = document.getElementById('calc-chip-name');
+        const calcTitle = document.getElementById('calc-context-title');
+        const calcDesc = document.getElementById('calc-context-desc');
+        const calcStatus = document.getElementById('calc-status');
+
+        function updateCalculator(year) {
+            calcYearDisplay.innerText = year;
+
+            // 1. Math: Theoretical Prediction (Doubles every 2 years from 1971 base of 2300)
+            // Formula: 2300 * 2^((year - 1971)/2)
+            const yearsPassed = year - 1971;
+            const theoretical = Math.floor(2300 * Math.pow(2, yearsPassed / 2));
+            calcPredicted.innerText = formatNum(theoretical);
+
+            // 2. Data: Actual Best Available
+            const bestChip = chips.reduce((prev, curr) => {
+                return (curr.year <= year && curr.year > prev.year) ? curr : prev;
+            }, { year: 1970, count: 0, name: "None" }); // Default
+
+            calcActual.innerText = formatNum(bestChip.count);
+            calcChipName.innerText = bestChip.name !== "None" ? `${bestChip.name} (${bestChip.year})` : "Pre-Microprocessor Era";
+
+            // 3. Status Logic
+            if (bestChip.count >= theoretical * 0.8) {
+                calcStatus.innerHTML = "STATUS: ON TRACK";
+                calcStatus.className = "inline-flex items-center gap-2 px-3 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30 w-max text-xs font-bold relative z-10";
+            } else {
+                calcStatus.innerHTML = "STATUS: LAGGING BEHIND";
+                calcStatus.className = "inline-flex items-center gap-2 px-3 py-1 bg-red-500/20 text-red-400 rounded border border-red-500/30 w-max text-xs font-bold relative z-10";
+            }
+            // Exception for early years where theory hadn't started
+            if (year < 1971) calcStatus.innerHTML = "STATUS: PRE-MOORE";
+
+            // 4. Context Text
+            if (year < 1980) {
+                calcTitle.innerText = "The Birth of Microprocessors";
+                calcDesc.innerText = "The first commercial chips emerge, powering calculators and simple arcade games.";
+            } else if (year < 1990) {
+                calcTitle.innerText = "The PC Revolution";
+                calcDesc.innerText = "Personal computing goes mainstream. GUIs appear. Gaming begins to evolve.";
+            } else if (year < 2005) {
+                calcTitle.innerText = "The Internet Age";
+                calcDesc.innerText = "The web explodes. Clock speeds skyrocket. The Pentium era defines performance.";
+            } else if (year < 2015) {
+                calcTitle.innerText = "Mobile & Multi-Core";
+                calcDesc.innerText = "Smartphones become ubiquitous. Physics limits single-core speed, so we add more cores.";
+            } else {
+                calcTitle.innerText = "The AI Era";
+                calcDesc.innerText = "GPUs take over. Specialized chips for neural networks drive massive transistor counts.";
+            }
+        }
+
+        calcSlider.addEventListener('input', (e) => updateCalculator(parseInt(e.target.value)));
+        updateCalculator(1987); // Initial state
+
+        // Intro Animation
+        gsap.from("section", {
+            opacity: 0,
+            y: 30,
+            duration: 0.8,
+            stagger: 0.2,
+            ease: "power2.out"
+        });
+
+    </script>
+</body>
+
+</html>
