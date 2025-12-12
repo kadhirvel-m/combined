@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instruction Encoder: Zero to Hero</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        paper: '#f8fafc',
+                        ink: '#0f172a',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .glass-panel {
+            @apply bg-white/50 dark:bg-slate-900/50;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .dark .glass-panel {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .cmd-btn.active {
+            @apply ring-2 ring-blue-500 border-blue-500 bg-blue-50 dark:bg-blue-900/20;
+        }
+
+        /* Bit Grid Visuals */
+        .bit-cell {
+            @apply flex items-center justify-center text-[10px] md:text-xs font-mono font-bold border-r border-white/10 last:border-0;
+        }
+    </style>
+</head>
+<body class="bg-paper text-ink dark:bg-[#020617] dark:text-slate-200 min-h-screen">
+
+    <nav class="fixed top-0 w-full z-50 glass-panel border-b border-slate-200 dark:border-white/5 h-16 flex items-center justify-between px-6 transition-colors duration-300">
+        <div class="flex items-center gap-2">
+            <div class="bg-blue-600 text-white p-1 rounded">
+                <i data-lucide="cpu" class="w-5 h-5"></i>
+            </div>
+            <span class="font-bold tracking-tight text-lg">Arch<span class="text-blue-500">Sim</span></span>
+        </div>
+        
+        <button id="theme-toggle" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+            <i data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
+            <i data-lucide="moon" class="w-5 h-5 block dark:hidden"></i>
+        </button>
+    </nav>
+
+    <section class="pt-28 pb-12 px-4">
+        <div class="max-w-6xl mx-auto mb-8 text-center">
+            <h1 class="text-3xl md:text-5xl font-extrabold mb-4">Command the Machine</h1>
+            <p class="text-slate-500 dark:text-slate-400">Select an instruction on the left. Watch the binary generate on the right.</p>
+        </div>
+
+        <div class="max-w-6xl mx-auto glass-panel rounded-3xl p-1 shadow-2xl border border-slate-200 dark:border-slate-800">
+            
+            <div class="bg-slate-100 dark:bg-slate-900/50 p-6 rounded-t-3xl border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                </div>
+                <button onclick="runSimulation()" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2.5 rounded-lg font-semibold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2">
+                    <i data-lucide="play" class="w-4 h-4"></i> Execute Cycle
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2">
+                
+                <div class="p-6 md:p-8 border-r border-slate-200 dark:border-slate-800 space-y-8">
+                    
+                    <div>
+                        <label class="block text-sm font-bold mb-3 text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                            1. Select Operation (Opcode)
+                        </label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="setOp('ADD', '0001')" class="cmd-btn active p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-left" data-type="ADD">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="font-bold">ADD</span>
+                                    <span class="text-[10px] font-mono bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1 rounded">0001</span>
+                                </div>
+                                <div class="text-xs text-slate-500">Math: Sum (+)</div>
+                            </button>
+
+                            <button onclick="setOp('SUB', '0010')" class="cmd-btn p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-left" data-type="SUB">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="font-bold">SUB</span>
+                                    <span class="text-[10px] font-mono bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1 rounded">0010</span>
+                                </div>
+                                <div class="text-xs text-slate-500">Math: Diff (-)</div>
+                            </button>
+
+                            <button onclick="setOp('MOV', '0011')" class="cmd-btn p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-left" data-type="MOV">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="font-bold">MOV</span>
+                                    <span class="text-[10px] font-mono bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1 rounded">0011</span>
+                                </div>
+                                <div class="text-xs text-slate-500">Copy Data (->)</div>
+                            </button>
+
+                            <button onclick="setOp('LDR', '0100')" class="cmd-btn p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-left" data-type="LDR">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="font-bold">LDR</span>
+                                    <span class="text-[10px] font-mono bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-1 rounded">0100</span>
+                                </div>
+                                <div class="text-xs text-slate-500">Load Memory (M)</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold mb-3 text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                            2. Set Values (Operands)
+                        </label>
+                        <div class="bg-slate-50 dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-5">
+                            <div>
+                                <div class="flex justify-between text-xs mb-2">
+                                    <span class="font-bold text-purple-500">Target (Register A)</span>
+                                    <span id="val-a-display" class="font-mono bg-slate-200 dark:bg-black px-2 rounded">5</span>
+                                </div>
+                                <input type="range" min="0" max="7" value="5" class="w-full accent-purple-500 cursor-pointer" oninput="updateVal('a', this.value)">
+                            </div>
+                            
+                            <div>
+                                <div class="flex justify-between text-xs mb-2">
+                                    <span class="font-bold text-pink-500">Source (Value B)</span>
+                                    <span id="val-b-display" class="font-mono bg-slate-200 dark:bg-black px-2 rounded">3</span>
+                                </div>
+                                <input type="range" min="0" max="7" value="3" class="w-full accent-pink-500 cursor-pointer" oninput="updateVal('b', this.value)">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-6 md:p-8 bg-slate-50 dark:bg-black/20 flex flex-col justify-between">
+                    
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-xs font-bold uppercase text-slate-400 tracking-widest">Instruction Register (12-Bit)</span>
+                            <i data-lucide="cpu" class="w-4 h-4 text-slate-400"></i>
+                        </div>
+
+                        <div class="flex gap-1 h-14 w-full mb-2">
+                            <div id="bits-op" class="flex-[4] bg-blue-500/10 border border-blue-500/30 rounded flex items-center justify-center gap-0.5 md:gap-1 p-1"></div>
+                            <div id="bits-a" class="flex-[4] bg-purple-500/10 border border-purple-500/30 rounded flex items-center justify-center gap-0.5 md:gap-1 p-1"></div>
+                            <div id="bits-b" class="flex-[4] bg-pink-500/10 border border-pink-500/30 rounded flex items-center justify-center gap-0.5 md:gap-1 p-1"></div>
+                        </div>
+                        
+                        <div class="flex text-[10px] md:text-xs font-mono text-slate-500 uppercase text-center">
+                            <div class="flex-[4] text-blue-500">Opcode</div>
+                            <div class="flex-[4] text-purple-500">Dest</div>
+                            <div class="flex-[4] text-pink-500">Src</div>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 min-h-[180px] mt-8 relative bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner flex flex-col items-center justify-center overflow-hidden">
+                        <div id="anim-stage" class="flex items-center gap-4 text-3xl font-mono font-bold">
+                            <div id="sim-a" class="text-purple-500">5</div>
+                            <div id="sim-op" class="text-slate-400">+</div>
+                            <div id="sim-b" class="text-pink-500">3</div>
+                        </div>
+                        <div id="sim-result" class="absolute text-4xl font-bold text-green-500 scale-0 opacity-0">8</div>
+                        <div id="cpu-status" class="absolute bottom-4 text-[10px] font-mono text-slate-400 uppercase tracking-widest">Ready</div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="py-16 px-4 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-900">
+        <div class="max-w-5xl mx-auto">
+            <h2 class="text-3xl font-bold mb-12 text-center">Under the Hood: Technical Breakdown</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
+                
+                <div class="glass-panel p-6 rounded-2xl border-l-4 border-blue-500">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-xl font-bold">R-Type (Register)</h3>
+                        <span class="text-xs font-mono bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-1 rounded">Arithmetic</span>
+                    </div>
+                    <p class="text-sm text-slate-600 dark:text-slate-400 mb-6 min-h-[40px]">
+                        Used for math logic like ADD, SUB, AND. It typically requires three register fields (Source 1, Source 2, Destination).
+                    </p>
+                    
+                    <div class="w-full h-10 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 flex text-white mb-2">
+                        <div class="w-[20%] bg-blue-600 bit-cell">OP</div>
+                        <div class="w-[15%] bg-indigo-600 bit-cell">RS</div>
+                        <div class="w-[15%] bg-indigo-600 bit-cell">RT</div>
+                        <div class="w-[15%] bg-purple-600 bit-cell">RD</div>
+                        <div class="w-[15%] bg-slate-600 bit-cell">SHAMT</div>
+                        <div class="w-[20%] bg-slate-700 bit-cell">FUNCT</div>
+                    </div>
+                    <div class="flex justify-between text-[10px] font-mono text-slate-500 px-1">
+                        <span>6 bits</span>
+                        <span>5 bits</span>
+                        <span>5 bits</span>
+                        <span>5 bits</span>
+                        <span>5 bits</span>
+                        <span>6 bits</span>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-6 rounded-2xl border-l-4 border-purple-500">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-xl font-bold">I-Type (Immediate)</h3>
+                        <span class="text-xs font-mono bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-300 px-2 py-1 rounded">Constants</span>
+                    </div>
+                    <p class="text-sm text-slate-600 dark:text-slate-400 mb-6 min-h-[40px]">
+                        Used when one input is a constant number (e.g., "Add 5"). The space usually used for registers is combined to hold the number.
+                    </p>
+                    
+                    <div class="w-full h-10 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 flex text-white mb-2">
+                        <div class="w-[20%] bg-blue-600 bit-cell">OP</div>
+                        <div class="w-[25%] bg-indigo-600 bit-cell">RS</div>
+                        <div class="w-[25%] bg-indigo-600 bit-cell">RT</div>
+                        <div class="w-[30%] bg-pink-600 bit-cell">CONSTANT (IMM)</div>
+                    </div>
+                    <div class="flex justify-between text-[10px] font-mono text-slate-500 px-1">
+                        <span>6 bits</span>
+                        <span>5 bits</span>
+                        <span>5 bits</span>
+                        <span>16 bits</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-8 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-green-500"></div>
+                
+                <h3 class="text-2xl font-bold mb-8 text-center">The CPU Heartbeat: Fetch-Decode-Execute</h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="relative pl-8 border-l-2 border-slate-200 dark:border-slate-800">
+                        <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-blue-500 border-4 border-white dark:border-slate-950"></div>
+                        <h4 class="font-bold text-blue-500 mb-2">1. Fetch</h4>
+                        <p class="text-sm text-slate-600 dark:text-slate-400">
+                            The CPU asks RAM for the next instruction. It receives the binary number (like <code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">00010101...</code>).
+                        </p>
+                    </div>
+
+                    <div class="relative pl-8 border-l-2 border-slate-200 dark:border-slate-800">
+                        <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 border-4 border-white dark:border-slate-950"></div>
+                        <h4 class="font-bold text-purple-500 mb-2">2. Decode</h4>
+                        <p class="text-sm text-slate-600 dark:text-slate-400">
+                            The Control Unit splits the bits. It looks at the Opcode first. <br>
+                            <em>"Ah, <code class="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">0001</code> means ADD."</em>
+                        </p>
+                    </div>
+
+                    <div class="relative pl-8 border-l-2 border-slate-200 dark:border-slate-800">
+                        <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-green-500 border-4 border-white dark:border-slate-950"></div>
+                        <h4 class="font-bold text-green-500 mb-2">3. Execute</h4>
+                        <p class="text-sm text-slate-600 dark:text-slate-400">
+                            Electricity flows through the specific gates for that operation. The math happens, and the result is stored.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-8 border-t border-slate-200 dark:border-slate-800 text-center">
+                    <p class="font-bold text-slate-700 dark:text-slate-300">Why Binary?</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 max-w-2xl mx-auto mt-2">
+                        Using fixed-size instructions (like 32-bit or 64-bit) allows the hardware to be extremely fast. 
+                        The processor knows <strong>exactly</strong> where to look for the Opcode (the first few bits) every single time, without needing to "read" the whole sentence first.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="py-12 text-center text-slate-500 text-sm">
+        <p class="opacity-50">Interactive Explainer Layout • Built with GSAP & Tailwind</p>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+
+        // STATE
+        const state = {
+            opName: 'ADD',
+            opBin: '0001',
+            opSym: '+',
+            valA: 5,
+            valB: 3
+        };
+
+        // DOM ELEMENTS
+        const els = {
+            opBits: document.getElementById('bits-op'),
+            aBits: document.getElementById('bits-a'),
+            bBits: document.getElementById('bits-b'),
+            valADisplay: document.getElementById('val-a-display'),
+            valBDisplay: document.getElementById('val-b-display'),
+            simA: document.getElementById('sim-a'),
+            simB: document.getElementById('sim-b'),
+            simOp: document.getElementById('sim-op'),
+            simResult: document.getElementById('sim-result'),
+            status: document.getElementById('cpu-status')
+        };
+
+        // HELPER: To Binary
+        const toBin = (n) => parseInt(n).toString(2).padStart(4, '0');
+
+        // CORE LOGIC
+        function render() {
+            // Update Text
+            els.valADisplay.innerText = state.valA;
+            els.valBDisplay.innerText = state.valB;
+            
+            // Update Bits
+            renderBits(els.opBits, state.opBin, 'bg-blue-500');
+            renderBits(els.aBits, toBin(state.valA), 'bg-purple-500');
+            renderBits(els.bBits, toBin(state.valB), 'bg-pink-500');
+
+            // Reset Animation Stage
+            els.simA.innerText = state.valA;
+            els.simB.innerText = state.valB;
+            els.simOp.innerText = state.opSym;
+        }
+
+        function renderBits(container, binStr, activeClass) {
+            container.innerHTML = '';
+            binStr.split('').forEach(bit => {
+                const el = document.createElement('div');
+                el.className = `w-5 h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white transition-all ${bit === '1' ? activeClass : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`;
+                el.innerText = bit;
+                container.appendChild(el);
+            });
+        }
+
+        // HANDLERS
+        window.setOp = (name, bin) => {
+            state.opName = name;
+            state.opBin = bin;
+            
+            // Determine Symbol for Sim
+            if(name === 'ADD') state.opSym = '+';
+            else if(name === 'SUB') state.opSym = '-';
+            else if(name === 'MOV') state.opSym = '→';
+            else if(name === 'LDR') state.opSym = 'M';
+
+            // UI State
+            document.querySelectorAll('.cmd-btn').forEach(btn => {
+                if(btn.dataset.type === name) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+
+            render();
+        };
+
+        window.updateVal = (target, val) => {
+            if(target === 'a') state.valA = val;
+            if(target === 'b') state.valB = val;
+            render();
+        };
+
+        // ANIMATION CYCLE
+        window.runSimulation = () => {
+            const tl = gsap.timeline();
+            
+            // Calc Result
+            let result = 0;
+            if(state.opName === 'ADD') result = parseInt(state.valA) + parseInt(state.valB);
+            else if(state.opName === 'SUB') result = parseInt(state.valA) - parseInt(state.valB);
+            else if(state.opName === 'MOV') result = parseInt(state.valB); // Move B to A (Result shows B)
+            else if(state.opName === 'LDR') result = `[${state.valB}]`; // Mock Memory Load
+
+            // 1. Reset
+            tl.set([els.simA, els.simB, els.simOp], { y: 20, opacity: 0, scale: 0.8 });
+            tl.set(els.simResult, { scale: 0, opacity: 0 });
+            tl.set(els.status, { text: "IDLE", opacity: 1 });
+
+            // 2. Fetch
+            tl.to(els.status, { text: "FETCHING INSTRUCTION...", duration: 0.5 });
+            
+            // 3. Decode
+            tl.to(els.status, { text: `DECODING: ${state.opName}`, duration: 0.4 });
+            tl.to(els.simA, { y: 0, opacity: 1, scale: 1, duration: 0.3, ease: "back.out" });
+            tl.to(els.simOp, { y: 0, opacity: 1, scale: 1, duration: 0.3 }, "<0.1");
+            tl.to(els.simB, { y: 0, opacity: 1, scale: 1, duration: 0.3, ease: "back.out" }, "<0.1");
+
+            // 4. Execute
+            tl.to(els.status, { text: "EXECUTING LOGIC...", duration: 0.4, delay: 0.2 });
+            
+            // Animation differs for MOV/LDR vs Math
+            if(state.opName === 'MOV' || state.opName === 'LDR') {
+                 // Slide B over to A
+                 tl.to(els.simB, { x: -60, duration: 0.4, ease: "power2.inOut" });
+                 tl.to([els.simA, els.simOp], { opacity: 0, duration: 0.2 }, "<");
+            } else {
+                // Smash together for Math
+                tl.to([els.simA, els.simB], { x: (i) => i===0 ? 20 : -20, opacity: 0, duration: 0.3 });
+                tl.to(els.simOp, { opacity: 0, duration: 0.1 }, "<");
+            }
+
+            // 5. Write Back
+            els.simResult.innerText = result;
+            tl.to(els.simResult, { scale: 1.5, opacity: 1, duration: 0.4, ease: "elastic.out(1, 0.5)" });
+            tl.to(els.status, { text: "WRITE BACK COMPLETE", duration: 0.5 });
+            tl.to(els.simResult, { scale: 1, duration: 0.3 });
+            tl.to(els.status, { opacity: 0, duration: 0.5, delay: 1 });
+        };
+
+        // THEME
+        document.getElementById('theme-toggle').addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+        });
+
+        // INIT
+        window.setOp('ADD', '0001');
+
+    </script>
+</body>
+</html>

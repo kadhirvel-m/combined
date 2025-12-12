@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>x86 Explained: The Chef & The CPU</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            500: '#6366f1', // Indigo
+                            600: '#4f46e5',
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; transition: background-color 0.3s, color 0.3s; }
+        .mono-font { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Glassmorphism utility */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .dark .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .light .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Floating animation element */
+        .anim-token {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #6366f1;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen selection:bg-brand-500 selection:text-white">
+
+    <nav class="fixed top-0 w-full z-40 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md">
+        <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="cpu" class="text-brand-500"></i>
+                <span class="font-bold tracking-tight">x86<span class="opacity-50 font-light">EXPLORER</span></span>
+            </div>
+            <button id="themeToggle" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                <i data-lucide="moon" class="block dark:hidden"></i>
+                <i data-lucide="sun" class="hidden dark:block"></i>
+            </button>
+        </div>
+    </nav>
+
+    <main class="pt-24 pb-20 px-6 max-w-5xl mx-auto space-y-24">
+
+        <section class="text-center space-y-8 relative">
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-brand-500/20 blur-[100px] rounded-full -z-10"></div>
+            
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300 text-sm font-semibold mb-4">
+                <i data-lucide="book-open" class="w-4 h-4"></i> The Metaphor
+            </div>
+            
+            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight">
+                The CPU is a <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 to-purple-500">Master Chef</span>.
+            </h1>
+            
+            <p class="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                Imagine a busy kitchen. You have a huge pantry (Memory) full of ingredients. But you can't chop an onion while it's still on the shelf. You must bring it to your cutting board (Register) first.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12 text-left">
+                <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <i data-lucide="warehouse" class="w-24 h-24"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2 flex items-center gap-2">
+                        <i data-lucide="warehouse" class="text-blue-500"></i> The Pantry
+                    </h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 font-mono mb-2">Technical Name: RAM / Memory</p>
+                    <p class="text-sm">Huge storage space. It holds everything, but it's slow to walk there. You refer to shelves by numbers (Addresses).</p>
+                </div>
+
+                <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 border-brand-500/30">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <i data-lucide="clipboard-list" class="w-24 h-24"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2 flex items-center gap-2">
+                        <i data-lucide="clipboard-list" class="text-brand-500"></i> The Countertop
+                    </h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 font-mono mb-2">Technical Name: Registers (EAX, EBX)</p>
+                    <p class="text-sm">Tiny, ultra-fast workspace right in front of the chef. You can only work on 2-3 things here at once.</p>
+                </div>
+
+                <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <i data-lucide="scroll" class="w-24 h-24"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2 flex items-center gap-2">
+                        <i data-lucide="scroll" class="text-emerald-500"></i> The Recipe
+                    </h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 font-mono mb-2">Technical Name: Instruction Set (x86)</p>
+                    <p class="text-sm">The specific commands the Chef understands. "Move this here," "Add this to that."</p>
+                </div>
+            </div>
+        </section>
+
+        <hr class="border-slate-200 dark:border-slate-800">
+
+        <section id="simulation" class="space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-end gap-4">
+                <div>
+                    <h2 class="text-3xl font-bold mb-2">The Kitchen Simulator</h2>
+                    <p class="text-slate-600 dark:text-slate-400">Don't just read. <span class="text-brand-500 font-bold">Do.</span> Issue commands to the CPU Chef.</p>
+                </div>
+                
+                <div class="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
+                    <button onclick="toggleLabels('analogy')" id="btn-analogy" class="px-4 py-1.5 rounded-md text-sm font-medium bg-white dark:bg-slate-700 shadow-sm transition-all">Chef View</button>
+                    <button onclick="toggleLabels('tech')" id="btn-tech" class="px-4 py-1.5 rounded-md text-sm font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-all">Tech View</button>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl border border-slate-300 dark:border-slate-700 overflow-hidden relative min-h-[500px] flex flex-col md:flex-row">
+                
+                <div id="anim-token" class="anim-token">0</div>
+
+                <div class="w-full md:w-1/3 bg-slate-100 dark:bg-slate-900/50 p-6 border-r border-slate-200 dark:border-slate-800 flex flex-col gap-4">
+                    <div class="flex items-center gap-2 text-slate-500 mb-2">
+                        <i data-lucide="terminal" class="w-4 h-4"></i>
+                        <span class="text-xs font-bold tracking-wider uppercase">Instruction Queue</span>
+                    </div>
+
+                    <div class="space-y-3">
+                        <button onclick="runInstruction('mov_imm')" class="w-full group relative flex items-center justify-between p-3 rounded-xl border border-slate-300 dark:border-slate-700 hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-all text-left">
+                            <div>
+                                <div class="font-mono font-bold text-sm text-brand-600 dark:text-brand-400">MOV EAX, 5</div>
+                                <div class="text-xs text-slate-500 mt-1 label-analogy">Put value 5 into Bowl</div>
+                                <div class="text-xs text-slate-500 mt-1 label-tech hidden">Load Immediate 5 to Register A</div>
+                            </div>
+                            <i data-lucide="play" class="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-brand-500"></i>
+                        </button>
+
+                        <button onclick="runInstruction('mov_mem')" class="w-full group relative flex items-center justify-between p-3 rounded-xl border border-slate-300 dark:border-slate-700 hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-all text-left">
+                            <div>
+                                <div class="font-mono font-bold text-sm text-brand-600 dark:text-brand-400">MOV EBX, [0x10]</div>
+                                <div class="text-xs text-slate-500 mt-1 label-analogy">Fetch from Shelf #10 to Board</div>
+                                <div class="text-xs text-slate-500 mt-1 label-tech hidden">Load Memory[0x10] to Register B</div>
+                            </div>
+                            <i data-lucide="play" class="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-brand-500"></i>
+                        </button>
+
+                        <button onclick="runInstruction('add')" class="w-full group relative flex items-center justify-between p-3 rounded-xl border border-slate-300 dark:border-slate-700 hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-all text-left">
+                            <div>
+                                <div class="font-mono font-bold text-sm text-purple-600 dark:text-purple-400">ADD EAX, EBX</div>
+                                <div class="text-xs text-slate-500 mt-1 label-analogy">Mix Board into Bowl</div>
+                                <div class="text-xs text-slate-500 mt-1 label-tech hidden">EAX = EAX + EBX</div>
+                            </div>
+                            <i data-lucide="play" class="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-purple-500"></i>
+                        </button>
+                        
+                        <button onclick="runInstruction('sub')" class="w-full group relative flex items-center justify-between p-3 rounded-xl border border-slate-300 dark:border-slate-700 hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-all text-left">
+                            <div>
+                                <div class="font-mono font-bold text-sm text-red-600 dark:text-red-400">SUB EAX, 1</div>
+                                <div class="text-xs text-slate-500 mt-1 label-analogy">Take 1 out of Bowl</div>
+                                <div class="text-xs text-slate-500 mt-1 label-tech hidden">Decrement Register A</div>
+                            </div>
+                            <i data-lucide="play" class="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-red-500"></i>
+                        </button>
+                    </div>
+
+                    <div class="mt-auto bg-black rounded-lg p-3 font-mono text-xs text-green-400 h-32 overflow-y-auto" id="console-log">
+                        <span class="opacity-50">> System ready...</span><br>
+                        <span class="opacity-50">> Waiting for instructions...</span>
+                    </div>
+                </div>
+
+                <div class="w-full md:w-2/3 p-8 relative bg-slate-50 dark:bg-slate-900 flex flex-col justify-between">
+                    
+                    <div class="mb-12">
+                        <div class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex justify-between">
+                            <span class="label-analogy">Countertop (Workspace)</span>
+                            <span class="label-tech hidden">General Purpose Registers</span>
+                        </div>
+                        <div class="flex gap-6 justify-center">
+                            <div class="relative group">
+                                <div class="absolute -top-6 left-0 text-xs font-mono text-slate-500">EAX (Accumulator)</div>
+                                <div id="reg-eax" class="w-24 h-24 rounded-full border-4 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center text-3xl font-bold font-mono shadow-inner">
+                                    0
+                                </div>
+                                <div class="text-center mt-2 text-xs text-slate-400 label-analogy">The Bowl</div>
+                            </div>
+
+                            <div class="relative group">
+                                <div class="absolute -top-6 left-0 text-xs font-mono text-slate-500">EBX (Base)</div>
+                                <div id="reg-ebx" class="w-24 h-24 rounded-lg border-4 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center text-3xl font-bold font-mono shadow-inner">
+                                    0
+                                </div>
+                                <div class="text-center mt-2 text-xs text-slate-400 label-analogy">The Board</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex justify-between">
+                            <span class="label-analogy">Pantry Shelves</span>
+                            <span class="label-tech hidden">System RAM (Heap)</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-4">
+                            <div class="p-4 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 flex flex-col items-center gap-1 relative">
+                                <span class="text-[10px] font-mono text-slate-400 absolute top-1 left-2">0x10</span>
+                                <i data-lucide="package" class="w-4 h-4 text-slate-300"></i>
+                                <span id="mem-10" class="font-mono font-bold text-lg">10</span>
+                            </div>
+                            <div class="p-4 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 flex flex-col items-center gap-1 relative opacity-50">
+                                <span class="text-[10px] font-mono text-slate-400 absolute top-1 left-2">0x14</span>
+                                <span class="font-mono text-lg">0</span>
+                            </div>
+                            <div class="p-4 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 flex flex-col items-center gap-1 relative opacity-50">
+                                <span class="text-[10px] font-mono text-slate-400 absolute top-1 left-2">0x18</span>
+                                <span class="font-mono text-lg">0</span>
+                            </div>
+                             <div class="p-4 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 flex flex-col items-center gap-1 relative opacity-50">
+                                <span class="text-[10px] font-mono text-slate-400 absolute top-1 left-2">0x1C</span>
+                                <span class="font-mono text-lg">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-8">
+            <h2 class="text-3xl font-bold">From Kitchen to Circuit Board</h2>
+            <p class="text-slate-600 dark:text-slate-400 max-w-3xl">
+                Now that you've seen the "Toy Model," let's map the metaphors to the actual computer science concepts. This is how your computer actually thinks.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="glass-panel p-6 rounded-xl border-l-4 border-brand-500">
+                    <h4 class="font-mono text-brand-500 font-bold mb-2 text-sm">CONCEPT #1</h4>
+                    <h3 class="text-lg font-bold mb-2">Instructions (The Recipe)</h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                        x86 is an <strong>Instruction Set Architecture (ISA)</strong>. It's the vocabulary the CPU understands. 
+                        <br><br>
+                        Common words:
+                        <ul class="list-disc pl-4 mt-2 space-y-1 font-mono text-xs">
+                            <li><strong>MOV</strong>: Copy data.</li>
+                            <li><strong>ADD/SUB</strong>: Math.</li>
+                            <li><strong>JMP</strong>: Jump to a different recipe step (Loop/If).</li>
+                        </ul>
+                    </p>
+                </div>
+
+                <div class="glass-panel p-6 rounded-xl border-l-4 border-purple-500">
+                    <h4 class="font-mono text-purple-500 font-bold mb-2 text-sm">CONCEPT #2</h4>
+                    <h3 class="text-lg font-bold mb-2">Registers vs. RAM</h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                        <strong>Registers (Countertop):</strong> Located <em>inside</em> the CPU core. Access time is near instant (~0.2 nanoseconds). Very expensive, very small space.
+                        <br><br>
+                        <strong>RAM (Pantry):</strong> Located on memory sticks. Access is "slow" (~100 nanoseconds). 
+                        <br>
+                        <em>Note: The CPU is 500x faster than RAM, which is why registers are vital.</em>
+                    </p>
+                </div>
+
+                <div class="glass-panel p-6 rounded-xl border-l-4 border-emerald-500 lg:col-span-1 md:col-span-2">
+                    <h4 class="font-mono text-emerald-500 font-bold mb-2 text-sm">CONCEPT #3</h4>
+                    <h3 class="text-lg font-bold mb-2">The Cycle</h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                        The "Chef" works in a never-ending loop called the <strong>Fetch-Decode-Execute</strong> cycle:
+                        <ol class="list-decimal pl-4 mt-2 space-y-1 font-mono text-xs">
+                            <li><strong>Fetch:</strong> Get next instruction from RAM.</li>
+                            <li><strong>Decode:</strong> Figure out what "MOV" means.</li>
+                            <li><strong>Execute:</strong> Do the math.</li>
+                        </ol>
+                        This happens billions of times per second (GHz).
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <footer class="text-center text-slate-500 text-sm py-12">
+            Built with HTML, Tailwind & GSAP. No server required.
+        </footer>
+
+    </main>
+
+    <script>
+        // --- 1. THEME TOGGLE LOGIC ---
+        const themeBtn = document.getElementById('themeToggle');
+        const html = document.documentElement;
+
+        themeBtn.addEventListener('click', () => {
+            html.classList.toggle('dark');
+            html.classList.toggle('light');
+        });
+
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+
+        // --- 2. SIMULATOR LOGIC (STATE MACHINE) ---
+        const state = {
+            eax: 0,
+            ebx: 0,
+            mem: { '10': 10 } // Value 10 stored at address 0x10
+        };
+
+        const els = {
+            eax: document.getElementById('reg-eax'),
+            ebx: document.getElementById('reg-ebx'),
+            mem10: document.getElementById('mem-10'),
+            token: document.getElementById('anim-token'),
+            log: document.getElementById('console-log')
+        };
+
+        // Helper: Log function
+        function log(msg) {
+            const line = document.createElement('div');
+            line.innerHTML = `> ${msg}`;
+            line.className = "mb-1";
+            els.log.appendChild(line);
+            els.log.scrollTop = els.log.scrollHeight;
+        }
+
+        // Helper: Get center coordinates of an element
+        function getCenter(element) {
+            const rect = element.getBoundingClientRect();
+            // Adjust for scroll
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            return {
+                x: rect.left + rect.width / 2 + scrollLeft,
+                y: rect.top + rect.height / 2 + scrollTop
+            };
+        }
+
+        // --- 3. ANIMATION LOGIC (GSAP) ---
+        function animateMove(startEl, endEl, value, callback) {
+            // If startEl is null, we are creating a value from thin air (Immediate value)
+            let startX, startY;
+            
+            if (startEl === 'immediate') {
+                // Start from the code button area (roughly left side of screen)
+                const codePanel = document.querySelector('.bg-slate-100'); 
+                const rect = codePanel.getBoundingClientRect();
+                startX = rect.left + 50 + window.scrollX;
+                startY = rect.top + 100 + window.scrollY;
+            } else {
+                const startCoords = getCenter(startEl);
+                startX = startCoords.x;
+                startY = startCoords.y;
+            }
+
+            const endCoords = getCenter(endEl);
+
+            // Set token initial state
+            els.token.textContent = value;
+            
+            // GSAP Sequence
+            const tl = gsap.timeline();
+
+            tl.set(els.token, { 
+                x: startX - 20, // offset for centering (width/2)
+                y: startY - 20, 
+                opacity: 1, 
+                scale: 0.5 
+            })
+            .to(els.token, { 
+                scale: 1.2, 
+                duration: 0.2, 
+                ease: "back.out(1.7)" 
+            })
+            .to(els.token, { 
+                x: endCoords.x - 20, 
+                y: endCoords.y - 20, 
+                duration: 0.8, 
+                ease: "power2.inOut" 
+            })
+            .to(els.token, { 
+                scale: 0.5, 
+                opacity: 0, 
+                duration: 0.2,
+                onComplete: () => {
+                    // Reset token position (optional cleanliness)
+                    gsap.set(els.token, { x: 0, y: 0 });
+                    callback();
+                }
+            });
+        }
+
+
+        // --- 4. INSTRUCTION HANDLERS ---
+        function runInstruction(type) {
+            switch(type) {
+                case 'mov_imm':
+                    // MOV EAX, 5
+                    log(`<span class="text-brand-400">MOV EAX, 5</span>`);
+                    animateMove('immediate', els.eax, 5, () => {
+                        state.eax = 5;
+                        els.eax.textContent = state.eax;
+                        flashElement(els.eax);
+                        log("Register EAX is now 5");
+                    });
+                    break;
+
+                case 'mov_mem':
+                    // MOV EBX, [0x10]
+                    log(`<span class="text-brand-400">MOV EBX, [0x10]</span>`);
+                    animateMove(els.mem10, els.ebx, state.mem['10'], () => {
+                        state.ebx = state.mem['10'];
+                        els.ebx.textContent = state.ebx;
+                        flashElement(els.ebx);
+                        log(`Fetched value ${state.ebx} from Mem[0x10] to EBX`);
+                    });
+                    break;
+
+                case 'add':
+                    // ADD EAX, EBX
+                    log(`<span class="text-purple-400">ADD EAX, EBX</span>`);
+                    // Visually, we move EBX into EAX
+                    animateMove(els.ebx, els.eax, "+", () => {
+                        state.eax = state.eax + state.ebx;
+                        els.eax.textContent = state.eax;
+                        flashElement(els.eax, 'purple');
+                        log(`Result: ${state.eax} stored in EAX`);
+                    });
+                    break;
+
+                case 'sub':
+                    // SUB EAX, 1
+                    log(`<span class="text-red-400">SUB EAX, 1</span>`);
+                    state.eax = state.eax - 1;
+                    flashElement(els.eax, 'red');
+                    els.eax.textContent = state.eax;
+                    log(`Decremented EAX. New value: ${state.eax}`);
+                    break;
+            }
+        }
+
+        function flashElement(el, color = 'blue') {
+            const borderClass = color === 'red' ? 'border-red-500' : (color === 'purple' ? 'border-purple-500' : 'border-brand-500');
+            
+            // Add flash class
+            el.classList.add(borderClass);
+            el.classList.add('scale-110');
+            el.style.transition = "all 0.2s";
+            
+            setTimeout(() => {
+                el.classList.remove(borderClass);
+                el.classList.remove('scale-110');
+            }, 300);
+        }
+
+        // --- 5. LABEL TOGGLE (Analogy vs Tech) ---
+        function toggleLabels(mode) {
+            const analogyLabels = document.querySelectorAll('.label-analogy');
+            const techLabels = document.querySelectorAll('.label-tech');
+            const btnAnalogy = document.getElementById('btn-analogy');
+            const btnTech = document.getElementById('btn-tech');
+
+            if (mode === 'analogy') {
+                analogyLabels.forEach(el => el.classList.remove('hidden'));
+                techLabels.forEach(el => el.classList.add('hidden'));
+                
+                btnAnalogy.classList.replace('text-slate-500', 'bg-white');
+                btnAnalogy.classList.replace('dark:text-slate-400', 'dark:bg-slate-700');
+                btnAnalogy.classList.add('shadow-sm');
+                
+                btnTech.classList.remove('bg-white', 'dark:bg-slate-700', 'shadow-sm');
+                btnTech.classList.add('text-slate-500', 'dark:text-slate-400');
+            } else {
+                analogyLabels.forEach(el => el.classList.add('hidden'));
+                techLabels.forEach(el => el.classList.remove('hidden'));
+
+                btnTech.classList.replace('text-slate-500', 'bg-white');
+                btnTech.classList.replace('dark:text-slate-400', 'dark:bg-slate-700');
+                btnTech.classList.add('shadow-sm');
+
+                btnAnalogy.classList.remove('bg-white', 'dark:bg-slate-700', 'shadow-sm');
+                btnAnalogy.classList.add('text-slate-500', 'dark:text-slate-400');
+            }
+        }
+    </script>
+</body>
+</html>

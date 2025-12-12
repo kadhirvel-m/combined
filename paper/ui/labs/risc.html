@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RISC Architecture: The Deep Dive</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/Flip.min.js"></script>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: { 400: '#60A5FA', 500: '#3B82F6', 600: '#2563EB', 900: '#1E3A8A' },
+                        accent: { 400: '#34D399', 500: '#10B981', 900: '#064E3B' },
+                        danger: { 400: '#F87171', 500: '#EF4444' }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #020617; color: #f8fafc; overflow-x: hidden; }
+        
+        /* Glassmorphism */
+        .glass {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .glass-card:hover {
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(30, 41, 59, 0.8);
+            transform: translateY(-2px);
+        }
+
+        /* Pipeline Grid */
+        .pipeline-grid {
+            display: grid;
+            grid-template-columns: 80px repeat(5, 1fr);
+            gap: 8px;
+        }
+        .stage-box {
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            font-family: 'JetBrains Mono', monospace;
+            color: white;
+            opacity: 0.3;
+            transition: all 0.2s;
+            border: 1px dashed rgba(255,255,255,0.1);
+        }
+        .stage-active {
+            opacity: 1;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+            border: 1px solid rgba(255,255,255,0.2);
+            transform: scale(1.05);
+        }
+        
+        /* Stage Colors */
+        .bg-if { background-color: #3B82F6; } /* Fetch - Blue */
+        .bg-id { background-color: #8B5CF6; } /* Decode - Purple */
+        .bg-ex { background-color: #F59E0B; } /* Execute - Amber */
+        .bg-mem { background-color: #10B981; } /* Mem - Green */
+        .bg-wb { background-color: #EC4899; } /* Write - Pink */
+
+        /* Card Flip Logic */
+        .perspective-1000 { perspective: 1000px; }
+        .flip-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .flip-card.flipped .flip-inner { transform: rotateY(180deg); }
+        .flip-front, .flip-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 1rem;
+        }
+        .flip-back { transform: rotateY(180deg); background: #0f172a; }
+
+        .code-line {
+            counter-increment: line; 
+            padding-left: 1rem;
+            border-left: 2px solid transparent;
+        }
+        .code-line:hover { background: rgba(255,255,255,0.05); border-left-color: #3B82F6; }
+        .code-line::before {
+            content: counter(line);
+            color: #64748b;
+            font-size: 0.75rem;
+            margin-right: 1rem;
+            display: inline-block;
+            width: 1.5rem;
+            text-align: right;
+        }
+    </style>
+</head>
+<body class="selection:bg-brand-500 selection:text-white">
+
+    <header class="fixed top-0 w-full z-50 glass border-b-0 border-white/5">
+        <div class="max-w-6xl mx-auto px-6 h-16 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-brand-500 rounded flex items-center justify-center text-white font-bold font-mono">R</div>
+                <span class="font-bold text-lg tracking-tight text-white">RISC<span class="text-slate-500 font-light">Explainer</span></span>
+            </div>
+            <button onclick="document.getElementById('sim-section').scrollIntoView({behavior: 'smooth'})" class="px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-sm font-medium transition-colors border border-white/10">
+                Jump to Simulator
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-6 pt-32 pb-24">
+
+        <section class="text-center mb-24">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-900/30 border border-brand-500/30 text-brand-400 text-xs font-mono font-bold uppercase tracking-widest mb-6 animate-pulse-slow">
+                Computer Architecture 101
+            </div>
+            <h1 class="text-6xl md:text-8xl font-black tracking-tighter text-white mb-6">
+                RISC
+            </h1>
+            <p class="text-2xl md:text-3xl font-light text-slate-400 max-w-2xl mx-auto leading-relaxed mb-8">
+                Reduced Instruction Set Computer
+            </p>
+            <p class="text-lg text-slate-500 max-w-xl mx-auto">
+                The philosophy that changed computing forever: <span class="text-brand-400 font-semibold">Simplify the hardware</span> to <span class="text-accent-400 font-semibold">speed up the execution</span>.
+            </p>
+            
+            <div class="mt-12 flex justify-center">
+                <i data-lucide="arrow-down-circle" class="w-8 h-8 text-slate-600 animate-bounce"></i>
+            </div>
+        </section>
+
+        <section class="mb-32">
+            <h2 class="text-3xl font-bold mb-10 flex items-center gap-3">
+                <i data-lucide="columns" class="text-brand-500"></i> The RISC Philosophy
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                <div class="flip-card perspective-1000 h-64 cursor-pointer group" onclick="this.classList.toggle('flipped')">
+                    <div class="flip-inner shadow-2xl">
+                        <div class="flip-front glass-card rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+                            <div class="p-4 bg-brand-500/20 rounded-full text-brand-400 mb-4 group-hover:scale-110 transition-transform">
+                                <i data-lucide="timer" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="font-bold text-lg">Single Cycle Execution</h3>
+                            <p class="text-xs text-brand-400 mt-2 uppercase tracking-wider">Click to reveal</p>
+                        </div>
+                        <div class="flip-back glass-card rounded-2xl p-6 flex flex-col justify-center bg-slate-900 border-brand-500/50 border">
+                            <div class="text-2xl font-black text-brand-500 mb-1">CPI ≈ 1</div>
+                            <h3 class="font-bold text-white mb-2">Predictability</h3>
+                            <p class="text-sm text-slate-400 leading-snug">Ideally, every instruction takes exactly one clock cycle. No complex logic waiting for multi-cycle tasks.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flip-card perspective-1000 h-64 cursor-pointer group" onclick="this.classList.toggle('flipped')">
+                    <div class="flip-inner shadow-2xl">
+                        <div class="flip-front glass-card rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+                            <div class="p-4 bg-accent-500/20 rounded-full text-accent-400 mb-4 group-hover:scale-110 transition-transform">
+                                <i data-lucide="arrow-left-right" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="font-bold text-lg">Load / Store Architecture</h3>
+                            <p class="text-xs text-accent-400 mt-2 uppercase tracking-wider">Click to reveal</p>
+                        </div>
+                        <div class="flip-back glass-card rounded-2xl p-6 flex flex-col justify-center bg-slate-900 border-accent-500/50 border">
+                            <div class="text-lg font-black text-accent-500 mb-1">Separation of Concerns</div>
+                            <p class="text-sm text-slate-400 leading-snug">Only <code class="bg-slate-800 px-1 rounded text-white">LOAD</code> and <code class="bg-slate-800 px-1 rounded text-white">STORE</code> touch RAM. All math happens strictly in fast CPU registers.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flip-card perspective-1000 h-64 cursor-pointer group" onclick="this.classList.toggle('flipped')">
+                    <div class="flip-inner shadow-2xl">
+                        <div class="flip-front glass-card rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+                            <div class="p-4 bg-purple-500/20 rounded-full text-purple-400 mb-4 group-hover:scale-110 transition-transform">
+                                <i data-lucide="ruler" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="font-bold text-lg">Fixed Instruction Length</h3>
+                            <p class="text-xs text-purple-400 mt-2 uppercase tracking-wider">Click to reveal</p>
+                        </div>
+                        <div class="flip-back glass-card rounded-2xl p-6 flex flex-col justify-center bg-slate-900 border-purple-500/50 border">
+                            <div class="text-lg font-black text-purple-500 mb-1">Usually 32-bit</div>
+                            <p class="text-sm text-slate-400 leading-snug">Every instruction is the same size. The CPU doesn't need to check "how long is this command?" before reading it.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flip-card perspective-1000 h-64 cursor-pointer group" onclick="this.classList.toggle('flipped')">
+                    <div class="flip-inner shadow-2xl">
+                        <div class="flip-front glass-card rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+                            <div class="p-4 bg-pink-500/20 rounded-full text-pink-400 mb-4 group-hover:scale-110 transition-transform">
+                                <i data-lucide="layers" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="font-bold text-lg">Heavy Pipelining</h3>
+                            <p class="text-xs text-pink-400 mt-2 uppercase tracking-wider">Click to reveal</p>
+                        </div>
+                        <div class="flip-back glass-card rounded-2xl p-6 flex flex-col justify-center bg-slate-900 border-pink-500/50 border">
+                            <div class="text-lg font-black text-pink-500 mb-1">The Assembly Line</div>
+                            <p class="text-sm text-slate-400 leading-snug">Because instructions are simple, we can overlap them. While one is fetching, the previous one is executing.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section id="sim-section" class="mb-32">
+            <div class="flex flex-col md:flex-row justify-between items-end mb-6">
+                <div>
+                    <h2 class="text-3xl font-bold text-white flex items-center gap-3">
+                        <i data-lucide="cpu" class="text-accent-500"></i> The Pipeline Engine
+                    </h2>
+                    <p class="text-slate-400 mt-2 text-sm max-w-lg">
+                        Visualize how RISC processes instructions. Click "Clock Tick" to step through time. 
+                        Notice how <strong class="text-brand-400">Pipelining</strong> fills every stage at once.
+                    </p>
+                </div>
+                
+                <div class="flex items-center gap-4 mt-4 md:mt-0">
+                    <div class="glass px-4 py-2 rounded-lg flex items-center gap-3">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Mode:</span>
+                        <button onclick="togglePipelineMode()" id="modeBtn" class="text-xs font-bold px-3 py-1 rounded bg-brand-600 text-white shadow-lg transition-all">Pipelined</button>
+                    </div>
+                    <button onclick="resetSim()" class="p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 transition-colors" title="Reset">
+                        <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                    </button>
+                    <button onclick="stepClock()" class="px-6 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg font-bold shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all active:scale-95 flex items-center gap-2">
+                        <i data-lucide="play" class="w-4 h-4 fill-current"></i> Clock Tick
+                    </button>
+                </div>
+            </div>
+
+            <div class="glass rounded-xl overflow-hidden border border-slate-700">
+                <div class="bg-slate-900/50 border-b border-slate-700 p-4 flex justify-between items-center font-mono text-sm">
+                    <div class="flex gap-8">
+                        <div>
+                            <span class="text-slate-500">CLOCK CYCLE:</span>
+                            <span id="clock-display" class="text-white font-bold text-xl ml-2">0</span>
+                        </div>
+                        <div>
+                            <span class="text-slate-500">FINISHED:</span>
+                            <span id="finished-display" class="text-accent-400 font-bold text-xl ml-2">0</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="px-2 py-0.5 rounded bg-if text-[10px] text-white font-bold">IF</div>
+                        <div class="px-2 py-0.5 rounded bg-id text-[10px] text-white font-bold">ID</div>
+                        <div class="px-2 py-0.5 rounded bg-ex text-[10px] text-white font-bold">EX</div>
+                        <div class="px-2 py-0.5 rounded bg-mem text-[10px] text-white font-bold">MEM</div>
+                        <div class="px-2 py-0.5 rounded bg-wb text-[10px] text-white font-bold">WB</div>
+                    </div>
+                </div>
+
+                <div class="p-6 overflow-x-auto">
+                    <div class="min-w-[600px]">
+                        <div class="pipeline-grid mb-2 border-b border-slate-700 pb-2">
+                            <div class="text-xs font-mono text-slate-500 pt-3">INSTR</div>
+                            <div class="text-xs font-mono text-center text-slate-500">FETCH</div>
+                            <div class="text-xs font-mono text-center text-slate-500">DECODE</div>
+                            <div class="text-xs font-mono text-center text-slate-500">EXECUTE</div>
+                            <div class="text-xs font-mono text-center text-slate-500">MEMORY</div>
+                            <div class="text-xs font-mono text-center text-slate-500">WRITE</div>
+                        </div>
+
+                        <div id="instruction-rows" class="space-y-2">
+                            </div>
+                    </div>
+                </div>
+            </div>
+            
+            <p id="sim-explainer" class="text-center mt-4 text-xs text-slate-500 font-mono">
+                * In Pipelined mode, a new instruction starts every cycle. <br>
+                * In Non-Pipelined, an instruction must finish WB before the next starts.
+            </p>
+        </section>
+
+        <section class="mb-32">
+            <h2 class="text-3xl font-bold mb-10 flex items-center gap-3">
+                <i data-lucide="code-2" class="text-brand-500"></i> The Code Showdown
+            </h2>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                
+                <div class="glass rounded-xl overflow-hidden border-l-4 border-pink-500">
+                    <div class="bg-slate-900/80 p-4 border-b border-slate-700 flex justify-between items-center">
+                        <h3 class="font-bold text-pink-400">CISC (x86 Style)</h3>
+                        <span class="text-xs bg-pink-500/10 text-pink-400 px-2 py-1 rounded">Complex</span>
+                    </div>
+                    <div class="p-6 font-mono text-sm text-slate-300">
+                        <p class="mb-4 text-xs text-slate-500 font-sans">Task: Multiply value at Mem[A] by Mem[B]</p>
+                        <div class="bg-black/50 p-4 rounded-lg">
+                            <div class="code-line"><span class="text-pink-400">MULT</span> 2:3, 5:2</div>
+                        </div>
+                        <ul class="mt-6 space-y-3 text-sm">
+                            <li class="flex gap-2 text-slate-400"><i data-lucide="x-circle" class="w-5 h-5 text-red-500 shrink-0"></i> <span>Hardware must be incredibly complex to decode this.</span></li>
+                            <li class="flex gap-2 text-slate-400"><i data-lucide="x-circle" class="w-5 h-5 text-red-500 shrink-0"></i> <span>Takes variable cycles (hard to pipeline).</span></li>
+                            <li class="flex gap-2 text-slate-400"><i data-lucide="check-circle" class="w-5 h-5 text-green-500 shrink-0"></i> <span>Code size is tiny.</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="glass rounded-xl overflow-hidden border-l-4 border-brand-500">
+                    <div class="bg-slate-900/80 p-4 border-b border-slate-700 flex justify-between items-center">
+                        <h3 class="font-bold text-brand-400">RISC (MIPS/ARM Style)</h3>
+                        <span class="text-xs bg-brand-500/10 text-brand-400 px-2 py-1 rounded">Reduced</span>
+                    </div>
+                    <div class="p-6 font-mono text-sm text-slate-300">
+                        <p class="mb-4 text-xs text-slate-500 font-sans">Task: Multiply value at Mem[A] by Mem[B]</p>
+                        <div class="bg-black/50 p-4 rounded-lg">
+                            <div class="code-line"><span class="text-brand-400">LOAD</span> R1, 2:3</div>
+                            <div class="code-line"><span class="text-brand-400">LOAD</span> R2, 5:2</div>
+                            <div class="code-line"><span class="text-yellow-400">PROD</span> R3, R1, R2</div>
+                            <div class="code-line"><span class="text-accent-400">STORE</span> 2:3, R3</div>
+                        </div>
+                        <ul class="mt-6 space-y-3 text-sm">
+                            <li class="flex gap-2 text-slate-400"><i data-lucide="check-circle" class="w-5 h-5 text-green-500 shrink-0"></i> <span>Hardware is simple & fast.</span></li>
+                            <li class="flex gap-2 text-slate-400"><i data-lucide="check-circle" class="w-5 h-5 text-green-500 shrink-0"></i> <span>Easy to pipeline (1 cycle per line).</span></li>
+                            <li class="flex gap-2 text-slate-400"><i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-500 shrink-0"></i> <span>Compiler must work harder.</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section>
+            <h2 class="text-3xl font-bold mb-10 flex items-center gap-3">
+                <i data-lucide="history" class="text-brand-500"></i> Evolution
+            </h2>
+
+            <div class="relative border-l-2 border-slate-800 ml-4 space-y-12">
+                
+                <div class="relative pl-8">
+                    <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-700 border-4 border-slate-900"></div>
+                    <div class="glass p-6 rounded-xl hover:bg-slate-800/50 transition-colors">
+                        <span class="text-xs font-bold text-brand-500 mb-1 block">1975-1980</span>
+                        <h3 class="text-xl font-bold text-white mb-2">The IBM 801 Project</h3>
+                        <p class="text-slate-400 text-sm">John Cocke ("Father of RISC") realizes that 20% of instructions do 80% of the work. They build a prototype using only the simple 20%.</p>
+                    </div>
+                </div>
+
+                <div class="relative pl-8">
+                    <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-700 border-4 border-slate-900"></div>
+                    <div class="glass p-6 rounded-xl hover:bg-slate-800/50 transition-colors">
+                        <span class="text-xs font-bold text-brand-500 mb-1 block">1980-1984</span>
+                        <h3 class="text-xl font-bold text-white mb-2">Berkeley & Stanford</h3>
+                        <p class="text-slate-400 text-sm">Academic validation. David Patterson (Berkeley) coins "RISC". John Hennessy (Stanford) creates MIPS, focusing on efficient pipelining.</p>
+                    </div>
+                </div>
+
+                <div class="relative pl-8">
+                    <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-brand-500 border-4 border-slate-900 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
+                    <div class="glass p-6 rounded-xl border border-brand-500/30 bg-brand-900/10">
+                        <span class="text-xs font-bold text-brand-500 mb-1 block">1985-Present</span>
+                        <h3 class="text-xl font-bold text-white mb-2">The Rise of ARM</h3>
+                        <p class="text-slate-400 text-sm">Acorn RISC Machine (ARM) proves RISC is power-efficient. Today, it powers almost every smartphone on Earth.</p>
+                    </div>
+                </div>
+
+                <div class="relative pl-8">
+                    <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-accent-500 border-4 border-slate-900"></div>
+                    <div class="glass p-6 rounded-xl hover:bg-slate-800/50 transition-colors">
+                        <span class="text-xs font-bold text-accent-500 mb-1 block">Future</span>
+                        <h3 class="text-xl font-bold text-white mb-2">RISC-V: The Open Era</h3>
+                        <p class="text-slate-400 text-sm">An open-source RISC architecture. It allows anyone to design chips without royalties. It is revolutionizing IoT and custom silicon.</p>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900 py-12 text-center">
+        <p class="text-slate-500 text-sm">Designed for Clarity. RISC Architecture Deep Dive.</p>
+    </footer>
+
+    <script>
+        // Init Icons
+        lucide.createIcons();
+
+        // SIMULATION LOGIC
+        const TOTAL_STAGES = 5; // IF, ID, EX, MEM, WB
+        const INSTRUCTIONS_COUNT = 7; // How many rows to show
+        let clock = 0;
+        let isPipelined = true;
+        let finishedCount = 0;
+
+        // Render the grid initially
+        const container = document.getElementById('instruction-rows');
+
+        function initGrid() {
+            container.innerHTML = '';
+            for(let i=1; i<=INSTRUCTIONS_COUNT; i++) {
+                const row = document.createElement('div');
+                row.className = 'pipeline-grid items-center';
+                
+                // Label
+                const label = document.createElement('div');
+                label.className = 'text-xs font-mono font-bold text-slate-500';
+                label.innerText = `Inst ${i}`;
+                row.appendChild(label);
+
+                // 5 Stage slots
+                for(let s=0; s<TOTAL_STAGES; s++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'stage-box';
+                    slot.id = `inst-${i}-stage-${s}`; // e.g., inst-1-stage-0
+                    
+                    // Set label text
+                    const stageNames = ['IF', 'ID', 'EX', 'MEM', 'WB'];
+                    slot.innerText = stageNames[s];
+                    
+                    row.appendChild(slot);
+                }
+                container.appendChild(row);
+            }
+        }
+
+        function togglePipelineMode() {
+            isPipelined = !isPipelined;
+            const btn = document.getElementById('modeBtn');
+            const explainer = document.getElementById('sim-explainer');
+            
+            if(isPipelined) {
+                btn.innerText = "Pipelined";
+                btn.classList.remove('bg-slate-600');
+                btn.classList.add('bg-brand-600');
+            } else {
+                btn.innerText = "Non-Pipelined";
+                btn.classList.remove('bg-brand-600');
+                btn.classList.add('bg-slate-600');
+            }
+            resetSim();
+        }
+
+        function resetSim() {
+            clock = 0;
+            finishedCount = 0;
+            document.getElementById('clock-display').innerText = clock;
+            document.getElementById('finished-display').innerText = finishedCount;
+            initGrid();
+        }
+
+        function stepClock() {
+            clock++;
+            document.getElementById('clock-display').innerText = clock;
+            
+            // Clear current highlights (simple redraw approach for clarity)
+            document.querySelectorAll('.stage-active').forEach(el => {
+                el.classList.remove('stage-active', 'bg-if', 'bg-id', 'bg-ex', 'bg-mem', 'bg-wb', 'text-white');
+                el.style.opacity = '0.3';
+            });
+
+            // Calculate state for each instruction
+            for(let i=1; i<=INSTRUCTIONS_COUNT; i++) {
+                let stageIndex = -1;
+
+                if (isPipelined) {
+                    // Formula: Stage = Clock - InstructionNumber
+                    // Example: Clock 1, Inst 1 => Stage 0 (IF)
+                    // Example: Clock 2, Inst 1 => Stage 1 (ID), Inst 2 => Stage 0 (IF)
+                    stageIndex = (clock - 1) - (i - 1);
+                } else {
+                    // Non-Pipelined (Serial)
+                    // Inst 1 occupies clocks 1-5
+                    // Inst 2 occupies clocks 6-10
+                    const startClock = (i - 1) * 5 + 1;
+                    const endClock = startClock + 4;
+                    
+                    if (clock >= startClock && clock <= endClock) {
+                        stageIndex = clock - startClock;
+                    } else if (clock > endClock) {
+                        stageIndex = 5; // Finished
+                    }
+                }
+
+                // Render Active Stage
+                if (stageIndex >= 0 && stageIndex < 5) {
+                    const slot = document.getElementById(`inst-${i}-stage-${stageIndex}`);
+                    if(slot) {
+                        slot.classList.add('stage-active');
+                        slot.style.opacity = '1';
+                        // Add specific color class
+                        const colors = ['bg-if', 'bg-id', 'bg-ex', 'bg-mem', 'bg-wb'];
+                        slot.classList.add(colors[stageIndex]);
+                    }
+                }
+                
+                // Count finished
+                if (stageIndex >= 5) {
+                    // Mark last block as done or dim row
+                     document.getElementById(`inst-${i}-stage-4`).classList.add('text-green-500', 'border-green-500');
+                }
+            }
+
+            // Update finished counter
+            if(isPipelined) {
+                // Inst N finishes at Clock N + 4
+                finishedCount = Math.max(0, clock - 4);
+                if(finishedCount > INSTRUCTIONS_COUNT) finishedCount = INSTRUCTIONS_COUNT;
+            } else {
+                finishedCount = Math.floor((clock - 1) / 5);
+                if(finishedCount > INSTRUCTIONS_COUNT) finishedCount = INSTRUCTIONS_COUNT;
+            }
+            document.getElementById('finished-display').innerText = finishedCount;
+        }
+
+        // Boot
+        initGrid();
+
+    </script>
+</body>
+</html>
