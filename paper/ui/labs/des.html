@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Von Neumann Architecture: Interactive Simulator</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;800&display=swap"
+        rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            /* Slate 950 */
+            color: #e2e8f0;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            /* Slate 800/70 */
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* The Bus Lines */
+        .bus-container {
+            position: relative;
+            height: 100%;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .bus-line {
+            height: 8px;
+            background: #334155;
+            /* Slate 700 */
+            border-radius: 4px;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .bus-label {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #64748b;
+            font-weight: bold;
+        }
+
+        .bus-active-addr {
+            background: #38bdf8;
+            box-shadow: 0 0 15px #38bdf8;
+        }
+
+        /* Sky */
+        .bus-active-data {
+            background: #34d399;
+            box-shadow: 0 0 15px #34d399;
+        }
+
+        /* Emerald */
+        .bus-active-ctrl {
+            background: #f472b6;
+            box-shadow: 0 0 15px #f472b6;
+        }
+
+        /* Pink */
+
+        /* Register Boxes */
+        .register-box {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px 12px;
+            /* Slightly compacted */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .register-highlight {
+            border-color: #38bdf8;
+            background: rgba(56, 189, 248, 0.1);
+            transform: scale(1.02);
+        }
+
+        /* RAM Grid - COMPACTED */
+        .ram-cell {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            /* Smaller font */
+            padding: 4px 8px;
+            /* Reduced padding */
+            border-bottom: 1px solid #334155;
+            display: grid;
+            grid-template-columns: 30px 1fr 40px;
+            align-items: center;
+            transition: background 0.2s;
+            cursor: default;
+            height: 28px;
+            /* Fixed small height */
+        }
+
+        .ram-cell:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .ram-active {
+            background: rgba(56, 189, 248, 0.2) !important;
+            border-left: 3px solid #38bdf8;
+        }
+
+        .ram-target {
+            background: rgba(52, 211, 153, 0.2) !important;
+            /* Emerald */
+            border-left: 3px solid #34d399;
+        }
+
+        /* ALU Pulse */
+        @keyframes pulse-alu {
+            0% {
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+            }
+        }
+
+        .alu-active {
+            animation: pulse-alu 1s infinite;
+            border-color: #f59e0b !important;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-950 text-slate-200 min-h-screen pb-20">
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="lg:flex lg:items-center lg:justify-between mb-8">
+            <div class="min-w-0 flex-1">
+                <h2
+                    class="text-4xl font-bold leading-7 text-white sm:truncate sm:text-5xl sm:tracking-tight bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
+                    Von Neumann Architecture
+                </h2>
+                <p class="mt-2 text-lg text-slate-400 max-w-3xl">
+                    Proposed in 1945, the <strong>Von Neumann Model</strong> defined a computer architecture where
+                    <span class="text-sky-400 font-semibold">program instructions</span> and <span
+                        class="text-emerald-400 font-semibold">data</span>
+                    share the same memory and pathways. This unified storage concept simplified computer design and
+                    enabled the software revolution.
+                </p>
+                <div class="mt-4 flex gap-4 text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <span
+                        class="hover:text-sky-400 transition-colors cursor-help border-b border-dotted border-slate-700">Stored-Program
+                        Concept</span>
+                    <span
+                        class="hover:text-sky-400 transition-colors cursor-help border-b border-dotted border-slate-700">Sequential
+                        Execution</span>
+                    <span
+                        class="hover:text-sky-400 transition-colors cursor-help border-b border-dotted border-slate-700">Shared
+                        Bus</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative">
+
+            <div
+                class="bg-slate-800/50 p-4 border-b border-slate-700 flex flex-wrap gap-4 items-center justify-between">
+                <div>
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <i data-lucide="monitor-play" class="w-5 h-5 text-sky-400"></i>
+                        The Machine Simulator
+                    </h3>
+                    <p class="text-xs text-slate-400">Watch the Fetch-Decode-Execute cycle in action.</p>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 bg-slate-950 rounded-lg p-1 border border-slate-700">
+                        <span class="text-xs font-bold text-slate-500 px-2">PROGRAM:</span>
+                        <select id="prog-select"
+                            class="bg-transparent text-sm font-mono text-white focus:outline-none cursor-pointer">
+                            <option value="add">Add Two Numbers</option>
+                            <option value="double">Double a Number</option>
+                        </select>
+                    </div>
+
+                    <button id="btn-reset"
+                        class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-bold transition-all border border-slate-600 flex items-center gap-2">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reset
+                    </button>
+                    <button id="btn-step"
+                        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-indigo-900/50 flex items-center gap-2">
+                        <i data-lucide="step-forward" class="w-4 h-4"></i> Step
+                    </button>
+                    <button id="btn-run"
+                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-emerald-900/50 flex items-center gap-2">
+                        <i data-lucide="play" class="w-4 h-4"></i> Run
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-0 min-h-[460px]">
+                <div class="lg:col-span-3 bg-slate-900 border-r border-slate-800 p-3 flex flex-col">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <i data-lucide="grid-3x3" class="w-3 h-3"></i> Memory (RAM)
+                        </h4>
+                        <span class="text-[10px] text-slate-600">16 Words</span>
+                    </div>
+
+                    <div
+                        class="flex-1 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden relative flex flex-col">
+                        <div
+                            class="grid grid-cols-[30px_1fr_40px] gap-2 px-2 py-1 bg-slate-800 text-[9px] text-slate-500 font-bold border-b border-slate-700">
+                            <div>ADDR</div>
+                            <div>CONTENT</div>
+                            <div>CODE</div>
+                        </div>
+                        <div id="ram-container" class="flex-1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-3 bg-slate-900/50 p-6 flex flex-col justify-center relative">
+                    <div class="absolute top-4 left-6 text-xs text-slate-500 max-w-[150px] leading-tight">
+                        <strong class="text-rose-400">The Bottleneck:</strong> Instructions and data share these same
+                        buses, limiting speed.
+                    </div>
+
+                    <div class="bus-container">
+                        <div class="relative">
+                            <div class="bus-label">Address Bus</div>
+                            <div id="bus-addr" class="bus-line"></div>
+                        </div>
+
+                        <div class="relative">
+                            <div class="bus-label">Data Bus</div>
+                            <div id="bus-data" class="bus-line"></div>
+                        </div>
+
+                        <div class="relative">
+                            <div class="bus-label">Control Bus</div>
+                            <div id="bus-ctrl" class="bus-line"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-6 bg-slate-900 border-l border-slate-800 p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h4 class="text-lg font-bold text-white flex items-center gap-2">
+                            <i data-lucide="cpu" class="w-6 h-6 text-indigo-400"></i> Central Processing Unit (CPU)
+                        </h4>
+                        <span id="status-badge"
+                            class="px-2 py-1 rounded-full bg-slate-800 text-xs font-bold text-slate-400 border border-slate-700 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-slate-500"></span> HALTED
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-8">
+
+                        <div class="space-y-4">
+                            <h5 class="text-xs font-bold text-slate-500 uppercase">Registers</h5>
+
+                            <div id="reg-pc" class="register-box">
+                                <div>
+                                    <div class="text-[9px] text-slate-400 font-bold">PROGRAM COUNTER (PC)</div>
+                                    <div class="text-[9px] text-slate-500">Next instruction address</div>
+                                </div>
+                                <div class="font-mono text-xl text-sky-400 font-bold val">00</div>
+                            </div>
+
+                            <div id="reg-mar" class="register-box">
+                                <div>
+                                    <div class="text-[9px] text-slate-400 font-bold">MEMORY ADDR REG (MAR)</div>
+                                    <div class="text-[9px] text-slate-500">Address to fetch/store</div>
+                                </div>
+                                <div class="font-mono text-xl text-emerald-400 font-bold val">00</div>
+                            </div>
+
+                            <div id="reg-mdr" class="register-box">
+                                <div>
+                                    <div class="text-[9px] text-slate-400 font-bold">MEMORY DATA REG (MDR)</div>
+                                    <div class="text-[9px] text-slate-500">Data buffer from RAM</div>
+                                </div>
+                                <div class="font-mono text-xl text-purple-400 font-bold val">00</div>
+                            </div>
+
+                            <div id="reg-cir" class="register-box">
+                                <div>
+                                    <div class="text-[9px] text-slate-400 font-bold">CURRENT INSTR REG (CIR)</div>
+                                    <div class="text-[9px] text-slate-500">Instruction being executed</div>
+                                </div>
+                                <div class="font-mono text-lg text-pink-400 font-bold val">STOP</div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-4">
+                            <h5 class="text-xs font-bold text-slate-500 uppercase">Execution Unit</h5>
+
+                            <div id="reg-acc"
+                                class="bg-slate-800 border border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center h-32 relative overflow-hidden">
+                                <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent"></div>
+                                <div class="text-xs text-slate-400 font-bold mb-2 relative z-10">ACCUMULATOR (ACC)</div>
+                                <div class="font-mono text-4xl text-white font-bold val relative z-10">0</div>
+                                <div class="text-[10px] text-slate-500 mt-1 relative z-10">Working Data Storage</div>
+                            </div>
+
+                            <div id="unit-alu"
+                                class="flex-1 bg-slate-800 border-2 border-slate-700 border-dashed rounded-xl p-4 flex flex-col items-center justify-center relative transition-all">
+                                <i data-lucide="calculator" class="w-8 h-8 text-slate-600 mb-2"></i>
+                                <div class="text-sm font-bold text-slate-300">ALU</div>
+                                <div class="text-[10px] text-slate-500 text-center">Arithmetic Logic Unit</div>
+
+                                <div id="alu-op"
+                                    class="mt-2 text-xs font-mono text-amber-400 opacity-0 transition-opacity">ADDING...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-950 border-t border-slate-800 p-3 px-6 flex items-center gap-4">
+                <div class="w-3 h-3 rounded-full bg-sky-500 animate-pulse" id="cycle-led"></div>
+                <div class="text-sm font-mono text-sky-400" id="cycle-text">SYSTEM READY. Press STEP to begin.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+
+        <h3 class="text-2xl font-bold text-white mb-6 pl-4 border-l-4 border-sky-500">Inside the Architecture</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+            <div class="glass-panel p-6 rounded-xl hover:bg-slate-800/80 transition-colors">
+                <div class="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center mb-4">
+                    <i data-lucide="calculator" class="text-indigo-400"></i>
+                </div>
+                <h4 class="font-bold text-white mb-2">ALU</h4>
+                <p class="text-sm text-slate-400 leading-relaxed">
+                    The <strong>Arithmetic Logic Unit</strong> performs math (add, subtract) and logic (AND, OR). It is
+                    the "calculator" of the CPU.
+                </p>
+            </div>
+            <div class="glass-panel p-6 rounded-xl hover:bg-slate-800/80 transition-colors">
+                <div class="w-10 h-10 bg-pink-500/20 rounded-lg flex items-center justify-center mb-4">
+                    <i data-lucide="settings-2" class="text-pink-400"></i>
+                </div>
+                <h4 class="font-bold text-white mb-2">Control Unit</h4>
+                <p class="text-sm text-slate-400 leading-relaxed">
+                    The "conductor" of the orchestra. It decodes instructions and sends timing signals to other units to
+                    coordinate data movement.
+                </p>
+            </div>
+            <div class="glass-panel p-6 rounded-xl hover:bg-slate-800/80 transition-colors">
+                <div class="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center mb-4">
+                    <i data-lucide="grid" class="text-emerald-400"></i>
+                </div>
+                <h4 class="font-bold text-white mb-2">Memory Unit</h4>
+                <p class="text-sm text-slate-400 leading-relaxed">
+                    A linear sequence of addressable storage cells. In this model, it stores <strong>both</strong> the
+                    executable program code and variables (data).
+                </p>
+            </div>
+            <div class="glass-panel p-6 rounded-xl hover:bg-slate-800/80 transition-colors">
+                <div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center mb-4">
+                    <i data-lucide="save" class="text-amber-400"></i>
+                </div>
+                <h4 class="font-bold text-white mb-2">Registers</h4>
+                <p class="text-sm text-slate-400 leading-relaxed">
+                    Tiny, super-fast storage locations inside the CPU. They hold temporary values like the current
+                    instruction (CIR) or address (MAR).
+                </p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="glass-panel p-8 rounded-2xl relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-bl-full"></div>
+                <h3 class="text-xl font-bold text-white mb-4">Historical Context</h3>
+                <p class="text-slate-400 text-sm leading-7 mb-4">
+                    Before 1945, computers like ENIAC were "programmed" by physically rewiring cables and setting
+                    switches. This made changing tasks incredibly slow.
+                </p>
+                <p class="text-slate-400 text-sm leading-7">
+                    The concept of the <strong class="text-sky-300">Stored-Program Computer</strong>—where the
+                    instructions meant to control the computer are stored in its memory just like data—was a paradigm
+                    shift. John von Neumann formalized these ideas in his famous paper: <em>"First Draft of a Report on
+                        the EDVAC"</em> (1945).
+                </p>
+            </div>
+
+            <div
+                class="bg-gradient-to-br from-indigo-900 to-slate-900 p-8 rounded-2xl border border-indigo-500/30 flex items-center">
+                <div>
+                    <h4 class="text-indigo-300 font-bold uppercase text-xs tracking-wider mb-2">Did You Know?</h4>
+                    <h3 class="text-xl font-bold text-white mb-4">The Bottleneck Exists Today</h3>
+                    <p class="text-indigo-200/80 text-sm leading-6">
+                        Modern computers still use this architecture, but they mitigate the "Von Neumann Bottleneck"
+                        (bus speed limit) using <strong>Caches (L1, L2, L3)</strong>. These are small, ultra-fast memory
+                        banks right next to the CPU that store frequently used data so the CPU doesn't have to wait for
+                        the main RAM.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        // Opcode Dictionary
+        const OPCODES = {
+            LOAD: { code: 1, text: "LOAD" },
+            ADD: { code: 2, text: "ADD" },
+            STORE: { code: 3, text: "STORE" },
+            SUB: { code: 4, text: "SUB" },
+            HALT: { code: 0, text: "HALT" }
+        };
+
+        // Programs
+        const PROGRAMS = {
+            add: [
+                { addr: 0, val: 114 }, // LOAD 14 (100 + 14) -> Using simplified decimal encoding: 1xx = LOAD, 2xx = ADD etc.
+                { addr: 1, val: 215 }, // ADD 15
+                { addr: 2, val: 313 }, // STORE 13
+                { addr: 3, val: 0 },   // HALT
+                { addr: 13, val: 0 },  // Result Slot
+                { addr: 14, val: 5 },  // Data A
+                { addr: 15, val: 8 }   // Data B
+            ],
+            double: [
+                { addr: 0, val: 114 }, // LOAD 14
+                { addr: 1, val: 214 }, // ADD 14 (Double it)
+                { addr: 2, val: 313 }, // STORE 13
+                { addr: 3, val: 0 },   // HALT
+                { addr: 13, val: 0 },
+                { addr: 14, val: 12 },
+                { addr: 15, val: 0 }
+            ]
+        };
+
+        // --- STATE ---
+        let state = {
+            memory: new Array(16).fill(0),
+            pc: 0,
+            mar: 0,
+            mdr: 0,
+            cir: 0,
+            acc: 0,
+            stage: 'START', // START, FETCH_1, FETCH_2, DECODE, EXECUTE_1, EXECUTE_2
+            isRunning: false,
+            programName: 'add'
+        };
+
+        // --- DOM ELEMENTS ---
+        const els = {
+            ram: document.getElementById('ram-container'),
+            pc: document.querySelector('#reg-pc .val'),
+            mar: document.querySelector('#reg-mar .val'),
+            mdr: document.querySelector('#reg-mdr .val'),
+            cir: document.querySelector('#reg-cir .val'),
+            acc: document.querySelector('#reg-acc .val'),
+            cycleText: document.getElementById('cycle-text'),
+            cycleLed: document.getElementById('cycle-led'),
+            statusBadge: document.getElementById('status-badge'),
+            buses: {
+                addr: document.getElementById('bus-addr'),
+                data: document.getElementById('bus-data'),
+                ctrl: document.getElementById('bus-ctrl')
+            }
+        };
+
+        // --- HELPERS ---
+        const fmt = (n) => n.toString().padStart(2, '0');
+
+        // --- RENDERING ---
+        function renderRAM() {
+            els.ram.innerHTML = '';
+            state.memory.forEach((val, i) => {
+                // Decode for display
+                let label = val;
+                let opCode = Math.floor(val / 100);
+                let operand = val % 100;
+                let textCode = "";
+
+                if (i < 10 && val > 0) { // Naive heuristic for instruction vs data
+                    const op = Object.values(OPCODES).find(o => o.code === opCode);
+                    if (op) textCode = `${op.text} <span class="text-sky-300">${operand}</span>`;
+                    else textCode = val;
+                } else if (val === 0 && i < 4) {
+                    textCode = "HALT";
+                } else {
+                    textCode = val;
+                }
+
+                const div = document.createElement('div');
+                div.className = `ram-cell ${i === state.pc ? 'bg-slate-800' : ''}`;
+                div.id = `ram-${i}`;
+                div.innerHTML = `
+                    <div class="text-slate-500">${fmt(i)}</div>
+                    <div class="font-bold text-emerald-400">${val}</div>
+                    <div class="text-[9px] text-slate-400 font-mono">${textCode}</div>
+                `;
+                els.ram.appendChild(div);
+            });
+        }
+
+        function updateUI() {
+            els.pc.innerText = fmt(state.pc);
+            els.mar.innerText = fmt(state.mar);
+            els.mdr.innerText = state.mdr;
+
+            // Format CIR
+            let op = Math.floor(state.cir / 100);
+            let opObj = Object.values(OPCODES).find(o => o.code === op);
+            els.cir.innerText = opObj ? opObj.text : (state.cir === 0 ? "HALT" : state.cir);
+
+            els.acc.innerText = state.acc;
+
+            // Highlight active RAM
+            document.querySelectorAll('.ram-cell').forEach(c => {
+                c.classList.remove('ram-active', 'ram-target');
+            });
+        }
+
+        function setStatus(msg, type = 'neutral') {
+            els.cycleText.innerText = msg;
+            els.cycleLed.className = `w-3 h-3 rounded-full animate-pulse ${type === 'active' ? 'bg-emerald-500' : 'bg-sky-500'}`;
+        }
+
+        function highlightReg(id, on) {
+            const el = document.getElementById(id);
+            if (on) el.classList.add('register-highlight');
+            else el.classList.remove('register-highlight');
+        }
+
+        function flashBus(type) {
+            const el = els.buses[type];
+            const cls = `bus-active-${type}`;
+            el.classList.add(cls);
+            setTimeout(() => el.classList.remove(cls), 600);
+        }
+
+        // --- SIMULATION LOGIC ---
+        function loadProgram(name) {
+            state.programName = name;
+            state.memory.fill(0);
+            PROGRAMS[name].forEach(p => state.memory[p.addr] = p.val);
+            state.pc = 0;
+            state.acc = 0;
+            state.mar = 0;
+            state.mdr = 0;
+            state.cir = 0;
+            state.stage = 'START';
+            state.isRunning = false;
+
+            updateUI();
+            renderRAM();
+            setStatus("Program Loaded. Ready.");
+
+            // Update UI Badge
+            els.statusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-500"></span> HALTED`;
+        }
+
+        async function step() {
+            if (state.stage === 'HALTED') return;
+
+            // 1. FETCH STAGE 1: PC -> MAR
+            if (state.stage === 'START' || state.stage === 'FETCH_1') {
+                setStatus("FETCH: Copying Program Counter (PC) to Memory Address Register (MAR)...");
+                highlightReg('reg-pc', true);
+                highlightReg('reg-mar', true);
+                flashBus('addr');
+
+                await wait(800);
+                state.mar = state.pc;
+                updateUI();
+                highlightReg('reg-pc', false);
+                highlightReg('reg-mar', false);
+                state.stage = 'FETCH_2';
+
+                // 2. FETCH STAGE 2: Memory -> MDR -> CIR
+            } else if (state.stage === 'FETCH_2') {
+                setStatus(`FETCH: Getting content from Address ${state.mar} into MDR...`);
+
+                const ramEl = document.getElementById(`ram-${state.mar}`);
+                ramEl.classList.add('ram-active');
+
+                await wait(500);
+                flashBus('data');
+                state.mdr = state.memory[state.mar];
+                updateUI();
+                highlightReg('reg-mdr', true);
+
+                await wait(500);
+                setStatus("FETCH: Moving data from MDR to Current Instruction Register (CIR)...");
+                state.cir = state.mdr;
+                state.pc++; // Increment PC
+                updateUI();
+                highlightReg('reg-mdr', false);
+                highlightReg('reg-cir', true);
+
+                await wait(500);
+                highlightReg('reg-cir', false);
+                state.stage = 'DECODE';
+
+                // 3. DECODE
+            } else if (state.stage === 'DECODE') {
+                const op = Math.floor(state.cir / 100);
+                const operand = state.cir % 100;
+                const opObj = Object.values(OPCODES).find(o => o.code === op);
+
+                if (state.cir === 0) {
+                    setStatus("DECODE: HALT command recognized.");
+                    state.stage = 'HALTED';
+                    state.isRunning = false;
+                    els.statusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> END`;
+                } else {
+                    setStatus(`DECODE: Operation is ${opObj.text}, Operand Address is ${operand}.`);
+                    state.stage = 'EXECUTE_1';
+                }
+
+                // 4. EXECUTE
+            } else if (state.stage === 'EXECUTE_1') {
+                const op = Math.floor(state.cir / 100);
+                const operand = state.cir % 100;
+
+                if (op === OPCODES.LOAD.code) {
+                    setStatus(`EXECUTE: Loading data from Address ${operand} into Accumulator.`);
+                    flashBus('addr');
+                    document.getElementById(`ram-${operand}`).classList.add('ram-target');
+                    await wait(600);
+                    flashBus('data');
+                    state.acc = state.memory[operand];
+
+                } else if (op === OPCODES.ADD.code) {
+                    setStatus(`EXECUTE: ALU Adding value at Address ${operand} to Accumulator.`);
+                    document.getElementById(`ram-${operand}`).classList.add('ram-target');
+                    document.getElementById('unit-alu').classList.add('alu-active');
+                    document.getElementById('alu-op').style.opacity = 1;
+                    await wait(800);
+                    state.acc += state.memory[operand];
+                    document.getElementById('unit-alu').classList.remove('alu-active');
+                    document.getElementById('alu-op').style.opacity = 0;
+
+                } else if (op === OPCODES.STORE.code) {
+                    setStatus(`EXECUTE: Storing Accumulator (${state.acc}) into Address ${operand}.`);
+                    flashBus('data');
+                    state.memory[operand] = state.acc;
+                    document.getElementById(`ram-${operand}`).classList.add('ram-active');
+                }
+
+                updateUI();
+                renderRAM(); // Re-render to show STORE changes
+                state.stage = 'START'; // Loop back
+            }
+        }
+
+        async function runLoop() {
+            if (!state.isRunning || state.stage === 'HALTED') {
+                state.isRunning = false;
+                document.getElementById('btn-run').innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Run`;
+                return;
+            }
+            await step();
+            setTimeout(runLoop, 1000); // Speed of simulation
+        }
+
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // --- EVENT LISTENERS ---
+        document.getElementById('btn-step').addEventListener('click', () => {
+            state.isRunning = false;
+            step();
+        });
+
+        document.getElementById('btn-run').addEventListener('click', () => {
+            if (state.isRunning) {
+                state.isRunning = false; // Pause
+                els.statusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-yellow-500"></span> PAUSED`;
+                document.getElementById('btn-run').innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Run`;
+            } else {
+                state.isRunning = true;
+                els.statusBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> RUNNING`;
+                document.getElementById('btn-run').innerHTML = `<i data-lucide="pause" class="w-4 h-4"></i> Pause`;
+                runLoop();
+            }
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            loadProgram(document.getElementById('prog-select').value);
+        });
+
+        document.getElementById('prog-select').addEventListener('change', (e) => {
+            loadProgram(e.target.value);
+        });
+
+        // Initialize
+        loadProgram('add');
+        lucide.createIcons();
+
+    </script>
+</body>
+
+</html>

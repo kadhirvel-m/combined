@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper X · Von Neumann Simulator</title>
+    <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap"
+        rel="stylesheet" />
+
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+
+    <script>
+        (() => {
+            try {
+                const stored = localStorage.getItem('cx-theme') || localStorage.getItem('theme') || localStorage.getItem('px-theme');
+                const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const wantDark = stored ? stored === 'dark' : prefersDark;
+                if (wantDark) document.documentElement.classList.add('dark');
+            } catch (err) {
+                console.warn('Theme boot failed', err);
+            }
+        })();
+    </script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1.5rem' },
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
+                    },
+                    colors: {
+                        brand: {
+                            900: '#1E1E2F',
+                            700: '#4C2A59',
+                            500: '#9E4B8A',
+                            300: '#FF7FD1',
+                            200: '#FFE1F6'
+                        },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 16px 45px rgba(158,75,138,0.28)'
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        :root {
+            color-scheme: light;
+            --brand-deep: #1E1E2F;
+            --brand-plum: #4C2A59;
+            --brand-magenta: #9E4B8A;
+            --brand-rose: #FF7FD1;
+            --panel-bg: rgba(255, 255, 255, 0.85);
+            --panel-border: rgba(30, 30, 47, 0.1);
+            --panel-shadow: 0 24px 65px rgba(30, 30, 47, 0.18);
+            --ram-border: rgba(76, 42, 89, 0.12);
+            --ram-current: rgba(158, 75, 138, 0.12);
+            --ram-active: rgba(255, 127, 209, 0.15);
+            --ram-target: rgba(78, 205, 196, 0.2);
+            --ram-addr: rgba(30, 30, 47, 0.55);
+            --ram-value: #4C2A59;
+            --ram-code: rgba(30, 30, 47, 0.6);
+            --ram-op: #9E4B8A;
+            --bus-base: rgba(76, 42, 89, 0.18);
+            --addr-bus: #FF7FD1;
+            --data-bus: #7C4DFF;
+            --ctrl-bus: #64E0B5;
+            --status-muted: rgba(76, 42, 89, 0.35);
+            --status-border: rgba(76, 42, 89, 0.18);
+            --status-bg: rgba(255, 255, 255, 0.55);
+            --status-text: #4C2A59;
+            --status-run: #64E0B5;
+            --status-pause: #F6C85F;
+            --status-end: #FF7FD1;
+            --cycle-active-shadow: rgba(100, 224, 181, 0.55);
+        }
+
+        html.dark {
+            color-scheme: dark;
+            --panel-bg: rgba(30, 22, 47, 0.88);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --panel-shadow: 0 30px 70px rgba(0, 0, 0, 0.65);
+            --ram-border: rgba(255, 255, 255, 0.08);
+            --ram-current: rgba(158, 75, 138, 0.28);
+            --ram-active: rgba(255, 127, 209, 0.27);
+            --ram-target: rgba(100, 224, 181, 0.23);
+            --ram-addr: rgba(240, 232, 255, 0.48);
+            --ram-value: rgba(255, 255, 255, 0.92);
+            --ram-code: rgba(240, 232, 255, 0.65);
+            --ram-op: #FF9ADA;
+            --bus-base: rgba(255, 255, 255, 0.14);
+            --status-muted: rgba(255, 255, 255, 0.45);
+            --status-border: rgba(255, 255, 255, 0.12);
+            --status-bg: rgba(30, 22, 47, 0.72);
+            --status-text: rgba(255, 255, 255, 0.88);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            position: relative;
+            min-height: 100vh;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            box-shadow: var(--panel-shadow);
+        }
+
+        .register-box {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 0.75rem;
+            padding: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .register-highlight {
+            border-color: var(--brand-magenta);
+            box-shadow: 0 0 0 1px rgba(158, 75, 138, 0.35);
+            background: linear-gradient(135deg, rgba(158, 75, 138, 0.18), transparent);
+            transform: translateY(-2px);
+        }
+
+        .bus-line {
+            height: 8px;
+            border-radius: 9999px;
+            position: relative;
+            background: var(--bus-base);
+            transition: all 0.35s ease;
+        }
+
+        .bus-label {
+            position: absolute;
+            top: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.625rem;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(76, 42, 89, 0.55);
+            font-weight: 700;
+        }
+
+        html.dark .bus-label {
+            color: rgba(240, 232, 255, 0.5);
+        }
+
+        .bus-active-addr {
+            background: var(--addr-bus);
+            box-shadow: 0 0 24px rgba(255, 127, 209, 0.38);
+        }
+
+        .bus-active-data {
+            background: var(--data-bus);
+            box-shadow: 0 0 24px rgba(124, 77, 255, 0.38);
+        }
+
+        .bus-active-ctrl {
+            background: var(--ctrl-bus);
+            box-shadow: 0 0 24px rgba(100, 224, 181, 0.45);
+        }
+
+        .ram-shell {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 1rem;
+            display: flex;
+            flex-direction: column;
+            height: clamp(480px, 54vh, 560px);
+            min-height: 480px;
+        }
+
+        .ram-shell>.grid {
+            flex: 0 0 auto;
+        }
+
+        .ram-grid {
+            display: grid;
+            flex: 1;
+            grid-template-rows: repeat(16, minmax(0, 1fr));
+            height: 100%;
+            overflow: hidden;
+        }
+
+        @media (max-width: 640px) {
+            .ram-shell {
+                height: auto;
+                min-height: 0;
+            }
+
+            .ram-grid {
+                grid-template-rows: repeat(16, minmax(36px, auto));
+            }
+        }
+
+        .ram-cell {
+            display: grid;
+            grid-template-columns: 56px 1fr 80px;
+            align-items: center;
+            padding: 0.35rem 0.75rem;
+            border-bottom: 1px solid var(--ram-border);
+            transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .ram-cell:last-child {
+            border-bottom: none;
+        }
+
+        .ram-cell:hover {
+            transform: translateX(2px);
+            background: rgba(158, 75, 138, 0.08);
+        }
+
+        html.dark .ram-cell:hover {
+            background: rgba(158, 75, 138, 0.18);
+        }
+
+        .ram-current {
+            background: var(--ram-current);
+            border-left: 3px solid var(--brand-magenta);
+        }
+
+        .ram-active {
+            background: var(--ram-active) !important;
+            border-left: 3px solid var(--addr-bus);
+        }
+
+        .ram-target {
+            background: var(--ram-target) !important;
+            border-left: 3px solid var(--ctrl-bus);
+        }
+
+        .ram-addr {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-weight: 700;
+            color: var(--ram-addr);
+        }
+
+        .ram-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--ram-value);
+        }
+
+        .ram-code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            text-align: right;
+            color: var(--ram-code);
+        }
+
+        .ram-code .ram-op {
+            color: var(--ram-op);
+            font-weight: 600;
+        }
+
+        @keyframes pulse-alu {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 127, 209, 0.6);
+            }
+
+            65% {
+                box-shadow: 0 0 0 18px rgba(255, 127, 209, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 127, 209, 0);
+            }
+        }
+
+        #unit-alu.alu-active {
+            animation: pulse-alu 1.3s infinite;
+            border-color: rgba(255, 127, 209, 0.45) !important;
+        }
+
+        #alu-op {
+            color: var(--brand-rose);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.35rem 0.8rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            border: 1px solid var(--status-border);
+            background: var(--status-bg);
+            color: var(--status-text);
+            transition: all 0.3s ease;
+        }
+
+        .status-dot {
+            width: 0.55rem;
+            height: 0.55rem;
+            border-radius: 9999px;
+            background: var(--status-muted);
+            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+            transition: all 0.3s ease;
+        }
+
+        .status-pill[data-state="running"] .status-dot {
+            background: var(--status-run);
+            box-shadow: 0 0 14px var(--cycle-active-shadow);
+        }
+
+        .status-pill[data-state="paused"] .status-dot {
+            background: var(--status-pause);
+            box-shadow: 0 0 10px rgba(246, 200, 95, 0.45);
+        }
+
+        .status-pill[data-state="halted"] .status-dot {
+            background: var(--status-muted);
+        }
+
+        .status-pill[data-state="end"] .status-dot {
+            background: var(--status-end);
+            box-shadow: 0 0 12px rgba(255, 127, 209, 0.4);
+        }
+
+        #cycle-led {
+            width: 0.75rem;
+            height: 0.75rem;
+            border-radius: 9999px;
+            background: var(--status-muted);
+            transition: all 0.35s ease;
+        }
+
+        #cycle-led.cycle-led-active {
+            background: var(--status-run);
+            box-shadow: 0 0 16px var(--cycle-active-shadow);
+            animation: cyclePulse 1.2s ease-in-out infinite alternate;
+        }
+
+        @keyframes cyclePulse {
+            from {
+                transform: scale(1);
+            }
+
+            to {
+                transform: scale(1.12);
+            }
+        }
+
+        .hero-glow {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.6;
+            background:
+                radial-gradient(1200px 500px at 20% 0%, rgba(158, 75, 138, 0.25), transparent 70%),
+                radial-gradient(900px 400px at 80% 10%, rgba(76, 42, 89, 0.22), transparent 65%);
+        }
+
+        html.dark .hero-glow {
+            opacity: 0.75;
+            background:
+                radial-gradient(1200px 500px at 20% 0%, rgba(158, 75, 138, 0.35), transparent 70%),
+                radial-gradient(900px 400px at 80% 10%, rgba(30, 22, 47, 0.55), transparent 65%);
+        }
+
+        .machine-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.75rem;
+        }
+
+        .machine-col {
+            border: none !important;
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-radius: 0;
+            min-height: 100%;
+        }
+
+        @media (max-width: 1023px) {
+            .machine-col {
+                border-radius: 1rem;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .machine-grid {
+                gap: 0;
+                grid-template-columns: 280px 260px minmax(0, 1fr);
+            }
+
+            .machine-col-ram {
+                border-right: 1px solid var(--panel-border) !important;
+            }
+
+            .machine-col-bus {
+                border-left: 1px solid var(--panel-border) !important;
+                border-right: 1px solid var(--panel-border) !important;
+            }
+
+            .machine-col-cpu {
+                border-left: 1px solid var(--panel-border) !important;
+            }
+
+            html.dark .machine-col-ram,
+            html.dark .machine-col-bus,
+            html.dark .machine-col-cpu {
+                border-color: var(--panel-border) !important;
+            }
+        }
+    </style>
+</head>
+
+<body
+    class="min-h-screen flex flex-col bg-gradient-to-br from-brandlt-50 via-white to-brandlt-200 dark:from-[#160F26] dark:via-[#1E1E2F] dark:to-[#0B0714] text-brand-900 dark:text-white">
+    <div class="hero-glow"></div>
+
+    <header
+        class="sticky top-0 z-40 border-b border-black/5 dark:border-white/10 bg-white/80 dark:bg-[#1E1E2F]/70 backdrop-blur-xl">
+        <div class="container mx-auto flex items-center justify-between gap-4 px-6 py-4">
+            <a href="../index.html" class="flex items-center gap-3" aria-label="Paper X home">
+                <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-9 w-auto dark:hidden" />
+                <img src="../assets/img/logo-dark.svg" alt="Paper X" class="hidden h-9 w-auto dark:block" />
+            </a>
+            <nav class="hidden lg:flex items-center gap-2 text-sm font-medium text-brand-900/70 dark:text-white/80">
+                <a href="../index.html#labs"
+                    class="inline-flex items-center rounded-full px-3 py-2 transition hover:bg-brandlt-200/60 dark:hover:bg-white/10">Overview</a>
+                <a href="../projects/postings.html"
+                    class="inline-flex items-center rounded-full px-3 py-2 transition hover:bg-brandlt-200/60 dark:hover:bg-white/10">Projects</a>
+                <a href="../labs/labs.html"
+                    class="inline-flex items-center rounded-full px-3 py-2 transition hover:bg-brandlt-200/60 dark:hover:bg-white/10">Labs
+                    Home</a>
+                <a href="../contact.html"
+                    class="inline-flex items-center rounded-full px-3 py-2 transition hover:bg-brandlt-200/60 dark:hover:bg-white/10">Contact</a>
+            </nav>
+            <div class="flex items-center gap-3">
+                <button id="theme-toggle" type="button"
+                    class="inline-flex items-center gap-2 rounded-full border border-brandlt-300/80 bg-white/70 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-brand-900 transition hover:border-brand-500 hover:text-brand-700 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:border-white/30 dark:hover:text-white">
+                    <span id="theme-icon-sun" aria-hidden="true">☀️</span>
+                    <span id="theme-icon-moon" aria-hidden="true" class="hidden">🌙</span>
+                    <span id="theme-label">Dark Mode</span>
+                </button>
+                <a href="../signup.html"
+                    class="hidden sm:inline-flex items-center gap-2 rounded-full bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-500/90">Get
+                    Access</a>
+                <button id="nav-toggle" type="button"
+                    class="inline-flex items-center justify-center rounded-full border border-brandlt-300/80 bg-white/70 p-2.5 text-brand-900 transition hover:border-brand-500 hover:text-brand-700 dark:border-white/10 dark:bg-white/5 dark:text-white/85 dark:hover:border-white/30 dark:hover:text-white lg:hidden"
+                    aria-expanded="false" aria-controls="nav-mobile">
+                    <span class="sr-only">Toggle navigation</span>
+                    <svg id="nav-icon-open" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                    <svg id="nav-icon-close" xmlns="http://www.w3.org/2000/svg" class="hidden h-5 w-5" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <nav id="nav-mobile"
+            class="hidden border-t border-black/10 bg-white/90 dark:border-white/10 dark:bg-[#1E1E2F]/90 lg:hidden">
+            <div
+                class="container mx-auto flex flex-col gap-1 px-6 py-4 text-sm font-semibold text-brand-900/80 dark:text-white/80">
+                <a href="../index.html#labs"
+                    class="rounded-xl px-3 py-2 hover:bg-brandlt-200/60 dark:hover:bg-white/10">Overview</a>
+                <a href="../projects/postings.html"
+                    class="rounded-xl px-3 py-2 hover:bg-brandlt-200/60 dark:hover:bg-white/10">Projects</a>
+                <a href="../labs/labs.html"
+                    class="rounded-xl px-3 py-2 hover:bg-brandlt-200/60 dark:hover:bg-white/10">Labs Home</a>
+                <a href="../contact.html"
+                    class="rounded-xl px-3 py-2 hover:bg-brandlt-200/60 dark:hover:bg-white/10">Contact</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="flex-1 pb-24">
+        <section class="container mx-auto px-6 pt-12">
+            <div class="mb-12 max-w-3xl">
+                <span
+                    class="inline-flex items-center gap-2 rounded-full bg-brandlt-200/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-brand-700 dark:bg-white/10 dark:text-white/70">Von
+                    Neumann Lab</span>
+                <h1 class="mt-5 text-4xl font-bold tracking-tight text-brand-900 dark:text-white sm:text-5xl">
+                    Stored-Program Model, rendered the Paper X way
+                </h1>
+                <p class="mt-4 text-base leading-relaxed text-brand-900/70 dark:text-white/70">
+                    Explore the fetch–decode–execute cycle with a simulator styled for our Paper X design language.
+                    Watch registers, buses, and memory update in real time as you step through curated micro programs.
+                </p>
+            </div>
+
+            <div
+                class="rounded-3xl border border-brandlt-200/80 bg-white/80 shadow-[0_30px_80px_-40px_rgba(30,30,47,0.6)] backdrop-blur-xl dark:border-white/10 dark:bg-[#1B1528]/80">
+                <div
+                    class="flex flex-wrap items-center justify-between gap-4 border-b border-brandlt-200/80 bg-white/70 px-6 py-4 dark:border-white/10 dark:bg-white/5">
+                    <div>
+                        <h2 class="flex items-center gap-2 text-lg font-semibold text-brand-900 dark:text-white">
+                            <i data-lucide="monitor-play" class="h-5 w-5 text-brand-500"></i>
+                            Von Neumann Machine
+                        </h2>
+                        <p class="text-xs font-medium uppercase tracking-[0.25em] text-brand-900/50 dark:text-white/40">
+                            Follow each microcycle with narration.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <div
+                            class="flex items-center gap-2 rounded-full border border-brandlt-300/80 bg-white/70 px-3 py-1 dark:border-white/10 dark:bg-white/5">
+                            <span
+                                class="text-[10px] font-semibold uppercase tracking-[0.35em] text-brand-900/60 dark:text-white/50">Program</span>
+                            <select id="prog-select"
+                                class="bg-transparent text-sm font-mono font-semibold text-brand-900 focus:outline-none dark:text-white">
+                                <option value="add">Add Two Numbers</option>
+                                <option value="double">Double a Number</option>
+                            </select>
+                        </div>
+                        <button id="btn-reset"
+                            class="inline-flex items-center gap-2 rounded-full border border-brandlt-300/80 bg-white/70 px-4 py-2 text-sm font-semibold text-brand-700 transition hover:border-brand-500 hover:text-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:border-white/40 dark:hover:text-white">
+                            <i data-lucide="rotate-ccw" class="h-4 w-4"></i>
+                            Reset
+                        </button>
+                        <button id="btn-step"
+                            class="inline-flex items-center gap-2 rounded-full bg-brandlt-400/90 px-4 py-2 text-sm font-semibold text-brand-900 shadow-glow transition hover:bg-brandlt-400">
+                            <i data-lucide="step-forward" class="h-4 w-4"></i>
+                            Step
+                        </button>
+                        <button id="btn-run"
+                            class="inline-flex items-center gap-2 rounded-full bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-500/90">
+                            <i data-lucide="play" class="h-4 w-4"></i>
+                            Run
+                        </button>
+                    </div>
+                </div>
+
+                <div class="machine-grid">
+                    <div class="machine-col machine-col-ram px-5 py-6">
+                        <div class="mb-4 flex items-center justify-between">
+                            <h3
+                                class="text-xs font-semibold uppercase tracking-[0.22em] text-brand-900/60 dark:text-white/50">
+                                Memory (RAM)</h3>
+                            <span
+                                class="rounded-full bg-brandlt-200/70 px-2 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-white/10 dark:text-white/60">16
+                                words</span>
+                        </div>
+                        <div class="ram-shell">
+                            <div
+                                class="flex items-center gap-2 border-b border-brandlt-200/80 bg-white/85 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                                <div
+                                    class="w-[52px] text-[10px] font-semibold uppercase tracking-[0.3em] text-brand-900/40 dark:text-white/40">
+                                    Addr</div>
+                                <div
+                                    class="flex-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-brand-900/40 dark:text-white/40">
+                                    Content</div>
+                                <div
+                                    class="w-[84px] text-right text-[10px] font-semibold uppercase tracking-[0.3em] text-brand-900/40 dark:text-white/40">
+                                    Code</div>
+                            </div>
+                            <div id="ram-container" class="ram-grid"></div>
+                        </div>
+                    </div>
+
+                    <div class="machine-col machine-col-bus flex flex-col justify-center gap-8 px-6 py-8">
+                        <div
+                            class="rounded-2xl border border-brandlt-200/70 bg-white/60 p-5 text-xs font-medium leading-relaxed text-brand-900/60 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-white/60">
+                            <strong class="text-brand-500 dark:text-brandlt-300">Shared Bus Reality:</strong>
+                            Instructions and data queue through identical buses, creating the classic Von Neumann
+                            bottleneck.
+                        </div>
+                        <div class="bus-container space-y-8">
+                            <div class="relative">
+                                <div class="bus-label">Address Bus</div>
+                                <div id="bus-addr" class="bus-line"></div>
+                            </div>
+                            <div class="relative">
+                                <div class="bus-label">Data Bus</div>
+                                <div id="bus-data" class="bus-line"></div>
+                            </div>
+                            <div class="relative">
+                                <div class="bus-label">Control Bus</div>
+                                <div id="bus-ctrl" class="bus-line"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="machine-col machine-col-cpu px-8 py-8">
+                        <div class="mb-8 flex items-center justify-between">
+                            <h3 class="flex items-center gap-3 text-xl font-semibold text-brand-900 dark:text-white">
+                                <i data-lucide="cpu" class="h-6 w-6 text-brand-500"></i>
+                                Central Processing Unit
+                            </h3>
+                            <span id="status-badge" class="status-pill" data-state="halted">
+                                <span class="status-dot" aria-hidden="true"></span>
+                                <span class="status-label">HALTED</span>
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-1 gap-8 md:grid-cols-2">
+                            <div class="space-y-4">
+                                <h4
+                                    class="text-xs font-semibold uppercase tracking-[0.25em] text-brand-900/50 dark:text-white/40">
+                                    Registers</h4>
+
+                                <div id="reg-pc" class="register-box">
+                                    <div>
+                                        <div
+                                            class="text-[10px] font-semibold uppercase tracking-[0.25em] text-brand-900/50 dark:text-white/40">
+                                            Program Counter</div>
+                                        <div class="text-[11px] text-brand-900/40 dark:text-white/40">Next instruction
+                                            address</div>
+                                    </div>
+                                    <div class="mono text-xl font-bold text-brand-500 dark:text-white val">00</div>
+                                </div>
+
+                                <div id="reg-mar" class="register-box">
+                                    <div>
+                                        <div
+                                            class="text-[10px] font-semibold uppercase tracking-[0.25em] text-brand-900/50 dark:text-white/40">
+                                            Memory Addr Reg</div>
+                                        <div class="text-[11px] text-brand-900/40 dark:text-white/40">Address to
+                                            fetch/store</div>
+                                    </div>
+                                    <div class="mono text-xl font-bold text-brand-500 dark:text-white val">00</div>
+                                </div>
+
+                                <div id="reg-mdr" class="register-box">
+                                    <div>
+                                        <div
+                                            class="text-[10px] font-semibold uppercase tracking-[0.25em] text-brand-900/50 dark:text-white/40">
+                                            Memory Data Reg</div>
+                                        <div class="text-[11px] text-brand-900/40 dark:text-white/40">Data buffer from
+                                            RAM</div>
+                                    </div>
+                                    <div class="mono text-xl font-bold text-brand-500 dark:text-white val">00</div>
+                                </div>
+
+                                <div id="reg-cir" class="register-box">
+                                    <div>
+                                        <div
+                                            class="text-[10px] font-semibold uppercase tracking-[0.25em] text-brand-900/50 dark:text-white/40">
+                                            Current Instr Reg</div>
+                                        <div class="text-[11px] text-brand-900/40 dark:text-white/40">Instruction being
+                                            executed</div>
+                                    </div>
+                                    <div class="mono text-lg font-bold text-brand-500 dark:text-white val">HALT</div>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col gap-4">
+                                <h4
+                                    class="text-xs font-semibold uppercase tracking-[0.25em] text-brand-900/50 dark:text-white/40">
+                                    Execution Unit</h4>
+
+                                <div id="reg-acc"
+                                    class="relative flex h-36 flex-col items-center justify-center overflow-hidden rounded-2xl border border-brandlt-200/80 bg-white/80 px-6 py-6 text-center shadow-sm dark:border-white/10 dark:bg-white/5">
+                                    <div class="absolute inset-0 bg-gradient-to-br from-brand-500/10 to-transparent">
+                                    </div>
+                                    <div
+                                        class="relative z-10 text-xs font-semibold uppercase tracking-[0.25em] text-brand-900/40 dark:text-white/40">
+                                        Accumulator</div>
+                                    <div
+                                        class="relative z-10 mono text-4xl font-bold text-brand-900 dark:text-white val">
+                                        0</div>
+                                    <div class="relative z-10 text-[10px] text-brand-900/40 dark:text-white/40">Working
+                                        data storage</div>
+                                </div>
+
+                                <div id="unit-alu"
+                                    class="flex flex-1 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-brandlt-300/70 bg-white/60 px-6 py-6 text-center transition dark:border-white/10 dark:bg-white/5">
+                                    <i data-lucide="calculator"
+                                        class="mb-3 h-8 w-8 text-brand-900/40 dark:text-white/30"></i>
+                                    <div class="text-sm font-semibold text-brand-900 dark:text-white">Arithmetic Logic
+                                        Unit</div>
+                                    <div class="text-[11px] text-brand-900/50 dark:text-white/40">Performs arithmetic
+                                        and logic operations.</div>
+                                    <div id="alu-op"
+                                        class="mt-2 text-xs font-mono uppercase tracking-[0.3em] opacity-0 transition-opacity">
+                                        Adding...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="flex items-center gap-3 border-t border-brandlt-200/80 bg-white/70 px-6 py-3 text-sm font-mono text-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white/60">
+                    <div id="cycle-led"></div>
+                    <div id="cycle-text">System ready. Press STEP to begin.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="container mx-auto px-6 pt-16">
+            <h2 class="mb-8 text-2xl font-semibold text-brand-900 dark:text-white">Inside the Architecture</h2>
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <article class="glass-panel rounded-2xl p-6 transition hover:-translate-y-1 hover:shadow-glow">
+                    <div
+                        class="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-brandlt-300/60 text-brand-700 dark:bg-brand-500/15 dark:text-brandlt-200">
+                        <i data-lucide="calculator" class="h-5 w-5"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-brand-900 dark:text-white">ALU</h3>
+                    <p class="mt-2 text-sm leading-relaxed text-brand-900/65 dark:text-white/65">Performs arithmetic and
+                        logic. Watch it pulse when addition operations execute.</p>
+                </article>
+                <article class="glass-panel rounded-2xl p-6 transition hover:-translate-y-1 hover:shadow-glow">
+                    <div
+                        class="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-brandlt-300/60 text-brand-700 dark:bg-brand-500/15 dark:text-brandlt-200">
+                        <i data-lucide="settings-2" class="h-5 w-5"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-brand-900 dark:text-white">Control Unit</h3>
+                    <p class="mt-2 text-sm leading-relaxed text-brand-900/65 dark:text-white/65">Decodes instructions
+                        from the CIR and orchestrates the signals that move data across the buses.</p>
+                </article>
+                <article class="glass-panel rounded-2xl p-6 transition hover:-translate-y-1 hover:shadow-glow">
+                    <div
+                        class="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-brandlt-300/60 text-brand-700 dark:bg-brand-500/15 dark:text-brandlt-200">
+                        <i data-lucide="grid" class="h-5 w-5"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-brand-900 dark:text-white">Unified Memory</h3>
+                    <p class="mt-2 text-sm leading-relaxed text-brand-900/65 dark:text-white/65">Stores both
+                        instructions and data, meaning your code and operands live side by side in the 16-word RAM grid.
+                    </p>
+                </article>
+                <article class="glass-panel rounded-2xl p-6 transition hover:-translate-y-1 hover:shadow-glow">
+                    <div
+                        class="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-brandlt-300/60 text-brand-700 dark:bg-brand-500/15 dark:text-brandlt-200">
+                        <i data-lucide="save" class="h-5 w-5"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-brand-900 dark:text-white">Registers</h3>
+                    <p class="mt-2 text-sm leading-relaxed text-brand-900/65 dark:text-white/65">Fast CPU storage for
+                        instruction tracking and data staging: PC, MAR, MDR, CIR, and the ACC are all live.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="container mx-auto grid gap-8 px-6 pt-16 lg:grid-cols-2">
+            <article class="glass-panel relative overflow-hidden rounded-3xl p-8">
+                <div class="absolute right-0 top-0 h-32 w-32 rounded-bl-[48px] bg-brand-500/20"></div>
+                <h3 class="text-xl font-semibold text-brand-900 dark:text-white">Historical Context</h3>
+                <p class="mt-4 text-sm leading-7 text-brand-900/70 dark:text-white/70">
+                    Before 1945, reprogramming a computer meant rewiring physical circuits. John von Neumann’s
+                    stored-program concept let instructions reside in memory just like data.
+                </p>
+                <p class="mt-4 text-sm leading-7 text-brand-900/70 dark:text-white/70">
+                    His “First Draft of a Report on the EDVAC” documented the blueprint for modern computing, enabling
+                    software loops, conditional branching, and the general-purpose machines we rely on today.
+                </p>
+            </article>
+
+            <article
+                class="rounded-3xl border border-brandlt-200/70 bg-gradient-to-br from-brand-900 via-brand-700 to-brand-500 p-8 text-white shadow-[0_32px_70px_-40px_rgba(0,0,0,0.7)] dark:border-white/10">
+                <h4 class="text-xs font-semibold uppercase tracking-[0.35em] text-white/65">Modern Parallel</h4>
+                <h3 class="mt-2 text-2xl font-semibold">The bottleneck still lingers</h3>
+                <p class="mt-4 text-sm leading-7 text-white/80">
+                    Contemporary CPUs lean on multi-level caches and speculative execution to minimize bus contention.
+                    Yet the Von Neumann separation of CPU and memory continues driving latency conversations in chip
+                    design.
+                </p>
+            </article>
+        </section>
+    </main>
+
+    <script defer src="../config.js"></script>
+    <script defer src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const navToggle = document.getElementById('nav-toggle');
+            const navMobile = document.getElementById('nav-mobile');
+            const iconOpen = document.getElementById('nav-icon-open');
+            const iconClose = document.getElementById('nav-icon-close');
+
+            if (navToggle && navMobile) {
+                navToggle.addEventListener('click', () => {
+                    const isHidden = navMobile.classList.toggle('hidden');
+                    navToggle.setAttribute('aria-expanded', (!isHidden).toString());
+                    if (iconOpen && iconClose) {
+                        iconOpen.classList.toggle('hidden', !isHidden);
+                        iconClose.classList.toggle('hidden', isHidden);
+                    }
+                });
+
+                document.addEventListener('click', (event) => {
+                    if (!navMobile.contains(event.target) && !navToggle.contains(event.target)) {
+                        if (!navMobile.classList.contains('hidden')) {
+                            navMobile.classList.add('hidden');
+                            navToggle.setAttribute('aria-expanded', 'false');
+                            if (iconOpen && iconClose) {
+                                iconOpen.classList.remove('hidden');
+                                iconClose.classList.add('hidden');
+                            }
+                        }
+                    }
+                });
+            }
+
+            function refreshIcons() {
+                if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                    window.lucide.createIcons();
+                }
+            }
+
+            const OPCODES = {
+                HALT: { code: 0, text: 'HALT' },
+                LOAD: { code: 1, text: 'LOAD' },
+                ADD: { code: 2, text: 'ADD' },
+                STORE: { code: 3, text: 'STORE' },
+                SUB: { code: 4, text: 'SUB' }
+            };
+
+            const PROGRAMS = {
+                add: [
+                    { addr: 0, val: 114 },
+                    { addr: 1, val: 215 },
+                    { addr: 2, val: 313 },
+                    { addr: 3, val: 0 },
+                    { addr: 13, val: 0 },
+                    { addr: 14, val: 5 },
+                    { addr: 15, val: 8 }
+                ],
+                double: [
+                    { addr: 0, val: 114 },
+                    { addr: 1, val: 214 },
+                    { addr: 2, val: 313 },
+                    { addr: 3, val: 0 },
+                    { addr: 13, val: 0 },
+                    { addr: 14, val: 12 },
+                    { addr: 15, val: 0 }
+                ]
+            };
+
+            const state = {
+                memory: new Array(16).fill(0),
+                pc: 0,
+                mar: 0,
+                mdr: 0,
+                cir: 0,
+                acc: 0,
+                stage: 'START',
+                isRunning: false,
+                programName: 'add',
+                activeAddr: null,
+                targetAddr: null,
+                storeAddr: null
+            };
+
+            const els = {
+                ram: document.getElementById('ram-container'),
+                pc: document.querySelector('#reg-pc .val'),
+                mar: document.querySelector('#reg-mar .val'),
+                mdr: document.querySelector('#reg-mdr .val'),
+                cir: document.querySelector('#reg-cir .val'),
+                acc: document.querySelector('#reg-acc .val'),
+                cycleText: document.getElementById('cycle-text'),
+                cycleLed: document.getElementById('cycle-led'),
+                statusBadge: document.getElementById('status-badge'),
+                statusBadgeLabel: document.querySelector('#status-badge .status-label'),
+                buses: {
+                    addr: document.getElementById('bus-addr'),
+                    data: document.getElementById('bus-data'),
+                    ctrl: document.getElementById('bus-ctrl')
+                },
+                runBtn: document.getElementById('btn-run'),
+                stepBtn: document.getElementById('btn-step'),
+                resetBtn: document.getElementById('btn-reset'),
+                programSelect: document.getElementById('prog-select')
+            };
+
+            const fmt = (n) => n.toString().padStart(2, '0');
+
+            function renderRAM() {
+                if (!els.ram) return;
+                els.ram.innerHTML = '';
+                state.memory.forEach((val, i) => {
+                    const opCode = Math.floor(val / 100);
+                    const operand = val % 100;
+                    const op = Object.values(OPCODES).find((entry) => entry.code === opCode);
+                    let codeText = '';
+
+                    if (val === 0 && i < 4) {
+                        codeText = 'HALT';
+                    } else if (op && i < 10) {
+                        codeText = `${op.text} <span class="ram-op">${fmt(operand)}</span>`;
+                    } else {
+                        codeText = val.toString();
+                    }
+
+                    const cell = document.createElement('div');
+                    const classes = ['ram-cell'];
+                    if (i === state.pc) classes.push('ram-current');
+                    if (state.activeAddr === i) classes.push('ram-active');
+                    if (state.targetAddr === i) classes.push('ram-target');
+                    if (state.storeAddr === i) classes.push('ram-active');
+                    cell.className = classes.join(' ');
+                    cell.id = `ram-${i}`;
+                    cell.innerHTML = `
+                        <div class="ram-addr">${fmt(i)}</div>
+                        <div class="ram-value">${val.toString().padStart(3, '0')}</div>
+                        <div class="ram-code">${codeText}</div>
+                    `;
+                    els.ram.appendChild(cell);
+                });
+
+                state.activeAddr = null;
+                state.targetAddr = null;
+                state.storeAddr = null;
+            }
+
+            function updateUI() {
+                if (els.pc) els.pc.textContent = fmt(state.pc);
+                if (els.mar) els.mar.textContent = fmt(state.mar);
+                if (els.mdr) els.mdr.textContent = state.mdr.toString().padStart(3, '0');
+                const op = Math.floor(state.cir / 100);
+                const opEntry = Object.values(OPCODES).find((entry) => entry.code === op);
+                const cirValue = state.cir === 0 ? 'HALT' : (opEntry ? opEntry.text : state.cir.toString());
+                if (els.cir) els.cir.textContent = cirValue;
+                if (els.acc) els.acc.textContent = state.acc.toString();
+            }
+
+            function setStatus(message, type = 'neutral') {
+                if (els.cycleText) els.cycleText.textContent = message;
+                if (!els.cycleLed) return;
+                if (type === 'active') {
+                    els.cycleLed.classList.add('cycle-led-active');
+                } else {
+                    els.cycleLed.classList.remove('cycle-led-active');
+                }
+            }
+
+            function highlightReg(id, on) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.toggle('register-highlight', on);
+            }
+
+            function flashBus(type) {
+                if (!els.buses[type]) return;
+                const cls = `bus-active-${type}`;
+                els.buses[type].classList.add(cls);
+                setTimeout(() => els.buses[type].classList.remove(cls), 650);
+            }
+
+            function setBadge(stateKey, label) {
+                if (els.statusBadge) els.statusBadge.dataset.state = stateKey;
+                if (els.statusBadgeLabel) els.statusBadgeLabel.textContent = label;
+            }
+
+            function resetRunButton() {
+                if (!els.runBtn) return;
+                els.runBtn.innerHTML = '<i data-lucide="play" class="h-4 w-4"></i> Run';
+                refreshIcons();
+            }
+
+            function wait(ms) {
+                return new Promise((resolve) => setTimeout(resolve, ms));
+            }
+
+            function loadProgram(name) {
+                state.programName = name;
+                state.memory.fill(0);
+                (PROGRAMS[name] || []).forEach((item) => {
+                    if (item.addr >= 0 && item.addr < state.memory.length) {
+                        state.memory[item.addr] = item.val;
+                    }
+                });
+                state.pc = 0;
+                state.mar = 0;
+                state.mdr = 0;
+                state.cir = 0;
+                state.acc = 0;
+                state.stage = 'START';
+                state.isRunning = false;
+                state.activeAddr = null;
+                state.targetAddr = null;
+                state.storeAddr = null;
+
+                updateUI();
+                renderRAM();
+                setStatus('Program loaded. Ready.');
+                setBadge('halted', 'HALTED');
+                resetRunButton();
+            }
+
+            async function step() {
+                if (state.stage === 'HALTED') return;
+
+                if (state.stage === 'START' || state.stage === 'FETCH_1') {
+                    setStatus('Fetch: PC -> MAR', 'active');
+                    highlightReg('reg-pc', true);
+                    highlightReg('reg-mar', true);
+                    flashBus('addr');
+                    await wait(800);
+                    state.mar = state.pc;
+                    updateUI();
+                    highlightReg('reg-pc', false);
+                    highlightReg('reg-mar', false);
+                    state.stage = 'FETCH_2';
+                    return;
+                }
+
+                if (state.stage === 'FETCH_2') {
+                    setStatus(`Fetch: Reading address ${fmt(state.mar)} into MDR`, 'active');
+                    state.activeAddr = state.mar;
+                    renderRAM();
+                    await wait(500);
+                    flashBus('data');
+                    state.mdr = state.memory[state.mar];
+                    updateUI();
+                    highlightReg('reg-mdr', true);
+                    await wait(500);
+                    setStatus('Fetch: MDR -> CIR');
+                    state.cir = state.mdr;
+                    state.pc = (state.pc + 1) % state.memory.length;
+                    updateUI();
+                    highlightReg('reg-mdr', false);
+                    highlightReg('reg-cir', true);
+                    await wait(450);
+                    highlightReg('reg-cir', false);
+                    state.stage = 'DECODE';
+                    renderRAM();
+                    return;
+                }
+
+                if (state.stage === 'DECODE') {
+                    const op = Math.floor(state.cir / 100);
+                    const operand = state.cir % 100;
+                    const opEntry = Object.values(OPCODES).find((entry) => entry.code === op);
+
+                    if (state.cir === 0 || !opEntry) {
+                        setStatus('Halt instruction reached.');
+                        state.stage = 'HALTED';
+                        state.isRunning = false;
+                        setBadge('end', 'END');
+                        resetRunButton();
+                        return;
+                    }
+
+                    setStatus(`Decode: ${opEntry.text} ${fmt(operand)}`);
+                    state.stage = 'EXECUTE';
+                    return;
+                }
+
+                if (state.stage === 'EXECUTE') {
+                    const op = Math.floor(state.cir / 100);
+                    const operand = state.cir % 100;
+                    const alu = document.getElementById('unit-alu');
+                    const aluOp = document.getElementById('alu-op');
+
+                    switch (op) {
+                        case OPCODES.LOAD.code:
+                            setStatus(`Execute: Load from ${fmt(operand)} into ACC.`, 'active');
+                            state.targetAddr = operand;
+                            renderRAM();
+                            flashBus('addr');
+                            await wait(600);
+                            flashBus('data');
+                            state.acc = state.memory[operand] ?? 0;
+                            highlightReg('reg-acc', true);
+                            await wait(200);
+                            highlightReg('reg-acc', false);
+                            break;
+                        case OPCODES.ADD.code:
+                            setStatus(`Execute: ACC += [${fmt(operand)}].`, 'active');
+                            state.targetAddr = operand;
+                            renderRAM();
+                            if (alu) alu.classList.add('alu-active');
+                            if (aluOp) {
+                                aluOp.textContent = `Adding [${fmt(operand)}]`;
+                                aluOp.style.opacity = '1';
+                            }
+                            await wait(780);
+                            state.acc += state.memory[operand] ?? 0;
+                            if (alu) alu.classList.remove('alu-active');
+                            if (aluOp) aluOp.style.opacity = '0';
+                            break;
+                        case OPCODES.SUB.code:
+                            setStatus(`Execute: ACC -= [${fmt(operand)}].`, 'active');
+                            state.targetAddr = operand;
+                            renderRAM();
+                            await wait(780);
+                            state.acc -= state.memory[operand] ?? 0;
+                            break;
+                        case OPCODES.STORE.code:
+                            setStatus(`Execute: Store ACC (${state.acc}) to [${fmt(operand)}].`, 'active');
+                            state.storeAddr = operand;
+                            renderRAM();
+                            flashBus('data');
+                            state.memory[operand] = state.acc;
+                            break;
+                        default:
+                            setStatus('Unknown instruction. Halting.');
+                            state.stage = 'HALTED';
+                            state.isRunning = false;
+                            setBadge('halted', 'HALTED');
+                            resetRunButton();
+                            return;
+                    }
+
+                    updateUI();
+                    renderRAM();
+                    state.stage = 'START';
+                }
+            }
+
+            let runTask = null;
+
+            async function runLoop() {
+                if (runTask) return runTask;
+                runTask = (async () => {
+                    while (state.isRunning && state.stage !== 'HALTED') {
+                        await step();
+                        if (!state.isRunning || state.stage === 'HALTED') break;
+                        await wait(650);
+                    }
+
+                    if (state.stage === 'HALTED') {
+                        setBadge('end', 'END');
+                    } else if (!state.isRunning) {
+                        setBadge('paused', 'PAUSED');
+                    }
+                    state.isRunning = false;
+                    resetRunButton();
+                    runTask = null;
+                })();
+                return runTask;
+            }
+
+            if (els.stepBtn) {
+                els.stepBtn.addEventListener('click', async () => {
+                    state.isRunning = false;
+                    setBadge('paused', 'STEPPING');
+                    resetRunButton();
+                    await step();
+                });
+            }
+
+            if (els.runBtn) {
+                els.runBtn.addEventListener('click', () => {
+                    if (state.isRunning) {
+                        state.isRunning = false;
+                        setBadge('paused', 'PAUSED');
+                        resetRunButton();
+                    } else {
+                        state.isRunning = true;
+                        setBadge('running', 'RUNNING');
+                        els.runBtn.innerHTML = '<i data-lucide="pause" class="h-4 w-4"></i> Pause';
+                        refreshIcons();
+                        runLoop();
+                    }
+                });
+            }
+
+            if (els.resetBtn) {
+                els.resetBtn.addEventListener('click', () => {
+                    state.isRunning = false;
+                    state.stage = 'START';
+                    loadProgram(els.programSelect ? els.programSelect.value : 'add');
+                });
+            }
+
+            if (els.programSelect) {
+                els.programSelect.addEventListener('change', (event) => {
+                    loadProgram(event.target.value);
+                });
+            }
+
+            function syncThemeControls() {
+                const isDark = document.documentElement.classList.contains('dark');
+                const label = document.getElementById('theme-label');
+                const sun = document.getElementById('theme-icon-sun');
+                const moon = document.getElementById('theme-icon-moon');
+                if (label) label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+                if (sun) sun.classList.toggle('hidden', isDark);
+                if (moon) moon.classList.toggle('hidden', !isDark);
+            }
+
+            const themeBtn = document.getElementById('theme-toggle');
+            if (themeBtn) {
+                themeBtn.addEventListener('click', () => {
+                    if (window.Theme && typeof window.Theme.toggle === 'function') {
+                        window.Theme.toggle();
+                    } else {
+                        document.documentElement.classList.toggle('dark');
+                        try {
+                            localStorage.setItem('cx-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+                        } catch (error) {
+                            console.warn('Theme store failed', error);
+                        }
+                    }
+                    syncThemeControls();
+                });
+            }
+
+            syncThemeControls();
+            loadProgram('add');
+            refreshIcons();
+
+            if (window.Theme && typeof window.Theme.get === 'function') {
+                const observer = new MutationObserver(syncThemeControls);
+                observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+            }
+        });
+    </script>
+</body>
+
+</html>
