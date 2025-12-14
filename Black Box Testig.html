@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorable Explanation: Black Box Testing</title>
+    <!-- Tailwind CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Lucide Icons CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.316.0/dist/lucide.min.js"></script>
+    <!-- GSAP CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <style>
+        /* Custom styles for Material-like feel and glassmorphism */
+        body {
+            font-family: 'Roboto', sans-serif;
+            /* Fallback for Roboto, if not loaded */
+            background-color: #020617;
+            /* bg-slate-950 */
+            color: #e2e8f0;
+            /* text-slate-200 */
+            line-height: 1.6;
+        }
+
+        .material-card {
+            background-color: #1e293b;
+            /* bg-slate-800 */
+            border-radius: 0.75rem;
+            /* rounded-xl */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            /* shadow-xl */
+            padding: 1.5rem;
+            /* p-6 */
+        }
+
+        .glass-effect {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            /* Safari support */
+            background-color: rgba(45, 62, 80, 0.15);
+            /* Slightly darker, less opaque */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            border-radius: 0.75rem;
+            /* rounded-xl */
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-family: 'Roboto Slab', serif;
+            /* A more distinct font for headings */
+            font-weight: 700;
+        }
+
+        /* Custom scrollbar for better dark mode look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+            /* slate-900 */
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            /* slate-600 */
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+            /* slate-500 */
+        }
+
+        /* Responsive typography adjustments */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.25rem;
+            }
+
+            /* text-4xl */
+            h2 {
+                font-size: 1.75rem;
+            }
+
+            /* text-3xl */
+            h3 {
+                font-size: 1.25rem;
+            }
+
+            /* text-xl */
+            .material-card {
+                padding: 1rem;
+            }
+        }
+    </style>
+    <!-- Google Fonts for Material UI feel (Roboto, Roboto Slab) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Slab:wght@400;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body
+    class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center py-12 px-4 selection:bg-blue-800 selection:text-white">
+
+    <div class="max-w-4xl w-full space-y-12">
+
+        <!-- Header Section -->
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-extrabold text-blue-400 mb-4 animate-fade-in">Black Box Testing: An Explorable
+                Explanation</h1>
+            <p class="text-xl text-slate-300 max-w-2xl mx-auto animate-fade-in animation-delay-200">
+                Dive into the world of Black Box Testing: understanding a system by only observing its inputs and
+                outputs, without peeking inside.
+            </p>
+        </header>
+
+        <!-- What is Black Box Testing? -->
+        <section class="material-card animate-slide-up animation-delay-400">
+            <h2 class="text-3xl font-bold text-blue-300 mb-4 flex items-center gap-2">
+                <i data-lucide="package-search" class="w-8 h-8 text-blue-400"></i> What is Black Box Testing?
+            </h2>
+            <p class="text-slate-300 mb-4">
+                Black Box Testing is a software testing method in which the internal structure, design, implementation,
+                and code of the item being tested are <strong class="text-blue-200">not known</strong> to the tester.
+                These tests can be functional or non-functional, though the term is often used to refer to functional
+                tests.
+            </p>
+            <p class="text-slate-300">
+                The primary goal is to verify if the system meets the requirements and behaves as expected from an
+                end-user perspective.
+            </p>
+        </section>
+
+        <!-- The Kitchen Table Analogy -->
+        <section class="material-card animate-slide-up animation-delay-600">
+            <h2 class="text-3xl font-bold text-blue-300 mb-4 flex items-center gap-2">
+                <i data-lucide="toaster" class="w-8 h-8 text-blue-400"></i> The Toaster Analogy
+            </h2>
+            <div class="flex flex-col md:flex-row items-center gap-6">
+                <div class="md:w-1/3 flex justify-center">
+                    <i data-lucide="toaster" class="w-32 h-32 text-slate-400"></i>
+                </div>
+                <div class="md:w-2/3 text-slate-300">
+                    <p class="mb-3">
+                        Imagine you're testing a new toaster. When you get it, you don't open it up to see the heating
+                        elements or the wiring. That would be "White Box Testing".
+                    </p>
+                    <p class="mb-3">
+                        Instead, you simply put in a slice of bread (your <strong class="text-blue-200">input</strong>),
+                        press the lever, and wait for the toast to pop up (your <strong
+                            class="text-blue-200">output</strong>). You expect perfectly golden brown toast.
+                    </p>
+                    <p>
+                        You might try different types of bread, adjust the browning settings, or even try toasting a
+                        bagel. You're testing the toaster's functionality from the outside, verifying if it performs its
+                        intended job without caring about its internal mechanics. This is exactly what Black Box Testing
+                        aims to do with software!
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Core Concepts & Techniques -->
+        <section class="material-card animate-slide-up animation-delay-800">
+            <h2 class="text-3xl font-bold text-blue-300 mb-4 flex items-center gap-2">
+                <i data-lucide="brain" class="w-8 h-8 text-blue-400"></i> Core Concepts & Techniques
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-xl font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                        <i data-lucide="square-check" class="w-5 h-5 text-green-400"></i> Types of Black Box Tests
+                    </h3>
+                    <ul class="list-disc list-inside text-slate-300 space-y-1 ml-4">
+                        <li><strong class="text-green-200">Functional Testing:</strong> Verifies specific functions
+                            (e.g., login, search, data entry).</li>
+                        <li><strong class="text-green-200">Non-Functional Testing:</strong> Verifies non-functional
+                            aspects (e.g., performance, usability, security).</li>
+                        <li><strong class="text-green-200">Regression Testing:</strong> Ensures new code changes haven't
+                            broken existing functionality.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-xl font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                        <i data-lucide="tool" class="w-5 h-5 text-yellow-400"></i> Common Techniques
+                    </h3>
+                    <ul class="list-disc list-inside text-slate-300 space-y-1 ml-4">
+                        <li><strong class="text-yellow-200">Equivalence Partitioning:</strong> Dividing input data into
+                            partitions of equivalent data.</li>
+                        <li><strong class="text-yellow-200">Boundary Value Analysis:</strong> Testing values at the
+                            boundaries of valid input ranges.</li>
+                        <li><strong class="text-yellow-200">Decision Table Testing:</strong> Mapping inputs to outcomes
+                            for complex logic.</li>
+                        <li><strong class="text-yellow-200">State Transition Testing:</strong> Analyzing how the system
+                            behaves when moving between states.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive "Black Box Simulator" -->
+        <section class="material-card animate-slide-up animation-delay-1000">
+            <h2 class="text-3xl font-bold text-blue-300 mb-6 flex items-center gap-2">
+                <i data-lucide="box" class="w-8 h-8 text-blue-400"></i> Interactive Black Box Simulator
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <!-- Controls Panel -->
+                <div class="md:col-span-1 glass-effect p-6 flex flex-col space-y-5">
+                    <h3 class="text-xl font-semibold text-slate-200 mb-2">Simulation Parameters</h3>
+
+                    <div class="flex flex-col gap-2">
+                        <label for="inputComplexity" class="text-slate-300 font-medium">Input Complexity: <span
+                                id="inputComplexityValue" class="text-blue-300 float-right">50%</span></label>
+                        <input type="range" id="inputComplexity" min="0" max="100" value="50"
+                            class="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700 accent-blue-500">
+                        <p class="text-sm text-slate-400">How complex is the test data? Higher complexity can stress the
+                            system.</p>
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                        <label for="testCoverage" class="text-slate-300 font-medium">Test Coverage Aim: <span
+                                id="testCoverageValue" class="text-blue-300 float-right">70%</span></label>
+                        <input type="range" id="testCoverage" min="0" max="100" value="70"
+                            class="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700 accent-blue-500">
+                        <p class="text-sm text-slate-400">Represents how thoroughly your test cases cover requirements.
+                            Higher is better.</p>
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                        <label for="faultChance" class="text-slate-300 font-medium">System Flaw Likelihood: <span
+                                id="faultChanceValue" class="text-blue-300 float-right">20%</span></label>
+                        <input type="range" id="faultChance" min="0" max="100" value="20"
+                            class="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700 accent-blue-500">
+                        <p class="text-sm text-slate-400">Simulates the probability of an underlying bug in the system.
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2 mt-4">
+                        <button id="presetSimple"
+                            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-sm focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900">Simple
+                            Valid</button>
+                        <button id="presetBoundary"
+                            class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all text-sm focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900">Boundary
+                            Case</button>
+                        <button id="presetError"
+                            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all text-sm focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-900">Force
+                            Error</button>
+                        <button id="resetButton"
+                            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all text-sm focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-slate-900">Reset</button>
+                    </div>
+                </div>
+
+                <!-- Simulation Area -->
+                <div class="md:col-span-2 glass-effect p-6 flex flex-col">
+                    <h3 class="text-xl font-semibold text-slate-200 mb-4">Run a Test</h3>
+
+                    <div class="flex-grow flex flex-col justify-between">
+                        <div class="mb-4">
+                            <label for="testInput" class="block text-slate-300 text-sm font-bold mb-2">Provide an
+                                Input:</label>
+                            <textarea id="testInput"
+                                class="w-full p-3 rounded-lg bg-slate-700 text-slate-200 border border-slate-600 focus:border-blue-500 focus:ring-blue-500 focus:ring-1 transition-all h-24 resize-y"
+                                placeholder="e.g., 'Login with valid user credentials', 'Search for 'non-existent product', 'Submit form with max-length text'"></textarea>
+                        </div>
+
+                        <div class="flex justify-center items-center my-6 relative">
+                            <button id="testButton"
+                                class="px-8 py-4 bg-green-600 hover:bg-green-700 text-white text-lg font-bold rounded-full shadow-lg transition-all focus:ring-4 focus:ring-green-500 focus:ring-offset-4 focus:ring-offset-slate-900 flex items-center gap-2">
+                                <i data-lucide="play" class="w-6 h-6"></i> Run Test
+                            </button>
+                            <i id="processingIndicator" data-lucide="loader-circle"
+                                class="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-10 h-10 text-blue-400 opacity-0 animate-spin"
+                                style="animation-duration: 1.5s;"></i>
+                        </div>
+
+                        <div class="text-center mb-6">
+                            <p id="testStatusDisplay"
+                                class="text-2xl font-bold text-slate-300 transition-colors duration-500">Ready to test!
+                            </p>
+                            <p id="testStatusDetails" class="text-slate-400 text-sm mt-1">Adjust parameters and hit 'Run
+                                Test'.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                                <h4 class="text-lg font-semibold text-slate-200 mb-2">Expected Output:</h4>
+                                <p id="expectedOutputDisplay" class="text-slate-300 font-mono text-sm break-words">No
+                                    test run yet.</p>
+                            </div>
+                            <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                                <h4 class="text-lg font-semibold text-slate-200 mb-2">Actual Output:</h4>
+                                <p id="actualOutputDisplay" class="text-slate-300 font-mono text-sm break-words">No test
+                                    run yet.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insights / Explanation -->
+            <div id="simulationInsight"
+                class="material-card mt-8 p-6 bg-slate-800 border border-slate-700 hidden animate-fade-in animation-delay-1200">
+                <h3 class="text-xl font-semibold text-blue-300 mb-3 flex items-center gap-2">
+                    <i data-lucide="lightbulb" class="w-6 h-6 text-blue-400"></i> Insights from this Run:
+                </h3>
+                <p id="insightText" class="text-slate-300"></p>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="text-center text-slate-500 text-sm mt-12 animate-fade-in animation-delay-1400">
+            <p>&copy; 2023 Explorable Explanations. All rights reserved.</p>
+            <p class="mt-2">Built with Tailwind CSS, GSAP, and Lucide Icons.</p>
+        </footer>
+
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // --- State Management ---
+        let state = {
+            variables: {
+                "InputComplexity": 50, // 0-100
+                "TestCoverage": 70,    // 0-100
+                "FaultChance": 20      // 0-100
+            },
+            currentInput: "",
+            actualOutput: "No test run yet.",
+            expectedOutput: "No test run yet.",
+            testStatus: "idle", // 'idle', 'testing', 'pass', 'fail'
+            processingTime: 1000, // Milliseconds, base for calculation
+            lastRunInsight: ""
+        };
+
+        const presets = [
+            { name: "Simple Valid Case", variables: { InputComplexity: 10, TestCoverage: 90, FaultChance: 5 }, input: "Login with valid username 'testuser' and password 'securepass123'." },
+            { name: "Boundary Condition", variables: { InputComplexity: 60, TestCoverage: 80, FaultChance: 30 }, input: "Submit form with all fields at maximum allowed length, including a 255-char description." },
+            { name: "Error Injection", variables: { InputComplexity: 80, TestCoverage: 50, FaultChance: 80 }, input: "Attempt to access '/admin' page without authentication token and malformed JSON payload." },
+        ];
+
+        // --- DOM Elements ---
+        const els = {
+            inputComplexity: document.getElementById('inputComplexity'),
+            inputComplexityValue: document.getElementById('inputComplexityValue'),
+            testCoverage: document.getElementById('testCoverage'),
+            testCoverageValue: document.getElementById('testCoverageValue'),
+            faultChance: document.getElementById('faultChance'),
+            faultChanceValue: document.getElementById('faultChanceValue'),
+            testInput: document.getElementById('testInput'),
+            testButton: document.getElementById('testButton'),
+            processingIndicator: document.getElementById('processingIndicator'),
+            testStatusDisplay: document.getElementById('testStatusDisplay'),
+            testStatusDetails: document.getElementById('testStatusDetails'),
+            expectedOutputDisplay: document.getElementById('expectedOutputDisplay'),
+            actualOutputDisplay: document.getElementById('actualOutputDisplay'),
+            presetSimple: document.getElementById('presetSimple'),
+            presetBoundary: document.getElementById('presetBoundary'),
+            presetError: document.getElementById('presetError'),
+            resetButton: document.getElementById('resetButton'),
+            simulationInsight: document.getElementById('simulationInsight'),
+            insightText: document.getElementById('insightText')
+        };
+
+        // --- GSAP Animations ---
+        const animateStatusText = (target, text, color, detailText = "") => {
+            gsap.to(target, {
+                duration: 0.3,
+                opacity: 0,
+                y: -10,
+                onComplete: () => {
+                    target.innerText = text;
+                    target.style.color = color;
+                    if (detailText && target === els.testStatusDisplay) {
+                        els.testStatusDetails.innerText = detailText;
+                        gsap.fromTo(els.testStatusDetails, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3 });
+                    }
+                    gsap.to(target, { opacity: 1, y: 0, duration: 0.3 });
+                }
+            });
+        };
+
+        const animateOutputText = (target, text, delay = 0) => {
+            gsap.to(target, {
+                duration: 0.2,
+                opacity: 0,
+                onComplete: () => {
+                    target.innerText = text;
+                    gsap.to(target, { duration: 0.3, opacity: 1, delay: delay });
+                }
+            });
+        };
+
+        const animateButtonIcon = (button, iconName) => {
+            gsap.to(button.querySelector('i'), {
+                rotation: 360,
+                duration: 0.3,
+                ease: "power2.out",
+                onComplete: () => {
+                    button.querySelector('i').setAttribute('data-lucide', iconName);
+                    lucide.createIcons();
+                    gsap.set(button.querySelector('i'), { rotation: 0 }); // Reset rotation for next change
+                }
+            });
+        };
+
+        // --- Render Function (updates UI based on state) ---
+        function render() {
+            // Update slider values and displays
+            els.inputComplexity.value = state.variables.InputComplexity;
+            els.inputComplexityValue.innerText = `${state.variables.InputComplexity}%`;
+            els.testCoverage.value = state.variables.TestCoverage;
+            els.testCoverageValue.innerText = `${state.variables.TestCoverage}%`;
+            els.faultChance.value = state.variables.FaultChance;
+            els.faultChanceValue.innerText = `${state.variables.FaultChance}%`;
+
+            // Update input text area
+            els.testInput.value = state.currentInput;
+
+            // Update outputs
+            animateOutputText(els.expectedOutputDisplay, state.expectedOutput);
+            animateOutputText(els.actualOutputDisplay, state.actualOutput);
+
+            // Update test status display
+            let statusText = "";
+            let statusColor = "";
+            let buttonIcon = "play";
+            let buttonBgColor = "bg-green-600";
+            let buttonHoverColor = "hover:bg-green-700";
+            let detailsText = "";
+
+            switch (state.testStatus) {
+                case 'idle':
+                    statusText = "Ready to test!";
+                    statusColor = "#e2e8f0"; // slate-100
+                    buttonIcon = "play";
+                    buttonBgColor = "bg-green-600";
+                    buttonHoverColor = "hover:bg-green-700";
+                    els.testButton.disabled = false;
+                    gsap.to(els.processingIndicator, { opacity: 0, duration: 0.3 });
+                    break;
+                case 'testing':
+                    statusText = "Testing in progress...";
+                    statusColor = "#60a5fa"; // blue-400
+                    buttonIcon = "loader-circle";
+                    buttonBgColor = "bg-blue-600";
+                    buttonHoverColor = "hover:bg-blue-700";
+                    detailsText = `Simulating black box with ${state.variables.InputComplexity}% complexity...`;
+                    els.testButton.disabled = true;
+                    gsap.to(els.processingIndicator, { opacity: 1, duration: 0.3 });
+                    break;
+                case 'pass':
+                    statusText = "TEST PASSED!";
+                    statusColor = "#34d399"; // green-400
+                    buttonIcon = "check-circle";
+                    buttonBgColor = "bg-green-600";
+                    buttonHoverColor = "hover:bg-green-700";
+                    detailsText = `The system behaved as expected. Good job!`;
+                    els.testButton.disabled = false;
+                    gsap.to(els.processingIndicator, { opacity: 0, duration: 0.3 });
+                    break;
+                case 'fail':
+                    statusText = "TEST FAILED!";
+                    statusColor = "#ef4444"; // red-500
+                    buttonIcon = "x-circle";
+                    buttonBgColor = "bg-red-600";
+                    buttonHoverColor = "hover:bg-red-700";
+                    detailsText = `Discrepancy found! The actual output differs from expected.`;
+                    els.testButton.disabled = false;
+                    gsap.to(els.processingIndicator, { opacity: 0, duration: 0.3 });
+                    break;
+            }
+
+            animateStatusText(els.testStatusDisplay, statusText, statusColor, detailsText);
+            animateButtonIcon(els.testButton, buttonIcon);
+            els.testButton.className = els.testButton.className.replace(/bg-[\w-]+|hover:bg-[\w-]+/g, '').trim() + ` ${buttonBgColor} ${buttonHoverColor}`;
+
+            // Update insights section
+            if (state.lastRunInsight) {
+                els.insightText.innerText = state.lastRunInsight;
+                gsap.to(els.simulationInsight, {
+                    height: "auto",
+                    opacity: 1,
+                    duration: 0.5,
+                    display: 'block',
+                    onStart: () => { if (els.simulationInsight.classList.contains('hidden')) els.simulationInsight.classList.remove('hidden'); }
+                });
+            } else {
+                gsap.to(els.simulationInsight, {
+                    opacity: 0,
+                    height: 0,
+                    duration: 0.3,
+                    onComplete: () => { els.simulationInsight.classList.add('hidden'); }
+                });
+            }
+        }
+
+        // --- Black Box Simulation Logic ---
+        function simulateBlackBox(input, complexity, coverage, faultChance) {
+            let actualOutput = "";
+            let expectedOutput = "";
+            let status = 'pass';
+            let insight = "";
+
+            // Base processing delay (more complex input takes longer)
+            let processingDelay = 500 + (complexity / 100 * 2000); // 0.5s to 2.5s
+
+            // Normalize values to 0-1 for easier calculation
+            const compNorm = complexity / 100;
+            const covNorm = coverage / 100;
+            const faultNorm = faultChance / 100;
+
+            // Generate expected output based on keywords in input
+            if (input.toLowerCase().includes("login")) {
+                if (input.toLowerCase().includes("valid")) {
+                    expectedOutput = "Successfully logged in. Redirecting to dashboard.";
+                } else if (input.toLowerCase().includes("invalid")) {
+                    expectedOutput = "Login failed: Invalid username or password.";
+                } else {
+                    expectedOutput = "Attempting login...";
+                }
+            } else if (input.toLowerCase().includes("search")) {
+                if (input.toLowerCase().includes("non-existent")) {
+                    expectedOutput = "Search results: No items found matching your query.";
+                } else if (input.toLowerCase().includes("product")) {
+                    expectedOutput = "Search results: Displaying relevant products.";
+                } else {
+                    expectedOutput = "Executing search query.";
+                }
+            } else if (input.toLowerCase().includes("form")) {
+                if (input.toLowerCase().includes("max-length") || input.toLowerCase().includes("boundary")) {
+                    expectedOutput = "Form submitted successfully. All boundary conditions handled.";
+                } else if (input.toLowerCase().includes("invalid")) {
+                    expectedOutput = "Form submission failed: Please check invalid fields.";
+                } else {
+                    expectedOutput = "Submitting form data.";
+                }
+            } else if (input.toLowerCase().includes("access '/admin'")) {
+                if (input.toLowerCase().includes("without authentication")) {
+                    expectedOutput = "Access denied: Authentication required.";
+                } else {
+                    expectedOutput = "Attempting admin access.";
+                }
+            } else {
+                expectedOutput = `Processed input: "${input}". Generic expected outcome.`;
+            }
+
+            actualOutput = expectedOutput; // Start with the correct output
+
+            // Introduce a "bug" based on fault chance and how well tests cover it
+            const actualBugChance = faultNorm * (1 - covNorm / 2); // Higher faultChance, lower coverage increases actual chance to manifest a bug
+            if (Math.random() < actualBugChance) {
+                status = 'fail';
+                insight += "A system flaw manifested! ";
+
+                if (Math.random() < compNorm * 0.7) { // Higher complexity makes error message less clear
+                    actualOutput = "Error: An unexpected internal server error occurred. Please try again later. (Error Code: " + Math.floor(Math.random() * 999) + ")";
+                    insight += "The error message is generic, possibly due to high input complexity or an unhandled exception. ";
+                } else {
+                    if (actualOutput.includes("Successfully logged in")) {
+                        actualOutput = "Login failed: Internal processing error.";
+                    } else if (actualOutput.includes("Search results")) {
+                        actualOutput = "Error: Search service unavailable.";
+                    } else if (actualOutput.includes("Form submitted successfully")) {
+                        actualOutput = "Form submission failed: Data integrity error.";
+                    } else if (actualOutput.includes("Access denied")) {
+                        actualOutput = "Error: Authorization service failed to respond.";
+                    } else {
+                        actualOutput = `Processing failed due to an internal system error. (Fault ID: ${Math.floor(Math.random() * 1000)})`;
+                    }
+                    insight += "The system produced an incorrect output. This bug was likely caught because your test case happened to hit the flawed path. ";
+                }
+            } else {
+                // No bug detected
+                if (status === 'pass' && faultNorm > 0.4 && covNorm < 0.6) {
+                    insight += "No bug found this run, but with a high 'System Flaw Likelihood' and low 'Test Coverage', it's possible a bug exists but your current test didn't expose it. Try different inputs! ";
+                } else if (status === 'pass' && covNorm > 0.8) {
+                    insight += "The system performed as expected. High 'Test Coverage Aim' gives us good confidence in this result. ";
+                } else if (status === 'pass') {
+                    insight += "The system performed as expected for this input. ";
+                }
+            }
+
+            if (status === 'fail' && covNorm < 0.3 && compNorm > 0.7) {
+                insight += "This failure might be a hard-to-find edge case due to high input complexity and low test coverage. Good find! ";
+            } else if (status === 'fail' && covNorm > 0.7) {
+                insight += "Despite good test coverage, a bug was found. This indicates a critical flaw that even thorough testing couldn't prevent from being introduced. ";
+            }
+
+            return { actualOutput, expectedOutput, processingDelay, status, insight };
+        }
+
+        // --- Event Listeners ---
+
+        // Sliders
+        els.inputComplexity.addEventListener('input', (e) => {
+            state.variables.InputComplexity = parseInt(e.target.value);
+            els.inputComplexityValue.innerText = `${e.target.value}%`;
+            state.lastRunInsight = ""; // Clear insight on parameter change
+            render();
+        });
+        els.testCoverage.addEventListener('input', (e) => {
+            state.variables.TestCoverage = parseInt(e.target.value);
+            els.testCoverageValue.innerText = `${e.target.value}%`;
+            state.lastRunInsight = ""; // Clear insight on parameter change
+            render();
+        });
+        els.faultChance.addEventListener('input', (e) => {
+            state.variables.FaultChance = parseInt(e.target.value);
+            els.faultChanceValue.innerText = `${e.target.value}%`;
+            state.lastRunInsight = ""; // Clear insight on parameter change
+            render();
+        });
+
+        // Test Input
+        els.testInput.addEventListener('input', (e) => {
+            state.currentInput = e.target.value;
+            state.lastRunInsight = ""; // Clear insight on input change
+            render();
+        });
+
+        // Test Button
+        els.testButton.addEventListener('click', () => {
+            if (state.testStatus === 'testing') return;
+
+            state.currentInput = els.testInput.value; // Ensure current input is captured
+            state.testStatus = 'testing';
+            state.lastRunInsight = ""; // Clear previous insight
+            render();
+
+            const { actualOutput, expectedOutput, processingDelay, status, insight } = simulateBlackBox(
+                state.currentInput,
+                state.variables.InputComplexity,
+                state.variables.TestCoverage,
+                state.variables.FaultChance
+            );
+
+            gsap.timeline()
+                .to(els.testButton, {
+                    duration: 0.2,
+                    scale: 0.95,
+                    ease: "power2.out"
+                })
+                .to(els.testButton, {
+                    duration: 0.2,
+                    scale: 1,
+                    ease: "power2.in"
+                })
+                .to(els.processingIndicator, {
+                    rotation: 360,
+                    repeat: -1,
+                    ease: "none",
+                    duration: 1.5,
+                    paused: true,
+                    id: "spinnerAnimation"
+                }, 0) // Start spinner immediately
+                .call(() => gsap.getById("spinnerAnimation").play()) // Play spinner
+                .to({}, {
+                    duration: processingDelay / 1000, // Wait for simulated processing time
+                    onComplete: () => {
+                        gsap.getById("spinnerAnimation").pause(); // Pause spinner
+                        state.actualOutput = actualOutput;
+                        state.expectedOutput = expectedOutput;
+                        state.testStatus = status;
+                        state.lastRunInsight = insight;
+                        render();
+                    }
+                });
+        });
+
+        // Presets Buttons
+        presets.forEach((preset, index) => {
+            const button = document.getElementById(`preset${index === 0 ? 'Simple' : (index === 1 ? 'Boundary' : 'Error')}`);
+            button.addEventListener('click', () => {
+                gsap.to(state.variables, {
+                    duration: 0.5,
+                    InputComplexity: preset.variables.InputComplexity,
+                    TestCoverage: preset.variables.TestCoverage,
+                    FaultChance: preset.variables.FaultChance,
+                    onUpdate: render // Render during tween
+                });
+                state.currentInput = preset.input;
+                state.lastRunInsight = ""; // Clear insight on preset load
+                render(); // Final render after tween
+            });
+        });
+
+        // Reset Button
+        els.resetButton.addEventListener('click', () => {
+            gsap.to(state.variables, {
+                duration: 0.5,
+                InputComplexity: 50,
+                TestCoverage: 70,
+                FaultChance: 20,
+                onUpdate: render // Render during tween
+            });
+            state.currentInput = "";
+            state.actualOutput = "No test run yet.";
+            state.expectedOutput = "No test run yet.";
+            state.testStatus = "idle";
+            state.lastRunInsight = "";
+            render(); // Final render after tween
+        });
+
+        // Initial render
+        render();
+
+        // Add intro animations with GSAP
+        gsap.from("header > *", { opacity: 0, y: 20, stagger: 0.2, duration: 0.8, ease: "power2.out", delay: 0.5 });
+        gsap.from(".material-card", { opacity: 0, y: 30, stagger: 0.3, duration: 0.8, ease: "power2.out", delay: 1 });
+
+    </script>
+</body>
+
+</html>
