@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDMA - Code Division Multiple Access</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        paper: {
+                            bg: '#1E1E2F',
+                            panel: '#4C2A59',
+                            accent: '#9E4B8A',
+                            light: '#E2E8F0'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            /* Default Dark Theme (PaperX Palette) */
+            --bg-body: #1E1E2F;
+            --bg-panel: rgba(76, 42, 89, 0.4);
+            --border-panel: rgba(158, 75, 138, 0.3);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #9E4B8A;
+            --color-a: #2563eb;
+            /* Blue */
+            --color-b: #dc2626;
+            /* Red */
+            --color-mix: #9333ea;
+            /* Purple */
+        }
+
+        html.light {
+            /* Light Theme */
+            --bg-body: #f8fafc;
+            --bg-panel: rgba(255, 255, 255, 0.8);
+            --border-panel: rgba(76, 42, 89, 0.1);
+            --text-main: #1E1E2F;
+            --text-muted: #64748b;
+            --accent: #9E4B8A;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .glass-panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-panel);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        /* Stations */
+        .station {
+            background: rgba(0, 0, 0, 0.2);
+            border: 2px solid var(--border-panel);
+            border-radius: 16px;
+            padding: 20px;
+            width: 45%;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        html.light .station {
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .station-a {
+            border-color: var(--color-a);
+        }
+
+        .station-b {
+            border-color: var(--color-b);
+        }
+
+        .station h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.2rem;
+            color: var(--text-main);
+        }
+
+        .code-tag {
+            display: inline-block;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            border: 1px solid var(--border-panel);
+            font-size: 0.9rem;
+            color: var(--text-main);
+        }
+
+        html.light .code-tag {
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Buttons */
+        .btn-group {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: 2px solid var(--border-panel);
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: 0.2s;
+            color: var(--text-main);
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        html.light .btn {
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        html.light .btn:hover {
+            background: rgba(255, 255, 255, 1);
+        }
+
+        /* Active States */
+        .btn.active-a {
+            background: var(--color-a);
+            color: white;
+            border-color: var(--color-a);
+        }
+
+        .btn.active-b {
+            background: var(--color-b);
+            color: white;
+            border-color: var(--color-b);
+        }
+
+        /* The Air Channel */
+        .air-channel {
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid var(--accent);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            color: var(--text-main);
+            position: relative;
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        html.light .air-channel {
+            background: rgba(158, 75, 138, 0.1);
+        }
+
+        .air-label {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+        }
+
+        /* Visual Elements (The Blocks) */
+        .packet-container {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .block {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+            color: white;
+        }
+
+        .bg-blue {
+            background: var(--color-a);
+        }
+
+        .bg-red {
+            background: var(--color-b);
+        }
+
+        .bg-purple {
+            background: var(--color-mix);
+        }
+
+        .bg-grey {
+            background: #94a3b8;
+        }
+
+        /* Flight Layer (Crucial for visibility) */
+        #flight-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            min-height: 100vh;
+            pointer-events: none;
+            /* Let clicks pass through */
+            z-index: 9999;
+            /* Always on top */
+        }
+
+        .flying-object {
+            position: absolute;
+            top: 0;
+            left: 0;
+            visibility: hidden;
+            /* Hidden until animated */
+        }
+
+        /* Controls Footer */
+        .controls {
+            margin-top: 30px;
+            text-align: center;
+            padding-top: 20px;
+            border-top: 2px dashed var(--border-panel);
+        }
+
+        .step-btn {
+            background: var(--accent);
+            color: white;
+            font-size: 1rem;
+            padding: 12px 28px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            margin: 0 8px;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .step-btn:hover {
+            background: #8B3577;
+            transform: translateY(-2px);
+        }
+
+        .step-btn:active {
+            transform: translateY(0);
+        }
+
+        .step-btn:disabled {
+            background: var(--text-muted);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .reset-btn {
+            background: #64748b;
+        }
+
+        .reset-btn:hover {
+            background: #475569;
+        }
+
+        #status-text {
+            font-size: 1.1rem;
+            color: var(--text-main);
+            font-weight: 600;
+            margin-bottom: 20px;
+            min-height: 1.5em;
+        }
+
+        .result-box {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-top: 10px;
+            min-height: 30px;
+            color: var(--text-main);
+        }
+    </style>
+</head>
+
+<body class="antialiased selection:bg-[#9E4B8A] selection:text-white">
+
+    <!-- Navigation -->
+    <nav
+        class="w-full px-6 py-4 flex justify-between items-center sticky top-0 z-50 glass-panel border-b-0 rounded-none">
+        <div class="flex items-center gap-2">
+            <i data-lucide="radio" class="text-[#9E4B8A]"></i>
+            <span class="font-bold tracking-tight text-xl">CDMA<span class="text-[#9E4B8A]"> Technology</span></span>
+        </div>
+
+        <button id="themeToggle" class="p-2 rounded-full hover:bg-black/10 transition flex items-center gap-2">
+            <i data-lucide="moon" id="themeIcon" class="w-5 h-5"></i>
+        </button>
+    </nav>
+
+    <!-- Introduction Section -->
+    <section class="max-w-5xl mx-auto px-6 pt-24 pb-20">
+        <div class="space-y-8">
+            <div
+                class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#9E4B8A] text-[#9E4B8A] text-xs font-mono font-bold">
+                <span class="w-2 h-2 rounded-full bg-[#9E4B8A] animate-pulse"></span>
+                WIRELESS TECHNOLOGY
+            </div>
+
+            <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight leading-tight">
+                Code Division<br>
+                <span class="text-[#9E4B8A]">Multiple Access.</span>
+            </h1>
+
+            <p class="text-xl md:text-2xl opacity-80 leading-relaxed">
+                CDMA (Code Division Multiple Access) is a <strong>channel access method</strong> that allows multiple
+                users to share the same frequency band simultaneously. Unlike TDMA or FDMA, CDMA uses unique orthogonal
+                codes to differentiate users.
+                <br><br>
+                <strong class="text-blue-400">User A</strong> and <strong class="text-red-400">User B</strong> can
+                transmit at the same time on the same frequency. Their signals mix in the air, but receivers can extract
+                their specific data using <strong class="text-[#9E4B8A]">orthogonal codes</strong> that act as
+                mathematical filters.
+                <br><br>
+                This technique enables higher capacity and better security compared to traditional access methods.
+            </p>
+
+            <div class="p-4 rounded-lg bg-[#9E4B8A]/10 border-l-4 border-[#9E4B8A]">
+                <p class="text-sm font-bold opacity-90">INTERACTIVE DEMO 👇</p>
+                <p class="text-sm opacity-70">Simulate how two users send data simultaneously and recover their signals
+                    using orthogonal codes.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="max-w-7xl mx-auto px-6 py-20">
+        <h2 class="text-4xl md:text-5xl font-bold mb-10 text-center">How <span class="text-[#9E4B8A]">CDMA</span> Works
+        </h2>
+
+        <div class="flex flex-col md:flex-row gap-6">
+            <!-- Card 1 -->
+            <div class="glass-panel p-8 rounded-2xl hover:-translate-y-1 transition duration-300 flex-1">
+                <div class="text-center">
+                    <div
+                        class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mb-4 text-green-400 mx-auto">
+                        <i data-lucide="key"></i>
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">Unique Codes</h3>
+                    <p class="text-base opacity-70">
+                        Each user gets a unique orthogonal code. User A has [1, 1] and User B has [1, -1]. These codes
+                        are mathematically perpendicular.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="glass-panel p-8 rounded-2xl hover:-translate-y-1 transition duration-300 flex-1">
+                <div class="text-center">
+                    <div
+                        class="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center mb-4 text-blue-400 mx-auto">
+                        <i data-lucide="git-merge"></i>
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">Signal Spreading</h3>
+                    <p class="text-base opacity-70">
+                        Data bits are multiplied by the user's code, creating a spread signal. This increases bandwidth
+                        but enables simultaneous transmission.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="glass-panel p-8 rounded-2xl hover:-translate-y-1 transition duration-300 flex-1">
+                <div class="text-center">
+                    <div
+                        class="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mb-4 text-purple-400 mx-auto">
+                        <i data-lucide="layers"></i>
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">Signal Mixing</h3>
+                    <p class="text-base opacity-70">
+                        All spread signals combine in the air channel. The receiver sees a sum of all transmissions
+                        without knowing the source.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Card 4 -->
+            <div class="glass-panel p-8 rounded-2xl hover:-translate-y-1 transition duration-300 flex-1">
+                <div class="text-center">
+                    <div
+                        class="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center mb-4 text-orange-400 mx-auto">
+                        <i data-lucide="filter"></i>
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">Signal Recovery</h3>
+                    <p class="text-base opacity-70">
+                        Receivers use their code as a filter. The dot product extracts their data while canceling out
+                        other users' signals.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Animation Section -->
+    <section class="max-w-6xl mx-auto px-6 py-20">
+        <h2 class="text-4xl md:text-5xl font-bold mb-6 text-center">Interactive <span class="text-[#9E4B8A]">CDMA</span>
+            Simulation</h2>
+        <p class="text-center opacity-70 mb-10">Select data bits for each user and watch how CDMA encodes, mixes, and
+            decodes the signals.</p>
+
+        <div class="glass-panel rounded-2xl p-8">
+            <div id="status-text">Select your data bits to begin...</div>
+
+            <div style="display: flex; justify-content: space-between; gap: 20px; margin-bottom: 40px;">
+                <div class="station station-a" id="sender-a">
+                    <h2>User A</h2>
+                    <div class="code-tag">Code: [1, 1]</div>
+                    <div class="btn-group">
+                        <button class="btn" id="btn-a-0" onclick="setData('A', 0)">Send 0</button>
+                        <button class="btn active-a" id="btn-a-1" onclick="setData('A', 1)">Send 1</button>
+                    </div>
+                </div>
+
+                <div class="station station-b" id="sender-b">
+                    <h2>User B</h2>
+                    <div class="code-tag">Code: [1, -1]</div>
+                    <div class="btn-group">
+                        <button class="btn active-b" id="btn-b-0" onclick="setData('B', 0)">Send 0</button>
+                        <button class="btn" id="btn-b-1" onclick="setData('B', 1)">Send 1</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="air-channel" id="air-channel">
+                <span class="air-label">The Air (Mixed Signal)</span>
+                <div style="opacity: 0.5; font-size: 0.9rem;">(Signals will mix here)</div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; gap: 20px; margin-top: 40px; margin-bottom: 0;">
+                <div class="station station-a" id="receiver-a">
+                    <h2>Receiver A</h2>
+                    <div class="code-tag">Filter: [1, 1]</div>
+                    <div class="result-box" id="res-a">...</div>
+                </div>
+
+                <div class="station station-b" id="receiver-b">
+                    <h2>Receiver B</h2>
+                    <div class="code-tag">Filter: [1, -1]</div>
+                    <div class="result-box" id="res-b">...</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button class="step-btn" id="main-action-btn" onclick="nextStep()">Step 1: Spread & Send</button>
+                <button class="step-btn reset-btn" onclick="resetSim()">Reset</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Conclusion Section -->
+    <section class="max-w-7xl mx-auto px-6 py-20">
+        <h2 class="text-4xl md:text-5xl font-bold mb-10 text-center">Why <span class="text-[#9E4B8A]">CDMA</span>
+            Matters</h2>
+
+        <div class="glass-panel rounded-2xl p-12">
+            <div class="space-y-4 text-base opacity-80 leading-relaxed">
+                <p>
+                    CDMA revolutionized wireless communications by enabling <strong>multiple users to share the same
+                        frequency simultaneously</strong>. This increased network capacity and spectral efficiency
+                    compared to FDMA and TDMA.
+                </p>
+
+                <p>
+                    <strong class="text-[#9E4B8A]">Key Advantages:</strong> Better privacy (unique codes act as
+                    encryption), soft handoffs between cells (reduces dropped calls), and graceful degradation (quality
+                    decreases gradually as more users join).
+                </p>
+
+                <p>
+                    <strong class="text-blue-400">Real-World Applications:</strong> CDMA formed the basis of 3G networks
+                    (WCDMA/UMTS and CDMA2000), GPS satellites, and modern 4G/5G technologies that evolved from CDMA
+                    principles.
+                </p>
+
+                <p>
+                    The mathematical elegance of orthogonal codes enables what seems impossible: multiple conversations
+                    happening at once on the same frequency, perfectly separated by mathematics.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <div id="flight-layer"></div>
+
+    <script>
+        // --- Setup & Constants ---
+        const CODE_A = [1, 1];
+        const CODE_B = [1, -1];
+
+        let state = {
+            step: 0,        // 0=Ready, 1=Sending, 2=Mixing, 3=Decoding
+            bitA: 1,        // Logic 1 (+1)
+            bitB: -1,       // Logic 0 (-1)
+            mixedData: []
+        };
+
+        const ui = {
+            layer: document.getElementById('flight-layer'),
+            status: document.getElementById('status-text'),
+            btnAction: document.getElementById('main-action-btn'),
+            resA: document.getElementById('res-a'),
+            resB: document.getElementById('res-b'),
+            // Anchors
+            senderA: document.getElementById('sender-a'),
+            senderB: document.getElementById('sender-b'),
+            air: document.getElementById('air-channel'),
+            recvA: document.getElementById('receiver-a'),
+            recvB: document.getElementById('receiver-b')
+        };
+
+        // --- Helpers ---
+
+        function setData(user, val) {
+            // Logic 0 becomes -1 for math, Logic 1 becomes +1
+            const mathVal = val === 0 ? -1 : 1;
+
+            if (user === 'A') {
+                state.bitA = mathVal;
+                document.getElementById('btn-a-0').className = val === 0 ? "btn active-a" : "btn";
+                document.getElementById('btn-a-1').className = val === 1 ? "btn active-a" : "btn";
+            } else {
+                state.bitB = mathVal;
+                document.getElementById('btn-b-0').className = val === 0 ? "btn active-b" : "btn";
+                document.getElementById('btn-b-1').className = val === 1 ? "btn active-b" : "btn";
+            }
+
+            // Reset if simulation was finished
+            if (state.step > 0) resetSim(false);
+        }
+
+        function createPacketHTML(values, colorClass) {
+            let html = `<div class="packet-container">`;
+            values.forEach(v => {
+                let bg = colorClass;
+                // For mixed signals (purple), handle 0 values visually
+                if (colorClass === 'bg-purple' && v === 0) bg = 'bg-grey';
+
+                html += `<div class="block ${bg}">${v}</div>`;
+            });
+            html += `</div>`;
+            return html;
+        }
+
+        // Creates an element on the floating layer at specific coordinates
+        function spawnElement(html, x, y) {
+            const div = document.createElement('div');
+            div.className = 'flying-object';
+            div.innerHTML = html;
+            ui.layer.appendChild(div);
+
+            // Set initial position
+            gsap.set(div, { x: x, y: y, autoAlpha: 1 });
+            return div;
+        }
+
+        function getCenter(element) {
+            const rect = element.getBoundingClientRect();
+            return {
+                x: rect.left + rect.width / 2 + window.scrollX,
+                y: rect.top + rect.height / 2 + window.scrollY
+            };
+        }
+
+        // --- Main Sequence ---
+
+        function nextStep() {
+            if (state.step === 0) step1_Send();
+            else if (state.step === 1) step2_Mix();
+            else if (state.step === 2) step3_Decode();
+        }
+
+        function step1_Send() {
+            state.step = 1;
+            ui.status.innerText = "Encoding Data... (Data × Code)";
+            ui.btnAction.disabled = true; // Lock button during animation
+
+            // 1. Calculate Signals
+            const sigA = CODE_A.map(c => c * state.bitA);
+            const sigB = CODE_B.map(c => c * state.bitB);
+
+            // 2. Spawn Packets at Senders
+            const posA = getCenter(ui.senderA);
+            const posB = getCenter(ui.senderB);
+
+            // Offset slightly to center the packet itself
+            const packetA = spawnElement(createPacketHTML(sigA, 'bg-blue'), posA.x - 30, posA.y);
+            const packetB = spawnElement(createPacketHTML(sigB, 'bg-red'), posB.x - 30, posB.y);
+
+            // 3. Store references for next step
+            state.packetA = packetA;
+            state.packetB = packetB;
+
+            // 4. Animate Appearance
+            gsap.from([packetA, packetB], { scale: 0, duration: 0.5, ease: "back.out(1.7)" });
+
+            setTimeout(() => {
+                ui.status.innerText = "Sending to Air Channel...";
+                ui.btnAction.innerText = "Step 2: Mix Signals";
+                ui.btnAction.disabled = false;
+            }, 600);
+        }
+
+        function step2_Mix() {
+            state.step = 2;
+            ui.status.innerText = "Signals are colliding in the air!";
+            ui.btnAction.disabled = true;
+
+            // 1. Target Position (Air Channel)
+            const airPos = getCenter(ui.air);
+
+            // 2. Fly A and B to Center
+            const tl = gsap.timeline();
+
+            tl.to([state.packetA, state.packetB], {
+                x: airPos.x - 30, // Center alignment
+                y: airPos.y,
+                duration: 1.5,
+                ease: "power2.inOut"
+            });
+
+            // 3. Merge into one Purple Packet
+            tl.call(() => {
+                // Remove individual packets
+                state.packetA.remove();
+                state.packetB.remove();
+
+                // Calculate Sum
+                const sigA = CODE_A.map(c => c * state.bitA);
+                const sigB = CODE_B.map(c => c * state.bitB);
+                state.mixedData = sigA.map((v, i) => v + sigB[i]);
+
+                // Spawn Mixed Packet
+                state.mixedPacket = spawnElement(createPacketHTML(state.mixedData, 'bg-purple'), airPos.x - 30, airPos.y);
+
+                // 4. "Pop" effect
+                gsap.fromTo(state.mixedPacket, { scale: 1.5 }, { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.3)" });
+            });
+
+            tl.call(() => {
+                ui.status.innerText = "The Air now contains a SUM of both signals.";
+                ui.btnAction.innerText = "Step 3: Decode";
+                ui.btnAction.disabled = false;
+            });
+        }
+
+        function step3_Decode() {
+            state.step = 3;
+            ui.status.innerText = "Receivers filter the noise using their Codes...";
+            ui.btnAction.disabled = true;
+
+            // 1. Clone Mixed Packet for both receivers
+            const startPos = getCenter(ui.air);
+            const destA = getCenter(ui.recvA);
+            const destB = getCenter(ui.recvB);
+
+            const packetToA = spawnElement(createPacketHTML(state.mixedData, 'bg-purple'), startPos.x - 30, startPos.y);
+            const packetToB = spawnElement(createPacketHTML(state.mixedData, 'bg-purple'), startPos.x - 30, startPos.y);
+
+            // Hide original center packet
+            if (state.mixedPacket) state.mixedPacket.style.opacity = 0;
+
+            // 2. Fly to Receivers
+            const tl = gsap.timeline();
+
+            tl.to(packetToA, { x: destA.x - 30, y: destA.y, duration: 1 });
+            tl.to(packetToB, { x: destB.x - 30, y: destB.y, duration: 1 }, "<"); // Run same time
+
+            // 3. Decode & Show Result
+            tl.call(() => {
+                // Decode Logic A: (Mix • CodeA) / 2
+                let sumA = 0;
+                state.mixedData.forEach((v, i) => sumA += v * CODE_A[i]);
+                const finalA = sumA / 2;
+
+                // Decode Logic B: (Mix • CodeB) / 2
+                let sumB = 0;
+                state.mixedData.forEach((v, i) => sumB += v * CODE_B[i]);
+                const finalB = sumB / 2;
+
+                // Update UI Text
+                ui.resA.innerHTML = `<span style="color:var(--color-a)">${finalA === 1 ? '1' : '0'}</span>`;
+                ui.resB.innerHTML = `<span style="color:var(--color-b)">${finalB === 1 ? '1' : '0'}</span>`;
+
+                ui.status.innerText = "Success! Original data recovered.";
+
+                // Cleanup flying packets
+                packetToA.remove();
+                packetToB.remove();
+            });
+
+            tl.call(() => {
+                ui.btnAction.innerText = "Simulation Complete";
+            });
+        }
+
+        function resetSim(full = true) {
+            state.step = 0;
+            state.mixedData = [];
+            ui.layer.innerHTML = ''; // Clear all flying objects
+
+            ui.status.innerText = "Select your data bits to begin...";
+            ui.btnAction.innerText = "Step 1: Spread & Send";
+            ui.btnAction.disabled = false;
+
+            ui.resA.innerText = "...";
+            ui.resB.innerText = "...";
+
+            if (full) {
+                setData('A', 1);
+                setData('B', 0);
+            }
+        }
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Theme Toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+        const body = document.body;
+
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'light') {
+            body.classList.remove('dark');
+            body.classList.add('light');
+            html.classList.remove('dark');
+            html.classList.add('light');
+            themeIcon.setAttribute('data-lucide', 'sun');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            if (body.classList.contains('dark')) {
+                body.classList.remove('dark');
+                body.classList.add('light');
+                html.classList.remove('dark');
+                html.classList.add('light');
+                localStorage.setItem('theme', 'light');
+                themeIcon.setAttribute('data-lucide', 'sun');
+            } else {
+                body.classList.remove('light');
+                body.classList.add('dark');
+                html.classList.remove('light');
+                html.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+                themeIcon.setAttribute('data-lucide', 'moon');
+            }
+            lucide.createIcons();
+        });
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Modulation — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --scope-bg: #ffffff;
+            --accent-cyan: #22d3ee;
+            --accent-purple: #c084fc;
+            --accent-emerald: #34d399;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+            --scope-bg: #0f0a1a;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Glass Panel */
+        .glass-panel {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            border-radius: 1rem;
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.35);
+        }
+
+        .dark .glass-panel {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Mode Buttons */
+        .mode-btn {
+            background-color: var(--bg-card);
+            color: var(--text-body);
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+        }
+
+        .mode-btn:hover {
+            background-color: rgba(158, 75, 138, 0.08);
+            border-color: #9E4B8A;
+        }
+
+        .mode-btn.active-mode {
+            background: linear-gradient(135deg, #9E4B8A, #B06AB3);
+            color: #FFFFFF;
+            border-color: transparent;
+            box-shadow: 0 8px 26px rgba(158, 75, 138, 0.5);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-app);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #9E4B8A;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #B06AB3;
+        }
+
+        /* Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: var(--text-head);
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border: 2px solid #9E4B8A;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: var(--border);
+            border-radius: 2px;
+        }
+
+        .highlight-text {
+            background: linear-gradient(to right, #9E4B8A, #C88DBA);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .cyber-grid {
+            background-size: 40px 40px;
+            background-image: linear-gradient(to right, rgba(158, 75, 138, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(158, 75, 138, 0.05) 1px, transparent 1px);
+        }
+
+        .dark .cyber-grid {
+            background-image: linear-gradient(to right, rgba(158, 75, 138, 0.1) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(158, 75, 138, 0.1) 1px, transparent 1px);
+        }
+
+        .accent-glow {
+            background: radial-gradient(600px 400px at 50% 0%, rgba(158, 75, 138, 0.25), transparent 70%);
+        }
+
+        .dark .accent-glow {
+            background: radial-gradient(600px 400px at 50% 0%, rgba(158, 75, 138, 0.35), transparent 70%);
+        }
+    </style>
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="lab-shell pb-10 cyber-grid">
+
+        <!-- Hero Section -->
+        <section class="min-h-[70vh] flex flex-col justify-center items-center px-6 relative overflow-hidden">
+            <div class="absolute inset-0 accent-glow pointer-events-none"></div>
+
+            <div class="max-w-4xl w-full z-10 space-y-8 text-center md:text-left">
+
+                <div class="flex items-center justify-center md:justify-start space-x-4 mb-4">
+                    <div class="p-3 rounded-xl border border-brand-500/30 bg-brand-500/10">
+                        <span class="material-symbols-rounded text-brand-500 text-3xl">music_note</span>
+                    </div>
+                    <span class="text-brand-500 font-bold tracking-widest text-sm uppercase">The Analogy</span>
+                </div>
+
+                <h1 class="text-5xl md:text-8xl font-black tracking-tight leading-none text-center md:text-left"
+                    style="color: var(--text-head)">
+                    Digital <br>
+                    <span class="highlight-text">Modulation</span>
+                </h1>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12 text-left">
+                    <div class="space-y-6">
+                        <p class="text-xl font-light leading-relaxed" style="color: var(--text-sub)">
+                            Computers speak in 1s and 0s. But the real world (cables, air, fiber optics) is purely
+                            analog. It only understands <strong class="text-brand-500">waves</strong>.
+                        </p>
+                        <p class="text-xl font-light leading-relaxed" style="color: var(--text-sub)">
+                            To solve this, we act like a musician. To send a "1", we play a specific note (High). To
+                            send a "0", we change how we play (Low).
+                        </p>
+                    </div>
+
+                    <div
+                        class="glass-panel p-8 flex flex-col justify-center items-center space-y-6 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+                        <div class="flex items-center justify-around w-full relative z-10">
+                            <div class="flex flex-col items-center gap-2 cursor-pointer" onclick="hintShake(this)">
+                                <div
+                                    class="w-16 h-16 rounded-full border-2 border-brand-500 bg-brand-500/10 flex items-center justify-center animate-pulse">
+                                    <span class="material-symbols-rounded text-brand-500 text-3xl">volume_up</span>
+                                </div>
+                                <span class="text-xs font-bold text-brand-500">LOUD (1)</span>
+                            </div>
+
+                            <span class="material-symbols-rounded" style="color: var(--text-sub)">arrow_forward</span>
+
+                            <div class="flex flex-col items-center gap-2 cursor-pointer" onclick="hintShake(this)">
+                                <div class="w-12 h-12 rounded-full border-2 bg-opacity-10 flex items-center justify-center opacity-70"
+                                    style="border-color: var(--text-sub); background: rgba(158, 75, 138, 0.1)">
+                                    <span class="material-symbols-rounded text-2xl"
+                                        style="color: var(--text-sub)">volume_down</span>
+                                </div>
+                                <span class="text-xs font-bold" style="color: var(--text-sub)">SOFT (0)</span>
+                            </div>
+                        </div>
+                        <p class="text-sm text-center mono max-w-xs" style="color: var(--text-sub)">
+                            This is <strong class="text-brand-500">Amplitude Modulation</strong>. <br>Changing the
+                            volume to speak binary.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Modulator Console Section -->
+        <section class="py-20 px-4 md:px-8 relative border-t" style="border-color: var(--border)">
+            <div class="max-w-6xl mx-auto">
+
+                <div class="flex flex-col md:flex-row justify-between items-end mb-12">
+                    <div>
+                        <h2 class="text-4xl font-bold mb-2" style="color: var(--text-head)">The Modulator Console</h2>
+                        <p style="color: var(--text-sub)">Encode binary data onto an analog carrier wave in real-time.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel px-6 py-3 flex items-center gap-4 mt-6 md:mt-0">
+                        <span class="text-xs font-bold uppercase tracking-wider" style="color: var(--text-sub)">Bit
+                            Stream:</span>
+                        <div id="bit-editor" class="flex gap-2 font-mono text-lg font-bold"
+                            style="color: var(--text-head)"></div>
+                        <button onclick="randomizeBits()"
+                            class="p-2 hover:bg-brand-500/10 rounded-full transition-colors" title="Randomize">
+                            <span class="material-symbols-rounded text-brand-500">shuffle</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[600px]">
+
+                    <div class="lg:col-span-8 relative glass-panel overflow-hidden flex flex-col"
+                        style="background: var(--scope-bg)">
+                        <div class="absolute top-4 left-4 z-10 pointer-events-none flex flex-col gap-1">
+                            <span class="text-[10px] font-bold px-2 py-1 rounded border"
+                                style="color: var(--text-sub); background: var(--bg-card); border-color: var(--border)">DIGITAL
+                                (Source)</span>
+                        </div>
+                        <div class="h-[30%] w-full border-b relative" style="border-color: var(--border)">
+                            <canvas id="digitalCanvas" class="w-full h-full block"></canvas>
+                        </div>
+                        <div class="h-[70%] w-full relative">
+                            <div class="absolute top-4 left-4 z-10 pointer-events-none">
+                                <span
+                                    class="text-[10px] font-bold text-brand-500 bg-brand-500/10 px-2 py-1 rounded border border-brand-500/30">ANALOG
+                                    (Modulated)</span>
+                            </div>
+                            <canvas id="analogCanvas" class="w-full h-full block"></canvas>
+                            <div class="absolute bottom-4 right-4 text-right pointer-events-none">
+                                <div class="text-[10px] uppercase tracking-widest mb-1" style="color: var(--text-sub)">
+                                    Carrier Freq</div>
+                                <div id="freq-display" class="text-xl font-mono font-bold"
+                                    style="color: var(--text-head)">2 Hz</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-4 flex flex-col justify-between h-full space-y-4">
+
+                        <div class="glass-panel p-6 flex flex-col gap-3">
+                            <h3 class="text-xs font-bold uppercase tracking-widest mb-2" style="color: var(--text-sub)">
+                                Technique</h3>
+
+                            <button onclick="setMode('ASK')" id="btn-ask"
+                                class="mode-btn active-mode flex items-center justify-between px-4 py-3 rounded-lg group">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-rounded text-cyan-500">bar_chart</span>
+                                    <div class="text-left">
+                                        <div class="text-sm font-bold">ASK</div>
+                                        <div class="text-[10px] opacity-70">Amplitude Shift</div>
+                                    </div>
+                                </div>
+                                <div
+                                    class="w-2 h-2 rounded-full bg-cyan-500 opacity-0 group-[.active-mode]:opacity-100">
+                                </div>
+                            </button>
+
+                            <button onclick="setMode('FSK')" id="btn-fsk"
+                                class="mode-btn flex items-center justify-between px-4 py-3 rounded-lg group">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-rounded text-purple-500">show_chart</span>
+                                    <div class="text-left">
+                                        <div class="text-sm font-bold">FSK</div>
+                                        <div class="text-[10px] opacity-70">Frequency Shift</div>
+                                    </div>
+                                </div>
+                                <div
+                                    class="w-2 h-2 rounded-full bg-purple-500 opacity-0 group-[.active-mode]:opacity-100">
+                                </div>
+                            </button>
+
+                            <button onclick="setMode('PSK')" id="btn-psk"
+                                class="mode-btn flex items-center justify-between px-4 py-3 rounded-lg group">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-rounded text-emerald-500">swap_horiz</span>
+                                    <div class="text-left">
+                                        <div class="text-sm font-bold">PSK</div>
+                                        <div class="text-[10px] opacity-70">Phase Shift</div>
+                                    </div>
+                                </div>
+                                <div
+                                    class="w-2 h-2 rounded-full bg-emerald-500 opacity-0 group-[.active-mode]:opacity-100">
+                                </div>
+                            </button>
+                        </div>
+
+                        <div class="glass-panel p-6 flex-1 flex flex-col justify-center border-l-4 border-brand-500 transition-colors duration-300"
+                            id="params-panel">
+                            <h3 class="text-xs font-bold uppercase tracking-widest mb-6 flex items-center gap-2"
+                                style="color: var(--text-head)">
+                                <span class="material-symbols-rounded text-base">tune</span> Parameters
+                            </h3>
+                            <div class="mb-6">
+                                <div class="flex justify-between text-xs mb-2" style="color: var(--text-sub)">
+                                    <span>Carrier Frequency</span>
+                                </div>
+                                <input type="range" id="carrier-slider" min="1" max="5" step="0.5" value="2"
+                                    class="w-full">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-xs mb-2" style="color: var(--text-sub)">
+                                    <span id="param2-label">Amplitude Difference</span>
+                                </div>
+                                <input type="range" id="param2-slider" min="0" max="1" step="0.1" value="0.5"
+                                    class="w-full">
+                            </div>
+                            <p id="mode-desc" class="text-xs mt-6 leading-relaxed italic"
+                                style="color: var(--text-sub)">
+                                Modifying the height (amplitude) of the wave to represent 1s (Tall) and 0s (Short).
+                            </p>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Under The Hood Section -->
+        <section class="py-24 px-6 relative z-10">
+            <div class="max-w-6xl mx-auto">
+                <h2 class="text-3xl font-bold mb-12 text-center" style="color: var(--text-head)">Under The Hood</h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                    <div class="glass-panel p-6 border-t-4 border-cyan-500 h-full flex flex-col">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-xl font-bold" style="color: var(--text-head)">ASK</h3>
+                                <p class="text-sm" style="color: var(--text-sub)">Amplitude Shift Keying</p>
+                            </div>
+                            <span class="px-2 py-1 bg-cyan-500/10 text-cyan-500 text-xs font-bold rounded">BASIC</span>
+                        </div>
+                        <p class="text-sm leading-relaxed mb-4 flex-grow" style="color: var(--text-sub)">
+                            Changes the <strong>loudness</strong> of the wave. Simple to implement but susceptible to
+                            noise. Used in optical fibers.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel p-6 border-t-4 border-purple-500 h-full flex flex-col">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-xl font-bold" style="color: var(--text-head)">FSK</h3>
+                                <p class="text-sm" style="color: var(--text-sub)">Frequency Shift Keying</p>
+                            </div>
+                            <span
+                                class="px-2 py-1 bg-purple-500/10 text-purple-500 text-xs font-bold rounded">ROBUST</span>
+                        </div>
+                        <p class="text-sm leading-relaxed mb-4 flex-grow" style="color: var(--text-sub)">
+                            Changes the <strong>pitch</strong> of the wave. Resistant to noise. Used in old modems and
+                            Bluetooth.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel p-6 border-t-4 border-emerald-500 h-full flex flex-col">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-xl font-bold" style="color: var(--text-head)">PSK</h3>
+                                <p class="text-sm" style="color: var(--text-sub)">Phase Shift Keying</p>
+                            </div>
+                            <span
+                                class="px-2 py-1 bg-emerald-500/10 text-emerald-500 text-xs font-bold rounded">EFFICIENT</span>
+                        </div>
+                        <p class="text-sm leading-relaxed mb-4 flex-grow" style="color: var(--text-sub)">
+                            Changes the <strong>timing</strong> (phase) of the wave start. Highly efficient. Used in
+                            Wi-Fi and 5G.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel p-6 md:col-span-2 lg:col-span-3">
+                        <div class="flex items-center gap-4 mb-4">
+                            <div class="p-2 bg-brand-500/10 rounded-lg">
+                                <span class="material-symbols-rounded text-brand-500 text-2xl">function</span>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold" style="color: var(--text-head)">The Master Equation</h3>
+                                <p class="text-xs" style="color: var(--text-sub)">General Sinusoid Formula</p>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row items-center justify-center gap-8 py-4">
+                            <div class="text-3xl md:text-5xl font-mono font-bold" style="color: var(--text-head)">
+                                y(t) = <span class="text-cyan-500">A</span> · sin(2π<span
+                                    class="text-purple-500">f</span>t + <span class="text-emerald-500">φ</span>)
+                            </div>
+                            <div class="text-xs font-mono space-y-2 border-l pl-4"
+                                style="color: var(--text-sub); border-color: var(--border)">
+                                <p><span class="text-cyan-500 font-bold">A</span> = Amplitude (ASK)</p>
+                                <p><span class="text-purple-500 font-bold">f</span> = Frequency (FSK)</p>
+                                <p><span class="text-emerald-500 font-bold">φ</span> = Phase (PSK)</p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="py-12 text-center text-sm border-t"
+        style="border-color: var(--border); color: var(--text-sub); background: var(--bg-card)">
+        <p>Explorable Explanation Design — Paper X</p>
+    </footer>
+
+    <script>
+        // --- SIMULATOR CONFIG ---
+        const bits = [1, 0, 1, 1, 0, 1, 0, 0];
+        let currentMode = 'ASK';
+        let time = 0;
+        let speed = 2; // Pixels per frame
+
+        // Canvas Setup
+        const dCanvas = document.getElementById('digitalCanvas');
+        const aCanvas = document.getElementById('analogCanvas');
+        const dCtx = dCanvas.getContext('2d');
+        const aCtx = aCanvas.getContext('2d');
+        let width, heightD, heightA;
+
+        // Elements
+        const bitEditor = document.getElementById('bit-editor');
+        const carrierSlider = document.getElementById('carrier-slider');
+        const param2Slider = document.getElementById('param2-slider');
+        const param2Label = document.getElementById('param2-label');
+        const modeDesc = document.getElementById('mode-desc');
+        const freqDisplay = document.getElementById('freq-display');
+        const paramsPanel = document.getElementById('params-panel');
+
+        // State for Sliders
+        let carrierFreq = 2;
+        let modParam = 0.5;
+
+        // --- INIT BITS UI ---
+        function renderBits() {
+            bitEditor.innerHTML = '';
+            bits.forEach((b, i) => {
+                const span = document.createElement('button');
+                span.className = `w-8 h-10 rounded flex items-center justify-center border transition-all ${b ? 'bg-brand-500 text-white border-brand-500' : 'bg-transparent border-current opacity-50'}`;
+                span.style.color = b ? '' : 'var(--text-sub)';
+                span.innerText = b;
+                span.onclick = () => {
+                    bits[i] = bits[i] ? 0 : 1;
+                    renderBits();
+                };
+                bitEditor.appendChild(span);
+            });
+        }
+
+        function randomizeBits() {
+            for (let i = 0; i < bits.length; i++) bits[i] = Math.random() > 0.5 ? 1 : 0;
+            renderBits();
+        }
+
+        // --- RESIZE ---
+        function resize() {
+            width = dCanvas.parentElement.clientWidth;
+            heightD = dCanvas.parentElement.clientHeight;
+            heightA = aCanvas.parentElement.clientHeight;
+            dCanvas.width = width;
+            dCanvas.height = heightD;
+            aCanvas.width = width;
+            aCanvas.height = heightA;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- MODES ---
+        const modes = {
+            ASK: { color: '#22d3ee', panelColor: '#22d3ee', label2: 'Amplitude Difference', desc: 'Modifying height (Amplitude). 1 = Tall, 0 = Short.' },
+            FSK: { color: '#c084fc', panelColor: '#c084fc', label2: 'Frequency Shift', desc: 'Modifying speed (Frequency). 1 = Fast, 0 = Slow.' },
+            PSK: { color: '#34d399', panelColor: '#34d399', label2: 'Phase Shift', desc: 'Shifting the starting point (Phase). 1 starts UP, 0 starts DOWN.' }
+        };
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('#btn-ask, #btn-fsk, #btn-psk').forEach(b => b.classList.remove('active-mode'));
+            document.getElementById(`btn-${mode.toLowerCase()}`).classList.add('active-mode');
+
+            param2Label.innerText = modes[mode].label2;
+            modeDesc.innerText = modes[mode].desc;
+            paramsPanel.style.borderLeftColor = modes[mode].panelColor;
+
+            if (mode === 'PSK') { param2Slider.value = 1; modParam = 1; }
+        }
+
+        // --- DRAW LOOP ---
+        function animate() {
+            // Theme colors
+            const style = getComputedStyle(document.documentElement);
+            const scopeBg = style.getPropertyValue('--scope-bg').trim();
+            const textSub = style.getPropertyValue('--text-sub').trim();
+
+            dCtx.clearRect(0, 0, width, heightD);
+            aCtx.fillStyle = scopeBg;
+            aCtx.fillRect(0, 0, width, heightA);
+
+            // Params
+            carrierFreq = parseFloat(carrierSlider.value);
+            modParam = parseFloat(param2Slider.value);
+            freqDisplay.innerText = carrierFreq + " Hz";
+
+            const bitWidth = 80;
+
+            // DRAW DIGITAL
+            dCtx.strokeStyle = textSub;
+            dCtx.lineWidth = 2;
+            dCtx.beginPath();
+
+            for (let x = 0; x < width; x++) {
+                const virtualX = x + time * speed;
+                const bitIndex = Math.floor(virtualX / bitWidth) % bits.length;
+                const bit = bits[bitIndex];
+                const y = bit ? heightD * 0.2 : heightD * 0.8;
+                if (x === 0) dCtx.moveTo(x, y);
+                else dCtx.lineTo(x, y);
+
+                if (Math.floor((virtualX - 1) / bitWidth) !== bitIndex) {
+                    dCtx.lineTo(x, bit ? heightD * 0.8 : heightD * 0.2);
+                }
+            }
+            dCtx.stroke();
+
+            // DRAW ANALOG
+            aCtx.lineWidth = 3;
+            aCtx.strokeStyle = modes[currentMode].color;
+            aCtx.shadowBlur = 10;
+            aCtx.shadowColor = modes[currentMode].color;
+            aCtx.beginPath();
+
+            for (let x = 0; x < width; x++) {
+                const virtualX = x + time * speed;
+                const bitIndex = Math.floor(virtualX / bitWidth) % bits.length;
+                const bit = bits[bitIndex];
+
+                let amp = 0.8;
+                let freq = carrierFreq;
+                let phase = 0;
+
+                if (currentMode === 'ASK') {
+                    if (bit === 0) amp = amp * (1 - modParam);
+                } else if (currentMode === 'FSK') {
+                    if (bit === 0) freq = freq / (1 + modParam);
+                    else freq = freq * (1 + modParam * 0.5);
+                } else if (currentMode === 'PSK') {
+                    if (bit === 0) phase = Math.PI * modParam;
+                }
+
+                const angle = (virtualX * 0.1 * freq) + phase;
+                const y = (heightA / 2) + Math.sin(angle) * (heightA / 2 * amp * 0.8);
+
+                if (x === 0) aCtx.moveTo(x, y);
+                else aCtx.lineTo(x, y);
+            }
+            aCtx.stroke();
+            aCtx.shadowBlur = 0;
+
+            time += 1;
+            requestAnimationFrame(animate);
+        }
+
+        // Init
+        renderBits();
+        resize();
+        setMode('ASK');
+        animate();
+
+        function hintShake(el) {
+            gsap.fromTo(el, { x: -5 }, { x: 5, duration: 0.1, yoyo: true, repeat: 3 });
+        }
+
+        // Shared Paper X theme toggle wiring
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radio Transmission — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --canvas-bg: rgba(255, 255, 255, 0.5);
+            --c-tower: #94a3b8;
+            --c-antenna: #475569;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+            --canvas-bg: rgba(0, 0, 0, 0.4);
+            --c-tower: #334155;
+            --c-antenna: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        .lab-container {
+            max-width: 1200px;
+            width: 95%;
+            margin: 2.5rem auto 3rem auto;
+        }
+
+        /* --- GLASS PANEL --- */
+        .glass-panel {
+            border-radius: 1rem;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.35);
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            overflow: hidden;
+        }
+
+        .dark .glass-panel {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* --- INFO CARDS --- */
+        .info-card {
+            border-radius: 1rem;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.35);
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            padding: 1.5rem;
+            transition: all 0.3s;
+        }
+
+        .dark .info-card {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.8);
+        }
+
+        .info-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 24px 50px -15px rgba(158, 75, 138, 0.3);
+        }
+
+        /* Custom Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+            width: 100%;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #9E4B8A;
+            cursor: pointer;
+            margin-top: -10px;
+            box-shadow: 0 0 10px rgba(158, 75, 138, 0.5);
+            border: 2px solid #C88DBA;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: var(--border);
+            border-radius: 2px;
+        }
+
+        /* Music Player Animation */
+        @keyframes spin-slow {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .animate-spin-slow {
+            animation: spin-slow 3s linear infinite;
+        }
+    </style>
+
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="lab-shell pb-10">
+
+        <!-- HERO SECTION -->
+        <section class="pt-12 pb-8">
+            <div class="container max-w-5xl mx-auto px-4">
+                <div class="flex items-start justify-between gap-4 mb-6">
+                    <div>
+                        <span class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-4
+                            bg-gradient-to-r from-rose-500/10 to-indigo-500/10 
+                            border border-rose-500/20 text-rose-600 dark:text-rose-400">
+                            <span class="material-symbols-rounded text-base">radio</span>
+                            The Concept
+                        </span>
+                        <h1
+                            class="text-4xl md:text-6xl font-extrabold tracking-tight text-brand-900 dark:text-white mb-2">
+                            Radio <br>
+                            <span
+                                class="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-indigo-500">Transmission</span>
+                        </h1>
+                    </div>
+                    <div class="hidden sm:flex flex-col items-end gap-2 text-xs text-neutral-500 dark:text-white/60">
+                        <span
+                            class="inline-flex items-center gap-1 rounded-full border border-black/5 dark:border-white/10 px-3 py-1">
+                            <span class="material-symbols-rounded text-base">bolt</span>
+                            Interactive Simulator
+                        </span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="space-y-6">
+                        <p class="text-lg font-light leading-relaxed" style="color: var(--text-sub)">
+                            Radio feels like magic, but it's actually very simple. It works almost exactly like a
+                            <strong class="text-brand-500">Jump Rope</strong>.
+                        </p>
+                        <p class="text-lg font-light leading-relaxed" style="color: var(--text-sub)">
+                            Imagine holding a rope connected to a friend. If you wiggle your hand up and down, a wave
+                            travels down the rope. When it hits your friend, their hand moves too.
+                        </p>
+                    </div>
+
+                    <div
+                        class="glass-panel p-8 flex flex-col justify-center items-center space-y-6 relative overflow-hidden">
+                        <div class="flex items-center justify-between w-full h-32 relative">
+                            <div class="relative z-10 flex flex-col items-center">
+                                <div
+                                    class="w-12 h-12 rounded-full border-2 border-rose-500 bg-rose-500/20 flex items-center justify-center animate-bounce">
+                                    <span class="material-symbols-rounded text-rose-500">cell_tower</span>
+                                </div>
+                                <span class="text-xs font-bold text-rose-500 mt-2">SENDER</span>
+                            </div>
+
+                            <svg class="absolute top-0 left-0 w-full h-full pointer-events-none"
+                                preserveAspectRatio="none">
+                                <path d="M 50,64 Q 150,10 250,64 T 450,64" stroke="var(--text-sub)" stroke-width="3"
+                                    fill="none" stroke-dasharray="5,5" opacity="0.5">
+                                    <animate attributeName="d"
+                                        values="M 50,64 Q 150,10 250,64 T 450,64; M 50,64 Q 150,118 250,64 T 450,64; M 50,64 Q 150,10 250,64 T 450,64"
+                                        dur="2s" repeatCount="indefinite" />
+                                </path>
+                            </svg>
+
+                            <div class="relative z-10 flex flex-col items-center">
+                                <div class="w-12 h-12 rounded-full border-2 border-indigo-500 bg-indigo-500/20 flex items-center justify-center animate-bounce"
+                                    style="animation-delay: 0.5s;">
+                                    <span class="material-symbols-rounded text-indigo-500">radio</span>
+                                </div>
+                                <span class="text-xs font-bold text-indigo-500 mt-2">RECEIVER</span>
+                            </div>
+                        </div>
+
+                        <p class="text-sm text-center font-mono" style="color: var(--text-sub)">
+                            You wiggle electrons here. Electrons wiggle there. <br> That is Radio.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="w-full flex justify-center pt-8 animate-bounce">
+                    <span class="material-symbols-rounded text-3xl"
+                        style="color: var(--text-sub)">keyboard_arrow_down</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- SIMULATOR SECTION -->
+        <section class="py-12 border-t" style="border-color: var(--border)">
+            <div class="lab-container">
+
+                <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+                    <div>
+                        <h2 class="text-3xl font-bold mb-2" style="color: var(--text-head)">The Radio Simulator</h2>
+                        <p style="color: var(--text-sub)">Match the Receiver's tuning to the Sender's speed to catch the
+                            signal!</p>
+                    </div>
+
+                    <div class="glass-panel px-4 py-2 flex items-center space-x-3">
+                        <div id="status-dot" class="w-4 h-4 rounded-full bg-slate-500 transition-all duration-300">
+                        </div>
+                        <span id="status-text"
+                            class="text-xs font-bold text-slate-500 tracking-widest uppercase transition-colors duration-300">No
+                            Signal (Static)</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6" style="min-height: 500px;">
+
+                    <!-- Canvas Area -->
+                    <div class="lg:col-span-8 relative glass-panel overflow-hidden flex flex-col"
+                        style="background: var(--canvas-bg); min-height: 400px;">
+                        <div class="absolute top-4 left-4 z-10 pointer-events-none">
+                            <span class="text-xs font-bold text-rose-500 bg-rose-500/10 px-2 py-1 rounded">SENDER
+                                (Tower)</span>
+                        </div>
+                        <div class="absolute top-4 right-4 z-10 pointer-events-none">
+                            <span class="text-xs font-bold text-indigo-500 bg-indigo-500/10 px-2 py-1 rounded">RECEIVER
+                                (Radio)</span>
+                        </div>
+
+                        <canvas id="radioCanvas" class="w-full h-full block"></canvas>
+
+                        <div class="absolute bottom-6 w-full text-center pointer-events-none">
+                            <p class="text-xs font-mono bg-black/10 dark:bg-white/10 inline-block px-4 py-1 rounded-full backdrop-blur-md"
+                                style="color: var(--text-sub)">
+                                Match the Frequencies
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Controls -->
+                    <div class="lg:col-span-4 flex flex-col justify-between h-full space-y-4">
+
+                        <!-- Sender Control -->
+                        <div class="glass-panel p-6 flex-1 flex flex-col justify-center border-l-4 border-rose-500">
+                            <h3 class="text-lg font-bold mb-1" style="color: var(--text-head)">1. The Sender</h3>
+                            <p class="text-xs mb-6" style="color: var(--text-sub)">How fast are we wiggling the signal?
+                            </p>
+
+                            <div class="mb-4">
+                                <div class="flex justify-between text-xs text-rose-500 font-bold mb-2">
+                                    <span>SENDING FREQUENCY</span>
+                                    <span id="tx-freq-val" class="font-mono text-lg">1.0 Hz</span>
+                                </div>
+                                <input type="range" id="tx-freq" min="0.5" max="3.0" step="0.1" value="1.0"
+                                    class="w-full">
+                            </div>
+                        </div>
+
+                        <!-- Receiver Control -->
+                        <div class="glass-panel p-6 flex-1 flex flex-col justify-center border-l-4 border-indigo-500">
+                            <h3 class="text-lg font-bold mb-1" style="color: var(--text-head)">2. The Receiver</h3>
+                            <p class="text-xs mb-6" style="color: var(--text-sub)">Tune your radio to catch the wave.
+                            </p>
+
+                            <div>
+                                <div class="flex justify-between text-xs text-indigo-500 font-bold mb-2">
+                                    <span>TUNING FREQUENCY</span>
+                                    <span id="rx-freq-val" class="font-mono text-lg">1.5 Hz</span>
+                                </div>
+                                <input type="range" id="rx-freq" min="0.5" max="3.0" step="0.1" value="1.5"
+                                    class="w-full">
+                            </div>
+
+                            <div class="mt-6 p-4 rounded-xl flex items-center space-x-3 transition-opacity duration-500 border"
+                                id="music-player"
+                                style="opacity: 0.3; background: var(--bg-app); border-color: var(--border);">
+                                <div
+                                    class="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center animate-spin-slow">
+                                    <span class="material-symbols-rounded text-white">music_note</span>
+                                </div>
+                                <div>
+                                    <div class="text-xs font-bold" style="color: var(--text-head)">Music Playing...
+                                    </div>
+                                    <div class="w-32 h-1 rounded-full mt-1 overflow-hidden"
+                                        style="background: var(--border)">
+                                        <div class="h-full bg-emerald-500 animate-pulse w-2/3"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- INFO SECTION -->
+        <section class="py-12 px-4">
+            <div class="max-w-6xl mx-auto">
+                <h2 class="text-3xl font-bold mb-8" style="color: var(--text-head)">Under The Hood</h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                    <div class="info-card border-t-4 border-rose-500">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-xl font-bold" style="color: var(--text-head)">1. The Wiggle</h3>
+                            <span class="material-symbols-rounded text-2xl text-rose-500">monitoring</span>
+                        </div>
+                        <p class="leading-relaxed text-sm" style="color: var(--text-sub)">
+                            A transmitter pushes electricity up and down an antenna. This creates a ripple in the
+                            electromagnetic field, just like a stone creates ripples in a pond.
+                        </p>
+                    </div>
+
+                    <div class="info-card border-t-4 border-emerald-500">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-xl font-bold" style="color: var(--text-head)">2. The Travel</h3>
+                            <span class="material-symbols-rounded text-2xl text-emerald-500">air</span>
+                        </div>
+                        <p class="leading-relaxed text-sm" style="color: var(--text-sub)">
+                            These ripples travel through the air (or space!) at the speed of light. They don't need
+                            wires. They pass through walls, clouds, and people.
+                        </p>
+                    </div>
+
+                    <div class="info-card border-t-4 border-indigo-500">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-xl font-bold" style="color: var(--text-head)">3. The Catch</h3>
+                            <span class="material-symbols-rounded text-2xl text-indigo-500">radio</span>
+                        </div>
+                        <p class="leading-relaxed text-sm" style="color: var(--text-sub)">
+                            When the ripple hits your radio's antenna, it pushes the electrons inside it. If your radio
+                            is "tuned" to match the ripple's speed, it amplifies the signal into sound.
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="py-8 text-center text-sm border-t" style="border-color: var(--border); color: var(--text-sub)">
+        <p>Made for learning. Part of <a href="../index.html" class="text-brand-500 hover:underline">Paper X</a>.</p>
+    </footer>
+
+    <script>
+        // --- CANVAS SETUP ---
+        const canvas = document.getElementById('radioCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let time = 0;
+
+        // --- ELEMENTS ---
+        const txFreqInput = document.getElementById('tx-freq');
+        const rxFreqInput = document.getElementById('rx-freq');
+        const txFreqVal = document.getElementById('tx-freq-val');
+        const rxFreqVal = document.getElementById('rx-freq-val');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const musicPlayer = document.getElementById('music-player');
+
+        // --- STATE ---
+        let tx = { x: 100, y: 0, freq: 1.0, amp: 60, electronY: 0 };
+        let rx = { x: 0, y: 0, freq: 1.5, energy: 0 };
+
+        function resize() {
+            width = canvas.parentElement.clientWidth;
+            height = canvas.parentElement.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+            tx.y = height / 2;
+            rx.x = width - 100;
+            rx.y = height / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- PHYSICS LOOP ---
+        function animate() {
+            // Theme Colors for Canvas
+            const style = getComputedStyle(document.body);
+            const cTower = style.getPropertyValue('--c-tower').trim();
+            const cAntenna = style.getPropertyValue('--c-antenna').trim();
+
+            ctx.clearRect(0, 0, width, height);
+
+            // 1. UPDATE STATE
+            tx.freq = parseFloat(txFreqInput.value);
+            rx.freq = parseFloat(rxFreqInput.value);
+            txFreqVal.innerText = tx.freq.toFixed(1) + " Hz";
+            rxFreqVal.innerText = rx.freq.toFixed(1) + " Hz";
+            time += 0.05;
+
+            // 2. TRANSMITTER
+            tx.electronY = Math.sin(time * tx.freq * 2) * (tx.amp / 2);
+
+            ctx.beginPath();
+            ctx.moveTo(tx.x, height);
+            ctx.lineTo(tx.x, height / 2 + 60);
+            ctx.strokeStyle = cTower;
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(tx.x, height / 2 + 60);
+            ctx.lineTo(tx.x, height / 2 - 60);
+            ctx.strokeStyle = cAntenna;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = '#f43f5e';
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#f43f5e';
+            ctx.beginPath();
+            ctx.arc(tx.x, tx.y + tx.electronY, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // 3. WAVES
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            const grad = ctx.createLinearGradient(tx.x, 0, rx.x, 0);
+            grad.addColorStop(0, '#f43f5e');
+            grad.addColorStop(1, '#6366f1');
+            ctx.strokeStyle = grad;
+
+            for (let x = tx.x; x < rx.x; x += 5) {
+                const dist = x - tx.x;
+                const y = tx.y + Math.sin((dist * 0.05 * tx.freq) - (time * tx.freq * 2)) * (tx.amp * 0.8);
+                if (x === tx.x) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // 4. RECEIVER
+            const delta = Math.abs(tx.freq - rx.freq);
+            let resonance = Math.max(0, 1 - (delta * 2));
+            rx.energy = (rx.energy * 0.9) + (resonance * 0.1);
+
+            ctx.beginPath();
+            ctx.moveTo(rx.x, height);
+            ctx.lineTo(rx.x, height / 2 + 60);
+            ctx.strokeStyle = cTower;
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(rx.x, height / 2 + 60);
+            ctx.lineTo(rx.x, height / 2 - 60);
+            ctx.strokeStyle = cAntenna;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            const rxElectronY = Math.sin(time * rx.freq * 2) * (50 * rx.energy);
+            ctx.fillStyle = '#6366f1';
+            if (rx.energy > 0.1) {
+                ctx.shadowBlur = 30 * rx.energy;
+                ctx.shadowColor = '#6366f1';
+            }
+            ctx.beginPath();
+            ctx.arc(rx.x, rx.y + rxElectronY, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            updateStatus(rx.energy);
+            requestAnimationFrame(animate);
+        }
+
+        function updateStatus(energy) {
+            if (energy > 0.8) {
+                statusDot.className = "w-4 h-4 rounded-full bg-emerald-500 shadow-[0_0_15px_#10b981] animate-pulse";
+                statusText.innerText = "Signal Tuned! (Music Playing)";
+                statusText.className = "text-xs font-bold text-emerald-500 tracking-widest uppercase transition-colors duration-300";
+                musicPlayer.style.opacity = "1";
+            } else if (energy > 0.3) {
+                statusDot.className = "w-4 h-4 rounded-full bg-yellow-500 shadow-[0_0_10px_#eab308]";
+                statusText.innerText = "Static / Weak Signal";
+                statusText.className = "text-xs font-bold text-yellow-500 tracking-widest uppercase transition-colors duration-300";
+                musicPlayer.style.opacity = "0.5";
+            } else {
+                statusDot.className = "w-4 h-4 rounded-full bg-slate-500";
+                statusText.innerText = "No Signal";
+                statusText.className = "text-xs font-bold text-slate-500 tracking-widest uppercase transition-colors duration-300";
+                musicPlayer.style.opacity = "0.2";
+            }
+        }
+
+        // Start animation
+        animate();
+
+        // Shared Paper X theme toggle wiring
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+            });
+        });
+    </script>
+</body>
+
+</html>
