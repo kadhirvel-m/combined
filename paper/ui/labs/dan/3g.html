@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3G Network Architecture — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <link rel="stylesheet" href="../../assets/css/tailwind.css" />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --voice-color: #f59e0b;
+            --data-color: #3b82f6;
+            --highlight: #22c55e;
+            --accent: #9E4B8A;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        /* --- CARD STYLES --- */
+        .card {
+            border-radius: 1rem;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.35);
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            overflow: hidden;
+        }
+
+        .dark .card {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Animation Box Styles */
+        .animation-box {
+            position: relative;
+            overflow: hidden;
+            background-image: linear-gradient(rgba(158, 75, 138, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(158, 75, 138, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            min-height: 600px;
+        }
+
+        .dark .animation-box {
+            background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        }
+
+        /* --- NETWORK NODES --- */
+        .node {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            cursor: pointer;
+            transition: transform 0.2s;
+            pointer-events: auto;
+        }
+
+        .node svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.3));
+        }
+
+        .dark .node svg {
+            filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.5));
+        }
+
+        .node:hover {
+            transform: scale(1.15);
+            z-index: 20;
+        }
+
+        .label {
+            position: absolute;
+            bottom: -20px;
+            font-size: 11px;
+            background: rgba(30, 30, 47, 0.9);
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: #fff;
+            border: 1px solid rgba(158, 75, 138, 0.3);
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        /* Connecting Lines */
+        .link-line {
+            position: absolute;
+            height: 3px;
+            background: rgba(158, 75, 138, 0.3);
+            transform-origin: 0 50%;
+            opacity: 0.6;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .dark .link-line {
+            background: #334155;
+        }
+
+        /* Data Packets */
+        .packet {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            z-index: 15;
+            box-shadow: 0 0 10px currentColor;
+            pointer-events: none;
+        }
+
+        /* Tooltip */
+        #tooltip {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 350px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(243, 231, 242, 0.98));
+            border: 1px solid rgba(158, 75, 138, 0.2);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(30, 30, 47, 0.2);
+            display: none;
+            z-index: 60;
+            pointer-events: none;
+        }
+
+        .dark #tooltip {
+            background: rgba(30, 30, 47, 0.98);
+            border-color: rgba(200, 141, 186, 0.3);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+        }
+
+        #tooltip h4 {
+            margin: 0 0 10px 0;
+            color: var(--accent);
+            font-size: 1.1rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 5px;
+        }
+
+        #tooltip p {
+            margin: 0;
+            font-size: 0.95rem;
+            color: var(--text-body);
+            line-height: 1.5;
+        }
+
+        /* Log Box */
+        #log-box {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(243, 231, 242, 0.95));
+            padding: 8px 25px;
+            border-radius: 20px;
+            border: 1px solid rgba(158, 75, 138, 0.2);
+            color: var(--text-head);
+            font-family: 'Inter', monospace;
+            font-size: 0.9rem;
+            font-weight: 500;
+            z-index: 50;
+            pointer-events: none;
+            box-shadow: 0 4px 15px rgba(30, 30, 47, 0.1);
+        }
+
+        .dark #log-box {
+            background: rgba(30, 30, 47, 0.9);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        /* Feature Cards */
+        .feature-card {
+            border-radius: 1rem;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.25);
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            padding: 2rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .dark .feature-card {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.6);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 24px 50px -15px rgba(158, 75, 138, 0.3);
+        }
+
+        .dark .feature-card:hover {
+            box-shadow: 0 28px 70px -20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Special Card with Gradient */
+        .feature-card-gradient {
+            background: linear-gradient(145deg, rgba(76, 42, 89, 0.15), rgba(158, 75, 138, 0.1));
+        }
+
+        .dark .feature-card-gradient {
+            background: linear-gradient(145deg, rgba(76, 42, 89, 0.6), rgba(30, 30, 47, 0.9));
+        }
+    </style>
+
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+    <script src="../../config.js"></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="lab-shell pb-10">
+
+        <!-- Hero Section -->
+        <section class="pt-12 pb-8">
+            <div class="container max-w-5xl mx-auto px-4">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="space-y-6">
+                        <span
+                            class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand-500/30 text-brand-500 text-xs font-semibold">
+                            <span class="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></span>
+                            3G NETWORK ARCHITECTURE
+                        </span>
+
+                        <h1
+                            class="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight text-brand-900 dark:text-white">
+                            Dual-Domain<br>
+                            <span class="text-brand-500">Network Evolution.</span>
+                        </h1>
+
+                        <p class="text-lg md:text-xl text-neutral-600 dark:text-white/70 leading-relaxed max-w-3xl">
+                            3G networks revolutionized mobile communications by introducing a <strong
+                                class="text-brand-700 dark:text-white">dual-domain
+                                architecture</strong>.
+                            Unlike earlier networks, 3G splits traffic into two specialized pathways:
+                        </p>
+
+                        <div class="flex flex-col sm:flex-row gap-4 text-sm">
+                            <div
+                                class="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400">
+                                <span class="material-symbols-rounded text-lg">call</span>
+                                <span class="font-semibold">Circuit-Switched (CS) Domain</span> - Voice Calls
+                            </div>
+                            <div
+                                class="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400">
+                                <span class="material-symbols-rounded text-lg">language</span>
+                                <span class="font-semibold">Packet-Switched (PS) Domain</span> - Data Services
+                            </div>
+                        </div>
+
+                        <div class="p-4 rounded-xl bg-brand-500/10 border-l-4 border-brand-500">
+                            <p class="text-sm font-bold text-brand-700 dark:text-brand-400">INTERACTIVE DEMO 👇</p>
+                            <p class="text-sm text-neutral-600 dark:text-white/60 mt-1">Explore the network components
+                                below and simulate voice or data traffic flows.</p>
+                        </div>
+                    </div>
+                    <div class="hidden sm:flex flex-col items-end gap-2 text-xs text-neutral-500 dark:text-white/60">
+                        <span
+                            class="inline-flex items-center gap-1 rounded-full border border-black/5 dark:border-white/10 px-3 py-1">
+                            <span class="material-symbols-rounded text-base">bolt</span>
+                            Real-time simulation
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works Section -->
+        <section class="py-12">
+            <div class="container max-w-7xl mx-auto px-4">
+                <h2 class="text-3xl md:text-4xl font-bold pt-6 pb-8 mb-10 text-center text-brand-900 dark:text-white">
+                    How <span class="text-brand-500">3G Networks</span> Work
+                </h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Card 1: RAN -->
+                    <div class="feature-card text-center">
+                        <div
+                            class="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center mb-5 mx-auto">
+                            <span class="material-symbols-rounded text-2xl text-green-500">cell_tower</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-3 text-brand-900 dark:text-white">Radio Access Network (RAN)
+                        </h3>
+                        <p class="text-sm text-neutral-600 dark:text-white/60">
+                            <strong>Node B</strong> base stations connect to mobile devices via radio signals.
+                            The RAN handles all wireless communication between users and the network core.
+                        </p>
+                    </div>
+
+                    <!-- Card 2: RNC -->
+                    <div class="feature-card text-center">
+                        <div
+                            class="w-14 h-14 rounded-full bg-blue-500/15 flex items-center justify-center mb-5 mx-auto">
+                            <span class="material-symbols-rounded text-2xl text-blue-500">hub</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-3 text-brand-900 dark:text-white">Radio Network Controller (RNC)
+                        </h3>
+                        <p class="text-sm text-neutral-600 dark:text-white/60">
+                            The <strong>intelligent router</strong> that manages radio resources and decides whether
+                            traffic goes to the Circuit or Packet domain based on service type.
+                        </p>
+                    </div>
+
+                    <!-- Card 3: Dual-Domain Core -->
+                    <div class="feature-card feature-card-gradient text-center">
+                        <div
+                            class="w-14 h-14 rounded-full bg-brand-500/15 flex items-center justify-center mb-5 mx-auto">
+                            <span class="material-symbols-rounded text-2xl text-brand-500">account_tree</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-3 text-brand-900 dark:text-white">Dual-Domain Core Network</h3>
+                        <p class="text-sm text-neutral-600 dark:text-white/60">
+                            <strong class="text-amber-500">Circuit-Switched Domain (MSC):</strong> Handles voice calls
+                            with
+                            dedicated connections.
+                            <br><br>
+                            <strong class="text-blue-500">Packet-Switched Domain (SGSN/GGSN):</strong> Routes data
+                            packets
+                            for internet services.
+                        </p>
+                    </div>
+
+                    <!-- Card 4: External Networks -->
+                    <div class="feature-card text-center">
+                        <div
+                            class="w-14 h-14 rounded-full bg-cyan-500/15 flex items-center justify-center mb-5 mx-auto">
+                            <span class="material-symbols-rounded text-2xl text-cyan-500">public</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-3 text-brand-900 dark:text-white">External Networks</h3>
+                        <p class="text-sm text-neutral-600 dark:text-white/60">
+                            The CS domain connects to <strong>PSTN</strong> (Public Switched Telephone Network) for
+                            traditional phone calls,
+                            while the PS domain connects to the <strong>Internet</strong> for web browsing, streaming,
+                            and
+                            apps.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive Animation Section -->
+        <section class="py-12">
+            <div class="container max-w-7xl mx-auto px-4">
+                <h2 class="text-3xl md:text-4xl font-bold mb-4 text-center text-brand-900 dark:text-white">
+                    Interactive <span class="text-brand-500">Network</span> Simulation
+                </h2>
+                <p class="text-center text-neutral-500 dark:text-white/60 mb-8">Hover over components to learn more.
+                    Click buttons to simulate traffic flows.</p>
+
+                <div class="card p-6 md:p-8">
+                    <div class="animation-box relative rounded-lg border border-brand-500/10" id="stage">
+                        <div id="log-box">Hover over components to learn...</div>
+                        <div id="tooltip">
+                            <h4 id="tt-title">Title</h4>
+                            <p id="tt-desc">Description</p>
+                        </div>
+                    </div>
+
+                    <!-- Control Buttons -->
+                    <div class="mt-6 flex flex-col sm:flex-row gap-4 justify-center">
+                        <button id="btn-data"
+                            class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition">
+                            <span class="material-symbols-rounded text-lg">language</span>
+                            Simulate Data (Packet)
+                        </button>
+                        <button id="btn-voice"
+                            class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition">
+                            <span class="material-symbols-rounded text-lg">call</span>
+                            Simulate Voice (Circuit)
+                        </button>
+                        <button id="btn-reset"
+                            class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-neutral-500 hover:bg-neutral-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition">
+                            <span class="material-symbols-rounded text-lg">refresh</span>
+                            Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Conclusion Section -->
+        <section class="py-12">
+            <div class="container max-w-5xl mx-auto px-4">
+                <h2 class="text-3xl md:text-4xl font-bold mb-6 text-center text-brand-900 dark:text-white">
+                    Understanding <span class="text-brand-500">3G's</span> Impact
+                </h2>
+
+                <div class="card p-8 md:p-12">
+                    <div class="space-y-5 text-base md:text-lg text-neutral-600 dark:text-white/70 leading-relaxed">
+                        <p>
+                            The 3G network architecture represented a fundamental shift in telecommunications design.
+                            By separating voice and data into specialized domains, engineers created a flexible system
+                            that could optimize each service type independently.
+                        </p>
+
+                        <p>
+                            <strong class="text-brand-700 dark:text-white">The Circuit-Switched domain</strong>
+                            maintains the reliability of traditional telephony,
+                            allocating dedicated channels for the duration of each call. This ensures consistent voice
+                            quality
+                            and minimal latency, critical for real-time communication.
+                        </p>
+
+                        <p>
+                            <strong class="text-brand-700 dark:text-white">The Packet-Switched domain</strong> brought
+                            internet-age efficiency to mobile networks.
+                            By breaking data into packets and routing them independently, it enables bandwidth sharing,
+                            better resource utilization, and support for bursty internet traffic patterns.
+                        </p>
+
+                        <p>
+                            This dual-domain approach laid the groundwork for 4G LTE and 5G networks, which eventually
+                            unified everything into an all-IP packet-switched architecture. Understanding 3G helps us
+                            appreciate the evolution toward today's converged networks where voice itself becomes
+                            just another data stream.
+                        </p>
+                    </div>
+
+                    <div class="mt-8 p-5 rounded-xl bg-brand-500/10 border-l-4 border-brand-500">
+                        <p class="text-sm font-bold text-brand-700 dark:text-brand-400">KEY TAKEAWAY</p>
+                        <p class="text-sm text-neutral-600 dark:text-white/60 mt-2">
+                            3G's dual-domain architecture demonstrates a crucial principle in system design:
+                            specialization enables optimization. By separating concerns, engineers create more
+                            efficient, maintainable, and scalable systems.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- CONFIG ---
+        const stage = document.getElementById('stage');
+        const logBox = document.getElementById('log-box');
+        const tooltip = document.getElementById('tooltip');
+        const ttTitle = document.getElementById('tt-title');
+        const ttDesc = document.getElementById('tt-desc');
+
+        // --- SVGs (Light/Dark theme aware) ---
+        const isDarkMode = () => document.documentElement.classList.contains('dark');
+
+        // 1. Mobile Device (UE)
+        const getSvgUE = () => `
+        <svg viewBox="0 0 60 100">
+            <rect x="10" y="5" width="40" height="90" rx="5" fill="${isDarkMode() ? '#1e293b' : '#4C2A59'}" stroke="#3b82f6" stroke-width="2"/>
+            <rect x="15" y="15" width="30" height="50" fill="${isDarkMode() ? '#0f172a' : '#1E1E2F'}"/>
+            <circle cx="30" cy="80" r="4" fill="#3b82f6"/>
+        </svg>`;
+
+        // 2. Node B (Base Station) - Antenna Tower
+        const getSvgNodeB = () => `
+        <svg viewBox="0 0 100 100">
+            <path d="M45,90 L55,90 L50,20 Z" fill="${isDarkMode() ? '#475569' : '#4C2A59'}"/>
+            <path d="M20,20 L80,20" stroke="#22c55e" stroke-width="4"/>
+            <path d="M30,20 L30,5 M70,20 L70,5" stroke="#22c55e" stroke-width="3"/>
+            <circle cx="50" cy="20" r="4" fill="#ef4444" class="blink"/>
+        </svg>`;
+
+        // 3. RNC (Controller) - Server Rack style
+        const getSvgRNC = () => `
+        <svg viewBox="0 0 100 80">
+            <rect x="10" y="10" width="80" height="60" rx="4" fill="${isDarkMode() ? '#334155' : '#4C2A59'}" stroke="${isDarkMode() ? '#94a3b8' : '#9E4B8A'}" stroke-width="2"/>
+            <rect x="15" y="20" width="70" height="5" fill="#0ea5e9"/>
+            <rect x="15" y="30" width="70" height="5" fill="#0ea5e9"/>
+            <rect x="15" y="40" width="70" height="5" fill="#0ea5e9"/>
+            <circle cx="80" cy="60" r="3" fill="#22c55e"/>
+        </svg>`;
+
+        // 4. Core Network (Cloud/Gateway)
+        const getSvgCore = () => `
+        <svg viewBox="0 0 100 80">
+            <path d="M20,60 Q10,40 30,30 Q40,10 60,30 Q80,20 90,40 Q100,60 80,70 L20,70 Q0,70 20,60" fill="${isDarkMode() ? '#1e293b' : '#4C2A59'}" stroke="#f59e0b" stroke-width="2"/>
+            <text x="50" y="55" text-anchor="middle" fill="#fff" font-size="12">CORE</text>
+        </svg>`;
+
+        // 5. Internet / PSTN
+        const getSvgWorld = () => `
+        <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="40" fill="${isDarkMode() ? 'none' : 'rgba(76,42,89,0.1)'}" stroke="${isDarkMode() ? '#fff' : '#4C2A59'}" stroke-width="2" stroke-dasharray="4,4"/>
+            <path d="M10,50 L90,50 M50,10 L50,90" stroke="${isDarkMode() ? '#fff' : '#4C2A59'}" opacity="0.3"/>
+            <text x="50" y="55" text-anchor="middle" fill="${isDarkMode() ? '#fff' : '#1E1E2F'}" font-size="14">NET</text>
+        </svg>`;
+
+        // --- NETWORK TOPOLOGY ---
+        // Coordinates (percent)
+        const nodes = [
+            {
+                id: 'ue', getSvg: getSvgUE, x: 10, y: 50, label: 'User Device (UE)',
+                title: 'Mobile Equipment', desc: 'Initiates voice calls and data sessions.'
+            },
+            {
+                id: 'nodeb', getSvg: getSvgNodeB, x: 30, y: 50, label: 'Node B',
+                title: 'Base Station (Node B)', desc: 'Communicates via Radio Signals. Relays signals to the Controller.'
+            },
+            {
+                id: 'rnc', getSvg: getSvgRNC, x: 50, y: 50, label: 'RNC',
+                title: 'Radio Network Controller', desc: 'Manages radio resources. Splits traffic to Packet (Data) or Circuit (Voice) domains.'
+            },
+            // Core split
+            {
+                id: 'ps', getSvg: getSvgCore, x: 75, y: 30, label: 'Packet Domain',
+                title: 'Packet Switched (SGSN/GGSN)', desc: 'Handles DATA (Internet). Routing is packet-based.'
+            },
+            {
+                id: 'cs', getSvg: getSvgCore, x: 75, y: 70, label: 'Circuit Domain',
+                title: 'Circuit Switched (MSC)', desc: 'Handles VOICE calls. Dedicated channel connection.'
+            },
+            // External
+            { id: 'net', getSvg: getSvgWorld, x: 95, y: 30, label: 'Internet', title: 'Public Internet', desc: 'Websites, Streaming, etc.' },
+            { id: 'pstn', getSvg: getSvgWorld, x: 95, y: 70, label: 'PSTN', title: 'PSTN', desc: 'Public Switched Telephone Network (Landlines/Phones).' }
+        ];
+
+        // --- FUNCTIONS ---
+
+        function log(msg, color = 'var(--text-head)') {
+            logBox.innerText = msg;
+            logBox.style.color = color;
+            if (color !== 'var(--text-head)') {
+                logBox.style.borderColor = color;
+            }
+            gsap.from(logBox, { y: -5, duration: 0.2 });
+        }
+
+        function showTooltip(title, desc) {
+            tooltip.style.display = 'block';
+            ttTitle.innerText = title;
+            ttDesc.innerHTML = desc;
+            gsap.fromTo(tooltip, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.2 });
+        }
+
+        function createNode(data) {
+            const el = document.createElement('div');
+            el.className = 'node';
+            el.id = data.id;
+            el.style.left = data.x + '%';
+            el.style.top = data.y + '%';
+            el.style.transform = 'translate(-50%, -50%)';
+            el.innerHTML = `${data.getSvg()}<div class="label">${data.label}</div>`;
+
+            el.addEventListener('mouseenter', () => showTooltip(data.title, data.desc));
+            el.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+
+            stage.appendChild(el);
+            gsap.from(el, { scale: 0, duration: 0.5, ease: "back.out" });
+        }
+
+        function drawLink(id1, id2) {
+            const n1 = nodes.find(n => n.id === id1);
+            const n2 = nodes.find(n => n.id === id2);
+
+            const line = document.createElement('div');
+            line.className = 'link-line';
+            // Calculate coords based on percentage approx (for simple layout)
+            // Getting pixel values is safer
+            const el1 = document.getElementById(id1);
+            const el2 = document.getElementById(id2);
+
+            // Wait for DOM
+            setTimeout(() => {
+                const r1 = el1.getBoundingClientRect();
+                const r2 = el2.getBoundingClientRect();
+                const stageR = stage.getBoundingClientRect();
+
+                const x1 = r1.left + r1.width / 2 - stageR.left;
+                const y1 = r1.top + r1.height / 2 - stageR.top;
+                const x2 = r2.left + r2.width / 2 - stageR.left;
+                const y2 = r2.top + r2.height / 2 - stageR.top;
+
+                const dist = Math.hypot(x2 - x1, y2 - y1);
+                const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+
+                line.style.width = dist + 'px';
+                line.style.left = x1 + 'px';
+                line.style.top = y1 + 'px';
+                line.style.transform = `translate(0, -50%) rotate(${angle}deg)`;
+
+                stage.appendChild(line);
+                gsap.from(line, { width: 0, duration: 1 });
+            }, 100);
+        }
+
+        // --- INITIALIZATION ---
+        function setupNetwork() {
+            // Create all nodes
+            nodes.forEach(n => createNode(n));
+
+            // Draw all connections after a brief delay
+            setTimeout(() => {
+                // UE -> NodeB -> RNC
+                drawLink('ue', 'nodeb');
+                drawLink('nodeb', 'rnc');
+                // RNC -> PS & CS
+                drawLink('rnc', 'ps');
+                drawLink('rnc', 'cs');
+                // Core -> External
+                drawLink('ps', 'net');
+                drawLink('cs', 'pstn');
+
+                log("Network Ready. Select a flow.", "#22c55e");
+            }, 500);
+        }
+
+        // --- FLOW ANIMATIONS ---
+        function runDataFlow() {
+            log("Simulating Packet-Switched Data (Internet)...", "#3b82f6");
+            const path = ['ue', 'nodeb', 'rnc', 'ps', 'net'];
+            animatePacket(path, '#3b82f6');
+        }
+
+        function runVoiceFlow() {
+            log("Simulating Circuit-Switched Voice (Call)...", "#f59e0b");
+            const path = ['ue', 'nodeb', 'rnc', 'cs', 'pstn'];
+            animatePacket(path, '#f59e0b');
+        }
+
+        function animatePacket(pathIds, color) {
+            // Create packet
+            const startEl = document.getElementById(pathIds[0]);
+            const p = document.createElement('div');
+            p.className = 'packet';
+            p.style.backgroundColor = color;
+            p.style.color = color; // For box shadow
+            stage.appendChild(p);
+
+            // Build Timeline
+            const tl = gsap.timeline({
+                onComplete: () => {
+                    p.remove();
+                    log("Transmission Complete.", color);
+                }
+            });
+
+            // 1. Place at start
+            const rStart = startEl.getBoundingClientRect();
+            const stageR = stage.getBoundingClientRect();
+            const startX = rStart.left + rStart.width / 2 - stageR.left;
+            const startY = rStart.top + rStart.height / 2 - stageR.top;
+
+            gsap.set(p, { left: startX, top: startY, xPercent: -50, yPercent: -50 });
+
+            // 2. Move to each node
+            for (let i = 1; i < pathIds.length; i++) {
+                const nextEl = document.getElementById(pathIds[i]);
+                const rNext = nextEl.getBoundingClientRect();
+                const nextX = rNext.left + rNext.width / 2 - stageR.left;
+                const nextY = rNext.top + rNext.height / 2 - stageR.top;
+
+                tl.to(p, { left: nextX, top: nextY, duration: 1, ease: "none" });
+
+                // Pulse the node when hit
+                tl.to(nextEl, { scale: 1.2, duration: 0.1, yoyo: true, repeat: 1 }, "-=0.2");
+            }
+        }
+
+        function resetSim() {
+            location.reload();
+        }
+
+        // --- BUTTON EVENT LISTENERS ---
+        document.getElementById('btn-data').addEventListener('click', runDataFlow);
+        document.getElementById('btn-voice').addEventListener('click', runVoiceFlow);
+        document.getElementById('btn-reset').addEventListener('click', resetSim);
+
+        // --- START THE NETWORK ---
+        setupNetwork();
+
+        // Shared Paper X theme toggle wiring
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+            });
+        });
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Black Box Testing: Observing Inputs and Outputs — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <link rel="stylesheet" href="../../assets/css/tailwind.css" />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --accent: #9E4B8A;
+            --success: #22c55e;
+            --fail: #f97316;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        /* --- CARD STYLES --- */
+        .card {
+            border-radius: 1rem;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.35);
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            overflow: hidden;
+        }
+
+        .dark .card {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Animation Box Styles */
+        .animation-box {
+            position: relative;
+            overflow: hidden;
+            background-image: linear-gradient(rgba(158, 75, 138, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(158, 75, 138, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            border-radius: 0.75rem;
+        }
+
+        .dark .animation-box {
+            background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        }
+
+        /* Feature Cards */
+        .feature-card {
+            border-radius: 1rem;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.25);
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            padding: 2rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .dark .feature-card {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.6);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 24px 50px -15px rgba(158, 75, 138, 0.3);
+        }
+
+        .dark .feature-card:hover {
+            box-shadow: 0 28px 70px -20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* --- SIMULATOR SPECIFIC STYLES --- */
+        .simulator-container {
+            background: rgba(15, 10, 23, 0.8);
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+        }
+
+        .dark .simulator-container {
+            background: rgba(15, 10, 23, 0.9);
+        }
+
+        .simulator-container h1 {
+            margin: 0;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            color: #fff;
+        }
+
+        .simulator-container p {
+            color: var(--text-sub);
+        }
+
+        .stage {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 50px 0;
+            position: relative;
+            height: 160px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .zone-label {
+            width: 160px;
+            text-align: center;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.2em;
+        }
+
+        .black-box {
+            width: 160px;
+            height: 160px;
+            background: #120b18;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 18px;
+            position: relative;
+            z-index: 2;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
+        }
+
+        .black-box span {
+            font-size: 3rem;
+            color: var(--accent);
+        }
+
+        .black-box small {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 8px;
+        }
+
+        .data-package {
+            width: 60px;
+            height: 60px;
+            background: var(--accent);
+            color: white;
+            border-radius: 999px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            left: 30px;
+            top: 50px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            opacity: 0;
+            z-index: 1;
+            box-shadow: 0 0 20px rgba(158, 75, 138, 0.7);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 20px;
+            border-radius: 12px;
+            display: flex;
+            gap: 18px;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            flex-wrap: wrap;
+        }
+
+        .controls label strong {
+            color: var(--accent);
+        }
+
+        .controls label {
+            color: #fff;
+        }
+
+        .sim-input {
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 1rem;
+            width: 220px;
+            outline: none;
+            transition: border 0.2s ease;
+        }
+
+        .sim-input:focus {
+            border-color: var(--accent);
+        }
+
+        .sim-btn {
+            padding: 12px 28px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .sim-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(158, 75, 138, 0.4);
+        }
+
+        .sim-btn:disabled {
+            background: rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.5);
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .explanation {
+            margin-top: 30px;
+            padding: 22px;
+            background: rgba(158, 75, 138, 0.1);
+            border-left: 4px solid rgba(158, 75, 138, 0.6);
+            border-radius: 10px;
+            color: #fff;
+        }
+
+        .explanation h3 {
+            margin: 0 0 10px 0;
+            color: var(--accent);
+        }
+
+        .explanation code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .bg-success {
+            background-color: var(--success) !important;
+            box-shadow: 0 0 15px var(--success) !important;
+        }
+
+        .bg-fail {
+            background-color: var(--fail) !important;
+            box-shadow: 0 0 15px var(--fail) !important;
+        }
+
+        .text-wait {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .text-success {
+            color: var(--success);
+            text-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+        }
+
+        .text-fail {
+            color: var(--fail);
+            text-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
+        }
+    </style>
+
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+    <script src="../../config.js"></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="lab-shell pb-10">
+
+        <!-- Hero Section -->
+        <section class="pt-12 pb-8">
+            <div class="container max-w-5xl mx-auto px-4">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="space-y-6">
+                        <span
+                            class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand-500/30 text-brand-500 text-xs font-semibold">
+                            <span class="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></span>
+                            SOFTWARE TESTING STRATEGIES
+                        </span>
+
+                        <h1
+                            class="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight text-brand-900 dark:text-white">
+                            Observing <span class="text-brand-500">Behavior</span><br>
+                            Without Peeking Inside.
+                        </h1>
+
+                        <p class="text-lg md:text-xl text-neutral-600 dark:text-white/70 leading-relaxed max-w-3xl">
+                            Black box testing treats software like a sealed device. Testers feed inputs, watch the
+                            outputs, and
+                            infer whether the hidden logic complies with specifications. It's the same method airport
+                            security uses to
+                            test luggage scanners—they run known objects through and examine the results without opening
+                            the hardware.
+                        </p>
+
+                        <p class="text-lg md:text-xl text-neutral-600 dark:text-white/70 leading-relaxed max-w-3xl">
+                            This interactive demonstration simulates a nightclub bouncer who grants or denies access
+                            based solely on
+                            age. By experimenting with different numbers, you can discover boundary conditions, valid
+                            partitions, and
+                            the hidden rule governing the system—all without reading the source code.
+                        </p>
+
+                        <div class="p-4 rounded-xl bg-brand-500/10 border-l-4 border-brand-500">
+                            <p class="text-sm font-bold text-brand-700 dark:text-brand-400">INTERACTIVE DEMO 👇</p>
+                            <p class="text-sm text-neutral-600 dark:text-white/60 mt-1">Enter different ages to deduce
+                                the hidden acceptance rule. Watch the data orb travel through the black box.</p>
+                        </div>
+                    </div>
+                    <div class="hidden sm:flex flex-col items-end gap-2 text-xs text-neutral-500 dark:text-white/60">
+                        <span
+                            class="inline-flex items-center gap-1 rounded-full border border-black/5 dark:border-white/10 px-3 py-1">
+                            <span class="material-symbols-rounded text-base">bolt</span>
+                            Real-time simulation
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works Section -->
+        <section class="py-12">
+            <div class="container max-w-7xl mx-auto px-4">
+                <h2 class="text-3xl md:text-4xl font-bold pt-6 pb-8 mb-10 text-center text-brand-900 dark:text-white">
+                    How <span class="text-brand-500">Black Box Testing</span> Operates
+                </h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Card 1: Input Modeling -->
+                    <div class="feature-card text-center">
+                        <div
+                            class="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center mb-5 mx-auto">
+                            <span class="material-symbols-rounded text-2xl text-green-500">layers</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-3 text-brand-900 dark:text-white">Input Modeling</h3>
+                        <p class="text-sm text-neutral-600 dark:text-white/60">
+                            Define <strong>equivalence classes</strong> of inputs that should behave the same. Ages
+                            below 18
+                            form one class, ages 18 and above form another.
+                        </p>
+                    </div>
+
+                    <!-- Card 2: Boundary Analysis -->
+                    <div class="feature-card text-center">
+                        <div
+                            class="w-14 h-14 rounded-full bg-blue-500/15 flex items-center justify-center mb-5 mx-auto">
+                            <span class="material-symbols-rounded text-2xl text-blue-500">shuffle</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-3 text-brand-900 dark:text-white">Boundary Analysis</h3>
+                        <p class="text-sm text-neutral-600 dark:text-white/60">
+                            Target the <strong>edges between classes</strong>. Testing 17 and 18 reveals the exact
+                            decision
+                            point even when internal logic remains hidden.
+                        </p>
+                    </div>
+
+                    <!-- Card 3: Execution & Observation -->
+                    <div class="feature-card text-center">
+                        <div
+                            class="w-14 h-14 rounded-full bg-purple-500/15 flex items-center justify-center mb-5 mx-auto">
+                            <span class="material-symbols-rounded text-2xl text-purple-500">play_circle</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-3 text-brand-900 dark:text-white">Execution & Observation</h3>
+                        <p class="text-sm text-neutral-600 dark:text-white/60">
+                            Feed inputs, run the system, and observe <strong>visible behavior</strong>. Orb animations
+                            reinforce
+                            the concept of data travelling through an opaque component.
+                        </p>
+                    </div>
+
+                    <!-- Card 4: Learning & Reporting -->
+                    <div class="feature-card text-center">
+                        <div
+                            class="w-14 h-14 rounded-full bg-orange-500/15 flex items-center justify-center mb-5 mx-auto">
+                            <span class="material-symbols-rounded text-2xl text-orange-500">assignment_turned_in</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-3 text-brand-900 dark:text-white">Learning & Reporting</h3>
+                        <p class="text-sm text-neutral-600 dark:text-white/60">
+                            Document observed rules and anomalies. The explanation panel ties each test back to theory,
+                            mirroring how testers capture evidence for stakeholders.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive Animation Section -->
+        <section class="py-12">
+            <div class="container max-w-7xl mx-auto px-4">
+                <h2 class="text-3xl md:text-4xl font-bold mb-4 text-center text-brand-900 dark:text-white">
+                    Interactive <span class="text-brand-500">Black Box</span> Simulation
+                </h2>
+                <p class="text-center text-neutral-500 dark:text-white/60 mb-8">Enter different ages to deduce the
+                    hidden acceptance rule. Watch the data orb travel through the black box.</p>
+
+                <div class="card p-4 md:p-6 rounded-xl border-l-4 border-brand-500 mb-8 max-w-4xl mx-auto">
+                    <div class="flex items-start gap-3">
+                        <span class="material-symbols-rounded text-brand-500 mt-0.5">info</span>
+                        <p class="text-sm text-neutral-600 dark:text-white/70">
+                            <strong>Try boundary values:</strong> 17, 18, 19. Notice how the system reacts exactly at
+                            the rule
+                            threshold and how that mirrors real-world equivalence partitioning techniques.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card p-6 md:p-8">
+                    <div class="animation-box p-6 border border-brand-500/10">
+                        <div class="simulator-container">
+                            <h1>Black Box Testing Simulator</h1>
+                            <p>A "Black Box" means we check input and output, but we cannot see the code inside.</p>
+
+                            <div class="stage">
+                                <div class="zone-label">
+                                    INPUT<br>↓
+                                </div>
+
+                                <div id="data-orb" class="data-package">?</div>
+
+                                <div class="black-box" id="box-visual">
+                                    <span>?</span>
+                                    <small>Hidden Code</small>
+                                </div>
+
+                                <div class="zone-label">
+                                    OUTPUT<br>↓<br>
+                                    <span id="result-text" class="text-wait"
+                                        style="font-size: 0.9rem; margin-top: 5px; display:block;">Waiting...</span>
+                                </div>
+                            </div>
+
+                            <div class="controls">
+                                <div style="flex-grow: 1;">
+                                    <label><strong>Scenario: Nightclub Bouncer</strong> (Age Limit: 18+)</label><br>
+                                    <span style="font-size: 0.85rem; color: rgba(255,255,255,0.5);">Try typing: 17, 18,
+                                        or 25</span>
+                                </div>
+                                <input type="number" id="user-input" placeholder="Enter age (e.g. 17)"
+                                    class="sim-input">
+                                <button onclick="runTest()" id="btn-test" class="sim-btn">Test Input</button>
+                            </div>
+
+                            <div class="explanation" id="edu-panel" style="display:none;">
+                                <h3 id="edu-title">Observation</h3>
+                                <p id="edu-text">...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Conclusion Section -->
+        <section class="py-12">
+            <div class="container max-w-5xl mx-auto px-4">
+                <h2 class="text-3xl md:text-4xl font-bold mb-6 text-center text-brand-900 dark:text-white">
+                    Why <span class="text-brand-500">Black Box Testing</span> Matters
+                </h2>
+
+                <div class="card p-8 md:p-12">
+                    <div class="space-y-5 text-base md:text-lg text-neutral-600 dark:text-white/70 leading-relaxed">
+                        <p>
+                            Black box testing empowers testers to validate functionality when source code is unavailable
+                            or when
+                            impartial verification is required. It focuses on outcomes, mirroring how end users
+                            experience the
+                            system.
+                        </p>
+
+                        <p>
+                            <strong class="text-brand-700 dark:text-white">Strengths:</strong> It uncovers missing
+                            requirements, interface defects, and integration
+                            issues. Because the tester works solely with specifications, they maintain objectivity and
+                            test scenarios a
+                            developer might overlook.
+                        </p>
+
+                        <p>
+                            <strong class="text-brand-700 dark:text-white">Limitations:</strong> It can't reveal
+                            internal performance bottlenecks or unreachable
+                            branches. That's why healthy teams pair black box methods with white box techniques to gain
+                            full coverage.
+                        </p>
+
+                        <p>
+                            When you combine structured input modeling with disciplined observation, you turn a sealed
+                            system into a
+                            transparent learning exercise—no source code required.
+                        </p>
+                    </div>
+
+                    <div class="mt-8 p-5 rounded-xl bg-brand-500/10 border-l-4 border-brand-500">
+                        <p class="text-sm font-bold text-brand-700 dark:text-brand-400">KEY TAKEAWAY</p>
+                        <p class="text-sm text-neutral-600 dark:text-white/60 mt-2">
+                            Black box testing proves that <strong>behavioral evidence</strong> is enough to validate
+                            many systems.
+                            If the inputs and outputs honor the contract, users can trust the product—even if the inner
+                            workings
+                            remain hidden.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Shared Paper X theme toggle wiring
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+            });
+        });
+    </script>
+
+    <script>
+        function runTest() {
+            const inputVal = document.getElementById('user-input').value;
+            const orb = document.getElementById('data-orb');
+            const box = document.getElementById('box-visual');
+            const btn = document.getElementById('btn-test');
+            const resultText = document.getElementById('result-text');
+            const eduPanel = document.getElementById('edu-panel');
+
+            if (inputVal === "") {
+                alert("Please enter a number first!");
+                return;
+            }
+
+            btn.disabled = true;
+            orb.style.opacity = 1;
+            orb.innerText = inputVal;
+            orb.className = "data-package";
+            orb.style.left = "30px";
+            resultText.innerText = "Processing...";
+            resultText.className = "text-wait";
+            eduPanel.style.display = 'none';
+
+            const tl = gsap.timeline();
+
+            tl.to(orb, {
+                left: "400px",
+                duration: 1.5,
+                ease: "power2.inOut"
+            });
+
+            tl.to(orb, { opacity: 0, duration: 0.2 });
+
+            tl.to(box, {
+                rotation: 5,
+                duration: 0.1,
+                yoyo: true,
+                repeat: 5
+            });
+
+            const age = parseInt(inputVal);
+            let passed = false;
+
+            if (age >= 18) {
+                passed = true;
+            }
+
+            tl.call(() => {
+                if (passed) {
+                    orb.classList.add("bg-success");
+                    resultText.innerText = "Access Granted";
+                    resultText.className = "text-success";
+                    showEducation(age, true);
+                } else {
+                    orb.classList.add("bg-fail");
+                    resultText.innerText = "Access Denied";
+                    resultText.className = "text-fail";
+                    showEducation(age, false);
+                }
+                orb.style.opacity = 1;
+            });
+
+            tl.to(orb, {
+                left: "800px",
+                duration: 1,
+                ease: "power2.out"
+            });
+
+            tl.call(() => {
+                btn.disabled = false;
+            });
+        }
+
+        function showEducation(age, passed) {
+            const title = document.getElementById('edu-title');
+            const text = document.getElementById('edu-text');
+            const panel = document.getElementById('edu-panel');
+
+            panel.style.display = "block";
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            if (passed) {
+                title.innerText = "✅ Test Passed (Valid Partition)";
+                text.innerHTML = `You entered <b>${age}</b>. Since the logic is <code>Age >= 18</code>, the system accepted it.<br><br>In Black Box testing, this falls into a <b>Valid Equivalence Class</b> (any number 18 or higher is treated the same way).`;
+            } else {
+                title.innerText = "❌ Test Rejected (Invalid Partition)";
+                text.innerHTML = `You entered <b>${age}</b>. The system blocked it.<br><br><b>Learning Point:</b> If you typed 17, you performed <b>Boundary Value Analysis</b>. You tested the specific edge case right before the requirement (18).`;
+            }
+        }
+    </script>
+</body>
+
+</html>

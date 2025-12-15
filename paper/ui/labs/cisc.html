@@ -1,304 +1,509 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CISC: The Explorable Explanation</title>
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-    
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <title>CISC Architecture Lab — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;600&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
 
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
+                container: { center: true, padding: '1rem' },
                 extend: {
                     fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
                         mono: ['Fira Code', 'monospace'],
                     },
                     colors: {
-                        cyber: {
-                            bg: '#0f172a',
-                            panel: 'rgba(30, 41, 59, 0.7)',
-                            accent: '#3b82f6',
-                            text: '#f8fafc'
-                        },
-                        paper: {
-                            bg: '#f8fafc',
-                            panel: '#ffffff',
-                            accent: '#2563eb',
-                            text: '#0f172a'
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
                         }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
                     }
                 }
             }
         }
     </script>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Fira+Code:wght@400;600&display=swap');
-        
-        body { transition: background-color 0.5s ease, color 0.5s ease; }
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --accent: #9E4B8A;
+            --accent-light: #C88DBA;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+            --accent: #C88DBA;
+            --accent-light: #D9B4D3;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        /* --- GLASS PANEL --- */
         .glass-panel {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
             backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.35);
+            border-radius: 1rem;
         }
-        .light .glass-panel {
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+
+        .dark .glass-panel {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.8);
         }
-        
+
         /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-        
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--accent);
+            border-radius: 4px;
+        }
+
         /* Animation Classes */
         .instruction-block {
             position: absolute;
             will-change: transform, opacity;
         }
+
+        /* --- INFO CARD --- */
+        .info-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            border-color: var(--accent);
+        }
+
+        /* --- COMPARISON CARDS --- */
+        .comparison-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .comparison-card:hover {
+            border-color: var(--accent);
+        }
+
+        /* --- SIMULATOR PANEL --- */
+        .sim-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+        }
     </style>
+
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+    <script src="../config.js"></script>
 </head>
 
-<body class="dark bg-cyber-bg text-cyber-text selection:bg-blue-500 selection:text-white overflow-x-hidden">
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
 
-    <nav class="fixed top-0 w-full z-50 p-6 flex justify-between items-center glass-panel border-b border-white/10">
-        <div class="flex items-center gap-3">
-            <i data-lucide="cpu" class="w-8 h-8 text-blue-500"></i>
-            <span class="font-bold text-xl tracking-tight">Arch<span class="text-blue-500">Lab</span></span>
-        </div>
-        <button id="themeToggle" class="p-2 rounded-full hover:bg-white/10 transition-colors">
-            <i data-lucide="sun" class="w-6 h-6 hidden dark:block"></i>
-            <i data-lucide="moon" class="w-6 h-6 block dark:hidden text-slate-800"></i>
-        </button>
-    </nav>
-
-    <section class="min-h-screen flex flex-col justify-center items-center px-6 pt-24 max-w-5xl mx-auto relative">
-        
-        <div class="text-center space-y-6 mb-16">
-            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-sm font-mono font-bold uppercase tracking-wider">
-                The Core Concept
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
             </div>
-            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">
-                The "Combo Meal" <br> <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Processor</span>
-            </h1>
-            <p class="text-xl md:text-2xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                Most people think computers are smart. They aren't. They just follow orders. <br>
-                <strong class="text-blue-400">CISC</strong> (Complex Instruction Set Computer) is like ordering a <span class="border-b-2 border-yellow-500 border-dashed cursor-help" title="A pre-packaged set of actions">Combo Meal</span>.
-            </p>
-        </div>
-
-        <div class="grid md:grid-cols-2 gap-12 w-full items-center">
-            
-            <div class="glass-panel p-8 rounded-2xl bg-slate-900/50 dark:bg-slate-800/50 border-l-4 border-slate-500 opacity-60 hover:opacity-100 transition-opacity">
-                <div class="flex items-center gap-4 mb-4">
-                    <div class="p-3 bg-slate-700 rounded-lg"><i data-lucide="list" class="w-6 h-6 text-white"></i></div>
-                    <h3 class="text-2xl font-bold">The "A La Carte" Way (RISC)</h3>
-                </div>
-                <p class="mb-6 text-slate-400">You must list every step individually.</p>
-                <div class="space-y-2 font-mono text-sm">
-                    <div class="bg-black/30 p-2 rounded text-green-400">> GET Bun</div>
-                    <div class="bg-black/30 p-2 rounded text-green-400">> COOK Patty</div>
-                    <div class="bg-black/30 p-2 rounded text-green-400">> ADD Cheese</div>
-                    <div class="bg-black/30 p-2 rounded text-green-400">> SERVE</div>
-                </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
             </div>
-
-            <div class="glass-panel p-8 rounded-2xl bg-blue-900/20 dark:bg-blue-900/20 border-l-4 border-blue-500 relative overflow-hidden transform hover:scale-[1.02] transition-all">
-                <div class="absolute top-0 right-0 p-4 opacity-10"><i data-lucide="layers" class="w-32 h-32"></i></div>
-                <div class="flex items-center gap-4 mb-4">
-                    <div class="p-3 bg-blue-600 rounded-lg"><i data-lucide="package" class="w-6 h-6 text-white"></i></div>
-                    <h3 class="text-2xl font-bold">The CISC Way</h3>
-                </div>
-                <p class="mb-6 text-slate-300">You say ONE word. The CPU does the rest.</p>
-                <div class="space-y-2 font-mono text-sm relative z-10">
-                    <div class="bg-blue-500 p-4 rounded text-white font-bold text-center shadow-lg shadow-blue-500/20">
-                        > ORDER_COMBO_MEAL
-                    </div>
-                    <p class="text-center text-xs text-blue-400 mt-2">The kitchen (Hardware) translates this into the 4 steps automatically.</p>
-                </div>
-            </div>
-
         </div>
+    </header>
 
-        <div class="mt-12 animate-bounce">
-            <i data-lucide="arrow-down" class="w-8 h-8 text-slate-500"></i>
-        </div>
-    </section>
+    <main class="lab-shell">
 
-    <section class="min-h-screen bg-slate-900/50 dark:bg-black/20 py-24 px-6">
-        <div class="max-w-6xl mx-auto">
-            
-            <div class="mb-10">
-                <h2 class="text-3xl font-bold mb-2">The "Instruction Translator" Simulator</h2>
-                <p class="text-slate-400 max-w-2xl">
-                    In a CISC computer, you write short code. The hardware contains a special translator called 
-                    <span class="text-blue-400 font-bold">Microcode</span> that expands your single command into many hardware signals.
-                    <br><br>
-                    <span class="text-yellow-400 text-sm"><i data-lucide="alert-circle" class="inline w-4 h-4"></i> Instructions: Click the "RUN CISC COMMAND" button below to see how one line of code triggers a chain reaction.</span>
+        <!-- ============== HERO SECTION ============== -->
+        <section
+            class="min-h-[80vh] flex flex-col justify-center items-center px-6 pt-12 pb-24 max-w-5xl mx-auto relative">
+
+            <div class="text-center space-y-6 mb-16">
+                <div
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-500/10 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400 border border-brand-500/20 text-sm font-mono font-bold uppercase tracking-wider">
+                    The Core Concept
+                </div>
+                <h1
+                    class="text-5xl md:text-7xl font-extrabold tracking-tight leading-tight text-brand-900 dark:text-white">
+                    The "Combo Meal" <br>
+                    <span
+                        class="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 to-brandlt-400">Processor</span>
+                </h1>
+                <p class="text-xl md:text-2xl text-neutral-600 dark:text-white/70 max-w-2xl mx-auto leading-relaxed">
+                    Most people think computers are smart. They aren't. They just follow orders. <br>
+                    <strong class="text-brand-500 dark:text-brand-400">CISC</strong> (Complex Instruction Set Computer)
+                    is like ordering a
+                    <span class="border-b-2 border-amber-500 border-dashed cursor-help"
+                        title="A pre-packaged set of actions">Combo Meal</span>.
                 </p>
             </div>
 
-            <div class="grid lg:grid-cols-3 gap-8">
-                
-                <div class="glass-panel rounded-2xl p-6 bg-slate-800/80 dark:bg-slate-900 border border-slate-700 h-fit">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="font-bold text-lg text-blue-400">1. Programmer's View</h3>
-                        <div class="text-xs font-mono bg-slate-700 px-2 py-1 rounded text-slate-300">HIGH LEVEL</div>
-                    </div>
-                    
-                    <div class="bg-black/50 rounded-lg p-6 mb-6 font-mono text-sm border border-slate-700/50 min-h-[150px] flex flex-col justify-center items-center gap-4">
-                        <span class="text-slate-500">// We want to multiply two numbers <br> // located in memory.</span>
-                        <div id="codeBlock" class="w-full bg-blue-600 hover:bg-blue-500 text-white p-4 rounded cursor-pointer text-center font-bold transition-all transform active:scale-95 shadow-lg shadow-blue-900/50 border border-blue-400">
-                            MULT 2:3, 5:2
-                        </div>
-                    </div>
+            <div class="grid md:grid-cols-2 gap-8 w-full items-stretch">
 
-                    <p class="text-xs text-slate-400 text-center">
-                        This single command says: "Go to memory address 2:3, get the number. Go to 5:2, get that number. Multiply them. Save it."
+                <!-- RISC Card -->
+                <div
+                    class="glass-panel p-8 border-l-4 border-neutral-400 dark:border-neutral-600 opacity-70 hover:opacity-100 transition-opacity">
+                    <div class="flex items-center gap-4 mb-4">
+                        <div class="p-3 bg-neutral-200 dark:bg-neutral-700 rounded-lg">
+                            <i data-lucide="list" class="w-6 h-6 text-neutral-700 dark:text-white"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-brand-900 dark:text-white">The "A La Carte" Way (RISC)</h3>
+                    </div>
+                    <p class="mb-6 text-neutral-600 dark:text-white/70">You must list every step individually.</p>
+                    <div class="space-y-2 font-mono text-sm">
+                        <div
+                            class="bg-brand-500/10 dark:bg-brand-500/20 p-2 rounded text-emerald-600 dark:text-emerald-400">
+                            > GET Bun</div>
+                        <div
+                            class="bg-brand-500/10 dark:bg-brand-500/20 p-2 rounded text-emerald-600 dark:text-emerald-400">
+                            > COOK Patty</div>
+                        <div
+                            class="bg-brand-500/10 dark:bg-brand-500/20 p-2 rounded text-emerald-600 dark:text-emerald-400">
+                            > ADD Cheese</div>
+                        <div
+                            class="bg-brand-500/10 dark:bg-brand-500/20 p-2 rounded text-emerald-600 dark:text-emerald-400">
+                            > SERVE</div>
+                    </div>
+                </div>
+
+                <!-- CISC Card -->
+                <div
+                    class="glass-panel p-8 border-l-4 border-brand-500 relative overflow-hidden transform hover:scale-[1.02] transition-all">
+                    <div class="absolute top-0 right-0 p-4 opacity-10">
+                        <i data-lucide="layers" class="w-32 h-32"></i>
+                    </div>
+                    <div class="flex items-center gap-4 mb-4">
+                        <div class="p-3 bg-brand-500 rounded-lg">
+                            <i data-lucide="package" class="w-6 h-6 text-white"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-brand-900 dark:text-white">The CISC Way</h3>
+                    </div>
+                    <p class="mb-6 text-neutral-600 dark:text-white/80">You say ONE word. The CPU does the rest.</p>
+                    <div class="space-y-2 font-mono text-sm relative z-10">
+                        <div
+                            class="bg-brand-500 p-4 rounded text-white font-bold text-center shadow-lg shadow-brand-500/30">
+                            > ORDER_COMBO_MEAL
+                        </div>
+                        <p class="text-center text-xs text-brand-600 dark:text-brand-400 mt-2">The kitchen (Hardware)
+                            translates this into the 4 steps automatically.</p>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="mt-12 animate-bounce">
+                <i data-lucide="arrow-down" class="w-8 h-8 text-neutral-400 dark:text-white/40"></i>
+            </div>
+        </section>
+
+        <!-- ============== SIMULATOR SECTION ============== -->
+        <section class="py-24 px-6">
+            <div class="container max-w-7xl mx-auto">
+
+                <div class="mb-10">
+                    <h2 class="text-3xl font-bold mb-2 text-brand-900 dark:text-white">The "Instruction Translator"
+                        Simulator</h2>
+                    <p class="text-neutral-600 dark:text-white/70 max-w-2xl">
+                        In a CISC computer, you write short code. The hardware contains a special translator called
+                        <span class="text-brand-500 dark:text-brand-400 font-bold">Microcode</span> that expands your
+                        single command into many hardware signals.
+                        <br><br>
+                        <span class="text-amber-600 dark:text-amber-400 text-sm">
+                            <i data-lucide="alert-circle" class="inline w-4 h-4"></i>
+                            Instructions: Click the "RUN CISC COMMAND" button below to see how one line of code triggers
+                            a chain reaction.
+                        </span>
                     </p>
                 </div>
 
-                <div class="glass-panel rounded-2xl p-0 bg-slate-900 border border-slate-700 relative overflow-hidden h-[500px] flex flex-col">
-                    <div class="p-6 border-b border-slate-800 z-20 bg-slate-900">
-                        <h3 class="font-bold text-lg text-purple-400">2. Inside the CPU (Microcode)</h3>
-                        <p class="text-xs text-slate-500">The "Translator" Hardware</p>
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-                    <div class="relative flex-1 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')]">
-                        
-                        <div class="absolute top-4 left-1/2 -translate-x-1/2 w-32 h-12 border-2 border-dashed border-purple-500/50 rounded flex items-center justify-center text-xs font-mono text-purple-400">
-                            DECODER
+                    <!-- Programmer's View -->
+                    <div class="glass-panel p-6 h-[800px] overflow-auto">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="font-bold text-lg text-brand-600 dark:text-brand-400">1. Programmer's View</h3>
+                            <div
+                                class="text-xs font-mono bg-brand-500/10 dark:bg-brand-500/20 px-2 py-1 rounded text-brand-600 dark:text-brand-300">
+                                HIGH LEVEL</div>
                         </div>
 
-                        <div id="microOpsContainer" class="flex flex-col items-center pt-24 gap-3 w-full px-8">
+                        <div
+                            class="bg-brand-500/5 dark:bg-brand-500/10 rounded-lg p-6 mb-6 font-mono text-sm border border-brand-500/20 min-h-[150px] flex flex-col justify-center items-center gap-4">
+                            <span class="text-neutral-500 dark:text-white/60 text-center">// We want to multiply two
+                                numbers <br> // located in memory.</span>
+                            <div id="codeBlock"
+                                class="w-full bg-brand-500 hover:bg-brand-600 text-white p-4 rounded-lg cursor-pointer text-center font-bold transition-all transform active:scale-95 shadow-lg shadow-brand-500/30 border border-brand-400">
+                                MULT 2:3, 5:2
+                            </div>
+                        </div>
+
+                        <p class="text-xs text-neutral-500 dark:text-white/60 text-center">
+                            This single command says: "Go to memory address 2:3, get the number. Go to 5:2, get that
+                            number. Multiply them. Save it."
+                        </p>
+                    </div>
+
+                    <!-- Inside the CPU -->
+                    <div class="glass-panel p-0 relative overflow-hidden h-[800px] flex flex-col">
+                        <div class="p-6 border-b border-brand-500/20 z-20 bg-brand-500/5 dark:bg-brand-500/10">
+                            <h3 class="font-bold text-lg text-brand-500 dark:text-brand-400">2. Inside the CPU
+                                (Microcode)</h3>
+                            <p class="text-xs text-neutral-500 dark:text-white/60">The "Translator" Hardware</p>
+                        </div>
+
+                        <div
+                            class="relative flex-1 flex flex-col items-center bg-[radial-gradient(circle,rgba(158,75,138,0.05)_1px,transparent_1px)] bg-[length:20px_20px] p-6">
+
+                            <!-- DECODER Box - now in normal flow -->
+                            <div
+                                class="w-32 h-12 border-2 border-dashed border-brand-500/50 rounded flex items-center justify-center text-xs font-mono text-brand-500 dark:text-brand-400 mb-6">
+                                DECODER
                             </div>
 
-                        <svg class="absolute inset-0 pointer-events-none opacity-20" width="100%" height="100%">
-                            <line x1="50%" y1="60" x2="50%" y2="500" stroke="white" stroke-width="2" stroke-dasharray="5,5" />
-                        </svg>
+                            <!-- Micro Ops appear below DECODER -->
+                            <div id="microOpsContainer" class="flex flex-col items-center gap-4 w-full">
+                            </div>
+
+                            <svg class="absolute inset-0 pointer-events-none opacity-20" width="100%" height="100%">
+                                <line x1="50%" y1="60" x2="50%" y2="500" stroke="currentColor" stroke-width="2"
+                                    stroke-dasharray="5,5" class="text-brand-500" />
+                            </svg>
+                        </div>
                     </div>
+
+                    <!-- Hardware State -->
+                    <div class="glass-panel p-6 h-[800px] overflow-auto">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="font-bold text-lg text-emerald-600 dark:text-emerald-400">3. Hardware State</h3>
+                            <div
+                                class="text-xs font-mono bg-emerald-500/10 px-2 py-1 rounded text-emerald-600 dark:text-emerald-400">
+                                REGISTERS</div>
+                        </div>
+
+                        <div class="space-y-4 font-mono text-sm">
+                            <div
+                                class="flex items-center justify-between p-3 bg-brand-500/5 dark:bg-brand-500/10 rounded-lg border border-brand-500/20">
+                                <span class="text-neutral-600 dark:text-white/70">TEMP_REG_A</span>
+                                <span id="regA" class="text-emerald-600 dark:text-emerald-400 font-bold">0</span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between p-3 bg-brand-500/5 dark:bg-brand-500/10 rounded-lg border border-brand-500/20">
+                                <span class="text-neutral-600 dark:text-white/70">TEMP_REG_B</span>
+                                <span id="regB" class="text-emerald-600 dark:text-emerald-400 font-bold">0</span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
+                                <span class="text-emerald-600 dark:text-emerald-400">ALU_RESULT</span>
+                                <span id="aluResult" class="text-brand-900 dark:text-white font-bold text-xl">0</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 pt-6 border-t border-brand-500/20">
+                            <div class="flex gap-2 mb-2">
+                                <div id="statusLight" class="w-3 h-3 rounded-full bg-neutral-400 dark:bg-neutral-600">
+                                </div>
+                                <span id="statusText"
+                                    class="text-xs uppercase font-bold text-neutral-500 dark:text-white/60">IDLE</span>
+                            </div>
+                            <div class="h-1 w-full bg-brand-500/20 rounded-full overflow-hidden">
+                                <div id="progressBar" class="h-full bg-gradient-to-r from-brand-500 to-brandlt-400 w-0">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
-
-                <div class="glass-panel rounded-2xl p-6 bg-slate-800/80 dark:bg-slate-900 border border-slate-700 h-fit">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="font-bold text-lg text-green-400">3. Hardware State</h3>
-                        <div class="text-xs font-mono bg-slate-700 px-2 py-1 rounded text-slate-300">REGISTERS</div>
-                    </div>
-
-                    <div class="space-y-4 font-mono text-sm">
-                        <div class="flex items-center justify-between p-3 bg-black/40 rounded border border-slate-700">
-                            <span class="text-slate-400">TEMP_REG_A</span>
-                            <span id="regA" class="text-green-400 font-bold">0</span>
-                        </div>
-                        <div class="flex items-center justify-between p-3 bg-black/40 rounded border border-slate-700">
-                            <span class="text-slate-400">TEMP_REG_B</span>
-                            <span id="regB" class="text-green-400 font-bold">0</span>
-                        </div>
-                        <div class="flex items-center justify-between p-3 bg-green-900/20 rounded border border-green-500/30">
-                            <span class="text-green-400">ALU_RESULT</span>
-                            <span id="aluResult" class="text-white font-bold text-xl">0</span>
-                        </div>
-                    </div>
-
-                    <div class="mt-6 pt-6 border-t border-slate-700">
-                        <div class="flex gap-2 mb-2">
-                            <div id="statusLight" class="w-3 h-3 rounded-full bg-slate-600"></div>
-                            <span id="statusText" class="text-xs uppercase font-bold text-slate-500">IDLE</span>
-                        </div>
-                        <div class="h-1 w-full bg-slate-700 rounded-full overflow-hidden">
-                            <div id="progressBar" class="h-full bg-green-500 w-0"></div>
-                        </div>
-                    </div>
-                </div>
-
             </div>
+        </section>
+
+        <!-- ============== TECHNICAL SPECS ============== -->
+        <section class="py-24 px-6">
+            <div class="container max-w-6xl mx-auto">
+                <h2 class="text-3xl font-bold mb-10 border-l-4 border-brand-500 pl-4 text-brand-900 dark:text-white">
+                    Under the Hood: Technical Specs</h2>
+
+                <div class="grid md:grid-cols-4 md:grid-rows-2 gap-4 h-auto md:h-[500px]">
+
+                    <!-- Code Density -->
+                    <div class="col-span-2 row-span-1 glass-panel p-6 flex flex-col justify-center">
+                        <div class="flex items-center gap-3 mb-2">
+                            <i data-lucide="book-open" class="text-brand-500 dark:text-brand-400"></i>
+                            <h3 class="font-bold text-xl text-brand-900 dark:text-white">Code Density</h3>
+                        </div>
+                        <p class="text-neutral-600 dark:text-white/70">CISC programs take up very little memory space.
+                            Because one instruction does so much, you need fewer lines of code. This was crucial in the
+                            1970s/80s when memory was expensive.</p>
+                    </div>
+
+                    <!-- Variable Length -->
+                    <div
+                        class="col-span-1 row-span-1 glass-panel p-6 flex flex-col items-center justify-center text-center">
+                        <span class="text-4xl font-bold text-brand-900 dark:text-white mb-1">Variable</span>
+                        <span class="text-xs uppercase tracking-widest text-neutral-500 dark:text-white/60">Instruction
+                            Length</span>
+                        <p class="text-xs text-neutral-500 dark:text-white/60 mt-2">Some commands are 1 byte. Some are
+                            10 bytes.</p>
+                    </div>
+
+                    <!-- Power Hunger -->
+                    <div class="col-span-1 row-span-2 glass-panel p-6 flex flex-col justify-between">
+                        <div>
+                            <i data-lucide="zap" class="text-amber-500 mb-4 w-8 h-8"></i>
+                            <h3 class="font-bold text-lg mb-2 text-brand-900 dark:text-white">Power Hunger</h3>
+                            <p class="text-sm text-neutral-600 dark:text-white/70">The complex decoding hardware
+                                generates heat. This is why mobile phones (batteries) usually use RISC (ARM), while
+                                desktops (plugged in) use CISC (x86).</p>
+                        </div>
+                        <div class="w-full bg-brand-500/10 dark:bg-brand-500/20 rounded-full h-32 relative mt-4">
+                            <div
+                                class="absolute bottom-0 w-full bg-gradient-to-t from-red-500 to-amber-500 h-[80%] rounded-b-full opacity-80">
+                            </div>
+                            <div
+                                class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-lg">
+                                HIGH WATTAGE</div>
+                        </div>
+                    </div>
+
+                    <!-- The Great Tradeoff -->
+                    <div class="col-span-3 row-span-1 glass-panel p-6 flex items-center gap-6">
+                        <div class="p-4 bg-brand-500/20 rounded-full text-brand-500 dark:text-brand-400 shrink-0">
+                            <i data-lucide="scale" class="w-8 h-8"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-lg text-brand-900 dark:text-white">The Great Tradeoff</h3>
+                            <p class="text-sm text-neutral-600 dark:text-white/70 mt-1">
+                                <strong class="text-brand-500 dark:text-brand-400">CISC:</strong> Easy for humans to
+                                write assembly, hard for hardware to decode. <br>
+                                <strong class="text-emerald-600 dark:text-emerald-400">RISC:</strong> Hard for humans to
+                                write assembly (verbose), easy for hardware to run fast.
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ============== FOOTER ============== -->
+    <footer class="border-t border-black/5 dark:border-white/10 py-8">
+        <div class="container text-center">
+            <p class="text-neutral-500 dark:text-white/60 text-sm">
+                Created for Learning • x86 and VAX are famous CISC architectures. — Paper X
+            </p>
         </div>
-    </section>
-
-    <section class="py-24 px-6 max-w-6xl mx-auto">
-        <h2 class="text-3xl font-bold mb-10 border-l-4 border-blue-500 pl-4">Under the Hood: Technical Specs</h2>
-        
-        <div class="grid md:grid-cols-4 md:grid-rows-2 gap-4 h-auto md:h-[500px]">
-            
-            <div class="col-span-2 row-span-1 glass-panel p-6 rounded-xl bg-gradient-to-br from-blue-900/20 to-slate-900 border border-slate-700 flex flex-col justify-center">
-                <div class="flex items-center gap-3 mb-2">
-                    <i data-lucide="book-open" class="text-blue-400"></i>
-                    <h3 class="font-bold text-xl">Code Density</h3>
-                </div>
-                <p class="text-slate-300">CISC programs take up very little memory space. Because one instruction does so much, you need fewer lines of code. This was crucial in the 1970s/80s when memory was expensive.</p>
-            </div>
-
-            <div class="col-span-1 row-span-1 glass-panel p-6 rounded-xl bg-slate-900 border border-slate-700 flex flex-col items-center justify-center text-center">
-                <span class="text-4xl font-bold text-white mb-1">Variable</span>
-                <span class="text-xs uppercase tracking-widest text-slate-500">Instruction Length</span>
-                <p class="text-xs text-slate-400 mt-2">Some commands are 1 byte. Some are 10 bytes.</p>
-            </div>
-
-            <div class="col-span-1 row-span-2 glass-panel p-6 rounded-xl bg-slate-900 border border-slate-700 flex flex-col justify-between">
-                <div>
-                    <i data-lucide="zap" class="text-yellow-400 mb-4 w-8 h-8"></i>
-                    <h3 class="font-bold text-lg mb-2">Power Hunger</h3>
-                    <p class="text-sm text-slate-400">The complex decoding hardware generates heat. This is why mobile phones (batteries) usually use RISC (ARM), while desktops (plugged in) use CISC (x86).</p>
-                </div>
-                <div class="w-full bg-slate-800 rounded-full h-32 relative mt-4">
-                    <div class="absolute bottom-0 w-full bg-gradient-to-t from-red-500 to-yellow-500 h-[80%] rounded-b-full opacity-80"></div>
-                    <div class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white shadow-black drop-shadow-md">HIGH WATTAGE</div>
-                </div>
-            </div>
-
-            <div class="col-span-3 row-span-1 glass-panel p-6 rounded-xl bg-slate-800/50 border border-slate-700 flex items-center gap-6">
-                <div class="p-4 bg-purple-500/20 rounded-full text-purple-400 shrink-0">
-                    <i data-lucide="scale" class="w-8 h-8"></i>
-                </div>
-                <div>
-                    <h3 class="font-bold text-lg text-white">The Great Tradeoff</h3>
-                    <p class="text-sm text-slate-300 mt-1">
-                        <strong class="text-purple-400">CISC:</strong> Easy for humans to write assembly, hard for hardware to decode. <br>
-                        <strong class="text-green-400">RISC:</strong> Hard for humans to write assembly (verbose), easy for hardware to run fast.
-                    </p>
-                </div>
-            </div>
-
-        </div>
-    </section>
-
-    <footer class="py-12 text-center text-slate-500 text-sm border-t border-slate-800 mt-12">
-        <p>Created for Learning • x86 and VAX are famous CISC architectures.</p>
     </footer>
 
     <script>
         // --- 1. ICON INITIALIZATION ---
         lucide.createIcons();
 
-        // --- 2. THEME TOGGLE ---
-        const themeToggle = document.getElementById('themeToggle');
-        const body = document.body;
-        
-        themeToggle.addEventListener('click', () => {
-            body.classList.toggle('dark');
-            body.classList.toggle('light');
-            body.classList.toggle('bg-cyber-bg');
-            body.classList.toggle('bg-paper-bg');
-            body.classList.toggle('text-cyber-text');
-            body.classList.toggle('text-paper-text');
-            
-            // Re-render icons for theme change
-            lucide.createIcons();
-        });
-        
-        // Ensure Light Mode styles are applied correctly manually for specific overrides
-        if(body.classList.contains('light')) {
-            // Additional manual overrides if needed
-        }
-
-        // --- 3. SIMULATION LOGIC ---
+        // --- 2. SIMULATION LOGIC ---
         const runBtn = document.getElementById('codeBlock');
         const container = document.getElementById('microOpsContainer');
         const regA = document.getElementById('regA');
@@ -312,42 +517,42 @@
 
         // The sequence of micro-operations that ONE CISC instruction breaks into
         const microOps = [
-            { name: "FETCH MEM [2:3]", color: "text-blue-400", action: () => { regA.innerText = "42"; gsap.from(regA, {scale: 1.5, color:"#fff", duration:0.3}); } },
-            { name: "FETCH MEM [5:2]", color: "text-blue-400", action: () => { regB.innerText = "10"; gsap.from(regB, {scale: 1.5, color:"#fff", duration:0.3}); } },
-            { name: "ALU: MULTIPLY", color: "text-purple-400", action: () => { aluResult.innerText = "420"; gsap.from(aluResult, {scale: 2, rotate: 10, duration:0.5}); } },
-            { name: "STORE RESULT", color: "text-green-400", action: () => { statusText.innerText = "COMPLETED"; statusLight.classList.replace('bg-yellow-500', 'bg-green-500'); } }
+            { name: "FETCH MEM [2:3]", color: "text-brand-600 dark:text-brand-400", action: () => { regA.innerText = "42"; gsap.from(regA, { scale: 1.5, color: "#fff", duration: 0.3 }); } },
+            { name: "FETCH MEM [5:2]", color: "text-brand-600 dark:text-brand-400", action: () => { regB.innerText = "10"; gsap.from(regB, { scale: 1.5, color: "#fff", duration: 0.3 }); } },
+            { name: "ALU: MULTIPLY", color: "text-brand-500 dark:text-brand-300", action: () => { aluResult.innerText = "420"; gsap.from(aluResult, { scale: 2, rotate: 10, duration: 0.5 }); } },
+            { name: "STORE RESULT", color: "text-emerald-600 dark:text-emerald-400", action: () => { statusText.innerText = "COMPLETED"; statusLight.classList.replace('bg-amber-500', 'bg-emerald-500'); } }
         ];
 
         runBtn.addEventListener('click', () => {
             if (isRunning) return;
             isRunning = true;
-            
+
             // Reset UI
             container.innerHTML = '';
             regA.innerText = "0";
             regB.innerText = "0";
             aluResult.innerText = "0";
-            statusLight.classList.remove('bg-slate-600', 'bg-green-500');
-            statusLight.classList.add('bg-yellow-500');
+            statusLight.classList.remove('bg-neutral-400', 'dark:bg-neutral-600', 'bg-emerald-500');
+            statusLight.classList.add('bg-amber-500');
             statusText.innerText = "DECODING...";
-            gsap.set(progressBar, {width: "0%"});
+            gsap.set(progressBar, { width: "0%" });
 
             // Master Timeline
             const tl = gsap.timeline({
                 onComplete: () => {
                     isRunning = false;
-                    gsap.to(runBtn, {scale: 1, duration: 0.2});
+                    gsap.to(runBtn, { scale: 1, duration: 0.2 });
                 }
             });
 
             // Button Feedback
-            tl.to(runBtn, {scale: 0.95, duration: 0.1, yoyo: true, repeat: 1});
+            tl.to(runBtn, { scale: 0.95, duration: 0.1, yoyo: true, repeat: 1 });
 
             // Generate Micro-ops
             microOps.forEach((op, index) => {
                 // Create the UI block
                 const block = document.createElement('div');
-                block.className = `w-4/5 p-3 rounded bg-slate-800 border border-slate-600 font-mono text-xs font-bold text-center shadow-xl opacity-0 translate-y-4 ${op.color}`;
+                block.className = `w-4/5 p-3 rounded-lg bg-brand-500/10 dark:bg-brand-500/20 border border-brand-500/30 font-mono text-xs font-bold text-center shadow-xl opacity-0 translate-y-4 ${op.color}`;
                 block.innerText = op.name;
                 container.appendChild(block);
 
@@ -360,8 +565,8 @@
                     onStart: () => {
                         // Update Progress bar
                         const progress = ((index + 1) / microOps.length) * 100;
-                        gsap.to(progressBar, {width: `${progress}%`, duration: 0.5});
-                        
+                        gsap.to(progressBar, { width: `${progress}%`, duration: 0.5 });
+
                         // Execute logic (update numbers)
                         op.action();
                     }
@@ -369,6 +574,18 @@
             });
         });
 
+        // --- 3. THEME TOGGLE (Paper X Standard) ---
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+            });
+        });
+
     </script>
 </body>
+
 </html>

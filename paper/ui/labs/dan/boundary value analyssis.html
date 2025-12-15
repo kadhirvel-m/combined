@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boundary Value Analysis - Testing at the Edges</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        paper: {
+                            bg: '#1E1E2F',
+                            panel: '#4C2A59',
+                            accent: '#9E4B8A',
+                            light: '#E2E8F0'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            /* Default Dark Theme (PaperX Palette) */
+            --bg-body: #1E1E2F;
+            --bg-panel: rgba(76, 42, 89, 0.4);
+            --border-panel: rgba(158, 75, 138, 0.3);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #9E4B8A;
+            --safe-color: #00e676;
+            --danger-color: #ff1744;
+            --boundary-color: #ffb300;
+        }
+
+        html.light {
+            /* Light Theme */
+            --bg-body: #f8fafc;
+            --bg-panel: rgba(255, 255, 255, 0.8);
+            --border-panel: rgba(76, 42, 89, 0.1);
+            --text-main: #1E1E2F;
+            --text-muted: #64748b;
+            --accent: #9E4B8A;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .glass-panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-panel);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        /* --- THE STAGE --- */
+        .stage {
+            position: relative;
+            height: 300px;
+            overflow: visible;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            border: 1px solid var(--border-panel);
+        }
+
+        html.light .stage {
+            background: rgba(158, 75, 138, 0.08);
+        }
+
+        /* 1. Input Data (Orb) */
+        .input-orb {
+            width: 60px;
+            height: 60px;
+            background: white;
+            color: #222;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            top: 80px;
+            left: 50px;
+            font-weight: bold;
+            z-index: 10;
+            box-shadow: 0 0 15px white;
+            cursor: pointer;
+            opacity: 0;
+        }
+
+        .orb-static {
+            /* Placeholder for initial view */
+            left: 50px;
+            opacity: 1;
+            border: 2px dashed #555;
+            background: transparent;
+            color: #555;
+            box-shadow: none;
+        }
+
+        /* 2. The Scanner (The System) */
+        .scanner-gate {
+            width: 20px;
+            height: 120px;
+            background: rgba(51, 51, 51, 0.8);
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            /* Center of stage */
+            transform: translateX(-50%);
+            border-radius: 10px;
+            z-index: 5;
+            box-shadow: 0 0 10px black;
+            cursor: pointer;
+            border: 1px solid #555;
+        }
+
+        /* The Laser Beam */
+        .laser-beam {
+            position: absolute;
+            top: 10px;
+            left: -2px;
+            width: 24px;
+            height: 2px;
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent);
+            animation: scan 1s infinite alternate;
+            opacity: 0.5;
+        }
+
+        @keyframes scan {
+            from {
+                top: 10px;
+            }
+
+            to {
+                top: 110px;
+            }
+        }
+
+        /* 3. The Visual Ruler (Crucial for BVA) */
+        .ruler-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid var(--border-panel);
+        }
+
+        .ruler-mark {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.8rem;
+            border-radius: 4px;
+            color: var(--text-muted);
+            border: 1px solid var(--border-panel);
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        /* Highlighting the Boundaries */
+        .mark-danger {
+            border-color: var(--danger-color);
+            color: var(--danger-color);
+            opacity: 0.5;
+        }
+
+        .mark-boundary {
+            background: var(--boundary-color);
+            color: black;
+            font-weight: bold;
+            box-shadow: 0 0 10px var(--boundary-color);
+        }
+
+        .mark-safe {
+            background: rgba(0, 230, 118, 0.1);
+            color: var(--safe-color);
+            border-color: var(--safe-color);
+        }
+
+        /* --- POPUP COMPONENT INFO --- */
+        .component-popup {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg-body);
+            border: 2px solid var(--accent);
+            padding: 25px;
+            border-radius: 12px;
+            z-index: 100;
+            display: none;
+            width: 350px;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+        }
+
+        .popup-title {
+            color: var(--accent);
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            display: block;
+            border-bottom: 1px solid var(--border-panel);
+            padding-bottom: 5px;
+        }
+
+        .popup-desc {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .popup-close {
+            margin-top: 15px;
+            background: var(--accent);
+            border: none;
+            color: white;
+            padding: 8px 20px;
+            cursor: pointer;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .popup-close:hover {
+            background: #8B3577;
+            transform: scale(1.05);
+        }
+
+        /* Status Colors for JS */
+        .status-pass {
+            color: var(--safe-color);
+            font-weight: bold;
+        }
+
+        .status-fail {
+            color: var(--danger-color);
+            font-weight: bold;
+        }
+
+        .status-boundary {
+            color: var(--boundary-color);
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body class="text-white dark">
+
+    <!-- Navigation -->
+    <nav
+        class="w-full px-6 py-4 flex justify-between items-center sticky top-0 z-50 glass-panel border-b-0 rounded-none">
+        <div class="flex items-center gap-2">
+            <i data-lucide="ruler" class="text-[#9E4B8A]"></i>
+            <span class="font-bold tracking-tight text-xl">Boundary <span class="text-[#9E4B8A]">Value
+                    Analysis</span></span>
+        </div>
+
+        <button id="themeToggle" class="p-2 rounded-full hover:bg-black/10 transition flex items-center gap-2">
+            <i data-lucide="moon" id="themeIcon" class="w-5 h-5"></i>
+        </button>
+    </nav>
+
+    <!-- Introduction Section -->
+    <section class="max-w-5xl mx-auto px-6 pt-24 pb-20">
+        <div class="space-y-8">
+            <div
+                class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#9E4B8A] text-[#9E4B8A] text-xs font-mono font-bold">
+                <span class="w-2 h-2 rounded-full bg-[#9E4B8A] animate-pulse"></span>
+                SOFTWARE TESTING TECHNIQUE
+            </div>
+
+            <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight leading-tight">
+                Testing at the<br>
+                <span class="text-[#9E4B8A]">Boundaries.</span>
+            </h1>
+
+            <p class="text-xl md:text-2xl opacity-80 leading-relaxed">
+                Boundary Value Analysis (BVA) is a <strong>black-box testing technique</strong> that focuses on the
+                edges of input ranges. Bugs often hide at boundaries where conditions transition from valid to invalid.
+                <br><br>
+                <strong class="text-[#9E4B8A]">Minimum Boundary (5)</strong> and <strong class="text-yellow-400">Maximum
+                    Boundary (10)</strong> are critical test points. Testing values like 4, 5, 10, and 11 reveals more
+                defects than testing random values in the middle range.
+                <br><br>
+                This demonstration simulates a password length validator to show how BVA identifies edge-case bugs
+                efficiently.
+            </p>
+
+            <div class="p-4 rounded-lg bg-[#9E4B8A]/10 border-l-4 border-[#9E4B8A]">
+                <p class="text-sm font-bold opacity-90">INTERACTIVE DEMO 👇</p>
+                <p class="text-sm opacity-70">Enter different password lengths to see how the system validates
+                    boundaries.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="max-w-7xl mx-auto px-6 py-20">
+        <h2 class="text-4xl md:text-5xl font-bold mb-10 text-center">How <span class="text-[#9E4B8A]">BVA</span> Works
+        </h2>
+
+        <div class="flex flex-col md:flex-row gap-6">
+            <!-- Card 1 -->
+            <div class="glass-panel p-8 rounded-2xl hover:-translate-y-1 transition duration-300 flex-1">
+                <div class="text-center">
+                    <div
+                        class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mb-4 text-green-400 mx-auto">
+                        <i data-lucide="target"></i>
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">Identify Boundaries</h3>
+                    <p class="text-base opacity-70">
+                        Find the edges of valid input ranges. For "password length 5-10", the boundaries are exactly 5
+                        and 10.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="glass-panel p-8 rounded-2xl hover:-translate-y-1 transition duration-300 flex-1">
+                <div class="text-center">
+                    <div
+                        class="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center mb-4 text-blue-400 mx-auto">
+                        <i data-lucide="layers"></i>
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">Test Edge Values</h3>
+                    <p class="text-base opacity-70">
+                        Test the boundaries and values just above/below them: 4, 5, 10, 11. These reveal off-by-one
+                        errors.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="glass-panel p-8 rounded-2xl hover:-translate-y-1 transition duration-300 flex-1">
+                <div class="text-center">
+                    <div
+                        class="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mb-4 text-purple-400 mx-auto">
+                        <i data-lucide="check-circle"></i>
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">Validate Behavior</h3>
+                    <p class="text-base opacity-70">
+                        Confirm the system correctly accepts valid boundaries and rejects invalid ones, ensuring proper
+                        logic.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Card 4 -->
+            <div class="glass-panel p-8 rounded-2xl hover:-translate-y-1 transition duration-300 flex-1">
+                <div class="text-center">
+                    <div
+                        class="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center mb-4 text-orange-400 mx-auto">
+                        <i data-lucide="bug"></i>
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">Find Edge Bugs</h3>
+                    <p class="text-base opacity-70">
+                        Catch common mistakes like using > instead of >=, which would incorrectly reject the minimum
+                        valid value.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Animation Section -->
+    <section class="max-w-6xl mx-auto px-6 py-20">
+        <h2 class="text-4xl md:text-5xl font-bold mb-6 text-center">Interactive <span class="text-[#9E4B8A]">BVA</span>
+            Simulation</h2>
+        <p class="text-center opacity-70 mb-10">Test different password lengths to see how the validator handles
+            boundary conditions.</p>
+
+        <div class="glass-panel rounded-xl p-8 border-l-4 border-[#9E4B8A] mb-10">
+            <div class="flex items-start gap-3">
+                <i data-lucide="info" class="w-5 h-5 text-[#9E4B8A] mt-1 flex-shrink-0"></i>
+                <p class="text-sm opacity-90">
+                    <strong>Scenario: Password Length Validator</strong> - Valid range is 5 to 10 characters. Try
+                    boundary values: 4, 5, 10, and 11 to see how the system validates each input.
+                </p>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6">
+            <div id="comp-popup" class="component-popup">
+                <strong class="popup-title" id="pop-title">Title</strong>
+                <p class="popup-desc" id="pop-desc">Description goes here.</p>
+                <button class="popup-close" onclick="closePopup()">Close</button>
+            </div>
+
+            <div class="stage">
+
+                <div class="input-orb orb-static" onclick="showPopup('orb')">
+                    <span>Data</span>
+                    <span style="font-size:0.6rem">Length</span>
+                </div>
+
+                <div id="orb" class="input-orb">
+                    <span id="orb-val">0</span>
+                </div>
+
+                <div class="scanner-gate" onclick="showPopup('scanner')">
+                    <div class="laser-beam"></div>
+                </div>
+
+                <div class="ruler-container" onclick="showPopup('ruler')">
+                    <div class="ruler-mark mark-danger">3</div>
+                    <div class="ruler-mark mark-danger">4</div>
+                    <div class="ruler-mark mark-boundary">5</div>
+                    <div class="ruler-mark mark-safe">...</div>
+                    <div class="ruler-mark mark-boundary">10</div>
+                    <div class="ruler-mark mark-danger">11</div>
+                    <div class="ruler-mark mark-danger">12</div>
+                </div>
+
+            </div>
+
+            <!-- Controls -->
+            <div class="mt-6 flex flex-wrap gap-4 items-center">
+                <label class="font-bold">Password Length:</label>
+                <input type="number" id="input-val" placeholder="Enter Length (e.g., 5)"
+                    class="px-4 py-2 rounded-lg bg-white/5 border border-white/20 focus:border-[#9E4B8A] focus:outline-none transition">
+                <button onclick="runTest()"
+                    class="px-6 py-2 bg-[#9E4B8A] hover:bg-[#8B3577] rounded-lg font-bold transition">
+                    Check Length
+                </button>
+
+                <div class="ml-auto flex gap-2">
+                    <button class="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-sm transition"
+                        onclick="quickFill(4)">Try 4</button>
+                    <button class="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-sm transition"
+                        onclick="quickFill(5)">Try 5</button>
+                    <button class="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-sm transition"
+                        onclick="quickFill(10)">Try 10</button>
+                    <button class="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-sm transition"
+                        onclick="quickFill(11)">Try 11</button>
+                </div>
+            </div>
+
+            <!-- Info Panel -->
+            <div id="explanation" class="mt-6 p-4 rounded-lg bg-[#9E4B8A]/10 border-l-4 border-[#9E4B8A]"
+                style="display: none;">
+                <strong id="exp-title" class="block mb-2">Analysis</strong>
+                <p id="exp-text" class="text-sm opacity-80">Details here...</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Conclusion Section -->
+    <section class="max-w-7xl mx-auto px-6 py-20">
+        <h2 class="text-4xl md:text-5xl font-bold mb-10 text-center">Why <span class="text-[#9E4B8A]">BVA</span> Matters
+        </h2>
+
+        <div class="glass-panel rounded-2xl p-12">
+            <div class="space-y-4 text-base opacity-80 leading-relaxed">
+                <p>
+                    Boundary Value Analysis is one of the most <strong>cost-effective testing techniques</strong>. By
+                    focusing on edge values, testers can find critical bugs with minimal test cases. Research shows that
+                    up to 70% of defects occur at or near boundary conditions.
+                </p>
+
+                <p>
+                    <strong class="text-[#9E4B8A]">Common Boundary Bugs:</strong> Off-by-one errors (using > instead of
+                    >=), incorrect range checks, integer overflow at maximum values, and edge cases in date/time
+                    validation.
+                </p>
+
+                <p>
+                    <strong class="text-blue-400">Real-World Applications:</strong> BVA is essential for testing age
+                    verification systems, payment amount validators, inventory management systems, and any application
+                    with numeric or range-based constraints.
+                </p>
+
+                <p>
+                    When combined with equivalence partitioning, BVA provides comprehensive coverage while keeping test
+                    suites manageable. Test the boundaries, and you'll catch the bugs that matter most.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // --- 1. POPUP LOGIC ---
+        const explanations = {
+            orb: {
+                title: "Test Input (Length)",
+                desc: "This represents the 'Length' of the password you are testing. In BVA, we don't care about the actual letters (abcde), we only care about the count (5)."
+            },
+            scanner: {
+                title: "The Logic Gate",
+                desc: "The system checks: <br><code>IF length >= 5 AND length <= 10</code>.<br> BVA helps us find bugs where the developer might have accidentally typed <code>> 5</code> (making 5 fail)."
+            },
+            ruler: {
+                title: "The Boundary Ruler",
+                desc: "This visualizes the 'Safe Zone' (5-10). <br><b>Yellow:</b> The exact Boundaries (Critical to test).<br><b>Green:</b> Valid data.<br><b>Red:</b> Invalid data.<br>Most bugs happen exactly at the Yellow/Red transition."
+            }
+        };
+
+        function showPopup(type) {
+            const popup = document.getElementById('comp-popup');
+            const title = document.getElementById('pop-title');
+            const desc = document.getElementById('pop-desc');
+
+            title.innerText = explanations[type].title;
+            desc.innerHTML = explanations[type].desc;
+
+            popup.style.display = "block";
+        }
+
+        function closePopup() {
+            document.getElementById('comp-popup').style.display = "none";
+        }
+
+        // --- 2. SIMULATION LOGIC ---
+        function quickFill(val) {
+            document.getElementById('input-val').value = val;
+            runTest();
+        }
+
+        function runTest() {
+            closePopup();
+
+            const valStr = document.getElementById('input-val').value;
+            if (valStr === "") return;
+            const length = parseInt(valStr);
+
+            const orb = document.getElementById('orb');
+            const scanner = document.querySelector('.scanner-gate');
+            const laser = document.querySelector('.laser-beam');
+
+            // Logic Check
+            let resultType = ""; // invalid-low, boundary-min, valid, boundary-max, invalid-high
+
+            if (length < 5) resultType = "invalid-low";
+            else if (length === 5) resultType = "boundary-min";
+            else if (length > 5 && length < 10) resultType = "valid";
+            else if (length === 10) resultType = "boundary-max";
+            else resultType = "invalid-high";
+
+            const isValid = (resultType === "valid" || resultType === "boundary-min" || resultType === "boundary-max");
+
+            // --- ANIMATION ---
+            const tl = gsap.timeline();
+
+            // 1. Reset Orb
+            tl.set(orb, {
+                left: 50, opacity: 0, scale: 1, backgroundColor: "white", boxShadow: "0 0 15px white"
+            });
+
+            // 2. Set Orb Value
+            document.getElementById('orb-val').innerText = length;
+            tl.to(orb, { opacity: 1, duration: 0.2 });
+
+            // 3. Move to Scanner (Center)
+            // Center is approx 450px (half of 900 container width)
+            tl.to(orb, { left: 420, duration: 1, ease: "power2.inOut" });
+
+            // 4. Scan Effect
+            tl.to(scanner, { scaleY: 1.2, duration: 0.1, yoyo: true, repeat: 3 });
+
+            // 5. Decision Animation
+            tl.call(() => {
+                if (isValid) {
+                    // Turn Green
+                    gsap.to(orb, { backgroundColor: "#00e676", boxShadow: "0 0 20px #00e676" });
+                    gsap.to(scanner, { borderColor: "#00e676", boxShadow: "0 0 20px #00e676" });
+                    laser.style.background = "#00e676";
+                } else {
+                    // Turn Red
+                    gsap.to(orb, { backgroundColor: "#ff1744", boxShadow: "0 0 20px #ff1744" });
+                    gsap.to(scanner, { borderColor: "#ff1744", boxShadow: "0 0 20px #ff1744" });
+                    laser.style.background = "#ff1744";
+                }
+            });
+
+            // 6. Outcome Movement
+            if (isValid) {
+                // Pass Through
+                tl.to(orb, { left: 800, duration: 1, ease: "power2.out" });
+            } else {
+                // Bounce Back (Reject)
+                tl.to(orb, { left: 300, duration: 0.3, ease: "power1.out" }); // Knock back
+                tl.to(orb, { scale: 0, duration: 0.2 }); // Disappear
+            }
+
+            // 7. Cleanup & Info
+            tl.call(() => {
+                // Reset scanner color
+                gsap.to(scanner, { borderColor: "#555", boxShadow: "0 0 10px black", delay: 1 });
+                laser.style.background = "#e91e63";
+                showAnalysis(length, resultType);
+            });
+        }
+
+        function showAnalysis(len, type) {
+            const panel = document.getElementById('explanation');
+            const title = document.getElementById('exp-title');
+            const text = document.getElementById('exp-text');
+
+            panel.style.display = "block";
+
+            if (type === "boundary-min") {
+                title.innerHTML = "Result: <span class='status-boundary'>MINIMUM BOUNDARY (5)</span>";
+                text.innerHTML = `You tested the exact edge! The requirement says "Min 5". <br>This test confirms the code uses <code>>= 5</code> (Correct) and not <code>> 5</code> (Bug).`;
+            }
+            else if (type === "boundary-max") {
+                title.innerHTML = "Result: <span class='status-boundary'>MAXIMUM BOUNDARY (10)</span>";
+                text.innerHTML = `You tested the exact top edge! The requirement says "Max 10". <br>This confirms the code handles 10 correctly before rejecting 11.`;
+            }
+            else if (type === "invalid-low") {
+                title.innerHTML = "Result: <span class='status-fail'>INVALID LOW (${len})</span>";
+                text.innerHTML = `This is a "Negative Test". If you test 4 (just below 5), you are verifying the <b>Lower Boundary Condition</b>. The system correctly rejected it.`;
+            }
+            else if (type === "invalid-high") {
+                title.innerHTML = "Result: <span class='status-fail'>INVALID HIGH (${len})</span>";
+                text.innerHTML = `This is a "Negative Test". If you test 11 (just above 10), you are verifying the <b>Upper Boundary Condition</b>.`;
+            }
+            else {
+                title.innerHTML = "Result: <span class='status-pass'>VALID CENTER (${len})</span>";
+                text.innerHTML = `This is a standard valid input. While good, BVA suggests that if 5 works and 10 works, 7 is very likely to work too. BVA prioritizes the edges over this number.`;
+            }
+        }
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Theme Toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+        const body = document.body;
+
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'light') {
+            body.classList.remove('dark');
+            body.classList.add('light');
+            html.classList.remove('dark');
+            themeIcon.setAttribute('data-lucide', 'sun');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            if (body.classList.contains('dark')) {
+                body.classList.remove('dark');
+                body.classList.add('light');
+                html.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+                themeIcon.setAttribute('data-lucide', 'sun');
+            } else {
+                body.classList.remove('light');
+                body.classList.add('dark');
+                html.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+                themeIcon.setAttribute('data-lucide', 'moon');
+            }
+            lucide.createIcons();
+        });
+    </script>
+</body>
+
+</html>

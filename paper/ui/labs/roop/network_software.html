@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Software — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+
+            /* Layer Colors */
+            --col-app: #10b981;
+            /* Emerald */
+            --col-trans: #3b82f6;
+            /* Blue */
+            --col-net: #8b5cf6;
+            /* Violet */
+            --col-link: #f59e0b;
+            /* Amber */
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        /* Glass Panel Card */
+        .glass-panel {
+            border-radius: 1rem;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
+            box-shadow: 0 18px 40px -18px rgba(30, 30, 47, 0.35);
+            border: 1px solid rgba(158, 75, 138, 0.16);
+            overflow: hidden;
+        }
+
+        .dark .glass-panel {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.96), rgba(30, 30, 47, 0.86));
+            border-color: rgba(200, 141, 186, 0.35);
+            box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Custom Horizontal Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: var(--text-head);
+            border: 4px solid #9E4B8A;
+            cursor: pointer;
+            margin-top: -10px;
+            box-shadow: 0 0 15px rgba(158, 75, 138, 0.5);
+            transition: transform 0.1s;
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: var(--border);
+            border-radius: 2px;
+        }
+
+        .layer-box {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform-origin: center;
+        }
+
+        /* Grid cards */
+        .info-card {
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            transform: translateY(-4px);
+        }
+    </style>
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="lab-shell pb-10">
+
+        <!-- Hero Section -->
+        <section class="pt-12 pb-8">
+            <div class="container max-w-5xl mx-auto px-4">
+                <div class="flex items-start justify-between gap-4 mb-6">
+                    <div>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                                <i data-lucide="package-open" class="w-7 h-7 text-emerald-500"></i>
+                            </div>
+                            <span
+                                class="text-emerald-600 dark:text-emerald-400 font-bold tracking-widest text-sm uppercase">The
+                                Concept</span>
+                        </div>
+                        <h1 class="text-3xl md:text-5xl font-bold tracking-tight text-brand-900 dark:text-white mb-3">
+                            Network Software <br>
+                            <span
+                                class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-blue-500">Protocol
+                                Stack</span>
+                        </h1>
+                        <p class="text-lg md:text-xl font-light leading-relaxed max-w-2xl"
+                            style="color: var(--text-sub)">
+                            Sending data isn't like pouring water through a pipe. It's like sending a delicate gift.
+                            <br><br>
+                            To ship a crystal vase (Data), you wrap it in bubble wrap, put it in a box, label the box,
+                            and put the box in a shipping container.
+                        </p>
+                    </div>
+                    <div class="hidden sm:flex flex-col items-end gap-2 text-xs text-neutral-500 dark:text-white/60">
+                        <span
+                            class="inline-flex items-center gap-1 rounded-full border border-black/5 dark:border-white/10 px-3 py-1">
+                            <span class="material-symbols-rounded text-base">layers</span>
+                            Protocol Visualization
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Info Cards Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                    <div class="glass-panel p-6 border-l-4 border-emerald-500 info-card">
+                        <div class="flex items-center gap-3 mb-2">
+                            <i data-lucide="layers" class="text-emerald-500 w-5 h-5"></i>
+                            <h3 class="text-lg font-bold" style="color: var(--text-head)">Encapsulation</h3>
+                        </div>
+                        <p class="text-sm leading-relaxed" style="color: var(--text-sub)">
+                            This is the process of wrapping. As data moves down the software stack, each layer adds its
+                            own "envelope" (Header) around the previous one.
+                        </p>
+                    </div>
+                    <div class="glass-panel p-6 border-l-4 border-amber-500 info-card">
+                        <div class="flex items-center gap-3 mb-2">
+                            <i data-lucide="truck" class="text-amber-500 w-5 h-5"></i>
+                            <h3 class="text-lg font-bold" style="color: var(--text-head)">The Journey</h3>
+                        </div>
+                        <p class="text-sm leading-relaxed" style="color: var(--text-sub)">
+                            The computer doesn't send "Hello". It sends a Truck (Frame), containing a Box (Packet),
+                            containing an Envelope (Segment), containing "Hello".
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex justify-center pt-8">
+                    <p class="text-xs font-mono opacity-50 animate-bounce">SCROLL TO PACK THE DATA ↓</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Encapsulator Section -->
+        <section class="py-12 px-4 md:px-8 relative border-t" style="border-color: var(--border)">
+            <div class="container max-w-6xl mx-auto">
+
+                <div class="flex flex-col md:flex-row justify-between items-end mb-8">
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-bold mb-2" style="color: var(--text-head)">The Encapsulator
+                        </h2>
+                        <p style="color: var(--text-sub)">Drag the slider to see how software wraps your data.</p>
+                    </div>
+                    <div class="mt-4 md:mt-0 glass-panel p-3 rounded-lg flex items-center gap-2">
+                        <span class="text-xs font-bold px-2 text-emerald-600 dark:text-emerald-400">YOUR MESSAGE:</span>
+                        <input type="text" id="user-message" value="Hello!"
+                            class="bg-transparent border-b border-gray-400 dark:border-gray-500 focus:outline-none focus:border-emerald-500 text-lg w-40 font-mono text-center font-bold"
+                            style="color: var(--text-head)" maxlength="8">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6" style="min-height: 500px;">
+
+                    <!-- Visualization Area -->
+                    <div class="lg:col-span-8 relative flex items-center justify-center glass-panel overflow-hidden"
+                        style="min-height: 450px;">
+
+                        <div class="absolute top-6 left-6 z-20">
+                            <h4 class="text-xs font-bold uppercase opacity-50 mb-1">Current Action</h4>
+                            <div id="action-text"
+                                class="text-xl md:text-2xl font-bold text-emerald-600 dark:text-emerald-400">Generating
+                                Data...</div>
+                        </div>
+
+                        <div id="vis-link"
+                            class="layer-box absolute w-72 h-72 md:w-96 md:h-96 border-4 border-amber-500 rounded-3xl flex items-end justify-center pb-4 opacity-0 scale-150 bg-amber-500/10">
+                            <div
+                                class="absolute top-0 left-0 bg-amber-500 text-white text-xs font-bold px-3 py-1 rounded-br-lg">
+                                ETHERNET FRAME</div>
+                            <div
+                                class="font-mono text-[10px] text-amber-600 dark:text-amber-400 absolute bottom-2 w-full text-center">
+                                MAC: A1:B2:C3:D4</div>
+                        </div>
+
+                        <div id="vis-net"
+                            class="layer-box absolute w-52 h-52 md:w-72 md:h-72 border-4 border-violet-500 rounded-2xl flex items-end justify-center pb-4 opacity-0 scale-150 bg-violet-500/10">
+                            <div
+                                class="absolute top-0 left-0 bg-violet-500 text-white text-xs font-bold px-3 py-1 rounded-br-lg">
+                                IP PACKET</div>
+                            <div
+                                class="font-mono text-[10px] text-violet-600 dark:text-violet-400 absolute bottom-2 w-full text-center">
+                                IP: 192.168.1.50</div>
+                        </div>
+
+                        <div id="vis-trans"
+                            class="layer-box absolute w-40 h-40 md:w-52 md:h-52 border-4 border-blue-500 rounded-xl flex items-end justify-center pb-4 opacity-0 scale-150 bg-blue-500/10">
+                            <div
+                                class="absolute top-0 left-0 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-br-lg">
+                                TCP SEGMENT</div>
+                            <div
+                                class="font-mono text-[10px] text-blue-600 dark:text-blue-400 absolute bottom-2 w-full text-center">
+                                PORT: 443</div>
+                        </div>
+
+                        <div id="vis-app"
+                            class="layer-box absolute w-28 h-28 md:w-32 md:h-32 border-4 border-emerald-500 rounded-lg flex items-center justify-center bg-emerald-500/20 z-10">
+                            <div class="text-center">
+                                <i data-lucide="file-text"
+                                    class="w-6 h-6 md:w-8 md:h-8 text-emerald-500 mx-auto mb-1"></i>
+                                <span id="data-text"
+                                    class="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-base md:text-lg">Hello!</span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Control Panel -->
+                    <div class="lg:col-span-4 flex flex-col gap-4">
+
+                        <div class="glass-panel p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <label class="text-xs font-bold text-brand-500 uppercase tracking-widest">Process
+                                    Progress</label>
+                                <span id="percent-val" class="text-xs font-mono opacity-50">0%</span>
+                            </div>
+
+                            <input type="range" id="stack-slider" min="0" max="100" value="0" class="mb-6">
+
+                            <div
+                                class="flex justify-between text-[10px] font-bold opacity-40 uppercase tracking-widest">
+                                <span>App</span>
+                                <span>Transport</span>
+                                <span>Network</span>
+                                <span>Link</span>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-6 flex-1 flex flex-col justify-center border-l-4 border-emerald-500"
+                            id="info-card">
+                            <span class="text-xs font-bold uppercase opacity-50 mb-2" id="info-layer">Layer 7:
+                                Application</span>
+                            <h3 class="text-xl md:text-2xl font-bold mb-2" id="info-title"
+                                style="color: var(--text-head)">User Data</h3>
+                            <div class="p-3 rounded-lg mb-4"
+                                style="background: var(--bg-app); border: 1px solid var(--border);">
+                                <p class="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold"
+                                    id="info-analogy">"Writing the Letter"</p>
+                            </div>
+                            <p class="text-sm leading-relaxed" id="info-desc" style="color: var(--text-sub)">
+                                This is the raw data generated by your browser or email client. It has no address info
+                                yet.
+                            </p>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Protocol Stack Section -->
+        <section class="py-12 px-4 max-w-6xl mx-auto">
+            <h2 class="text-2xl md:text-3xl font-bold mb-10 text-center" style="color: var(--text-head)">
+                The Protocol <span
+                    class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-cyan-500">Stack</span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+                <div class="glass-panel p-6 border-t-4 border-emerald-500 info-card">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-lg font-bold" style="color: var(--text-head)">Application</h3>
+                        <span
+                            class="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded">L7</span>
+                    </div>
+                    <p class="text-sm mb-4" style="color: var(--text-sub)">The interface. Where data is created. (HTTP,
+                        SMTP).</p>
+                    <div class="text-xs font-mono opacity-50">Payload: Data</div>
+                </div>
+
+                <div class="glass-panel p-6 border-t-4 border-blue-500 info-card">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-lg font-bold" style="color: var(--text-head)">Transport</h3>
+                        <span
+                            class="text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1 rounded">L4</span>
+                    </div>
+                    <p class="text-sm mb-4" style="color: var(--text-sub)">Reliability. Breaks data into chunks. (TCP,
+                        UDP).</p>
+                    <div class="text-xs font-mono opacity-50">Header: Ports</div>
+                </div>
+
+                <div class="glass-panel p-6 border-t-4 border-violet-500 info-card">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-lg font-bold" style="color: var(--text-head)">Network</h3>
+                        <span
+                            class="text-[10px] font-bold bg-violet-500/10 text-violet-600 dark:text-violet-400 px-2 py-1 rounded">L3</span>
+                    </div>
+                    <p class="text-sm mb-4" style="color: var(--text-sub)">Routing. Finds the path across the web. (IP).
+                    </p>
+                    <div class="text-xs font-mono opacity-50">Header: IP Address</div>
+                </div>
+
+                <div class="glass-panel p-6 border-t-4 border-amber-500 info-card">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-lg font-bold" style="color: var(--text-head)">Link</h3>
+                        <span
+                            class="text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-1 rounded">L2</span>
+                    </div>
+                    <p class="text-sm mb-4" style="color: var(--text-sub)">Physical transfer between devices. (Ethernet,
+                        Wi-Fi).</p>
+                    <div class="text-xs font-mono opacity-50">Header: MAC Address</div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // --- SIMULATOR LOGIC ---
+        const slider = document.getElementById('stack-slider');
+        const percentVal = document.getElementById('percent-val');
+        const dataInput = document.getElementById('user-message');
+        const dataText = document.getElementById('data-text');
+
+        // Visual Elements
+        const visApp = document.getElementById('vis-app');
+        const visTrans = document.getElementById('vis-trans');
+        const visNet = document.getElementById('vis-net');
+        const visLink = document.getElementById('vis-link');
+
+        // Info Card Elements
+        const infoCard = document.getElementById('info-card');
+        const infoTitle = document.getElementById('info-title');
+        const infoLayer = document.getElementById('info-layer');
+        const infoAnalogy = document.getElementById('info-analogy');
+        const infoDesc = document.getElementById('info-desc');
+        const actionText = document.getElementById('action-text');
+
+        // Data Models for the Info Card
+        const stages = [
+            {
+                layer: "Layer 7: Application",
+                title: "Raw Data",
+                analogy: "\"Writing the Letter\"",
+                desc: "This is the content you created. It has no address or tracking info yet. It's just bytes.",
+                color: "border-emerald-500",
+                textCol: "text-emerald-600 dark:text-emerald-400",
+                action: "Generating Data..."
+            },
+            {
+                layer: "Layer 4: Transport",
+                title: "TCP Segment",
+                analogy: "\"Putting it in an Envelope\"",
+                desc: "We add Port Numbers (Room numbers). TCP also ensures the data arrives in order and error-free.",
+                color: "border-blue-500",
+                textCol: "text-blue-600 dark:text-blue-400",
+                action: "Adding Reliability..."
+            },
+            {
+                layer: "Layer 3: Network",
+                title: "IP Packet",
+                analogy: "\"Addressing the Box\"",
+                desc: "We add IP Addresses (Street addresses). This allows routers to send the data across the internet.",
+                color: "border-violet-500",
+                textCol: "text-violet-600 dark:text-violet-400",
+                action: "Routing Logic..."
+            },
+            {
+                layer: "Layer 2: Link",
+                title: "Ethernet Frame",
+                analogy: "\"Loading into the Truck\"",
+                desc: "We add MAC Addresses. This is for the physical hop from your computer to the router/switch.",
+                color: "border-amber-500",
+                textCol: "text-amber-600 dark:text-amber-400",
+                action: "Physical Transfer..."
+            }
+        ];
+
+        function updateSimulation() {
+            const val = parseInt(slider.value);
+            percentVal.innerText = val + "%";
+            dataText.innerText = dataInput.value || "Data";
+
+            // Determine Stage (0 to 3)
+            let stageIndex = 0;
+            if (val > 10) stageIndex = 1; // Transport starts appearing
+            if (val > 40) stageIndex = 2; // Network starts appearing
+            if (val > 75) stageIndex = 3; // Link starts appearing
+
+            // Update Info Card Content
+            const info = stages[stageIndex];
+            infoLayer.innerText = info.layer;
+            infoTitle.innerText = info.title;
+            infoAnalogy.innerText = info.analogy;
+            infoDesc.innerText = info.desc;
+            actionText.innerText = info.action;
+
+            // Update Card Styling
+            infoCard.className = `glass-panel p-6 flex-1 flex flex-col justify-center border-l-4 ${info.color}`;
+            infoAnalogy.className = `text-xs font-bold font-mono ${info.textCol}`;
+            actionText.className = `text-xl md:text-2xl font-bold ${info.textCol}`;
+
+            // GSAP Animations
+
+            // 1. Transport Layer (Blue Box)
+            // Starts appearing at 10, fully visible/scaled at 40
+            const transProgress = Math.min(Math.max((val - 10) / 30, 0), 1);
+            gsap.to(visTrans, {
+                opacity: transProgress,
+                scale: 1.5 - (transProgress * 0.5), // Shrinks from 1.5 to 1.0
+                duration: 0.1,
+                ease: "power1.out"
+            });
+
+            // 2. Network Layer (Violet Box)
+            // Starts appearing at 40, fully visible/scaled at 75
+            const netProgress = Math.min(Math.max((val - 40) / 35, 0), 1);
+            gsap.to(visNet, {
+                opacity: netProgress,
+                scale: 1.5 - (netProgress * 0.5),
+                duration: 0.1,
+                ease: "power1.out"
+            });
+
+            // 3. Link Layer (Amber Box)
+            // Starts appearing at 75, fully visible/scaled at 100
+            const linkProgress = Math.min(Math.max((val - 75) / 25, 0), 1);
+            gsap.to(visLink, {
+                opacity: linkProgress,
+                scale: 1.5 - (linkProgress * 0.5),
+                duration: 0.1,
+                ease: "power1.out"
+            });
+        }
+
+        // Listeners
+        slider.addEventListener('input', updateSimulation);
+        dataInput.addEventListener('input', updateSimulation);
+
+        // Init
+        updateSimulation();
+
+        // Shared Paper X theme toggle wiring
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+            });
+        });
+
+    </script>
+</body>
+
+</html>
