@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataSense - Categorical Data</title>
+    <link rel="icon" type="image/x-icon" href="../../../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <link rel="stylesheet" href="../../../assets/css/tailwind.css" />
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #7c3aed 0%, #d946ef 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* 3D Shape Mockups for Hero */
+        .shape-float {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .shape-float-delayed {
+            animation: float 6s ease-in-out infinite 3s;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translateY(0px) rotate(0deg);
+            }
+
+            50% {
+                transform: translateY(-20px) rotate(5deg);
+            }
+
+            100% {
+                transform: translateY(0px) rotate(0deg);
+            }
+        }
+
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+    </style>
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="#definition" class="hover:text-brandlt-900 dark:hover:text-white">Definition</a>
+                <a href="#types" class="hover:text-brandlt-900 dark:hover:text-white">Nominal vs Ordinal</a>
+                <a href="#lab" class="hover:text-brandlt-900 dark:hover:text-white">Interactive Lab</a>
+                <a href="#quiz" class="hover:text-brandlt-900 dark:hover:text-white">Quiz</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../../../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../../../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="pb-10">
+
+        <section class="pt-32 pb-20 px-6 hero-bg overflow-hidden relative">
+            <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+
+                <div class="z-10">
+                    <div
+                        class="inline-block px-3 py-1 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded-full text-xs font-bold tracking-wider mb-6">
+                        STATISTICS FUNDAMENTALS
+                    </div>
+                    <h1
+                        class="text-5xl md:text-7xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-6 leading-tight">
+                        Categorical <br />
+                        <span class="gradient-text">Data</span>
+                    </h1>
+                    <p class="text-lg text-slate-600 dark:text-slate-300 mb-8 max-w-lg leading-relaxed">
+                        Data isn't always about numbers. Sometimes it's about <strong>qualities, labels,</strong> and
+                        <strong>groups</strong>. Explore how we classify the world around us.
+                    </p>
+                    <button onclick="document.getElementById('definition').scrollIntoView()"
+                        class="group flex items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-full font-medium hover:bg-slate-800 dark:hover:bg-slate-200 transition-all">
+                        Start Exploring
+                        <i data-lucide="arrow-down" class="w-4 h-4 group-hover:translate-y-1 transition-transform"></i>
+                    </button>
+                </div>
+
+                <div class="relative h-[400px] w-full flex items-center justify-center">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-tr from-violet-200 to-purple-200 rounded-full blur-3xl opacity-50">
+                    </div>
+
+                    <div class="relative w-full h-full">
+                        <div
+                            class="absolute top-10 right-10 w-32 h-32 bg-gradient-to-br from-violet-400 to-indigo-600 rounded-full shadow-2xl shape-float flex items-center justify-center text-white/20">
+                            <i data-lucide="box" class="w-16 h-16"></i>
+                        </div>
+                        <div
+                            class="absolute bottom-20 left-10 w-24 h-24 bg-gradient-to-br from-fuchsia-400 to-pink-600 rounded-xl shadow-xl shape-float-delayed rotate-12 flex items-center justify-center text-white/20">
+                            <i data-lucide="hexagon" class="w-12 h-12"></i>
+                        </div>
+                        <div class="absolute bottom-10 right-20 bg-white/90 dark:bg-slate-800/90 backdrop-blur border border-white/50 dark:border-white/10 p-4 rounded-xl shadow-lg animate-bounce"
+                            style="animation-duration: 3s;">
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="p-2 bg-violet-100 dark:bg-violet-900/30 rounded-lg text-violet-600 dark:text-violet-400">
+                                    <i data-lucide="bar-chart-2" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] uppercase font-bold text-slate-400">Key Stat</div>
+                                    <div class="text-sm font-bold text-slate-800 dark:text-white">Mode (Most Frequent)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="definition" class="py-24 bg-white dark:bg-slate-900">
+            <div class="max-w-4xl mx-auto px-6 text-center">
+                <h2 class="text-3xl font-bold text-slate-900 dark:text-white mb-6">What is Categorical Data?</h2>
+                <p class="text-xl text-slate-500 dark:text-slate-400 mb-16 max-w-2xl mx-auto">
+                    Categorical data (also called qualitative data) represents characteristics. It puts data into
+                    <strong>groups</strong> or <strong>categories</strong> rather than measuring a quantity.
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div
+                        class="bg-slate-50 dark:bg-slate-800 p-8 rounded-3xl border border-slate-100 dark:border-slate-700 text-left card-hover">
+                        <div
+                            class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center text-green-600 dark:text-green-400 mb-6">
+                            <i data-lucide="tag" class="w-6 h-6"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">It Describes</h3>
+                        <p class="text-slate-500 dark:text-slate-400 leading-relaxed">
+                            Answers questions like "What type?", "Which one?", or "How would you rate it?"
+                        </p>
+                    </div>
+
+                    <div
+                        class="bg-slate-50 dark:bg-slate-800 p-8 rounded-3xl border border-slate-100 dark:border-slate-700 text-left card-hover">
+                        <div
+                            class="w-12 h-12 bg-rose-100 dark:bg-rose-900/30 rounded-xl flex items-center justify-center text-rose-600 dark:text-rose-400 mb-6">
+                            <i data-lucide="calculator" class="w-6 h-6"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">No "True" Math</h3>
+                        <p class="text-slate-500 dark:text-slate-400 leading-relaxed">
+                            You can't calculate an "average" hair color or zip code. Mathematical operations don't apply
+                            directly.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="types" class="py-24 bg-slate-50 dark:bg-slate-950 border-y border-slate-200 dark:border-slate-800">
+            <div class="max-w-6xl mx-auto px-6">
+                <div class="text-center mb-16">
+                    <span
+                        class="text-violet-600 dark:text-violet-400 font-bold tracking-widest text-xs uppercase mb-2 block">The
+                        Classification</span>
+                    <h2 class="text-4xl font-bold text-slate-900 dark:text-white mb-4">Nominal vs. Ordinal</h2>
+                    <p class="text-slate-500 dark:text-slate-400">The two main subtypes. The difference lies in
+                        <strong>order</strong>.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+                    <div
+                        class="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+                        <div class="absolute top-0 left-0 w-full h-2 bg-blue-400"></div>
+
+                        <div class="flex gap-3 mb-6">
+                            <span
+                                class="px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-full text-xs font-bold">No
+                                Order</span>
+                            <span
+                                class="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full text-xs font-bold">Labels
+                                Only</span>
+                        </div>
+
+                        <h3 class="text-3xl font-bold text-slate-900 dark:text-white mb-4">Nominal Data</h3>
+                        <p class="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
+                            Categories that have no natural rank or order. Changing the order doesn't change the
+                            meaning.
+                        </p>
+
+                        <div class="space-y-3 mb-10">
+                            <div class="flex items-center gap-3 text-slate-700 dark:text-slate-300">
+                                <i data-lucide="eye" class="w-4 h-4 text-blue-400"></i> Eye Color (Blue, Brown, Green)
+                            </div>
+                            <div class="flex items-center gap-3 text-slate-700 dark:text-slate-300">
+                                <i data-lucide="dog" class="w-4 h-4 text-blue-400"></i> Pet Type (Dog, Cat, Fish)
+                            </div>
+                            <div class="flex items-center gap-3 text-slate-700 dark:text-slate-300">
+                                <i data-lucide="flag" class="w-4 h-4 text-blue-400"></i> Nationality (French, Japanese,
+                                US)
+                            </div>
+                        </div>
+
+                        <div
+                            class="bg-slate-50 dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700">
+                            <div
+                                class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-4 flex justify-between">
+                                <span>Try It: Order Doesn't Matter</span>
+                                <span class="cursor-pointer text-blue-500 hover:underline"
+                                    onclick="shuffleNominal()">Click
+                                    to shuffle</span>
+                            </div>
+                            <div id="nominal-container" class="flex justify-center gap-4">
+                                <div
+                                    class="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold shadow-lg">
+                                    A</div>
+                                <div
+                                    class="w-12 h-12 rounded-full bg-green-500 text-white flex items-center justify-center font-bold shadow-lg">
+                                    B</div>
+                                <div
+                                    class="w-12 h-12 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold shadow-lg">
+                                    C</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        class="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-full h-2 bg-purple-500"></div>
+
+                        <div class="flex gap-3 mb-6">
+                            <span
+                                class="px-3 py-1 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 rounded-full text-xs font-bold">Ordered</span>
+                            <span
+                                class="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full text-xs font-bold">Rank
+                                Matters</span>
+                        </div>
+
+                        <h3 class="text-3xl font-bold text-slate-900 dark:text-white mb-4">Ordinal Data</h3>
+                        <p class="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
+                            Categories with a clear, natural order. The difference between ranks isn't always equal, but
+                            the
+                            sequence matters.
+                        </p>
+
+                        <div class="space-y-3 mb-10">
+                            <div class="flex items-center gap-3 text-slate-700 dark:text-slate-300">
+                                <i data-lucide="star" class="w-4 h-4 text-purple-400"></i> Ratings (1 Star, 2 Stars, 3
+                                Stars)
+                            </div>
+                            <div class="flex items-center gap-3 text-slate-700 dark:text-slate-300">
+                                <i data-lucide="shirt" class="w-4 h-4 text-purple-400"></i> Clothing Size (S, M, L, XL)
+                            </div>
+                            <div class="flex items-center gap-3 text-slate-700 dark:text-slate-300">
+                                <i data-lucide="graduation-cap" class="w-4 h-4 text-purple-400"></i> Education (HS,
+                                Bachelors, Masters)
+                            </div>
+                        </div>
+
+                        <div
+                            class="bg-slate-50 dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700">
+                            <div
+                                class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase mb-4 flex justify-between">
+                                <span>Try It: Order Is Fixed</span>
+                                <span class="cursor-pointer text-purple-500 hover:underline"
+                                    onclick="sortOrdinal()">Click
+                                    to sort</span>
+                            </div>
+                            <div id="ordinal-container" class="flex justify-center gap-2">
+                                <div class="ord-item w-10 h-10 rounded bg-purple-600 text-white flex items-center justify-center font-bold shadow-md"
+                                    data-val="3">L</div>
+                                <div class="ord-item w-8 h-8 rounded bg-purple-400 text-white flex items-center justify-center font-bold shadow-md"
+                                    data-val="1">S</div>
+                                <div class="ord-item w-12 h-12 rounded bg-purple-800 text-white flex items-center justify-center font-bold shadow-md"
+                                    data-val="4">XL</div>
+                                <div class="ord-item w-9 h-9 rounded bg-purple-500 text-white flex items-center justify-center font-bold shadow-md"
+                                    data-val="2">M</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section id="lab" class="py-24 bg-white dark:bg-slate-900">
+            <div class="max-w-5xl mx-auto px-6">
+                <div class="flex items-center gap-4 mb-8">
+                    <div
+                        class="p-3 bg-violet-100 dark:bg-violet-900/30 rounded-xl text-violet-700 dark:text-violet-300">
+                        <i data-lucide="flask-conical" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-3xl font-bold text-slate-900 dark:text-white">Data Lab</h2>
+                        <p class="text-slate-500 dark:text-slate-400 text-sm">Collect data and see how Nominal and
+                            Ordinal visualizations
+                            differ.</p>
+                    </div>
+                </div>
+
+                <div class="flex border-b border-slate-200 dark:border-slate-800 mb-8">
+                    <button onclick="switchLab('nominal')" id="tab-nominal"
+                        class="px-6 py-3 text-sm font-bold text-violet-600 dark:text-violet-400 border-b-2 border-violet-600 dark:border-violet-400 transition-colors">Nominal
+                        Study</button>
+                    <button onclick="switchLab('ordinal')" id="tab-ordinal"
+                        class="px-6 py-3 text-sm font-bold text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">Ordinal
+                        Study</button>
+                </div>
+
+                <div
+                    class="bg-slate-50 dark:bg-slate-950 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 grid grid-cols-1 lg:grid-cols-3 gap-8 min-h-[500px]">
+
+                    <div class="lg:col-span-1">
+                        <h3 id="lab-title" class="text-xl font-bold text-slate-900 dark:text-white mb-2">Ice Cream
+                            Flavors</h3>
+                        <p id="lab-desc" class="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                            Nominal Data: Preferences with no inherent order.
+                        </p>
+
+                        <div id="controls-container" class="space-y-3">
+                        </div>
+
+                        <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">Total
+                                    Samples</span>
+                                <span id="total-samples"
+                                    class="text-xl font-bold text-slate-900 dark:text-white">0</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">Mode</span>
+                                <span id="mode-val"
+                                    class="text-sm font-bold text-violet-600 dark:text-violet-400">None</span>
+                            </div>
+                            <button onclick="resetLab()"
+                                class="mt-4 w-full py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                                <i data-lucide="rotate-ccw" class="w-3 h-3 inline mr-1"></i> Reset Data
+                            </button>
+                        </div>
+                    </div>
+
+                    <div
+                        class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-inner flex flex-col">
+                        <div class="flex justify-between items-center mb-6">
+                            <h4 class="font-bold text-slate-700 dark:text-slate-300">Live Frequency Distribution</h4>
+                            <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                <div class="w-3 h-3 rounded-full bg-violet-500"></div> Count
+                            </div>
+                        </div>
+
+                        <div class="flex-1 flex items-end justify-around gap-4 pb-8 border-b border-slate-100 dark:border-slate-800 relative"
+                            id="chart-area">
+                            <div class="absolute inset-0 flex items-center justify-center text-slate-300 dark:text-slate-600 text-sm pointer-events-none"
+                                id="empty-state">
+                                Add data to see the chart
+                            </div>
+                        </div>
+
+                        <div class="flex justify-around px-2 mt-4" id="x-axis">
+                        </div>
+
+                        <div id="chart-note"
+                            class="mt-6 p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs rounded-lg flex gap-2">
+                            <i data-lucide="info" class="w-4 h-4 flex-shrink-0"></i>
+                            <span>In <strong>Nominal Data</strong>, the categories are just distinct labels. A bar chart
+                                is
+                                perfect.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="quiz" class="py-24 bg-slate-900 dark:bg-slate-950 text-white">
+            <div class="max-w-3xl mx-auto px-6 text-center">
+                <span class="text-yellow-400 font-bold tracking-widest text-xs uppercase mb-4 block">Quiz Time</span>
+                <h2 class="text-4xl font-bold mb-12">Categorical or Numerical?</h2>
+
+                <div class="flex justify-between max-w-lg mx-auto mb-8 text-sm font-mono text-slate-400">
+                    <div>SCORE: <span id="score" class="text-white font-bold text-xl">0</span></div>
+                    <div>STREAK: <span id="streak" class="text-white font-bold text-xl">0</span></div>
+                </div>
+
+                <div class="relative h-64 max-w-xl mx-auto mb-12">
+
+                    <div class="absolute left-0 top-0 bottom-0 w-1/3 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center p-4 transition-colors"
+                        id="zone-cat">
+                        <div
+                            class="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center text-purple-400 mb-2">
+                            <i data-lucide="shapes" class="w-5 h-5"></i>
+                        </div>
+                        <span class="font-bold text-purple-400">Categorical</span>
+                        <span class="text-[10px] text-slate-500 mt-1">Qualities, Labels</span>
+                    </div>
+
+                    <div class="absolute right-0 top-0 bottom-0 w-1/3 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center p-4 transition-colors"
+                        id="zone-num">
+                        <div
+                            class="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 mb-2">
+                            <i data-lucide="hash" class="w-5 h-5"></i>
+                        </div>
+                        <span class="font-bold text-green-400">Numerical</span>
+                        <span class="text-[10px] text-slate-500 mt-1">Quantities, Math</span>
+                    </div>
+
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div id="quiz-card"
+                            class="bg-white dark:bg-slate-800 text-slate-900 dark:text-white w-48 h-48 rounded-2xl shadow-2xl flex flex-col items-center justify-center p-4 z-20 pointer-events-auto transform transition-transform">
+                            <div
+                                class="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-3 text-3xl">
+                                🤔
+                            </div>
+                            <h3 id="q-text" class="text-lg font-bold text-center mb-1">Hair Color</h3>
+                            <p id="q-sub" class="text-[10px] text-slate-400 text-center">Blonde, Brown, Black...</p>
+                        </div>
+                    </div>
+
+                    <div id="feedback"
+                        class="absolute inset-0 flex items-center justify-center z-30 opacity-0 pointer-events-none">
+                        <div
+                            class="bg-slate-800 text-white px-6 py-3 rounded-full font-bold text-xl shadow-xl transform scale-50 transition-all">
+                            Correct!
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-center gap-4">
+                    <button onclick="answer('cat')"
+                        class="px-8 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold transition-colors">
+                        Categorical
+                    </button>
+                    <button onclick="answer('num')"
+                        class="px-8 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold transition-colors">
+                        Numerical
+                    </button>
+                </div>
+
+                <div
+                    class="mt-16 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-left max-w-2xl mx-auto flex gap-4">
+                    <i data-lucide="alert-triangle" class="text-yellow-500 flex-shrink-0"></i>
+                    <div>
+                        <h4 class="font-bold text-yellow-500 text-sm mb-1">Tricky Case: Zip Codes & Phone Numbers</h4>
+                        <p class="text-slate-400 text-xs leading-relaxed">
+                            Even though they are made of numbers, <strong>Zip Codes</strong> are actually <span
+                                class="text-white">Categorical (Nominal)</span>. Why? Because the "average" of two zip
+                            codes
+                            (e.g., 90210 + 10001 / 2) is meaningless. They are just labels for a place.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="py-8 bg-slate-950 text-slate-600 text-center text-xs border-t border-slate-900">
+        <p>&copy; 2025 DataSense Education. Built with Tailwind CSS & GSAP.</p>
+    </footer>
+
+    <script>
+        // Init Icons
+        lucide.createIcons();
+
+        // --- SECTION 1: NOMINAL / ORDINAL MINI SIMS ---
+
+        function shuffleNominal() {
+            const container = document.getElementById('nominal-container');
+            const items = Array.from(container.children);
+
+            // GSAP Flip could be used, but simple randomization works for this scale
+            items.sort(() => Math.random() - 0.5);
+
+            items.forEach(item => container.appendChild(item));
+
+            gsap.from(items, {
+                scale: 0.5,
+                opacity: 0,
+                duration: 0.4,
+                stagger: 0.1,
+                ease: "back.out(1.7)"
+            });
+        }
+
+        function sortOrdinal() {
+            const container = document.getElementById('ordinal-container');
+            const items = Array.from(container.children);
+
+            items.sort((a, b) => a.getAttribute('data-val') - b.getAttribute('data-val'));
+
+            items.forEach(item => container.appendChild(item));
+
+            gsap.from(items, {
+                y: -20,
+                opacity: 0,
+                duration: 0.5,
+                stagger: 0.1,
+                ease: "power2.out"
+            });
+        }
+
+        // --- SECTION 2: DATA LAB ---
+
+        const labData = {
+            nominal: {
+                title: "Ice Cream Flavors",
+                desc: "Nominal Data: Preferences with no inherent order.",
+                options: [
+                    { label: "Vanilla", color: "bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-800" },
+                    { label: "Chocolate", color: "bg-stone-200 dark:bg-stone-800 text-stone-800 dark:text-stone-200 border-stone-300 dark:border-stone-700" },
+                    { label: "Strawberry", color: "bg-rose-100 dark:bg-rose-900/30 text-rose-800 dark:text-rose-200 border-rose-200 dark:border-rose-800" },
+                    { label: "Mint", color: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800" }
+                ],
+                note: "In <strong>Nominal Data</strong>, the categories are just distinct labels. A bar chart is perfect.",
+                counts: [0, 0, 0, 0],
+                maxPossible: 10
+            },
+            ordinal: {
+                title: "Customer Satisfaction",
+                desc: "Ordinal Data: Ratings with a specific meaningful order.",
+                options: [
+                    { label: "Unhappy", color: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 border-red-200 dark:border-red-800" },
+                    { label: "Neutral", color: "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700" },
+                    { label: "Happy", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800" },
+                    { label: "Very Happy", color: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800" }
+                ],
+                note: "In <strong>Ordinal Data</strong>, order matters immensely. 'Very Happy' represents more satisfaction than 'Happy'. The bars MUST be kept in this specific sequence.",
+                counts: [0, 0, 0, 0],
+                maxPossible: 10
+            }
+        };
+
+        let currentLab = 'nominal';
+
+        function switchLab(type) {
+            currentLab = type;
+
+            // Update Tabs
+            document.getElementById('tab-nominal').className = type === 'nominal' ? "px-6 py-3 text-sm font-bold text-violet-600 border-b-2 border-violet-600 transition-colors" : "px-6 py-3 text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors";
+            document.getElementById('tab-ordinal').className = type === 'ordinal' ? "px-6 py-3 text-sm font-bold text-violet-600 border-b-2 border-violet-600 transition-colors" : "px-6 py-3 text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors";
+
+            // Update Text
+            const data = labData[type];
+            document.getElementById('lab-title').innerText = data.title;
+            document.getElementById('lab-desc').innerText = data.desc;
+            document.getElementById('chart-note').innerHTML = `<i data-lucide="info" class="w-4 h-4 flex-shrink-0"></i> <span>${data.note}</span>`;
+            lucide.createIcons();
+
+            // Render Controls
+            const controlsDiv = document.getElementById('controls-container');
+            controlsDiv.innerHTML = '';
+            data.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `w-full text-left px-4 py-3 rounded-lg border flex justify-between items-center transition-transform active:scale-95 ${opt.color}`;
+                btn.innerHTML = `<span class="font-bold">${opt.label}</span> <i data-lucide="plus" class="w-4 h-4 opacity-50"></i>`;
+                btn.onclick = () => addData(idx);
+                controlsDiv.appendChild(btn);
+            });
+            lucide.createIcons();
+
+            updateChart();
+        }
+
+        function addData(idx) {
+            labData[currentLab].counts[idx]++;
+            updateChart();
+        }
+
+        function updateChart() {
+            const data = labData[currentLab];
+            const total = data.counts.reduce((a, b) => a + b, 0);
+
+            // Update Stats
+            document.getElementById('total-samples').innerText = total;
+
+            // Calculate Mode
+            let maxVal = Math.max(...data.counts);
+            let modeText = "None";
+            if (total > 0) {
+                let modes = [];
+                data.counts.forEach((c, i) => { if (c === maxVal) modes.push(data.options[i].label) });
+                modeText = modes.join(", ");
+            }
+            document.getElementById('mode-val').innerText = modeText;
+
+            // Render Chart
+            const chartArea = document.getElementById('chart-area');
+            const xAxis = document.getElementById('x-axis');
+            const emptyState = document.getElementById('empty-state');
+
+            if (total > 0) emptyState.style.display = 'none';
+            else emptyState.style.display = 'flex';
+
+            // Clear existing
+            // Keep empty state element though
+            const bars = Array.from(chartArea.children).filter(el => el.id !== 'empty-state');
+            bars.forEach(b => b.remove());
+            xAxis.innerHTML = '';
+
+            // Max scale for chart height
+            const scaleMax = Math.max(5, maxVal + 2);
+
+            data.options.forEach((opt, i) => {
+                const count = data.counts[i];
+                const heightPct = (count / scaleMax) * 100;
+
+                // Create Bar
+                const bar = document.createElement('div');
+                bar.className = "flex-1 rounded-t-lg relative group transition-all duration-500 ease-out";
+                // Get bg color from tailwind class string roughly
+                let baseColor = currentLab === 'nominal' ?
+                    ['#fcd34d', '#e7e5e4', '#fda4af', '#6ee7b7'][i] :
+                    ['#fca5a5', '#f1f5f9', '#93c5fd', '#818cf8'][i];
+
+                bar.style.backgroundColor = baseColor;
+                bar.style.height = `${heightPct}%`;
+
+                // Count Label
+                if (count > 0) {
+                    const label = document.createElement('div');
+                    label.className = "absolute -top-6 w-full text-center text-xs font-bold text-slate-500 dark:text-slate-400";
+                    label.innerText = count;
+                    bar.appendChild(label);
+                }
+
+                chartArea.appendChild(bar);
+
+                // Axis Label
+                const axisLabel = document.createElement('div');
+                axisLabel.className = "flex-1 text-center text-[10px] md:text-xs font-medium text-slate-500 dark:text-slate-400 truncate px-1";
+                axisLabel.innerText = opt.label;
+                xAxis.appendChild(axisLabel);
+            });
+        }
+
+        function resetLab() {
+            labData.nominal.counts = [0, 0, 0, 0];
+            labData.ordinal.counts = [0, 0, 0, 0];
+            updateChart();
+        }
+
+        // --- SECTION 3: QUIZ ---
+
+        const questions = [
+            { text: "Hair Color", sub: "Blonde, Brown, Black, Red...", type: "cat" },
+            { text: "Height", sub: "170cm, 5'9\", 1.8m...", type: "num" },
+            { text: "T-Shirt Size", sub: "S, M, L, XL...", type: "cat" }, // Actually Ordinal, which is Categorical
+            { text: "Temperature", sub: "30°C, 85°F...", type: "num" },
+            { text: "Zip Code", sub: "90210, 10001...", type: "cat" },
+            { text: "Movie Genre", sub: "Horror, Comedy, Action...", type: "cat" },
+            { text: "Number of Siblings", sub: "0, 1, 2, 3...", type: "num" }
+        ];
+
+        let qIndex = 0;
+        let score = 0;
+        let streak = 0;
+
+        function updateCard() {
+            const q = questions[qIndex % questions.length];
+            const card = document.getElementById('quiz-card');
+            const text = document.getElementById('q-text');
+            const sub = document.getElementById('q-sub');
+
+            // Animate Out
+            gsap.to(card, {
+                scale: 0.8, opacity: 0, duration: 0.2, onComplete: () => {
+                    // Update Data
+                    text.innerText = q.text;
+                    sub.innerText = q.sub;
+
+                    // Animate In
+                    gsap.to(card, { scale: 1, opacity: 1, rotation: 0, x: 0, duration: 0.4, ease: "back.out" });
+                }
+            });
+        }
+
+        function answer(choice) {
+            const q = questions[qIndex % questions.length];
+            const isCorrect = (choice === q.type);
+            const card = document.getElementById('quiz-card');
+
+            // Visual Feedback
+            const targetX = choice === 'cat' ? -100 : 100;
+            const rotate = choice === 'cat' ? -15 : 15;
+
+            gsap.to(card, { x: targetX, rotation: rotate, duration: 0.2 });
+
+            const feedback = document.getElementById('feedback');
+
+            if (isCorrect) {
+                score += 10;
+                streak++;
+                feedback.firstElementChild.innerText = "Correct!";
+                feedback.firstElementChild.className = "bg-green-500 text-white px-6 py-3 rounded-full font-bold text-xl shadow-xl";
+            } else {
+                streak = 0;
+                feedback.firstElementChild.innerText = "Oops!";
+                feedback.firstElementChild.className = "bg-red-500 text-white px-6 py-3 rounded-full font-bold text-xl shadow-xl";
+            }
+
+            // Show Feedback Overlay
+            gsap.fromTo(feedback, { opacity: 0, scale: 0.5 }, { opacity: 1, scale: 1, duration: 0.2, yoyo: true, repeat: 1 });
+
+            // Update UI
+            document.getElementById('score').innerText = score;
+            document.getElementById('streak').innerText = streak;
+
+            // Next Question
+            qIndex++;
+            setTimeout(updateCard, 500);
+        }
+
+        // Initialize
+        window.onload = () => {
+            switchLab('nominal');
+            updateCard();
+        };
+
+        // Shared Paper X theme toggle wiring
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+            });
+        });
+
+    </script>
+</body>
+
+</html>

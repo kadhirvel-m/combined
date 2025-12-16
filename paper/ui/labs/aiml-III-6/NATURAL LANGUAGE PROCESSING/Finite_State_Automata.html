@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finite State Automata — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../../assets/img/favicon.svg">
+
+    <!-- Inter + JetBrains Mono + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <link rel="stylesheet" href="../../../assets/css/tailwind.css" />
+
+    <!-- MathJax for formula rendering -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --brand-500: #9E4B8A;
+            --brand-700: #4C2A59;
+            --brand-900: #1E1E2F;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(158, 75, 138, 0.15);
+            box-shadow: 0 8px 32px rgba(30, 30, 47, 0.12);
+        }
+
+        .dark .glass-panel {
+            background: rgba(30, 30, 47, 0.75);
+            border: 1px solid rgba(200, 141, 186, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(158, 75, 138, 0.12);
+            transition: transform 0.2s ease, border-color 0.2s;
+        }
+
+        .dark .glass-card {
+            background: rgba(30, 30, 47, 0.85);
+            border: 1px solid rgba(200, 141, 186, 0.25);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(158, 75, 138, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        @keyframes pulse-slow {
+
+            0%,
+            100% {
+                opacity: 0.15;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.25;
+                transform: scale(1.05);
+            }
+        }
+
+        .animate-pulse-slow {
+            animation: pulse-slow 6s ease-in-out infinite;
+        }
+
+        .glass-btn {
+            background: rgba(158, 75, 138, 0.1);
+            border: 1px solid rgba(158, 75, 138, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .glass-btn:hover {
+            background: rgba(158, 75, 138, 0.25);
+            border-color: rgba(158, 75, 138, 0.6);
+            box-shadow: 0 0 20px rgba(158, 75, 138, 0.3);
+        }
+
+        .dark .glass-btn {
+            background: rgba(158, 75, 138, 0.15);
+            border: 1px solid rgba(200, 141, 186, 0.3);
+        }
+
+        .dark .glass-btn:hover {
+            background: rgba(158, 75, 138, 0.35);
+            border-color: rgba(200, 141, 186, 0.6);
+        }
+
+        .formula-container {
+            background: linear-gradient(135deg, rgba(250, 245, 251, 0.95) 0%, rgba(243, 231, 242, 0.95) 100%);
+            border: 1px solid rgba(158, 75, 138, 0.2);
+        }
+
+        .dark .formula-container {
+            background: linear-gradient(135deg, rgba(30, 30, 47, 0.95) 0%, rgba(40, 30, 55, 0.95) 100%);
+            border: 1px solid rgba(200, 141, 186, 0.3);
+        }
+
+        /* FSA Diagram Styles */
+        .node {
+            fill: var(--bg-card);
+            stroke: var(--brand-700);
+            stroke-width: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .node.active {
+            stroke: var(--brand-500);
+            stroke-width: 3px;
+            filter: drop-shadow(0 0 12px rgba(158, 75, 138, 0.6));
+        }
+
+        .node.accepting {
+            stroke: #22c55e;
+        }
+
+        .node.accepting.active {
+            filter: drop-shadow(0 0 12px rgba(34, 197, 94, 0.6));
+        }
+
+        .edge {
+            fill: none;
+            stroke: var(--brand-700);
+            stroke-width: 2px;
+            transition: stroke 0.3s;
+        }
+
+        .edge.traversed {
+            stroke: var(--brand-500);
+            stroke-width: 3px;
+        }
+
+        .packet {
+            fill: var(--brand-500);
+            filter: drop-shadow(0 0 8px rgba(158, 75, 138, 0.7));
+            visibility: hidden;
+        }
+
+        .tape-cell {
+            transition: all 0.3s ease;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(158, 75, 138, 0.3);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(158, 75, 138, 0.5);
+        }
+    </style>
+
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+    <script src="../../../config.js"></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- NAVBAR -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../../../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../../../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../../../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../../../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded dark:hidden">dark_mode</span>
+                    <span class="material-symbols-rounded hidden dark:inline">light_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../../../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../../../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded dark:hidden">dark_mode</span>
+                    <span class="material-symbols-rounded hidden dark:inline">light_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="lab-shell pb-10">
+        <!-- Hero Section -->
+        <section class="relative pt-16 pb-12 overflow-hidden">
+            <div class="absolute inset-0 overflow-hidden pointer-events-none">
+                <div
+                    class="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-500 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[100px] animate-pulse-slow">
+                </div>
+                <div class="absolute bottom-1/4 right-1/4 w-72 h-72 bg-brand-700 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[80px] animate-pulse-slow"
+                    style="animation-delay: -3s;"></div>
+            </div>
+
+            <div class="container max-w-4xl mx-auto px-4 text-center relative z-10">
+                <div
+                    class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-500 dark:text-brandlt-400 text-xs tracking-widest uppercase font-bold mb-6">
+                    <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+                    Natural Language Processing
+                </div>
+
+                <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight gradient-hero-text mb-6">
+                    Finite State Automata
+                </h1>
+
+                <p
+                    class="text-lg md:text-xl text-neutral-600 dark:text-white/70 leading-relaxed font-light max-w-2xl mx-auto mb-8">
+                    The mathematical backbone of how computers read, parse, and decide.
+                    <br><br>
+                    <span class="italic text-brand-900 dark:text-white font-medium">Simple machines with powerful
+                        capabilities.</span>
+                </p>
+
+                <div class="mt-10 animate-bounce text-neutral-400 dark:text-white/40">
+                    <i data-lucide="chevron-down" class="w-6 h-6 mx-auto"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- Turnstile Section -->
+        <section class="py-10 px-4 md:px-8 max-w-5xl mx-auto">
+            <div class="mb-8 border-l-4 border-brand-500 pl-6">
+                <h2 class="text-2xl md:text-3xl font-bold text-brand-900 dark:text-white mb-2">1. The Subway Turnstile
+                </h2>
+                <p class="text-neutral-600 dark:text-white/60">
+                    Forget algorithms for a moment. Imagine a simple subway turnstile. It only knows <strong>two
+                        things</strong>:
+                </p>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-8 md:p-12 relative overflow-hidden">
+                <div
+                    class="absolute top-0 right-0 p-32 bg-brand-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                    <div class="flex flex-col items-center justify-center space-y-6">
+                        <div id="turnstile-icon" class="relative">
+                            <div id="ts-state-visual"
+                                class="w-32 h-32 rounded-full border-4 flex items-center justify-center transition-all duration-500 border-red-500 bg-red-500/10 shadow-[0_0_30px_rgba(239,68,68,0.2)]">
+                                <i data-lucide="lock" class="w-12 h-12 text-red-500"></i>
+                            </div>
+                        </div>
+                        <div class="text-center">
+                            <p
+                                class="text-sm text-neutral-500 dark:text-white/50 uppercase tracking-widest font-mono mb-1">
+                                Current State</p>
+                            <p id="ts-status-text" class="text-2xl font-bold text-red-500">LOCKED</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div
+                            class="bg-brandlt-50 dark:bg-white/5 p-6 rounded-xl border border-brand-500/10 dark:border-white/10">
+                            <p class="text-neutral-500 dark:text-white/50 mb-4 text-sm">Action:</p>
+                            <div class="flex gap-4">
+                                <button onclick="interactTurnstile('coin')"
+                                    class="glass-btn flex-1 py-4 rounded-lg flex flex-col items-center gap-2 group">
+                                    <i data-lucide="coins"
+                                        class="text-amber-500 group-hover:scale-110 transition-transform"></i>
+                                    <span class="font-mono text-sm font-bold text-brand-900 dark:text-white">Insert
+                                        Coin</span>
+                                </button>
+                                <button onclick="interactTurnstile('push')"
+                                    class="glass-btn flex-1 py-4 rounded-lg flex flex-col items-center gap-2 group">
+                                    <i data-lucide="move-right"
+                                        class="text-brand-500 group-hover:scale-110 transition-transform"></i>
+                                    <span class="font-mono text-sm font-bold text-brand-900 dark:text-white">Push
+                                        Arm</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="p-4 rounded-lg bg-brandlt-50 dark:bg-white/5 font-mono text-xs text-neutral-600 dark:text-white/60 border-l-2 border-brand-500"
+                            id="ts-log">
+                            > System Ready. Waiting for input...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 text-neutral-600 dark:text-white/60 leading-relaxed">
+                <p>
+                    This machine is a <strong class="text-brand-900 dark:text-white">Finite State Automaton</strong>. It
+                    can't be "half-locked" or "slightly open."
+                    It is always in exactly one state. When you give it an input (a Coin or a Push), it jumps instantly
+                    to a
+                    new state based on rigid rules.
+                </p>
+            </div>
+        </section>
+
+        <!-- Pattern Seeker Section -->
+        <section class="py-10 px-4 md:px-8 max-w-6xl mx-auto">
+            <div class="mb-8 border-l-4 border-brand-700 pl-6">
+                <h2 class="text-2xl md:text-3xl font-bold text-brand-900 dark:text-white mb-2">2. The Pattern Seeker
+                </h2>
+                <p class="text-neutral-600 dark:text-white/60">
+                    Let's upgrade. We will build a machine to detect a secret code. <br>
+                    The Mission: <strong class="text-brand-500">Unlock only when the sequence ends in "101".</strong>
+                </p>
+            </div>
+
+            <div class="glass-panel rounded-2xl border border-brand-500/20 overflow-hidden flex flex-col">
+                <div
+                    class="bg-brandlt-50 dark:bg-white/5 p-4 border-b border-brand-500/10 dark:border-white/10 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center gap-4 w-full md:w-auto">
+                        <span class="text-neutral-500 dark:text-white/50 text-sm font-mono uppercase">Input Tape:</span>
+                        <div id="tape-container"
+                            class="flex-1 md:w-64 h-12 bg-white dark:bg-white/5 rounded border border-brand-500/20 dark:border-white/15 flex items-center overflow-hidden px-2 gap-1 relative">
+                            <span class="text-neutral-400 dark:text-white/40 text-xs italic w-full text-center"
+                                id="tape-placeholder">Empty (Type 0 or 1)</span>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="addToTape('0')"
+                            class="px-4 py-2 bg-white dark:bg-white/10 hover:bg-brandlt-100 dark:hover:bg-white/15 rounded text-brand-900 dark:text-white font-mono border border-brand-500/20 dark:border-white/15 transition-colors">0</button>
+                        <button onclick="addToTape('1')"
+                            class="px-4 py-2 bg-white dark:bg-white/10 hover:bg-brandlt-100 dark:hover:bg-white/15 rounded text-brand-900 dark:text-white font-mono border border-brand-500/20 dark:border-white/15 transition-colors">1</button>
+                        <div class="w-px h-8 bg-brand-500/20 dark:bg-white/15 mx-2"></div>
+                        <button onclick="runSimulation()" id="btn-run"
+                            class="px-6 py-2 bg-brand-500 hover:bg-brand-700 rounded text-white font-bold shadow-lg shadow-brand-500/30 transition-all flex items-center gap-2">
+                            <i data-lucide="play" class="w-4 h-4"></i> RUN
+                        </button>
+                        <button onclick="resetSimulation()"
+                            class="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded text-red-500 transition-colors">
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="relative bg-brandlt-50 dark:bg-brand-900/50 h-[400px] w-full overflow-hidden select-none">
+                    <svg id="fsa-svg" class="absolute inset-0 w-full h-full pointer-events-none">
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" class="fill-brand-700 dark:fill-brandlt-400" />
+                            </marker>
+                        </defs>
+                    </svg>
+
+                    <div class="absolute bottom-4 left-4 glass-panel px-4 py-2 rounded-lg">
+                        <span class="text-xs text-neutral-500 dark:text-white/50 font-mono uppercase">Current
+                            Status</span>
+                        <div id="sim-status" class="text-brand-500 font-bold font-mono">WAITING</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 grid md:grid-cols-2 gap-6 text-sm text-neutral-600 dark:text-white/60">
+                <div class="glass-card p-5 rounded-xl">
+                    <strong class="text-brand-900 dark:text-white block mb-2 flex items-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4 text-brand-500"></i> How it works:
+                    </strong>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li>The machine starts at <strong class="text-brand-500">q0</strong> (Start).</li>
+                        <li>If it sees a '1', it hopes for a pattern and moves to <strong
+                                class="text-brand-500">q1</strong>.</li>
+                        <li>If the pattern breaks (e.g., '1' then '1'), it resets to the best possible state.</li>
+                    </ul>
+                </div>
+                <div class="glass-card p-5 rounded-xl">
+                    <strong class="text-brand-900 dark:text-white block mb-2 flex items-center gap-2">
+                        <i data-lucide="target" class="w-4 h-4 text-emerald-500"></i> The Goal:
+                    </strong>
+                    <p>Reaching the double-ringed circle <strong class="text-emerald-500">q3</strong> (Accept State).
+                        This means "101" was just detected.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Under The Hood Section -->
+        <section class="py-16 px-6 max-w-6xl mx-auto">
+            <div class="mb-12 border-l-4 border-brand-500 pl-6">
+                <h2 class="text-3xl md:text-4xl font-bold text-brand-900 dark:text-white mb-2 flex items-center gap-3">
+                    <span class="text-brand-500">
+                        <i data-lucide="cpu" class="w-8 h-8"></i>
+                    </span>
+                    Under The Hood
+                </h2>
+                <p class="text-neutral-600 dark:text-white/60">The mathematics and formal definitions behind FSAs.</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- 5-Tuple Card -->
+                <div class="glass-card p-6 rounded-2xl lg:col-span-2">
+                    <div
+                        class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4 text-brand-500">
+                        <i data-lucide="sigma" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-brand-900 dark:text-white mb-2">The 5-Tuple Definition</h3>
+                    <p class="text-sm text-neutral-600 dark:text-white/60 leading-relaxed mb-4">
+                        Mathematically, an FSA is defined as a collection of 5 components:
+                    </p>
+                    <div class="formula-container p-5 rounded-xl text-center overflow-x-auto mb-4">
+                        <div class="text-brand-900 dark:text-white text-lg">
+                            \[ M = (Q, \Sigma, \delta, q_0, F) \]
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex gap-3 items-start">
+                            <span class="text-brand-500 font-mono font-bold w-6 shrink-0">Q</span>
+                            <span class="text-neutral-600 dark:text-white/60">A finite set of <strong
+                                    class="text-brand-900 dark:text-white">States</strong> (The circles).</span>
+                        </div>
+                        <div class="flex gap-3 items-start">
+                            <span class="text-brand-700 font-mono font-bold w-6 shrink-0">Σ</span>
+                            <span class="text-neutral-600 dark:text-white/60">The <strong
+                                    class="text-brand-900 dark:text-white">Alphabet</strong> (Valid inputs, e.g., {0,
+                                1}).</span>
+                        </div>
+                        <div class="flex gap-3 items-start">
+                            <span class="text-emerald-500 font-mono font-bold w-6 shrink-0">δ</span>
+                            <span class="text-neutral-600 dark:text-white/60">The <strong
+                                    class="text-brand-900 dark:text-white">Transition Function</strong> (The
+                                arrows/rules).</span>
+                        </div>
+                        <div class="flex gap-3 items-start">
+                            <span class="text-amber-500 font-mono font-bold w-6 shrink-0">q₀</span>
+                            <span class="text-neutral-600 dark:text-white/60">The <strong
+                                    class="text-brand-900 dark:text-white">Start State</strong> (Where we begin).</span>
+                        </div>
+                        <div class="flex gap-3 items-start">
+                            <span class="text-red-500 font-mono font-bold w-6 shrink-0">F</span>
+                            <span class="text-neutral-600 dark:text-white/60">Set of <strong
+                                    class="text-brand-900 dark:text-white">Accept States</strong> (The double
+                                circles).</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deterministic Card -->
+                <div class="glass-card p-6 rounded-2xl">
+                    <div
+                        class="w-12 h-12 rounded-xl bg-brand-700/20 flex items-center justify-center mb-4 text-brand-700 dark:text-brandlt-400">
+                        <i data-lucide="git-merge" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-brand-900 dark:text-white mb-4">Deterministic?</h3>
+                    <p class="text-sm text-neutral-600 dark:text-white/60 leading-relaxed mb-4">
+                        The machine above is a <strong class="text-brand-500">DFA</strong> (Deterministic Finite
+                        Automaton).
+                    </p>
+                    <p class="text-sm text-neutral-600 dark:text-white/60 leading-relaxed">
+                        "Deterministic" means there is <strong class="text-brand-900 dark:text-white">no
+                            ambiguity</strong>. For every state, and for every
+                        possible input (0 or 1), there is exactly one arrow leaving that state. The machine never has to
+                        guess.
+                    </p>
+                </div>
+
+                <!-- Why It Matters Card -->
+                <div class="glass-card p-6 rounded-2xl lg:col-span-3 bg-gradient-to-br from-brand-500/5 to-brand-700/5">
+                    <div
+                        class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center mb-4 text-emerald-500">
+                        <i data-lucide="sparkles" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-brand-900 dark:text-white mb-4">Why Does This Matter?</h3>
+                    <div class="grid md:grid-cols-3 gap-6">
+                        <div class="border-l-2 border-brand-500 pl-4">
+                            <strong class="text-brand-500 block mb-1">Regex</strong>
+                            <p class="text-sm text-neutral-600 dark:text-white/60">When you Ctrl+F to find text, your
+                                computer compiles your search term into an FSA to scan the document efficiently.</p>
+                        </div>
+                        <div class="border-l-2 border-brand-700 pl-4">
+                            <strong class="text-brand-700 dark:text-brandlt-400 block mb-1">Compilers</strong>
+                            <p class="text-sm text-neutral-600 dark:text-white/60">Your code editor uses FSAs (lexical
+                                analysis) to know that "if" is a keyword and "123" is a number.</p>
+                        </div>
+                        <div class="border-l-2 border-emerald-500 pl-4">
+                            <strong class="text-emerald-500 block mb-1">Game AI</strong>
+                            <p class="text-sm text-neutral-600 dark:text-white/60">NPCs use State Machines. <em>See
+                                    Player → Attack State. Low Health → Flee State.</em></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer
+        class="text-center py-12 text-neutral-500 dark:text-white/40 text-sm border-t border-black/5 dark:border-white/10">
+        <p>Designed for Interactive Learning — Paper X Labs</p>
+    </footer>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // --- Theme Toggle ---
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const html = document.documentElement;
+                const isDark = html.classList.toggle('dark');
+                localStorage.setItem('px_theme', isDark ? 'dark' : 'light');
+            });
+        });
+
+        // --- 1. TURNSTILE LOGIC ---
+        const turnstile = {
+            state: 'LOCKED',
+            elStatus: document.getElementById('ts-status-text'),
+            elVisual: document.getElementById('ts-state-visual'),
+            elLog: document.getElementById('ts-log'),
+            icon: document.querySelector('#turnstile-icon i')
+        };
+
+        function interactTurnstile(action) {
+            let logMsg = "";
+
+            if (turnstile.state === 'LOCKED') {
+                if (action === 'coin') {
+                    turnstile.state = 'UNLOCKED';
+                    logMsg = "Coin inserted. Unlocking...";
+                    updateTurnstileUI(true);
+                } else {
+                    logMsg = "Push blocked. Insert coin first.";
+                    gsap.to(turnstile.elVisual, { x: 10, duration: 0.1, yoyo: true, repeat: 3 });
+                }
+            } else {
+                if (action === 'push') {
+                    turnstile.state = 'LOCKED';
+                    logMsg = "Person entered. Locking...";
+                    updateTurnstileUI(false);
+                } else {
+                    logMsg = "Coin wasted. Already unlocked.";
+                    gsap.to(turnstile.icon, { opacity: 0.5, duration: 0.2, yoyo: true, repeat: 1 });
+                }
+            }
+
+            turnstile.elLog.innerText = `> ${logMsg}`;
+        }
+
+        function updateTurnstileUI(isUnlocked) {
+            if (isUnlocked) {
+                turnstile.elStatus.innerText = "OPEN";
+                turnstile.elStatus.className = "text-2xl font-bold text-emerald-500";
+                turnstile.elVisual.className = "w-32 h-32 rounded-full border-4 flex items-center justify-center transition-all duration-500 border-emerald-500 bg-emerald-500/10 shadow-[0_0_30px_rgba(34,197,94,0.2)]";
+                turnstile.elVisual.innerHTML = `<i data-lucide="unlock" class="w-12 h-12 text-emerald-500"></i>`;
+            } else {
+                turnstile.elStatus.innerText = "LOCKED";
+                turnstile.elStatus.className = "text-2xl font-bold text-red-500";
+                turnstile.elVisual.className = "w-32 h-32 rounded-full border-4 flex items-center justify-center transition-all duration-500 border-red-500 bg-red-500/10 shadow-[0_0_30px_rgba(239,68,68,0.2)]";
+                turnstile.elVisual.innerHTML = `<i data-lucide="lock" class="w-12 h-12 text-red-500"></i>`;
+            }
+            lucide.createIcons();
+        }
+
+        // --- 2. FSA SIMULATOR LOGIC ---
+        const dfa = {
+            nodes: [
+                { id: 0, x: 150, y: 200, label: "q0", start: true, accept: false },
+                { id: 1, x: 350, y: 200, label: "q1", start: false, accept: false },
+                { id: 2, x: 550, y: 200, label: "q2", start: false, accept: false },
+                { id: 3, x: 750, y: 200, label: "q3", start: false, accept: true }
+            ],
+            transitions: [
+                { from: 0, to: 0, input: '0' }, { from: 0, to: 1, input: '1' },
+                { from: 1, to: 1, input: '1' }, { from: 1, to: 2, input: '0' },
+                { from: 2, to: 0, input: '0' }, { from: 2, to: 3, input: '1' },
+                { from: 3, to: 2, input: '0' }, { from: 3, to: 1, input: '1' }
+            ]
+        };
+
+        let tape = [];
+        let isRunning = false;
+        let currentState = 0;
+
+        const svg = document.getElementById('fsa-svg');
+
+        function initGraph() {
+            while (svg.lastChild) svg.removeChild(svg.lastChild);
+
+            const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+            const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+            marker.setAttribute("id", "arrowhead");
+            marker.setAttribute("markerWidth", "10");
+            marker.setAttribute("markerHeight", "7");
+            marker.setAttribute("refX", "9");
+            marker.setAttribute("refY", "3.5");
+            marker.setAttribute("orient", "auto");
+
+            const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+            polygon.setAttribute("points", "0 0, 10 3.5, 0 7");
+            polygon.setAttribute("fill", "#4C2A59");
+
+            marker.appendChild(polygon);
+            defs.appendChild(marker);
+            svg.appendChild(defs);
+
+            const NODE_RADIUS = 30;
+            const ARROW_PADDING = 4;
+
+            dfa.transitions.forEach(t => {
+                const startNode = dfa.nodes[t.from];
+                const endNode = dfa.nodes[t.to];
+                const isSelf = t.from === t.to;
+
+                let pathD = "";
+                let labelX = 0;
+                let labelY = 0;
+
+                if (isSelf) {
+                    const startX = startNode.x - 15;
+                    const startY = startNode.y - 25;
+                    const endX = startNode.x + 15;
+                    const endY = startNode.y - 25;
+                    const cp1X = startNode.x - 40;
+                    const cp1Y = startNode.y - 90;
+                    const cp2X = startNode.x + 40;
+                    const cp2Y = startNode.y - 90;
+
+                    pathD = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
+                    labelX = startNode.x;
+                    labelY = startNode.y - 75;
+                } else {
+                    const dx = endNode.x - startNode.x;
+                    const dy = endNode.y - startNode.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const isForward = endNode.x > startNode.x;
+                    const arcScale = isForward ? -0.2 : 0.25;
+                    const arcHeight = dist * arcScale;
+                    const midX = (startNode.x + endNode.x) / 2;
+                    const midY = (startNode.y + endNode.y) / 2 + arcHeight;
+
+                    const angle = Math.atan2(endNode.y - midY, endNode.x - midX);
+                    const targetX = endNode.x - Math.cos(angle) * (NODE_RADIUS + ARROW_PADDING);
+                    const targetY = endNode.y - Math.sin(angle) * (NODE_RADIUS + ARROW_PADDING);
+                    const startAngle = Math.atan2(midY - startNode.y, midX - startNode.x);
+                    const sourceX = startNode.x + Math.cos(startAngle) * NODE_RADIUS;
+                    const sourceY = startNode.y + Math.sin(startAngle) * NODE_RADIUS;
+
+                    pathD = `M ${sourceX} ${sourceY} Q ${midX} ${midY} ${targetX} ${targetY}`;
+                    labelX = midX;
+                    labelY = midY + (isForward ? -10 : 20);
+                }
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", pathD);
+                path.setAttribute("class", "edge");
+                path.setAttribute("id", `edge-${t.from}-${t.to}-${t.input}`);
+                path.setAttribute("stroke", "#4C2A59");
+                path.setAttribute("fill", "none");
+                path.setAttribute("stroke-width", "2");
+                path.setAttribute("marker-end", "url(#arrowhead)");
+                svg.appendChild(path);
+
+                const bgSize = 20;
+                const textBg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                textBg.setAttribute("x", labelX - bgSize / 2);
+                textBg.setAttribute("y", labelY - bgSize / 2 - 2);
+                textBg.setAttribute("width", bgSize);
+                textBg.setAttribute("height", bgSize);
+                textBg.setAttribute("rx", 4);
+                textBg.setAttribute("class", "fill-white dark:fill-brand-900");
+                svg.appendChild(textBg);
+
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", labelX);
+                text.setAttribute("y", labelY + 4);
+                text.setAttribute("text-anchor", "middle");
+                text.setAttribute("class", "fill-brand-700 dark:fill-brandlt-400");
+                text.setAttribute("font-family", "monospace");
+                text.setAttribute("font-weight", "bold");
+                text.setAttribute("font-size", "12px");
+                text.textContent = t.input;
+                svg.appendChild(text);
+            });
+
+            dfa.nodes.forEach(n => {
+                const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                group.setAttribute("id", `node-${n.id}`);
+
+                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                circle.setAttribute("cx", n.x);
+                circle.setAttribute("cy", n.y);
+                circle.setAttribute("r", 30);
+                circle.setAttribute("class", `node ${n.accept ? 'accepting' : ''}`);
+                circle.setAttribute("fill", "white");
+                group.appendChild(circle);
+
+                if (n.accept) {
+                    const innerCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    innerCircle.setAttribute("cx", n.x);
+                    innerCircle.setAttribute("cy", n.y);
+                    innerCircle.setAttribute("r", 24);
+                    innerCircle.setAttribute("fill", "none");
+                    innerCircle.setAttribute("stroke", "#22c55e");
+                    innerCircle.setAttribute("stroke-width", "2");
+                    group.appendChild(innerCircle);
+                }
+
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", n.x);
+                text.setAttribute("y", n.y + 4);
+                text.setAttribute("text-anchor", "middle");
+                text.setAttribute("class", "fill-brand-900 dark:fill-white");
+                text.setAttribute("font-family", "monospace");
+                text.setAttribute("font-weight", "bold");
+                text.textContent = n.label;
+                group.appendChild(text);
+
+                if (n.start) {
+                    const startPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    startPath.setAttribute("d", `M ${n.x - 60} ${n.y} L ${n.x - 38} ${n.y}`);
+                    startPath.setAttribute("stroke", "#4C2A59");
+                    startPath.setAttribute("stroke-width", "2");
+                    startPath.setAttribute("marker-end", "url(#arrowhead)");
+                    svg.appendChild(startPath);
+                }
+
+                svg.appendChild(group);
+            });
+
+            const packet = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            packet.setAttribute("r", 8);
+            packet.setAttribute("id", "packet");
+            packet.setAttribute("class", "packet");
+            svg.appendChild(packet);
+
+            highlightNode(0);
+        }
+
+        function addToTape(val) {
+            if (isRunning) return;
+            tape.push(val);
+            renderTape();
+        }
+
+        function renderTape() {
+            const container = document.getElementById('tape-container');
+            container.innerHTML = '';
+            if (tape.length === 0) {
+                container.innerHTML = '<span class="text-neutral-400 dark:text-white/40 text-xs italic w-full text-center" id="tape-placeholder">Empty (Type 0 or 1)</span>';
+                return;
+            }
+
+            tape.forEach((bit, index) => {
+                const el = document.createElement('div');
+                el.className = 'tape-cell w-8 h-8 flex items-center justify-center bg-white dark:bg-white/10 rounded text-brand-900 dark:text-white font-mono font-bold shadow-sm border border-brand-500/20 dark:border-white/15';
+                el.id = `tape-bit-${index}`;
+                el.innerText = bit;
+                container.appendChild(el);
+            });
+        }
+
+        function highlightNode(id) {
+            document.querySelectorAll('.node').forEach(el => el.classList.remove('active'));
+            const nodeCircle = document.querySelector(`#node-${id} .node`);
+            if (nodeCircle) nodeCircle.classList.add('active');
+        }
+
+        function resetSimulation() {
+            tape = [];
+            isRunning = false;
+            currentState = 0;
+            renderTape();
+            highlightNode(0);
+            document.getElementById('sim-status').innerText = "WAITING";
+            document.getElementById('sim-status').className = "text-brand-500 font-bold font-mono";
+            gsap.killTweensOf("#packet");
+            document.getElementById('packet').style.visibility = 'hidden';
+            document.querySelectorAll('.edge').forEach(e => e.classList.remove('traversed'));
+        }
+
+        async function runSimulation() {
+            if (tape.length === 0 || isRunning) return;
+
+            isRunning = true;
+            currentState = 0;
+            highlightNode(0);
+
+            const packet = document.getElementById('packet');
+            packet.style.visibility = 'visible';
+
+            const startNode = dfa.nodes.find(n => n.id === 0);
+            gsap.set(packet, { attr: { cx: startNode.x, cy: startNode.y } });
+
+            document.getElementById('sim-status').innerText = "RUNNING...";
+            document.getElementById('sim-status').className = "text-amber-500 font-bold font-mono";
+
+            for (let i = 0; i < tape.length; i++) {
+                const input = tape[i];
+                const tapeEl = document.getElementById(`tape-bit-${i}`);
+                tapeEl.classList.add('bg-brand-500', 'text-white');
+
+                const transition = dfa.transitions.find(t => t.from === currentState && t.input === input);
+
+                if (transition) {
+                    const targetNode = dfa.nodes[transition.to];
+                    const edgeId = `edge-${currentState}-${transition.to}-${input}`;
+                    const edgeEl = document.getElementById(edgeId);
+
+                    if (edgeEl) {
+                        edgeEl.classList.add('traversed');
+                        setTimeout(() => edgeEl.classList.remove('traversed'), 1000);
+                    }
+
+                    await gsap.to(packet, {
+                        attr: { cx: targetNode.x, cy: targetNode.y },
+                        duration: 0.8,
+                        ease: "power2.inOut"
+                    });
+
+                    currentState = transition.to;
+                    highlightNode(currentState);
+                }
+
+                tapeEl.classList.remove('bg-brand-500', 'text-white');
+                tapeEl.classList.add('opacity-50');
+            }
+
+            const finalNode = dfa.nodes.find(n => n.id === currentState);
+            const statusEl = document.getElementById('sim-status');
+
+            if (finalNode.accept) {
+                statusEl.innerText = "ACCEPTED (Pattern Found!)";
+                statusEl.className = "text-emerald-500 font-bold font-mono";
+                gsap.to(`#node-${currentState} .node`, { stroke: "#22c55e", strokeWidth: 5, duration: 0.2, yoyo: true, repeat: 3 });
+            } else {
+                statusEl.innerText = "REJECTED";
+                statusEl.className = "text-red-500 font-bold font-mono";
+                gsap.to(`#node-${currentState} .node`, { x: 5, duration: 0.1, yoyo: true, repeat: 3 });
+            }
+
+            isRunning = false;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            initGraph();
+        });
+
+        // Re-render MathJax after DOM is ready
+        window.addEventListener('load', () => {
+            if (typeof MathJax !== 'undefined') {
+                MathJax.typeset();
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizing Momentum GD — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <link rel="stylesheet" href="../../../assets/css/tailwind.css" />
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --primary: #9E4B8A;
+            --primary-dark: #4C2A59;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Custom Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+            width: 100%;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #9E4B8A;
+            cursor: pointer;
+            margin-top: -7px;
+            box-shadow: 0 0 10px rgba(158, 75, 138, 0.5);
+            border: 2px solid #fff;
+        }
+
+        .dark input[type=range]::-webkit-slider-thumb {
+            border-color: #1E1E2F;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: linear-gradient(90deg, #E7D0E4, #D9B4D3);
+            border-radius: 2px;
+        }
+
+        .dark input[type=range]::-webkit-slider-runnable-track {
+            background: linear-gradient(90deg, #4C2A59, #9E4B8A);
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(158, 75, 138, 0.15);
+        }
+
+        .dark .glass-panel {
+            background: rgba(30, 30, 47, 0.85);
+            border-color: rgba(200, 141, 186, 0.25);
+        }
+
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+    </style>
+
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../../../index.html" class="hover:text-brand-500 dark:hover:text-white transition">Home</a>
+                <a href="../../../about.html" class="hover:text-brand-500 dark:hover:text-white transition">About</a>
+                <a href="../../../academicas.html"
+                    class="hover:text-brand-500 dark:hover:text-white transition">Academics</a>
+                <a href="../../../contact.html"
+                    class="hover:text-brand-500 dark:hover:text-white transition">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../../../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brand-500 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../../../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="min-h-screen pb-10">
+
+        <section class="max-w-5xl mx-auto pt-12 pb-12 px-4">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="p-2 bg-brand-500/10 rounded-lg border border-brand-500/20">
+                    <span class="material-symbols-rounded text-xl text-brand-500">activity_zone</span>
+                </div>
+                <span class="text-brand-500 font-mono text-xs tracking-widest uppercase">Explorable Concept</span>
+            </div>
+
+            <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight mb-4">
+                <span class="gradient-hero-text">Momentum</span>
+                <span class="text-brand-900 dark:text-white">Based Descent</span>
+            </h1>
+
+            <div class="grid md:grid-cols-2 gap-6 items-center">
+                <div class="space-y-3 text-base text-neutral-600 dark:text-white/70 leading-relaxed">
+                    <p>
+                        Imagine you are hiking down a mountain in thick fog. You can only see your feet.
+                    </p>
+                    <p>
+                        <strong class="text-brand-900 dark:text-white">Standard Gradient Descent</strong> is like a
+                        timid hiker. They take a step, stop completely, look at the slope, and take another step. If the
+                        ground is bumpy, they get stuck or zigzag inefficiently.
+                    </p>
+                    <p>
+                        <strong class="text-brand-900 dark:text-white">Momentum</strong> changes the hiker into a
+                        <strong class="text-brand-500">heavy bowling ball</strong>. Once it starts rolling, it builds up
+                        speed. Small bumps don't stop it. It remembers where it was going and powers through the valley
+                        floor.
+                    </p>
+                </div>
+                <div
+                    class="glass-panel p-4 rounded-xl flex flex-col items-center justify-center h-40 relative overflow-hidden shadow-soft">
+                    <svg viewBox="0 0 200 100" class="w-full h-full">
+                        <path d="M0,80 Q50,80 80,40 T160,20" fill="none" stroke="currentColor"
+                            class="text-neutral-300 dark:text-white/20" stroke-width="2" />
+                        <circle id="analogy-ball" cx="160" cy="20" r="8" fill="#9E4B8A" />
+                        <g id="speed-lines" opacity="0">
+                            <line x1="140" y1="20" x2="150" y2="20" stroke="#9E4B8A" stroke-width="2" />
+                            <line x1="142" y1="16" x2="148" y2="16" stroke="#9E4B8A" stroke-width="2" />
+                            <line x1="142" y1="24" x2="148" y2="24" stroke="#9E4B8A" stroke-width="2" />
+                        </g>
+                    </svg>
+                    <p class="text-xs font-mono text-neutral-500 dark:text-white/50 mt-2 text-center">Inertia carries
+                        the ball forward</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="max-w-7xl mx-auto px-4 py-6 border-t border-black/5 dark:border-white/10">
+
+            <div class="flex flex-col lg:flex-row gap-8">
+
+                <div class="lg:w-1/3 flex flex-col gap-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-brand-900 dark:text-white mb-2">The "Ravine" Challenge</h2>
+                        <p class="text-sm text-neutral-600 dark:text-white/70 leading-relaxed">
+                            A common problem in optimization is a "ravine"—a surface that curves much more steeply in
+                            one
+                            dimension than another.
+                            Watch how <span class="text-rose-500 font-bold">Standard GD</span> struggles (oscillates)
+                            while
+                            <span class="text-brand-500 font-bold">Momentum</span> accelerates down the valley.
+                        </p>
+                    </div>
+
+                    <div
+                        class="flex items-center gap-6 text-sm font-mono border-b border-black/5 dark:border-white/10 pb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></span>
+                            <span class="text-neutral-700 dark:text-white/80">Standard GD</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="w-3 h-3 rounded-full bg-brand-500 shadow-[0_0_8px_rgba(158,75,138,0.8)]"></span>
+                            <span class="text-neutral-700 dark:text-white/80">Momentum GD</span>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button id="btn-reset"
+                            class="px-4 py-2 rounded-lg bg-white dark:bg-white/10 hover:bg-neutral-100 dark:hover:bg-white/20 text-neutral-700 dark:text-white font-mono text-sm border border-black/10 dark:border-white/15 transition-colors flex items-center gap-2">
+                            <span class="material-symbols-rounded text-lg">refresh</span> Reset
+                        </button>
+                        <button id="btn-start"
+                            class="flex-1 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-700 text-white font-bold shadow-lg shadow-brand-500/40 transition-all flex items-center justify-center gap-2">
+                            <span class="material-symbols-rounded text-lg">play_arrow</span> Start Race
+                        </button>
+                    </div>
+
+                    <div class="space-y-6 p-4 glass-panel rounded-xl">
+                        <div>
+                            <div class="flex justify-between mb-2">
+                                <label
+                                    class="text-xs font-bold text-neutral-500 dark:text-white/60 uppercase tracking-wider">Learning
+                                    Rate
+                                    (η)</label>
+                                <span id="lr-val" class="font-mono text-sm text-brand-500">0.005</span>
+                            </div>
+                            <input type="range" id="lr-slider" min="0.001" max="0.02" step="0.001" value="0.005">
+                            <p class="text-[10px] text-neutral-500 dark:text-white/50 mt-1">Controls step size. High
+                                values cause oscillation.
+                            </p>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between mb-2">
+                                <label
+                                    class="text-xs font-bold text-neutral-500 dark:text-white/60 uppercase tracking-wider">Momentum
+                                    (γ)</label>
+                                <span id="mom-val" class="font-mono text-sm text-brand-500">0.90</span>
+                            </div>
+                            <input type="range" id="momentum-slider" min="0.0" max="0.99" step="0.01" value="0.90">
+                            <p class="text-[10px] text-neutral-500 dark:text-white/50 mt-1">Controls "inertia". Higher
+                                values smooth the path.
+                            </p>
+                        </div>
+                    </div>
+
+
+                </div>
+
+                <div
+                    class="lg:w-2/3 lg:self-stretch relative rounded-xl overflow-hidden shadow-2xl border border-black/10 dark:border-white/10">
+                    <canvas id="gd-canvas" class="w-full h-full block cursor-crosshair"></canvas>
+
+                    <div id="click-hint"
+                        class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none text-center opacity-0">
+                        <div
+                            class="bg-white/90 dark:bg-brand-900/90 backdrop-blur border border-black/10 dark:border-white/15 text-brand-900 dark:text-white px-4 py-2 rounded-full text-sm font-bold animate-pulse shadow-xl">
+                            Click anywhere to move the starting point
+                        </div>
+                    </div>
+
+                    <!-- Live Metrics Overlay -->
+                    <div class="absolute bottom-3 right-3 glass-panel p-3 rounded-lg space-y-2 min-w-[160px]">
+                        <h3 class="text-[10px] font-bold text-neutral-500 dark:text-white/60 uppercase tracking-wider">
+                            Live Metrics</h3>
+                        <div class="flex justify-between items-center gap-4">
+                            <span class="text-[10px] text-rose-500">Standard GD</span>
+                            <span class="font-mono text-sm text-brand-900 dark:text-white"
+                                id="loss-standard">0.00000</span>
+                        </div>
+                        <div class="flex justify-between items-center gap-4">
+                            <span class="text-[10px] text-brand-500">Momentum</span>
+                            <span class="font-mono text-sm text-brand-900 dark:text-white"
+                                id="loss-momentum">0.00000</span>
+                        </div>
+                        <div class="text-[10px] font-mono text-neutral-500 dark:text-white/50 text-right">
+                            Step: <span id="step-count">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="max-w-7xl mx-auto px-4 py-8">
+            <h2 class="text-2xl font-bold text-brand-900 dark:text-white mb-6 text-center">Under The Hood</h2>
+
+            <div class="grid md:grid-cols-3 gap-4">
+
+                <!-- Card 1: Oscillation Problem -->
+                <div class="glass-panel p-4 rounded-xl">
+                    <div class="w-8 h-8 bg-rose-500/20 rounded-lg flex items-center justify-center mb-3">
+                        <span class="material-symbols-rounded text-rose-500 text-lg">warning</span>
+                    </div>
+                    <h3 class="text-base font-bold text-brand-900 dark:text-white mb-2">The Oscillation Problem</h3>
+                    <p class="text-xs text-neutral-600 dark:text-white/70 leading-relaxed">
+                        In "narrow valleys", Standard Gradient Descent bounces back and forth between the steep walls
+                        (high gradients), making very slow progress towards the bottom.
+                    </p>
+                </div>
+
+                <!-- Card 2: Momentum Update Rule -->
+                <div class="glass-panel p-4 rounded-xl relative overflow-hidden">
+                    <div class="absolute -right-8 -top-8 w-28 h-28 bg-brand-500/10 rounded-full blur-2xl"></div>
+                    <h3 class="text-base font-bold text-brand-900 dark:text-white mb-3">The Momentum Update Rule</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-[10px] font-mono text-brand-500 uppercase mb-1">Step 1: Update Velocity</p>
+                            <div
+                                class="text-sm font-mono text-brand-900 dark:text-white bg-white/50 dark:bg-white/5 p-2 rounded border border-black/5 dark:border-white/10">
+                                v<sub>t</sub> = <span class="text-brand-500">γ</span>v<sub>t-1</sub> + η∇J(θ)
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-mono text-brand-500 uppercase mb-1">Step 2: Update Position</p>
+                            <div
+                                class="text-sm font-mono text-brand-900 dark:text-white bg-white/50 dark:bg-white/5 p-2 rounded border border-black/5 dark:border-white/10">
+                                θ<sub>t</sub> = θ<sub>t-1</sub> - v<sub>t</sub>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3: Why It Works -->
+                <div class="glass-panel p-4 rounded-xl">
+                    <h3 class="text-base font-bold text-brand-900 dark:text-white mb-2">Why It Works</h3>
+                    <p class="text-xs text-neutral-600 dark:text-white/70 mb-3">
+                        The momentum term acts like a low-pass filter on the gradients.
+                    </p>
+                    <ul class="space-y-1.5 text-xs text-neutral-700 dark:text-white/80 mb-3">
+                        <li class="flex items-start gap-1.5">
+                            <span class="material-symbols-rounded text-brand-500 text-sm">check_circle</span>
+                            <span>Oscillating gradients cancel out.</span>
+                        </li>
+                        <li class="flex items-start gap-1.5">
+                            <span class="material-symbols-rounded text-brand-500 text-sm">check_circle</span>
+                            <span>Consistent gradients accumulate speed.</span>
+                        </li>
+                    </ul>
+                    <div class="bg-white/50 dark:bg-white/5 rounded p-2 border border-black/5 dark:border-white/10">
+                        <div
+                            class="flex justify-between text-[10px] font-mono text-neutral-500 dark:text-white/60 mb-1">
+                            <span>Standard GD</span>
+                            <span>Momentum</span>
+                        </div>
+                        <div class="h-1.5 bg-neutral-200 dark:bg-white/10 rounded-full mb-2 overflow-hidden">
+                            <div class="h-full bg-rose-500 w-1/4 opacity-50"></div>
+                        </div>
+                        <div class="h-1.5 bg-neutral-200 dark:bg-white/10 rounded-full overflow-hidden">
+                            <div class="h-full bg-brand-500 w-3/4"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <footer
+        class="text-center py-12 text-neutral-500 dark:text-white/50 text-sm border-t border-black/5 dark:border-white/10">
+        <p>Designed for learning. Part of <a href="../../../index.html" class="text-brand-500 hover:underline">Paper
+                X</a>.</p>
+    </footer>
+
+    <script>
+        // --- Analogy Animation (GSAP) ---
+        const analogyTimeline = gsap.timeline({ repeat: -1, repeatDelay: 1 });
+        analogyTimeline
+            .to("#analogy-ball", { duration: 2, attr: { cx: 80, cy: 40 }, ease: "power1.in" })
+            .to("#analogy-ball", { duration: 1, attr: { cx: 160, cy: 20 }, ease: "power1.out" })
+            .to("#speed-lines", { opacity: 1, duration: 0.1 }, "<")
+            .to("#speed-lines", { opacity: 0, duration: 0.5 }, ">0.5")
+            .to("#analogy-ball", { duration: 0, attr: { cx: 0, cy: 80 }, delay: 1 });
+
+        // --- Simulation Engine ---
+
+        const canvas = document.getElementById('gd-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        // Configuration
+        let config = {
+            lr: 0.005,
+            beta: 0.90,
+            isRunning: false,
+            startPos: { x: -3.5, y: 2.0 } // Default starting position
+        };
+
+        // Two Runners: Standard (Red) and Momentum (Brand)
+        let runners = [
+            { id: 'standard', color: '#f43f5e', x: 0, y: 0, vx: 0, vy: 0, path: [], active: true },
+            { id: 'momentum', color: '#9E4B8A', x: 0, y: 0, vx: 0, vy: 0, path: [], active: true }
+        ];
+
+        let steps = 0;
+
+        // DOM Elements
+        const elLossStd = document.getElementById('loss-standard');
+        const elLossMom = document.getElementById('loss-momentum');
+        const elStep = document.getElementById('step-count');
+        const btnStart = document.getElementById('btn-start');
+        const btnReset = document.getElementById('btn-reset');
+        const hint = document.getElementById('click-hint');
+
+        // Coordinate System
+        const scale = 50;
+        const originX = () => width / 2;
+        const originY = () => height / 2;
+
+        function toScreen(x, y) {
+            return { x: originX() + x * scale, y: originY() - y * scale };
+        }
+        function toMath(sx, sy) {
+            return { x: (sx - originX()) / scale, y: -(sy - originY()) / scale };
+        }
+
+        // Cost Function: The Ravine
+        // f(x,y) = 0.5*x^2 + 10*y^2  (Steep in Y, shallow in X)
+        function cost(x, y) {
+            return 0.5 * x * x + 10 * y * y;
+        }
+
+        function gradient(x, y) {
+            return { dx: 1.0 * x, dy: 20 * y };
+        }
+
+        // Theme-aware colors
+        function getThemeColors() {
+            const isDark = document.documentElement.classList.contains('dark');
+            return {
+                bg: isDark ? '#1E1E2F' : '#FFFFFF',
+                contour: isDark ? 'rgba(200, 141, 186, 0.2)' : 'rgba(76, 42, 89, 0.15)',
+                startPoint: isDark ? '#C88DBA' : '#4C2A59'
+            };
+        }
+
+        // Resize
+        function resize() {
+            const parent = canvas.parentElement;
+            canvas.width = parent.clientWidth;
+            canvas.height = parent.clientHeight;
+            width = canvas.width;
+            height = canvas.height;
+            draw();
+        }
+        window.addEventListener('resize', resize);
+
+        function reset() {
+            config.isRunning = false;
+            steps = 0;
+
+            runners.forEach(r => {
+                r.x = config.startPos.x;
+                r.y = config.startPos.y;
+                r.vx = 0;
+                r.vy = 0;
+                r.path = [{ x: r.x, y: r.y }];
+                r.active = true;
+            });
+
+            btnStart.innerHTML = '<span class="material-symbols-rounded text-lg">play_arrow</span> Start Race';
+            elStep.innerText = "0";
+            updateMetrics();
+            draw();
+
+            // Show hint animation once
+            gsap.to(hint, { opacity: 1, duration: 0.5, yoyo: true, repeat: 1, delay: 0.5 });
+        }
+
+        function updateMetrics() {
+            // Display loss
+            const lossStd = cost(runners[0].x, runners[0].y);
+            const lossMom = cost(runners[1].x, runners[1].y);
+
+            elLossStd.innerText = lossStd.toFixed(5);
+            elLossMom.innerText = lossMom.toFixed(5);
+            elStep.innerText = steps;
+        }
+
+        function step() {
+            if (!config.isRunning) return;
+
+            steps++;
+
+            runners.forEach(r => {
+                if (!r.active) return;
+
+                const g = gradient(r.x, r.y);
+
+                if (r.id === 'standard') {
+                    // Standard GD: Equivalent to Momentum with beta = 0
+                    // v = learning_rate * gradient
+                    // x = x - v
+                    r.vx = config.lr * g.dx;
+                    r.vy = config.lr * g.dy;
+                } else {
+                    // Momentum GD
+                    // v = beta * v + learning_rate * gradient
+                    r.vx = config.beta * r.vx + config.lr * g.dx;
+                    r.vy = config.beta * r.vy + config.lr * g.dy;
+                }
+
+                r.x -= r.vx;
+                r.y -= r.vy;
+                r.path.push({ x: r.x, y: r.y });
+
+                // Check divergence or convergence
+                const currentCost = cost(r.x, r.y);
+                if (currentCost > 1000) r.active = false; // Exploded
+            });
+
+            updateMetrics();
+            draw();
+
+            // Stop if both converged or too many steps
+            const stdCost = cost(runners[0].x, runners[0].y);
+            const momCost = cost(runners[1].x, runners[1].y);
+
+            if ((stdCost < 0.001 && momCost < 0.001) || steps > 1000) {
+                config.isRunning = false;
+                btnStart.innerHTML = '<span class="material-symbols-rounded text-lg">refresh</span> Race Finished';
+            } else {
+                requestAnimationFrame(step);
+            }
+        }
+
+        function draw() {
+            const colors = getThemeColors();
+
+            // Background
+            ctx.fillStyle = colors.bg;
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw Contours (The Ravine)
+            ctx.lineWidth = 1;
+            for (let c = 1; c < 200; c *= 1.5) {
+                ctx.beginPath();
+                ctx.strokeStyle = colors.contour;
+
+                // Ellipse: 0.5x^2 + 10y^2 = c
+                // x^2/(2c) + y^2/(c/10) = 1
+                // a = sqrt(2c), b = sqrt(c/10)
+                const a = Math.sqrt(2 * c);
+                const b = Math.sqrt(c / 10);
+
+                const center = toScreen(0, 0);
+                ctx.ellipse(center.x, center.y, a * scale, b * scale, 0, 0, 2 * Math.PI);
+                ctx.stroke();
+            }
+
+            // Draw Paths & Runners
+            runners.forEach(r => {
+                if (r.path.length < 2) return;
+
+                // Path
+                ctx.beginPath();
+                ctx.strokeStyle = r.color;
+                ctx.lineWidth = 2;
+                ctx.lineJoin = 'round';
+
+                const start = toScreen(r.path[0].x, r.path[0].y);
+                ctx.moveTo(start.x, start.y);
+
+                for (let i = 1; i < r.path.length; i++) {
+                    const p = toScreen(r.path[i].x, r.path[i].y);
+                    ctx.lineTo(p.x, p.y);
+                }
+                ctx.stroke();
+
+                // Current Dot
+                const curr = toScreen(r.x, r.y);
+
+                // Glow
+                const grad = ctx.createRadialGradient(curr.x, curr.y, 2, curr.x, curr.y, 10);
+                grad.addColorStop(0, r.color);
+                grad.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(curr.x, curr.y, 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Solid Core
+                ctx.fillStyle = r.color;
+                ctx.beginPath();
+                ctx.arc(curr.x, curr.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Start Point Marker
+            const startS = toScreen(config.startPos.x, config.startPos.y);
+            ctx.fillStyle = colors.startPoint;
+            ctx.beginPath();
+            ctx.arc(startS.x, startS.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Listeners
+        document.getElementById('lr-slider').addEventListener('input', (e) => {
+            config.lr = parseFloat(e.target.value);
+            document.getElementById('lr-val').innerText = config.lr.toFixed(3);
+        });
+
+        document.getElementById('momentum-slider').addEventListener('input', (e) => {
+            config.beta = parseFloat(e.target.value);
+            document.getElementById('mom-val').innerText = config.beta.toFixed(2);
+        });
+
+        btnStart.addEventListener('click', () => {
+            if (config.isRunning) {
+                config.isRunning = false;
+                btnStart.innerHTML = '<span class="material-symbols-rounded text-lg">play_arrow</span> Resume';
+            } else {
+                config.isRunning = true;
+                btnStart.innerHTML = '<span class="material-symbols-rounded text-lg">pause</span> Pause';
+                step();
+            }
+        });
+
+        btnReset.addEventListener('click', reset);
+
+        // Click to set start position
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            config.startPos = toMath(e.clientX - rect.left, e.clientY - rect.top);
+            reset();
+        });
+
+        // Init
+        resize();
+        reset();
+
+        // Shared Paper X theme toggle wiring
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+                draw(); // Redraw canvas with new theme colors
+            });
+        });
+
+    </script>
+</body>
+
+</html>
