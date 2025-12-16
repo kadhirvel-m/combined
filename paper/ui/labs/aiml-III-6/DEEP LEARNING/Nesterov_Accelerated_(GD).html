@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nesterov Accelerated GD — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <link rel="stylesheet" href="../../../assets/css/tailwind.css" />
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --brand-500: #9E4B8A;
+            --brand-700: #4C2A59;
+            --brand-900: #1E1E2F;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(158, 75, 138, 0.15);
+            box-shadow: 0 8px 32px rgba(30, 30, 47, 0.12);
+        }
+
+        .dark .glass-panel {
+            background: rgba(30, 30, 47, 0.75);
+            border: 1px solid rgba(200, 141, 186, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(158, 75, 138, 0.12);
+            transition: transform 0.2s ease, border-color 0.2s;
+        }
+
+        .dark .glass-card {
+            background: rgba(30, 30, 47, 0.85);
+            border: 1px solid rgba(200, 141, 186, 0.25);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(158, 75, 138, 0.4);
+        }
+
+        .glass-button {
+            background: rgba(158, 75, 138, 0.1);
+            border: 1px solid rgba(158, 75, 138, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .glass-button:hover {
+            background: rgba(158, 75, 138, 0.2);
+            box-shadow: 0 0 15px rgba(158, 75, 138, 0.3);
+        }
+
+        /* Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #9E4B8A;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(158, 75, 138, 0.6);
+            transition: transform 0.1s;
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #E7D0E4;
+            border-radius: 2px;
+        }
+
+        .dark input[type=range]::-webkit-slider-runnable-track {
+            background: #4C2A59;
+        }
+
+        /* Hero Section Text */
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .math-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
+
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+    <script src="../../../config.js"></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../../../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../../../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../../../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../../../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../../../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../../../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="lab-shell pb-10">
+        <!-- Hero Section -->
+        <section class="pt-12 pb-8">
+            <div class="container max-w-4xl mx-auto px-4 text-center">
+                <div
+                    class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-500 dark:text-brandlt-400 text-xs tracking-widest uppercase font-bold mb-4">
+                    <i data-lucide="activity" class="w-3 h-3"></i> Interactive Explorable
+                </div>
+
+                <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight gradient-hero-text mb-6">
+                    Nesterov Accelerated GD
+                </h1>
+
+                <p
+                    class="text-lg md:text-xl text-neutral-600 dark:text-white/70 leading-relaxed font-light max-w-2xl mx-auto">
+                    "Looking before you leap." Learn how anticipating future position improves optimization on tricky
+                    surfaces.
+                </p>
+
+                <div class="glass-panel p-6 rounded-2xl text-left max-w-3xl mx-auto mt-8 border-l-4 border-brand-500">
+                    <p class="text-neutral-700 dark:text-white/80 text-lg">
+                        Imagine a blind skier racing down a misty mountain. Standard momentum picks up speed but turns
+                        poorly.
+                        <span class="text-brand-900 dark:text-white font-semibold">Nesterov looks ahead</span> to where
+                        they will be, reacting to curves before hitting them.
+                    </p>
+                </div>
+
+                <div class="mt-8 animate-bounce text-neutral-400 dark:text-white/40">
+                    <i data-lucide="chevron-down" class="w-6 h-6 mx-auto"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- Simulation Section -->
+        <section class="py-10 px-4 md:px-8" id="lab">
+            <div class="max-w-7xl mx-auto">
+                <div class="flex items-center gap-4 mb-8">
+                    <div class="p-3 bg-brand-500/20 rounded-lg text-brand-500 dark:text-brandlt-400">
+                        <i data-lucide="flask-conical" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-bold text-brand-900 dark:text-white">Interactive Laboratory
+                        </h2>
+                        <p class="text-neutral-600 dark:text-white/60">Compare Standard GD, Momentum, and Nesterov (NAG)
+                            on an elliptical valley.</p>
+                    </div>
+                </div>
+
+                <div class="grid lg:grid-cols-12 gap-8 items-start">
+                    <!-- Controls Panel -->
+                    <div class="lg:col-span-4 space-y-6">
+                        <div class="glass-panel p-6 rounded-2xl">
+                            <div class="flex items-center gap-2 mb-6 border-b border-black/5 dark:border-white/10 pb-4">
+                                <i data-lucide="settings-2" class="w-4 h-4 text-brand-500"></i>
+                                <h3
+                                    class="text-sm font-bold uppercase tracking-wider text-neutral-600 dark:text-white/70">
+                                    Simulation Tuner</h3>
+                            </div>
+
+                            <div class="mb-8">
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-sm font-semibold text-neutral-700 dark:text-white/80">Learning
+                                        Rate (Step Size)</label>
+                                    <span id="lr-val" class="text-sm font-mono text-brand-500">0.015</span>
+                                </div>
+                                <input type="range" id="lr-slider" min="0.001" max="0.08" step="0.001" value="0.015">
+                                <p class="text-xs text-neutral-500 dark:text-white/50 mt-2">How big of a step to take
+                                    each iteration.</p>
+                            </div>
+
+                            <div class="mb-8">
+                                <div class="flex justify-between mb-2">
+                                    <label
+                                        class="text-sm font-semibold text-neutral-700 dark:text-white/80">Momentum</label>
+                                    <span id="mom-val" class="text-sm font-mono text-brand-500">0.9</span>
+                                </div>
+                                <input type="range" id="mom-slider" min="0.0" max="0.99" step="0.01" value="0.9">
+                                <p class="text-xs text-neutral-500 dark:text-white/50 mt-2">Velocity retention factor
+                                    between steps.</p>
+                            </div>
+
+                            <!-- Legend -->
+                            <div class="mt-6 pt-4 border-t border-black/5 dark:border-white/10 space-y-3">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 bg-slate-500 rounded-full"></div>
+                                    <span class="text-xs text-neutral-600 dark:text-neutral-400">Standard GD
+                                        (Slow)</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                    <span class="text-xs text-neutral-600 dark:text-neutral-400">Momentum
+                                        (Overshoots)</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="w-3 h-3 bg-brand-500 rounded-full shadow-[0_0_8px_rgba(158,75,138,0.6)]">
+                                    </div>
+                                    <span class="text-xs font-bold text-brand-900 dark:text-white">Nesterov (NAG)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="reset-btn"
+                            class="w-full glass-button text-brand-900 dark:text-white font-bold py-4 rounded-xl flex justify-center items-center gap-2 group">
+                            <i data-lucide="refresh-cw"
+                                class="w-5 h-5 group-hover:rotate-180 transition-transform duration-500"></i>
+                            Re-Run Simulation
+                        </button>
+                    </div>
+
+                    <!-- Canvas Panel -->
+                    <div class="lg:col-span-8 space-y-4">
+                        <div class="glass-panel p-1 rounded-2xl relative overflow-hidden">
+                            <!-- Live Metrics Overlay -->
+                            <div
+                                class="absolute top-4 left-4 right-4 flex justify-between items-start pointer-events-none z-10">
+                                <div
+                                    class="bg-white/95 dark:bg-brand-900/95 backdrop-blur-md p-4 rounded-xl border border-brand-500/20 dark:border-white/10 shadow-lg">
+                                    <div
+                                        class="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-white/50 mb-3 flex items-center gap-2">
+                                        <span class="material-symbols-rounded text-brand-500 text-sm">monitoring</span>
+                                        Live Metrics
+                                    </div>
+
+                                    <div class="space-y-2">
+                                        <div class="flex items-center justify-between gap-6">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-2.5 h-2.5 bg-slate-500 rounded-full"></div>
+                                                <span class="text-xs text-neutral-600 dark:text-neutral-400">Standard
+                                                    GD</span>
+                                            </div>
+                                            <span id="loss-gd"
+                                                class="text-sm font-mono font-bold text-slate-600 dark:text-slate-400">0.00000</span>
+                                        </div>
+
+                                        <div class="flex items-center justify-between gap-6">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-2.5 h-2.5 bg-blue-500 rounded-full"></div>
+                                                <span
+                                                    class="text-xs text-neutral-600 dark:text-neutral-400">Momentum</span>
+                                            </div>
+                                            <span id="loss-mom"
+                                                class="text-sm font-mono font-bold text-blue-500">0.00000</span>
+                                        </div>
+
+                                        <div class="flex items-center justify-between gap-6">
+                                            <div class="flex items-center gap-2">
+                                                <div
+                                                    class="w-2.5 h-2.5 bg-brand-500 rounded-full shadow-[0_0_6px_rgba(158,75,138,0.6)]">
+                                                </div>
+                                                <span
+                                                    class="text-xs font-semibold text-brand-900 dark:text-white">Nesterov
+                                                    Accelerated</span>
+                                            </div>
+                                            <span id="loss-nag"
+                                                class="text-sm font-mono font-bold text-brand-500">0.00000</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 pt-3 border-t border-black/5 dark:border-white/10">
+                                        <div class="text-xs text-neutral-500 dark:text-white/50">
+                                            Step: <span id="step-count"
+                                                class="font-mono font-bold text-brand-900 dark:text-white">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <canvas id="sim-canvas" class="w-full h-[550px] rounded-xl cursor-crosshair"></canvas>
+
+                            <div class="absolute bottom-4 left-0 right-0 text-center pointer-events-none">
+                                <p
+                                    class="text-xs text-neutral-500 dark:text-white/50 bg-white/90 dark:bg-brand-900/90 inline-block px-4 py-1.5 rounded-full backdrop-blur-sm border border-black/5 dark:border-white/10">
+                                    Narrow Valley: f(x,y) = x² + 15y² — Standard GD struggles here.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Under the Hood Section -->
+        <section class="py-16 px-6 max-w-6xl mx-auto">
+            <div class="mb-12 border-l-4 border-brand-500 pl-6">
+                <h2 class="text-3xl md:text-4xl font-bold text-brand-900 dark:text-white mb-2">Under the Hood</h2>
+                <p class="text-neutral-600 dark:text-white/60">The mathematics and intuition behind the algorithms.</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8 mb-12">
+                <!-- Standard Momentum Card -->
+                <div class="glass-card p-8 rounded-2xl">
+                    <div
+                        class="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center mb-4 text-blue-500">
+                        <i data-lucide="wind" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-brand-900 dark:text-white mb-4">Standard Momentum</h3>
+                    <p class="text-neutral-600 dark:text-white/60 text-sm leading-relaxed mb-4">
+                        Calculates the gradient at the current position, adds it to the accumulated velocity, then takes
+                        a step. It's like a heavy ball rolling down a hill—it builds speed but turns poorly.
+                    </p>
+                    <div
+                        class="bg-brandlt-50 dark:bg-white/5 p-4 rounded-xl math-font text-sm text-neutral-700 dark:text-neutral-300 space-y-2 border border-brand-500/10 dark:border-white/10">
+                        <p><span class="text-blue-500">v_new</span> = <span
+                                class="text-brand-700 dark:text-brandlt-400">μ</span> * v - <span
+                                class="text-green-600 dark:text-green-400">α</span> * ∇f(θ)</p>
+                        <p>θ_new = θ + <span class="text-blue-500">v_new</span></p>
+                    </div>
+                    <div class="mt-4 text-xs text-neutral-500 dark:text-white/50">
+                        μ = Momentum, α = Learning Rate, θ = Position
+                    </div>
+                </div>
+
+                <!-- Nesterov Card -->
+                <div class="glass-card p-8 rounded-2xl border-l-4 border-brand-500">
+                    <div
+                        class="w-12 h-12 rounded-full bg-brand-500/20 flex items-center justify-center mb-4 text-brand-500">
+                        <i data-lucide="eye" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-brand-700 dark:text-brandlt-100 mb-4">Nesterov (NAG)</h3>
+                    <p class="text-neutral-600 dark:text-brandlt-200 text-sm leading-relaxed mb-4">
+                        Moves <em>first</em> based on momentum, <em>then</em> calculates the gradient at that future
+                        point. It "looks ahead" to correct its course before it's too late.
+                    </p>
+                    <div
+                        class="bg-white/60 dark:bg-black/20 p-4 rounded-xl math-font text-sm text-brand-900 dark:text-brandlt-50 space-y-2 border border-brandlt-200 dark:border-brand-500/20">
+                        <p
+                            class="text-neutral-400 dark:text-neutral-500 border-b border-black/5 dark:border-white/10 pb-2 mb-2">
+                            // The "Look Ahead" Step</p>
+                        <p>θ_look = θ + <span class="text-brand-700 dark:text-brandlt-400">μ</span> * v</p>
+                        <p><span class="text-blue-500">v_new</span> = <span
+                                class="text-brand-700 dark:text-brandlt-400">μ</span> * v - <span
+                                class="text-green-600 dark:text-green-400">α</span> * ∇f(θ_look)</p>
+                        <p>θ_new = θ + <span class="text-blue-500">v_new</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="text-2xl font-bold text-brand-900 dark:text-white mb-6 flex items-center gap-2">
+                <i data-lucide="lightbulb" class="text-yellow-500"></i> Key Insight
+            </h3>
+
+            <div class="glass-panel p-6 rounded-xl">
+                <p class="text-neutral-600 dark:text-white/70 leading-relaxed">
+                    The key difference is <strong>when</strong> and <strong>where</strong> the gradient is calculated.
+                    Standard Momentum calculates the gradient at your current position, while Nesterov calculates it at
+                    the position you're <em>about to be</em>. This gives NAG a form of "foresight" that helps it slow
+                    down before overshooting and take tighter turns around curves in the loss landscape.
+                </p>
+            </div>
+        </section>
+
+        <!-- History Section -->
+        <section class="bg-brandlt-50 dark:bg-brand-900/50 border-y border-brand-500/10 dark:border-white/5 py-16 px-6">
+            <div class="max-w-6xl mx-auto grid md:grid-cols-2 gap-12">
+                <div>
+                    <h3
+                        class="text-xl font-bold text-brand-900 dark:text-white mb-6 border-b border-brand-500/30 pb-2 inline-block">
+                        A Bit of History</h3>
+                    <div class="space-y-4 text-neutral-600 dark:text-white/60 leading-relaxed">
+                        <p>
+                            Nesterov's Accelerated Gradient was proposed by <strong
+                                class="text-brand-900 dark:text-white">Yurii Nesterov in 1983</strong> as part of his
+                            work on convex optimization.
+                        </p>
+                        <p>
+                            The method achieves an optimal convergence rate of O(1/k²) for convex functions, compared to
+                            O(1/k) for standard gradient descent—a quadratic speedup!
+                        </p>
+                        <a href="https://en.wikipedia.org/wiki/Nesterov%27s_accelerated_gradient_descent"
+                            target="_blank"
+                            class="inline-flex items-center gap-2 text-brand-500 hover:text-brand-700 dark:hover:text-brandlt-400 text-sm mt-2 transition-colors">
+                            <i data-lucide="external-link" class="w-4 h-4"></i> Learn more on Wikipedia
+                        </a>
+                    </div>
+                </div>
+
+                <div>
+                    <h3
+                        class="text-xl font-bold text-brand-900 dark:text-white mb-6 border-b border-brand-500/30 pb-2 inline-block">
+                        Real World Applications</h3>
+                    <div class="space-y-6">
+                        <div class="flex gap-4">
+                            <div class="mt-1 bg-brand-500/10 dark:bg-white/5 p-2 rounded-lg h-fit">
+                                <i data-lucide="brain" class="text-brand-500 w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-brand-900 dark:text-white font-bold text-sm">Deep Learning</h4>
+                                <p class="text-xs text-neutral-600 dark:text-white/60 mt-1">NAG is a core component of
+                                    optimizers like Adam and many PyTorch implementations.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <div class="mt-1 bg-green-500/10 dark:bg-green-900/20 p-2 rounded-lg h-fit">
+                                <i data-lucide="line-chart" class="text-green-600 dark:text-green-400 w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-brand-900 dark:text-white font-bold text-sm">Convex Optimization</h4>
+                                <p class="text-xs text-neutral-600 dark:text-white/60 mt-1">Achieves optimal convergence
+                                    rates for smooth convex problems.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <div class="mt-1 bg-brand-700/10 dark:bg-brand-700/20 p-2 rounded-lg h-fit">
+                                <i data-lucide="bot" class="text-brand-700 dark:text-brandlt-400 w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-brand-900 dark:text-white font-bold text-sm">Reinforcement Learning</h4>
+                                <p class="text-xs text-neutral-600 dark:text-white/60 mt-1">Used in policy gradient
+                                    methods and actor-critic algorithms.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // --- THEME TOGGLE ---
+        const html = document.documentElement;
+        document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (html.classList.contains('dark')) {
+                    html.classList.remove('dark');
+                    localStorage.setItem('px_theme', 'light');
+                } else {
+                    html.classList.add('dark');
+                    localStorage.setItem('px_theme', 'dark');
+                }
+                // Re-render canvas on theme change
+                render();
+            });
+        });
+
+        // --- SIMULATION SETUP ---
+        const canvas = document.getElementById('sim-canvas');
+        const ctx = canvas.getContext('2d');
+        const lrSlider = document.getElementById('lr-slider');
+        const momSlider = document.getElementById('mom-slider');
+        const lrVal = document.getElementById('lr-val');
+        const momVal = document.getElementById('mom-val');
+        const stepCountEl = document.getElementById('step-count');
+
+        // Simulation State
+        let width, height;
+        let centerX, centerY;
+        let scale = 40;
+
+        // Hyperparameters
+        let lr = parseFloat(lrSlider.value);
+        let momentum = parseFloat(momSlider.value);
+
+        // Loss Function: f(x,y) = 0.5*x^2 + 7.5*y^2 (Elliptical Valley)
+        const lossFunc = (x, y) => 0.5 * x * x + 7.5 * y * y;
+        const dfdx = (x) => x;
+        const dfdy = (y) => 15 * y;
+
+        // DOM elements for loss display
+        const lossGDEl = document.getElementById('loss-gd');
+        const lossMomEl = document.getElementById('loss-mom');
+        const lossNAGEl = document.getElementById('loss-nag');
+
+        // Paths
+        let pathGD = [];
+        let pathMom = [];
+        let pathNAG = [];
+
+        let animationId = null;
+        let currentStep = 0;
+        const maxSteps = 100;
+
+        // Starting Position
+        const startX = -8;
+        const startY = -4;
+
+        // --- ALGORITHMS ---
+        function initPaths() {
+            pathGD = [{ x: startX, y: startY, vx: 0, vy: 0 }];
+            pathMom = [{ x: startX, y: startY, vx: 0, vy: 0 }];
+            pathNAG = [{ x: startX, y: startY, vx: 0, vy: 0 }];
+            currentStep = 0;
+            stepCountEl.innerText = currentStep;
+            updateLossDisplays();
+        }
+
+        function calculateNextStep() {
+            if (currentStep >= maxSteps) return;
+
+            // 1. Standard GD
+            let lastGD = pathGD[currentStep];
+            let gradX_GD = dfdx(lastGD.x);
+            let gradY_GD = dfdy(lastGD.y);
+            pathGD.push({
+                x: lastGD.x - lr * gradX_GD,
+                y: lastGD.y - lr * gradY_GD,
+                vx: 0, vy: 0
+            });
+
+            // 2. Momentum GD
+            let lastMom = pathMom[currentStep];
+            let vx_Mom = momentum * lastMom.vx - lr * dfdx(lastMom.x);
+            let vy_Mom = momentum * lastMom.vy - lr * dfdy(lastMom.y);
+            pathMom.push({
+                x: lastMom.x + vx_Mom,
+                y: lastMom.y + vy_Mom,
+                vx: vx_Mom,
+                vy: vy_Mom
+            });
+
+            // 3. Nesterov (NAG)
+            let lastNAG = pathNAG[currentStep];
+            let lookX = lastNAG.x + momentum * lastNAG.vx;
+            let lookY = lastNAG.y + momentum * lastNAG.vy;
+            let gradX_NAG = dfdx(lookX);
+            let gradY_NAG = dfdy(lookY);
+            let vx_NAG = momentum * lastNAG.vx - lr * gradX_NAG;
+            let vy_NAG = momentum * lastNAG.vy - lr * gradY_NAG;
+            pathNAG.push({
+                x: lastNAG.x + vx_NAG,
+                y: lastNAG.y + vy_NAG,
+                vx: vx_NAG,
+                vy: vy_NAG
+            });
+
+            currentStep++;
+            stepCountEl.innerText = currentStep;
+
+            // Update loss displays
+            updateLossDisplays();
+        }
+
+        function updateLossDisplays() {
+            if (pathGD.length > 0) {
+                const lastGD = pathGD[pathGD.length - 1];
+                lossGDEl.innerText = lossFunc(lastGD.x, lastGD.y).toFixed(5);
+            }
+            if (pathMom.length > 0) {
+                const lastMom = pathMom[pathMom.length - 1];
+                lossMomEl.innerText = lossFunc(lastMom.x, lastMom.y).toFixed(5);
+            }
+            if (pathNAG.length > 0) {
+                const lastNAG = pathNAG[pathNAG.length - 1];
+                lossNAGEl.innerText = lossFunc(lastNAG.x, lastNAG.y).toFixed(5);
+            }
+        }
+
+        // --- RENDERING ---
+        function toScreen(x, y) {
+            return {
+                x: centerX + x * scale,
+                y: centerY - y * scale
+            };
+        }
+
+        function drawContour() {
+            const isDark = html.classList.contains('dark');
+            ctx.strokeStyle = isDark ? '#3A3247' : '#E7D0E4';
+            ctx.lineWidth = 1;
+
+            for (let r = 1; r < 20; r += 2) {
+                ctx.beginPath();
+                for (let t = 0; t <= Math.PI * 2; t += 0.1) {
+                    let rx = r;
+                    let ry = r / Math.sqrt(15);
+                    let x = rx * Math.cos(t);
+                    let y = ry * Math.sin(t);
+                    let s = toScreen(x, y);
+                    if (t === 0) ctx.moveTo(s.x, s.y);
+                    else ctx.lineTo(s.x, s.y);
+                }
+                ctx.stroke();
+            }
+
+            // Draw Target (0,0)
+            let center = toScreen(0, 0);
+            ctx.fillStyle = isDark ? '#ffffff' : '#1E1E2F';
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawPath(path, color, size, glow) {
+            if (path.length < 1) return;
+
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+
+            let start = toScreen(path[0].x, path[0].y);
+            ctx.moveTo(start.x, start.y);
+
+            for (let i = 1; i < path.length; i++) {
+                let p = toScreen(path[i].x, path[i].y);
+                ctx.lineTo(p.x, p.y);
+            }
+            ctx.stroke();
+
+            // Draw Head
+            let head = path[path.length - 1];
+            let headP = toScreen(head.x, head.y);
+
+            if (glow) {
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = color;
+            }
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(headP.x, headP.y, size, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+        }
+
+        function render() {
+            const isDark = html.classList.contains('dark');
+            // Dark theme uses deeper purple-tinted background for better contrast
+            ctx.fillStyle = isDark ? '#141321' : '#FAF5FB';
+            ctx.fillRect(0, 0, width, height);
+
+            drawContour();
+
+            drawPath(pathGD, '#64748b', 3, false); // Slate 500
+            drawPath(pathMom, '#3b82f6', 4, false); // Blue
+            drawPath(pathNAG, '#9E4B8A', 5, true);  // Brand
+        }
+
+        function animate() {
+            calculateNextStep();
+            render();
+
+            if (currentStep < maxSteps) {
+                setTimeout(() => {
+                    animationId = requestAnimationFrame(animate);
+                }, 40);
+            }
+        }
+
+        function resetSimulation() {
+            if (animationId) cancelAnimationFrame(animationId);
+
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            width = canvas.width;
+            height = canvas.height;
+            centerX = width / 2;
+            centerY = height / 2;
+
+            scale = width < 500 ? 25 : 40;
+
+            initPaths();
+            animate();
+        }
+
+        // --- EVENTS ---
+        lrSlider.addEventListener('input', (e) => {
+            lr = parseFloat(e.target.value);
+            lrVal.innerText = lr.toFixed(3);
+        });
+
+        momSlider.addEventListener('input', (e) => {
+            momentum = parseFloat(e.target.value);
+            momVal.innerText = momentum.toFixed(2);
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', resetSimulation);
+        window.addEventListener('resize', resetSimulation);
+
+        // Start
+        resetSimulation();
+    </script>
+</body>
+
+</html>

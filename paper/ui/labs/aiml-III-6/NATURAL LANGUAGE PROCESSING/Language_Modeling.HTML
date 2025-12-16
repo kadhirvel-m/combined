@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Language Models — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <link rel="stylesheet" href="../../../assets/css/tailwind.css" />
+
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body);"></script>
+
+    <!-- GSAP for animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)',
+                        neon: '0 0 20px rgba(158,75,138,0.5), 0 0 40px rgba(158,75,138,0.3)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --accent: #9E4B8A;
+            --accent-dark: #4C2A59;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        /* Gradient hero text */
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        /* Futuristic glassmorphism cards */
+        .glass-card {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(243, 231, 242, 0.9));
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(158, 75, 138, 0.18);
+            box-shadow: 0 20px 50px -15px rgba(30, 30, 47, 0.25);
+        }
+
+        .dark .glass-card {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.95), rgba(32, 25, 52, 0.9));
+            border-color: rgba(200, 141, 186, 0.25);
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.6);
+        }
+
+        /* Neon glow effect */
+        .neon-border {
+            position: relative;
+        }
+
+        .neon-border::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: linear-gradient(135deg, #9E4B8A, #4C2A59, #9E4B8A);
+            border-radius: inherit;
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .neon-border:hover::before {
+            opacity: 1;
+            filter: blur(8px);
+        }
+
+        /* Tree simulation area */
+        .sim-area {
+            position: relative;
+            min-height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(145deg, rgba(250, 245, 251, 0.5), rgba(231, 208, 228, 0.3));
+            border-radius: 1rem;
+        }
+
+        .dark .sim-area {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.6), rgba(32, 25, 52, 0.4));
+        }
+
+        /* Node styling */
+        .node-circle {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .node-circle:hover {
+            filter: drop-shadow(0 0 12px rgba(158, 75, 138, 0.6));
+            transform: scale(1.05);
+        }
+
+        /* Node button transition */
+        .node-btn {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        /* Tooltip label for nodes */
+        .tooltip-label {
+            display: block;
+            margin-top: 8px;
+            font-size: 11px;
+            font-weight: 500;
+            color: #4C2A59;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 4px 10px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(30, 30, 47, 0.15);
+            opacity: 0;
+            transform: translateY(-4px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            pointer-events: none;
+            white-space: nowrap;
+            z-index: 20;
+        }
+
+        .dark .tooltip-label {
+            background: rgba(30, 30, 47, 0.95);
+            color: #E7D0E4;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .group:hover .tooltip-label {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Output sentence styling */
+        .terminal-word {
+            display: inline-block;
+            font-weight: 700;
+            color: #1E1E2F;
+            background: linear-gradient(135deg, rgba(158, 75, 138, 0.15), rgba(76, 42, 89, 0.1));
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin: 2px;
+        }
+
+        .dark .terminal-word {
+            color: #F3E7F2;
+            background: linear-gradient(135deg, rgba(158, 75, 138, 0.25), rgba(76, 42, 89, 0.2));
+        }
+
+        .pending-symbol {
+            display: inline-block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #9E4B8A;
+            background: rgba(158, 75, 138, 0.12);
+            border: 1px dashed rgba(158, 75, 138, 0.4);
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin: 2px;
+        }
+
+        .dark .pending-symbol {
+            color: #C88DBA;
+            background: rgba(158, 75, 138, 0.15);
+            border-color: rgba(200, 141, 186, 0.4);
+        }
+
+        /* Terminal node in tree (leaf nodes like "wizard", "A", etc.) */
+        .terminal-node {
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #4C2A59 0%, #9E4B8A 100%);
+            color: #FFFFFF;
+            font-weight: 700;
+            font-size: 1rem;
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(76, 42, 89, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(200, 141, 186, 0.5);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .dark .terminal-node {
+            background: linear-gradient(135deg, #9E4B8A 0%, #4C2A59 100%);
+            box-shadow: 0 6px 20px rgba(158, 75, 138, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        /* Wire/connector styling */
+        svg.tree-lines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        path.connector {
+            fill: none;
+            stroke: var(--border);
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
+
+        .dark path.connector {
+            stroke: rgba(200, 141, 186, 0.4);
+        }
+
+        /* Tech list styling */
+        .tech-list li {
+            position: relative;
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .tech-list li::before {
+            content: "▹";
+            position: absolute;
+            left: 0;
+            color: #9E4B8A;
+        }
+
+        /* Futuristic table styling */
+        .futuristic-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+        }
+
+        .futuristic-table th {
+            background: linear-gradient(135deg, rgba(158, 75, 138, 0.15), rgba(76, 42, 89, 0.1));
+            color: var(--text-head);
+            padding: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 0.75rem;
+        }
+
+        .futuristic-table td {
+            padding: 0.875rem 1rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-body);
+            text-align: center;
+        }
+
+        .futuristic-table tr.highlight {
+            background: linear-gradient(90deg, rgba(158, 75, 138, 0.15), rgba(76, 42, 89, 0.1));
+        }
+
+        .futuristic-table tr.highlight td {
+            color: #9E4B8A;
+            font-weight: 600;
+        }
+
+        /* Floating particles effect */
+        .particles-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(158, 75, 138, 0.3);
+            border-radius: 50%;
+            animation: float 15s infinite ease-in-out;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(100vh) rotate(0deg);
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(-100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+
+        /* Pulse animation */
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 5px rgba(158, 75, 138, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 20px rgba(158, 75, 138, 0.8), 0 0 30px rgba(158, 75, 138, 0.4);
+            }
+        }
+
+        .pulse-glow {
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        /* Chip navigation */
+        .nav-chip {
+            background: rgba(250, 245, 251, 0.95);
+            border: 1px solid rgba(158, 75, 138, 0.2);
+            color: #4C2A59;
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .nav-chip:hover {
+            background: rgba(158, 75, 138, 0.12);
+            border-color: #9E4B8A;
+            color: #9E4B8A;
+            transform: translateY(-2px);
+        }
+
+        .nav-chip.active {
+            background: linear-gradient(135deg, #9E4B8A, #B06AB3);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 8px 25px rgba(158, 75, 138, 0.5);
+        }
+
+        .dark .nav-chip {
+            background: rgba(30, 30, 47, 0.9);
+            border-color: rgba(200, 141, 186, 0.3);
+            color: #C88DBA;
+        }
+
+        .dark .nav-chip:hover {
+            background: rgba(158, 75, 138, 0.2);
+            border-color: #9E4B8A;
+        }
+
+        .dark .nav-chip.active {
+            background: linear-gradient(135deg, #9E4B8A, #B06AB3);
+            color: white;
+        }
+
+        /* Code block styling */
+        .code-block {
+            background: linear-gradient(145deg, rgba(30, 30, 47, 0.95), rgba(20, 19, 33, 0.98));
+            border: 1px solid rgba(158, 75, 138, 0.3);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            overflow-x: auto;
+            color: #C9BED5;
+        }
+
+        .code-block .text-brand-400 {
+            color: #9E4B8A;
+        }
+
+        .code-block .text-neutral-500 {
+            color: #8B7FA0;
+        }
+
+        .dark .code-block {
+            background: linear-gradient(145deg, rgba(20, 19, 33, 0.95), rgba(30, 30, 47, 0.9));
+            color: #E8E3EE;
+        }
+
+        /* Info card tabs */
+        .tab-btn {
+            flex: 1;
+            padding: 1rem;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: var(--text-sub);
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.75rem;
+            transition: all 0.25s ease;
+        }
+
+        .tab-btn:hover {
+            color: #9E4B8A;
+        }
+
+        .tab-btn.active {
+            color: #9E4B8A;
+            border-bottom-color: #9E4B8A;
+        }
+
+        .tab-content {
+            padding: 1.5rem;
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Formula block */
+        .formula-block {
+            background: linear-gradient(135deg, rgba(30, 30, 47, 0.95), rgba(76, 42, 89, 0.8));
+            border: 1px solid rgba(158, 75, 138, 0.4);
+            border-radius: 1rem;
+            padding: 1.5rem 2rem;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(30, 30, 47, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .formula-block .katex {
+            font-size: 1.75rem;
+            color: #C88DBA;
+        }
+
+        .dark .formula-block {
+            background: linear-gradient(135deg, rgba(20, 19, 33, 0.95), rgba(30, 30, 47, 0.9));
+        }
+
+        /* Scanline overlay for cyber aesthetic (subtle) */
+        .scanlines {
+            background: linear-gradient(to bottom,
+                    rgba(255, 255, 255, 0),
+                    rgba(255, 255, 255, 0) 50%,
+                    rgba(0, 0, 0, 0.03) 50%,
+                    rgba(0, 0, 0, 0.03));
+            background-size: 100% 4px;
+            pointer-events: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 9999;
+            opacity: 0.5;
+        }
+
+        .dark .scanlines {
+            opacity: 0.15;
+        }
+    </style>
+
+    <!-- Theme persistence -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- Subtle scanline overlay -->
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <!-- ============== NAVBAR ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../../../index.html" class="hover:text-brand-500 dark:hover:text-white transition">Home</a>
+                <a href="../../../about.html" class="hover:text-brand-500 dark:hover:text-white transition">About</a>
+                <a href="../../../academicas.html"
+                    class="hover:text-brand-500 dark:hover:text-white transition">Academics</a>
+                <a href="../../../contact.html"
+                    class="hover:text-brand-500 dark:hover:text-white transition">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded text-xl">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../../../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brand-500 dark:hover:text-white rounded-full transition">Log
+                    in</a>
+                <a href="../../../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ============== MAIN CONTENT ============== -->
+    <main class="relative z-10">
+
+        <!-- Hero Section -->
+        <section class="relative overflow-hidden pt-12 pb-8 md:pt-16 md:pb-12">
+            <!-- Decorative orbs -->
+            <div
+                class="pointer-events-none absolute -top-32 -right-32 size-[450px] rounded-full bg-brand-500/20 blur-[100px]">
+            </div>
+            <div
+                class="pointer-events-none absolute top-20 -left-32 size-[380px] rounded-full bg-brand-700/25 blur-[100px]">
+            </div>
+
+            <div class="container max-w-4xl text-center px-4">
+                <div
+                    class="inline-flex items-center justify-center mb-6 p-4 rounded-full bg-white/80 dark:bg-brand-900/60 border border-brand-500/20 dark:border-brand-500/30 shadow-lg pulse-glow">
+                    <span class="material-symbols-rounded text-4xl text-brand-500">psychology</span>
+                </div>
+
+                <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 gradient-hero-text">
+                    The Infinite Menu
+                </h1>
+
+                <div class="max-w-2xl mx-auto space-y-4">
+                    <p class="text-lg md:text-xl text-neutral-600 dark:text-white/80 leading-relaxed">
+                        Imagine a robot waiter at a very strict restaurant. You cannot just order "Food."
+                        You must follow the <strong class="text-brand-500">blueprint</strong>.
+                    </p>
+                    <p class="text-neutral-500 dark:text-white/60">
+                        The rule says: <em>"A Meal consists of a <span class="text-brand-500 font-semibold">Main</span>
+                            and a <span class="text-brand-500 font-semibold">Side</span>."</em><br>
+                        The Main splits into <em>"Burger"</em> or <em>"Pizza"</em>.<br>
+                        The Side splits into <em>"Fries"</em> or <em>"Salad"</em>.
+                    </p>
+                    <blockquote
+                        class="mt-6 text-left border-l-4 border-brand-500 pl-4 py-2 bg-white/50 dark:bg-white/5 rounded-r-lg italic text-neutral-700 dark:text-white/80">
+                        A "Grammar-Based Language Model" is just this robot. It doesn't know what a burger tastes like.
+                        It just
+                        knows the rules of how to build the order properly.
+                    </blockquote>
+                </div>
+
+                <div class="mt-10 animate-bounce">
+                    <span
+                        class="material-symbols-rounded text-3xl text-neutral-400 dark:text-white/40">keyboard_arrow_down</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive Simulation Section -->
+        <section class="py-8 md:py-12">
+            <div class="container max-w-6xl px-4">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                    <!-- Control Panel -->
+                    <div class="space-y-4">
+                        <div class="glass-card rounded-2xl p-6 border-l-4 border-brand-500">
+                            <h2 class="text-xl font-bold mb-2 flex items-center gap-2 text-brand-900 dark:text-white">
+                                <span class="material-symbols-rounded text-brand-500">memory</span>
+                                The Generator
+                            </h2>
+                            <p class="text-sm text-neutral-500 dark:text-white/60 mb-4">
+                                Click on glowing <span class="text-brand-500 font-semibold">Non-Terminal</span> nodes
+                                (colored boxes) to
+                                apply a grammar rule and expand the sentence.
+                            </p>
+
+                            <div id="status-panel" class="code-block text-sm h-32 overflow-y-auto text-green-400">
+                                <span class="text-brand-400">&gt;</span> System Ready...<br>
+                                <span class="text-neutral-500">&gt;</span> Waiting for user input...
+                            </div>
+                        </div>
+
+                        <div class="glass-card rounded-2xl p-6">
+                            <h3
+                                class="text-xs uppercase tracking-widest font-bold mb-2 text-neutral-500 dark:text-white/50">
+                                Generated Output</h3>
+                            <div id="sentence-output"
+                                class="text-xl md:text-2xl font-bold text-brand-900 dark:text-white min-h-[3rem] border-b-2 border-brand-500/30 pb-2">
+                                ...
+                            </div>
+                        </div>
+
+                        <button onclick="resetTree()"
+                            class="w-full px-6 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500/20 transition flex items-center justify-center gap-2 font-medium">
+                            <span class="material-symbols-rounded">refresh</span>
+                            Reset Simulation
+                        </button>
+                    </div>
+
+                    <!-- Tree Visualization -->
+                    <div class="lg:col-span-2">
+                        <div class="glass-card rounded-2xl overflow-hidden">
+                            <div class="sim-area" id="tree-container">
+                                <svg class="tree-lines" id="svg-lines"></svg>
+                                <div id="nodes-layer" class="absolute top-0 left-0 w-full h-full"></div>
+
+                                <div
+                                    class="absolute bottom-4 right-4 text-xs text-neutral-400 dark:text-white/30 font-mono">
+                                    GRAMMAR SPACE
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- Technical Breakdown Section -->
+        <section class="py-12 md:py-20">
+            <div class="container max-w-5xl px-4">
+
+                <h2
+                    class="text-2xl md:text-3xl font-bold mb-10 flex items-center gap-3 border-b border-neutral-200 dark:border-white/10 pb-4 text-brand-900 dark:text-white">
+                    <span class="material-symbols-rounded text-brand-500">school</span>
+                    Under The Hood: Technical Breakdown
+                </h2>
+
+                <!-- Concept Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                    <div class="glass-card rounded-2xl p-6 hover:shadow-glow transition neon-border">
+                        <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center mb-4">
+                            <span class="text-brand-500 font-bold text-xl">N</span>
+                        </div>
+                        <h3 class="text-lg font-bold mb-2 text-brand-900 dark:text-white">Non-Terminals</h3>
+                        <p class="text-sm text-neutral-500 dark:text-white/60 leading-relaxed">
+                            Abstract placeholders (like <code
+                                class="font-mono text-brand-500 bg-brand-500/10 px-1 rounded">NP</code> or <code
+                                class="font-mono text-brand-500 bg-brand-500/10 px-1 rounded">VP</code>). They don't
+                            appear in the final output; they are "blueprints" to be expanded.
+                        </p>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-6 hover:shadow-glow transition neon-border">
+                        <div class="w-12 h-12 rounded-xl bg-brand-700/20 flex items-center justify-center mb-4">
+                            <span class="text-brand-700 dark:text-brandlt-300 font-bold text-xl">T</span>
+                        </div>
+                        <h3 class="text-lg font-bold mb-2 text-brand-900 dark:text-white">Terminals</h3>
+                        <p class="text-sm text-neutral-500 dark:text-white/60 leading-relaxed">
+                            The actual words (like <code
+                                class="font-mono text-brand-700 dark:text-brandlt-300 bg-brand-700/10 px-1 rounded">"robot"</code>).
+                            These are the leaves of
+                            the tree. Once you reach a terminal, you stop expanding.
+                        </p>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-6 hover:shadow-glow transition neon-border">
+                        <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center mb-4">
+                            <span class="text-emerald-500 font-bold text-xl">→</span>
+                        </div>
+                        <h3 class="text-lg font-bold mb-2 text-brand-900 dark:text-white">Production Rules</h3>
+                        <p class="text-sm text-neutral-500 dark:text-white/60 leading-relaxed">
+                            The logic mapping.<br>
+                            <code class="font-mono text-emerald-500 bg-emerald-500/10 px-1 rounded">S → NP VP</code>
+                            means "A Sentence is a Noun Phrase followed by a Verb Phrase."
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Theory & Formula -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+                    <div class="glass-card rounded-2xl p-8">
+                        <h3 class="text-xl font-bold mb-4 text-brand-900 dark:text-white">The Core Theory</h3>
+                        <p class="text-neutral-600 dark:text-white/70 mb-6 leading-relaxed">
+                            Unlike modern LLMs (like GPT) which predict the next word based on statistics and vast
+                            training
+                            data, a <strong class="text-brand-500">Grammar-Based Language Model (GBLM)</strong> defines
+                            valid sentences using a strict
+                            set of hierarchical rules.
+                        </p>
+
+                        <ul class="space-y-4">
+                            <li class="flex items-start gap-3">
+                                <span class="material-symbols-rounded text-brand-500 mt-0.5">check_circle</span>
+                                <div>
+                                    <strong class="text-brand-900 dark:text-white block">Formal Grammar</strong>
+                                    <span class="text-sm text-neutral-500 dark:text-white/60">A set of rules (P) that
+                                        describe how to form strings from a vocabulary (Σ).</span>
+                                </div>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="material-symbols-rounded text-brand-500 mt-0.5">check_circle</span>
+                                <div>
+                                    <strong class="text-brand-900 dark:text-white block">Context-Free Grammar
+                                        (CFG)</strong>
+                                    <span class="text-sm text-neutral-500 dark:text-white/60">The most common type for
+                                        NLP. Rules replace a single non-terminal regardless of context.</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-8 border-2 border-brand-500/20">
+                        <h3 class="text-xl font-bold mb-6 text-brand-500 border-b border-brand-500/20 pb-2">Formal
+                            Definition</h3>
+
+                        <div class="formula-block mb-6">
+                            <span class="font-mono text-2xl md:text-3xl font-bold text-brandlt-300">G = (N, Σ, P,
+                                S)</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 text-sm font-mono">
+                            <div class="flex items-center gap-2">
+                                <span class="text-brand-500 font-bold bg-brand-500/10 px-2 py-1 rounded">N</span>
+                                <span class="text-neutral-600 dark:text-white/70">Non-terminals</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-brand-500 font-bold bg-brand-500/10 px-2 py-1 rounded">Σ</span>
+                                <span class="text-neutral-600 dark:text-white/70">Terminals</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-brand-500 font-bold bg-brand-500/10 px-2 py-1 rounded">P</span>
+                                <span class="text-neutral-600 dark:text-white/70">Production Rules</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-brand-500 font-bold bg-brand-500/10 px-2 py-1 rounded">S</span>
+                                <span class="text-neutral-600 dark:text-white/70">Start Symbol</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grammar vs Statistics Comparison -->
+                <h3 class="text-xl font-bold mb-6 text-center text-brand-900 dark:text-white">Grammar vs. Statistics
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-0 glass-card rounded-2xl overflow-hidden mb-12">
+                    <div
+                        class="p-8 border-b md:border-b-0 md:border-r border-neutral-200 dark:border-white/10 hover:bg-brand-500/5 transition">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="p-3 rounded-xl bg-brand-700/20">
+                                <span
+                                    class="material-symbols-rounded text-brand-700 dark:text-brandlt-300">account_tree</span>
+                            </div>
+                            <h4 class="text-lg font-bold text-brand-700 dark:text-brandlt-300">Grammar-Based</h4>
+                        </div>
+                        <ul class="space-y-3 text-sm">
+                            <li class="flex gap-2 text-neutral-700 dark:text-white/80"><span
+                                    class="text-green-500 font-bold">✓</span> Guarantees syntactic correctness.</li>
+                            <li class="flex gap-2 text-neutral-700 dark:text-white/80"><span
+                                    class="text-green-500 font-bold">✓</span> Interpretable and debuggable.</li>
+                            <li class="flex gap-2 text-neutral-500 dark:text-white/60"><span
+                                    class="text-red-400 font-bold">✗</span> Brittle: Fails on ungrammatical input.</li>
+                            <li class="flex gap-2 text-neutral-500 dark:text-white/60"><span
+                                    class="text-red-400 font-bold">✗</span> Requires expert manual design.</li>
+                        </ul>
+                        <div
+                            class="mt-6 pt-4 border-t border-neutral-200 dark:border-white/10 text-xs text-neutral-500 dark:text-white/50 uppercase tracking-wider font-bold">
+                            Best For: Compilers, Voice Commands, Data Formatting
+                        </div>
+                    </div>
+
+                    <div class="p-8 hover:bg-emerald-500/5 transition">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="p-3 rounded-xl bg-emerald-500/20">
+                                <span class="material-symbols-rounded text-emerald-500">insights</span>
+                            </div>
+                            <h4 class="text-lg font-bold text-emerald-600 dark:text-emerald-400">Statistical / Neural
+                            </h4>
+                        </div>
+                        <ul class="space-y-3 text-sm">
+                            <li class="flex gap-2 text-neutral-700 dark:text-white/80"><span
+                                    class="text-green-500 font-bold">✓</span> Robust: Handles errors and noise well.
+                            </li>
+                            <li class="flex gap-2 text-neutral-700 dark:text-white/80"><span
+                                    class="text-green-500 font-bold">✓</span> Learns automatically from data.</li>
+                            <li class="flex gap-2 text-neutral-500 dark:text-white/60"><span
+                                    class="text-red-400 font-bold">✗</span> Can hallucinate or produce nonsense.</li>
+                            <li class="flex gap-2 text-neutral-500 dark:text-white/60"><span
+                                    class="text-red-400 font-bold">✗</span> "Black Box" interpretability.</li>
+                        </ul>
+                        <div
+                            class="mt-6 pt-4 border-t border-neutral-200 dark:border-white/10 text-xs text-neutral-500 dark:text-white/50 uppercase tracking-wider font-bold">
+                            Best For: Chatbots, Translation, Creative Writing
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PCFG Section -->
+                <div
+                    class="glass-card rounded-2xl p-8 border-l-4 border-brand-500 flex flex-col md:flex-row gap-8 items-center">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-4">
+                            <span class="material-symbols-rounded text-brand-500">calculate</span>
+                            <h3 class="text-xl font-bold text-brand-900 dark:text-white">Bridging the Gap: Probabilistic
+                                CFGs (PCFG)</h3>
+                        </div>
+                        <p class="text-neutral-600 dark:text-white/70 text-sm leading-relaxed mb-4">
+                            Pure grammars treat all rules equally. But in English, "The man ate" is more common than
+                            "The man slept."
+                            <strong class="text-brand-500">PCFGs</strong> assign a probability to each rule. The
+                            probability of a whole tree is the
+                            product of all rule probabilities used.
+                        </p>
+                    </div>
+
+                    <div class="flex-1 w-full code-block">
+                        <div class="flex justify-between border-b border-white/10 pb-2 mb-2">
+                            <span class="text-brand-400">VP → Verb NP</span>
+                            <span class="text-green-400">[0.7]</span>
+                        </div>
+                        <div class="text-neutral-500 text-xs italic mb-4">// Common (e.g., "ate an apple")</div>
+
+                        <div class="flex justify-between border-b border-white/10 pb-2 mb-2">
+                            <span class="text-brand-400">VP → Verb</span>
+                            <span class="text-yellow-400">[0.3]</span>
+                        </div>
+                        <div class="text-neutral-500 text-xs italic">// Less Common (e.g., "slept")</div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ============== FOOTER ============== -->
+    <footer class="py-8 border-t border-neutral-200 dark:border-white/10">
+        <div class="container max-w-4xl px-4 text-center">
+            <p class="text-sm text-neutral-500 dark:text-white/50">
+                © 2024 Paper X — Language Models Lab. Built with 💜 for learning.
+            </p>
+        </div>
+    </footer>
+
+    <!-- ============== SCRIPTS ============== -->
+    <script>
+        // Theme Toggle
+        document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                localStorage.setItem('px_theme',
+                    document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+            });
+        });
+
+        // --- GRAMMAR DEFINITION ---
+        const grammar = {
+            "S": [["NP", "VP"]],
+            "NP": [["Det", "N"], ["Det", "Adj", "N"], ["PropN"]],
+            "VP": [["V", "NP"], ["V"]],
+            "Det": [["The"], ["A"]],
+            "N": [["robot"], ["cat"], ["wizard"], ["bug"]],
+            "Adj": [["rusty"], ["happy"], ["cybernetic"]],
+            "PropN": [["Alice"], ["Bob"], ["ChatGPT"]],
+            "V": [["builds"], ["eats"], ["destroys"], ["loves"]]
+        };
+
+        const descriptions = {
+            "S": "Start Symbol",
+            "NP": "Noun Phrase",
+            "VP": "Verb Phrase",
+            "Det": "Determiner",
+            "N": "Noun",
+            "Adj": "Adjective",
+            "PropN": "Proper Noun",
+            "V": "Verb"
+        };
+
+        // --- STATE MANAGEMENT ---
+        let treeData = {
+            id: "root",
+            symbol: "S",
+            x: 50,
+            y: 10,
+            children: [],
+            isTerminal: false,
+            expanded: false
+        };
+
+        const container = document.getElementById('tree-container');
+        const nodesLayer = document.getElementById('nodes-layer');
+        const svgLines = document.getElementById('svg-lines');
+        const logPanel = document.getElementById('status-panel');
+        const outputDisplay = document.getElementById('sentence-output');
+
+        function log(msg) {
+            const entry = document.createElement('div');
+            entry.innerHTML = `<span class="text-brand-400">&gt;</span> ${msg}`;
+            logPanel.appendChild(entry);
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        // --- RENDER LOGIC ---
+        function createNodeElement(node, animate = true) {
+            const el = document.createElement('div');
+            el.className = `group absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-10`;
+            el.id = node.id;
+
+            const isTerminal = !grammar[node.symbol];
+            node.isTerminal = isTerminal;
+
+            if (isTerminal) {
+                el.innerHTML = `
+                    <div class="terminal-node">
+                        "${node.symbol}"
+                    </div>
+                    <span class="tooltip-label">Terminal: ${node.symbol}</span>
+                `;
+            } else {
+                const desc = descriptions[node.symbol] || "Phrase";
+                el.innerHTML = `
+                    <button class="node-btn px-4 py-2 rounded-lg shadow-lg font-mono text-lg font-bold ${node.expanded
+                        ? 'bg-neutral-200 dark:bg-neutral-700 border-2 border-neutral-300 dark:border-neutral-600 text-neutral-500 cursor-default'
+                        : 'bg-gradient-to-br from-brand-500 to-brand-700 border-2 border-brand-400 text-white cursor-pointer hover:scale-105 hover:shadow-neon pulse-glow'
+                    }">
+                        ${node.symbol}
+                    </button>
+                    <span class="tooltip-label">${desc}</span>
+                `;
+
+                if (!node.expanded) {
+                    el.querySelector('button').onclick = () => showChoices(node);
+                }
+            }
+
+            if (animate) {
+                gsap.set(el, { left: `${node.x}%`, top: `${node.y}%`, opacity: 0, scale: 0 });
+            } else {
+                gsap.set(el, { left: `${node.x}%`, top: `${node.y}%`, opacity: 1, scale: 1 });
+            }
+            return el;
+        }
+
+        function drawTree(animateAll = true) {
+            nodesLayer.innerHTML = '';
+            svgLines.innerHTML = '';
+            renderNodeRecursive(treeData, animateAll);
+            updateSentence();
+        }
+
+        function renderNodeRecursive(node, animate = true) {
+            const el = createNodeElement(node, animate);
+            nodesLayer.appendChild(el);
+            if (animate) {
+                gsap.to(el, { duration: 0.4, opacity: 1, scale: 1, ease: "back.out(1.4)" });
+            }
+
+            if (node.children.length > 0) {
+                node.children.forEach(child => {
+                    const lineId = `line-${node.id}-${child.id}`;
+                    drawLine(node, child, lineId, animate);
+                    renderNodeRecursive(child, animate);
+                });
+            }
+        }
+
+        function drawLine(parent, child, id, animate = true) {
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("class", "connector");
+            path.setAttribute("id", id);
+            svgLines.appendChild(path);
+
+            const w = container.offsetWidth;
+            const h = container.offsetHeight;
+
+            const x1 = (parent.x / 100) * w;
+            const y1 = (parent.y / 100) * h + 20;
+            const x2 = (child.x / 100) * w;
+            const y2 = (child.y / 100) * h - 20;
+
+            const d = `M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`;
+            path.setAttribute("d", d);
+
+            if (animate) {
+                const length = path.getTotalLength();
+                gsap.set(path, { strokeDasharray: length, strokeDashoffset: length });
+                gsap.to(path, { strokeDashoffset: 0, duration: 0.6, ease: "power2.out" });
+            }
+        }
+
+        function showChoices(node) {
+            if (node.expanded) return;
+
+            const rules = grammar[node.symbol];
+            if (!rules) return;
+
+            const overlay = document.createElement('div');
+            overlay.className = "absolute z-50 bg-white/95 dark:bg-brand-900/95 border border-brand-500/30 rounded-xl p-3 flex flex-wrap gap-2 shadow-card backdrop-blur-xl";
+            gsap.set(overlay, { left: `${node.x}%`, top: `${node.y + 8}%`, x: "-50%" });
+
+            rules.forEach((rule, index) => {
+                const btn = document.createElement('button');
+                btn.className = "px-3 py-1.5 bg-gradient-to-r from-brand-500 to-brand-700 hover:from-brand-600 hover:to-brand-800 text-white text-sm rounded-lg transition font-mono shadow-md";
+                btn.innerText = rule.join(" ");
+                btn.onclick = () => {
+                    expandNode(node, rule);
+                    overlay.remove();
+                };
+                overlay.appendChild(btn);
+            });
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = "px-2 py-1.5 text-red-400 hover:text-red-300 text-lg font-bold";
+            closeBtn.innerHTML = "×";
+            closeBtn.onclick = () => overlay.remove();
+            overlay.appendChild(closeBtn);
+
+            nodesLayer.appendChild(overlay);
+        }
+
+        function expandNode(node, ruleArray) {
+            log(`Expanding <strong class="text-brand-300">${node.symbol}</strong> using rule: [${ruleArray.join(" ")}]`);
+            node.expanded = true;
+
+            const depth = getDepth(node.id);
+            const spread = 40 / (depth + 1);
+
+            const totalChildren = ruleArray.length;
+            const startX = node.x - (spread * (totalChildren - 1)) / 2;
+
+            ruleArray.forEach((symbol, idx) => {
+                const childId = node.id + "-" + idx;
+                const childX = startX + (spread * idx);
+                const childY = node.y + 15;
+
+                node.children.push({
+                    id: childId,
+                    symbol: symbol,
+                    x: childX,
+                    y: childY,
+                    children: [],
+                    expanded: false
+                });
+            });
+
+            drawTree();
+        }
+
+        function getDepth(id) { return id.split('-').length; }
+
+        function getLeaves(node) {
+            if (node.children.length === 0) {
+                if (grammar[node.symbol] && !node.expanded) return [`<span class="pending-symbol">?${node.symbol}?</span>`];
+                if (!grammar[node.symbol]) return [`<span class="terminal-word">${node.symbol}</span>`];
+                return [];
+            }
+            let leaves = [];
+            node.children.forEach(child => {
+                leaves = leaves.concat(getLeaves(child));
+            });
+            return leaves;
+        }
+
+        function updateSentence() {
+            const leaves = getLeaves(treeData);
+            outputDisplay.innerHTML = leaves.join(" ");
+
+            const isComplete = !outputDisplay.innerHTML.includes("?");
+            if (isComplete) {
+                outputDisplay.classList.add("text-green-500");
+                outputDisplay.classList.remove("text-brand-900", "dark:text-white");
+                log(`<span class="text-green-400">✓ Sentence Complete!</span>`);
+            } else {
+                outputDisplay.classList.remove("text-green-500");
+                outputDisplay.classList.add("text-brand-900", "dark:text-white");
+            }
+        }
+
+        function resetTree() {
+            treeData = { id: "root", symbol: "S", x: 50, y: 10, children: [], isTerminal: false, expanded: false };
+            logPanel.innerHTML = '<span class="text-green-400">&gt; System Reset...</span><br>';
+            drawTree();
+        }
+
+        window.addEventListener('resize', () => { drawTree(false); });
+        drawTree(true);
+    </script>
+</body>
+
+</html>

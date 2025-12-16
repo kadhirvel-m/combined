@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gradient Descent Lab — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../../../assets/img/favicon.svg">
+
+    <!-- Inter + Material Symbols -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS bundle used across Paper X -->
+    <link rel="stylesheet" href="../../../assets/css/tailwind.css" />
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: {
+                            50: '#FAF5FB',
+                            100: '#F3E7F2',
+                            200: '#E7D0E4',
+                            300: '#D9B4D3',
+                            400: '#C88DBA',
+                            500: '#9E4B8A',
+                            700: '#4C2A59',
+                            900: '#1E1E2F'
+                        }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.35)',
+                        soft: '0 10px 30px rgba(0,0,0,0.25)',
+                        card: '0 24px 60px rgba(30,30,47,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --bg-app: #F7F2F9;
+            --bg-card: #FFFFFF;
+            --text-head: #1E1E2F;
+            --text-body: #2F2F3A;
+            --text-sub: #5A5A6B;
+            --border: #E5DFEC;
+            --brand-500: #9E4B8A;
+            --brand-700: #4C2A59;
+            --brand-900: #1E1E2F;
+        }
+
+        .dark {
+            --bg-app: #1E1E2F;
+            --bg-card: #201934;
+            --text-head: #F3E7F2;
+            --text-body: #E8E3EE;
+            --text-sub: #C9BED5;
+            --border: #3A3247;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .lab-shell {
+            min-height: 100vh;
+            background-image: linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%);
+        }
+
+        .dark .lab-shell {
+            background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(158, 75, 138, 0.15);
+            box-shadow: 0 8px 32px rgba(30, 30, 47, 0.12);
+        }
+
+        .dark .glass-panel {
+            background: rgba(30, 30, 47, 0.75);
+            border: 1px solid rgba(200, 141, 186, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(158, 75, 138, 0.12);
+            transition: transform 0.2s ease, border-color 0.2s;
+        }
+
+        .dark .glass-card {
+            background: rgba(30, 30, 47, 0.85);
+            border: 1px solid rgba(200, 141, 186, 0.25);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(158, 75, 138, 0.4);
+        }
+
+        .glass-button {
+            background: rgba(158, 75, 138, 0.1);
+            border: 1px solid rgba(158, 75, 138, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .glass-button:hover {
+            background: rgba(158, 75, 138, 0.2);
+            box-shadow: 0 0 15px rgba(158, 75, 138, 0.3);
+        }
+
+        .glass-button.active {
+            background: rgba(158, 75, 138, 0.8);
+            color: white;
+            box-shadow: 0 0 15px rgba(158, 75, 138, 0.5);
+        }
+
+        /* Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #9E4B8A;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(158, 75, 138, 0.6);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #E7D0E4;
+            border-radius: 2px;
+        }
+
+        .dark input[type=range]::-webkit-slider-runnable-track {
+            background: #4C2A59;
+        }
+
+        /* Custom Select */
+        select {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-head);
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            width: 100%;
+            outline: none;
+        }
+
+        select:focus {
+            border-color: #9E4B8A;
+        }
+
+        canvas {
+            touch-action: none;
+        }
+
+        /* Hero Section Text */
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+    </style>
+
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+    <script src="../../../config.js"></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- ============== NAVBAR (Paper X) ============== -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="../../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="../../../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="../../../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
+                <a href="../../../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="../../../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <a href="../../../login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="../../../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="lab-shell pb-10">
+        <!-- Hero Section -->
+        <section class="pt-12 pb-8">
+            <div class="container max-w-4xl mx-auto px-4 text-center">
+                <div
+                    class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-500 dark:text-brandlt-400 text-xs tracking-widest uppercase font-bold mb-4">
+                    <i data-lucide="info" class="w-3 h-3"></i> Interactive Guide
+                </div>
+
+                <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight gradient-hero-text mb-6">
+                    What is Gradient Descent?
+                </h1>
+
+                <p
+                    class="text-lg md:text-xl text-neutral-600 dark:text-white/70 leading-relaxed font-light max-w-2xl mx-auto">
+                    Imagine you are standing on top of a mountain in thick fog. You want to reach the lowest point (the
+                    valley), but you can't see the path.
+                </p>
+
+                <div class="glass-panel p-6 rounded-2xl text-left max-w-3xl mx-auto mt-8 border-l-4 border-brand-500">
+                    <p class="text-neutral-700 dark:text-white/80 text-lg">
+                        The best strategy is to look at the ground around your feet, find the direction that slopes down
+                        the
+                        steepest, and take a small step that way.
+                        <span class="text-brand-900 dark:text-white font-semibold">Repeat this until the ground becomes
+                            flat.</span>
+                    </p>
+                </div>
+
+                <div class="mt-8 animate-bounce text-neutral-400 dark:text-white/40">
+                    <i data-lucide="chevron-down" class="w-6 h-6 mx-auto"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- Lab Section -->
+        <section class="py-10 px-4 md:px-8" id="lab">
+            <div class="max-w-7xl mx-auto">
+                <div class="flex items-center gap-4 mb-8">
+                    <div class="p-3 bg-brand-500/20 rounded-lg text-brand-500 dark:text-brandlt-400">
+                        <i data-lucide="flask-conical" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-bold text-brand-900 dark:text-white">Interactive Laboratory
+                        </h2>
+                        <p class="text-neutral-600 dark:text-white/60">Experiment with the parameters to see how the
+                            algorithm finds the minimum.</p>
+                    </div>
+                </div>
+
+                <div class="grid lg:grid-cols-12 gap-8 items-start">
+                    <!-- Controls Panel -->
+                    <div class="lg:col-span-4 space-y-6">
+                        <div class="glass-panel p-6 rounded-2xl">
+                            <div class="flex items-center gap-2 mb-6 border-b border-black/5 dark:border-white/10 pb-4">
+                                <i data-lucide="settings-2" class="w-4 h-4 text-brand-500"></i>
+                                <h3
+                                    class="text-sm font-bold uppercase tracking-wider text-neutral-600 dark:text-white/70">
+                                    Tune Configuration</h3>
+                            </div>
+
+                            <div class="mb-8">
+                                <label class="block text-sm font-semibold text-neutral-700 dark:text-white/80 mb-2">Cost
+                                    Function Surface</label>
+                                <select id="funcSelector" class="mb-2">
+                                    <option value="convex">Simple Valley (Convex)</option>
+                                    <option value="nonconvex" selected>Complex Hills (Non-Convex)</option>
+                                </select>
+                                <p id="funcDesc" class="text-xs text-neutral-500 dark:text-white/50">
+                                    A non-convex function (quartic). Has a local minimum (left) and global minimum
+                                    (right).
+                                </p>
+                            </div>
+
+                            <div class="mb-8">
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-sm font-semibold text-neutral-700 dark:text-white/80">Learning
+                                        Rate (Step Size)</label>
+                                    <span id="displayLR" class="text-sm font-mono text-brand-500">0.05</span>
+                                </div>
+                                <input type="range" id="sliderLR" min="0.001" max="0.2" step="0.001" value="0.05">
+                                <p class="text-xs text-neutral-500 dark:text-white/50 mt-2">Low: Slow convergence. High:
+                                    May overshoot.</p>
+                            </div>
+
+                            <div class="mb-8">
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-sm font-semibold text-neutral-700 dark:text-white/80">Starting
+                                        Position (x)</label>
+                                    <span id="displayX" class="text-sm font-mono text-brand-500">-2.0</span>
+                                </div>
+                                <input type="range" id="sliderX" min="-3" max="3" step="0.1" value="-2">
+                            </div>
+
+                            <div
+                                class="grid grid-cols-2 gap-4 bg-brandlt-50 dark:bg-white/5 p-4 rounded-xl border border-brand-500/10 dark:border-white/10">
+                                <div>
+                                    <p class="text-xs text-neutral-500 dark:text-white/50 uppercase">Iteration</p>
+                                    <p id="valSteps" class="text-xl font-mono text-brand-900 dark:text-white">0</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-neutral-500 dark:text-white/50 uppercase">Current Cost f(x)
+                                    </p>
+                                    <p id="valCost" class="text-xl font-mono text-brand-500">0.00</p>
+                                </div>
+                                <div class="col-span-2 border-t border-black/5 dark:border-white/10 pt-2">
+                                    <p class="text-xs text-neutral-500 dark:text-white/50 uppercase">Gradient f'(x)</p>
+                                    <p id="valGradient" class="text-sm font-mono text-neutral-700 dark:text-white/80">
+                                        0.00</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Panel -->
+                    <div class="lg:col-span-8 space-y-6">
+                        <div class="glass-panel p-1 rounded-2xl relative overflow-hidden group">
+                            <div
+                                class="absolute top-4 left-4 right-4 flex justify-between items-start pointer-events-none z-10">
+                                <div class="flex items-center gap-2 pointer-events-auto">
+                                    <span
+                                        class="bg-white/90 dark:bg-brand-900/80 backdrop-blur text-xs px-2 py-1 rounded border border-brand-500/20 text-brand-500 flex items-center gap-1">
+                                        <div class="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></div> Current
+                                        Position
+                                    </span>
+                                    <span
+                                        class="bg-white/90 dark:bg-brand-900/80 backdrop-blur text-xs px-2 py-1 rounded border border-red-400/30 text-red-500 dark:text-red-400 flex items-center gap-1">
+                                        <i data-lucide="arrow-right" class="w-3 h-3"></i> Gradient
+                                    </span>
+                                </div>
+
+                                <button id="btnAudio"
+                                    class="pointer-events-auto bg-white/90 dark:bg-brand-900/80 hover:bg-brandlt-100 dark:hover:bg-brand-700/60 backdrop-blur text-xs px-3 py-1.5 rounded-full border border-brand-500/20 text-neutral-600 dark:text-white/70 flex items-center gap-2 transition-colors">
+                                    <i data-lucide="volume-2" class="w-3 h-3"></i> <span id="audioText">Audio Off</span>
+                                </button>
+                            </div>
+
+                            <canvas id="gdCanvas"
+                                class="w-full h-[500px] bg-brandlt-50 dark:bg-brand-900 rounded-xl cursor-crosshair"></canvas>
+
+                            <div class="absolute bottom-4 left-0 right-0 text-center pointer-events-none">
+                                <p
+                                    class="text-xs text-neutral-500 dark:text-white/50 bg-white/80 dark:bg-brand-900/80 inline-block px-3 py-1 rounded-full backdrop-blur-sm">
+                                    Tip: Turn on your speakers! Lower pitch = Lower cost (Deep Valley).
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-4">
+                            <button id="btnStep"
+                                class="col-span-1 glass-button text-brand-900 dark:text-white font-bold py-4 rounded-xl flex flex-col items-center justify-center gap-1 group">
+                                <i data-lucide="arrow-right-circle"
+                                    class="w-5 h-5 group-hover:translate-x-1 transition-transform"></i>
+                                <span class="text-sm">Take 1 Step</span>
+                            </button>
+
+                            <button id="btnAuto"
+                                class="col-span-1 glass-button text-brand-500 border-brand-500/50 font-bold py-4 rounded-xl flex flex-col items-center justify-center gap-1">
+                                <i data-lucide="play" class="w-5 h-5"></i>
+                                <span class="text-sm">Auto Descent</span>
+                            </button>
+
+                            <button id="btnReset"
+                                class="col-span-1 glass-button text-neutral-600 dark:text-white/70 hover:text-brand-900 dark:hover:text-white font-bold py-4 rounded-xl flex flex-col items-center justify-center gap-1">
+                                <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                                <span class="text-sm">Reset</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works Section -->
+        <section class="py-16 px-6 max-w-6xl mx-auto">
+            <div class="mb-12 border-l-4 border-brand-500 pl-6">
+                <h2 class="text-3xl md:text-4xl font-bold text-brand-900 dark:text-white mb-2">How It Works</h2>
+                <p class="text-neutral-600 dark:text-white/60">The mathematics and intuition behind the descent.</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8 mb-12">
+                <div class="glass-card p-8 rounded-2xl">
+                    <div
+                        class="w-12 h-12 rounded-full bg-brand-500/20 flex items-center justify-center mb-4 text-brand-500">
+                        <span class="font-mono font-bold text-xl">1</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-brand-900 dark:text-white mb-4">The Hiker in the Fog</h3>
+                    <p class="text-neutral-600 dark:text-white/60 text-sm leading-relaxed mb-4">
+                        Imagine you are hiking. Your goal is to get to the lodge at the bottom of the valley. However, a
+                        thick fog has rolled in.
+                    </p>
+                    <p
+                        class="text-neutral-600 dark:text-white/60 text-sm leading-relaxed border-l-2 border-brand-500/30 pl-4">
+                        You can't plan a perfect path. Instead, you feel the slope of the ground. If the ground tilts
+                        down
+                        to the right, you take a step to the right.
+                        <strong class="text-brand-500">Gradient Descent</strong> works exactly like this: it measures
+                        the
+                        "steepness" (gradient) and moves downhill.
+                    </p>
+                </div>
+
+                <div class="glass-card p-8 rounded-2xl">
+                    <div
+                        class="w-12 h-12 rounded-full bg-brand-700/20 flex items-center justify-center mb-4 text-brand-700 dark:text-brandlt-400">
+                        <span class="font-mono font-bold text-xl">2</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-brand-900 dark:text-white mb-4">The Mathematical Engine</h3>
+
+                    <div
+                        class="bg-brandlt-50 dark:bg-white/5 p-6 rounded-xl border border-brand-500/10 dark:border-white/10 mb-6 text-center">
+                        <p class="text-xs text-neutral-500 dark:text-white/50 uppercase tracking-widest mb-2">The Update
+                            Rule</p>
+                        <div class="text-2xl md:text-3xl font-mono text-brand-900 dark:text-white">
+                            x<span class="text-sm text-neutral-500 dark:text-white/50">new</span> = x<span
+                                class="text-sm text-neutral-500 dark:text-white/50">old</span> - <span
+                                class="text-brand-500">α</span> · <span
+                                class="text-red-500 dark:text-red-400">∇f(x)</span>
+                        </div>
+                    </div>
+
+                    <ul class="space-y-3 text-sm text-neutral-600 dark:text-white/60 font-mono">
+                        <li class="flex gap-3"><span class="text-brand-900 dark:text-white font-bold w-4">x</span> The
+                            parameter (position).</li>
+                        <li class="flex gap-3"><span class="text-brand-500 font-bold w-4">α</span> Learning Rate (Step
+                            Size).</li>
+                        <li class="flex gap-3"><span class="text-red-500 dark:text-red-400 font-bold w-4">∇</span> The
+                            Gradient (slope).</li>
+                        <li class="flex gap-3"><span class="text-neutral-700 dark:text-white/70 font-bold w-4">-</span>
+                            We subtract to go opposite to slope.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3 class="text-2xl font-bold text-brand-900 dark:text-white mb-6 flex items-center gap-2">
+                <i data-lucide="alert-triangle" class="text-yellow-500"></i> Common Pitfalls
+            </h3>
+
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="glass-panel p-6 rounded-xl">
+                    <div class="flex items-center gap-3 mb-3 text-red-500 dark:text-red-400">
+                        <i data-lucide="zap"></i>
+                        <h4 class="font-bold text-brand-900 dark:text-white">Overshooting</h4>
+                    </div>
+                    <p class="text-sm text-neutral-600 dark:text-white/60">
+                        If the <strong>Learning Rate</strong> is too high, the hiker takes giant leaps. They might jump
+                        right over the valley to the other side, diverging instead of converging.
+                    </p>
+                </div>
+
+                <div class="glass-panel p-6 rounded-xl">
+                    <div class="flex items-center gap-3 mb-3 text-yellow-500">
+                        <i data-lucide="hourglass"></i>
+                        <h4 class="font-bold text-brand-900 dark:text-white">Slow Convergence</h4>
+                    </div>
+                    <p class="text-sm text-neutral-600 dark:text-white/60">
+                        If the <strong>Learning Rate</strong> is too small, the hiker takes baby steps. It will take
+                        thousands of iterations to reach the bottom.
+                    </p>
+                </div>
+
+                <div class="glass-panel p-6 rounded-xl">
+                    <div class="flex items-center gap-3 mb-3 text-brand-500">
+                        <i data-lucide="mountain"></i>
+                        <h4 class="font-bold text-brand-900 dark:text-white">Local Minima</h4>
+                    </div>
+                    <p class="text-sm text-neutral-600 dark:text-white/60">
+                        In complex landscapes (Non-convex), the hiker might get stuck in a small dip (local minimum) and
+                        miss the true deepest valley (global minimum).
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- History & Applications Section -->
+        <section class="bg-brandlt-50 dark:bg-brand-900/50 border-y border-brand-500/10 dark:border-white/5 py-16 px-6">
+            <div class="max-w-6xl mx-auto grid md:grid-cols-2 gap-12">
+                <div>
+                    <h3
+                        class="text-xl font-bold text-brand-900 dark:text-white mb-6 border-b border-brand-500/30 pb-2 inline-block">
+                        A Bit of History</h3>
+                    <div class="space-y-4 text-neutral-600 dark:text-white/60 leading-relaxed">
+                        <p>
+                            While central to modern AI, Gradient Descent is actually quite old. It was first proposed by
+                            the
+                            French mathematician
+                            <strong class="text-brand-900 dark:text-white">Augustin-Louis Cauchy in 1847</strong>.
+                        </p>
+                        <p>
+                            Cauchy was trying to solve systems of equations related to astronomy (orbits of stars). He
+                            realized that instead of solving complex equations directly, he could iteratively
+                            approximate
+                            the solution by following the negative gradient.
+                        </p>
+                        <a href="https://en.wikipedia.org/wiki/Gradient_descent" target="_blank"
+                            class="inline-flex items-center gap-2 text-brand-500 hover:text-brand-700 dark:hover:text-brandlt-400 text-sm mt-2 transition-colors">
+                            <i data-lucide="external-link" class="w-4 h-4"></i> Learn more on Wikipedia
+                        </a>
+                    </div>
+                </div>
+
+                <div>
+                    <h3
+                        class="text-xl font-bold text-brand-900 dark:text-white mb-6 border-b border-brand-500/30 pb-2 inline-block">
+                        Real World Applications</h3>
+                    <div class="space-y-6">
+                        <div class="flex gap-4">
+                            <div class="mt-1 bg-brand-500/10 dark:bg-white/5 p-2 rounded-lg h-fit">
+                                <i data-lucide="network" class="text-brand-500 w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-brand-900 dark:text-white font-bold text-sm">Neural Networks</h4>
+                                <p class="text-xs text-neutral-600 dark:text-white/60 mt-1">The "Backpropagation"
+                                    algorithm used to train ChatGPT
+                                    and other AI models is essentially Gradient Descent applied to billions of
+                                    parameters.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <div class="mt-1 bg-green-500/10 dark:bg-green-900/20 p-2 rounded-lg h-fit">
+                                <i data-lucide="factory" class="text-green-600 dark:text-green-400 w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-brand-900 dark:text-white font-bold text-sm">Supply Chain & Logistics
+                                </h4>
+                                <p class="text-xs text-neutral-600 dark:text-white/60 mt-1">Optimizing delivery routes
+                                    and inventory levels to
+                                    minimize costs while meeting demand.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <div class="mt-1 bg-brand-700/10 dark:bg-brand-700/20 p-2 rounded-lg h-fit">
+                                <i data-lucide="trending-up" class="text-brand-700 dark:text-brandlt-400 w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-brand-900 dark:text-white font-bold text-sm">Finance</h4>
+                                <p class="text-xs text-neutral-600 dark:text-white/60 mt-1">Algorithmic trading
+                                    strategies often use
+                                    gradient-based optimization to adjust portfolio weights for maximum return.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        // --- CONFIGURATION ---
+        const canvas = document.getElementById('gdCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Functions
+        const functions = {
+            convex: {
+                f: (x) => Math.pow(x, 2),
+                df: (x) => 2 * x,
+                scaleY: 60,
+                yOffset: 0.8,
+                desc: "A simple bowl shape. The hiker will always find the bottom.",
+                xRange: [-3, 3]
+            },
+            nonconvex: {
+                f: (x) => Math.pow(x, 4) - 2 * Math.pow(x, 2) + 0.3 * x + 1,
+                df: (x) => 4 * Math.pow(x, 3) - 4 * x + 0.3,
+                scaleY: 60,
+                yOffset: 0.8,
+                desc: "A complex W-shape. Notice the shallow trap (local min) on the left and deep valley (global min) on the right.",
+                xRange: [-2.2, 2.2]
+            }
+        };
+
+        let currentMode = 'nonconvex';
+        let state = {
+            x: -2.0,
+            lr: 0.05,
+            iteration: 0,
+            path: [],
+            isAnimating: false,
+            audioEnabled: false
+        };
+
+        let autoInterval = null;
+        let audioCtx = null;
+        let oscillator = null;
+        let gainNode = null;
+
+        // --- AUDIO ENGINE ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                gainNode = audioCtx.createGain();
+                gainNode.connect(audioCtx.destination);
+                gainNode.gain.value = 0.1;
+            }
+        }
+
+        function playTone(cost) {
+            if (!state.audioEnabled || !audioCtx) return;
+            let freq = 200 + (cost * 150);
+            if (freq > 800) freq = 800;
+            if (freq < 100) freq = 100;
+
+            if (!oscillator) {
+                oscillator = audioCtx.createOscillator();
+                oscillator.type = 'sine';
+                oscillator.connect(gainNode);
+                oscillator.start();
+            }
+            oscillator.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.1);
+        }
+
+        function stopTone() {
+            if (oscillator) {
+                oscillator.stop();
+                oscillator.disconnect();
+                oscillator = null;
+            }
+        }
+
+        // --- DRAWING LOGIC ---
+        let width, height;
+
+        function resize() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * 2;
+            canvas.height = rect.height * 2;
+            width = canvas.width;
+            height = canvas.height;
+            ctx.scale(2, 2);
+            width /= 2;
+            height /= 2;
+            draw();
+        }
+        window.addEventListener('resize', resize);
+
+        function toCanvasX(x) {
+            return (width / 2) + (x * 80);
+        }
+
+        function toCanvasY(y) {
+            const config = functions[currentMode];
+            return (height * config.yOffset) - (y * config.scaleY);
+        }
+
+        function drawCurve() {
+            const config = functions[currentMode];
+            ctx.beginPath();
+            ctx.strokeStyle = '#9E4B8A';
+            ctx.lineWidth = 3;
+            ctx.lineJoin = 'round';
+
+            for (let x = -3.5; x <= 3.5; x += 0.05) {
+                const y = config.f(x);
+                const cx = toCanvasX(x);
+                const cy = toCanvasY(y);
+                if (x === -3.5) ctx.moveTo(cx, cy);
+                else ctx.lineTo(cx, cy);
+            }
+            ctx.stroke();
+        }
+
+        function drawGrid() {
+            const isDark = document.documentElement.classList.contains('dark');
+            ctx.strokeStyle = isDark ? '#3A3247' : '#E7D0E4';
+            ctx.lineWidth = 1;
+
+            // Y Axis
+            ctx.beginPath();
+            ctx.moveTo(width / 2, 0);
+            ctx.lineTo(width / 2, height);
+            ctx.stroke();
+
+            // X Axis approximation (y=0)
+            const y0 = toCanvasY(0);
+            ctx.beginPath();
+            ctx.moveTo(0, y0);
+            ctx.lineTo(width, y0);
+            ctx.stroke();
+        }
+
+        function drawBall() {
+            const config = functions[currentMode];
+            const cx = toCanvasX(state.x);
+            const cy = toCanvasY(config.f(state.x));
+
+            // Draw Tangent (Gradient)
+            const slope = config.df(state.x);
+            const lineLen = 0.6;
+            ctx.beginPath();
+            ctx.strokeStyle = '#f87171';
+            ctx.lineWidth = 2;
+            const x1 = state.x - lineLen;
+            const y1 = config.f(state.x) - slope * lineLen;
+            const x2 = state.x + lineLen;
+            const y2 = config.f(state.x) + slope * lineLen;
+            ctx.moveTo(toCanvasX(x1), toCanvasY(y1));
+            ctx.lineTo(toCanvasX(x2), toCanvasY(y2));
+            ctx.stroke();
+
+            // Draw Ball
+            ctx.beginPath();
+            ctx.fillStyle = '#C88DBA';
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#9E4B8A';
+            ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function updateStats() {
+            const config = functions[currentMode];
+            const cost = config.f(state.x);
+            const grad = config.df(state.x);
+
+            document.getElementById('valCost').innerText = cost.toFixed(5);
+            document.getElementById('valGradient').innerText = grad.toFixed(5);
+            document.getElementById('valSteps').innerText = state.iteration;
+
+            if (state.audioEnabled && state.isAnimating) {
+                playTone(cost);
+            } else if (!state.isAnimating) {
+                stopTone();
+            }
+        }
+
+        function draw() {
+            const isDark = document.documentElement.classList.contains('dark');
+            ctx.fillStyle = isDark ? '#1E1E2F' : '#FAF5FB';
+            ctx.fillRect(0, 0, width, height);
+
+            drawGrid();
+            drawCurve();
+
+            // Draw path
+            if (state.path.length > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = isDark ? 'rgba(200,141,186,0.4)' : 'rgba(76,42,89,0.3)';
+                state.path.forEach((p, i) => {
+                    const cx = toCanvasX(p.x);
+                    const cy = toCanvasY(p.y);
+                    if (i === 0) ctx.moveTo(cx, cy);
+                    else ctx.lineTo(cx, cy);
+                });
+                ctx.stroke();
+
+                // Draw past dots
+                state.path.forEach(p => {
+                    ctx.beginPath();
+                    ctx.fillStyle = isDark ? 'rgba(200,141,186,0.5)' : 'rgba(76,42,89,0.4)';
+                    ctx.arc(toCanvasX(p.x), toCanvasY(p.y), 2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+
+            drawBall();
+            updateStats();
+        }
+
+        // --- CORE LOGIC ---
+        function takeStep() {
+            if (state.isAnimating) return;
+            state.isAnimating = true;
+
+            const config = functions[currentMode];
+            const grad = config.df(state.x);
+
+            state.path.push({ x: state.x, y: config.f(state.x) });
+            state.iteration++;
+
+            const newX = state.x - (state.lr * grad);
+
+            if (state.audioEnabled && !autoInterval) {
+                initAudio();
+                playTone(config.f(state.x));
+                setTimeout(stopTone, 100);
+            }
+
+            gsap.to(state, {
+                x: newX,
+                duration: autoInterval ? 0.2 : 0.5,
+                ease: "power2.out",
+                onUpdate: draw,
+                onComplete: () => {
+                    state.isAnimating = false;
+                    draw();
+                }
+            });
+        }
+
+        function resetSim() {
+            if (autoInterval) {
+                clearInterval(autoInterval);
+                autoInterval = null;
+                document.getElementById('btnAuto').innerHTML = '<i data-lucide="play" class="w-5 h-5"></i><span class="text-sm">Auto Descent</span>';
+                lucide.createIcons();
+            }
+            stopTone();
+
+            gsap.to(state, {
+                x: parseFloat(document.getElementById('sliderX').value),
+                duration: 0.5,
+                onUpdate: draw,
+                onComplete: () => {
+                    state.path = [];
+                    state.iteration = 0;
+                    draw();
+                }
+            });
+        }
+
+        // --- UI BINDINGS ---
+        document.getElementById('funcSelector').addEventListener('change', (e) => {
+            currentMode = e.target.value;
+            document.getElementById('funcDesc').innerText = functions[currentMode].desc;
+            resetSim();
+        });
+
+        document.getElementById('sliderX').addEventListener('input', (e) => {
+            if (autoInterval) clearInterval(autoInterval);
+            state.path = [];
+            state.iteration = 0;
+            state.x = parseFloat(e.target.value);
+            document.getElementById('displayX').innerText = state.x.toFixed(1);
+            draw();
+        });
+
+        document.getElementById('sliderLR').addEventListener('input', (e) => {
+            state.lr = parseFloat(e.target.value);
+            document.getElementById('displayLR').innerText = state.lr.toFixed(3);
+        });
+
+        document.getElementById('btnStep').addEventListener('click', () => {
+            if (autoInterval) clearInterval(autoInterval);
+            takeStep();
+        });
+
+        document.getElementById('btnReset').addEventListener('click', resetSim);
+
+        document.getElementById('btnAuto').addEventListener('click', function () {
+            if (autoInterval) {
+                clearInterval(autoInterval);
+                autoInterval = null;
+                this.innerHTML = '<i data-lucide="play" class="w-5 h-5"></i><span class="text-sm">Auto Descent</span>';
+                lucide.createIcons();
+                stopTone();
+            } else {
+                this.innerHTML = '<i data-lucide="pause" class="w-5 h-5"></i><span class="text-sm">Pause</span>';
+                lucide.createIcons();
+                if (state.audioEnabled) initAudio();
+                autoInterval = setInterval(() => {
+                    const config = functions[currentMode];
+                    if (Math.abs(config.df(state.x)) < 0.001) {
+                        clearInterval(autoInterval);
+                        autoInterval = null;
+                        document.getElementById('btnAuto').innerHTML = '<i data-lucide="check" class="w-5 h-5 text-green-500"></i><span class="text-sm">Converged</span>';
+                        lucide.createIcons();
+                        stopTone();
+                        return;
+                    }
+                    if (!state.isAnimating) takeStep();
+                }, 250);
+            }
+        });
+
+        document.getElementById('btnAudio').addEventListener('click', function () {
+            state.audioEnabled = !state.audioEnabled;
+            if (state.audioEnabled) {
+                initAudio();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                this.classList.add('bg-brand-500/20', 'text-brand-500', 'border-brand-500/50');
+                document.getElementById('audioText').innerText = "Audio On";
+            } else {
+                stopTone();
+                this.classList.remove('bg-brand-500/20', 'text-brand-500', 'border-brand-500/50');
+                document.getElementById('audioText').innerText = "Audio Off";
+            }
+        });
+
+        // Init
+        resize();
+        draw();
+
+        // Shared Paper X theme toggle wiring
+        const themeToggles = document.querySelectorAll('[data-theme-toggle]');
+        const root = document.documentElement;
+
+        themeToggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = root.classList.toggle('dark');
+                try { localStorage.setItem('px_theme', isDark ? 'dark' : 'light'); } catch (_) { }
+                draw(); // Redraw canvas with new theme colors
+            });
+        });
+    </script>
+</body>
+
+</html>
