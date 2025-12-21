@@ -470,7 +470,7 @@
             setTimeout(() => { unitTitleInput?.focus(); }, 60);
         }
 
-        function addTopicRow(value = '') {
+        function addTopicRow(value = '', insertAfterRow = null) {
             const id = Math.random().toString(36).slice(2, 9);
             const row = document.createElement('div');
             row.className = 'flex items-center gap-2';
@@ -481,13 +481,30 @@
                     <span class="material-symbols-rounded text-base">drag_indicator</span>
                 </button>
                 <input type="text" data-topic-input id="topic-${id}" placeholder="Topic title" value="${Collage.escapeHtml(value)}" class="flex-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40" maxlength="256" />
-                <button type="button" aria-label="Remove topic" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition"><span class="material-symbols-rounded text-base">close</span></button>`;
+                <button type="button" aria-label="Add topic below" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition">
+                    <span class="material-symbols-rounded text-base">add</span>
+                </button>
+                <button type="button" aria-label="Remove topic" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-red-500 hover:border-red-500/50 transition"><span class="material-symbols-rounded text-base">close</span></button>`;
+
+            const addBtn = row.querySelector('button[aria-label="Add topic below"]');
+            addBtn.addEventListener('click', () => addTopicRow('', row));
+
             const removeBtn = row.querySelector('button[aria-label="Remove topic"]');
             removeBtn.addEventListener('click', () => {
                 row.remove();
                 if (!topicsContainer.querySelector('[data-topic-input]')) addTopicRow();
             });
-            topicsContainer.appendChild(row);
+
+            if (insertAfterRow && insertAfterRow.parentNode === topicsContainer) {
+                if (insertAfterRow.nextSibling) {
+                    topicsContainer.insertBefore(row, insertAfterRow.nextSibling);
+                } else {
+                    topicsContainer.appendChild(row);
+                }
+            } else {
+                topicsContainer.appendChild(row);
+            }
+
             // Make the handle itself draggable to ensure dragstart fires
             const handleBtn = row.querySelector('[data-drag-handle]');
             if (handleBtn) handleBtn.setAttribute('draggable', 'true');

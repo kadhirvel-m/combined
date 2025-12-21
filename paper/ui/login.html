@@ -162,11 +162,45 @@
         const isDark = stored ? stored === 'dark' : prefersDark;
         if (isDark) document.documentElement.classList.add('dark');
       })();
+
   </script>
+  <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js" type="module"></script>
+  <style>
+    #pageLoader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.4s ease, visibility 0.4s;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    #pageLoader.active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    .dark #pageLoader {
+      background: rgba(30, 30, 47, 0.7);
+    }
+  </style>
 </head>
 
 <body
   class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors overflow-x-hidden">
+  <!-- Loading Overlay -->
+  <div id="pageLoader">
+    <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
+      style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
+  </div>
   <!-- Ambient gradients -->
   <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
     <div
@@ -491,6 +525,7 @@
 
     async function handleHashSession() {
       if (!location.hash.includes('access_token')) return;
+      showLoader();
       const hash = new URLSearchParams(location.hash.slice(1));
       const token = hash.get('access_token');
       if (token) {
@@ -509,6 +544,7 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!form.reportValidity()) return;
+      showLoader();
       status.classList.remove('hidden');
       status.textContent = '';
       setSubmitState(true);
@@ -521,6 +557,7 @@
         const out = await res.json().catch(() => ({}));
         if (!res.ok) {
           status.textContent = `❌ ${out?.detail || out?.message || 'Login failed.'}`;
+          hideLoader();
           return;
         }
         if (out.access_token) {
@@ -534,12 +571,14 @@
         setTimeout(() => { window.location.href = 'profile.html'; }, 400);
       } catch (err) {
         status.textContent = '❌ Network error. Please try again.';
+        hideLoader();
       } finally {
         setSubmitState(false);
       }
     });
 
     googleBtn?.addEventListener('click', async () => {
+      showLoader();
       status.classList.remove('hidden');
       status.textContent = 'Redirecting to Google…';
       try {
@@ -553,8 +592,18 @@
       } catch (err) {
         console.error(err);
         status.textContent = '❌ Google sign-in failed.';
+        hideLoader();
       }
     });
+
+    function showLoader() {
+      const loader = document.getElementById('pageLoader');
+      if (loader) loader.classList.add('active');
+    }
+    function hideLoader() {
+      const loader = document.getElementById('pageLoader');
+      if (loader) loader.classList.remove('active');
+    }
   </script>
 </body>
 

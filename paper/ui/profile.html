@@ -282,11 +282,42 @@
       transform: translateY(0);
       pointer-events: auto;
     }
+
+    /* Loader Styles */
+    #pageLoader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.4s ease, visibility 0.4s;
+    }
+
+    .dark #pageLoader {
+      background: rgba(30, 30, 47, 0.7);
+    }
+
+    .loaded #pageLoader {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
   </style>
+  <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js" type="module"></script>
 </head>
 
 <body
-  class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors">
+  class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors relative">
+
+  <!-- Loading Overlay -->
+  <div id="pageLoader">
+    <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
+      style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
+  </div>
   <header
     class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10 relative">
     <div class="container flex items-center justify-between py-4">
@@ -1266,7 +1297,17 @@
           window.__PX_NAV_APPLY(profile);
         }
         statusEl.textContent = '';
-      } catch (e) { console.error(e); statusEl.textContent = 'Failed to load profile. Please try again.'; }
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = 'Failed to load profile. Please try again.';
+      } finally {
+        // Hide loader
+        document.body.classList.add('loaded');
+        const loader = document.getElementById('pageLoader');
+        if (loader) {
+          setTimeout(() => { loader.style.display = 'none'; }, 450);
+        }
+      }
     };
 
     el('copyPhone').addEventListener('click', () => { const v = el('info-phone').textContent?.trim(); if (v && v !== '—' && v !== '--') navigator.clipboard.writeText(v); });
