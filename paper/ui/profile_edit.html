@@ -15,9 +15,39 @@
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,-50..200" />
     <!-- Inline Tailwind runtime config removed: central config lives in tailwind.config.js -->
+    <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js" type="module"></script>
+    <style>
+        #pageLoader {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.4s ease, visibility 0.4s;
+        }
+
+        .loaded #pageLoader {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .dark #pageLoader {
+            background: rgba(30, 30, 47, 0.7);
+        }
+    </style>
 </head>
 
 <body class="font-display bg-white text-slate-900 dark:bg-night-900 dark:text-slate-200 min-h-screen">
+    <!-- Loading Overlay -->
+    <div id="pageLoader">
+        <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
+            style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
+    </div>
     <div aria-hidden="true"
         class="fixed inset-0 -z-10 bg-gradient-to-b from-transparent to-brand-50/40 dark:to-night-700/20"></div>
     <header
@@ -1570,74 +1600,83 @@
         }
 
         async function loadProfile() {
-            const data = await fetchProfileData();
-            if (!data) return;
-            document.getElementById('name').textContent = data.name || '—';
-            document.getElementById('email').textContent = data.email || '—';
-            document.getElementById('avatar').textContent = initials(data.name);
-            document.getElementById('f_name').value = data.name || '';
-            document.getElementById('f_email_ro').value = data.email || '';
-            document.getElementById('f_headline').value = data.headline || '';
-            document.getElementById('f_location').value = data.location || '';
-            document.getElementById('f_dob').value = data.dob || '';
-            document.getElementById('f_phone').value = data.phone || '';
-            document.getElementById('f_bio').value = data.bio || '';
-            document.getElementById('f_linkedin').value = data.linkedin || '';
-            document.getElementById('f_github').value = data.github || '';
-            document.getElementById('f_portfolio').value = data.portfolio_url || '';
-            document.getElementById('f_website').value = data.website || '';
-            document.getElementById('f_twitter').value = data.twitter || '';
-            document.getElementById('f_instagram').value = data.instagram || '';
-            document.getElementById('f_medium').value = data.medium || '';
-            document.getElementById('f_leetcode').value = data.leetcode || '';
-            document.getElementById('f_technologies').value = data.technologies || '';
-            document.getElementById('f_skills').value = data.skills || '';
-            document.getElementById('f_certifications').value = data.certifications || '';
-            document.getElementById('f_languages').value = data.languages || '';
-            document.getElementById('f_interests').value = data.interests || '';
-            document.getElementById('f_achievements').value = data.achievements || '';
-            document.getElementById('f_experience').value = data.experience || '';
-            document.getElementById('f_publications').value = data.publications || '';
-            document.getElementById('f_project_info').value = data.project_info || '';
-            document.getElementById('f_specs').value = Array.isArray(data.specializations) ? data.specializations.join(', ') : (data.specializations || '');
+            try {
+                const data = await fetchProfileData();
+                if (!data) return;
+                document.getElementById('name').textContent = data.name || '—';
+                document.getElementById('email').textContent = data.email || '—';
+                document.getElementById('avatar').textContent = initials(data.name);
+                document.getElementById('f_name').value = data.name || '';
+                document.getElementById('f_email_ro').value = data.email || '';
+                document.getElementById('f_headline').value = data.headline || '';
+                document.getElementById('f_location').value = data.location || '';
+                document.getElementById('f_dob').value = data.dob || '';
+                document.getElementById('f_phone').value = data.phone || '';
+                document.getElementById('f_bio').value = data.bio || '';
+                document.getElementById('f_linkedin').value = data.linkedin || '';
+                document.getElementById('f_github').value = data.github || '';
+                document.getElementById('f_portfolio').value = data.portfolio_url || '';
+                document.getElementById('f_website').value = data.website || '';
+                document.getElementById('f_twitter').value = data.twitter || '';
+                document.getElementById('f_instagram').value = data.instagram || '';
+                document.getElementById('f_medium').value = data.medium || '';
+                document.getElementById('f_leetcode').value = data.leetcode || '';
+                document.getElementById('f_technologies').value = data.technologies || '';
+                document.getElementById('f_skills').value = data.skills || '';
+                document.getElementById('f_certifications').value = data.certifications || '';
+                document.getElementById('f_languages').value = data.languages || '';
+                document.getElementById('f_interests').value = data.interests || '';
+                document.getElementById('f_achievements').value = data.achievements || '';
+                document.getElementById('f_experience').value = data.experience || '';
+                document.getElementById('f_publications').value = data.publications || '';
+                document.getElementById('f_project_info').value = data.project_info || '';
+                document.getElementById('f_specs').value = Array.isArray(data.specializations) ? data.specializations.join(', ') : (data.specializations || '');
 
-            if (experienceList) {
-                experienceList.innerHTML = '';
-                const experiences = Array.isArray(data.experiences) ? data.experiences : [];
-                experiences.forEach(exp => addExperienceRow(exp));
+                if (experienceList) {
+                    experienceList.innerHTML = '';
+                    const experiences = Array.isArray(data.experiences) ? data.experiences : [];
+                    experiences.forEach(exp => addExperienceRow(exp));
+                }
+
+                if (educationList) {
+                    educationList.innerHTML = '';
+                    const educationEntries = Array.isArray(data.education_entries) ? data.education_entries : [];
+                    educationEntries.forEach(entry => addEducationRow(entry));
+                }
+
+                if (certificationList) {
+                    certificationList.innerHTML = '';
+                    const certEntries = Array.isArray(data.certification_entries) ? data.certification_entries : [];
+                    certEntries.forEach(entry => addCertificationRow(entry));
+                }
+
+                if (portfolioList) {
+                    portfolioList.innerHTML = '';
+                    const portfolioEntries = Array.isArray(data.portfolio_projects) ? data.portfolio_projects : [];
+                    portfolioEntries.forEach(entry => addPortfolioRow(entry));
+                }
+
+                if (publicationList) {
+                    publicationList.innerHTML = '';
+                    const publicationEntries = Array.isArray(data.publication_entries) ? data.publication_entries : [];
+                    publicationEntries.forEach(entry => addPublicationRow(entry));
+                }
+
+                refreshAssociations();
+
+                if (data.profile_image_url) {
+                    const a = document.getElementById('currentImage'); a.href = data.profile_image_url; a.classList.remove('hidden');
+                    const img = document.getElementById('imagePreview'); img.src = data.profile_image_url; img.classList.remove('hidden');
+                }
+                if (data.resume_url) { const a = document.getElementById('currentResume'); a.href = data.resume_url; a.classList.remove('hidden'); }
+            } finally {
+                // Hide loader
+                document.body.classList.add('loaded');
+                const loader = document.getElementById('pageLoader');
+                if (loader) {
+                    setTimeout(() => { loader.style.display = 'none'; }, 450);
+                }
             }
-
-            if (educationList) {
-                educationList.innerHTML = '';
-                const educationEntries = Array.isArray(data.education_entries) ? data.education_entries : [];
-                educationEntries.forEach(entry => addEducationRow(entry));
-            }
-
-            if (certificationList) {
-                certificationList.innerHTML = '';
-                const certEntries = Array.isArray(data.certification_entries) ? data.certification_entries : [];
-                certEntries.forEach(entry => addCertificationRow(entry));
-            }
-
-            if (portfolioList) {
-                portfolioList.innerHTML = '';
-                const portfolioEntries = Array.isArray(data.portfolio_projects) ? data.portfolio_projects : [];
-                portfolioEntries.forEach(entry => addPortfolioRow(entry));
-            }
-
-            if (publicationList) {
-                publicationList.innerHTML = '';
-                const publicationEntries = Array.isArray(data.publication_entries) ? data.publication_entries : [];
-                publicationEntries.forEach(entry => addPublicationRow(entry));
-            }
-
-            refreshAssociations();
-
-            if (data.profile_image_url) {
-                const a = document.getElementById('currentImage'); a.href = data.profile_image_url; a.classList.remove('hidden');
-                const img = document.getElementById('imagePreview'); img.src = data.profile_image_url; img.classList.remove('hidden');
-            }
-            if (data.resume_url) { const a = document.getElementById('currentResume'); a.href = data.resume_url; a.classList.remove('hidden'); }
         }
 
         document.getElementById('imageInput').addEventListener('change', (e) => {
@@ -1671,49 +1710,70 @@
 
         document.getElementById('detailsForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const specs = document.getElementById('f_specs').value.split(',').map(s => s.trim()).filter(Boolean);
-            const experiences = collectExperienceData();
-            const educationEntries = collectEducationData();
-            const certificationEntries = collectCertificationData();
-            const portfolioEntries = collectPortfolioData();
-            const publicationEntries = collectPublicationData();
-            const payload = {
-                name: document.getElementById('f_name').value || null,
-                phone: document.getElementById('f_phone').value || null,
-                headline: document.getElementById('f_headline').value || null,
-                location: document.getElementById('f_location').value || null,
-                dob: document.getElementById('f_dob').value || null,
-                bio: document.getElementById('f_bio').value || null,
-                linkedin: document.getElementById('f_linkedin').value || null,
-                github: document.getElementById('f_github').value || null,
-                leetcode: document.getElementById('f_leetcode').value || null,
-                portfolio_url: document.getElementById('f_portfolio').value || null,
-                website: document.getElementById('f_website').value || null,
-                twitter: document.getElementById('f_twitter').value || null,
-                instagram: document.getElementById('f_instagram').value || null,
-                medium: document.getElementById('f_medium').value || null,
-                specializations: specs,
-                technologies: document.getElementById('f_technologies').value || null,
-                skills: document.getElementById('f_skills').value || null,
-                certifications: document.getElementById('f_certifications').value || null,
-                languages: document.getElementById('f_languages').value || null,
-                interests: document.getElementById('f_interests').value || null,
-                achievements: document.getElementById('f_achievements').value || null,
-                experience: document.getElementById('f_experience').value || null,
-                publications: document.getElementById('f_publications').value || null,
-                project_info: document.getElementById('f_project_info').value || null,
-                experiences: experiences,
-                education_entries: educationEntries,
-                certification_entries: certificationEntries,
-                portfolio_projects: portfolioEntries,
-                publication_entries: publicationEntries,
-            };
-            const res = await fetch(`${apiBase}/api/profile/me`, { method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const out = await res.json().catch(() => ({}));
-            const st = document.getElementById('status'); st.classList.remove('hidden');
-            st.textContent = res.ok ? '✔ Profile updated' : `❌ ${out?.detail || 'Update failed'}`;
-            if (res.ok) {
-                await loadProfile();
+            // Show loader manually
+            const loader = document.getElementById('pageLoader');
+            if (loader) {
+                loader.classList.remove('loaded');
+                loader.style.display = 'flex';
+                loader.style.opacity = '1';
+                loader.style.visibility = 'visible';
+            }
+
+            try {
+                const specs = document.getElementById('f_specs').value.split(',').map(s => s.trim()).filter(Boolean);
+                const experiences = collectExperienceData();
+                const educationEntries = collectEducationData();
+                const certificationEntries = collectCertificationData();
+                const portfolioEntries = collectPortfolioData();
+                const publicationEntries = collectPublicationData();
+                const payload = {
+                    name: document.getElementById('f_name').value || null,
+                    phone: document.getElementById('f_phone').value || null,
+                    headline: document.getElementById('f_headline').value || null,
+                    location: document.getElementById('f_location').value || null,
+                    dob: document.getElementById('f_dob').value || null,
+                    bio: document.getElementById('f_bio').value || null,
+                    linkedin: document.getElementById('f_linkedin').value || null,
+                    github: document.getElementById('f_github').value || null,
+                    leetcode: document.getElementById('f_leetcode').value || null,
+                    portfolio_url: document.getElementById('f_portfolio').value || null,
+                    website: document.getElementById('f_website').value || null,
+                    twitter: document.getElementById('f_twitter').value || null,
+                    instagram: document.getElementById('f_instagram').value || null,
+                    medium: document.getElementById('f_medium').value || null,
+                    specializations: specs,
+                    technologies: document.getElementById('f_technologies').value || null,
+                    skills: document.getElementById('f_skills').value || null,
+                    certifications: document.getElementById('f_certifications').value || null,
+                    languages: document.getElementById('f_languages').value || null,
+                    interests: document.getElementById('f_interests').value || null,
+                    achievements: document.getElementById('f_achievements').value || null,
+                    experience: document.getElementById('f_experience').value || null,
+                    publications: document.getElementById('f_publications').value || null,
+                    project_info: document.getElementById('f_project_info').value || null,
+                    experiences: experiences,
+                    education_entries: educationEntries,
+                    certification_entries: certificationEntries,
+                    portfolio_projects: portfolioEntries,
+                    publication_entries: publicationEntries,
+                };
+                const res = await fetch(`${apiBase}/api/profile/me`, { method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const out = await res.json().catch(() => ({}));
+                const st = document.getElementById('status'); st.classList.remove('hidden');
+                st.textContent = res.ok ? '✔ Profile updated' : `❌ ${out?.detail || 'Update failed'}`;
+                if (res.ok) {
+                    await loadProfile();
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                // Ensure loader is hidden if loadProfile wasn't called or failed to hide it
+                // We add a small delay or just wait for loadProfile's animation? 
+                // loadProfile handles it. If this runs after loadProfile returns, we can just ensure it's hidden.
+                document.body.classList.add('loaded');
+                if (loader && loader.style.display !== 'none') {
+                    setTimeout(() => { loader.style.display = 'none'; }, 450);
+                }
             }
         });
 
