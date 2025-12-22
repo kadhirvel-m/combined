@@ -993,6 +993,7 @@ HEADERS = {
 }
 
 REQ_TIMEOUT = 25
+MAX_FETCH_BYTES = int(os.getenv("PAPERX_FETCH_MAX_BYTES", "5000000"))  # 5 MB safety cap per fetch
 
 
 @dataclass
@@ -1168,9 +1169,40 @@ def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, a
 
 
 def fetch(url: str) -> str:
-    r = requests.get(url, headers=HEADERS, timeout=REQ_TIMEOUT)
-    r.raise_for_status()
-    return r.text
+    """Fetch a URL with a strict size cap to avoid memory blow-ups from large assets.
+
+    Uses streaming downloads and enforces a configurable max byte budget
+    (PAPERX_FETCH_MAX_BYTES, default 5 MB). Raises RuntimeError on size
+    overflow so callers can treat it as a fetch failure.
+    """
+    with requests.get(url, headers=HEADERS, timeout=REQ_TIMEOUT, stream=True) as r:
+        r.raise_for_status()
+
+        # Fast reject if Content-Length header is present and too large
+        try:
+            content_len = int(r.headers.get("Content-Length", "0"))
+            if content_len and content_len > MAX_FETCH_BYTES:
+                raise RuntimeError(f"Remote content too large ({content_len} bytes)")
+        except ValueError:
+            # Ignore malformed header; fall back to streamed limit below
+            pass
+
+        chunks: List[bytes] = []
+        total = 0
+        for chunk in r.iter_content(chunk_size=8192):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > MAX_FETCH_BYTES:
+                raise RuntimeError(f"Remote content exceeded max size ({MAX_FETCH_BYTES} bytes cap)")
+            chunks.append(chunk)
+
+    body = b"".join(chunks)
+    encoding = r.encoding or "utf-8"
+    try:
+        return body.decode(encoding, errors="replace")
+    except Exception:
+        return body.decode("utf-8", errors="replace")
 
 
 # -------------------- Image helpers --------------------
@@ -3387,7 +3419,7 @@ def get_current_user_profile(token: Optional[str]):
                     if unit_ids:
                         topics_q = (
                             supabase.table("syllabus_topics")
-                            .select("id,unit_id,topic,order_in_unit,image_url")
+                            .select("id,unit_id,topic,order_in_unit,image_url,lab_url,video_url,ppt_url")
                             .in_("unit_id", [str(uid) for uid in unit_ids])
                             .order("unit_id")
                             .order("order_in_unit")
@@ -3406,6 +3438,9 @@ def get_current_user_profile(token: Optional[str]):
                                     "topic": raw_topic.get("topic"),
                                     "order_in_unit": raw_topic.get("order_in_unit"),
                                     "image_url": raw_topic.get("image_url"),
+                                    "lab_url": raw_topic.get("lab_url"),
+                                    "video_url": raw_topic.get("video_url"),
+                                    "ppt_url": raw_topic.get("ppt_url"),
                                 }
                             )
 
