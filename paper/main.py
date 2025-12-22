@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, Iterator, List, Literal, Optional, Set, Tuple
 from urllib.parse import quote, urlparse
 import threading
+import concurrent.futures
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_core.models import ModelInfo
@@ -240,7 +241,7 @@ deepseek_model_client =  OpenAIChatCompletionClient(
 
 gemini_model_client = OpenAIChatCompletionClient(
     base_url=os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-    model="gemini-3-flash-preview",
+    model="gemini-2.5-flash",
     api_key=(os.getenv("GEMINI_API_KEY", "") or "").strip(),
     model_info=ModelInfo(
         vision=True,
@@ -873,8 +874,10 @@ learning_logger.setLevel(logging.INFO)
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY", "") or "").strip()
 SERPAPI_API_KEY = (os.getenv("SERPAPI_API_KEY", "") or "").strip()
+SERPAPI_ENABLED = os.getenv("ENABLE_SERPAPI", "true").strip().lower() in {"1", "true", "yes", "on"}
+SERPAPI_TIMEOUT_SEC = float(os.getenv("SERPAPI_TIMEOUT_SEC", "8"))
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or "").strip()
-GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-3-flash-preview")
+GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-2.5-flash")
 MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
 # Default domains for notes/web search when DB has no config yet
@@ -969,7 +972,7 @@ def load_learning_tracks_config() -> Dict[str, Any]:
     goals = _parse_env_list("LEARNING_TRACK_GOALS", LEARNING_TRACK_DEFAULT_GOALS)
     companies = _parse_env_list("LEARNING_TRACK_COMPANIES", LEARNING_TRACK_DEFAULT_COMPANIES)
     compiler_languages = _parse_env_json_array("LEARNING_TRACK_COMPILER_LANGUAGES", LEARNING_TRACK_DEFAULT_COMPILER_LANGUAGES)
-    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-3-flash-preview"))
+    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-2.5-flash"))
     flashcard_model = os.getenv("LEARNING_TRACK_FLASHCARD_MODEL", GEMINI_NOTES_MODEL)
     code_explainer_model = os.getenv("LEARNING_TRACK_CODE_MODEL", GEMINI_NOTES_MODEL)
     mcq_model = os.getenv("LEARNING_TRACK_MCQ_MODEL", GEMINI_NOTES_MODEL)
@@ -1072,6 +1075,12 @@ def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, a
 
     Fallback: If no URLs matched the domain filter, retry WITHOUT any site filter (top web results).
     """
+    if not SERPAPI_ENABLED:
+        notes_logger.info("SerpAPI disabled; skipping search", extra={"topic": topic})
+        return []
+    if not SERPAPI_API_KEY:
+        notes_logger.warning("SerpAPI key missing; skipping search", extra={"topic": topic})
+        return []
     # Resolve domains according to priority
     domains: List[str] = []
     if allowed_domains:
@@ -1097,12 +1106,20 @@ def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, a
         "allowed_domains": domains,
         "api_key_present": bool(SERPAPI_API_KEY),
     })
-    search = GoogleSearch(params)
+    def _fetch(p):
+        return GoogleSearch(p).get_dict()
+
+    results: Dict[str, Any] = {}
     try:
-        results = search.get_dict()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(_fetch, params)
+            results = fut.result(timeout=SERPAPI_TIMEOUT_SEC)
+    except concurrent.futures.TimeoutError:
+        notes_logger.error("SerpAPI search timed out", extra={"topic": topic, "timeout_sec": SERPAPI_TIMEOUT_SEC})
+        return []
     except Exception as exc:
         notes_logger.error("SerpAPI search failed", exc_info=exc)
-        raise
+        return []
     urls: List[str] = []
     if not results:
         notes_logger.warning("SerpAPI returned empty response", extra={"topic": topic})
@@ -1149,8 +1166,12 @@ def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, a
     # Fallback: re-run without site restriction to get top results
     notes_logger.warning("No URLs matched allowed domains; falling back to unrestricted search", extra={"topic": topic})
     try:
-        search2 = GoogleSearch({**params, "q": topic})
-        results2 = search2.get_dict()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut2 = pool.submit(_fetch, {**params, "q": topic})
+            results2 = fut2.result(timeout=SERPAPI_TIMEOUT_SEC)
+    except concurrent.futures.TimeoutError:
+        notes_logger.error("SerpAPI fallback timed out", extra={"topic": topic, "timeout_sec": SERPAPI_TIMEOUT_SEC})
+        return []
     except Exception:
         return []
     urls2: List[str] = []
@@ -2935,7 +2956,7 @@ def _normalize_parsed_struct(parsed: dict, hints: dict) -> ParsedSyllabusOut:
     return ParsedSyllabusOut(course_code=cc, title=ttl, units=units_in)
 
 
-GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-3-flash-preview").strip()
+GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-2.5-flash").strip()
 
 
 def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
@@ -2948,7 +2969,7 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-3-flash-preview")
+        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-2.5-flash")
         prompt = (
             "You are a strict JSON parser for academic syllabi. Given the raw syllabus text, return ONLY JSON with keys: "
             "semester (integer 1-12, optional), course_code (string, optional), title (string, optional), "
@@ -3419,7 +3440,7 @@ def get_current_user_profile(token: Optional[str]):
                     if unit_ids:
                         topics_q = (
                             supabase.table("syllabus_topics")
-                            .select("id,unit_id,topic,order_in_unit,image_url,lab_url,video_url,ppt_url")
+                            .select("id,unit_id,topic,order_in_unit,image_url,lab_url")
                             .in_("unit_id", [str(uid) for uid in unit_ids])
                             .order("unit_id")
                             .order("order_in_unit")
@@ -3439,8 +3460,6 @@ def get_current_user_profile(token: Optional[str]):
                                     "order_in_unit": raw_topic.get("order_in_unit"),
                                     "image_url": raw_topic.get("image_url"),
                                     "lab_url": raw_topic.get("lab_url"),
-                                    "video_url": raw_topic.get("video_url"),
-                                    "ppt_url": raw_topic.get("ppt_url"),
                                 }
                             )
 
@@ -14922,6 +14941,11 @@ def create_app() -> FastAPI:
             "transcripts_ui": "/ui/youtube-transcript.html",
             "youtube_videos_ui": "/ui/youtube_videos.html",
         }
+
+    @app.get("/health", tags=["system"])
+    def health():
+        """Lightweight health probe used by the Render load balancer."""
+        return {"status": "ok", "timestamp": datetime.utcnow().isoformat() + "Z"}
 
     ui_dir = Path(__file__).resolve().parent / "ui"
     if ui_dir.is_dir():

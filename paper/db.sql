@@ -374,6 +374,7 @@ CREATE TABLE public.syllabus_topics (
   image_url text,
   video_url text,
   ppt_url text,
+  lab_url text,
   CONSTRAINT syllabus_topics_pkey PRIMARY KEY (id),
   CONSTRAINT syllabus_topics_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.syllabus_units(id)
 );
