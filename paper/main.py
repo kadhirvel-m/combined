@@ -3195,295 +3195,212 @@ def get_current_user_profile(token: Optional[str]):
 
     try:
         user_id = _get_user_id_with_retry(token)
-
         supabase = get_service_client()
-        # Primary profile fetch with retry; if transient protocol error persists, surface a 503 so clients can retry
+
+        # 1. Fetch Profile WITH embedded College, Dept, Batch data in ONE request
+        # Requires FKs: user_profiles.college_id -> colleges.id, etc.
         try:
             prof_q = _supabase_retry(
                 lambda: (
                     supabase.table("user_profiles")
-                    .select("*")
+                    .select("*, colleges(id,name), departments(id,name), batches(id,from_year,to_year)")
                     .eq("auth_user_id", user_id)
                     .limit(1)
                     .execute()
                 )
             )
-        except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network dependent
+        except HTTPXRemoteProtocolError as exc:
             supabase_logger.warning("/api/me profile fetch transient protocol error: %s", exc)
             raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.")
+        
         if getattr(prof_q, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (get profile): {prof_q.error}")
         if not prof_q.data:
             raise HTTPException(status_code=404, detail="Profile not found")
+        
         prof = prof_q.data[0]
-
-        college = None
-        department = None
-        batch = None
-        # FK-first resolution: rely on IDs; ignore legacy text copies (school/department/batch_range) here.
-        if prof.get("college_id"):
-            try:
-                cq = _supabase_retry(
-                    lambda: (
-                        supabase.table("colleges")
-                        .select("id,name")
-                        .eq("id", prof["college_id"])
-                        .limit(1)
-                        .execute()
-                    )
-                )
-                if getattr(cq, "error", None):
-                    raise HTTPException(status_code=500, detail=f"Supabase error (college): {cq.error}")
-                if cq.data:
-                    college = {"id": cq.data[0]["id"], "name": cq.data[0]["name"]}
-            except HTTPXRemoteProtocolError as exc:  # pragma: no cover
-                supabase_logger.warning("/api/me college lookup transient protocol error: %s", exc)
-        if prof.get("department_id"):
-            try:
-                dq = _supabase_retry(
-                    lambda: (
-                        supabase.table("departments")
-                        .select("id,name")
-                        .eq("id", prof["department_id"])
-                        .limit(1)
-                        .execute()
-                    )
-                )
-                if getattr(dq, "error", None):
-                    raise HTTPException(status_code=500, detail=f"Supabase error (department): {dq.error}")
-                if dq.data:
-                    department = {"id": dq.data[0]["id"], "name": dq.data[0]["name"]}
-            except HTTPXRemoteProtocolError as exc:  # pragma: no cover
-                supabase_logger.warning("/api/me department lookup transient protocol error: %s", exc)
-        if prof.get("batch_id"):
-            try:
-                bq = _supabase_retry(
-                    lambda: (
-                        supabase.table("batches")
-                        .select("id,from_year,to_year")
-                        .eq("id", prof["batch_id"])
-                        .limit(1)
-                        .execute()
-                    )
-                )
-                if getattr(bq, "error", None):
-                    raise HTTPException(status_code=500, detail=f"Supabase error (batch): {bq.error}")
-                if bq.data:
-                    batch = {"id": bq.data[0]["id"], "from": bq.data[0]["from_year"], "to": bq.data[0]["to_year"]}
-            except HTTPXRemoteProtocolError as exc:  # pragma: no cover
-                supabase_logger.warning("/api/me batch lookup transient protocol error: %s", exc)
-
-        # Placeholder; will be recomputed after education override
-        syllabus = []
-
-        related_experiences: List[Dict[str, Any]] = []
-        related_education: List[Dict[str, Any]] = []
-        related_certifications: List[Dict[str, Any]] = []
-        related_projects: List[Dict[str, Any]] = []
-        related_publications: List[Dict[str, Any]] = []
         profile_id = prof.get("id")
-        if profile_id:
-            related_experiences = _fetch_profile_related(
-                profile_id,
-                "user_experiences",
-                [("order_index", False), ("start_date", True), ("created_at", False)],
-            )
-            related_education = _fetch_profile_related(
-                profile_id,
-                "user_education",
-                [("order_index", False), ("created_at", False)],
-            )
-            related_certifications = _fetch_profile_related(
-                profile_id,
-                "user_certifications",
-                [("order_index", False), ("issue_date", True), ("created_at", False)],
-            )
-            related_projects = _fetch_profile_related(
-                profile_id,
-                "user_portfolio_projects",
-                [("order_index", False), ("start_date", True), ("created_at", False)],
-            )
-            related_publications = _fetch_profile_related(
-                profile_id,
-                "user_publications",
-                [("order_index", False), ("publication_date", True), ("created_at", False)],
-            )
 
-    # Override displayed academic info from user_education if available
+        # Extract joined data or fallback to None
+        college_data = prof.get("colleges")  # dict or list depending on cardinality (should be dict if FK is 1:1/M:1) -> actually Supabase returns dict for M:1
+        department_data = prof.get("departments")
+        batch_data = prof.get("batches")
+
+        # Normalize potentially scalar or list return from join
+        college = college_data if isinstance(college_data, dict) else (college_data[0] if isinstance(college_data, list) and college_data else None)
+        department = department_data if isinstance(department_data, dict) else (department_data[0] if isinstance(department_data, list) and department_data else None)
+        batch = None
+        if batch_data:
+            raw_batch = batch_data if isinstance(batch_data, dict) else (batch_data[0] if isinstance(batch_data, list) else None)
+            if raw_batch:
+                batch = {"id": raw_batch.get("id"), "from": raw_batch.get("from_year"), "to": raw_batch.get("to_year")}
+
+        # 2. Parallel Fetch of Related Data (Experience, Education, etc.)
+        # We use a ThreadPool to run these read-only fetches concurrently
+        related_results = {}
+        fetch_specs = [
+            ("experiences", "user_experiences", [("order_index", False), ("start_date", True), ("created_at", False)]),
+            ("education_entries", "user_education", [("order_index", False), ("created_at", False)]),
+            ("certification_entries", "user_certifications", [("order_index", False), ("issue_date", True), ("created_at", False)]),
+            ("portfolio_projects", "user_portfolio_projects", [("order_index", False), ("start_date", True), ("created_at", False)]),
+            ("publication_entries", "user_publications", [("order_index", False), ("publication_date", True), ("created_at", False)]),
+        ]
+
+        if profile_id:
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                future_map = {
+                    executor.submit(_fetch_profile_related, profile_id, table, sort_keys): key
+                    for key, table, sort_keys in fetch_specs
+                }
+                for future in concurrent.futures.as_completed(future_map):
+                    key = future_map[future]
+                    try:
+                        related_results[key] = future.result()
+                    except Exception as e:
+                        supabase_logger.error(f"Failed to fetch related {key}: {e}")
+                        related_results[key] = []
+        else:
+             for key, _, _ in fetch_specs:
+                 related_results[key] = []
+
+        # Unpack related data
+        related_education = related_results.get("education_entries", [])
+        
+        # Education Overrides (Semester, batch derived from text, etc.)
         final_semester = prof.get("semester")
         final_regno = prof.get("regno")
-        derived_batch_years: tuple[int,int] | None = None
+        derived_batch_years = None
+        
         if related_education:
-            # Choose entry with highest current_semester else first
+            # Sort by current_semester then order_index
             sem_sorted = [e for e in related_education if isinstance(e, dict)]
             if sem_sorted:
                 sem_sorted.sort(key=lambda r: (r.get("current_semester") or 0, r.get("order_index") or 0), reverse=True)
                 primary_edu = sem_sorted[0]
-                # Semester & Reg No
                 if primary_edu.get("current_semester"):
                     final_semester = primary_edu.get("current_semester")
                 if primary_edu.get("regno"):
                     final_regno = primary_edu.get("regno")
-                # College/Department/Batch textual data
-                edu_school = primary_edu.get("school")
-                edu_department = primary_edu.get("department")
-                edu_batch_range = primary_edu.get("batch_range")
-                # Replace only if present to avoid wiping existing structured IDs
-                if edu_school:
-                    # Try resolve existing college id; do not create new here
-                    try:
-                        supabase = get_service_client()
-                        cq2 = supabase.table("colleges").select("id,name").eq("name", edu_school).limit(1).execute()
-                        if not getattr(cq2, "error", None) and cq2.data:
-                            college = {"id": cq2.data[0]["id"], "name": cq2.data[0]["name"]}
-                        else:
+                
+                # Text-based resolution fallbacks (only if direct IDs missing)
+                # We must attempt to resolve IDs to support batch lookup
+                if not college:
+                    edu_school = primary_edu.get("school")
+                    if edu_school:
+                        try:
+                            # Attempt resolution
+                            cq2 = supabase.table("colleges").select("id,name").eq("name", edu_school).limit(1).execute()
+                            if not getattr(cq2, "error", None) and cq2.data:
+                                college = {"id": cq2.data[0]["id"], "name": cq2.data[0]["name"]}
+                            else:
+                                college = {"id": None, "name": edu_school}
+                        except Exception:
                             college = {"id": None, "name": edu_school}
-                    except Exception:
-                        college = {"id": None, "name": edu_school}
-                if edu_department:
-                    # Attempt department id resolution only if we have college id
-                    try:
-                        if college and college.get("id"):
-                            supabase = get_service_client()
-                            dq2 = (
-                                supabase.table("departments").select("id,name")
-                                .eq("college_id", college["id"])\
-                                .eq("name", (edu_department or "").upper())
-                                .limit(1)
-                                .execute()
-                            )
+                
+                if not department:
+                    edu_dept = primary_edu.get("department")
+                    if edu_dept:
+                        try:
+                            # Attempt resolution - requires college_id if we want to be strict, or just name? 
+                            # DB schema: departments usually linked to college.
+                            # Original logic matched name AND college_id if available. 
+                            dept_q = supabase.table("departments").select("id,name").eq("name", (edu_dept or "").upper())
+                            if college and college.get("id"):
+                                dept_q = dept_q.eq("college_id", college.get("id"))
+                            dq2 = dept_q.limit(1).execute()
+                            
                             if not getattr(dq2, "error", None) and dq2.data:
                                 department = {"id": dq2.data[0]["id"], "name": dq2.data[0]["name"]}
                             else:
-                                department = {"id": None, "name": (edu_department or "").upper()}
-                        else:
-                            department = {"id": None, "name": (edu_department or "").upper()}
-                    except Exception:
-                        department = {"id": None, "name": (edu_department or "").upper()}
-                if edu_batch_range and isinstance(edu_batch_range, str):
-                    import re as _re
-                    years_full = _re.findall(r"\b(\d{4})\b", edu_batch_range)
-                    if len(years_full) >= 2:
-                        try:
-                            from_year = int(years_full[0])
-                            to_year = int(years_full[1])
-                            batch = {"id": None, "from": from_year, "to": to_year}
-                            derived_batch_years = (from_year, to_year)
+                                department = {"id": None, "name": (edu_dept or "").upper()}
                         except Exception:
-                            pass
-        # Recompute syllabus using derived academic info
-        effective_batch_id = None
-        # Attempt to resolve batch id from derived years (do not create new) if we have college & department ids
-        try:
-            if batch and batch.get("id"):
-                effective_batch_id = batch["id"]
-            elif derived_batch_years and college and college.get("id") and department and department.get("id"):
-                fy, ty = derived_batch_years
-                bq2 = (
-                    supabase.table("batches")
-                    .select("id")
-                    .eq("college_id", college["id"])
-                    .eq("department_id", department["id"])
-                    .eq("from_year", fy)
-                    .eq("to_year", ty)
-                    .limit(1)
-                    .execute()
-                )
-                if not getattr(bq2, "error", None) and bq2.data:
-                    effective_batch_id = bq2.data[0]["id"]
-            if not effective_batch_id and prof.get("batch_id"):
-                effective_batch_id = prof.get("batch_id")
-            # Use final_semester (possibly overridden)
-            if effective_batch_id and final_semester:
-                courses_q = (
+                            department = {"id": None, "name": (edu_dept or "").upper()}
+
+                if not batch:
+                    edu_batch_range = primary_edu.get("batch_range")
+                    if edu_batch_range and isinstance(edu_batch_range, str):
+                        import re as _re
+                        years_full = _re.findall(r"\b(\d{4})\b", edu_batch_range)
+                        if len(years_full) >= 2:
+                            try:
+                                from_year = int(years_full[0])
+                                to_year = int(years_full[1])
+                                batch = {"id": None, "from": from_year, "to": to_year}
+                                derived_batch_years = (from_year, to_year)
+                            except Exception:
+                                pass
+
+        # 3. Optimized Syllabus Fetch (N+1 -> 1 query)
+        # Fetch Courses -> embedded Units -> embedded Topics
+        syllabus = []
+        effective_batch_id = prof.get("batch_id") or (batch.get("id") if batch else None)
+        
+        # Try to resolve batch ID from derived years if missing
+        if not effective_batch_id and derived_batch_years and college and college.get("id") and department and department.get("id"):
+             # This is a rare edge case, keeping the single lookup is fine, or arguably skip to save time.
+             # We'll keep it but optimize slightly.
+             try:
+                 fy, ty = derived_batch_years
+                 bq2 = supabase.table("batches").select("id").eq("college_id", college["id"]).eq("department_id", department["id"]).eq("from_year", fy).eq("to_year", ty).limit(1).execute()
+                 if bq2.data:
+                     effective_batch_id = bq2.data[0]["id"]
+             except Exception:
+                 pass
+
+        if effective_batch_id and final_semester:
+            try:
+                # Deep query: courses -> units -> topics
+                syllabus_query = (
                     supabase.table("syllabus_courses")
-                    .select("id,course_code,title,semester")
+                    .select("id,course_code,title,semester, syllabus_units(id,unit_title,order_in_course, syllabus_topics(id,topic,order_in_unit,image_url,lab_url))")
                     .eq("batch_id", effective_batch_id)
                     .eq("semester", final_semester)
-                    .order("course_code")
                     .execute()
                 )
-                if getattr(courses_q, "error", None):
-                    raise HTTPException(status_code=500, detail=f"Supabase error (courses): {courses_q.error}")
-
-                course_rows = courses_q.data or []
-                course_ids = [row.get("id") for row in course_rows if row.get("id")]
-                units_by_course: Dict[str, List[Dict[str, Any]]] = {}
-                unit_lookup: Dict[str, Dict[str, Any]] = {}
-
-                if course_ids:
-                    units_q = (
-                        supabase.table("syllabus_units")
-                        .select("id,course_id,unit_title,order_in_course")
-                        .in_("course_id", [str(cid) for cid in course_ids])
-                        .order("course_id")
-                        .order("order_in_course")
-                        .execute()
-                    )
-                    if getattr(units_q, "error", None):
-                        raise HTTPException(status_code=500, detail=f"Supabase error (units): {units_q.error}")
-                    for raw_unit in units_q.data or []:
-                        unit_id = raw_unit.get("id")
-                        course_id = raw_unit.get("course_id")
-                        if not unit_id or not course_id:
-                            continue
-                        unit_obj = {
-                            "id": unit_id,
-                            "unit_title": raw_unit.get("unit_title"),
-                            "order_in_course": raw_unit.get("order_in_course"),
-                            "topics": [],
-                        }
-                        units_by_course.setdefault(course_id, []).append(unit_obj)
-                        unit_lookup[unit_id] = unit_obj
-
-                    unit_ids = list(unit_lookup.keys())
-                    if unit_ids:
-                        topics_q = (
-                            supabase.table("syllabus_topics")
-                            .select("id,unit_id,topic,order_in_unit,image_url,lab_url")
-                            .in_("unit_id", [str(uid) for uid in unit_ids])
-                            .order("unit_id")
-                            .order("order_in_unit")
-                            .execute()
-                        )
-                        if getattr(topics_q, "error", None):
-                            raise HTTPException(status_code=500, detail=f"Supabase error (topics): {topics_q.error}")
-                        for raw_topic in topics_q.data or []:
-                            unit_id = raw_topic.get("unit_id")
-                            unit_obj = unit_lookup.get(unit_id)
-                            if not unit_obj:
-                                continue
-                            unit_obj["topics"].append(
+                
+                if not getattr(syllabus_query, "error", None) and syllabus_query.data:
+                    # Sort in memory
+                    courses_data = syllabus_query.data
+                    courses_data.sort(key=lambda c: c.get("course_code") or "")
+                    
+                    for cr in courses_data:
+                        raw_units = cr.get("syllabus_units") or []
+                        # Sort units
+                        raw_units.sort(key=lambda u: u.get("order_in_course") or 0)
+                        
+                        clean_units = []
+                        for u in raw_units:
+                            raw_topics = u.get("syllabus_topics") or []
+                            # Sort topics
+                            raw_topics.sort(key=lambda t: t.get("order_in_unit") or 0)
+                            
+                            clean_topics = [
                                 {
-                                    "id": raw_topic.get("id"),
-                                    "topic": raw_topic.get("topic"),
-                                    "order_in_unit": raw_topic.get("order_in_unit"),
-                                    "image_url": raw_topic.get("image_url"),
-                                    "lab_url": raw_topic.get("lab_url"),
+                                    "id": t.get("id"),
+                                    "topic": t.get("topic"),
+                                    "order_in_unit": t.get("order_in_unit"),
+                                    "image_url": t.get("image_url"),
+                                    "lab_url": t.get("lab_url"),
                                 }
-                            )
-
-                new_syllabus: List[Dict[str, Any]] = []
-                for course in course_rows:
-                    cid = course.get("id")
-                    course_units = units_by_course.get(cid, [])
-                    for unit in course_units:
-                        unit["topics"].sort(key=lambda t: (t.get("order_in_unit") or 0))
-                    new_syllabus.append(
-                        {
-                            "id": cid,
-                            "course_code": course.get("course_code"),
-                            "title": course.get("title"),
-                            "semester": course.get("semester"),
-                            "units": course_units,
-                        }
-                    )
-                syllabus = new_syllabus
-        except HTTPException:
-            raise
-        except Exception:
-            # keep existing syllabus (possibly empty) on failure
-            pass
+                                for t in raw_topics
+                            ]
+                            clean_units.append({
+                                "id": u.get("id"),
+                                "unit_title": u.get("unit_title"),
+                                "order_in_course": u.get("order_in_course"),
+                                "topics": clean_topics
+                            })
+                            
+                        syllabus.append({
+                            "id": cr.get("id"),
+                            "course_code": cr.get("course_code"),
+                            "title": cr.get("title"),
+                            "semester": cr.get("semester"),
+                            "units": clean_units
+                        })
+            except Exception as e:
+                supabase_logger.warning(f"Syllabus fetch error: {e}")
 
         return {
             "profile": {
@@ -3519,21 +3436,21 @@ def get_current_user_profile(token: Optional[str]):
                 "publications": prof.get("publications"),
                 "achievements": prof.get("achievements"),
                 "experience": prof.get("experience"),
-                "experiences": related_experiences,
+                "experiences": related_results.get("experiences", []),
                 "education_entries": related_education,
-                "certification_entries": related_certifications,
-                "portfolio_projects": related_projects,
-                "publication_entries": related_publications,
+                "certification_entries": related_results.get("certification_entries", []),
+                "portfolio_projects": related_results.get("portfolio_projects", []),
+                "publication_entries": related_results.get("publication_entries", []),
                 "college": college,
                 "department": department,
                 "batch": batch,
             },
             "syllabus": syllabus,
         }
+
     except HTTPException:
         raise
     except Exception as e:
-        # Convert malformed/invalid token errors to 401 rather than 500
         msg = f"{e}".lower()
         if "invalid jwt" in msg or "token is malformed" in msg or "unable to parse" in msg:
             raise HTTPException(status_code=401, detail="Invalid or malformed token")

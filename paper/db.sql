@@ -596,9 +596,16 @@ CREATE TABLE public.user_profiles (
   project_info text,
   publications text,
   achievements text,
+  achievements text,
   experience text,
+  college_id uuid,
+  department_id uuid,
+  batch_id uuid,
   CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
-  CONSTRAINT user_profiles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
+  CONSTRAINT user_profiles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT user_profiles_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
+  CONSTRAINT user_profiles_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT user_profiles_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id)
 );
 CREATE TABLE public.user_publications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
