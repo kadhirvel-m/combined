@@ -1664,8 +1664,8 @@ def collect_image_urls(topic: str, page_urls: List[str], stop_event: Optional[th
     if stop_event and stop_event.is_set():
         return []
     urls: List[str] = []
-    # 1) From SerpAPI image search
-    urls.extend(serpapi_image_urls(topic, num=12))
+    # 1) From SerpAPI image search - REMOVED per user request
+    # urls.extend(serpapi_image_urls(topic, num=12))
     if stop_event and stop_event.is_set():
         return urls
     # 2) From parsed webpages
