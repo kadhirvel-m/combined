@@ -1402,29 +1402,55 @@ def assemble_context_for_llm(pages: List[PageExtract], merged_titles: List[str],
     return "\n".join(lines)
 
 
-SYSTEM_INSTRUCTIONS = """You are a senior educational writer building accurate, well-structured notes for college students in India.
+SYSTEM_INSTRUCTIONS = """You are a senior educational writer building accurate, comprehensive, and exam-ready notes for college students in India.
 
 CRITICAL RULES:
-- Use ONLY the source excerpts provided; do not invent facts. If a fact is not supported, mark it as [needs review].
+- Use the source excerpts provided as the foundation, but you MAY ALSO ADD your own expert knowledge to make the notes more comprehensive and complete.
 - Respect section headings actually observed on the referenced pages. You may merge similar headings (e.g., Advantages/Pros).
-- You MUST also include these blocks even if not present: Introduction, TL;DR in short simple points, Examples, Conclusion, Memory Aids, Common Mistakes.
-- Keep explanations concise but complete; use bullet points where helpful.
-- Include at least one Mermaid diagram when process/relationships are relevant.
+- Provide DETAILED, IN-DEPTH explanations for each concept. Do not be brief - students need thorough understanding.
+- Every section should have substantial content with examples, explanations, and practical insights.
+
+MANDATORY SECTIONS (include ALL that are applicable to the topic):
+1. **Introduction** - Comprehensive overview of the topic, its importance, and context
+2. **Need / Why It Is Required** - Explain the problem it solves, why it was developed, real-world necessity
+3. **Definition / Concept** - Clear, detailed definition with technical accuracy
+4. **Working Principle / How It Works** - Step-by-step explanation of the mechanism, process, or algorithm
+5. **Components / Parts / Architecture** - Detailed breakdown of constituent parts with their roles
+6. **Types / Classification / Categories** - Different variants, types, or classifications if applicable
+7. **Characteristics / Properties / Features** - Key attributes and distinguishing features
+8. **Formulas / Equations / Mathematical Representation** - Include all relevant formulas with explanations
+9. **Examples / Real-Life Examples / Case Studies** - Multiple practical examples, real-world applications
+10. **Solved Problems / Numerical Examples** - If applicable, include worked-out examples step-by-step
+11. **Advantages / Benefits / Pros** - Comprehensive list with explanations
+12. **Disadvantages / Limitations / Cons** - Honest assessment of drawbacks
+13. **Applications / Use Cases** - Real-world applications across industries
+14. **Comparison** - Compare with related concepts/technologies if relevant
+15. **TL;DR / Quick Summary** - Bullet points for quick revision
+16. **Memory Aids / Mnemonics** - Tricks to remember key concepts
+17. **Common Mistakes to Avoid** - Frequent errors students make
+18. **Conclusion** - Summarize key takeaways
+
+NOTE: Include sections only if they are RELEVANT to the topic. For theoretical topics, skip hardware components. For concepts without formulas, skip mathematical sections. Use your judgment.
+
+FORMATTING RULES:
+- Include at least 2-3 Mermaid diagrams when process/relationships/architecture are relevant.
 - Every non-obvious claim MUST carry an inline citation like [GFG], [TP], [Scaler], [Wiki], or [TPT] mapped in the CITATIONS section.
 - Prefer plain text + Mermaid diagrams; do not embed external images.
- - Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (Îµ-greedy)**, **Markov Decision Process (MDP)**, parameters like **Î¸**, **Î³**, **Î±**, algorithm names like **Q-learning**.
+- Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (ε-greedy)**, **Markov Decision Process (MDP)**, parameters like **θ**, **γ**, **α**, algorithm names like **Q-learning**.
+- Use tables to organize comparative information, specifications, or properties.
+- Use numbered lists for sequential processes and bullet points for unordered information.
 
 OUTPUT FORMAT (STRICT):
 Return a single Markdown document with:
 1) A title line: '# <Topic>'
-2) For each merged section title (after light normalization), a '## <Section>' block
+2) For each section, a '## <Section>' block with comprehensive content
 3) Use bullet points, short paragraphs, tables when appropriate (GitHub MD)
 4) Mermaid diagram(s) in fenced code blocks: ```mermaid ... ```
 5) A final '## CITATIONS' list mapping labels to URLs with short quoted spans
 
 If sources contradict, mark the line with [conflict] and keep both with citations.
 
-Keep it under ~1200â€“1500 words unless the topic is inherently longer.
+TARGET LENGTH: 1500-2000 words for comprehensive coverage. Be thorough and detailed.
 """
 
 
@@ -1493,20 +1519,47 @@ def generate_notes_markdown(topic: str, *, degree: Optional[str] = None) -> str:
     # 5) Call AutoGen Assistant
     assistant = build_agent()
     user_prompt = f"""
-You will compose the final Markdown notes now.
+You will compose comprehensive, exam-ready Markdown notes for the topic "{topic}".
 
-Context:
+Context from sources:
 {context}
 
-Instructions:
-- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" â†’ pick one).
-- Include the compulsory sections even if they were not present in sources.
-- Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
-- Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
-- Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+IMPORTANT INSTRUCTIONS:
+1. Create DETAILED, THOROUGH notes - students need complete understanding for exams.
+2. Use the source context as foundation, but ADD your expert knowledge to fill gaps and provide complete coverage.
+3. Normalize section titles (e.g., "Applications" vs. "Use Cases" - pick one).
 
-Start with '# {topic}' and then the sections in a logical order.
+MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
+- **Introduction**: Comprehensive overview with context and importance
+- **Need / Why It Is Required**: What problem does it solve? Why was it developed?
+- **Definition / Core Concept**: Clear, precise technical definition
+- **Working Principle / How It Works**: Detailed step-by-step mechanism or process
+- **Components / Architecture / Structure**: Break down into constituent parts with roles
+- **Types / Classification**: Different variants or categories if applicable
+- **Characteristics / Properties**: Key distinguishing features
+- **Formulas / Equations**: All relevant mathematical representations with explanations
+- **Examples / Real-Life Examples**: Multiple practical, relatable examples
+- **Solved Problems**: Worked-out numerical examples if applicable
+- **Advantages**: Comprehensive list with brief explanations
+- **Disadvantages / Limitations**: Honest assessment of drawbacks
+- **Applications**: Real-world use cases across industries
+- **Comparison with Related Concepts**: If relevant, compare with alternatives
+- **TL;DR / Quick Summary**: Bullet points for quick revision
+- **Memory Aids / Mnemonics**: Tricks and tips to remember concepts
+- **Common Mistakes to Avoid**: Frequent student errors
+- **Conclusion**: Key takeaways
+
+FORMATTING REQUIREMENTS:
+- Generate 2-3 Mermaid diagrams for processes, architectures, or relationships
+- Build a final '## CITATIONS' section mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to source URLs
+- Inline citations: "... property ... [GFG]" or "... step ... [Wiki]" after statements
+- Bold important keywords/terms with **...** (e.g., **algorithm name**, **theta**, **gamma**, **alpha**)
+- Use tables for comparisons, specifications, or structured data
+- Use numbered lists for sequential steps, bullet points for features/properties
+
+TARGET LENGTH: 2500-4000 words for comprehensive exam preparation.
+
+Start with '# {topic}' and organize sections in a logical educational flow.
 """
     # Use safe runner to support both CLI and FastAPI contexts
     result = _run_assistant_blocking(assistant, user_prompt)
@@ -1556,22 +1609,49 @@ Output rules (STRICT):
 - Bold important terms with **...**.
 - Include a final '## CITATIONS' section with labelâ†’URL list for the sources you used.
 """.strip()
-    # default detailed prompt remains as before
+    # default detailed prompt - comprehensive and thorough
     return f"""
-You will compose the final Markdown notes now.
+You will compose comprehensive, exam-ready Markdown notes for the topic "{topic}".
 
-Context:
+Context from sources:
 {context}
 
-Instructions:
-- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" â†’ pick one).
-- Include the compulsory sections even if they were not present in sources.
-- Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
-- Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
-- Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
-- Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+IMPORTANT INSTRUCTIONS:
+1. Create DETAILED, THOROUGH notes - students need complete understanding for exams.
+2. Use the source context as foundation, but ADD your expert knowledge to fill gaps and provide complete coverage.
+3. Normalize section titles (e.g., "Applications" vs. "Use Cases" → pick one).
 
-Start with '# {topic}' and then the sections in a logical order.
+MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
+- **Introduction**: Comprehensive overview with context and importance
+- **Need / Why It Is Required**: What problem does it solve? Why was it developed?
+- **Definition / Core Concept**: Clear, precise technical definition
+- **Working Principle / How It Works**: Detailed step-by-step mechanism or process
+- **Components / Architecture / Structure**: Break down into constituent parts with roles
+- **Types / Classification**: Different variants or categories if applicable
+- **Characteristics / Properties**: Key distinguishing features
+- **Formulas / Equations**: All relevant mathematical representations with explanations
+- **Examples / Real-Life Examples**: Multiple practical, relatable examples
+- **Solved Problems**: Worked-out numerical examples if applicable
+- **Advantages**: Comprehensive list with brief explanations
+- **Disadvantages / Limitations**: Honest assessment of drawbacks
+- **Applications**: Real-world use cases across industries
+- **Comparison with Related Concepts**: If relevant, compare with alternatives
+- **TL;DR / Quick Summary**: Bullet points for quick revision
+- **Memory Aids / Mnemonics**: Tricks and tips to remember concepts
+- **Common Mistakes to Avoid**: Frequent student errors
+- **Conclusion**: Key takeaways
+
+FORMATTING REQUIREMENTS:
+- Generate 2-3 Mermaid diagrams for processes, architectures, or relationships
+- Build a final '## CITATIONS' section mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to source URLs
+- Inline citations: "... property ... [GFG]" or "... step ... [Wiki]" after statements
+- Bold important keywords/terms with **...** (e.g., **algorithm name**, **θ**, **γ**, **α**)
+- Use tables for comparisons, specifications, or structured data
+- Use numbered lists for sequential steps, bullet points for features/properties
+
+TARGET LENGTH: 2500-4000 words for comprehensive exam preparation.
+
+Start with '# {topic}' and organize sections in a logical educational flow.
 """.strip()
 
 def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None, variant: str = "detailed", degree: Optional[str] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
