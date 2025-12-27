@@ -3186,8 +3186,17 @@ def signup_user(user):
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
     try:
         res = anon_client.auth.sign_up({"email": user.email, "password": user.password})
-        token = _extract_access_token(res)
-        return {"message": "Signup initiated", "access_token": token, "raw": getattr(res, "__dict__", res)}
+        # Extract session data for persistent login
+        session = getattr(res, "session", None)
+        access_token = getattr(session, "access_token", None) if session else None
+        refresh_token = getattr(session, "refresh_token", None) if session else None
+        expires_in = getattr(session, "expires_in", 3600) if session else 3600
+        return {
+            "message": "Signup initiated",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": expires_in,
+        }
     except Exception as e:
         supabase_logger.exception("Signup error")
         raise HTTPException(status_code=400, detail=str(e))
@@ -3199,8 +3208,21 @@ def login_user(user):
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
     try:
         res = anon_client.auth.sign_in_with_password({"email": user.email, "password": user.password})
-        token = _extract_access_token(res)
-        return {"message": "Login successful", "access_token": token, "raw": getattr(res, "__dict__", res)}
+        # Extract session data for persistent login
+        session = getattr(res, "session", None)
+        access_token = getattr(session, "access_token", None) if session else None
+        refresh_token = getattr(session, "refresh_token", None) if session else None
+        expires_in = getattr(session, "expires_in", 3600) if session else 3600
+        if not access_token:
+            raise HTTPException(status_code=401, detail="Login failed: no session returned")
+        return {
+            "message": "Login successful",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": expires_in,
+        }
+    except HTTPException:
+        raise
     except Exception:
         supabase_logger.exception("Login failed")
         raise HTTPException(status_code=401, detail="Invalid credentials or login failed")
@@ -8829,6 +8851,44 @@ def signup(user: UserAuth):
 @academics_router.post("/login")
 def login(user: UserAuth):
     return login_user(user)
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+@academics_router.post("/refresh", summary="Refresh access token using refresh token")
+def refresh_token(payload: RefreshTokenRequest):
+    """Refresh the access token using a valid refresh token.
+    
+    This endpoint allows clients to obtain a new access token without
+    requiring the user to re-enter credentials. Used for persistent sessions.
+    """
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
+    if not payload.refresh_token:
+        raise HTTPException(status_code=400, detail="refresh_token is required")
+    try:
+        # Use Supabase's refresh_session method
+        res = anon_client.auth.refresh_session(payload.refresh_token)
+        session = getattr(res, "session", None)
+        access_token = getattr(session, "access_token", None) if session else None
+        refresh_token = getattr(session, "refresh_token", None) if session else None
+        expires_in = getattr(session, "expires_in", 3600) if session else 3600
+        if not access_token:
+            raise HTTPException(status_code=401, detail="Token refresh failed: invalid or expired refresh token")
+        return {
+            "message": "Token refreshed successfully",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": expires_in,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        supabase_logger.exception("Token refresh failed")
+        raise HTTPException(status_code=401, detail="Token refresh failed: invalid or expired refresh token")
 
 
 @academics_router.get("/api/public/supabase", summary="Public Supabase client config")

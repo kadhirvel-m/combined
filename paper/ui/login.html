@@ -528,8 +528,20 @@
       showLoader();
       const hash = new URLSearchParams(location.hash.slice(1));
       const token = hash.get('access_token');
+      const refreshToken = hash.get('refresh_token');
+      const expiresIn = hash.get('expires_in');
       if (token) {
-        try { localStorage.setItem('px_token', token); } catch { }
+        try {
+          localStorage.setItem('px_token', token);
+          // Store refresh token and expiry for persistent OAuth sessions
+          if (refreshToken) {
+            localStorage.setItem('px_refresh_token', refreshToken);
+          }
+          if (expiresIn) {
+            const expiresAt = Date.now() + (parseInt(expiresIn, 10) * 1000);
+            localStorage.setItem('px_token_expires_at', expiresAt.toString());
+          }
+        } catch { }
         history.replaceState(null, document.title, location.pathname + location.search);
         try {
           await fetch(`${apiBase}/api/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
@@ -563,6 +575,15 @@
         if (out.access_token) {
           try {
             localStorage.setItem('px_token', out.access_token);
+            // Store refresh token and expiry for persistent sessions
+            if (out.refresh_token) {
+              localStorage.setItem('px_refresh_token', out.refresh_token);
+            }
+            if (out.expires_in) {
+              // Store token expiry time (current time + expires_in seconds)
+              const expiresAt = Date.now() + (out.expires_in * 1000);
+              localStorage.setItem('px_token_expires_at', expiresAt.toString());
+            }
             // Enforce single active session: clear teacher session if any
             localStorage.removeItem('teacherToken');
           } catch { }
