@@ -29,12 +29,70 @@
   const API = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
   const USER_TOKEN_KEY = 'px_token';
   const TEACHER_TOKEN_KEY = 'teacherToken';
+  const REFRESH_TOKEN_KEY = 'px_refresh_token';
+  const TOKEN_EXPIRES_KEY = 'px_token_expires_at';
   const tokenUser = safeGet(USER_TOKEN_KEY);
   const tokenTeacher = safeGet(TEACHER_TOKEN_KEY);
 
   function safeGet(k){ try { return localStorage.getItem(k); } catch(_) { return null; } }
   function safeSet(k,v){ try { localStorage.setItem(k,v); } catch(_) { } }
   function safeRemove(k){ try { localStorage.removeItem(k); } catch(_) { } }
+
+  // Auto-refresh token if expired or about to expire (within 5 minutes)
+  async function refreshTokensIfNeeded() {
+    const refreshToken = safeGet(REFRESH_TOKEN_KEY);
+    const expiresAt = safeGet(TOKEN_EXPIRES_KEY);
+    const accessToken = safeGet(USER_TOKEN_KEY);
+    
+    // If no refresh token, can't refresh
+    if (!refreshToken) return false;
+    
+    // If access token exists and not expired (with 5 min buffer), no refresh needed
+    if (accessToken && expiresAt) {
+      const expiryTime = parseInt(expiresAt, 10);
+      const bufferMs = 5 * 60 * 1000; // 5 minutes
+      if (Date.now() < (expiryTime - bufferMs)) {
+        return true; // Token still valid
+      }
+    }
+    
+    // Need to refresh
+    try {
+      const res = await fetch(`${API}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken })
+      });
+      if (!res.ok) {
+        // Refresh failed - clear tokens and redirect to login
+        clearAllTokens();
+        return false;
+      }
+      const data = await res.json();
+      if (data.access_token) {
+        safeSet(USER_TOKEN_KEY, data.access_token);
+        if (data.refresh_token) {
+          safeSet(REFRESH_TOKEN_KEY, data.refresh_token);
+        }
+        if (data.expires_in) {
+          const newExpiresAt = Date.now() + (data.expires_in * 1000);
+          safeSet(TOKEN_EXPIRES_KEY, newExpiresAt.toString());
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Token refresh failed:', e);
+      return false;
+    }
+  }
+
+  function clearAllTokens() {
+    safeRemove(USER_TOKEN_KEY);
+    safeRemove(TEACHER_TOKEN_KEY);
+    safeRemove(REFRESH_TOKEN_KEY);
+    safeRemove(TOKEN_EXPIRES_KEY);
+  }
 
   const el = (id) => document.getElementById(id);
 
@@ -170,9 +228,8 @@
 
   function handleSignOut(ev){
     if(ev) ev.preventDefault();
-    // Clear both possible sessions to enforce exclusivity
-    safeRemove(USER_TOKEN_KEY);
-    safeRemove(TEACHER_TOKEN_KEY);
+    // Clear all session tokens including refresh tokens
+    clearAllTokens();
     if(typeof window.__PX_CLOSE_MOBILE_NAV === 'function'){ window.__PX_CLOSE_MOBILE_NAV(); }
     window.location.href = 'login.html';
   }
@@ -231,7 +288,17 @@
     } catch(e){ /* swallow */ }
   }
 
-  function init(){
+  async function init(){
+    // Auto-refresh token if needed (for persistent sessions)
+    const hasRefreshToken = safeGet(REFRESH_TOKEN_KEY);
+    if (hasRefreshToken) {
+      const refreshed = await refreshTokensIfNeeded();
+      if (!refreshed && !safeGet(USER_TOKEN_KEY)) {
+        // Refresh failed and no access token - user needs to re-login
+        clearAllTokens();
+      }
+    }
+
     const session = activeSession();
     const useShopProfile = wantsShopProfile();
     if(session.token){
