@@ -15145,8 +15145,14 @@ def create_app() -> FastAPI:
     # Note: Using allow_origin_regex to correctly echo Origin when credentials are enabled.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[],
-        allow_origin_regex=r".*",
+        allow_origins=[
+            "https://paperx.tech",
+            "https://www.paperx.tech",
+            "https://lionfish-app-ynu29.ondigitalocean.app",
+            "https://uppzpkmpxgyipjzcskva.supabase.co",
+            "http://127.0.0.1:5501",
+            "http://127.0.0.1:8000",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
