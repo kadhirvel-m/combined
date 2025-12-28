@@ -14942,6 +14942,200 @@ def api_youtube_channel_logo(
         raise HTTPException(status_code=500, detail=f"Channel logo lookup failed: {str(e)}")
 
 
+# --- Streak API ---
+
+class StreakResponse(BaseModel):
+    current_streak: int = 0
+    longest_streak: int = 0
+    last_activity_date: Optional[str] = None
+    next_milestone: int = 7
+    prev_milestone: int = 0
+    milestone_progress: int = 0
+    days_completed: int = 0
+    week_data: List[dict] = []
+
+STREAK_MILESTONES = [7, 14, 21, 30, 60, 90, 180, 365]
+
+def _get_next_milestone(current: int) -> int:
+    for m in STREAK_MILESTONES:
+        if current < m:
+            return m
+    return STREAK_MILESTONES[-1] + 100
+
+def _get_prev_milestone(current: int) -> int:
+    for i in range(len(STREAK_MILESTONES) - 1, -1, -1):
+        if current >= STREAK_MILESTONES[i]:
+            return STREAK_MILESTONES[i]
+    return 0
+
+@academics_router.get("/api/streak", response_model=StreakResponse, summary="Get user streak data")
+def get_user_streak(authorization: Optional[str] = Header(default=None)):
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing authorization")
+    
+    try:
+        user_id = _get_user_id_with_retry(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    supabase = get_service_client()
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    
+    # Get user profile ID
+    prof_q = supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
+    if not prof_q.data:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    profile_id = prof_q.data[0]["id"]
+    
+    # Get or create streak record
+    streak_q = supabase.table("notex_streak").select("*").eq("user_profile_id", profile_id).limit(1).execute()
+    
+    if not streak_q.data:
+        # Create new streak record
+        new_streak = {
+            "user_profile_id": profile_id,
+            "current_streak": 1,
+            "longest_streak": 1,
+            "last_activity_date": today.isoformat()
+        }
+        supabase.table("notex_streak").insert(new_streak).execute()
+        streak_data = new_streak
+    else:
+        streak_data = streak_q.data[0]
+        last_date_str = streak_data.get("last_activity_date")
+        
+        # Check if we need to update streak
+        if last_date_str:
+            try:
+                last_date = date.fromisoformat(str(last_date_str))
+            except:
+                last_date = None
+            
+            if last_date:
+                if last_date == today:
+                    # Already visited today, no change needed
+                    pass
+                elif last_date == yesterday:
+                    # Continue streak
+                    new_current = streak_data.get("current_streak", 0) + 1
+                    new_longest = max(new_current, streak_data.get("longest_streak", 0))
+                    supabase.table("notex_streak").update({
+                        "current_streak": new_current,
+                        "longest_streak": new_longest,
+                        "last_activity_date": today.isoformat(),
+                        "updated_at": datetime.utcnow().isoformat()
+                    }).eq("user_profile_id", profile_id).execute()
+                    streak_data["current_streak"] = new_current
+                    streak_data["longest_streak"] = new_longest
+                    streak_data["last_activity_date"] = today.isoformat()
+                else:
+                    # Streak broken, reset to 1
+                    supabase.table("notex_streak").update({
+                        "current_streak": 1,
+                        "last_activity_date": today.isoformat(),
+                        "updated_at": datetime.utcnow().isoformat()
+                    }).eq("user_profile_id", profile_id).execute()
+                    streak_data["current_streak"] = 1
+                    streak_data["last_activity_date"] = today.isoformat()
+        else:
+            # No last activity, start fresh
+            supabase.table("notex_streak").update({
+                "current_streak": 1,
+                "last_activity_date": today.isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("user_profile_id", profile_id).execute()
+            streak_data["current_streak"] = 1
+            streak_data["last_activity_date"] = today.isoformat()
+    
+    current = streak_data.get("current_streak", 0)
+    longest = streak_data.get("longest_streak", 0)
+    
+    # Calculate milestones
+    next_m = _get_next_milestone(current)
+    prev_m = _get_prev_milestone(current)
+    range_val = next_m - prev_m
+    progress = round(((current - prev_m) / range_val) * 100) if range_val > 0 else 0
+    
+    # Get activity logs for this week
+    week_start = today - timedelta(days=today.weekday())  # Monday
+    activity_q = supabase.table("notex_activity_logs").select("activity_date").eq("user_profile_id", profile_id).gte("activity_date", week_start.isoformat()).execute()
+    active_dates = set()
+    for a in (activity_q.data or []):
+        if a.get("activity_date"):
+            active_dates.add(str(a["activity_date"]))
+    
+    # Also include today if streak is active
+    if streak_data.get("last_activity_date") == today.isoformat():
+        active_dates.add(today.isoformat())
+    
+    # Build week data
+    day_names = ["M", "T", "W", "T", "F", "S", "S"]
+    today_index = today.weekday()
+    week_data = []
+    for i in range(7):
+        day_date = week_start + timedelta(days=i)
+        is_today = i == today_index
+        is_future = i > today_index
+        is_active = day_date.isoformat() in active_dates
+        week_data.append({
+            "day": day_names[i],
+            "date": day_date.day,
+            "is_today": is_today,
+            "is_active": is_active,
+            "is_future": is_future
+        })
+    
+    days_completed = len([d for d in week_data if d["is_active"]])
+    
+    return StreakResponse(
+        current_streak=current,
+        longest_streak=longest,
+        last_activity_date=streak_data.get("last_activity_date"),
+        next_milestone=next_m,
+        prev_milestone=prev_m,
+        milestone_progress=progress,
+        days_completed=days_completed,
+        week_data=week_data
+    )
+
+@academics_router.post("/api/streak/ping", summary="Record user activity for streak")
+def ping_streak(authorization: Optional[str] = Header(default=None)):
+    """Call this endpoint when user is active to maintain streak."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing authorization")
+    
+    try:
+        user_id = _get_user_id_with_retry(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    supabase = get_service_client()
+    today = date.today()
+    
+    # Get user profile ID
+    prof_q = supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
+    if not prof_q.data:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    profile_id = prof_q.data[0]["id"]
+    
+    # Record activity log for today (upsert)
+    try:
+        # Check if already logged today
+        existing = supabase.table("notex_activity_logs").select("id").eq("user_profile_id", profile_id).eq("activity_date", today.isoformat()).limit(1).execute()
+        if not existing.data:
+            supabase.table("notex_activity_logs").insert({
+                "user_profile_id": profile_id,
+                "activity_date": today.isoformat()
+            }).execute()
+    except Exception:
+        pass  # Ignore duplicate key errors
+    
+    return {"status": "ok", "date": today.isoformat()}
+
+
 # --- FastAPI app ---
 
 def create_app() -> FastAPI:
@@ -15295,9 +15489,10 @@ async def analytics_dashboard_metrics():
 
         # Fetch Profiles
         users_list = []
+        profile_id_map = {}  # auth_user_id -> profile id
         if wau_users:
             try:
-                prof_res = supabase.table("user_profiles").select("auth_user_id, name, email, profile_image_url").in_("auth_user_id", list(wau_users)).execute()
+                prof_res = supabase.table("user_profiles").select("id, auth_user_id, name, email, profile_image_url").in_("auth_user_id", list(wau_users)).execute()
                 profiles = getattr(prof_res, 'data', []) or []
                 for p in profiles:
                     uid = p.get("auth_user_id")
@@ -15305,6 +15500,20 @@ async def analytics_dashboard_metrics():
                         users_map[uid]["name"] = p.get("name")
                         users_map[uid]["email"] = p.get("email")
                         users_map[uid]["image"] = p.get("profile_image_url")
+                        users_map[uid]["streak"] = 0  # default
+                        profile_id_map[p.get("id")] = uid
+            except: pass
+        
+        # Fetch Streak data from notex_streak table
+        if profile_id_map:
+            try:
+                streak_res = supabase.table("notex_streak").select("user_profile_id, current_streak").in_("user_profile_id", list(profile_id_map.keys())).execute()
+                streaks = getattr(streak_res, 'data', []) or []
+                for s in streaks:
+                    profile_id = s.get("user_profile_id")
+                    if profile_id in profile_id_map:
+                        uid = profile_id_map[profile_id]
+                        users_map[uid]["streak"] = s.get("current_streak", 0)
             except: pass
         
         # Convert to list

@@ -180,6 +180,7 @@
                             <th class="py-3 px-4 text-center">NoteX Views</th>
                             <th class="py-3 px-4 text-center">Blink Views</th>
                             <th class="py-3 px-4 text-center">LabX Starts</th>
+                            <th class="py-3 px-4 text-center">Streak</th>
                             <th class="py-3 px-4 text-center">Sessions</th>
                             <th class="py-3 px-4 text-right">Last Active</th>
                         </tr>
@@ -266,7 +267,7 @@
                 tbody.innerHTML = '';
                 const users = data.users || [];
                 if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-gray-500">No active users found in the last 7 days.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-gray-500">No active users found in the last 7 days.</td></tr>';
                 } else {
                     users.forEach(u => {
                         const row = document.createElement('tr');
@@ -285,6 +286,9 @@
                             imgHtml = `<div class="h-8 w-8 rounded-full bg-brand-600 flex items-center justify-center text-xs font-bold text-white">${init}</div>`;
                         }
 
+                        const streak = u.streak || 0;
+                        const streakColor = streak >= 7 ? 'text-green-400' : streak >= 3 ? 'text-yellow-400' : 'text-gray-300';
+
                         row.innerHTML = `
                             <td class="py-3 px-4">
                                 <div class="flex items-center gap-3">
@@ -298,6 +302,12 @@
                             <td class="py-3 px-4 text-center text-gray-300">${u.notex}</td>
                             <td class="py-3 px-4 text-center text-gray-300">${u.blink}</td>
                             <td class="py-3 px-4 text-center text-gray-300">${u.labx}</td>
+                            <td class="py-3 px-4 text-center ${streakColor}">
+                                <span class="inline-flex items-center gap-1">
+                                    <span class="material-symbols-rounded text-sm">local_fire_department</span>
+                                    ${streak}
+                                </span>
+                            </td>
                             <td class="py-3 px-4 text-center text-gray-300">${u.sessions}</td>
                             <td class="py-3 px-4 text-right text-gray-400 text-xs">${lastSeen}</td>
                         `;
