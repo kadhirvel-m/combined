@@ -356,7 +356,18 @@
         const res = await fetch(`${apiBase}/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) { status.textContent = `❌ ${out?.detail || out?.message || 'Signup failed.'}`; return; }
-        if (out.access_token) { try { localStorage.setItem('px_token', out.access_token); } catch { } }
+        if (out.access_token) {
+          try {
+            localStorage.setItem('px_token', out.access_token);
+            if (out.refresh_token) {
+              localStorage.setItem('px_refresh_token', out.refresh_token);
+            }
+            if (out.expires_in) {
+              const expiresAt = Date.now() + (out.expires_in * 1000);
+              localStorage.setItem('px_token_expires_at', expiresAt.toString());
+            }
+          } catch { }
+        }
         status.textContent = '✔ Account created. Redirecting…';
         setTimeout(() => { window.location.href = 'profile_edit.html'; }, 600);
       } catch (err) { status.textContent = '❌ Network error. Please try again.'; }
