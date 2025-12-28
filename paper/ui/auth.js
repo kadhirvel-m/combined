@@ -40,21 +40,28 @@
 
   // Auto-refresh token if expired or about to expire (within 5 minutes)
   async function refreshTokensIfNeeded() {
+    console.log('[Auth] Checking if token refresh is needed...');
     const refreshToken = safeGet(REFRESH_TOKEN_KEY);
     const expiresAt = safeGet(TOKEN_EXPIRES_KEY);
     const accessToken = safeGet(USER_TOKEN_KEY);
     
     // If no refresh token, can't refresh
-    if (!refreshToken) return false;
+    if (!refreshToken) {
+      console.log('[Auth] No refresh token found. Skipping auto-refresh.');
+      return false;
+    }
     
     // If access token exists and not expired (with 5 min buffer), no refresh needed
     if (accessToken && expiresAt) {
       const expiryTime = parseInt(expiresAt, 10);
       const bufferMs = 5 * 60 * 1000; // 5 minutes
       if (Date.now() < (expiryTime - bufferMs)) {
+        console.log('[Auth] Access token is still valid. No refresh needed.');
         return true; // Token still valid
       }
     }
+    
+    console.log('[Auth] Token expired or missing. Attempting refresh...');
     
     // Need to refresh
     try {
@@ -64,12 +71,14 @@
         body: JSON.stringify({ refresh_token: refreshToken })
       });
       if (!res.ok) {
+        console.error('[Auth] Refresh request failed:', res.status);
         // Refresh failed - clear tokens and redirect to login
         clearAllTokens();
         return false;
       }
       const data = await res.json();
       if (data.access_token) {
+        console.log('[Auth] Token refreshed successfully.');
         safeSet(USER_TOKEN_KEY, data.access_token);
         if (data.refresh_token) {
           safeSet(REFRESH_TOKEN_KEY, data.refresh_token);
@@ -82,7 +91,7 @@
       }
       return false;
     } catch (e) {
-      console.error('Token refresh failed:', e);
+      console.error('[Auth] Token refresh failed with exception:', e);
       return false;
     }
   }
@@ -294,9 +303,12 @@
     if (hasRefreshToken) {
       const refreshed = await refreshTokensIfNeeded();
       if (!refreshed && !safeGet(USER_TOKEN_KEY)) {
+        console.warn('[Auth] Init - Refresh failed and no access token. Clearing session.');
         // Refresh failed and no access token - user needs to re-login
         clearAllTokens();
       }
+    } else {
+        console.log('[Auth] Init - No refresh token found.');
     }
 
     const session = activeSession();

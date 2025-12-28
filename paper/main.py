@@ -1450,7 +1450,7 @@ Return a single Markdown document with:
 
 If sources contradict, mark the line with [conflict] and keep both with citations.
 
-TARGET LENGTH: 1500-2000 words for comprehensive coverage. Be thorough and detailed.
+TARGET LENGTH: 1000-1500 words for comprehensive coverage. Be thorough and detailed.
 """
 
 

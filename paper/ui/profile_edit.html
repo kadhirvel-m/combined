@@ -59,8 +59,9 @@
                     <span class="material-symbols-rounded">arrow_back</span> Back
                 </a>
                 <div class="flex items-center gap-3">
-                    <a href="profile.html"
-                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-white shadow-neon">Done</a>
+                    <button id="saveChangesBtn" type="button"
+                        class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-4 py-2 text-white shadow-neon">Save
+                        Changes</button>
                     <button id="signOutBtn" title="Sign out" aria-label="Sign out"
                         class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 text-sm">
                         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
@@ -749,9 +750,6 @@
                         <div class="flex items-center justify-between">
                             <a href="profile.html"
                                 class="rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-2 hover:border-brand-400/60">Cancel</a>
-                            <button type="submit"
-                                class="rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 px-5 py-2.5 text-white shadow-neon">Save
-                                Changes</button>
                         </div>
                         <div id="status"
                             class="hidden text-xs rounded border border-slate-200/60 dark:border-white/10 p-2"></div>
@@ -1708,6 +1706,10 @@
             if (res.ok) loadProfile();
         });
 
+        document.getElementById('saveChangesBtn')?.addEventListener('click', () => {
+            document.getElementById('detailsForm')?.requestSubmit();
+        });
+
         document.getElementById('detailsForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             // Show loader manually
@@ -1762,7 +1764,7 @@
                 const st = document.getElementById('status'); st.classList.remove('hidden');
                 st.textContent = res.ok ? '✔ Profile updated' : `❌ ${out?.detail || 'Update failed'}`;
                 if (res.ok) {
-                    await loadProfile();
+                    window.location.href = 'academicas.html';
                 }
             } catch (err) {
                 console.error(err);
