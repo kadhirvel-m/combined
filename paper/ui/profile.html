@@ -33,6 +33,7 @@
     })();
   </script>
   <script src="config.js"></script>
+  <script src="auth.js" defer></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -863,9 +864,11 @@
 
     const API = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
     const token = localStorage.getItem('px_token');
+    const refreshToken = localStorage.getItem('px_refresh_token');
     const statusEl = document.getElementById('status');
     const el = (id) => document.getElementById(id);
-    if (!token) { window.location.href = 'login.html'; }
+    // Only redirect if no access token AND no refresh token (can't recover session)
+    if (!token && !refreshToken) { window.location.href = 'login.html'; }
 
     const defaultText = (v, fb = '--') => v ? v : fb;
     const setText = (id, v, fb = '--') => { const n = el(id); if (n) n.textContent = defaultText(v, fb); };
@@ -1283,11 +1286,71 @@
         }
       }
     };
+    // Token refresh helper - attempts to refresh access token if expired or about to expire
+    const refreshTokenIfNeeded = async () => {
+      const REFRESH_TOKEN_KEY = 'px_refresh_token';
+      const TOKEN_EXPIRES_KEY = 'px_token_expires_at';
+      const USER_TOKEN_KEY = 'px_token';
+
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+      const expiresAt = localStorage.getItem(TOKEN_EXPIRES_KEY);
+      const accessToken = localStorage.getItem(USER_TOKEN_KEY);
+
+      // If no refresh token, can't refresh
+      if (!refreshToken) return false;
+
+      // If access token exists and not expired (with 5 min buffer), no refresh needed
+      if (accessToken && expiresAt) {
+        const expiryTime = parseInt(expiresAt, 10);
+        const bufferMs = 5 * 60 * 1000; // 5 minutes
+        if (Date.now() < (expiryTime - bufferMs)) {
+          return true; // Token still valid
+        }
+      }
+
+      // Need to refresh
+      try {
+        console.log('[Profile] Token expired or missing. Attempting refresh...');
+        const res = await fetch(`${API}/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        });
+        if (!res.ok) {
+          console.warn('[Profile] Refresh failed:', res.status);
+          return false;
+        }
+        const data = await res.json();
+        if (data.access_token) {
+          console.log('[Profile] Token refreshed successfully.');
+          localStorage.setItem(USER_TOKEN_KEY, data.access_token);
+          if (data.refresh_token) {
+            localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+          }
+          if (data.expires_in) {
+            const newExpiresAt = Date.now() + (data.expires_in * 1000);
+            localStorage.setItem(TOKEN_EXPIRES_KEY, newExpiresAt.toString());
+          }
+          return true;
+        }
+        return false;
+      } catch (e) {
+        console.error('[Profile] Token refresh failed:', e);
+        return false;
+      }
+    };
 
     const loadProfile = async () => {
+      // First attempt to refresh token if needed
+      await refreshTokenIfNeeded();
+
+      // Re-read token after potential refresh
+      const currentToken = localStorage.getItem('px_token');
+      if (!currentToken) { window.location.href = 'login.html'; return; }
+
       statusEl.textContent = 'Loading profile…';
       try {
-        const res = await fetch(`${API}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`${API}/api/me`, { headers: { Authorization: `Bearer ${currentToken}` } });
         if (res.status === 401) { localStorage.removeItem('px_token'); window.location.href = 'login.html'; return; }
         const data = await res.json();
         const profile = data?.profile || {};

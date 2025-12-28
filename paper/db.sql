@@ -1,6 +1,13 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+CREATE TABLE public.active_subjects (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  code text NOT NULL UNIQUE,
+  name text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT active_subjects_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.admin_roles (
   auth_user_id uuid NOT NULL,
   role text NOT NULL DEFAULT 'student'::text,
@@ -18,6 +25,7 @@ CREATE TABLE public.ai_notes (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   image_urls ARRAY DEFAULT '{}'::text[],
+  labs text,
   CONSTRAINT ai_notes_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.ai_notes_cheatsheet (
@@ -51,6 +59,16 @@ CREATE TABLE public.ai_notes_user_edits (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT ai_notes_user_edits_pkey PRIMARY KEY (id),
   CONSTRAINT ai_notes_user_edits_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.analytics_events (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  session_id uuid,
+  event_type text NOT NULL,
+  event_data jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT analytics_events_pkey PRIMARY KEY (id),
+  CONSTRAINT analytics_events_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.user_sessions(id)
 );
 CREATE TABLE public.batches (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -209,6 +227,25 @@ CREATE TABLE public.marketplace_reviews (
   CONSTRAINT marketplace_reviews_note_id_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id),
   CONSTRAINT marketplace_reviews_reviewer_user_id_fkey FOREIGN KEY (reviewer_user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.notex_activity_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  activity_date date NOT NULL DEFAULT CURRENT_DATE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT notex_activity_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT notex_activity_logs_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.notex_streak (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL UNIQUE,
+  current_streak integer DEFAULT 0,
+  longest_streak integer DEFAULT 0,
+  last_activity_date date DEFAULT CURRENT_DATE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT notex_streak_pkey PRIMARY KEY (id),
+  CONSTRAINT notex_streak_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+);
 CREATE TABLE public.print_job_events (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   job_id uuid NOT NULL,
@@ -330,6 +367,50 @@ CREATE TABLE public.projects (
   CONSTRAINT projects_pkey PRIMARY KEY (id),
   CONSTRAINT projects_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.pyq_papers (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  subject_id uuid,
+  year integer NOT NULL,
+  title text,
+  paper_path text NOT NULL,
+  paper_url text NOT NULL,
+  uploaded_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pyq_papers_pkey PRIMARY KEY (id),
+  CONSTRAINT pyq_papers_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.active_subjects(id)
+);
+CREATE TABLE public.pyq_solutions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  pyq_paper_id uuid,
+  solution_path text NOT NULL,
+  solution_url text NOT NULL,
+  uploaded_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pyq_solutions_pkey PRIMARY KEY (id),
+  CONSTRAINT pyq_solutions_pyq_paper_id_fkey FOREIGN KEY (pyq_paper_id) REFERENCES public.pyq_papers(id)
+);
+CREATE TABLE public.questions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  topic_id uuid,
+  year integer NOT NULL,
+  marks integer,
+  type text,
+  question_content text NOT NULL,
+  options jsonb,
+  answer jsonb,
+  has_diagram boolean DEFAULT false,
+  diagram_note text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT questions_pkey PRIMARY KEY (id),
+  CONSTRAINT questions_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.topics(id)
+);
+CREATE TABLE public.sections (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  subject_code text,
+  name text NOT NULL,
+  order_no integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT sections_pkey PRIMARY KEY (id),
+  CONSTRAINT sections_subject_code_fkey FOREIGN KEY (subject_code) REFERENCES public.active_subjects(code)
+);
 CREATE TABLE public.skill_tests (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
@@ -361,6 +442,7 @@ CREATE TABLE public.syllabus_courses (
   title text NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  type text DEFAULT 'practical'::text,
   CONSTRAINT syllabus_courses_pkey PRIMARY KEY (id),
   CONSTRAINT syllabus_courses_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id)
 );
@@ -374,6 +456,7 @@ CREATE TABLE public.syllabus_topics (
   image_url text,
   video_url text,
   ppt_url text,
+  labs text NOT NULL DEFAULT ''::text,
   lab_url text,
   CONSTRAINT syllabus_topics_pkey PRIMARY KEY (id),
   CONSTRAINT syllabus_topics_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.syllabus_units(id)
@@ -472,6 +555,82 @@ CREATE TABLE public.teacher_profiles (
   CONSTRAINT teacher_profiles_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
   CONSTRAINT teacher_profiles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.test_attempts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  test_id uuid NOT NULL,
+  student_user_id uuid NOT NULL,
+  answers jsonb NOT NULL DEFAULT '[]'::jsonb,
+  score integer NOT NULL DEFAULT 0,
+  elapsed_seconds integer,
+  started_at timestamp with time zone NOT NULL DEFAULT now(),
+  submitted_at timestamp with time zone,
+  CONSTRAINT test_attempts_pkey PRIMARY KEY (id),
+  CONSTRAINT test_attempts_test_id_fkey FOREIGN KEY (test_id) REFERENCES public.tests(id),
+  CONSTRAINT test_attempts_student_user_id_fkey FOREIGN KEY (student_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.test_questions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  test_id uuid NOT NULL,
+  prompt text NOT NULL,
+  options ARRAY NOT NULL CHECK (cardinality(options) >= 2 AND cardinality(options) <= 8),
+  correct_index integer NOT NULL,
+  points integer NOT NULL DEFAULT 1,
+  question_order integer NOT NULL DEFAULT 0,
+  CONSTRAINT test_questions_pkey PRIMARY KEY (id),
+  CONSTRAINT test_questions_test_id_fkey FOREIGN KEY (test_id) REFERENCES public.tests(id)
+);
+CREATE TABLE public.tests (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  teacher_user_id uuid NOT NULL,
+  class_id uuid,
+  title text NOT NULL,
+  description text,
+  duration_seconds integer CHECK (duration_seconds >= 0),
+  max_score integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  accepting_submissions boolean NOT NULL DEFAULT true,
+  CONSTRAINT tests_pkey PRIMARY KEY (id),
+  CONSTRAINT tests_teacher_user_id_fkey FOREIGN KEY (teacher_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.topic_feedback (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  topic_id text NOT NULL,
+  is_helpful boolean NOT NULL,
+  comment text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT topic_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT topic_feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.topics (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  unit_id uuid,
+  name text NOT NULL,
+  difficulty text CHECK (difficulty IS NULL OR (difficulty = ANY (ARRAY['Easy'::text, 'Medium'::text, 'Hard'::text]))),
+  order_no integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT topics_pkey PRIMARY KEY (id),
+  CONSTRAINT topics_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.units(id)
+);
+CREATE TABLE public.units (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  section_id uuid,
+  name text NOT NULL,
+  hours integer,
+  order_no integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT units_pkey PRIMARY KEY (id),
+  CONSTRAINT units_section_id_fkey FOREIGN KEY (section_id) REFERENCES public.sections(id)
+);
+CREATE TABLE public.user_activity_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  activity_date date NOT NULL DEFAULT CURRENT_DATE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_activity_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT user_activity_logs_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+);
 CREATE TABLE public.user_certifications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_profile_id uuid NOT NULL,
@@ -538,6 +697,16 @@ CREATE TABLE public.user_experiences (
   CONSTRAINT user_experiences_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_experiences_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id)
 );
+CREATE TABLE public.user_gate (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL UNIQUE,
+  target_year integer,
+  target_subject_ids ARRAY DEFAULT '{}'::uuid[],
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_gate_pkey PRIMARY KEY (id),
+  CONSTRAINT user_gate_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+);
 CREATE TABLE public.user_portfolio_projects (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_profile_id uuid NOT NULL,
@@ -596,7 +765,6 @@ CREATE TABLE public.user_profiles (
   project_info text,
   publications text,
   achievements text,
-  achievements text,
   experience text,
   college_id uuid,
   department_id uuid,
@@ -622,6 +790,26 @@ CREATE TABLE public.user_publications (
   CONSTRAINT user_publications_pkey PRIMARY KEY (id),
   CONSTRAINT user_publications_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
 );
+CREATE TABLE public.user_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  started_at timestamp with time zone NOT NULL DEFAULT now(),
+  last_seen_at timestamp with time zone NOT NULL DEFAULT now(),
+  user_agent text,
+  ip text,
+  CONSTRAINT user_sessions_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.user_streaks (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL UNIQUE,
+  current_streak integer DEFAULT 0,
+  longest_streak integer DEFAULT 0,
+  last_activity_date date DEFAULT CURRENT_DATE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_streaks_pkey PRIMARY KEY (id),
+  CONSTRAINT user_streaks_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+);
 CREATE TABLE public.user_topic_progress (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_profile_id uuid NOT NULL,
@@ -641,87 +829,4 @@ CREATE TABLE public.youtube_ai_notes (
   transcript_chars integer,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
-);
-
--- Assessments: tests, questions, attempts
-CREATE TABLE public.tests (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  teacher_user_id uuid NOT NULL,
-  class_id uuid,
-  title text NOT NULL,
-  description text,
-  duration_seconds integer CHECK (duration_seconds >= 0),
-  accepting_submissions boolean NOT NULL DEFAULT true,
-  max_score integer NOT NULL DEFAULT 0,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT tests_pkey PRIMARY KEY (id),
-  CONSTRAINT tests_teacher_user_id_fkey FOREIGN KEY (teacher_user_id) REFERENCES auth.users(id)
-);
-
-CREATE TABLE public.test_questions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  test_id uuid NOT NULL,
-  prompt text NOT NULL,
-  options text[] NOT NULL,
-  correct_index integer NOT NULL,
-  points integer NOT NULL DEFAULT 1,
-  question_order integer NOT NULL DEFAULT 0,
-  CONSTRAINT test_questions_pkey PRIMARY KEY (id),
-  CONSTRAINT test_questions_test_id_fkey FOREIGN KEY (test_id) REFERENCES public.tests(id) ON DELETE CASCADE,
-  CONSTRAINT test_questions_options_size CHECK (cardinality(options) BETWEEN 2 AND 8),
-  CONSTRAINT test_questions_correct_index_valid CHECK (correct_index >= 0 AND correct_index < cardinality(options))
-);
-
-CREATE INDEX test_questions_test_id_idx ON public.test_questions (test_id);
-
-CREATE TABLE public.test_attempts (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  test_id uuid NOT NULL,
-  student_user_id uuid NOT NULL,
-  answers jsonb NOT NULL DEFAULT '[]',
-  score integer NOT NULL DEFAULT 0,
-  elapsed_seconds integer,
-  started_at timestamp with time zone NOT NULL DEFAULT now(),
-  submitted_at timestamp with time zone,
-  CONSTRAINT test_attempts_pkey PRIMARY KEY (id),
-  CONSTRAINT test_attempts_test_id_fkey FOREIGN KEY (test_id) REFERENCES public.tests(id) ON DELETE CASCADE,
-  CONSTRAINT test_attempts_student_user_id_fkey FOREIGN KEY (student_user_id) REFERENCES auth.users(id),
-  CONSTRAINT test_attempts_single_attempt UNIQUE (test_id, student_user_id)
-);
-
-CREATE INDEX test_attempts_test_id_idx ON public.test_attempts (test_id);
-
--- Analytics: Sessions, Events, Feedback
-
-CREATE TABLE public.user_sessions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid, -- Nullable for guest sessions if needed, but primarily for auth users
-  started_at timestamp with time zone NOT NULL DEFAULT now(),
-  last_seen_at timestamp with time zone NOT NULL DEFAULT now(),
-  user_agent text,
-  ip text,
-  CONSTRAINT user_sessions_pkey PRIMARY KEY (id)
-);
-
-CREATE TABLE public.analytics_events (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid,
-  session_id uuid,
-  event_type text NOT NULL, -- 'note_viewed', 'lab_started', 'topic_opened', 'lab_completed', 'page_view'
-  event_data jsonb DEFAULT '{}'::jsonb,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT analytics_events_pkey PRIMARY KEY (id),
-  CONSTRAINT analytics_events_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.user_sessions(id)
-);
-
-CREATE TABLE public.topic_feedback (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  topic_id text NOT NULL,
-  is_helpful boolean NOT NULL, -- true = thumbs up, false = thumbs down
-  comment text,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT topic_feedback_pkey PRIMARY KEY (id),
-  CONSTRAINT topic_feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
