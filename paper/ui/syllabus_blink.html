@@ -9,6 +9,9 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script defer src="assets/js/analytics-tracker.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
         rel="stylesheet" />
@@ -186,6 +189,15 @@
             }
             $('prevBtn').disabled = cursor === 0;
             $('nextBtn').disabled = cursor === total - 1;
+
+            // Track Blink View
+            if (window.Analytics) {
+                window.Analytics.track('note_viewed', {
+                    variant: 'cheatsheet',
+                    topic: item.topic,
+                    unit_id: readQuery().unitId
+                });
+            }
         }
 
         async function loadTopicsForUnit(unitId) {

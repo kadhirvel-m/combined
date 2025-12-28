@@ -101,6 +101,7 @@
     safeRemove(TEACHER_TOKEN_KEY);
     safeRemove(REFRESH_TOKEN_KEY);
     safeRemove(TOKEN_EXPIRES_KEY);
+    safeRemove('paperx_session_id'); // Clear analytics session
   }
 
   const el = (id) => document.getElementById(id);

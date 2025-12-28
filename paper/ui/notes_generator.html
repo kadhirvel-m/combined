@@ -28,6 +28,8 @@
 
   <!-- Tailwind + plugins -->
   <link rel="stylesheet" href="assets/css/tailwind.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="assets/js/analytics-tracker.js"></script>
   <script>
     // Use the same palette + mode behavior as other PaperX pages
     tailwind.config = {
@@ -537,7 +539,7 @@
             class="ripple hidden px-3 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
             disabled aria-disabled="true">Flashcards</button>
           <button id="mcqBtn"
-            class="ripple hidden px-3 py-2 rounded-full bg-indigo-600 text-[var(--surface-contrast)] dark:text-white text-sm font-semibold shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
+            class="ripple hidden px-3 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
             disabled aria-disabled="true">MCQ</button>
           <button id="densityBtn"
             class="ripple px-3 py-2 rounded-full border text-sm hover:bg-brandlt-100 dark:hover:bg-white/10 transition"
@@ -1510,6 +1512,15 @@
             console.warn('Gemini inline render fallback', err);
             outputBox.textContent = text;
           }
+
+          // Track Note Generation
+          if (window.Analytics) {
+            window.Analytics.track('note_viewed', {
+              variant: 'generated',
+              prompt: instruction.slice(0, 50)
+            });
+          }
+
           resetStatus();
         } catch (error) {
           console.error('Gemini inline assist error', error);
@@ -2567,6 +2578,17 @@
       const html = DOMPurify.sanitize(marked.parse(lastMarkdown));
       $output.innerHTML = html;
       $editor.value = lastMarkdown;
+
+      // Track note view if we have content
+      if (lastMarkdown && lastMarkdown.length > 50 && window.Analytics) {
+        // Debounce or just track? Since renderMarkdown might be called multiple times during streaming/editing, 
+        // we might want to be careful. But for now, assuming it's final render or major update.
+        // Actually, let's track only if it seems substantial.
+        window.Analytics.track('note_viewed', {
+          variant: currentVariant || 'detailed',
+          word_count: lastMarkdown.split(/\s+/).length
+        });
+      }
 
       // Mermaid blocks
       const mmd = $output.querySelectorAll('code.language-mermaid, pre code.language-mermaid');

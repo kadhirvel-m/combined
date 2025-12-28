@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PaperX Admin — User Analytics</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+        rel="stylesheet">
+
+    <!-- Reuse existing config -->
+    <script defer src="../config.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            900: '#1E1E2F',
+                            800: '#26263A',
+                            700: '#4C2A59',
+                            500: '#9E4B8A',
+                            300: '#C88DBA'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="bg-gray-900 text-white min-h-screen font-sans selection:bg-brand-500 selection:text-white">
+
+    <!-- Navigation -->
+    <nav class="border-b border-white/10 bg-brand-900/80 backdrop-blur sticky top-0 z-50">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="flex h-16 items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="rounded-lg bg-brand-500/20 p-2 text-brand-300">
+                        <span class="material-symbols-rounded">analytics</span>
+                    </span>
+                    <h1 class="text-lg font-bold tracking-tight">PaperX Analytics</h1>
+                </div>
+                <div class="flex items-center gap-4 text-sm text-gray-400">
+                    <span class="flex items-center gap-1">
+                        <span class="relative flex h-2 w-2">
+                            <span
+                                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        Live
+                    </span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+
+        <!-- Key Metrics Grid -->
+        <section>
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-4">Core Metrics (Real-time)</h2>
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                <!-- DAU -->
+                <div class="relative overflow-hidden rounded-2xl bg-white/5 p-6 shadow-lg border border-white/10">
+                    <dt class="truncate text-sm font-medium text-gray-400">Daily Active Users</dt>
+                    <dd class="mt-2 text-3xl font-bold tracking-tight text-white" id="metric-dau">-</dd>
+                    <div class="absolute bottom-0 right-0 p-4 opacity-10">
+                        <span class="material-symbols-rounded text-6xl">group</span>
+                    </div>
+                </div>
+
+                <!-- WAU -->
+                <div class="relative overflow-hidden rounded-2xl bg-white/5 p-6 shadow-lg border border-white/10">
+                    <dt class="truncate text-sm font-medium text-gray-400">Weekly Active Users</dt>
+                    <dd class="mt-2 text-3xl font-bold tracking-tight text-white" id="metric-wau">-</dd>
+                </div>
+
+                <!-- Avg Study Time -->
+                <div class="relative overflow-hidden rounded-2xl bg-white/5 p-6 shadow-lg border border-white/10">
+                    <dt class="truncate text-sm font-medium text-gray-400">Avg Study Time</dt>
+                    <dd class="mt-2 text-3xl font-bold tracking-tight text-white" id="metric-time">- <span
+                            class="text-sm font-normal text-gray-500">min</span></dd>
+                </div>
+
+                <!-- Sessions/User -->
+                <div class="relative overflow-hidden rounded-2xl bg-white/5 p-6 shadow-lg border border-white/10">
+                    <dt class="truncate text-sm font-medium text-gray-400">Sessions / User</dt>
+                    <dd class="mt-2 text-3xl font-bold tracking-tight text-white" id="metric-sessions">-</dd>
+                </div>
+            </div>
+        </section>
+
+        <!-- Feature Usage & Funnel -->
+        <div class="grid grid-cols-1 gap-8 lg:grid-cols-2">
+
+            <!-- Feature Usage Chart -->
+            <section class="rounded-3xl bg-white/5 p-6 border border-white/10">
+                <h3 class="text-lg font-semibold text-white mb-6">Feature Usage (Event Volume)</h3>
+                <div class="relative h-64 w-full">
+                    <canvas id="featureChart"></canvas>
+                </div>
+                <!-- Custom Legend/Stats below -->
+                <div class="mt-6 grid grid-cols-3 gap-4 text-center border-t border-white/10 pt-4">
+                    <div>
+                        <p class="text-xs text-brand-300">NoteX Views</p>
+                        <p class="text-xl font-bold" id="stat-notex">0</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-brand-300">Blink Views</p>
+                        <p class="text-xl font-bold" id="stat-blink">0</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-brand-300">LabX Starts</p>
+                        <p class="text-xl font-bold" id="stat-labx">0</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Funnel/Conversion -->
+            <section class="rounded-3xl bg-white/5 p-6 border border-white/10">
+                <h3 class="text-lg font-semibold text-white mb-6">Learning Funnel</h3>
+                <div class="space-y-6">
+                    <!-- Step 1 -->
+                    <div class="relative">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-gray-300">Topic Opened -> Note Viewed</span>
+                            <span class="text-sm font-bold text-brand-300" id="funnel-1">0%</span>
+                        </div>
+                        <div class="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                            <div class="h-full bg-brand-500 transition-all duration-1000" id="bar-funnel-1"
+                                style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div class="relative">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-gray-300">Note Viewed -> Lab Started</span>
+                            <span class="text-sm font-bold text-brand-300" id="funnel-2">0%</span>
+                        </div>
+                        <div class="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                            <div class="h-full bg-brand-300 transition-all duration-1000" id="bar-funnel-2"
+                                style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Learning Metrics Badges -->
+                    <h4 class="text-sm font-semibold text-gray-400 mt-8 mb-4">Learning Behavior</h4>
+                    <div class="flex flex-wrap gap-3">
+                        <div class="bg-gray-800 rounded-xl p-3 border border-white/5 grow">
+                            <p class="text-xs text-gray-500">Note Completion</p>
+                            <p class="text-lg font-bold text-white" id="learn-completion">0%</p>
+                        </div>
+                        <div class="bg-gray-800 rounded-xl p-3 border border-white/5 grow">
+                            <p class="text-xs text-gray-500">Blink Revisit</p>
+                            <p class="text-lg font-bold text-white" id="learn-revisit">0%</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- User Activity Details -->
+        <section class="mt-8 rounded-3xl bg-white/5 p-6 border border-white/10">
+            <h3 class="text-lg font-semibold text-white mb-6">User Activity (Last 7 Days)</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-xs text-gray-400 border-b border-white/10 uppercase tracking-wider">
+                            <th class="py-3 px-4">User</th>
+                            <th class="py-3 px-4 text-center">NoteX Views</th>
+                            <th class="py-3 px-4 text-center">Blink Views</th>
+                            <th class="py-3 px-4 text-center">LabX Starts</th>
+                            <th class="py-3 px-4 text-center">Sessions</th>
+                            <th class="py-3 px-4 text-right">Last Active</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-table-body" class="text-sm">
+                        <!-- Rows injected via JS -->
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-gray-500">Loading users...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Fetch data
+            try {
+                const base = (window.API_BASE || '').replace(/\/+$/, '');
+                const url = base ? `${base}/analytics/dashboard` : '/analytics/dashboard';
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.error) throw new Error(data.error);
+
+                // Update KPIs
+                const kpi = data.kpi || {};
+                document.getElementById('metric-dau').textContent = kpi.dau || 0;
+                document.getElementById('metric-wau').textContent = kpi.wau || 0;
+                document.getElementById('metric-time').innerHTML = (kpi.avg_study_time || 0) + ' <span class="text-sm font-normal text-gray-500">min</span>';
+                document.getElementById('metric-sessions').textContent = kpi.sessions_per_user || 0;
+
+                // Update Feature Stats
+                const feats = data.features || {};
+                document.getElementById('stat-notex').textContent = (feats.notex || 0);
+                document.getElementById('stat-blink').textContent = (feats.blink || 0);
+                document.getElementById('stat-labx').textContent = (feats.labx || 0);
+
+                // Render Chart
+                const ctx = document.getElementById('featureChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['NoteX', 'Blink', 'LabX'],
+                        datasets: [{
+                            data: [feats.notex || 0, feats.blink || 0, feats.labx || 0],
+                            backgroundColor: ['#9E4B8A', '#C88DBA', '#4C2A59'],
+                            borderColor: '#1E1E2F',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { color: '#bbb', usePointStyle: true }
+                            }
+                        }
+                    }
+                });
+
+                // Update Funnel
+                const funnel = data.funnel || {};
+                const f1 = funnel.topic_to_note || 0;
+                const f2 = funnel.note_to_lab || 0;
+                document.getElementById('funnel-1').textContent = f1 + '%';
+                document.getElementById('bar-funnel-1').style.width = f1 + '%';
+
+                document.getElementById('funnel-2').textContent = f2 + '%';
+                document.getElementById('bar-funnel-2').style.width = f2 + '%';
+
+                // Learning
+                const learn = data.learning || {};
+                document.getElementById('learn-completion').textContent = (learn.note_completion_rate || 0) + '%';
+                document.getElementById('learn-revisit').textContent = (learn.blink_revisit || 0) + '%';
+
+                // User Table
+                const tbody = document.getElementById('user-table-body');
+                tbody.innerHTML = '';
+                const users = data.users || [];
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-gray-500">No active users found in the last 7 days.</td></tr>';
+                } else {
+                    users.forEach(u => {
+                        const row = document.createElement('tr');
+                        row.className = 'border-b border-white/5 hover:bg-white/5 transition-colors';
+
+                        const name = u.name || 'Anonymous';
+                        const email = u.email || (u.id ? u.id.slice(0, 8) + '...' : 'Unknown');
+                        const lastSeen = u.last_seen ? new Date(u.last_seen).toLocaleString() : '-';
+
+                        // Image Handling
+                        let imgHtml = '';
+                        if (u.image) {
+                            imgHtml = `<img src="${u.image}" alt="${name}" class="h-8 w-8 rounded-full bg-gray-800 object-cover">`;
+                        } else {
+                            const init = name.slice(0, 1).toUpperCase();
+                            imgHtml = `<div class="h-8 w-8 rounded-full bg-brand-600 flex items-center justify-center text-xs font-bold text-white">${init}</div>`;
+                        }
+
+                        row.innerHTML = `
+                            <td class="py-3 px-4">
+                                <div class="flex items-center gap-3">
+                                    ${imgHtml}
+                                    <div>
+                                        <div class="font-medium text-white">${name}</div>
+                                        <div class="text-xs text-gray-500">${email}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="py-3 px-4 text-center text-gray-300">${u.notex}</td>
+                            <td class="py-3 px-4 text-center text-gray-300">${u.blink}</td>
+                            <td class="py-3 px-4 text-center text-gray-300">${u.labx}</td>
+                            <td class="py-3 px-4 text-center text-gray-300">${u.sessions}</td>
+                            <td class="py-3 px-4 text-right text-gray-400 text-xs">${lastSeen}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+
+            } catch (e) {
+                console.error('Loader failed', e);
+                // alert('Failed to load dashboard data');
+            }
+        });
+    </script>
+</body>
+
+</html>

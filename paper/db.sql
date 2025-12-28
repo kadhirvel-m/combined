@@ -691,3 +691,37 @@ CREATE TABLE public.test_attempts (
 );
 
 CREATE INDEX test_attempts_test_id_idx ON public.test_attempts (test_id);
+
+-- Analytics: Sessions, Events, Feedback
+
+CREATE TABLE public.user_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid, -- Nullable for guest sessions if needed, but primarily for auth users
+  started_at timestamp with time zone NOT NULL DEFAULT now(),
+  last_seen_at timestamp with time zone NOT NULL DEFAULT now(),
+  user_agent text,
+  ip text,
+  CONSTRAINT user_sessions_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE public.analytics_events (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  session_id uuid,
+  event_type text NOT NULL, -- 'note_viewed', 'lab_started', 'topic_opened', 'lab_completed', 'page_view'
+  event_data jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT analytics_events_pkey PRIMARY KEY (id),
+  CONSTRAINT analytics_events_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.user_sessions(id)
+);
+
+CREATE TABLE public.topic_feedback (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  topic_id text NOT NULL,
+  is_helpful boolean NOT NULL, -- true = thumbs up, false = thumbs down
+  comment text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT topic_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT topic_feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
