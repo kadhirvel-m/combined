@@ -12,6 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js" type="module"></script>
+    <script defer src="assets/js/analytics-tracker.js"></script>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
         rel="stylesheet" />
@@ -314,10 +315,6 @@
                             <div class="flex flex-col gap-1"><span
                                     class="text-neutral-500 dark:text-white/50">Batch</span><span id="batch"
                                     class="font-medium truncate">-</span></div>
-                        </div>
-                        <div id="profileMetaNote"
-                            class="pt-2 border-t border-black/5 dark:border-white/10 text-xs text-neutral-600 dark:text-white/55">
-                            Keep your profile updated to improve verification scoring and collaboration visibility.
                         </div>
                     </div>
                 </div>
@@ -686,6 +683,11 @@
                         a.target = '_blank';
                         a.rel = 'noopener';
                         a.className = 'text-brand-600 dark:text-brand-300 hover:underline';
+                        a.onclick = () => {
+                            if (window.Analytics) {
+                                window.Analytics.track('topic_opened', { topic: t.topic });
+                            }
+                        };
                         li.appendChild(a);
 
                         const labUrl = (t.lab_url || '').trim();
@@ -697,6 +699,14 @@
                             labLink.innerHTML = '<span class="material-symbols-rounded text-[16px]">science</span><span>Labs</span>';
                             labLink.className = 'ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold bg-brand-500/10 text-brand-700 dark:text-brandlt-200 ring-1 ring-brand-500/25 hover:bg-brand-500/20 hover:shadow-glow transition';
                             labLink.title = 'Open lab material';
+                            labLink.onclick = () => {
+                                if (window.Analytics) {
+                                    window.Analytics.track('lab_started', {
+                                        url: labUrl,
+                                        topic: t.topic
+                                    });
+                                }
+                            };
                             li.appendChild(labLink);
                         }
 

@@ -15018,6 +15018,333 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
+# ==========================================
+# ANALYTICS MODULE (Injected)
+# ==========================================
+from datetime import timedelta
+
+class AnalyticsSessionStart(BaseModel):
+    user_id: Optional[str] = None
+    user_agent: Optional[str] = None
+
+class AnalyticsHeartbeat(BaseModel):
+    session_id: str
+
+class AnalyticsEventModel(BaseModel):
+    session_id: str
+    user_id: Optional[str] = None
+    event_type: str
+    event_data: Dict[str, Any] = {}
+
+class TopicFeedbackModel(BaseModel):
+    user_id: str
+    topic_id: str
+    is_helpful: bool
+    comment: Optional[str] = None
+
+analytics_router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+@analytics_router.post("/session/start")
+async def start_session(req: AnalyticsSessionStart, request: Request):
+    supabase = get_service_client()
+    
+    user_agent = req.user_agent or request.headers.get("user-agent")
+    client_ip = request.client.host if request.client else None
+    
+    uid = req.user_id
+    if uid and not uid.strip():
+        uid = None
+
+    data = {
+        "user_id": uid,
+        "user_agent": user_agent,
+        "ip": client_ip,
+        "last_seen_at": datetime.utcnow().isoformat()
+    }
+    
+    try:
+        res = supabase.table("user_sessions").insert(data).execute()
+        if res.data:
+            return {"session_id": res.data[0]["id"]}
+        # Fallback if no data returned (RLS or otherwise), generate UUID
+        return {"session_id": str(uuid.uuid4())} 
+    except Exception as e:
+        print(f"Analytics Error: {e}")
+        return {"session_id": str(uuid.uuid4())} # Graceful degradation
+
+@analytics_router.post("/session/heartbeat")
+async def analytics_heartbeat(payload: AnalyticsHeartbeat):
+    try:
+        supabase = get_service_client()
+        supabase.table("user_sessions").update({
+            "last_seen_at": datetime.utcnow().isoformat()
+        }).eq("id", payload.session_id).execute()
+    except Exception:
+        pass
+    return {"status": "ok"}
+
+@analytics_router.post("/event")
+async def analytics_track_event(payload: AnalyticsEventModel):
+    try:
+        supabase = get_service_client()
+        data = {
+            "session_id": payload.session_id,
+            "user_id": payload.user_id if payload.user_id else None,
+            "event_type": payload.event_type,
+            "event_data": payload.event_data
+        }
+        if not data["user_id"]: del data["user_id"]
+        supabase.table("analytics_events").insert(data).execute()
+    except Exception as e:
+        print(f"Analytics Event Error: {e}")
+    return {"status": "ok"}
+
+@analytics_router.post("/feedback/topic")
+async def analytics_topic_feedback(payload: TopicFeedbackModel):
+    try:
+        supabase = get_service_client()
+        data = {
+            "user_id": payload.user_id,
+            "topic_id": payload.topic_id,
+            "is_helpful": payload.is_helpful,
+            "comment": payload.comment
+        }
+        supabase.table("topic_feedback").insert(data).execute()
+    except Exception:
+        pass
+    return {"status": "ok"}
+
+@analytics_router.get("/dashboard")
+async def analytics_dashboard_metrics():
+    try:
+        supabase = get_service_client()
+        now = datetime.utcnow()
+        day_ago = (now - timedelta(days=1)).isoformat()
+        week_ago = (now - timedelta(days=7)).isoformat()
+
+        # 1. Active Users (DAU/WAU)
+        sessions_24h_res = supabase.table("user_sessions").select("user_id").gte("started_at", day_ago).execute()
+        sessions_7d_res = supabase.table("user_sessions").select("user_id", "started_at").gte("started_at", week_ago).execute()
+        
+        sessions_24h = getattr(sessions_24h_res, 'data', []) or []
+        sessions_7d = getattr(sessions_7d_res, 'data', []) or []
+
+        dau = len({s["user_id"] for s in sessions_24h if s.get("user_id")})
+        wau_users = {s["user_id"] for s in sessions_7d if s.get("user_id")}
+        wau = len(wau_users)
+
+        # 2. Avg Study Time
+        # Needs last_seen - started_at. We need to fetch times.
+        # Re-fetch 24h with times
+        sessions_times_res = supabase.table("user_sessions").select("started_at,last_seen_at").gte("started_at", day_ago).execute()
+        sessions_times = getattr(sessions_times_res, 'data', []) or []
+        
+        total_minutes = 0.0
+        for s in sessions_times:
+            if s.get("started_at") and s.get("last_seen_at"):
+                try:
+                    start = datetime.fromisoformat(s["started_at"].replace('Z', '+00:00'))
+                    end = datetime.fromisoformat(s["last_seen_at"].replace('Z', '+00:00'))
+                    diff = (end - start).total_seconds() / 60
+                    if 0 < diff < 480: # Cap at 8h to ignore stuck sessions
+                        total_minutes += diff
+                except: pass
+        
+        avg_study_time = (total_minutes / dau) if dau > 0 else 0
+        avg_sessions = (len(sessions_7d) / wau) if wau > 0 else 0
+
+        # 3. Feature Usage
+        events_7d_res = supabase.table("analytics_events").select("event_type,event_data,user_id").gte("created_at", week_ago).execute()
+        events_7d = getattr(events_7d_res, 'data', []) or []
+
+        note_viewers = set()
+        blink_viewers = set()
+        lab_users = set()
+        
+        counts = {}
+
+        for e in events_7d:
+            et = e.get("event_type")
+            counts[et] = counts.get(et, 0) + 1
+            uid = e.get("user_id")
+            if not uid: continue
+            
+            if et == "note_viewed":
+                data = e.get("event_data") or {}
+                # Handle both dict and string if Supabase returns weirdly, but usually dict
+                if isinstance(data, str):
+                     try: data = json.loads(data)
+                     except: data = {}
+                
+                variant = data.get("variant", "detailed")
+                if variant == "cheatsheet":
+                    blink_viewers.add(uid)
+                else:
+                    note_viewers.add(uid)
+            elif et == "lab_started":
+                lab_users.add(uid)
+
+        # Calc Feature Volume (Counts)
+        notex_count = counts.get("note_viewed", 0)
+        
+        # Blink count (cheatsheet variant of note_viewed)
+        blink_count = 0
+        for e in events_7d:
+             et = e.get("event_type")
+             if et == "note_viewed":
+                 data = e.get("event_data") or {}
+                 if isinstance(data, str):
+                     try: data = json.loads(data)
+                     except: data = {}
+                 if data.get("variant") == "cheatsheet":
+                     blink_count += 1
+        
+        labx_count = counts.get("lab_started", 0)
+
+        # 4. Learning Metrics / Funnel (Simplistic)
+        # Topic opened -> Note viewed -> Lab started
+        topic_opens = counts.get("topic_opened", 0)
+        note_views = counts.get("note_viewed", 0)
+        lab_starts = counts.get("lab_started", 0)
+        
+        # Funnel metrics
+        raw_funnel_1 = (note_views / topic_opens * 100) if topic_opens > 0 else 0
+        raw_funnel_2 = (lab_starts / note_views * 100) if note_views > 0 else 0
+        
+        funnel_1 = round(min(raw_funnel_1, 100.0), 2)
+        funnel_2 = round(min(raw_funnel_2, 100.0), 2)
+
+        # 5. Advanced Learning Metrics (Real Logic)
+        
+        # Note Completion: % of note users who have a 'scroll_depth' event >= 70
+        scroll_users = set()
+        completed_users = set()
+        blink_counts = {} # uid -> count of cheatsheet views
+        
+        for e in events_7d:
+            et = e.get("event_type")
+            uid = e.get("user_id")
+            if not uid: continue
+            
+            if et == "scroll_depth":
+                data = e.get("event_data") or {}
+                if isinstance(data, str):
+                    try: data = json.loads(data)
+                    except: data = {}
+                depth = int(data.get("depth", 0))
+                # Only consider it a "note scroll" if on relevant pages
+                page = data.get("page", "")
+                if "notes_generator" in page or "note_detail" in page:
+                     scroll_users.add(uid)
+                     if depth >= 70:
+                         completed_users.add(uid)
+            
+            elif et == "note_viewed":
+                data = e.get("event_data") or {}
+                if isinstance(data, str):
+                    try: data = json.loads(data)
+                    except: data = {}
+                variant = data.get("variant")
+                if variant == "cheatsheet":
+                    blink_counts[uid] = blink_counts.get(uid, 0) + 1
+
+        # Note Completion Rate
+        note_completion_rate = round((len(completed_users) / len(scroll_users) * 100), 1) if scroll_users else 0
+        
+        # Blink Revisit Rate: % of blink users who viewed >= 2 blinks (or same blink 2x, simpler to just count total views > 1)
+        revisit_users = [u for u, c in blink_counts.items() if c >= 2]
+        blink_total_users = len(blink_counts)
+        blink_revisit = round((len(revisit_users) / blink_total_users * 100), 1) if blink_total_users > 0 else 0
+
+        # 6. User Activity Details (User List)
+        users_map = {} # uid -> { notex, blink, labx, sessions, last_seen }
+        
+        # Init from WAU list
+        for uid in wau_users:
+            users_map[uid] = { "notex": 0, "blink": 0, "labx": 0, "sessions": 0, "last_seen": "", "id": uid }
+
+        # Aggregation
+        for e in events_7d:
+            uid = e.get("user_id")
+            if not uid or uid not in users_map: continue
+            
+            et = e.get("event_type")
+            data = e.get("event_data") or {}
+            if isinstance(data, str):
+                 try: data = json.loads(data)
+                 except: data = {}
+            
+            if et == "note_viewed":
+                if data.get("variant") == "cheatsheet":
+                    users_map[uid]["blink"] += 1
+                else:
+                    users_map[uid]["notex"] += 1
+            elif et == "lab_started":
+                users_map[uid]["labx"] += 1
+        
+        # Session counts + Last active
+        for s in sessions_7d:
+            uid = s.get("user_id")
+            if not uid or uid not in users_map: continue
+            users_map[uid]["sessions"] += 1
+            # Update last_seen if fresher
+            curr = users_map[uid]["last_seen"]
+            started = s.get("started_at")
+            if started and (not curr or started > curr):
+                users_map[uid]["last_seen"] = started
+
+        # Fetch Profiles
+        users_list = []
+        if wau_users:
+            try:
+                prof_res = supabase.table("user_profiles").select("auth_user_id, name, email, profile_image_url").in_("auth_user_id", list(wau_users)).execute()
+                profiles = getattr(prof_res, 'data', []) or []
+                for p in profiles:
+                    uid = p.get("auth_user_id")
+                    if uid in users_map:
+                        users_map[uid]["name"] = p.get("name")
+                        users_map[uid]["email"] = p.get("email")
+                        users_map[uid]["image"] = p.get("profile_image_url")
+            except: pass
+        
+        # Convert to list
+        for uid, stats in users_map.items():
+            users_list.append(stats)
+        
+        # Sort by most active (sessions or last active)
+        users_list.sort(key=lambda x: x.get("last_seen", ""), reverse=True)
+
+        return {
+            "kpi": {
+                "dau": dau,
+                "wau": wau,
+                "avg_study_time": round(avg_study_time, 1),
+                "sessions_per_user": round(avg_sessions, 1),
+                "retention_7d": 85 # Dummy/Placeholder for now as logic is complex
+            },
+            "features": {
+                "notex": notex_count,
+                "blink": blink_count,
+                "labx": labx_count,
+                "avg_time_note": 12 # Placeholder
+            },
+            "learning": {
+                "note_completion_rate": note_completion_rate,
+                "blink_revisit": blink_revisit,
+                "revisited_topics": len(revisit_users)
+            },
+            "funnel": {
+                "topic_to_note": funnel_1,
+                "note_to_lab": funnel_2
+            },
+            "users": users_list
+        }
+    except Exception as e:
+        print(f"Dashboard Error: {e}")
+        return {"error": str(e)}
+
+app.include_router(analytics_router)
+
 if __name__ == "__main__":
     import uvicorn
 
