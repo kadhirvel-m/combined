@@ -15560,6 +15560,258 @@ async def analytics_dashboard_metrics():
 
 app.include_router(analytics_router)
 
+# -------------------- Lcoding Learning Tracks --------------------
+
+class LcodingLanguageBase(BaseModel):
+    name: str
+    # slug removed
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+
+class LcodingLanguageCreate(LcodingLanguageBase):
+    pass
+
+class LcodingLanguage(LcodingLanguageBase):
+    id: str
+    created_at: str
+    updated_at: str
+
+    class Config:
+        orm_mode = True
+
+class LcodingLevelBase(BaseModel):
+    title: str
+    order_index: int = 0
+
+class LcodingLevelCreate(LcodingLevelBase):
+    pass
+
+class LcodingLevel(LcodingLevelBase):
+    id: str
+    language_id: str
+    created_at: str
+    updated_at: str
+
+class LcodingSectionBase(BaseModel):
+    title: str
+    order_index: int = 0
+
+class LcodingSectionCreate(LcodingSectionBase):
+    pass
+
+class LcodingSection(LcodingSectionBase):
+    id: str
+    level_id: str
+    created_at: str
+    updated_at: str
+
+class LcodingTopicBase(BaseModel):
+    title: str
+    content: Optional[str] = None
+    video_url: Optional[str] = None
+    order_index: int = 0
+
+class LcodingTopicCreate(LcodingTopicBase):
+    pass
+
+class LcodingTopic(LcodingTopicBase):
+    id: str
+    section_id: str
+    created_at: str
+    updated_at: str
+
+
+lcoding_router = APIRouter(prefix="/api/lcoding", tags=["lcoding"])
+
+@lcoding_router.get("/languages", response_model=List[LcodingLanguage])
+def get_lcoding_languages():
+    supabase = get_service_client()
+    res = supabase.table("lcoding_languages").select("*").order("name").execute()
+    return res.data or []
+
+@lcoding_router.post("/languages", response_model=LcodingLanguage)
+async def create_lcoding_language(
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    logo: Optional[UploadFile] = File(None)
+):
+    supabase = get_service_client()
+    
+    logo_url = None
+    if logo:
+        try:
+            file_content = await logo.read()
+            file_ext = logo.filename.split(".")[-1] if "." in logo.filename else "png"
+            file_name = f"lcoding-logos/{uuid.uuid4()}.{file_ext}"
+            
+            # Upload to 'tunex' bucket
+            res = supabase.storage.from_("tunex").upload(
+                path=file_name,
+                file=file_content,
+                file_options={"content-type": logo.content_type}
+            )
+            
+            # Get public URL
+            logo_url = supabase.storage.from_("tunex").get_public_url(file_name)
+        except Exception as e:
+            print(f"Logo upload failed: {e}")
+            
+    payload = {
+        "name": name,
+        "description": description,
+        "logo_url": logo_url,
+        "updated_at": datetime.utcnow().isoformat()
+    }
+    
+    res = supabase.table("lcoding_languages").insert(payload).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to create language")
+    return res.data[0]
+
+@lcoding_router.put("/languages/{lang_id}", response_model=LcodingLanguage)
+async def update_lcoding_language(
+    lang_id: str,
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    logo: Optional[UploadFile] = File(None)
+):
+    supabase = get_service_client()
+    
+    existing = supabase.table("lcoding_languages").select("id, logo_url").eq("id", lang_id).single().execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Language not found")
+
+    payload = {
+        "name": name,
+        "description": description,
+        "updated_at": datetime.utcnow().isoformat()
+    }
+
+    if logo:
+        try:
+            file_content = await logo.read()
+            file_ext = logo.filename.split(".")[-1] if "." in logo.filename else "png"
+            file_name = f"lcoding-logos/{uuid.uuid4()}.{file_ext}"
+            
+            res = supabase.storage.from_("tunex").upload(
+                path=file_name,
+                file=file_content,
+                file_options={"content-type": logo.content_type}
+            )
+            logo_url = supabase.storage.from_("tunex").get_public_url(file_name)
+            payload["logo_url"] = logo_url
+        except Exception as e:
+            print(f"Logo upload failed: {e}")
+            
+    res = supabase.table("lcoding_languages").update(payload).eq("id", lang_id).execute()
+    if not res.data:
+         raise HTTPException(status_code=500, detail="Failed to update language")
+    return res.data[0]
+
+@lcoding_router.get("/languages/{lang_id}", response_model=LcodingLanguage)
+def get_lcoding_language(lang_id: str):
+    supabase = get_service_client()
+    res = supabase.table("lcoding_languages").select("*").eq("id", lang_id).single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Language not found")
+    return res.data
+
+# --- Levels ---
+
+@lcoding_router.get("/languages/{lang_id}/levels", response_model=List[LcodingLevel])
+def get_lcoding_levels(lang_id: str):
+    supabase = get_service_client()
+    res = supabase.table("lcoding_levels").select("*").eq("language_id", lang_id).order("order_index").execute()
+    return res.data or []
+
+@lcoding_router.post("/languages/{lang_id}/levels", response_model=LcodingLevel)
+def create_lcoding_level(lang_id: str, level: LcodingLevelCreate):
+    supabase = get_service_client()
+    payload = level.dict()
+    payload["language_id"] = lang_id
+    payload["updated_at"] = datetime.utcnow().isoformat()
+    res = supabase.table("lcoding_levels").insert(payload).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to create level")
+    return res.data[0]
+    
+@lcoding_router.get("/levels/{level_id}", response_model=LcodingLevel)
+def get_lcoding_level(level_id: str):
+    supabase = get_service_client()
+    res = supabase.table("lcoding_levels").select("*").eq("id", level_id).single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Level not found")
+    return res.data
+
+@lcoding_router.put("/levels/{level_id}", response_model=LcodingLevel)
+def update_lcoding_level(level_id: str, level: LcodingLevelCreate):
+    supabase = get_service_client()
+    payload = level.dict()
+    payload["updated_at"] = datetime.utcnow().isoformat()
+    # Ensure we don't accidentally wipe out language_id if pydantic excludes it, 
+    # but since it's an update, Supabase handles partials for us if we sent them, 
+    # but here we are sending full payload. Ideally we only update what changed.
+    # LcodingLevelCreate has title and order_index.
+    
+    res = supabase.table("lcoding_levels").update(payload).eq("id", level_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to update level")
+    return res.data[0]
+
+@lcoding_router.delete("/levels/{level_id}")
+def delete_lcoding_level(level_id: str):
+    supabase = get_service_client()
+    res = supabase.table("lcoding_levels").delete().eq("id", level_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Level not found or failed to delete")
+    return {"message": "Level deleted successfully"}
+
+# --- Sections (now under Levels) ---
+
+@lcoding_router.get("/levels/{level_id}/sections", response_model=List[LcodingSection])
+def get_lcoding_sections(level_id: str):
+    supabase = get_service_client()
+    res = supabase.table("lcoding_sections").select("*").eq("level_id", level_id).order("order_index").execute()
+    return res.data or []
+
+@lcoding_router.post("/levels/{level_id}/sections", response_model=LcodingSection)
+def create_lcoding_section(level_id: str, section: LcodingSectionCreate):
+    supabase = get_service_client()
+    payload = section.dict()
+    payload["level_id"] = level_id
+    payload["updated_at"] = datetime.utcnow().isoformat()
+    res = supabase.table("lcoding_sections").insert(payload).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to create section")
+    return res.data[0]
+
+@lcoding_router.get("/sections/{section_id}/topics", response_model=List[LcodingTopic])
+def get_lcoding_topics(section_id: str):
+    supabase = get_service_client()
+    res = supabase.table("lcoding_topics").select("*").eq("section_id", section_id).order("order_index").execute()
+    return res.data or []
+
+@lcoding_router.post("/sections/{section_id}/topics", response_model=LcodingTopic)
+def create_lcoding_topic(section_id: str, topic: LcodingTopicCreate):
+    supabase = get_service_client()
+    payload = topic.dict()
+    payload["section_id"] = section_id
+    payload["updated_at"] = datetime.utcnow().isoformat()
+    res = supabase.table("lcoding_topics").insert(payload).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to create topic")
+    return res.data[0]
+
+@lcoding_router.get("/topics/{topic_id}", response_model=LcodingTopic)
+def get_lcoding_topic(topic_id: str):
+    supabase = get_service_client()
+    res = supabase.table("lcoding_topics").select("*").eq("id", topic_id).single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    return res.data
+
+app.include_router(lcoding_router)
+
 if __name__ == "__main__":
     import uvicorn
 

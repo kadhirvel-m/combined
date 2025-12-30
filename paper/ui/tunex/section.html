@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Topics | Tunex</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <script src="../../assets/js/theme.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gatex: {
+                            bg: '#13131F',
+                            card: '#1E1E2F',
+                            cardHover: '#27293d',
+                            primary: '#9E4B8A',
+                            secondary: '#4C2A59',
+                            accent: '#FF7F50',
+                            success: '#00F090',
+                            info: '#3B82F6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-header {
+            background: rgba(19, 19, 31, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+
+<body class="bg-gatex-bg text-gray-100 font-sans antialiased" x-data="sectionApp()">
+
+    <!-- Header -->
+    <header class="h-16 flex items-center justify-between px-6 sticky top-0 z-30 glass-header">
+        <div class="flex items-center gap-4">
+            <button @click="goBack()" class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10">
+                <i class="ri-arrow-left-line text-xl"></i>
+            </button>
+            <div class="flex flex-col">
+                <h1 class="text-sm text-gray-400 font-medium" x-text="langName"></h1>
+                <h2 class="text-lg font-bold" x-text="sectionName || 'Loading...'"></h2>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <button @click="Theme.toggle()" class="p-2 text-gray-400 hover:text-white transition">
+                <i class="ri-moon-line dark:hidden"></i>
+                <i class="ri-sun-line hidden dark:block"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="p-6 max-w-5xl mx-auto">
+
+        <!-- Header & Add Button -->
+        <div class="flex justify-between items-center mb-8">
+            <h3 class="text-xl font-bold">Topics</h3>
+            <button @click="showAddModal = true"
+                class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-xl flex items-center gap-2 transition shadow-lg shadow-gatex-primary/20">
+                <i class="ri-add-line"></i> Add Topic
+            </button>
+        </div>
+
+        <!-- Topics List -->
+        <div class="space-y-3">
+            <template x-for="(topic, index) in topics" :key="topic.id">
+                <div
+                    class="bg-gatex-card border border-white/5 rounded-xl p-4 flex items-center justify-between hover:border-white/10 transition group">
+                    <div class="flex items-start gap-4">
+                        <div class="mt-1 w-6 h-6 rounded-full border border-gatex-primary/30 flex items-center justify-center text-xs text-gatex-primary font-bold"
+                            x-text="index + 1"></div>
+                        <div>
+                            <h4 class="font-bold text-gray-200" x-text="topic.title"></h4>
+                            <div class="flex items-center gap-4 mt-1 text-xs text-gray-500">
+                                <span x-show="topic.video_url" class="flex items-center gap-1"><i
+                                        class="ri-video-line"></i> Video</span>
+                                <span x-show="topic.content" class="flex items-center gap-1"><i
+                                        class="ri-file-text-line"></i> Content</span>
+                                <span>Index: <span x-text="topic.order_index"></span></span>
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        class="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-white/5 opacity-0 group-hover:opacity-100 transition">
+                        <i class="ri-pencil-line"></i>
+                    </button>
+                </div>
+            </template>
+        </div>
+
+        <!-- Empty State -->
+        <div x-show="topics.length === 0 && !loading"
+            class="text-center py-20 bg-gatex-card/50 rounded-2xl border border-white/5 border-dashed">
+            <i class="ri-list-check text-4xl mb-3 block opacity-30"></i>
+            <p class="text-gray-500">No topics in this section yet.</p>
+        </div>
+
+        <!-- Add Modal -->
+        <div x-show="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style="display: none;">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showAddModal = false"></div>
+            <div
+                class="bg-gatex-card border border-white/10 rounded-2xl p-6 w-full max-w-lg relative z-10 shadow-2xl max-h-[90vh] overflow-y-auto">
+                <h3 class="text-xl font-bold mb-4">Add Topic</h3>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Title</label>
+                        <input type="text" x-model="newTopic.title"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition"
+                            placeholder="Topic Title">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Video URL (Optional)</label>
+                        <input type="text" x-model="newTopic.video_url"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition"
+                            placeholder="https://youtube.com/...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Content (Markdown)</label>
+                        <textarea x-model="newTopic.content" rows="6"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition font-mono text-sm"
+                            placeholder="# Header..."></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Order Index</label>
+                        <input type="number" x-model="newTopic.order_index"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button @click="showAddModal = false"
+                        class="px-4 py-2 rounded-lg hover:bg-white/5 text-sm">Cancel</button>
+                    <button @click="createTopic()"
+                        class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-lg text-sm font-medium transition">Create</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        function sectionApp() {
+            return {
+                sectionId: null,
+                langName: '',
+                sectionName: '', // Hard to get without fetching section details endpoint or passing via URL
+                topics: [],
+                loading: true,
+                showAddModal: false,
+                newTopic: { title: '', video_url: '', content: '', order_index: 0 },
+
+                init() {
+                    const params = new URLSearchParams(window.location.search);
+                    this.sectionId = params.get('id');
+                    this.langName = params.get('langName') || 'Language';
+
+                    if (!this.sectionId) {
+                        alert("No section ID provided");
+                        window.history.back();
+                        return;
+                    }
+                    this.fetchData();
+                },
+
+                goBack() {
+                    window.history.back();
+                },
+
+                async fetchData() {
+                    this.loading = true;
+                    try {
+                        // Ideally we fetch section details too, but for speed let's just assume we might want to render what we have
+                        // Adding a small section detail fetch would be good if we have that endpoint easily accessible
+                        // Since I didn't verify a widely usable "get section by id" fully exposed to public without auth, 
+                        // I will attempt to assume proper endpoint usage.
+
+                        const topicRes = await fetch(`${API_BASE}/api/lcoding/sections/${this.sectionId}/topics`);
+                        if (topicRes.ok) this.topics = await topicRes.json();
+
+                        if (this.topics.length > 0) {
+                            const maxOrder = Math.max(...this.topics.map(t => t.order_index));
+                            this.newTopic.order_index = maxOrder + 10;
+                        }
+
+                    } catch (e) {
+                        console.error("Failed to fetch topics", e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async createTopic() {
+                    if (!this.newTopic.title) return alert("Title is required");
+
+                    try {
+                        const res = await fetch(`${API_BASE}/api/lcoding/sections/${this.sectionId}/topics`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.newTopic)
+                        });
+
+                        if (res.ok) {
+                            this.showAddModal = false;
+                            this.newTopic = { title: '', video_url: '', content: '', order_index: this.newTopic.order_index + 10 };
+                            this.fetchData();
+                        } else {
+                            alert("Failed to create topic");
+                        }
+                    } catch (e) {
+                        console.error("Error creating topic", e);
+                        alert("Error creating topic");
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>

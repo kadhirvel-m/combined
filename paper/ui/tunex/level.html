@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Sections | Tunex</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <script src="../../assets/js/theme.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gatex: {
+                            bg: '#13131F',
+                            card: '#1E1E2F',
+                            cardHover: '#27293d',
+                            primary: '#9E4B8A',
+                            secondary: '#4C2A59',
+                            accent: '#FF7F50',
+                            success: '#00F090',
+                            info: '#3B82F6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-header {
+            background: rgba(19, 19, 31, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+
+<body class="bg-gatex-bg text-gray-100 font-sans antialiased" x-data="levelApp()">
+
+    <!-- Header -->
+    <header class="h-16 flex items-center justify-between px-6 sticky top-0 z-30 glass-header">
+        <div class="flex items-center gap-4">
+            <button @click="goBack()" class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10">
+                <i class="ri-arrow-left-line text-xl"></i>
+            </button>
+            <div class="flex flex-col">
+                <h1 class="text-sm text-gray-400 font-medium" x-text="langName"></h1>
+                <h2 class="text-lg font-bold" x-text="level ? level.title : 'Loading...'"></h2>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <button @click="Theme.toggle()" class="p-2 text-gray-400 hover:text-white transition">
+                <i class="ri-moon-line dark:hidden"></i>
+                <i class="ri-sun-line hidden dark:block"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="p-6 max-w-5xl mx-auto">
+
+        <!-- Header & Add Button -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h3 class="text-2xl font-bold">Sections</h3>
+                <p class="text-sm text-gray-400">Manage sections for this level.</p>
+            </div>
+
+            <button @click="showAddModal = true"
+                class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-xl flex items-center gap-2 transition shadow-lg shadow-gatex-primary/20">
+                <i class="ri-add-line"></i> Add Section
+            </button>
+        </div>
+
+        <!-- Sections List -->
+        <div class="space-y-4">
+            <template x-for="(section, index) in sections" :key="section.id">
+                <a :href="'section.html?id=' + section.id + '&langName=' + langName"
+                    class="block bg-gatex-card border border-white/5 rounded-xl p-5 hover:border-gatex-primary/50 transition group">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <span
+                                class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-sm font-mono text-gray-400"
+                                x-text="index + 1"></span>
+                            <div>
+                                <h3 class="font-bold text-lg group-hover:text-gatex-primary transition"
+                                    x-text="section.title"></h3>
+                                <p class="text-xs text-gray-500 mt-1">Order Index: <span
+                                        x-text="section.order_index"></span></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span
+                                class="text-xs bg-white/5 px-2 py-1 rounded text-gray-400 group-hover:bg-gatex-primary/10 group-hover:text-gatex-primary transition">Manage
+                                Topics</span>
+                            <i
+                                class="ri-arrow-right-s-line text-xl text-gray-600 group-hover:text-white transition"></i>
+                        </div>
+                    </div>
+                </a>
+            </template>
+        </div>
+
+        <!-- Empty State -->
+        <div x-show="sections.length === 0 && !loading"
+            class="text-center py-20 bg-gatex-card/50 rounded-2xl border border-white/5 border-dashed">
+            <i class="ri-layout-row-line text-4xl mb-3 block opacity-30"></i>
+            <p class="text-gray-500">No sections yet.</p>
+        </div>
+
+        <!-- Add Modal -->
+        <div x-show="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style="display: none;">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showAddModal = false"></div>
+            <div class="bg-gatex-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative z-10 shadow-2xl">
+                <h3 class="text-xl font-bold mb-4">Add Section</h3>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Title</label>
+                        <input type="text" x-model="newSection.title"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition"
+                            placeholder="e.g., Introduction">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Order Index</label>
+                        <input type="number" x-model="newSection.order_index"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button @click="showAddModal = false"
+                        class="px-4 py-2 rounded-lg hover:bg-white/5 text-sm">Cancel</button>
+                    <button @click="createSection()"
+                        class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-lg text-sm font-medium transition">Create</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        function levelApp() {
+            return {
+                levelId: null,
+                langName: '',
+                level: null,
+                sections: [],
+                loading: true,
+                showAddModal: false,
+                newSection: { title: '', order_index: 0 },
+
+                init() {
+                    const params = new URLSearchParams(window.location.search);
+                    this.levelId = params.get('id');
+                    this.langName = params.get('langName') || 'Language';
+
+                    if (!this.levelId) {
+                        alert("No level ID provided");
+                        window.history.back();
+                        return;
+                    }
+                    this.fetchData();
+                },
+
+                goBack() {
+                    window.history.back();
+                },
+
+                async fetchData() {
+                    this.loading = true;
+                    try {
+                        const [levelRes, secRes] = await Promise.all([
+                            fetch(`${API_BASE}/api/lcoding/levels/${this.levelId}`),
+                            fetch(`${API_BASE}/api/lcoding/levels/${this.levelId}/sections`)
+                        ]);
+
+                        if (levelRes.ok) this.level = await levelRes.json();
+                        if (secRes.ok) this.sections = await secRes.json();
+
+                        if (this.sections.length > 0) {
+                            const maxOrder = Math.max(...this.sections.map(s => s.order_index));
+                            this.newSection.order_index = maxOrder + 10;
+                        }
+
+                    } catch (e) {
+                        console.error("Failed to fetch data", e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async createSection() {
+                    if (!this.newSection.title) return alert("Title is required");
+
+                    try {
+                        const res = await fetch(`${API_BASE}/api/lcoding/levels/${this.levelId}/sections`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.newSection)
+                        });
+
+                        if (res.ok) {
+                            this.showAddModal = false;
+                            this.newSection = { title: '', order_index: 0 };
+                            this.fetchData();
+                        } else {
+                            alert("Failed to create section");
+                        }
+                    } catch (e) {
+                        console.error("Error creating section", e);
+                        alert("Error creating section");
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
