@@ -118,6 +118,37 @@ CREATE TABLE public.departments (
   CONSTRAINT departments_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
   CONSTRAINT departments_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id)
 );
+CREATE TABLE public.lcoding_languages (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  description text,
+  logo_url text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lcoding_languages_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.lcoding_sections (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  language_id uuid NOT NULL,
+  title text NOT NULL,
+  order_index integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lcoding_sections_pkey PRIMARY KEY (id),
+  CONSTRAINT lcoding_sections_language_id_fkey FOREIGN KEY (language_id) REFERENCES public.lcoding_languages(id)
+);
+CREATE TABLE public.lcoding_topics (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  section_id uuid NOT NULL,
+  title text NOT NULL,
+  content text,
+  order_index integer DEFAULT 0,
+  video_url text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lcoding_topics_pkey PRIMARY KEY (id),
+  CONSTRAINT lcoding_topics_section_id_fkey FOREIGN KEY (section_id) REFERENCES public.lcoding_sections(id)
+);
 CREATE TABLE public.learning_track_goals (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   auth_user_id uuid NOT NULL UNIQUE,

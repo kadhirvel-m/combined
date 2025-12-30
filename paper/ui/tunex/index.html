@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coding Tracks | Tunex</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <script src="../../assets/js/theme.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gatex: {
+                            bg: '#13131F',
+                            card: '#1E1E2F',
+                            cardHover: '#27293d',
+                            primary: '#9E4B8A',
+                            secondary: '#4C2A59',
+                            accent: '#FF7F50',
+                            success: '#00F090',
+                            info: '#3B82F6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-header {
+            background: rgba(19, 19, 31, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+
+<body class="bg-gatex-bg text-gray-100 font-sans antialiased" x-data="tracksApp()">
+
+    <!-- Header -->
+    <header class="h-16 flex items-center justify-between px-6 sticky top-0 z-30 glass-header">
+        <div class="flex items-center gap-4">
+            <a href="../../ui/dashboard.html" class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10">
+                <i class="ri-arrow-left-line text-xl"></i>
+            </a>
+            <h1 class="text-lg font-bold">Coding Tracks</h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <button @click="Theme.toggle()" class="p-2 text-gray-400 hover:text-white transition">
+                <i class="ri-moon-line dark:hidden"></i>
+                <i class="ri-sun-line hidden dark:block"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="p-6 max-w-7xl mx-auto">
+
+        <!-- Header & Add Button -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h2 class="text-2xl font-bold mb-1">Languages</h2>
+                <p class="text-gray-400 text-sm">Select a language to manage its learning track.</p>
+            </div>
+            <button @click="openAddModal()"
+                class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-xl flex items-center gap-2 transition">
+                <i class="ri-add-line"></i> Add Language
+            </button>
+        </div>
+
+        <!-- Language Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <template x-for="lang in languages" :key="lang.id">
+                <a :href="'language.html?id=' + lang.id"
+                    class="bg-gatex-card hover:bg-gatex-cardHover border border-white/5 rounded-2xl p-6 transition group relative overflow-hidden block">
+                    <!-- Background Glow -->
+                    <div
+                        class="absolute top-0 right-0 w-32 h-32 bg-gatex-primary/10 rounded-fullblur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-gatex-primary/20 transition">
+                    </div>
+
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-2xl">
+                            <!-- Placeholder Icon if no logo -->
+                            <i class="ri-code-s-slash-line text-gatex-accent" x-show="!lang.logo_url"></i>
+                            <img :src="lang.logo_url" x-show="lang.logo_url" class="w-8 h-8 object-contain">
+                        </div>
+                        <div class="flex gap-2">
+                            <button @click.prevent="openEditModal(lang)"
+                                class="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition z-20 relative">
+                                <i class="ri-pencil-line"></i>
+                            </button>
+                            <i
+                                class="ri-arrow-right-line text-gray-500 group-hover:text-white transition group-hover:translate-x-1 mt-2"></i>
+                        </div>
+                    </div>
+
+                    <h3 class="text-xl font-bold mb-2" x-text="lang.name"></h3>
+                    <p class="text-sm text-gray-400 line-clamp-2" x-text="lang.description || 'No description'"></p>
+                </a>
+            </template>
+        </div>
+
+        <!-- Empty State -->
+        <div x-show="languages.length === 0 && !loading" class="text-center py-20 text-gray-500">
+            <i class="ri-code-box-line text-4xl mb-3 block opacity-50"></i>
+            <p>No languages found. Add one to get started.</p>
+        </div>
+
+        <!-- Add/Edit Modal -->
+        <div x-show="showModal" class="fixed inset-0 z-50 flex items-center justify-center px-4" style="display: none;">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="closeModal()"></div>
+            <div class="bg-gatex-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative z-10 shadow-2xl">
+                <h3 class="text-xl font-bold mb-4" x-text="isEdit ? 'Edit Language' : 'Add New Language'"></h3>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Name</label>
+                        <input type="text" x-model="form.name"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Description</label>
+                        <textarea x-model="form.description" rows="3"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Logo Image</label>
+                        <div x-show="isEdit && form.logo_url" class="mb-2">
+                            <img :src="form.logo_url" class="h-10 w-10 object-contain rounded bg-white/5 p-1">
+                        </div>
+                        <input type="file" @change="form.logo = $event.target.files[0]" accept="image/*"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition text-xs text-gray-400 file:mr-4 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gatex-primary file:text-white hover:file:bg-gatex-secondary">
+                        <p x-show="isEdit" class="text-[10px] text-gray-500 mt-1">Upload new image to replace existing.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button @click="closeModal()" class="px-4 py-2 rounded-lg hover:bg-white/5 text-sm">Cancel</button>
+                    <button @click="submitForm()"
+                        class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+                        x-text="isEdit ? 'Update' : 'Create'"></button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000'; // Adjust as needed
+
+        function tracksApp() {
+            return {
+                languages: [],
+                loading: true,
+                showModal: false,
+                isEdit: false,
+                form: { id: null, name: '', description: '', logo: null, logo_url: '' },
+
+                init() {
+                    this.fetchLanguages();
+                },
+
+                async fetchLanguages() {
+                    this.loading = true;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/lcoding/languages`);
+                        if (res.ok) {
+                            this.languages = await res.json();
+                        }
+                    } catch (e) {
+                        console.error("Failed to fetch languages", e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                openAddModal() {
+                    this.isEdit = false;
+                    this.form = { id: null, name: '', description: '', logo: null, logo_url: '' };
+                    this.showModal = true;
+                    this.resetFileInput();
+                },
+
+                openEditModal(lang) {
+                    this.isEdit = true;
+                    // Clone to avoid modifying view directly
+                    this.form = {
+                        id: lang.id,
+                        name: lang.name,
+                        description: lang.description,
+                        logo_url: lang.logo_url,
+                        logo: null
+                    };
+                    this.showModal = true;
+                    this.resetFileInput();
+                },
+
+                closeModal() {
+                    this.showModal = false;
+                },
+
+                resetFileInput() {
+                    const input = document.querySelector('input[type="file"]');
+                    if (input) input.value = '';
+                },
+
+                async submitForm() {
+                    if (!this.form.name) return alert("Name is required");
+
+                    try {
+                        const formData = new FormData();
+                        formData.append('name', this.form.name);
+                        if (this.form.description) formData.append('description', this.form.description);
+                        if (this.form.logo) formData.append('logo', this.form.logo);
+
+                        let url = `${API_BASE}/api/lcoding/languages`;
+                        let method = 'POST';
+
+                        if (this.isEdit) {
+                            url += `/${this.form.id}`;
+                            method = 'PUT';
+                        }
+
+                        const res = await fetch(url, {
+                            method: method,
+                            body: formData
+                        });
+
+                        if (res.ok) {
+                            this.closeModal();
+                            this.fetchLanguages();
+                        } else {
+                            alert("Failed to " + (this.isEdit ? "update" : "create") + " language");
+                        }
+                    } catch (e) {
+                        console.error("Error submitting form", e);
+                        alert("Error " + (this.isEdit ? "updating" : "creating") + " language");
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>

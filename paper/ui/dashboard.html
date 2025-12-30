@@ -1,0 +1,1768 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GateX Pro Dashboard</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gatex: {
+                            bg: '#13131F',       // Darker, deeper background
+                            card: '#1E1E2F',     // Standard card
+                            cardHover: '#27293d',
+                            primary: '#9E4B8A',  // Brand Pink/Purple
+                            secondary: '#4C2A59', // Deep Purple
+                            accent: '#FF7F50',   // Fire Orange
+                            success: '#00F090',  // Neon Green
+                            info: '#3B82F6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px rgba(158, 75, 138, 0.3)',
+                        'fire-glow': '0 0 15px rgba(255, 127, 80, 0.4)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4C2A59;
+            border-radius: 10px;
+        }
+
+        /* Animations */
+        @keyframes fire-pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                filter: drop-shadow(0 0 2px #FF7F50);
+            }
+
+            50% {
+                transform: scale(1.1);
+                filter: drop-shadow(0 0 8px #FF7F50);
+            }
+        }
+
+        .fire-anim {
+            animation: fire-pulse 2s infinite ease-in-out;
+        }
+
+        .glass-header {
+            background: rgba(19, 19, 31, 0.8);
+            backdrop-filter: blur(12px);
+        }
+
+        /* ===== Light Theme Overrides ===== */
+        html:not(.dark) {
+            --light-bg: #f8f9fc;
+            --light-card: #ffffff;
+            --light-text: #1f2937;
+            --light-text-secondary: #6b7280;
+            --light-border: rgba(0, 0, 0, 0.08);
+        }
+
+        html:not(.dark) body {
+            background-color: #f8f9fc;
+            color: #1f2937;
+        }
+
+        html:not(.dark) .bg-gatex-bg {
+            background-color: #f8f9fc !important;
+        }
+
+        html:not(.dark) .bg-gatex-card {
+            background-color: #ffffff !important;
+            border-color: rgba(0, 0, 0, 0.08) !important;
+        }
+
+        html:not(.dark) .glass-header {
+            background: rgba(255, 255, 255, 0.9);
+            border-color: rgba(0, 0, 0, 0.08) !important;
+        }
+
+        html:not(.dark) .text-white {
+            color: #1f2937 !important;
+        }
+
+        html:not(.dark) .text-gray-100 {
+            color: #374151 !important;
+        }
+
+        html:not(.dark) .text-gray-300 {
+            color: #4b5563 !important;
+        }
+
+        html:not(.dark) .text-gray-400 {
+            color: #6b7280 !important;
+        }
+
+        html:not(.dark) .text-gray-500 {
+            color: #9ca3af !important;
+        }
+
+        html:not(.dark) .border-white\/5 {
+            border-color: rgba(0, 0, 0, 0.08) !important;
+        }
+
+        html:not(.dark) .bg-white\/5 {
+            background-color: rgba(0, 0, 0, 0.03) !important;
+        }
+
+        html:not(.dark) .bg-white\/10 {
+            background-color: rgba(0, 0, 0, 0.05) !important;
+        }
+
+        html:not(.dark) .hover\:bg-white\/5:hover {
+            background-color: rgba(0, 0, 0, 0.05) !important;
+        }
+
+        html:not(.dark) .hover\:bg-white\/10:hover {
+            background-color: rgba(0, 0, 0, 0.08) !important;
+        }
+
+        html:not(.dark) aside {
+            background-color: #ffffff !important;
+            border-color: rgba(0, 0, 0, 0.08) !important;
+        }
+
+        html:not(.dark) main {
+            background-color: #f8f9fc !important;
+        }
+
+        html:not(.dark) footer {
+            background-color: #f8f9fc !important;
+            border-color: rgba(0, 0, 0, 0.08) !important;
+            color: #9ca3af !important;
+        }
+
+        html:not(.dark) .bento-card {
+            background-color: #ffffff !important;
+            border-color: rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        html:not(.dark) .bento-card:hover {
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+
+        html:not(.dark) input {
+            color: #1f2937 !important;
+        }
+
+        html:not(.dark) input::placeholder {
+            color: #9ca3af !important;
+        }
+
+        html:not(.dark) .schedule-bubble {
+            background-color: rgba(255, 255, 255, 0.9) !important;
+        }
+
+        html:not(.dark) ::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+        }
+
+        /* Bento Grid Item Transition */
+        .bento-card {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+        }
+
+        .bento-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        /* ===== Enhanced Streak Component Styles ===== */
+        .streak-card:hover .streak-glow-bg {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        .streak-glow-bg {
+            transition: all 0.5s ease;
+            animation: glow-pulse 4s ease-in-out infinite;
+        }
+
+        .streak-glow-secondary {
+            animation: glow-pulse 3s ease-in-out infinite reverse;
+        }
+
+        @keyframes glow-pulse {
+
+            0%,
+            100% {
+                opacity: 0.15;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.3;
+                transform: scale(1.05);
+            }
+        }
+
+        /* Fire Icon Animation */
+        .fire-icon-main {
+            animation: fire-float 2s ease-in-out infinite;
+        }
+
+        @keyframes fire-float {
+
+            0%,
+            100% {
+                transform: translateY(0) scale(1);
+                filter: drop-shadow(0 0 8px rgba(251, 146, 60, 0.6));
+            }
+
+            50% {
+                transform: translateY(-3px) scale(1.05);
+                filter: drop-shadow(0 0 15px rgba(251, 146, 60, 0.8));
+            }
+        }
+
+        .fire-container {
+            animation: fire-container-glow 2s ease-in-out infinite;
+        }
+
+        @keyframes fire-container-glow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 20px rgba(251, 146, 60, 0.2), inset 0 0 20px rgba(251, 146, 60, 0.1);
+            }
+
+            50% {
+                box-shadow: 0 0 30px rgba(251, 146, 60, 0.4), inset 0 0 30px rgba(251, 146, 60, 0.2);
+            }
+        }
+
+        /* Fire Particles */
+        .fire-particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: linear-gradient(to top, #f97316, #fbbf24);
+            border-radius: 50%;
+            opacity: 0;
+        }
+
+        .particle-1 {
+            top: 50%;
+            left: 30%;
+            animation: particle-rise 2.5s ease-out infinite;
+        }
+
+        .particle-2 {
+            top: 60%;
+            left: 50%;
+            animation: particle-rise 2s ease-out infinite 0.5s;
+        }
+
+        .particle-3 {
+            top: 55%;
+            left: 70%;
+            animation: particle-rise 2.2s ease-out infinite 1s;
+        }
+
+        @keyframes particle-rise {
+            0% {
+                opacity: 0;
+                transform: translateY(0) scale(1);
+            }
+
+            20% {
+                opacity: 0.8;
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(-30px) scale(0.3);
+            }
+        }
+
+        /* Streak Number Glow */
+        .streak-number {
+            text-shadow: 0 0 30px rgba(251, 146, 60, 0.3);
+            animation: number-glow 3s ease-in-out infinite;
+        }
+
+        @keyframes number-glow {
+
+            0%,
+            100% {
+                filter: drop-shadow(0 0 10px rgba(251, 146, 60, 0.3));
+            }
+
+            50% {
+                filter: drop-shadow(0 0 20px rgba(251, 146, 60, 0.5));
+            }
+        }
+
+        /* Progress Bar Shimmer */
+        .streak-progress-bar {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .streak-shimmer {
+            animation: shimmer 2s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        /* Day Items */
+        .streak-day-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            transition: transform 0.2s ease;
+        }
+
+        .streak-day-item:hover {
+            transform: scale(1.1);
+        }
+
+        .streak-day-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .streak-day-label {
+            font-size: 9px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+        }
+
+        /* Completed Days */
+        .streak-day-item.completed .streak-day-circle {
+            background: linear-gradient(135deg, #f97316, #ea580c);
+            box-shadow: 0 0 12px rgba(249, 115, 22, 0.4);
+            border: 2px solid rgba(251, 146, 60, 0.3);
+        }
+
+        .streak-day-item.completed .streak-day-label {
+            color: #f97316;
+        }
+
+        /* Today */
+        .streak-day-item.today .streak-day-circle {
+            background: linear-gradient(135deg, #fbbf24, #f97316, #ef4444);
+            box-shadow: 0 0 20px rgba(249, 115, 22, 0.6);
+            border: 2px solid rgba(251, 191, 36, 0.5);
+        }
+
+        .today-pulse {
+            animation: today-pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes today-pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 15px rgba(249, 115, 22, 0.5);
+            }
+
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 25px rgba(249, 115, 22, 0.8);
+            }
+        }
+
+        .today-label {
+            color: #fbbf24 !important;
+            font-weight: 700 !important;
+        }
+
+        /* Future Days */
+        .streak-day-item.future {
+            opacity: 0.5;
+        }
+
+        .streak-day-item.future .streak-day-circle {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+        }
+
+        .streak-day-item.future:hover {
+            opacity: 0.7;
+        }
+
+        /* ===== Class Schedule Styles ===== */
+        .schedule-timeline {
+            min-height: 180px;
+        }
+
+        .schedule-bubble {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px;
+            border-radius: 50px;
+            border: 1px solid;
+            backdrop-filter: blur(8px);
+            white-space: nowrap;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .schedule-bubble:hover {
+            transform: scale(1.05);
+        }
+
+        .schedule-bubble.active {
+            animation: schedule-pulse 2s ease-in-out infinite;
+        }
+
+        /* New Schedule Pill Style */
+        .schedule-pill {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 50px;
+            backdrop-filter: blur(8px);
+            white-space: nowrap;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .schedule-pill:hover {
+            transform: scale(1.03);
+        }
+
+        .schedule-pill.active {
+            animation: schedule-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes schedule-pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 15px rgba(158, 75, 138, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 25px rgba(158, 75, 138, 0.6);
+            }
+        }
+
+        .schedule-time-line {
+            animation: time-line-glow 2s ease-in-out infinite;
+        }
+
+        @keyframes time-line-glow {
+
+            0%,
+            100% {
+                opacity: 0.5;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .schedule-item {
+            z-index: 10;
+        }
+    </style>
+</head>
+
+<body class="font-sans antialiased text-gray-100 bg-gatex-bg transition-colors duration-300" x-data="{ 
+          darkMode: localStorage.getItem('theme') === 'light' ? false : true,
+          sidebarOpen: true,
+          leaderboardTab: 'global',
+          init() {
+              this.$watch('darkMode', val => {
+                  localStorage.setItem('theme', val ? 'dark' : 'light');
+                  document.documentElement.classList.toggle('dark', val);
+              });
+              if (!this.darkMode) document.documentElement.classList.remove('dark');
+          }
+      }" x-init="init()">
+
+    <div class="flex h-screen overflow-hidden">
+
+        <aside :class="sidebarOpen ? 'w-56' : 'w-20'"
+            class="hidden md:flex flex-shrink-0 flex-col justify-between border-r border-white/5 bg-gatex-card transition-all duration-300 z-20">
+
+            <div class="h-20 flex items-center justify-center border-b border-white/5">
+                <!-- Collapsed View - Icon Only -->
+                <img x-show="!sidebarOpen" src="assets/img/icon.svg" alt="GateX" class="w-10 h-10">
+
+                <!-- Expanded View - Full Logo -->
+                <template x-if="sidebarOpen">
+                    <div class="mt-6 mb-4">
+                        <!-- Dark Theme Logo -->
+                        <img x-show="darkMode" src="assets/img/gatex-dark-logo.svg" alt="GateX" class="h-10">
+                        <!-- Light Theme Logo -->
+                        <img x-show="!darkMode" src="assets/img/gatex-light-logo.svg" alt="GateX" class="h-10">
+                    </div>
+                </template>
+            </div>
+
+            <nav class="flex-1 py-6 px-3 space-y-1 overflow-y-auto min-h-0">
+                <p x-show="sidebarOpen" class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Learning</p>
+
+                <a href="#"
+                    class="flex items-center gap-3 px-3 py-2 rounded-xl bg-gatex-primary/10 text-gatex-primary border border-gatex-primary/20">
+                    <i class="ri-dashboard-fill text-lg"></i>
+                    <span x-show="sidebarOpen" class="font-medium text-sm">Dashboard</span>
+                </a>
+                <a href="#"
+                    class="flex items-center gap-3 px-3 py-2 rounded-xl text-gray-400 hover:bg-white/5 hover:text-white transition">
+                    <i class="ri-book-3-line text-lg"></i>
+                    <span x-show="sidebarOpen" class="font-medium text-sm">My Courses</span>
+                </a>
+                <a href="#"
+                    class="flex items-center gap-3 px-3 py-2 rounded-xl text-gray-400 hover:bg-white/5 hover:text-white transition">
+                    <i class="ri-flask-line text-lg"></i>
+                    <span x-show="sidebarOpen" class="font-medium text-sm">LabX Simulations</span>
+                </a>
+                <a href="syllabus.html"
+                    class="flex items-center gap-3 px-3 py-2 rounded-xl text-gray-400 hover:bg-white/5 hover:text-white transition">
+                    <i class="ri-book-open-line text-lg"></i>
+                    <span x-show="sidebarOpen" class="font-medium text-sm">Syllabus</span>
+                </a>
+                <a href="#"
+                    class="flex items-center gap-3 px-3 py-2 rounded-xl text-gray-400 hover:bg-white/5 hover:text-white transition">
+                    <i class="ri-calendar-todo-line text-lg"></i>
+                    <span x-show="sidebarOpen" class="font-medium text-sm">Schedule</span>
+                </a>
+                <a href="pyq-viewer.html"
+                    class="flex items-center gap-3 px-3 py-2 rounded-xl text-gray-400 hover:bg-white/5 hover:text-white transition">
+                    <i class="ri-vip-diamond-line text-lg text-amber-400"></i>
+                    <span x-show="sidebarOpen" class="font-medium text-sm">Gold Mine</span>
+                </a>
+
+                <p x-show="sidebarOpen"
+                    class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-4 mb-2">Community</p>
+                <a href="#"
+                    class="flex items-center gap-3 px-3 py-2 rounded-xl text-gray-400 hover:bg-white/5 hover:text-white transition">
+                    <i class="ri-trophy-line text-lg"></i>
+                    <span x-show="sidebarOpen" class="font-medium text-sm">Leaderboard</span>
+                </a>
+            </nav>
+
+            <!-- Explore Community Card -->
+            <div x-show="sidebarOpen" class="px-3 mb-3 mt-14 flex-shrink-0">
+                <!-- Increased margin for larger pop-out -->
+                <div class="rounded-2xl p-4 text-center relative" style="background-color: #9e4b8a;">
+                    <!-- Decor -->
+                    <div
+                        class="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 overflow-hidden">
+                    </div>
+                    <!-- Bubu Image Pop-out -->
+                    <img src="assets/img/bubu.png" alt="Community"
+                        class="absolute -top-20 left-1/2 -translate-x-1/2 w-24 drop-shadow-lg filter"
+                        style="max-width: none;">
+
+                    <!-- Content (pushed down slightly) -->
+                    <div class="mt-8">
+                        <h4 class="!text-white font-bold text-sm">Explore Community</h4>
+                        <p class="!text-white/80 text-[10px] mb-3">Support each others</p>
+
+                        <button
+                            class="w-full bg-white text-[#9e4b8a] font-bold text-xs py-2 px-4 rounded-lg hover:bg-gray-100 transition shadow-lg">
+                            Explore
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-white/5 flex-shrink-0">
+                <a href="profile.html"
+                    class="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-white/5 transition">
+                    <div class="w-8 h-8 rounded-full ring-2 ring-gatex-primary bg-gatex-card flex items-center justify-center overflow-hidden"
+                        id="userAvatar">
+                        <i class="ri-user-line text-gray-400"></i>
+                    </div>
+                    <div x-show="sidebarOpen" class="text-left overflow-hidden">
+                        <p class="text-xs font-bold text-white truncate" id="userName">Loading...</p>
+                        <p class="text-[10px] text-gray-500 truncate" id="userEmail">...</p>
+                    </div>
+                </a>
+            </div>
+        </aside>
+
+        <main class="flex-1 overflow-y-auto relative scroll-smooth bg-gatex-bg">
+
+            <header
+                class="h-16 flex items-center justify-between px-6 sticky top-0 z-30 glass-header border-b border-white/5">
+                <div class="flex items-center gap-4">
+                    <button @click="sidebarOpen = !sidebarOpen"
+                        class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10">
+                        <i class="ri-menu-fold-line text-xl"></i>
+                    </button>
+                    <div
+                        class="hidden md:flex items-center bg-gatex-card border border-white/5 rounded-full px-4 py-1.5 w-64">
+                        <i class="ri-search-line text-gray-500"></i>
+                        <input type="text" placeholder="Search concepts..."
+                            class="bg-transparent border-none outline-none text-sm ml-2 text-white w-full placeholder-gray-600">
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <div
+                        class="flex items-center gap-1 bg-gatex-card dark:bg-gatex-card px-3 py-1 rounded-full border border-white/5 dark:border-white/5">
+                        <i class="ri-vip-diamond-fill text-blue-400 text-xs"></i>
+                        <span class="text-xs font-bold">2,450 XP</span>
+                    </div>
+                    <!-- Theme Toggle Button -->
+                    <button @click="darkMode = !darkMode"
+                        class="relative p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 dark:hover:bg-white/10 transition-all"
+                        title="Toggle Theme">
+                        <i x-show="darkMode" class="ri-sun-line text-lg text-yellow-400"></i>
+                        <i x-show="!darkMode" class="ri-moon-line text-lg text-indigo-400"></i>
+                    </button>
+                    <button class="relative p-2 text-gray-400 hover:text-white">
+                        <i class="ri-notification-3-line text-lg"></i>
+                        <span
+                            class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-gatex-bg"></span>
+                    </button>
+                    <!-- Logout Button -->
+                    <button id="logoutBtn"
+                        class="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                        title="Logout">
+                        <i class="ri-logout-box-r-line text-lg"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="p-6 max-w-[1600px] mx-auto pb-20">
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+
+                    <!-- Progress Stats Row -->
+                    <div class="col-span-1 md:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <!-- Completed Courses -->
+                        <div
+                            class="bento-card bg-gatex-card border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-blue-500/30 transition-all">
+                            <!-- Circular Progress Pie -->
+                            <div class="w-12 h-12 relative">
+                                <svg class="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
+                                    <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(59, 130, 246, 0.2)"
+                                        stroke-width="3" />
+                                    <circle id="completedCircle" cx="18" cy="18" r="16" fill="none" stroke="#3B82F6"
+                                        stroke-width="3" stroke-dasharray="0, 100" stroke-linecap="round" />
+                                </svg>
+                                <span id="completedPercentText"
+                                    class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-blue-400">0%</span>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-2xl font-black text-white"><span id="completedCount">0</span><span
+                                        id="totalCount" class="text-sm font-normal text-gray-500">/0</span></p>
+                                <p class="text-[11px] text-gray-400">Completed Courses</p>
+                            </div>
+                            <svg class="w-16 h-8 text-blue-500/30" viewBox="0 0 64 32">
+                                <path d="M0,24 Q16,20 24,16 T40,12 T56,8 L64,4" fill="none" stroke="currentColor"
+                                    stroke-width="2" />
+                            </svg>
+                        </div>
+
+                        <!-- Earned Certificates -->
+                        <div
+                            class="bento-card bg-gatex-card border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-emerald-500/30 transition-all">
+                            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                                <i class="ri-award-fill text-emerald-400 text-xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-2xl font-black text-white">40+</p>
+                                <p class="text-[11px] text-gray-400">Earned Certificates</p>
+                            </div>
+                            <svg class="w-16 h-8 text-emerald-500/30" viewBox="0 0 64 32">
+                                <path d="M0,20 Q12,24 24,18 T48,10 T64,6" fill="none" stroke="currentColor"
+                                    stroke-width="2" />
+                            </svg>
+                        </div>
+
+                        <!-- Courses in Progress -->
+                        <div
+                            class="bento-card bg-gatex-card border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-amber-500/30 transition-all">
+                            <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                                <i class="ri-lightbulb-flash-fill text-amber-400 text-xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-2xl font-black text-white">27+</p>
+                                <p class="text-[11px] text-gray-400">Courses in Progress</p>
+                            </div>
+                            <svg class="w-16 h-8 text-amber-500/30" viewBox="0 0 64 32">
+                                <path d="M0,16 Q16,20 28,14 T52,10 T64,8" fill="none" stroke="currentColor"
+                                    stroke-width="2" />
+                            </svg>
+                        </div>
+
+                        <!-- Percent Completed -->
+                        <div
+                            class="bento-card bg-gatex-card border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-orange-500/30 transition-all">
+                            <!-- Circular Progress Pie -->
+                            <div class="w-12 h-12 relative">
+                                <svg class="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
+                                    <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(249, 115, 22, 0.2)"
+                                        stroke-width="3" />
+                                    <circle id="overallCircle" cx="18" cy="18" r="16" fill="none" stroke="#F97316"
+                                        stroke-width="3" stroke-dasharray="0, 100" stroke-linecap="round" />
+                                </svg>
+                                <span id="overallPercentText"
+                                    class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-orange-400">0%</span>
+                            </div>
+                            <div class="flex-1">
+                                <p id="overallPercentBig" class="text-2xl font-black text-white">0%</p>
+                                <p class="text-[11px] text-gray-400">Percent Completed</p>
+                            </div>
+                            <svg class="w-16 h-8 text-orange-500/30" viewBox="0 0 64 32">
+                                <path d="M0,22 Q20,16 32,20 T56,10 T64,6" fill="none" stroke="currentColor"
+                                    stroke-width="2" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    <div
+                        class="col-span-1 md:col-span-12 lg:col-span-8 bento-card bg-gradient-to-r from-gatex-card to-gatex-secondary rounded-3xl p-8 relative overflow-hidden group">
+                        <div
+                            class="absolute right-0 top-0 h-full w-1/2 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10">
+                        </div>
+                        <div
+                            class="absolute -right-10 -bottom-10 w-64 h-64 bg-gatex-primary blur-[100px] opacity-40 rounded-full">
+                        </div>
+
+                        <div class="relative z-10">
+                            <div class="flex items-center gap-3 mb-4">
+                                <span
+                                    class="bg-white/10 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider !text-white">
+                                    <i class="ri-flag-fill text-gatex-primary mr-1"></i> Daily Focus
+                                </span>
+                                <span class="!text-white/60 text-xs">Est. 45 mins</span>
+                            </div>
+                            <h2 class="text-3xl font-bold !text-white mb-2">Control Systems: Nyquist Stability</h2>
+                            <p class="!text-white/80 text-sm max-w-lg mb-8 leading-relaxed">
+                                Complete 3 Previous Year Questions (PYQ) and visualize the stability criteria using the
+                                LabX Plotter.
+                            </p>
+
+                            <div class="flex items-center gap-4">
+                                <button
+                                    class="bg-white text-black px-6 py-3 rounded-xl font-bold hover:scale-105 transition-transform flex items-center gap-2 shadow-lg shadow-white/10">
+                                    Start Mission <i class="ri-arrow-right-line"></i>
+                                </button>
+                                <div class="flex -space-x-2">
+                                    <div
+                                        class="w-8 h-8 rounded-full bg-gatex-card border border-white/10 flex items-center justify-center text-[10px] text-gray-400">
+                                        +400</div>
+                                    <div
+                                        class="w-8 h-8 rounded-full bg-gatex-card border border-white/10 flex items-center justify-center text-xs">
+                                        XP</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Enhanced Streak Component -->
+                    <div
+                        class="col-span-1 md:col-span-6 lg:col-span-4 bento-card bg-gatex-card border border-white/5 rounded-3xl p-6 flex flex-col justify-between relative overflow-hidden streak-card">
+
+                        <!-- Animated Background Fire Glow -->
+                        <div
+                            class="absolute -right-20 -top-20 w-56 h-56 bg-orange-500/20 rounded-full blur-[80px] streak-glow-bg">
+                        </div>
+                        <div
+                            class="absolute -left-10 -bottom-10 w-32 h-32 bg-red-500/10 rounded-full blur-[60px] streak-glow-secondary">
+                        </div>
+
+                        <!-- Main Header Section -->
+                        <div class="flex justify-between items-start z-10">
+                            <div>
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="text-gray-400 text-[10px] font-bold uppercase tracking-widest">🔥
+                                        Learning Streak</span>
+                                    <span
+                                        class="px-2 py-0.5 bg-orange-500/20 text-orange-400 text-[9px] font-bold rounded-full border border-orange-500/20">ON
+                                        FIRE</span>
+                                </div>
+                                <div class="flex items-baseline gap-2">
+                                    <span
+                                        class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-orange-300 via-orange-500 to-red-600 streak-number"
+                                        id="currentStreak">0</span>
+                                    <span class="text-sm font-bold text-gray-300 dark:text-gray-300">Days</span>
+                                    <span class="text-[10px] text-gray-500 ml-2" id="streakPersonalBest">· Personal
+                                        Best: 0</span>
+                                </div>
+                            </div>
+
+                            <!-- Premium Fire Icon with Particle Effects -->
+                            <div class="relative">
+                                <div
+                                    class="fire-container w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-500/30 via-red-500/20 to-transparent flex items-center justify-center backdrop-blur-sm border border-orange-500/20">
+                                    <i class="ri-fire-fill text-3xl text-orange-400 fire-icon-main"></i>
+                                </div>
+                                <!-- Fire particles -->
+                                <div class="fire-particle particle-1"></div>
+                                <div class="fire-particle particle-2"></div>
+                                <div class="fire-particle particle-3"></div>
+                            </div>
+                        </div>
+
+                        <!-- Streak Milestone Progress -->
+                        <div class="mt-4 z-10">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Next
+                                    Milestone</span>
+                                <span class="text-[10px] text-orange-400 font-bold" id="nextMilestoneText">...</span>
+                            </div>
+                            <div class="relative h-2 bg-gatex-bg rounded-full overflow-hidden">
+                                <div class="absolute inset-0 bg-gradient-to-r from-orange-500/20 to-red-500/20"></div>
+                                <div class="h-full bg-gradient-to-r from-orange-400 via-orange-500 to-red-500 rounded-full streak-progress-bar"
+                                    id="streakProgressBar" style="width: 0%;">
+                                    <div
+                                        class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent streak-shimmer">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex justify-between mt-1">
+                                <span class="text-[9px] text-gray-600" id="prevMilestoneLabel">0 🔥</span>
+                                <span class="text-[9px] text-orange-500 font-bold" id="currentStreakLabel">0</span>
+                                <span class="text-[9px] text-gray-600" id="nextMilestoneLabel">10 🏆</span>
+                            </div>
+                        </div>
+
+                        <!-- Weekly Calendar - Enhanced -->
+                        <div class="mt-5 z-10">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">This
+                                    Week</span>
+                                <span class="text-[9px] text-gray-500" id="weekProgressText">...</span>
+                            </div>
+                            <div class="grid grid-cols-7 gap-2" id="streakCalendarGrid">
+                                <!-- Calendar populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <!-- Subject Mastery (moved here) -->
+                    <div
+                        class="col-span-1 md:col-span-6 lg:col-span-4 bento-card bg-gatex-card border border-white/5 rounded-3xl p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-white font-bold">Subject Mastery</h3>
+                            <button class="text-xs text-gatex-primary hover:text-white">View All</button>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-300">Digital Logic</span>
+                                    <span class="text-white font-bold">85%</span>
+                                </div>
+                                <div class="w-full h-2 bg-gatex-bg rounded-full overflow-hidden">
+                                    <div class="h-full bg-gatex-primary w-[85%] rounded-full shadow-[0_0_10px_#9E4B8A]">
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-300">Calculus</span>
+                                    <span class="text-white font-bold">42%</span>
+                                </div>
+                                <div class="w-full h-2 bg-gatex-bg rounded-full overflow-hidden">
+                                    <div class="h-full bg-blue-500 w-[42%] rounded-full"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-300">Signals &amp; Systems</span>
+                                    <span class="text-white font-bold">60%</span>
+                                </div>
+                                <div class="w-full h-2 bg-gatex-bg rounded-full overflow-hidden">
+                                    <div class="h-full bg-orange-500 w-[60%] rounded-full"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Skill Analysis (moved here) -->
+                    <div
+                        class="col-span-1 md:col-span-6 lg:col-span-4 bento-card bg-gatex-card border border-white/5 rounded-3xl p-6 flex flex-col items-center">
+                        <h3 class="text-white font-bold text-sm w-full mb-2">Skill Analysis</h3>
+                        <div class="w-full h-48 relative">
+                            <canvas id="radarChart"></canvas>
+                        </div>
+                        <div class="flex gap-4 mt-2 text-[10px] text-gray-500">
+                            <div class="flex items-center gap-1"><span
+                                    class="w-2 h-2 rounded-full bg-gatex-accent"></span>
+                                Current</div>
+                            <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gray-600"></span>
+                                Avg Topper</div>
+                        </div>
+                    </div>
+
+                    <div
+                        class="col-span-1 md:col-span-6 lg:col-span-4 row-span-2 bento-card bg-gatex-card border border-white/5 rounded-3xl p-0 flex flex-col h-full overflow-hidden">
+                        <div class="p-5 border-b border-white/5 flex items-center justify-between">
+                            <h3 class="font-bold text-white">Leaderboard</h3>
+                            <div class="flex bg-gatex-bg p-1 rounded-lg">
+                                <button @click="leaderboardTab = 'friends'"
+                                    :class="leaderboardTab === 'friends' ? 'bg-gatex-card text-white shadow' : 'text-gray-500'"
+                                    class="px-3 py-1 text-xs font-bold rounded transition">Friends</button>
+                                <button @click="leaderboardTab = 'global'"
+                                    :class="leaderboardTab === 'global' ? 'bg-gatex-card text-white shadow' : 'text-gray-500'"
+                                    class="px-3 py-1 text-xs font-bold rounded transition">Global</button>
+                            </div>
+                        </div>
+
+                        <div x-show="leaderboardTab === 'global'" class="flex-1 overflow-y-auto p-2 space-y-1">
+                            <div
+                                class="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-yellow-500/10 to-transparent border border-yellow-500/20 mb-2">
+                                <div class="flex items-center gap-3">
+                                    <div class="text-yellow-500 font-black text-lg w-4">1</div>
+                                    <div class="relative">
+                                        <img src="https://i.pravatar.cc/150?u=11"
+                                            class="w-10 h-10 rounded-full border-2 border-yellow-500">
+                                        <div
+                                            class="absolute -top-2 -right-1 bg-yellow-500 text-black text-[8px] font-bold px-1 rounded">
+                                            KING</div>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-bold text-white">Sarah Jenkins</p>
+                                        <p class="text-[10px] text-gray-400">Streak: 45 days</p>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-bold text-yellow-500">5200 XP</span>
+                            </div>
+
+                            <template x-for="i in 5">
+                                <div
+                                    class="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition group cursor-pointer">
+                                    <div class="flex items-center gap-3">
+                                        <div class="text-gray-500 font-bold text-sm w-4" x-text="i + 1"></div>
+                                        <img :src="`https://i.pravatar.cc/150?u=${i + 20}`"
+                                            class="w-8 h-8 rounded-full grayscale group-hover:grayscale-0 transition">
+                                        <p class="text-sm font-medium text-gray-300 group-hover:text-white"
+                                            x-text="['David Kim', 'Elena R.', 'Marcus T.', 'Priya S.', 'Tom H.'][i-1]">
+                                        </p>
+                                    </div>
+                                    <span
+                                        class="text-xs font-bold text-gray-500 group-hover:text-gatex-success transition">+120
+                                        XP</span>
+                                </div>
+                            </template>
+                        </div>
+
+                        <div class="p-4 bg-gatex-primary/10 border-t border-gatex-primary/20 mt-auto">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-gatex-primary font-bold">#420</span>
+                                    <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d"
+                                        class="w-8 h-8 rounded-full ring-1 ring-gatex-primary">
+                                    <span class="text-sm font-bold text-white">You</span>
+                                </div>
+                                <div class="flex flex-col items-end">
+                                    <span class="text-xs font-bold text-white">2,450 XP</span>
+                                    <span class="text-[10px] text-green-400">▲ 12 ranks</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Activity Analysis (moved here) -->
+                    <div
+                        class="col-span-1 md:col-span-12 lg:col-span-8 bento-card bg-gatex-card border border-white/5 rounded-3xl p-6">
+                        <div class="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 class="text-white font-bold text-lg">Activity Analysis</h3>
+                                <p class="text-xs text-gray-500">Correlation: Time Spent vs. Questions Solved</p>
+                            </div>
+                            <div class="flex bg-gatex-bg p-1 rounded-lg border border-white/5">
+                                <button
+                                    class="px-3 py-1 text-xs font-medium rounded text-white bg-white/10 shadow-sm">Week</button>
+                                <button
+                                    class="px-3 py-1 text-xs font-medium rounded text-gray-500 hover:text-white">Month</button>
+                            </div>
+                        </div>
+
+                        <div class="h-64 w-full relative">
+                            <canvas id="activityChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Class Schedule Component -->
+                    <div
+                        class="col-span-1 md:col-span-12 bento-card bg-gatex-card border border-white/5 rounded-3xl p-6 relative overflow-hidden">
+                        <!-- Header -->
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <h3 class="text-white font-bold text-xl">Class Schedule</h3>
+                                <p class="text-gray-400 text-sm mt-1">Never miss your study session</p>
+                            </div>
+                            <button
+                                class="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition text-gray-300 text-xs">
+                                <i class="ri-eye-line"></i>
+                                Hide
+                            </button>
+                        </div>
+
+                        <!-- Schedule Content -->
+                        <div class="relative" style="height: 160px;">
+
+                            <!-- Vertical Dashed Line (Current Time at 12pm = ~33%) -->
+                            <div
+                                class="absolute left-[33%] top-0 bottom-8 w-px border-l-2 border-dashed border-gray-600/50">
+                            </div>
+
+                            <!-- Pills Container -->
+                            <!-- Digital Logic - 9:30am (left side, lower) -->
+                            <div class="absolute left-[8%]" style="bottom: 55px;">
+                                <div
+                                    class="schedule-pill bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer">
+                                    <div
+                                        class="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center mr-2.5">
+                                        <i class="ri-cpu-line text-amber-400 text-sm"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-white font-semibold text-xs">Digital Logic</p>
+                                        <p class="text-gray-400 text-[10px]">2h 30m · Prof. A.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Control Systems - 12pm (Current, at the line, higher) -->
+                            <div class="absolute left-[33%] -translate-x-1/2" style="bottom: 90px;">
+                                <div
+                                    class="schedule-pill active bg-gatex-primary border border-gatex-primary/50 shadow-glow">
+                                    <div class="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center mr-2.5">
+                                        <i class="ri-settings-3-line text-white text-sm"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-white font-semibold text-xs">Control Systems</p>
+                                        <p class="text-white/70 text-[10px]">3h 20m · Prof. K.</p>
+                                    </div>
+                                </div>
+                                <!-- Connector line to timeline -->
+                                <div class="absolute left-1/2 -bottom-[30px] w-px h-[30px] bg-gatex-primary/50"></div>
+                            </div>
+
+                            <!-- Break - 2pm (center, at bottom near timeline) -->
+                            <div class="absolute left-[52%] -translate-x-1/2" style="bottom: 35px;">
+                                <div
+                                    class="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10">
+                                    <i class="ri-cup-line text-gray-400 text-sm"></i>
+                                    <span class="text-gray-400 text-xs font-medium">Break</span>
+                                    <span class="text-gray-500 text-[10px]">· 1h 30m</span>
+                                </div>
+                            </div>
+
+                            <!-- Signals & Systems - 3pm (right side, higher) -->
+                            <div class="absolute left-[70%]" style="bottom: 75px;">
+                                <div
+                                    class="schedule-pill bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 transition-all cursor-pointer">
+                                    <div
+                                        class="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center mr-2.5">
+                                        <i class="ri-flask-line text-blue-400 text-sm"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-white font-semibold text-xs">Signals & Systems</p>
+                                        <p class="text-gray-400 text-[10px]">1h 40m · Prof. R.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Time Labels (at the bottom) -->
+                            <div
+                                class="absolute bottom-0 left-0 right-0 flex justify-between text-[11px] text-gray-500 px-2">
+                                <span>9am</span>
+                                <span>10am</span>
+                                <span>11am</span>
+                                <span class="text-gatex-primary font-bold">12pm</span>
+                                <span>1pm</span>
+                                <span>2pm</span>
+                                <span>3pm</span>
+                                <span>4pm</span>
+                                <span>5pm</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hours Activity Component -->
+                    <div
+                        class="col-span-1 md:col-span-6 lg:col-span-5 bento-card bg-gatex-card border border-white/5 rounded-3xl p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-white font-bold text-lg">Hours Activity</h3>
+                                <p class="text-green-400 text-xs mt-1">
+                                    <i class="ri-arrow-up-line"></i> +3% Increase than last week
+                                </p>
+                            </div>
+                            <button class="p-2 bg-white/5 rounded-lg hover:bg-white/10 transition">
+                                <i class="ri-equalizer-line text-gray-400"></i>
+                            </button>
+                        </div>
+
+                        <!-- Hours Chart -->
+                        <div class="relative h-40">
+                            <canvas id="hoursChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Course Stats Cards -->
+                    <div class="col-span-1 md:col-span-6 lg:col-span-3 flex flex-col gap-4">
+                        <!-- Courses Completed -->
+                        <div
+                            class="bento-card bg-gradient-to-br from-emerald-500/10 to-gatex-card border border-emerald-500/20 rounded-3xl p-5 flex-1">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-5xl font-black text-emerald-400">11</span>
+                                    <p class="text-gray-400 text-xs mt-2">Courses<br>Completed</p>
+                                </div>
+                                <div class="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                                    <i class="ri-check-double-line text-emerald-400 text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Courses In Progress -->
+                        <div
+                            class="bento-card bg-gradient-to-br from-amber-500/10 to-gatex-card border border-amber-500/20 rounded-3xl p-5 flex-1">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-5xl font-black text-amber-400">04</span>
+                                    <p class="text-gray-400 text-xs mt-2">Courses in<br>Progress</p>
+                                </div>
+                                <div class="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                    <i class="ri-loader-4-line text-amber-400 text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Task Schedule Calendar -->
+                    <div
+                        class="col-span-1 md:col-span-6 lg:col-span-4 bento-card bg-gatex-card border border-white/5 rounded-3xl p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <div>
+                                <p class="text-gray-400 text-xs">Task Schedule</p>
+                                <h3 class="text-white font-bold text-lg" id="scheduleHeaderDate">...</h3>
+                            </div>
+                            <button class="p-2 bg-white/5 rounded-lg hover:bg-white/10 transition">
+                                <i class="ri-arrow-right-up-line text-gray-400"></i>
+                            </button>
+                        </div>
+
+                        <!-- Calendar Grid -->
+                        <div class="grid grid-cols-7 gap-1 text-center text-xs" id="scheduleCalendarGrid">
+                            <!-- Day Headers -->
+                            <span class="text-gray-500 py-1">S</span>
+                            <span class="text-gray-500 py-1">M</span>
+                            <span class="text-gray-500 py-1">T</span>
+                            <span class="text-gray-500 py-1">W</span>
+                            <span class="text-gray-500 py-1">T</span>
+                            <span class="text-gray-500 py-1">F</span>
+                            <span class="text-gray-500 py-1">S</span>
+
+                            <!-- Days populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <footer class="text-center py-6 text-gray-600 text-xs border-t border-white/5 bg-gatex-bg">
+                    <p>&copy; 2025 GateX Learning Technologies</p>
+                </footer>
+        </main>
+    </div>
+
+    <script>
+        // --- 1. Mixed Activity Chart (Bar + Line) ---
+        const ctxActivity = document.getElementById('activityChart').getContext('2d');
+
+        // Gradient for the Line
+        let gradientLine = ctxActivity.createLinearGradient(0, 0, 0, 400);
+        gradientLine.addColorStop(0, 'rgba(158, 75, 138, 0.5)');
+        gradientLine.addColorStop(1, 'rgba(158, 75, 138, 0)');
+
+        new Chart(ctxActivity, {
+            type: 'bar',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'Questions Solved',
+                        data: [15, 22, 18, 30, 25, 40, 35],
+                        borderColor: '#9E4B8A', // Brand Pink
+                        backgroundColor: gradientLine,
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#1E1E2F',
+                        pointBorderColor: '#9E4B8A',
+                        pointRadius: 4,
+                        yAxisID: 'y'
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Hours Spent',
+                        data: [2, 3.5, 2.5, 4, 3, 5, 4.5],
+                        backgroundColor: '#4C2A59', // Dark Purple
+                        borderRadius: 6,
+                        barThickness: 12,
+                        hoverBackgroundColor: '#FF7F50', // Orange on hover
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: '#aaa', font: { size: 10 }, usePointStyle: true } },
+                    tooltip: {
+                        backgroundColor: 'rgba(30, 30, 47, 0.9)',
+                        titleColor: '#fff',
+                        bodyColor: '#ccc',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#666' }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: { color: 'rgba(255,255,255,0.05)', borderDash: [5, 5] },
+                        ticks: { color: '#666' },
+                        title: { display: false } // Questions
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: { display: false },
+                        ticks: { display: false } // Hide hours numbers to keep clean
+                    }
+                }
+            }
+        });
+
+        // --- 2. Radar Skill Chart ---
+        const ctxRadar = document.getElementById('radarChart').getContext('2d');
+        new Chart(ctxRadar, {
+            type: 'radar',
+            data: {
+                labels: ['Control', 'Signals', 'Digital', 'Maths', 'Analog', 'Networks'],
+                datasets: [{
+                    label: 'You',
+                    data: [85, 65, 90, 70, 55, 80],
+                    fill: true,
+                    backgroundColor: 'rgba(255, 127, 80, 0.2)', // Orange tint
+                    borderColor: '#FF7F50',
+                    pointBackgroundColor: '#FF7F50',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: '#FF7F50'
+                },
+                {
+                    label: 'Topper Avg',
+                    data: [90, 85, 95, 90, 80, 90],
+                    fill: false,
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    borderDash: [5, 5],
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    r: {
+                        angleLines: { color: 'rgba(255, 255, 255, 0.05)' },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        pointLabels: { color: '#888', font: { size: 10 } },
+                        ticks: { display: false, backdropColor: 'transparent' }
+                    }
+                }
+            }
+        });
+
+        // --- 3. Hours Activity Chart ---
+        const ctxHours = document.getElementById('hoursChart').getContext('2d');
+        new Chart(ctxHours, {
+            type: 'bar',
+            data: {
+                labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+                datasets: [{
+                    data: [3, 5, 7, 4, 8, 6, 9],
+                    backgroundColor: function (context) {
+                        const chart = context.chart;
+                        const { ctx, chartArea } = chart;
+                        if (!chartArea) return '#4C2A59';
+                        const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+                        gradient.addColorStop(0, '#4C2A59');
+                        gradient.addColorStop(1, '#9E4B8A');
+                        return gradient;
+                    },
+                    borderRadius: 6,
+                    barThickness: 20,
+                    hoverBackgroundColor: '#FF7F50'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(30, 30, 47, 0.95)',
+                        titleColor: '#fff',
+                        bodyColor: '#ccc',
+                        callbacks: {
+                            label: function (context) {
+                                return context.raw + 'h studied';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#666', font: { size: 10 } }
+                    },
+                    y: {
+                        display: false,
+                        grid: { display: false },
+                        max: 12
+                    }
+                }
+            }
+        });
+    </script>
+
+    <!-- API Configuration -->
+    <script src="scripts/cloud.js"></script>
+    <script>
+        // Logout functionality - Call Backend API
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            try {
+                // Call backend logout endpoint
+                await fetch(`${API_BASE_URL}/auth/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+            } catch (err) {
+                console.error('Logout API error:', err);
+            }
+
+            // Clear localStorage regardless of API result
+            localStorage.removeItem('gatex-access-token');
+            localStorage.removeItem('gatex-refresh-token');
+            localStorage.removeItem('gatex-user');
+
+            window.location.href = '../login.html';
+        });
+
+        // Check authentication on page load from localStorage
+        // Check authentication on page load from localStorage
+        document.addEventListener('DOMContentLoaded', async () => {
+            const accessToken = localStorage.getItem('gatex-access-token');
+            if (!accessToken) {
+                window.location.href = '../login.html';
+            }
+
+            // Display user info in sidebar
+            const user = JSON.parse(localStorage.getItem('gatex-user') || '{}');
+            const userNameEl = document.getElementById('userName');
+            const userEmailEl = document.getElementById('userEmail');
+            let userAvatarEl = document.getElementById('userAvatar');
+
+            // Set basic info initially from localStorage
+            if (userNameEl) userNameEl.textContent = user.full_name || user.email || 'User';
+            if (userEmailEl) userEmailEl.textContent = user.email || '...';
+
+            if (user.id) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/auth/profile/${user.id}`, {
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        const profile = await response.json();
+
+                        // Update name if available in profile
+                        if (profile.name && userNameEl) {
+                            userNameEl.textContent = profile.name;
+                        }
+
+                        // Update email if different (optional)
+                        if (profile.email && userEmailEl) {
+                            userEmailEl.textContent = profile.email;
+                        }
+
+                        // Handle Avatar
+                        if (profile.profile_image_url) {
+                            // If currently not an image (e.g. div), replace with image
+                            if (userAvatarEl.tagName !== 'IMG') {
+                                const newImg = document.createElement('img');
+                                newImg.className = "w-8 h-8 rounded-full ring-2 ring-gatex-primary object-cover";
+                                newImg.id = "userAvatar";
+                                userAvatarEl.replaceWith(newImg);
+                                userAvatarEl = newImg;
+                            }
+                            userAvatarEl.src = profile.profile_image_url;
+                        } else {
+                            // Show initials
+                            const name = profile.name || user.full_name || user.email || "U";
+                            const initials = getInitials(name);
+
+                            const initialsDiv = document.createElement('div');
+                            initialsDiv.className = "w-8 h-8 rounded-full ring-2 ring-gatex-primary bg-gatex-primary text-white flex items-center justify-center text-xs font-bold";
+                            initialsDiv.textContent = initials;
+                            initialsDiv.id = "userAvatar";
+
+                            userAvatarEl.replaceWith(initialsDiv);
+                            userAvatarEl = initialsDiv;
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error fetching profile:", error);
+                }
+
+                // Load Streak Data
+                try {
+                    const streakRes = await fetch(`${API_BASE_URL}/activity/streak/${user.id}`, {
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+                    if (streakRes.ok) {
+                        const streakData = await streakRes.json();
+                        const currentStreakEl = document.getElementById('currentStreak');
+                        const personalBestEl = document.getElementById('streakPersonalBest');
+
+                        if (currentStreakEl) currentStreakEl.textContent = streakData.current_streak || 0;
+                        if (personalBestEl) personalBestEl.textContent = `· Personal Best: ${streakData.longest_streak || 0}`;
+
+                        // Milestones (Defensive Check)
+                        const nextM = streakData.next_milestone !== undefined ? streakData.next_milestone : 7;
+                        const prevM = streakData.prev_milestone !== undefined ? streakData.prev_milestone : 0;
+                        const prog = streakData.milestone_progress !== undefined ? streakData.milestone_progress : 0;
+                        const daysComp = streakData.days_completed !== undefined ? streakData.days_completed : 0;
+
+                        document.getElementById('nextMilestoneText').textContent = `${nextM} Days 🎯`;
+                        document.getElementById('streakProgressBar').style.width = `${prog}%`;
+                        document.getElementById('prevMilestoneLabel').textContent = `${prevM} 🔥`;
+                        document.getElementById('currentStreakLabel').textContent = streakData.current_streak || 0;
+                        document.getElementById('nextMilestoneLabel').textContent = `${nextM} 🏆`;
+
+                        // Week Progress
+                        document.getElementById('weekProgressText').textContent = `${daysComp}/7 days complete`;
+
+
+                        // Render Calendar
+                        const calendarGrid = document.getElementById('streakCalendarGrid');
+
+                        // Fallback & Smart Inference
+                        // If week_data is missing OR if we want to backfill visual history based on streak count
+                        let weekData = streakData.week_data;
+                        const currentStreak = streakData.current_streak || 0;
+
+                        // Helper to get day index (Mon=0, Sun=6)
+                        const getDayIndex = (date) => {
+                            const day = date.getDay();
+                            return (day + 6) % 7;
+                        };
+                        const todayIndex = getDayIndex(new Date());
+
+                        if (!weekData || weekData.length === 0) {
+                            const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+                            weekData = days.map((d, i) => {
+                                // Infer activity: if day is today or before, and within streak range
+                                const daysDiff = todayIndex - i;
+                                const isActive = daysDiff >= 0 && daysDiff < currentStreak;
+                                const isToday = i === todayIndex;
+
+                                return {
+                                    day: d,
+                                    date: new Date(new Date().setDate(new Date().getDate() - daysDiff)).getDate(),
+                                    is_today: isToday,
+                                    is_active: isActive,
+                                    is_future: i > todayIndex
+                                };
+                            });
+
+                            // Recalculate days_completed for UI
+                            const activeCount = weekData.filter(d => d.is_active).length;
+                            document.getElementById('weekProgressText').textContent = `${activeCount}/7 days complete`;
+                        } else {
+                            // Even if we have data, if it shows 0 active but we have a streak, let's fix visual gap
+                            // This handles "First day with new table" scenario where history is missing
+                            weekData = weekData.map((d, i) => {
+                                if (d.is_today && currentStreak > 0) d.is_active = true;
+                                // Simple backfill for current week if streak > 1
+                                const daysDiff = todayIndex - i;
+                                if (daysDiff > 0 && daysDiff < currentStreak && !d.is_active) {
+                                    d.is_active = true;
+                                }
+                                return d;
+                            });
+                            // Update count again just in case
+                            const activeCount = weekData.filter(d => d.is_active).length;
+                            document.getElementById('weekProgressText').textContent = `${activeCount}/7 days complete`;
+                        }
+
+                        if (calendarGrid) {
+                            calendarGrid.innerHTML = '';
+                            weekData.forEach(day => {
+                                let itemClass = 'streak-day-item';
+                                let circleContent = '';
+                                let labelClass = 'streak-day-label';
+
+                                if (day.is_active) {
+                                    itemClass += ' completed';
+                                    circleContent = '<i class="ri-check-line text-xs text-white"></i>';
+                                    if (day.is_today) {
+                                        itemClass = 'streak-day-item today';
+                                        circleContent = '<i class="ri-fire-fill text-xs text-white"></i>';
+                                        labelClass += ' today-label';
+                                    }
+                                } else if (day.is_future) {
+                                    itemClass += ' future';
+                                    // If date is present show it, else empty
+                                    circleContent = day.date ? `<span class="text-[10px] text-gray-600">${day.date}</span>` : '<span class="text-[10px] text-gray-600">-</span>';
+                                } else {
+                                    // Past inactive
+                                    itemClass += ' future';
+                                    circleContent = day.date ? `<span class="text-[10px] text-gray-600">${day.date}</span>` : '<span class="text-[10px] text-gray-600">-</span>';
+                                }
+
+                                // Special pulsing for today active
+                                const pulseClass = (day.is_today && day.is_active) ? 'today-pulse' : '';
+
+                                const html = `
+                                    <div class="${itemClass}">
+                                        <div class="streak-day-circle ${pulseClass}">
+                                            ${circleContent}
+                                        </div>
+                                        <span class="${labelClass}">${typeof day.day === 'string' ? day.day[0] : ''}</span>
+                                    </div>
+                                `;
+                                calendarGrid.insertAdjacentHTML('beforeend', html);
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error fetching streak:", err);
+                }
+            }
+            // Call Calendar Render
+            renderScheduleCalendar();
+            // Call Stats Render
+            loadUserStats();
+        });
+
+        // -------------------------------------------------------------
+        // Fetch Stats
+        // -------------------------------------------------------------
+        async function loadUserStats() {
+            const token = localStorage.getItem('gatex-access-token');
+            if (!token) {
+                console.log("No gatex-access-token found");
+                return;
+            }
+
+            // Need user ID. 
+            // Try to get from localStorage first to avoid extra API call
+            let uid = null;
+            try {
+                const localUser = JSON.parse(localStorage.getItem('gatex-user') || '{}');
+                if (localUser.id) uid = localUser.id;
+            } catch (e) { }
+
+            if (!uid) {
+                // Fallback to fetching me if not in local
+                try {
+                    const meRes = await fetch(`${API_BASE_URL}/auth/me`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (meRes.ok) {
+                        const meData = await meRes.json();
+                        uid = meData.user.id;
+                    }
+                } catch (e) { }
+            }
+
+            if (!uid) {
+                console.log("Could not find User ID for stats");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/activity/stats/${uid}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    // Update DOM
+                    const completed = data.completed_topics || 0;
+                    const total = data.total_topics || 0;
+                    const percent = data.percent_completed || 0;
+
+                    // Comp Courses Card
+                    const compCountEl = document.getElementById('completedCount');
+                    const totalCountEl = document.getElementById('totalCount');
+                    const compPercentText = document.getElementById('completedPercentText');
+                    const compCircle = document.getElementById('completedCircle');
+
+                    if (compCountEl) compCountEl.textContent = completed;
+                    if (totalCountEl) totalCountEl.textContent = `/${total}`;
+                    if (compPercentText) compPercentText.textContent = `${percent}%`;
+                    if (compCircle) compCircle.setAttribute('stroke-dasharray', `${percent}, 100`);
+
+                    // Percent Completed Card
+                    const overallBig = document.getElementById('overallPercentBig');
+                    const overallText = document.getElementById('overallPercentText');
+                    const overallCircle = document.getElementById('overallCircle');
+
+                    if (overallBig) overallBig.textContent = `${percent}%`;
+                    if (overallText) overallText.textContent = `${percent}%`;
+                    if (overallCircle) overallCircle.setAttribute('stroke-dasharray', `${percent}, 100`);
+                }
+            } catch (e) {
+                console.error("Stats Load Error", e);
+            }
+        }
+
+        // -------------------------------------------------------------
+        // Dynamic Schedule Calendar
+        // -------------------------------------------------------------
+        function renderScheduleCalendar() {
+            const headerEl = document.getElementById('scheduleHeaderDate');
+            const gridEl = document.getElementById('scheduleCalendarGrid');
+            if (!headerEl || !gridEl) return;
+
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            const currentDate = today.getDate();
+
+            // Format Header: e.g. "27 December, 2024"
+            const monthNames = ["January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            ];
+            headerEl.textContent = `${currentDate} ${monthNames[currentMonth]}, ${currentYear}`;
+
+            // Calendar Logic
+            const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay(); // 0 (Sun) - 6 (Sat)
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate(); // 28-31
+            const daysInPrevMonth = new Date(currentYear, currentMonth, 0).getDate();
+
+            // Clear Grid (keep nothing, rebuild all)
+            gridEl.innerHTML = `
+                <span class="text-gray-500 py-1">S</span>
+                <span class="text-gray-500 py-1">M</span>
+                <span class="text-gray-500 py-1">T</span>
+                <span class="text-gray-500 py-1">W</span>
+                <span class="text-gray-500 py-1">T</span>
+                <span class="text-gray-500 py-1">F</span>
+                <span class="text-gray-500 py-1">S</span>
+            `;
+
+            // Previous Month Padding
+            for (let i = 0; i < firstDayOfMonth; i++) {
+                const dayNum = daysInPrevMonth - firstDayOfMonth + 1 + i;
+                const span = document.createElement('span');
+                span.className = "text-gray-600 py-2";
+                span.textContent = dayNum;
+                gridEl.appendChild(span);
+            }
+
+            // Current Month
+            for (let d = 1; d <= daysInMonth; d++) {
+                const span = document.createElement('span');
+                if (d === currentDate) {
+                    span.className = "bg-gatex-primary text-white rounded-full py-2 font-bold cursor-pointer hover:bg-gatex-primary/90 transition";
+                } else {
+                    span.className = "text-gray-300 py-2 hover:bg-white/5 rounded-full cursor-pointer transition";
+                }
+                span.textContent = d;
+                gridEl.appendChild(span);
+            }
+
+            // Next Month Padding (fill remaining of the current row + maybe one more row if needed)
+            const totalCellsSoFar = firstDayOfMonth + daysInMonth; // e.g. 3 + 31 = 34
+            // Grid is 7 cols. 
+            // We want to fill the last row.
+            const totalCellsNeeded = Math.ceil(totalCellsSoFar / 7) * 7;
+            const nextMonthPadding = totalCellsNeeded - totalCellsSoFar;
+
+            // If total rows < 6, maybe add another row? 
+            // The static design had 6 rows (including one full next-month row maybe?). 
+            // Let's stick to valid grid. If it creates 5 rows, that's fine.
+
+            for (let i = 1; i <= nextMonthPadding; i++) {
+                const span = document.createElement('span');
+                span.className = "text-gray-600 py-2";
+                span.textContent = i;
+                gridEl.appendChild(span);
+            }
+        }
+
+        function getInitials(name) {
+            const parts = name.trim().split(' ');
+            if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+            return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+        }
+    </script>
+</body>
+
+</html>
