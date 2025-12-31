@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -8,7 +8,23 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-    <script src="../../assets/js/theme.js"></script>
+    <script>
+        // Theme initialization
+        (function () {
+            const stored = localStorage.getItem('tunex-theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = stored === 'dark' || (!stored && prefersDark);
+            if (isDark) document.documentElement.classList.add('dark');
+            else document.documentElement.classList.remove('dark');
+        })();
+        const Theme = {
+            toggle() {
+                const html = document.documentElement;
+                html.classList.toggle('dark');
+                localStorage.setItem('tunex-theme', html.classList.contains('dark') ? 'dark' : 'light');
+            }
+        };
+    </script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -68,10 +84,22 @@
                 <h2 class="text-2xl font-bold mb-1">Languages</h2>
                 <p class="text-gray-400 text-sm">Select a language to manage its learning track.</p>
             </div>
-            <button @click="openAddModal()"
-                class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-xl flex items-center gap-2 transition">
-                <i class="ri-add-line"></i> Add Language
-            </button>
+
+
+            <div class="flex gap-3">
+                <a href="notebook.html"
+                    class="bg-gatex-card hover:bg-gatex-cardHover border border-white/10 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition">
+                    <i class="ri-book-2-fill text-gatex-accent"></i> Open Notebook
+                </a>
+                <a href="compiler.html"
+                    class="bg-gatex-card hover:bg-gatex-cardHover border border-white/10 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition">
+                    <i class="ri-terminal-box-line text-gatex-success"></i> Open Compiler
+                </a>
+                <button @click="openAddModal()"
+                    class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-xl flex items-center gap-2 transition">
+                    <i class="ri-add-line"></i> Add Language
+                </button>
+            </div>
         </div>
 
         <!-- Language Grid -->
