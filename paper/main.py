@@ -15607,8 +15607,6 @@ class LcodingSection(LcodingSectionBase):
 
 class LcodingTopicBase(BaseModel):
     title: str
-    content: Optional[str] = None
-    video_url: Optional[str] = None
     order_index: int = 0
 
 class LcodingTopicCreate(LcodingTopicBase):
@@ -15816,3 +15814,21 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
+
+# ... (existing code)
+
+# --- Python Compiler Endpoint ---
+from packages.python_compiler import execute_python_code
+
+class CompilerRequest(BaseModel):
+    code: str
+
+@app.post("/api/tunex/compiler/run")
+async def run_python_compiler(request: CompilerRequest):
+    """
+    Executes python code sent from the frontend.
+    """
+    result = execute_python_code(request.code)
+    return result
+
+# ... (end of file)
