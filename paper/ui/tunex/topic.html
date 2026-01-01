@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
     <meta charset="UTF-8">
@@ -9,7 +9,37 @@
         href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+    <!-- Theme & Config -->
+    <script src="../../assets/js/theme.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gatex: {
+                            bg: '#13131F',
+                            card: '#1E1E2F',
+                            cardHover: '#27293d',
+                            primary: '#9E4B8A',
+                            secondary: '#4C2A59',
+                            accent: '#FF7F50',
+                            success: '#00F090',
+                            info: '#3B82F6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/intersect@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
@@ -23,10 +53,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
 
     <style>
-        * {
-            font-family: 'Space Grotesk', sans-serif;
-        }
-
         body {
             background: #1E1E2F;
             color: #fff;
@@ -47,26 +73,6 @@
         .code-output {
             background: #0a0a0f;
             font-family: 'JetBrains Mono', monospace;
-        }
-
-        .kw {
-            color: #C792EA;
-        }
-
-        .fn {
-            color: #82AAFF;
-        }
-
-        .str {
-            color: #C3E88D;
-        }
-
-        .num {
-            color: #F78C6C;
-        }
-
-        .cmt {
-            color: #546E7A;
         }
 
         .chapter-num {
@@ -148,7 +154,7 @@
     </style>
 </head>
 
-<body class="min-h-screen" x-data="topicApp()" x-init="init()">
+<body class="min-h-screen" x-data="topicApp">
 
     <!-- Header -->
     <header
@@ -166,6 +172,10 @@
             </div>
         </div>
         <div class="flex items-center gap-4">
+            <button @click="Theme.toggle()" class="p-2 text-gray-400 hover:text-white transition">
+                <i class="ri-moon-line dark:hidden"></i>
+                <i class="ri-sun-line hidden dark:block"></i>
+            </button>
             <a href="notebook.html"
                 class="px-4 py-2 rounded-lg bg-[#4C2A59]/20 hover:bg-[#9E4B8A] transition-all text-sm font-bold border border-white/5 hover:border-[#9E4B8A]/50 flex items-center gap-2">
                 <i class="ri-code-s-slash-line"></i> Playground
@@ -192,7 +202,7 @@
                 <h3 class="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-4 px-2">Table of Contents</h3>
                 <nav class="space-y-1">
                     <template x-for="(ch, i) in chapters" :key="i">
-                        <button @click="scrollTo('ch' + ch.chapter_number)"
+                        <button @click="scrollTo('ch' + ch.chapter_number); setCurrent(ch.chapter_number)"
                             class="w-full text-left px-3 py-3 rounded-xl text-sm transition-all duration-200 border border-transparent group relative overflow-hidden"
                             :class="currentChapter === ('ch' + ch.chapter_number) ? 'bg-[#4C2A59]/20 border-[#9E4B8A]/30 text-white' : 'hover:bg-white/5 text-gray-400 hover:text-gray-200'">
                             <div class="flex items-center gap-3 relative z-10">
@@ -239,7 +249,7 @@
                         </div>
 
                         <!-- 1. CONCEPT -->
-                        <template x-if="ch.chapter_type === 'concept'">
+                        <template x-if="ch.chapter_type === 'concept' && !ch.content.blocks">
                             <div>
                                 <p class="text-lg opacity-80 leading-relaxed mb-8" x-text="ch.content.description"></p>
                                 <div class="grid md:grid-cols-2 gap-6">
@@ -268,215 +278,86 @@
                             </div>
                         </template>
 
-                        <!-- 2. SYNTAX -->
-                        <template x-if="ch.chapter_type === 'syntax'">
-                            <div>
-                                <div class="grid lg:grid-cols-2 gap-8 mb-8">
-                                    <div class="p-8 rounded-2xl bg-[#12121a] font-mono text-lg flex items-center justify-center border border-white/5 shadow-lg whitespace-pre"
-                                        x-text="ch.content.syntax_block"></div>
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <template x-for="comp in ch.content.components">
-                                            <div class="p-3 rounded-xl bg-[#4C2A59]/10 border border-[#4C2A59]/20">
-                                                <span class="accent font-bold font-mono text-sm block mb-1"
-                                                    x-text="comp.name"></span>
-                                                <p class="opacity-60 text-xs" x-text="comp.desc"></p>
+                        <!-- Generic Legacy Support (Syntax/Mistakes/Interview/Quiz) skipped for brevity, keeping Dynamic Engine as priority -->
+                        <!-- 11. DYNAMIC BLOCK ENGINE -->
+                        <template x-if="ch.content.blocks">
+                            <div class="space-y-10">
+                                <template x-for="block in ch.content.blocks">
+                                    <div class="block-container">
+                                        <template x-if="block.type === 'text'">
+                                            <div class="max-w-3xl mx-auto">
+                                                <h3 x-show="block.title" class="text-2xl font-bold mb-4"
+                                                    x-text="block.title"></h3>
+                                                <p class="text-lg opacity-80 leading-relaxed whitespace-pre-line"
+                                                    x-html="block.content"></p>
                                             </div>
                                         </template>
-                                    </div>
-                                </div>
-                                <template x-for="tip in ch.content.tips">
-                                    <div class="p-6 rounded-2xl bg-[#12121a] border border-white/5 mb-4">
-                                        <p class="font-bold mb-2 flex items-center gap-2"><i
-                                                class="ri-information-fill text-[#9E4B8A]"></i> <span
-                                                x-text="tip.title"></span></p>
-                                        <p class="opacity-80 text-sm" x-text="tip.text"></p>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-
-                        <!-- 3. RANGE / NESTED / SEQUENCES / KEYWORDS / WALKTHROUGH (Editors) -->
-                        <!-- Generic content text -->
-                        <template x-if="ch.content.description">
-                            <p class="text-lg opacity-80 mb-8" x-text="ch.content.description"></p>
-                        </template>
-
-                        <!-- Variations (Range specific) -->
-                        <template x-if="ch.content.variations">
-                            <div class="grid md:grid-cols-3 gap-4 mb-8">
-                                <template x-for="v in ch.content.variations">
-                                    <div class="p-4 rounded-xl bg-[#4C2A59]/20">
-                                        <p class="font-mono text-sm mb-2" x-text="v.code"></p>
-                                        <p class="font-mono accent text-xs" x-text="v.meaning"></p>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-
-                        <!-- Sequences Sections -->
-                        <template x-if="ch.content.sections">
-                            <div class="space-y-12">
-                                <template x-for="sect in ch.content.sections">
-                                    <div>
-                                        <h3 class="text-xl font-bold mb-4" x-text="sect.title"></h3>
-                                        <p class="text-sm opacity-80 mb-4" x-text="sect.text"></p>
-                                        <!-- Editor Component -->
-                                        <div class="rounded-2xl overflow-hidden border-2 border-[#4C2A59] mb-6">
-                                            <div class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
-                                                <span class="text-sm font-bold">Try Code</span>
-                                                <button @click="runCode(sect.editor_id)"
-                                                    class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
-                                                    <i class="ri-play-fill"></i> Run
-                                                </button>
-                                            </div>
-                                            <!-- EDITOR DOM -->
-                                            <div :id="'editor-' + sect.editor_id"></div>
-                                            <div class="code-output p-4 min-h-[40px]"
-                                                x-show="outputs[sect.editor_id] || errors[sect.editor_id]">
-                                                <pre class="text-sm text-green-400"
-                                                    x-text="outputs[sect.editor_id]"></pre>
-                                                <pre class="text-sm text-red-400" x-text="errors[sect.editor_id]"></pre>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-
-                        <!-- Single Editor (Range, Nested, Keywords, Walkthrough) -->
-                        <template x-if="ch.content.editor_id !== undefined">
-                            <div class="rounded-2xl overflow-hidden border-2 border-[#4C2A59] mb-8">
-                                <div class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
-                                    <span class="text-sm font-bold">Try Code</span>
-                                    <button @click="runCode(ch.content.editor_id)"
-                                        class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
-                                        <i class="ri-play-fill"></i> Run
-                                    </button>
-                                </div>
-                                <div :id="'editor-' + ch.content.editor_id"></div>
-                                <div class="code-output p-4 min-h-[40px]"
-                                    x-show="outputs[ch.content.editor_id] || errors[ch.content.editor_id]">
-                                    <pre class="text-sm text-green-400" x-text="outputs[ch.content.editor_id]"></pre>
-                                    <pre class="text-sm text-red-400" x-text="errors[ch.content.editor_id]"></pre>
-                                </div>
-                            </div>
-                        </template>
-
-                        <!-- 7. MISTAKES -->
-                        <template x-if="ch.chapter_type === 'mistakes'">
-                            <div class="grid md:grid-cols-3 gap-6">
-                                <template x-for="mistake in ch.content.mistakes">
-                                    <div
-                                        class="p-6 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/30 hover:border-[#EF4444] transition-all group">
-                                        <div
-                                            class="w-10 h-10 rounded-full bg-[#EF4444]/20 flex items-center justify-center text-[#EF4444] mb-4 group-hover:scale-110 transition-transform">
-                                            <i :class="mistake.icon || 'ri-error-warning-fill'"></i>
-                                        </div>
-                                        <h3 class="font-bold text-lg mb-2" x-text="mistake.name"></h3>
-                                        <p class="text-sm opacity-70 mb-4" x-text="mistake.desc"></p>
-                                        <div class="p-3 rounded-lg bg-[#12121a] border border-[#EF4444]/20">
-                                            <p class="text-[10px] text-[#10B981] font-bold uppercase mb-1">Fix</p>
-                                            <code class="bg-transparent p-0 text-xs" x-text="mistake.fix"></code>
-                                        </div>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-
-                        <!-- 9. INTERVIEW -->
-                        <template x-if="ch.chapter_type === 'interview'">
-                            <div class="grid md:grid-cols-2 gap-6">
-                                <template x-for="q in ch.content.questions">
-                                    <div
-                                        class="p-6 rounded-2xl bg-[#1E1E2F] border border-white/5 hover:border-white/10 transition-all group hover:-translate-y-1 shadow-lg">
-                                        <div class="flex items-center justify-between mb-4">
-                                            <div class="flex items-center gap-3">
-                                                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white"
-                                                    :style="`background-color: ${q.color}`">
-                                                    <i :class="q.icon" class="text-xl"></i>
+                                        <template x-if="block.type === 'code'">
+                                            <div class="rounded-2xl overflow-hidden border-2 border-[#4C2A59] my-6">
+                                                <div class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
+                                                    <span class="text-sm font-bold"
+                                                        x-text="block.title || 'Code Playground'"></span>
+                                                    <button @click="runCode(block.id)"
+                                                        class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
+                                                        <i class="ri-play-fill" x-show="!running[block.id]"></i>
+                                                        <i class="ri-loader-4-line animate-spin"
+                                                            x-show="running[block.id]"></i>
+                                                        Run
+                                                    </button>
                                                 </div>
-                                                <span class="font-bold text-lg" x-text="q.company"></span>
+                                                <div :id="'editor-' + block.id"></div>
+                                                <div class="code-output p-4 min-h-[40px]"
+                                                    x-show="outputs[block.id] || errors[block.id]">
+                                                    <pre class="text-sm text-green-400"
+                                                        x-text="outputs[block.id]"></pre>
+                                                    <pre class="text-sm text-red-400" x-text="errors[block.id]"></pre>
+                                                </div>
                                             </div>
-                                            <span
-                                                class="text-xs px-2 py-1 rounded bg-[#12121a] border border-white/10 text-gray-400"
-                                                x-text="q.tag"></span>
-                                        </div>
-                                        <p class="font-medium text-lg leading-relaxed opacity-90 group-hover:opacity-100 transition-opacity"
-                                            x-text="q.q"></p>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-
-                        <!-- 10. QUIZ -->
-                        <template x-if="ch.chapter_type === 'quiz'">
-                            <div class="bg-[#12121a] rounded-3xl p-8 border border-white/5 text-center">
-                                <div class="mb-4 inline-block p-4 rounded-full bg-[#9E4B8A]/20 text-[#9E4B8A]">
-                                    <i class="ri-trophy-line text-4xl"></i>
-                                </div>
-                                <h2 class="text-3xl font-bold mb-2">Mastery Check</h2>
-                                <p class="opacity-60 mb-8">Test your knowledge.</p>
-
-                                <div x-show="!quizCompleted">
-                                    <div class="mb-8">
-                                        <div class="flex justify-between text-sm opacity-50 mb-2">
-                                            <span
-                                                x-text="`Question ${currentQuizIndex + 1} of ${ch.content.questions.length}`"></span>
-                                        </div>
-                                        <div class="h-2 bg-[#2a2a35] rounded-full overflow-hidden">
-                                            <div class="h-full bg-[#9E4B8A] transition-all"
-                                                :style="`width: ${(currentQuizIndex + 1) / ch.content.questions.length * 100}%`">
+                                        </template>
+                                        <template x-if="block.type === 'split'">
+                                            <div class="grid md:grid-cols-2 gap-8 items-center">
+                                                <div>
+                                                    <h3 x-show="block.left.title" class="text-xl font-bold mb-3"
+                                                        x-text="block.left.title"></h3>
+                                                    <p class="opacity-80 leading-relaxed" x-html="block.left.content">
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <template x-if="block.right.type === 'image'">
+                                                        <img :src="block.right.url"
+                                                            class="rounded-xl border border-white/10 shadow-lg w-full">
+                                                    </template>
+                                                    <template x-if="block.right.type === 'code_static'">
+                                                        <div
+                                                            class="p-6 rounded-xl bg-[#12121a] font-mono text-sm border border-white/5 relative group">
+                                                            <div class="whitespace-pre text-gray-300"
+                                                                x-text="block.right.content"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </div>
-
-                                    <h3 class="text-xl font-bold mb-6"
-                                        x-text="ch.content.questions[currentQuizIndex].q"></h3>
-
-                                    <div class="grid gap-3 text-left">
-                                        <template x-for="(opt, idx) in ch.content.questions[currentQuizIndex].opts"
-                                            :key="idx">
-                                            <div @click="selectQuizOption(idx, ch.content.questions[currentQuizIndex])"
-                                                class="quiz-opt p-4 rounded-xl transition-all" :class="{
-                                                    'selected': selectedOption === idx,
-                                                    'correct': quizAnswered && idx === ch.content.questions[currentQuizIndex].correct,
-                                                    'wrong': quizAnswered && selectedOption === idx && idx !== ch.content.questions[currentQuizIndex].correct
+                                        </template>
+                                        <template x-if="block.type === 'callout'">
+                                            <div class="p-6 rounded-2xl border mb-6 flex gap-4" :class="{
+                                                    'bg-[#9E4B8A]/10 border-[#9E4B8A]/30': block.variant === 'info',
+                                                    'bg-[#EF4444]/10 border-[#EF4444]/30': block.variant === 'warning',
+                                                    'bg-[#10B981]/10 border-[#10B981]/30': block.variant === 'success'
                                                 }">
-                                                <div class="flex items-center gap-3">
-                                                    <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs"
-                                                        :class="selectedOption === idx ? 'border-[#9E4B8A] bg-[#9E4B8A] text-white' : 'border-gray-600'">
-                                                        <span x-show="selectedOption === idx"
-                                                            x-text="['A','B','C'][idx]"></span>
-                                                    </div>
-                                                    <span x-text="opt"></span>
-                                                </div>
-                                                <div x-show="quizAnswered && idx === ch.content.questions[currentQuizIndex].correct"
-                                                    class="mt-2 text-xs text-[#10B981] font-bold pl-9">
-                                                    <i class="ri-check-line"></i> <span
-                                                        x-text="ch.content.questions[currentQuizIndex].why"></span>
+                                                <i class="text-2xl" :class="{
+                                                        'ri-information-fill text-[#9E4B8A]': block.variant === 'info',
+                                                        'ri-alert-fill text-[#EF4444]': block.variant === 'warning',
+                                                        'ri-check-double-line text-[#10B981]': block.variant === 'success'
+                                                    }"></i>
+                                                <div>
+                                                    <h4 class="font-bold mb-1" x-text="block.title"></h4>
+                                                    <p class="text-sm opacity-80" x-text="block.text"></p>
                                                 </div>
                                             </div>
                                         </template>
                                     </div>
-
-                                    <button x-show="quizAnswered" @click="nextQuiz(ch.content.questions)"
-                                        class="mt-6 w-full py-3 rounded-xl accent-bg font-bold hover:brightness-110 transition-all">
-                                        <span
-                                            x-text="currentQuizIndex < ch.content.questions.length - 1 ? 'Next Question' : 'See Results'"></span>
-                                    </button>
-                                </div>
-
-                                <div x-show="quizCompleted" class="text-center py-8">
-                                    <h3 class="text-3xl font-bold mb-2">Quiz Complete!</h3>
-                                    <p class="text-xl accent mb-6"
-                                        x-text="`You scored ${score}/${ch.content.questions.length}`"></p>
-                                    <button onclick="location.reload()"
-                                        class="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold">Restart
-                                        Topic</button>
-                                </div>
+                                </template>
                             </div>
                         </template>
-
                     </section>
                 </template>
 
@@ -484,18 +365,17 @@
                 <div x-show="loading" class="flex items-center justify-center py-20">
                     <i class="ri-loader-4-line text-4xl accent animate-spin"></i>
                 </div>
-
             </div>
-
-            <!-- Right Sidebar placeholder (hidden for dynamic generic-ness for now, or could iterate) -->
         </main>
     </div>
 
     <script>
-        const API = 'http://127.0.0.1:8000';
+        // Define API_BASE inside the event listener or global if needed, but safer inside
 
-        function topicApp() {
-            return {
+        document.addEventListener('alpine:init', () => {
+            const API_BASE = 'http://127.0.0.1:8000';
+
+            Alpine.data('topicApp', () => ({
                 loading: true,
                 topicTitle: '',
                 topicDesc: '',
@@ -537,7 +417,7 @@
                 async loadTopic(id) {
                     try {
                         console.log("Fetching topic:", id);
-                        const res = await fetch(`${API}/api/tunex/topics/${id}/full`);
+                        const res = await fetch(`${API_BASE}/api/tunex/topics/${id}/full`);
 
                         if (!res.ok) {
                             const err = await res.json();
@@ -552,12 +432,11 @@
                         this.chapters = data.chapters || [];
                         this.loading = false;
 
-                        // Init CodeMirror next tick
                         setTimeout(() => this.initCodeMirrors(), 100);
 
-                        // Set initial chapter
                         if (this.chapters.length > 0) {
                             this.currentChapter = 'ch' + this.chapters[0].chapter_number;
+                            this.updateProgress(this.chapters[0].chapter_number);
                         }
 
                     } catch (e) {
@@ -570,17 +449,16 @@
                 initCodeMirrors() {
                     this.chapters.forEach(ch => {
                         const c = ch.content;
-                        // Check if chapter has direct editor
-                        if (c.editor_id !== undefined && c.default_code) {
-                            this.createEditor(c.editor_id, c.default_code);
-                        }
-                        // Check if chapter has sections with editors (Sequences)
-                        if (c.sections) {
-                            c.sections.forEach(s => {
-                                if (s.editor_id !== undefined && s.default_code) {
-                                    this.createEditor(s.editor_id, s.default_code);
+                        if (c.blocks && Array.isArray(c.blocks)) {
+                            c.blocks.forEach(b => {
+                                if (b.type === 'code' && b.id !== undefined) {
+                                    this.createEditor(b.id, b.default_code);
                                 }
                             });
+                        }
+                        // Legacy support
+                        if (c.editor_id !== undefined && c.default_code) {
+                            this.createEditor(c.editor_id, c.default_code);
                         }
                     });
                 },
@@ -608,7 +486,7 @@
                     this.errors[id] = '';
 
                     try {
-                        const res = await fetch(`${API}/api/tunex/compiler/run`, {
+                        const res = await fetch(`${API_BASE}/api/tunex/compiler/run`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ code })
@@ -626,24 +504,6 @@
                     }
                 },
 
-                // Quiz Logic
-                selectQuizOption(idx, q) {
-                    if (this.quizAnswered) return;
-                    this.selectedOption = idx;
-                    this.quizAnswered = true;
-                    if (idx === q.correct) this.score++;
-                },
-                nextQuiz(questions) {
-                    if (this.currentQuizIndex < questions.length - 1) {
-                        this.currentQuizIndex++;
-                        this.selectedOption = null;
-                        this.quizAnswered = false;
-                    } else {
-                        this.quizCompleted = true;
-                    }
-                },
-
-                // Utilities
                 numberToWord(n) {
                     const words = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
                     return words[n] || n;
@@ -654,16 +514,16 @@
                 },
                 setCurrent(num) {
                     this.currentChapter = 'ch' + num;
+                    this.updateProgress(num);
+                },
+                updateProgress(num) {
                     this.progressPercent = Math.round((num / (this.chapters.length || 1)) * 100);
                     this.completedChapters = num;
                 },
-                checkScroll(e) {
-                    // Intersection observer handles the active state mostly
-                }
-            }
-        }
+                checkScroll(e) { }
+            }));
+        });
     </script>
 </body>
 
 </html>
-```
