@@ -80,6 +80,7 @@ from packages.yt_transcript import (
     fetch_transcript_paragraph,
     extract_video_id,
 )
+from packages import tunex_router
 from packages.youtube_video import (
     get_channel_logo,
     get_default_channel_logo,
@@ -15168,6 +15169,7 @@ def create_app() -> FastAPI:
     app.include_router(youtube_transcript_router)
     app.include_router(youtube_search_router)
     app.include_router(yt_transcript_router, prefix="/api/youtube", tags=["youtube transcripts (raw)"])
+    app.include_router(tunex_router.router)
 
     # Simple request logger to aid debugging 405/OPTIONS/CORS issues
     @app.middleware("http")
