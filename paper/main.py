@@ -81,6 +81,7 @@ from packages.yt_transcript import (
     extract_video_id,
 )
 from packages import tunex_router
+from packages import problems_api # New Problem Solver API
 from packages.youtube_video import (
     get_channel_logo,
     get_default_channel_logo,
@@ -15811,6 +15812,7 @@ def get_lcoding_topic(topic_id: str):
     return res.data
 
 app.include_router(lcoding_router)
+app.include_router(problems_api.router) # Problem Solver Routes
 
 if __name__ == "__main__":
     import uvicorn
