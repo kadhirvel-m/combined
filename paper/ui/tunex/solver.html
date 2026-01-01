@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Problem Solver | Tunex</title>
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Remixicon -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <!-- CodeMirror -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material-darker.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/matchbrackets.min.js"></script>
+    <!-- Marked for Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Theme Config -->
+    <script src="../assets/js/theme.js"></script>
+    <script src="../config.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #0F0F16;
+            color: #E2E8F0;
+            overflow: hidden;
+            /* App-like feel */
+        }
+
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #12121a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #2a2a35;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9E4B8A;
+        }
+
+        .CodeMirror {
+            height: 100% !important;
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            background-color: #1E1E2F !important;
+        }
+    </style>
+</head>
+
+<body x-data="solverApp" class="h-screen flex flex-col">
+
+    <!-- Header -->
+    <header
+        class="h-16 border-b border-white/5 bg-[#12121a]/80 backdrop-blur flex items-center justify-between px-6 z-10">
+        <div class="flex items-center gap-4">
+            <button @click="goBack()" class="p-2 rounded-lg hover:bg-white/5 transition-colors">
+                <i class="ri-arrow-left-line"></i>
+            </button>
+            <h1 class="font-bold text-lg flex items-center gap-3">
+                <i class="ri-code-box-line text-[#9E4B8A]"></i>
+                Problem Solver
+            </h1>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <button @click="runCode()"
+                class="px-5 py-2 rounded-lg bg-[#9E4B8A] hover:bg-[#863e75] text-white font-bold transition-all flex items-center gap-2">
+                <i class="ri-play-fill" x-show="!running"></i>
+                <i class="ri-loader-4-line animate-spin" x-show="running"></i>
+                Run Code
+            </button>
+            <button
+                class="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold transition-all opacity-50 cursor-not-allowed"
+                title="Not implemented">
+                Submit
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex-grow flex overflow-hidden">
+
+        <!-- Left Pane: Problem Description -->
+        <div class="w-1/2 flex flex-col border-r border-white/5 bg-[#12121a]">
+            <!-- Tabs -->
+            <div class="flex border-b border-white/5 px-4 pt-2 gap-4">
+                <button
+                    class="px-4 py-2 text-[#9E4B8A] border-b-2 border-[#9E4B8A] font-bold text-sm">Description</button>
+                <button class="px-4 py-2 text-gray-500 hover:text-white transition-colors text-sm">Editorial</button>
+                <button class="px-4 py-2 text-gray-500 hover:text-white transition-colors text-sm">Solutions</button>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-grow overflow-y-auto p-6 scrollbar-custom" x-show="!loading" x-transition>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-bold" x-text="problem.title"></h2>
+                    <span :class="{
+                            'bg-green-500/10 text-green-400': problem.difficulty === 'Easy',
+                            'bg-amber-500/10 text-amber-400': problem.difficulty === 'Medium',
+                            'bg-red-500/10 text-red-400': problem.difficulty === 'Hard'
+                        }" class="px-3 py-1 rounded text-xs font-bold uppercase" x-text="problem.difficulty"></span>
+                </div>
+
+                <!-- Companies -->
+                <div class="flex flex-wrap gap-2 mb-6" x-show="problem.companies && problem.companies.length">
+                    <template x-for="comp in problem.companies" :key="comp">
+                        <span class="px-2 py-1 rounded bg-[#2a2a35] text-xs text-gray-400 border border-white/5"
+                            x-text="comp"></span>
+                    </template>
+                </div>
+
+                <div class="prose prose-invert max-w-none prose-sm" x-html="renderMarkdown(problem.description)"></div>
+            </div>
+
+            <div x-show="loading" class="flex-grow flex items-center justify-center">
+                <div class="animate-spin w-8 h-8 border-4 border-[#9E4B8A] border-t-transparent rounded-full"></div>
+            </div>
+        </div>
+
+        <!-- Right Pane: Editor & Console -->
+        <div class="w-1/2 flex flex-col bg-[#1E1E2F]">
+            <!-- Editor Header -->
+            <div class="h-10 border-b border-white/5 bg-[#1E1E2F] flex items-center px-4 justify-between">
+                <span class="text-xs font-mono text-gray-400">Python 3</span>
+                <span class="text-xs text-gray-500 hover:text-white cursor-pointer"><i class="ri-settings-3-line"></i>
+                    Settings</span>
+            </div>
+
+            <!-- Editor -->
+            <div class="flex-grow relative">
+                <div id="code-editor" class="absolute inset-0"></div>
+            </div>
+
+            <!-- Console / Test Results -->
+            <div class="h-1/3 flex flex-col border-t border-white/5 bg-[#12121a]" :class="{'h-1/2': results}">
+                <div class="h-10 border-b border-white/5 flex items-center px-4 gap-4 bg-[#181824]">
+                    <span class="text-xs font-bold uppercase tracking-wider text-gray-400">Test Results</span>
+                    <span x-show="results" class="text-xs px-2 py-0.5 rounded"
+                        :class="results && results.status === 'success' && results.passed_tests === results.total_tests ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'">
+                        <span
+                            x-text="results ? (results.passed_tests === results.total_tests ? 'Accepted' : 'Wrong Answer') : ''"></span>
+                    </span>
+                </div>
+
+                <div class="flex-grow overflow-y-auto p-4 font-mono text-sm relative">
+                    <p x-show="!results && !running" class="text-gray-500 italic mt-4 text-center">Run code to see
+                        results</p>
+
+                    <div x-show="running"
+                        class="absolute inset-0 flex items-center justify-center bg-[#12121a]/50 z-10">
+                        <span class="animate-pulse text-[#9E4B8A]">Running Tests...</span>
+                    </div>
+
+                    <template x-if="results">
+                        <div class="space-y-4">
+                            <!-- Compile Error -->
+                            <div x-show="results.status === 'compile_error' || results.status === 'runtime_error'"
+                                class="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 whitespace-pre-wrap"
+                                x-text="results.compile_error"></div>
+
+                            <!-- Test Cases -->
+                            <div class="flex gap-2 mb-4 overflow-x-auto pb-2" x-show="results.status === 'success'">
+                                <template x-for="(res, idx) in results.results" :key="idx">
+                                    <button @click="selectedTest = idx"
+                                        class="px-3 py-1 rounded border min-w-[80px] text-xs font-bold transition-all"
+                                        :class="{
+                                            'bg-[#9E4B8A] border-[#9E4B8A] text-white': selectedTest === idx,
+                                            'bg-green-500/10 border-green-500/30 text-green-400': selectedTest !== idx && res.passed,
+                                            'bg-red-500/10 border-red-500/30 text-red-400': selectedTest !== idx && !res.passed
+                                        }">
+                                        Case <span x-text="idx + 1"></span>
+                                        <i x-show="res.passed" class="ri-check-line ml-1"></i>
+                                        <i x-show="!res.passed" class="ri-close-line ml-1"></i>
+                                    </button>
+                                </template>
+                            </div>
+
+                            <!-- Selected Test Detail -->
+                            <template x-if="results.status === 'success' && results.results[selectedTest]">
+                                <div class="space-y-3 p-4 bg-[#1E1E2F] rounded-xl border border-white/5">
+                                    <template x-if="results.results[selectedTest].is_hidden">
+                                        <div class="text-gray-400 italic">Hidden Test Case</div>
+                                    </template>
+
+                                    <template x-if="!results.results[selectedTest].is_hidden">
+                                        <div class="w-full">
+                                            <div class="mb-2">
+                                                <span class="text-xs text-gray-500 uppercase">Input</span>
+                                                <div class="mt-1 p-2 rounded bg-[#12121a] text-gray-300 font-mono text-xs"
+                                                    x-text="JSON.stringify(results.results[selectedTest].input)"></div>
+                                            </div>
+                                            <div class="mb-2">
+                                                <span class="text-xs text-gray-500 uppercase">Output</span>
+                                                <div class="mt-1 p-2 rounded bg-[#12121a] font-mono text-xs border"
+                                                    :class="results.results[selectedTest].passed ? 'border-green-500/30 text-green-400' : 'border-red-500/30 text-red-400'"
+                                                    x-text="JSON.stringify(results.results[selectedTest].output || results.results[selectedTest].error)">
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span class="text-xs text-gray-500 uppercase">Expected</span>
+                                                <div class="mt-1 p-2 rounded bg-[#12121a] text-gray-300 font-mono text-xs"
+                                                    x-text="JSON.stringify(results.results[selectedTest].expected)">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('solverApp', () => ({
+                problemId: null,
+                problem: {},
+                loading: true,
+                running: false,
+                editor: null,
+                results: null,
+                selectedTest: 0,
+
+                init() {
+                    const params = new URLSearchParams(window.location.search);
+                    this.problemId = params.get('id');
+
+                    if (!this.problemId) {
+                        alert("No problem ID specified!");
+                        return;
+                    }
+
+                    this.loadProblem();
+                },
+
+                async loadProblem() {
+                    try {
+                        const res = await fetch(`${window.API_BASE}/api/tunex/problems/${this.problemId}`);
+                        if (!res.ok) throw new Error("Failed to load");
+                        this.problem = await res.json();
+
+                        this.initEditor(this.problem.boilerplate_code);
+                        this.loading = false;
+                    } catch (e) {
+                        console.error(e);
+                        alert("Error loading problem. Make sure the database is migrated.");
+                    }
+                },
+
+                initEditor(code) {
+                    this.$nextTick(() => {
+                        const el = document.getElementById('code-editor');
+                        if (!el) return;
+                        el.innerHTML = '';
+                        this.editor = CodeMirror(el, {
+                            value: code,
+                            mode: 'python',
+                            theme: 'material-darker',
+                            lineNumbers: true,
+                            autoCloseBrackets: true,
+                            matchBrackets: true,
+                            indentUnit: 4,
+                            tabSize: 4,
+                        });
+                    });
+                },
+
+                async runCode() {
+                    if (this.running) return;
+                    this.running = true;
+                    this.results = null;
+                    this.selectedTest = 0;
+
+                    const code = this.editor.getValue();
+
+                    try {
+                        const res = await fetch(`${window.API_BASE}/api/tunex/problems/${this.problemId}/run`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ code })
+                        });
+                        this.results = await res.json();
+                    } catch (e) {
+                        this.results = { status: 'runtime_error', compile_error: "Network Error" };
+                    } finally {
+                        this.running = false;
+                    }
+                },
+
+                renderMarkdown(text) {
+                    return marked.parse(text || '');
+                },
+
+                goBack() {
+                    window.history.back();
+                }
+            }));
+        });
+    </script>
+</body>
+
+</html>

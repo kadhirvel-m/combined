@@ -278,7 +278,222 @@
                             </div>
                         </template>
 
-                        <!-- Generic Legacy Support (Syntax/Mistakes/Interview/Quiz) skipped for brevity, keeping Dynamic Engine as priority -->
+                        <!-- 2. SYNTAX -->
+                        <template x-if="ch.chapter_type === 'syntax'">
+                            <div>
+                                <div class="grid lg:grid-cols-2 gap-8 mb-8">
+                                    <div class="p-8 rounded-2xl bg-[#12121a] font-mono text-lg flex items-center justify-center border border-white/5 shadow-lg whitespace-pre"
+                                        x-text="ch.content.syntax_block"></div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <template x-for="comp in ch.content.components">
+                                            <div class="p-3 rounded-xl bg-[#4C2A59]/10 border border-[#4C2A59]/20">
+                                                <span class="accent font-bold font-mono text-sm block mb-1"
+                                                    x-text="comp.name"></span>
+                                                <p class="opacity-60 text-xs" x-text="comp.desc"></p>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                                <template x-for="tip in ch.content.tips">
+                                    <div class="p-6 rounded-2xl bg-[#12121a] border border-white/5 mb-4">
+                                        <p class="font-bold mb-2 flex items-center gap-2"><i
+                                                class="ri-information-fill text-[#9E4B8A]"></i> <span
+                                                x-text="tip.title"></span></p>
+                                        <p class="opacity-80 text-sm" x-text="tip.text"></p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- 3. MISTAKES -->
+                        <template x-if="ch.chapter_type === 'mistakes'">
+                            <div class="grid md:grid-cols-3 gap-6">
+                                <template x-for="mistake in ch.content.mistakes">
+                                    <div
+                                        class="p-6 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/30 hover:border-[#EF4444] transition-all group">
+                                        <div
+                                            class="w-10 h-10 rounded-full bg-[#EF4444]/20 flex items-center justify-center text-[#EF4444] mb-4 group-hover:scale-110 transition-transform">
+                                            <i :class="mistake.icon || 'ri-error-warning-fill'"></i>
+                                        </div>
+                                        <h3 class="font-bold text-lg mb-2" x-text="mistake.name"></h3>
+                                        <p class="text-sm opacity-70 mb-4" x-text="mistake.desc"></p>
+                                        <div class="p-3 rounded-lg bg-[#12121a] border border-[#EF4444]/20">
+                                            <p class="text-[10px] text-[#10B981] font-bold uppercase mb-1">Fix</p>
+                                            <code class="bg-transparent p-0 text-xs" x-text="mistake.fix"></code>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- 4. INTERVIEW -->
+                        <template x-if="ch.chapter_type === 'interview' && !ch.content.layout">
+                            <div class="grid md:grid-cols-2 gap-6">
+                                <template x-for="q in ch.content.questions">
+                                    <div
+                                        class="p-6 rounded-2xl bg-[#1E1E2F] border border-white/5 hover:border-white/10 transition-all group hover:-translate-y-1 shadow-lg">
+                                        <div class="flex items-center justify-between mb-4">
+                                            <div class="flex items-center gap-3">
+                                                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white"
+                                                    :style="`background-color: ${q.color}`">
+                                                    <i :class="q.icon" class="text-xl"></i>
+                                                </div>
+                                                <span class="font-bold text-lg" x-text="q.company"></span>
+                                            </div>
+                                            <span
+                                                class="text-xs px-2 py-1 rounded bg-[#12121a] border border-white/10 text-gray-400"
+                                                x-text="q.tag"></span>
+                                        </div>
+                                        <p class="font-medium text-lg leading-relaxed opacity-90 group-hover:opacity-100 transition-opacity"
+                                            x-text="q.q"></p>
+                                    </div>
+                                </template>
+                        </template>
+
+                        <!-- 4B. PRACTICE (New Vertical Layout) -->
+                        <template x-if="ch.chapter_type === 'interview' && ch.content.layout === 'practice_list'">
+                            <div class="space-y-4"> <!-- Vertical Stack -->
+                                <template x-for="(q, idx) in ch.content.questions" :key="idx">
+                                    <div @click="openProblem(q.problem_id)"
+                                        class="p-5 rounded-xl bg-[#1E1E2F] border border-white/5 hover:border-[#9E4B8A] transition-all flex items-start gap-4 group cursor-pointer relative overflow-hidden">
+                                        <div
+                                            class="absolute inset-0 bg-[#9E4B8A]/5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        </div>
+                                        <!-- Optional: Simple Number or Icon -->
+                                        <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-sm font-bold opacity-60 group-hover:bg-[#9E4B8A] group-hover:text-white transition-colors"
+                                            x-text="idx + 1"></div>
+
+                                        <div class="flex-grow">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <h4 class="font-bold text-white/90" x-text="q.q"></h4>
+
+                                                <!-- Metadata Badges -->
+                                                <div class="flex gap-2">
+                                                    <span
+                                                        class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-white/5 text-gray-400"
+                                                        x-text="q.company"></span>
+                                                    <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded"
+                                                        :class="{
+                                                            'bg-green-500/10 text-green-400': q.company === 'Easy',
+                                                            'bg-amber-500/10 text-amber-400': q.company === 'Medium',
+                                                            'bg-red-500/10 text-red-400': q.company === 'Hard'
+                                                        }" x-text="q.tag"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- 5. QUIZ -->
+                        <template x-if="ch.chapter_type === 'quiz'">
+                            <div class="bg-[#12121a] rounded-3xl p-8 border border-white/5 text-center">
+                                <div class="mb-4 inline-block p-4 rounded-full bg-[#9E4B8A]/20 text-[#9E4B8A]">
+                                    <i class="ri-trophy-line text-4xl"></i>
+                                </div>
+                                <h2 class="text-3xl font-bold mb-2">Mastery Check</h2>
+                                <p class="opacity-60 mb-8">Test your knowledge.</p>
+
+                                <div x-show="!quizCompleted">
+                                    <div class="mb-8">
+                                        <div class="flex justify-between text-sm opacity-50 mb-2">
+                                            <span
+                                                x-text="`Question ${currentQuizIndex + 1} of ${ch.content.questions.length}`"></span>
+                                        </div>
+                                        <div class="h-2 bg-[#2a2a35] rounded-full overflow-hidden">
+                                            <div class="h-full bg-[#9E4B8A] transition-all"
+                                                :style="`width: ${(currentQuizIndex + 1) / ch.content.questions.length * 100}%`">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <h3 class="text-xl font-bold mb-6"
+                                        x-text="ch.content.questions[currentQuizIndex].q"></h3>
+
+                                    <div class="grid gap-3 text-left">
+                                        <template x-for="(opt, idx) in ch.content.questions[currentQuizIndex].opts"
+                                            :key="idx">
+                                            <div @click="selectQuizOption(idx, ch.content.questions[currentQuizIndex])"
+                                                class="quiz-opt p-4 rounded-xl transition-all" :class="{
+                                                    'selected': selectedOption === idx,
+                                                    'correct': quizAnswered && idx === ch.content.questions[currentQuizIndex].correct,
+                                                    'wrong': quizAnswered && selectedOption === idx && idx !== ch.content.questions[currentQuizIndex].correct
+                                                }">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs"
+                                                        :class="selectedOption === idx ? 'border-[#9E4B8A] bg-[#9E4B8A] text-white' : 'border-gray-600'">
+                                                        <span x-show="selectedOption === idx"
+                                                            x-text="['A','B','C'][idx]"></span>
+                                                    </div>
+                                                    <span x-text="opt"></span>
+                                                </div>
+                                                <div x-show="quizAnswered && idx === ch.content.questions[currentQuizIndex].correct"
+                                                    class="mt-2 text-xs text-[#10B981] font-bold pl-9">
+                                                    <i class="ri-check-line"></i> <span
+                                                        x-text="ch.content.questions[currentQuizIndex].why"></span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <button x-show="quizAnswered" @click="nextQuiz(ch.content.questions)"
+                                        class="mt-6 w-full py-3 rounded-xl accent-bg font-bold hover:brightness-110 transition-all">
+                                        <span
+                                            x-text="currentQuizIndex < ch.content.questions.length - 1 ? 'Next Question' : 'See Results'"></span>
+                                    </button>
+                                </div>
+
+                                <div x-show="quizCompleted" class="text-center py-8">
+                                    <h3 class="text-3xl font-bold mb-2">Quiz Complete!</h3>
+                                    <p class="text-xl accent mb-6"
+                                        x-text="`You scored ${score}/${ch.content.questions.length}`"></p>
+                                    <button onclick="location.reload()"
+                                        class="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold">Restart
+                                        Topic</button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- 6. GENERIC EDITOR SECTIONS (Sequences, etc.) -->
+                        <template x-if="ch.content.sections && !ch.content.blocks">
+                            <div class="space-y-12">
+                                <template x-for="sect in ch.content.sections">
+                                    <div>
+                                        <h3 class="text-xl font-bold mb-4" x-text="sect.title"></h3>
+                                        <p class="text-sm opacity-80 mb-4" x-text="sect.text"></p>
+                                        <div class="rounded-2xl overflow-hidden border-2 border-[#4C2A59] mb-6">
+                                            <div class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
+                                                <span class="text-sm font-bold">Try Code</span>
+                                                <button @click="runCode(sect.editor_id)"
+                                                    class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
+                                                    <i class="ri-play-fill"></i> Run
+                                                </button>
+                                            </div>
+                                            <div :id="'editor-' + sect.editor_id"></div>
+                                            <div class="code-output p-4 min-h-[40px]"
+                                                x-show="outputs[sect.editor_id] || errors[sect.editor_id]">
+                                                <pre class="text-sm text-green-400"
+                                                    x-text="outputs[sect.editor_id]"></pre>
+                                                <pre class="text-sm text-red-400" x-text="errors[sect.editor_id]"></pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- 7. VARIATIONS -->
+                        <template x-if="ch.content.variations">
+                            <div class="grid md:grid-cols-3 gap-4 mb-8">
+                                <template x-for="v in ch.content.variations">
+                                    <div class="p-4 rounded-xl bg-[#4C2A59]/20">
+                                        <p class="font-mono text-sm mb-2" x-text="v.code"></p>
+                                        <p class="font-mono accent text-xs" x-text="v.meaning"></p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
                         <!-- 11. DYNAMIC BLOCK ENGINE -->
                         <template x-if="ch.content.blocks">
                             <div class="space-y-10">
@@ -352,6 +567,73 @@
                                                     <h4 class="font-bold mb-1" x-text="block.title"></h4>
                                                     <p class="text-sm opacity-80" x-text="block.text"></p>
                                                 </div>
+                                            </div>
+                                        </template>
+
+                                        <template x-if="block.type === 'carousel'">
+                                            <div class="relative bg-[#12121a] rounded-2xl border border-white/5 p-1"
+                                                x-data="{ slide: 0 }"
+                                                x-init="$watch('slide', idx => $nextTick(() => refreshEditor(block.items[idx].code_id)))">
+                                                <!-- Slides -->
+                                                <template x-for="(item, idx) in block.items" :key="idx">
+                                                    <div x-show="slide === idx" class="p-6 transition-all duration-300">
+                                                        <div class="flex justify-between items-start mb-4">
+                                                            <div>
+                                                                <h3 class="font-bold text-xl accent"
+                                                                    x-text="item.title"></h3>
+                                                                <p class="text-sm opacity-70 mt-1" x-text="item.desc">
+                                                                </p>
+                                                            </div>
+                                                            <div class="flex gap-2">
+                                                                <button
+                                                                    @click="slide = (slide - 1 + block.items.length) % block.items.length"
+                                                                    class="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                                                                    <i class="ri-arrow-left-s-line"></i>
+                                                                </button>
+                                                                <button
+                                                                    @click="slide = (slide + 1) % block.items.length"
+                                                                    class="p-2 rounded-lg bg-[#9E4B8A]/20 text-[#9E4B8A] hover:bg-[#9E4B8A] hover:text-white transition-all">
+                                                                    <i class="ri-arrow-right-s-line text-lg"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Editor for this slide -->
+                                                        <div
+                                                            class="rounded-xl overflow-hidden border border-[#4C2A59]/40 bg-[#0F0F16]">
+                                                            <div
+                                                                class="px-4 py-2 bg-[#4C2A59]/20 flex items-center justify-between border-b border-[#4C2A59]/20">
+                                                                <span class="text-xs font-mono opacity-60">Example
+                                                                    Code</span>
+                                                                <button @click="runCode(item.code_id)"
+                                                                    class="px-3 py-1 rounded text-xs font-bold bg-[#9E4B8A] hover:bg-[#863e75] flex items-center gap-1 transition-colors">
+                                                                    <i class="ri-play-fill"
+                                                                        x-show="!running[item.code_id]"></i>
+                                                                    <i class="ri-loader-4-line animate-spin"
+                                                                        x-show="running[item.code_id]"></i>
+                                                                    Run
+                                                                </button>
+                                                            </div>
+                                                            <div :id="'editor-' + item.code_id"></div>
+                                                            <div class="code-output p-4 min-h-[40px] border-t border-white/5"
+                                                                x-show="outputs[item.code_id] || errors[item.code_id]">
+                                                                <pre class="text-xs text-green-400 font-mono"
+                                                                    x-text="outputs[item.code_id]"></pre>
+                                                                <pre class="text-xs text-red-400 font-mono"
+                                                                    x-text="errors[item.code_id]"></pre>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Dots -->
+                                                        <div class="flex justify-center gap-2 mt-6">
+                                                            <template x-for="(_, i) in block.items">
+                                                                <div class="w-2 h-2 rounded-full transition-all"
+                                                                    :class="slide === i ? 'bg-[#9E4B8A] w-6' : 'bg-white/10'">
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </div>
+                                                </template>
                                             </div>
                                         </template>
                                     </div>
@@ -454,6 +736,12 @@
                                 if (b.type === 'code' && b.id !== undefined) {
                                     this.createEditor(b.id, b.default_code);
                                 }
+                                // Carousel Support
+                                if (b.type === 'carousel' && b.items) {
+                                    b.items.forEach(item => {
+                                        if (item.code_id) this.createEditor(item.code_id, item.default_code);
+                                    });
+                                }
                             });
                         }
                         // Legacy support
@@ -474,7 +762,9 @@
                         lineNumbers: true,
                         autoCloseBrackets: true,
                         matchBrackets: true,
-                        viewportMargin: Infinity
+                        viewportMargin: Infinity,
+                        readOnly: false,
+                        cursorBlinkRate: 530
                     });
                     this.editors[id] = cm;
                 },
@@ -508,6 +798,40 @@
                     const words = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
                     return words[n] || n;
                 },
+
+                openProblem(id) {
+                    if (!id) return;
+                    window.location.href = `solver.html?id=${id}`;
+                },
+
+                // Quiz Logic
+                selectQuizOption(idx, question) {
+                    if (this.quizAnswered) return;
+                    this.selectedOption = idx;
+                    this.quizAnswered = true;
+                    if (idx === question.correct) {
+                        this.score++;
+                    }
+                },
+                nextQuiz(questions) {
+                    if (this.currentQuizIndex < questions.length - 1) {
+                        this.currentQuizIndex++;
+                        this.selectedOption = null;
+                        this.quizAnswered = false;
+                    } else {
+                        this.quizCompleted = true;
+                    }
+                },
+
+                // Editor Utilities
+                refreshEditor(id) {
+                    setTimeout(() => {
+                        if (this.editors[id]) {
+                            this.editors[id].refresh();
+                        }
+                    }, 200);
+                },
+
                 scrollTo(id) {
                     const el = document.getElementById(id);
                     if (el) el.scrollIntoView({ behavior: 'smooth' });
