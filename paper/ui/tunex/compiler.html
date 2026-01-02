@@ -125,7 +125,8 @@
             <textarea x-model="code" spellcheck="false"
                 class="flex-1 w-full bg-[#1e1e2f] text-gray-200 font-mono text-sm p-4 resize-none outline-none focus:ring-0 leading-relaxed placeholder-gray-700"
                 placeholder="# Type your Python code here...
-print('Hello world!')" @keydown.tab.prevent="insertTab($event)"></textarea>
+print('Hello world!')" @keydown.tab.prevent="insertTab($event)"
+                @keydown.backspace="handleBackspace($event)"></textarea>
         </div>
 
         <!-- Output Console -->
@@ -210,6 +211,32 @@ print('Hello world!')" @keydown.tab.prevent="insertTab($event)"></textarea>
                     this.$nextTick(() => {
                         e.target.selectionStart = e.target.selectionEnd = start + 4;
                     });
+                },
+
+                handleBackspace(e) {
+                    const el = e.target;
+                    const start = el.selectionStart;
+                    const end = el.selectionEnd;
+
+                    if (start !== end) return; // Selection exists, let default handle it
+
+                    const text = el.value;
+                    const before = text.substring(0, start);
+                    const lineStart = before.lastIndexOf('\n') + 1;
+                    const linePrefix = before.substring(lineStart);
+
+                    // Check if we are at an indentation boundary (multiple of 4 spaces)
+                    // and the line prefix consists only of whitespace
+                    if (/^\s+$/.test(linePrefix) && linePrefix.length % 4 === 0 && linePrefix.length > 0) {
+                        e.preventDefault();
+                        // Remove 4 spaces
+                        this.code = text.substring(0, start - 4) + text.substring(end);
+
+                        // Restore cursor position
+                        this.$nextTick(() => {
+                            el.selectionStart = el.selectionEnd = start - 4;
+                        });
+                    }
                 }
             }
         }
