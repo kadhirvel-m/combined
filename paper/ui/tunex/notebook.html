@@ -387,7 +387,21 @@
                                 cm.replaceSelection('    ', 'end');
                             }
                         },
-                        'Ctrl-Space': 'autocomplete'
+                        'Ctrl-Space': 'autocomplete',
+                        'Backspace': function (cm) {
+                            if (cm.somethingSelected()) return CodeMirror.Pass;
+                            var cursor = cm.getCursor();
+                            var line = cm.getLine(cursor.line);
+                            var before = line.slice(0, cursor.ch);
+                            if (/^\s+$/.test(before) && before.length % 4 === 0 && before.length > 0) {
+                                cm.replaceRange("", {
+                                    line: cursor.line,
+                                    ch: cursor.ch - 4
+                                }, cursor);
+                            } else {
+                                return CodeMirror.Pass;
+                            }
+                        }
                     }
                 });
 
