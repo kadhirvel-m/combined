@@ -10,6 +10,11 @@ from .tunex_router import get_supabase
 router = APIRouter(prefix="/api/tunex", tags=["problems"])
 logger = logging.getLogger("problems_api")
 
+class Example(BaseModel):
+    input: str           # Display string like "nums = [2,7,11,15], target = 9"
+    output: str          # Display string like "[0,1]"
+    explanation: Optional[str] = None
+
 class Problem(BaseModel):
     id: str
     title: str
@@ -19,6 +24,12 @@ class Problem(BaseModel):
     function_name: str
     companies: List[str] = []
     likes: int = 0
+    # Enhanced LeetCode-style fields
+    examples: List[dict] = []        # Array of {input, output, explanation}
+    constraints: List[str] = []      # Array of constraint strings
+    hints: List[str] = []            # Array of progressive hints
+    follow_up: Optional[str] = None  # Optional optimization question
+    topics: List[str] = []           # Related topics like "Array", "Math"
 
 class TestCaseResult(BaseModel):
     passed: bool
@@ -38,6 +49,44 @@ class RunResponse(BaseModel):
 @router.get("/problems/{id}")
 async def get_problem(id: str):
     supabase = get_supabase()
+
+    # MOCK DATA FOR DEMO
+    mocks = {
+        "p_google": {
+            "id": "p_google", "title": "Google Search Algorithm", "difficulty": "Hard",
+            "companies": ["Google", "DeepMind"], "function_name": "search",
+            "description": "Implement a simplified search ranking algorithm. Given a list of documents and a query, rank them by relevance score.",
+            "boilerplate_code": "def search(docs, query):\n    # Your code here\n    pass"
+        },
+        "p_netflix": {
+            "id": "p_netflix", "title": "Movie Recommendation", "difficulty": "Medium",
+            "companies": ["Netflix", "Hulu"], "function_name": "recommend",
+            "description": "Given a user's watch history and a list of movies, recommend the next top 3 movies based on genre similarity.",
+            "boilerplate_code": "def recommend(history, movies):\n    # Your code here\n    pass"
+        },
+        "p_insta": {
+            "id": "p_insta", "title": "Instagram Feed", "difficulty": "Medium",
+            "companies": ["Meta", "Instagram"], "function_name": "feed_gen",
+            "description": "Design an algorithm to generate a user's feed sorted by timestamp and engagement score.",
+            "boilerplate_code": "def feed_gen(posts):\n    # Your code here\n    pass"
+        },
+        "p_nasa": {
+            "id": "p_nasa", "title": "Asteroid Tracking", "difficulty": "Hard",
+            "companies": ["NASA", "SpaceX"], "function_name": "track",
+            "description": "Analyze a stream of coordinate data to predict an asteroid's trajectory.",
+            "boilerplate_code": "def track(data):\n    # Your code here\n    pass"
+        },
+        "p_spotify": {
+            "id": "p_spotify", "title": "Playlist Shuffle", "difficulty": "Easy",
+            "companies": ["Spotify", "Apple Music"], "function_name": "shuffle",
+            "description": "Implement a shuffle algorithm that ensures no two similar songs are played back-to-back.",
+            "boilerplate_code": "def shuffle(playlist):\n    # Your code here\n    pass"
+        }
+    }
+    
+    if id in mocks:
+        return mocks[id]
+
     res = supabase.table("lcoding_problems").select("*").eq("id", id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Problem not found")

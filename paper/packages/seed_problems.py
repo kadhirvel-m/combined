@@ -113,13 +113,70 @@ Write a function `can_vote(age)` that checks if a person is eligible to vote.
         "slug": "electricity-bill",
         "title": "Electricity Bill Calculator",
         "difficulty": "Hard",
-        "description": "Calculate bill: <100 units free, 100-200 $5/unit, >200 $10/unit. Add 10% tax on total. Return float.",
-        "boilerplate_code": "def calculate_bill(units):\n    pass",
+        "topics": ["Math", "Conditional Logic", "Real World"],
+        "description": """# Electricity Bill Calculator
+
+You are given the number of electricity units consumed by a household. Calculate the total bill amount based on the following tiered pricing structure:
+
+- **First 100 units**: Free (no charge)
+- **Next 100 units (101-200)**: $5 per unit
+- **Units above 200**: $10 per unit
+
+After calculating the base amount, add a **10% tax** on the total bill.
+
+Return the final bill amount as a **float**.
+
+**Note:** If the total units consumed is 100 or less, the bill is $0.00 (no tax applied on zero amount).""",
+        "examples": [
+            {
+                "input": "units = 50",
+                "output": "0.0",
+                "explanation": "50 units fall within the free tier (first 100 units). Base amount = $0. Tax = 10% of $0 = $0. Total = $0.0"
+            },
+            {
+                "input": "units = 150",
+                "output": "275.0",
+                "explanation": "First 100 units = $0 (free). Next 50 units (101-150) = 50 × $5 = $250. Base amount = $250. Tax = 10% of $250 = $25. Total = $275.0"
+            },
+            {
+                "input": "units = 250",
+                "output": "1100.0",
+                "explanation": "First 100 units = $0 (free). Next 100 units (101-200) = 100 × $5 = $500. Remaining 50 units (201-250) = 50 × $10 = $500. Base amount = $1000. Tax = 10% of $1000 = $100. Total = $1100.0"
+            }
+        ],
+        "constraints": [
+            "0 <= units <= 10^6",
+            "The return value must be a float",
+            "Tax is always 10% of the total base amount",
+            "If base amount is 0, return 0.0 (not 0)"
+        ],
+        "hints": [
+            "Start by breaking down the problem into tiers: 0-100, 101-200, and 201+.",
+            "Use conditional statements to calculate the cost for each tier separately.",
+            "Remember that units in the first tier (0-100) are completely free, so only calculate cost for units ABOVE 100.",
+            "For the second tier, the cost is for units between 101 and 200, which is min(units - 100, 100) × $5.",
+            "For the third tier, only units above 200 are charged at $10 each: max(0, units - 200) × $10.",
+            "Don't forget to apply the 10% tax at the end: total = base_amount × 1.1"
+        ],
+        "follow_up": "Can you solve this problem in O(1) time complexity without using any loops or recursion?",
+        "boilerplate_code": "def calculate_bill(units: int) -> float:\n    # Your code here\n    pass",
         "function_name": "calculate_bill",
-        "companies": ["Hard", "Real World"],
+        "companies": ["Utility Corp", "Smart Grid Inc", "Energy Solutions"],
         "test_cases": [
-            {"input_json": [50], "expected_output_json": 0.0}, # Free
-            {"input_json": [150], "expected_output_json": 275.0}, # (50*5) * 1.1
+            # Visible test cases
+            {"input_json": [50], "expected_output_json": 0.0},
+            {"input_json": [150], "expected_output_json": 275.0},
+            {"input_json": [250], "expected_output_json": 1100.0},
+            # Hidden test cases - edge cases
+            {"input_json": [0], "expected_output_json": 0.0, "is_hidden": True},
+            {"input_json": [100], "expected_output_json": 0.0, "is_hidden": True},
+            {"input_json": [101], "expected_output_json": 5.5, "is_hidden": True},
+            {"input_json": [200], "expected_output_json": 550.0, "is_hidden": True},
+            {"input_json": [201], "expected_output_json": 561.0, "is_hidden": True},
+            {"input_json": [500], "expected_output_json": 3850.0, "is_hidden": True},
+            {"input_json": [1000], "expected_output_json": 8850.0, "is_hidden": True},
+            {"input_json": [1], "expected_output_json": 0.0, "is_hidden": True},
+            {"input_json": [99], "expected_output_json": 0.0, "is_hidden": True}
         ]
     }
 ]
