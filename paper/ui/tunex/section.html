@@ -89,7 +89,19 @@
                             </div>
                         </div>
                     </div>
-                    <i class="ri-arrow-right-s-line text-gray-500 group-hover:text-white transition"></i>
+                    <div class="flex items-center gap-2">
+                        <button @click.stop="renameTopic(topic)"
+                            class="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition"
+                            title="Rename">
+                            <i class="ri-pencil-line"></i>
+                        </button>
+                        <button @click.stop="deleteTopic(topic)"
+                            class="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
+                            title="Delete">
+                            <i class="ri-delete-bin-line"></i>
+                        </button>
+                        <i class="ri-arrow-right-s-line text-gray-500 group-hover:text-white transition"></i>
+                    </div>
                 </div>
             </template>
         </div>
@@ -126,6 +138,53 @@
             </div>
         </div>
 
+        <!-- Edit Modal -->
+        <div x-show="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style="display: none;">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showEditModal = false"></div>
+            <div class="bg-gatex-card border border-white/10 rounded-2xl p-6 w-full max-w-sm relative z-10 shadow-2xl">
+                <h3 class="text-xl font-bold mb-4">Edit Topic</h3>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Title</label>
+                        <input type="text" x-model="editingTopic.title"
+                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition"
+                            placeholder="Topic Title" @keydown.enter="confirmRename()">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button @click="showEditModal = false"
+                        class="px-4 py-2 rounded-lg hover:bg-white/5 text-sm">Cancel</button>
+                    <button @click="confirmRename()"
+                        class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-lg text-sm font-medium transition">Save
+                        Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Modal -->
+        <div x-show="showDeleteModal" class="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style="display: none;">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="showDeleteModal = false"></div>
+            <div class="bg-gatex-card border border-white/10 rounded-2xl p-6 w-full max-w-sm relative z-10 shadow-2xl">
+                <i class="ri-error-warning-line text-4xl text-red-500 mb-2 block"></i>
+                <h3 class="text-xl font-bold mb-2">Delete Topic?</h3>
+                <p class="text-gray-400 text-sm mb-6">Are you sure you want to delete "<span
+                        class="text-white font-medium" x-text="deletingTopic?.title"></span>"? This action cannot be
+                    undone.</p>
+
+                <div class="flex justify-end gap-3">
+                    <button @click="showDeleteModal = false"
+                        class="px-4 py-2 rounded-lg hover:bg-white/5 text-sm">Cancel</button>
+                    <button @click="confirmDelete()"
+                        class="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-4 py-2 rounded-lg text-sm font-medium transition">Delete
+                        Forever</button>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <script>
@@ -139,7 +198,11 @@
                 topics: [],
                 loading: true,
                 showAddModal: false,
+                showEditModal: false,
+                showDeleteModal: false,
                 newTopic: { title: '', order_index: 0 },
+                editingTopic: { id: null, title: '' },
+                deletingTopic: null,
 
                 init() {
                     const params = new URLSearchParams(window.location.search);
@@ -171,6 +234,14 @@
                 async fetchData() {
                     this.loading = true;
                     try {
+                        // Fetch section details to get the name
+                        const sectionRes = await fetch(`${API_BASE}/api/lcoding/sections/${this.sectionId}`);
+                        if (sectionRes.ok) {
+                            const sectionData = await sectionRes.json();
+                            this.sectionName = sectionData.title || sectionData.name || 'Section';
+                        }
+
+                        // Fetch topics for this section
                         const topicRes = await fetch(`${API_BASE}/api/lcoding/sections/${this.sectionId}/topics`);
                         if (topicRes.ok) this.topics = await topicRes.json();
 
@@ -180,7 +251,7 @@
                         }
 
                     } catch (e) {
-                        console.error("Failed to fetch topics", e);
+                        console.error("Failed to fetch data", e);
                     } finally {
                         this.loading = false;
                     }
@@ -214,6 +285,60 @@
                     } catch (e) {
                         console.error("Error creating topic", e);
                         alert("Error creating topic");
+                    }
+                },
+
+                renameTopic(topic) {
+                    this.editingTopic = { ...topic };
+                    this.showEditModal = true;
+                },
+
+                async confirmRename() {
+                    if (!this.editingTopic.title) return alert("Title is required");
+                    // Optimistic update
+                    const oldTitle = this.topics.find(t => t.id === this.editingTopic.id).title;
+
+                    try {
+                        const res = await fetch(`${API_BASE}/api/lcoding/topics/${this.editingTopic.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title: this.editingTopic.title })
+                        });
+
+                        if (res.ok) {
+                            this.showEditModal = false;
+                            this.fetchData();
+                        } else {
+                            alert("Failed to rename topic");
+                        }
+                    } catch (e) {
+                        console.error("Error renaming topic", e);
+                        alert("Error renaming topic");
+                    }
+                },
+
+                deleteTopic(topic) {
+                    this.deletingTopic = topic;
+                    this.showDeleteModal = true;
+                },
+
+                async confirmDelete() {
+                    if (!this.deletingTopic) return;
+
+                    try {
+                        const res = await fetch(`${API_BASE}/api/lcoding/topics/${this.deletingTopic.id}`, {
+                            method: 'DELETE'
+                        });
+
+                        if (res.ok) {
+                            this.showDeleteModal = false;
+                            this.fetchData();
+                        } else {
+                            alert("Failed to delete topic");
+                        }
+                    } catch (e) {
+                        console.error("Error deleting topic", e);
+                        alert("Error deleting topic");
                     }
                 }
             }

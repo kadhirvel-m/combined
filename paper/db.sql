@@ -137,6 +137,26 @@ CREATE TABLE public.lcoding_levels (
   CONSTRAINT lcoding_levels_pkey PRIMARY KEY (id),
   CONSTRAINT lcoding_levels_language_id_fkey FOREIGN KEY (language_id) REFERENCES public.lcoding_languages(id)
 );
+CREATE TABLE public.lcoding_problems (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE,
+  title text NOT NULL,
+  description text NOT NULL,
+  difficulty text NOT NULL CHECK (difficulty = ANY (ARRAY['Easy'::text, 'Medium'::text, 'Hard'::text])),
+  tags ARRAY DEFAULT '{}'::text[],
+  boilerplate_code text NOT NULL,
+  function_name text NOT NULL,
+  companies ARRAY DEFAULT '{}'::text[],
+  likes integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  examples jsonb DEFAULT '[]'::jsonb,
+  constraints ARRAY DEFAULT '{}'::text[],
+  hints ARRAY DEFAULT '{}'::text[],
+  follow_up text,
+  topics ARRAY DEFAULT '{}'::text[],
+  CONSTRAINT lcoding_problems_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.lcoding_sections (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   title text NOT NULL,
@@ -146,6 +166,17 @@ CREATE TABLE public.lcoding_sections (
   level_id uuid,
   CONSTRAINT lcoding_sections_pkey PRIMARY KEY (id),
   CONSTRAINT lcoding_sections_level_id_fkey FOREIGN KEY (level_id) REFERENCES public.lcoding_levels(id)
+);
+CREATE TABLE public.lcoding_test_cases (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  problem_id uuid NOT NULL,
+  input_json jsonb NOT NULL,
+  expected_output_json jsonb NOT NULL,
+  is_hidden boolean DEFAULT false,
+  order_index integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lcoding_test_cases_pkey PRIMARY KEY (id),
+  CONSTRAINT lcoding_test_cases_problem_id_fkey FOREIGN KEY (problem_id) REFERENCES public.lcoding_problems(id)
 );
 CREATE TABLE public.lcoding_topic_chapters (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

@@ -15154,6 +15154,9 @@ def create_app() -> FastAPI:
             "https://uppzpkmpxgyipjzcskva.supabase.co",
             "http://127.0.0.1:5501",
             "http://127.0.0.1:8000",
+            "http://localhost:5501",
+            "http://localhost:8000",
+            "http://localhost",
         ],
         allow_credentials=True,
         allow_methods=["*"],
@@ -15622,6 +15625,11 @@ class LcodingTopic(LcodingTopicBase):
     updated_at: str
 
 
+
+class LcodingTopicUpdate(BaseModel):
+    title: Optional[str] = None
+    order_index: Optional[int] = None
+
 lcoding_router = APIRouter(prefix="/api/lcoding", tags=["lcoding"])
 
 @lcoding_router.get("/languages", response_model=List[LcodingLanguage])
@@ -15786,6 +15794,14 @@ def create_lcoding_section(level_id: str, section: LcodingSectionCreate):
         raise HTTPException(status_code=500, detail="Failed to create section")
     return res.data[0]
 
+@lcoding_router.get("/sections/{section_id}", response_model=LcodingSection)
+def get_lcoding_section(section_id: str):
+    supabase = get_service_client()
+    res = supabase.table("lcoding_sections").select("*").eq("id", section_id).single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Section not found")
+    return res.data
+
 @lcoding_router.get("/sections/{section_id}/topics", response_model=List[LcodingTopic])
 def get_lcoding_topics(section_id: str):
     supabase = get_service_client()
@@ -15810,6 +15826,29 @@ def get_lcoding_topic(topic_id: str):
     if not res.data:
         raise HTTPException(status_code=404, detail="Topic not found")
     return res.data
+
+@lcoding_router.patch("/topics/{topic_id}", response_model=LcodingTopic)
+def update_lcoding_topic(topic_id: str, topic: LcodingTopicUpdate):
+    supabase = get_service_client()
+    payload = topic.dict(exclude_unset=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    payload["updated_at"] = datetime.utcnow().isoformat()
+    res = supabase.table("lcoding_topics").update(payload).eq("id", topic_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Topic not found or failed to update")
+    return res.data[0]
+
+@lcoding_router.delete("/topics/{topic_id}")
+def delete_lcoding_topic(topic_id: str):
+    supabase = get_service_client()
+    res = supabase.table("lcoding_topics").delete().eq("id", topic_id).execute()
+    # Note: Supabase delete returns the deleted rows. If empty, it might mean not found OR already deleted.
+    if not res.data:
+         # Check if it existed? Or just return success.
+         # For safety, let's assume if it returns nothing, it wasn't there.
+         raise HTTPException(status_code=404, detail="Topic not found or failed to delete")
+    return {"message": "Topic deleted successfully"}
 
 app.include_router(lcoding_router)
 app.include_router(problems_api.router) # Problem Solver Routes

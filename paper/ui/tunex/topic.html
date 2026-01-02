@@ -11,7 +11,7 @@
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
 
     <!-- Theme & Config -->
-    <script src="../../assets/js/theme.js"></script>
+    <script src="../assets/js/theme.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -42,6 +42,7 @@
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/intersect@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <!-- CodeMirror 5 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
@@ -53,9 +54,18 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
 
     <style>
+        /* Base body styling */
         body {
             background: #1E1E2F;
             color: #fff;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        /* Light theme body */
+        html.light body,
+        html:not(.dark) body {
+            background: #f8fafc !important;
+            color: #1e293b !important;
         }
 
         .accent {
@@ -70,10 +80,39 @@
             border-color: #9E4B8A;
         }
 
+        /* Code output - keep dark background in both themes */
         .code-output {
             background: #0a0a0f;
             font-family: 'JetBrains Mono', monospace;
+            color: #e2e8f0;
         }
+
+        /* Syntax highlighting */
+        .kw {
+            color: #C792EA;
+        }
+
+        /* Keywords */
+        .fn {
+            color: #82AAFF;
+        }
+
+        /* Functions */
+        .str {
+            color: #C3E88D;
+        }
+
+        /* Strings */
+        .num {
+            color: #F78C6C;
+        }
+
+        /* Numbers */
+        .cmt {
+            color: #546E7A;
+        }
+
+        /* Comments */
 
         .chapter-num {
             width: 48px;
@@ -88,12 +127,20 @@
             border-radius: 12px;
         }
 
+        /* Inline code */
         code {
             font-family: 'JetBrains Mono', monospace;
             background: #4C2A59;
+            color: #fff;
             padding: 2px 8px;
             border-radius: 4px;
             font-size: 0.9em;
+        }
+
+        html.light code,
+        html:not(.dark) code {
+            background: #f3e8ff !important;
+            color: #6b21a8 !important;
         }
 
         .quiz-opt {
@@ -116,12 +163,35 @@
             background: rgba(239, 68, 68, 0.15);
         }
 
+        /* CodeMirror - dark mode default */
         .CodeMirror {
             font-family: 'JetBrains Mono', monospace !important;
-            font-size: 14px;
+            font-size: 16px;
             height: auto !important;
             background: #12121a !important;
             border-radius: 0 0 12px 12px;
+        }
+
+        /* CodeMirror - light mode */
+        html.light .CodeMirror,
+        html:not(.dark) .CodeMirror {
+            background: #e2e8f0 !important;
+        }
+
+        html.light .CodeMirror-gutters,
+        html:not(.dark) .CodeMirror-gutters {
+            background: #cbd5e1 !important;
+            border-right: 1px solid #94a3b8 !important;
+        }
+
+        html.light .cm-s-material-darker .CodeMirror-linenumber,
+        html:not(.dark) .cm-s-material-darker .CodeMirror-linenumber {
+            color: #475569 !important;
+        }
+
+        html.light .cm-s-material-darker span,
+        html:not(.dark) .cm-s-material-darker span {
+            color: #1e293b !important;
         }
 
         .CodeMirror-scroll {
@@ -146,10 +216,176 @@
             border-radius: 10px;
         }
 
+        /* Background grid */
         .bg-grid {
             background-size: 40px 40px;
             background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
                 linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        }
+
+        html.light .bg-grid,
+        html:not(.dark) .bg-grid {
+            background-image: linear-gradient(to right, rgba(0, 0, 0, 0.07) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.07) 1px, transparent 1px) !important;
+        }
+
+        /* Light mode overrides for Tailwind classes */
+        html.light .bg-\[\#1E1E2F\],
+        html:not(.dark) .bg-\[\#1E1E2F\] {
+            background-color: #f8fafc !important;
+        }
+
+        html.light .bg-\[\#171722\],
+        html:not(.dark) .bg-\[\#171722\] {
+            background: #f1f5f9 !important;
+        }
+
+        html.light .bg-\[\#12121a\],
+        html:not(.dark) .bg-\[\#12121a\] {
+            background: #e2e8f0 !important;
+        }
+
+        html.light .bg-\[\#0F0F16\],
+        html:not(.dark) .bg-\[\#0F0F16\] {
+            background: #e2e8f0 !important;
+        }
+
+        html.light .bg-\[\#1E1E2F\]\/80,
+        html:not(.dark) .bg-\[\#1E1E2F\]\/80 {
+            background: rgba(248, 250, 252, 0.9) !important;
+        }
+
+        html.light .text-white,
+        html:not(.dark) .text-white {
+            color: #1e293b !important;
+        }
+
+        html.light .text-gray-400,
+        html:not(.dark) .text-gray-400 {
+            color: #64748b !important;
+        }
+
+        html.light .text-gray-500,
+        html:not(.dark) .text-gray-500 {
+            color: #475569 !important;
+        }
+
+        html.light .text-gray-300,
+        html:not(.dark) .text-gray-300 {
+            color: #334155 !important;
+        }
+
+        html.light .text-gray-200,
+        html:not(.dark) .text-gray-200 {
+            color: #1e293b !important;
+        }
+
+        html.light .border-white\/5,
+        html:not(.dark) .border-white\/5 {
+            border-color: rgba(0, 0, 0, 0.1) !important;
+        }
+
+        html.light .border-white\/10,
+        html:not(.dark) .border-white\/10 {
+            border-color: rgba(0, 0, 0, 0.15) !important;
+        }
+
+        html.light .border-white\/20,
+        html:not(.dark) .border-white\/20 {
+            border-color: rgba(0, 0, 0, 0.2) !important;
+        }
+
+        html.light .opacity-50,
+        html:not(.dark) .opacity-50 {
+            opacity: 0.7 !important;
+        }
+
+        html.light .opacity-80,
+        html:not(.dark) .opacity-80 {
+            opacity: 0.9 !important;
+        }
+
+        /* Cards and panels */
+        html.light .bg-\[\#4C2A59\]\/20,
+        html:not(.dark) .bg-\[\#4C2A59\]\/20 {
+            background: rgba(158, 75, 138, 0.1) !important;
+        }
+
+        html.light .bg-\[\#4C2A59\]\/10,
+        html:not(.dark) .bg-\[\#4C2A59\]\/10 {
+            background: rgba(158, 75, 138, 0.08) !important;
+        }
+
+        /* Hover states */
+        html.light .hover\:bg-white\/5:hover,
+        html:not(.dark) .hover\:bg-white\/5:hover {
+            background: rgba(0, 0, 0, 0.05) !important;
+        }
+
+        /* Sidebar chapter numbers in light mode */
+        html.light .bg-\[\#252530\],
+        html:not(.dark) .bg-\[\#252530\] {
+            background: #e2e8f0 !important;
+            color: #1e293b !important;
+        }
+
+        html.light .group-hover\:bg-\[\#303040\],
+        html:not(.dark) .group-hover\:bg-\[\#303040\] {
+            background: #cbd5e1 !important;
+        }
+
+        /* Code editor header - keep text light since bg is dark purple */
+        .bg-\[\#4C2A59\] {
+            color: #ffffff !important;
+        }
+
+        .bg-\[\#4C2A59\] span,
+        .bg-\[\#4C2A59\] button {
+            color: #ffffff !important;
+        }
+
+        /* Practice questions and cards in light mode */
+        html.light .bg-\[\#2D1B36\],
+        html:not(.dark) .bg-\[\#2D1B36\] {
+            background: #f1f5f9 !important;
+        }
+
+        html.light .from-\[\#2D1B36\],
+        html:not(.dark) .from-\[\#2D1B36\] {
+            --tw-gradient-from: #f1f5f9 !important;
+        }
+
+        html.light .to-\[\#1E1E2F\],
+        html:not(.dark) .to-\[\#1E1E2F\] {
+            --tw-gradient-to: #f8fafc !important;
+        }
+
+        /* Fix text visibility in light mode */
+        html.light .text-white\/70,
+        html:not(.dark) .text-white\/70 {
+            color: #475569 !important;
+        }
+
+        /* Practice cards in light mode */
+        html.light .practice-card,
+        html:not(.dark) .practice-card {
+            background: #f1f5f9 !important;
+            border-color: rgba(0, 0, 0, 0.1) !important;
+        }
+
+        html.light .practice-title,
+        html:not(.dark) .practice-title {
+            color: #1e293b !important;
+        }
+
+        /* Hide dark logo in light mode, show light logo */
+        html.light .logo-dark,
+        html:not(.dark) .logo-dark {
+            display: none !important;
+        }
+
+        html.dark .logo-light {
+            display: none !important;
         }
     </style>
 </head>
@@ -160,21 +396,24 @@
     <header
         class="fixed top-0 left-0 right-0 h-16 bg-[#1E1E2F]/80 backdrop-blur-xl border-b border-white/5 z-50 flex items-center justify-between px-6">
         <div class="flex items-center gap-3">
-            <a href="section.html"
+            <button @click="goBack()"
                 class="w-8 h-8 rounded-full bg-[#4C2A59]/20 flex items-center justify-center hover:bg-[#9E4B8A] transition-all text-white/70 hover:text-white">
                 <i class="ri-arrow-left-line"></i>
-            </a>
+            </button>
             <div class="flex items-center gap-3">
-                <img src="../assets/img/tunex/tunex-logo-dark.svg" alt="Tunex" class="h-6">
+                <img src="../assets/img/tunex/tunex-logo-dark.svg" alt="Tunex" class="h-6 logo-dark">
+                <img src="../assets/img/tunex/tunex-logo-light.svg" alt="Tunex" class="h-6 logo-light">
                 <span class="font-bold tracking-tight opacity-50 text-sm border-l border-white/20 pl-3">
                     <span x-text="topicTitle || 'Loading...'"></span>
                 </span>
             </div>
         </div>
         <div class="flex items-center gap-4">
-            <button @click="Theme.toggle()" class="p-2 text-gray-400 hover:text-white transition">
-                <i class="ri-moon-line dark:hidden"></i>
-                <i class="ri-sun-line hidden dark:block"></i>
+            <button @click="Theme.toggle()"
+                class="w-9 h-9 rounded-lg bg-[#4C2A59]/20 flex items-center justify-center hover:bg-[#9E4B8A] transition-all text-gray-400 hover:text-white border border-white/5"
+                title="Toggle theme">
+                <i class="ri-moon-line dark:hidden text-lg"></i>
+                <i class="ri-sun-line hidden dark:block text-lg"></i>
             </button>
             <a href="notebook.html"
                 class="px-4 py-2 rounded-lg bg-[#4C2A59]/20 hover:bg-[#9E4B8A] transition-all text-sm font-bold border border-white/5 hover:border-[#9E4B8A]/50 flex items-center gap-2">
@@ -248,10 +487,11 @@
                             </div>
                         </div>
 
-                        <!-- 1. CONCEPT -->
+                        <!-- 1. CONCEPT (Legacy) -->
                         <template x-if="ch.chapter_type === 'concept' && !ch.content.blocks">
                             <div>
-                                <p class="text-lg opacity-80 leading-relaxed mb-8" x-text="ch.content.description"></p>
+                                <div class="text-lg opacity-80 leading-relaxed mb-8 markdown-body"
+                                    x-html="parseMarkdown(ch.content.description)"></div>
                                 <div class="grid md:grid-cols-2 gap-6">
                                     <div
                                         class="p-8 rounded-2xl bg-[#0F0F16] relative overflow-hidden group border border-white/5">
@@ -348,6 +588,7 @@
                                             x-text="q.q"></p>
                                     </div>
                                 </template>
+                            </div>
                         </template>
 
                         <!-- 4B. PRACTICE (New Vertical Layout) -->
@@ -383,6 +624,168 @@
                                         </div>
                                     </div>
                                 </template>
+                            </div>
+                        </template>
+
+                        <!-- 4C. COMPANY GRID (New Layout) -->
+                        <template x-if="ch.chapter_type === 'interview' && ch.content.layout === 'company_grid'">
+                            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                                <template x-for="q in ch.content.questions">
+                                    <div @click="openProblem(q.problem_id)"
+                                        class="aspect-square relative group cursor-pointer perspective-1000">
+                                        <div
+                                            class="w-full h-full rounded-2xl bg-[#1E1E2F] border border-white/5 p-4 flex flex-col items-center justify-center text-center transition-all duration-500 group-hover:rotate-y-12 shadow-xl group-hover:shadow-[#9E4B8A]/20">
+
+                                            <!-- Icon -->
+                                            <div class="w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-4 transition-transform group-hover:scale-110"
+                                                :style="`background: ${q.color}20; color: ${q.color}`">
+                                                <i :class="q.icon"></i>
+                                            </div>
+
+                                            <h4 class="font-bold text-lg mb-1" x-text="q.company"></h4>
+                                            <p class="text-[10px] uppercase tracking-wider opacity-50"
+                                                x-text="q.tag_short"></p>
+
+                                            <!-- Hover Overlay -->
+                                            <div
+                                                class="absolute inset-0 bg-[#0F0F16]/95 rounded-2xl flex items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                                                <div>
+                                                    <p class="text-xs text-gray-300 mb-2 leading-relaxed"
+                                                        x-text="q.use_case"></p>
+                                                    <span
+                                                        class="text-[10px] font-bold text-[#9E4B8A] uppercase tracking-widest">View
+                                                        Problem</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+
+
+                        <!-- 4E. COMPANY CARDS (Interview with company styling) -->
+                        <template x-if="ch.chapter_type === 'interview' && ch.content.layout === 'company_cards'">
+                            <div>
+                                <div class="grid md:grid-cols-2 gap-4 mb-8">
+                                    <template x-for="q in ch.content.questions">
+                                        <div class="group p-6 rounded-2xl border border-white/5 bg-[#12121a] hover:bg-[#1a1a24] transition-all relative overflow-hidden"
+                                            :style="`--company-color: ${q.color}`">
+                                            <div class="absolute -right-4 -top-4 w-24 h-24 rounded-full blur-2xl transition-all"
+                                                :style="`background: ${q.color}10`"></div>
+                                            <div class="flex items-center justify-between mb-4 relative">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-10 h-10 rounded-xl flex items-center justify-center"
+                                                        :style="`background: ${q.color}20; color: ${q.color}`">
+                                                        <i :class="q.icon" class="text-xl"></i>
+                                                    </div>
+                                                    <div>
+                                                        <h3 class="font-bold" x-text="q.company"></h3>
+                                                        <p class="text-[10px] uppercase tracking-wider opacity-50"
+                                                            x-text="q.role"></p>
+                                                    </div>
+                                                </div>
+                                                <span class="px-3 py-1 rounded-full text-xs font-bold border"
+                                                    :style="`background: ${q.color}10; color: ${q.color}; border-color: ${q.color}30`"
+                                                    x-text="q.tag"></span>
+                                            </div>
+                                            <p class="text-base font-medium leading-snug relative z-10"
+                                                x-text="'\"' + q.question + ' \"'"></p>
+                                        </div>
+                                    </template>
+                                </div>
+                                <!-- Tips section if available -->
+                                <template x-if="ch.content.tips">
+                                    <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                        <p class="font-bold mb-3">💡 Pro Tips for Interviews</p>
+                                        <ul class="space-y-2 opacity-80 text-sm">
+                                            <template x-for="tip in ch.content.tips">
+                                                <li class="markdown-body" x-html="parseMarkdown('• ' + tip)"></li>
+                                            </template>
+                                        </ul>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- 6. WALKTHROUGH (Step-by-step problem solving) -->
+                        <template x-if="ch.chapter_type === 'walkthrough'">
+                            <div>
+                                <!-- Problem Statement -->
+                                <div class="p-6 rounded-2xl bg-[#4C2A59]/30 mb-8">
+                                    <p class="font-bold text-lg mb-3 flex items-center gap-2">
+                                        <i class="ri-file-list-3-line"></i>
+                                        <span x-text="'Problem: ' + ch.content.problem.title"></span>
+                                    </p>
+                                    <p class="opacity-80" x-text="ch.content.problem.desc"></p>
+                                    <p class="font-mono text-sm mt-3 opacity-60" x-text="ch.content.problem.example">
+                                    </p>
+                                </div>
+
+                                <!-- Steps -->
+                                <div class="space-y-6 mb-8">
+                                    <template x-for="step in ch.content.steps">
+                                        <div class="p-5 rounded-2xl bg-[#12121a]">
+                                            <p class="text-sm font-bold accent mb-3" x-text="step.title"></p>
+                                            <p x-show="step.text" class="opacity-80 text-sm" x-text="step.text"></p>
+                                            <ul x-show="step.items" class="space-y-1 opacity-80 text-sm">
+                                                <template x-for="item in step.items">
+                                                    <li class="markdown-body" x-html="parseMarkdown('• ' + item)"></li>
+                                                </template>
+                                            </ul>
+                                            <!-- Code editor for walkthrough -->
+                                            <template x-if="step.code_id">
+                                                <div class="rounded-xl overflow-hidden border border-[#4C2A59] mt-4">
+                                                    <div
+                                                        class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
+                                                        <span class="text-sm font-bold">Code</span>
+                                                        <button @click="runCode(step.code_id)"
+                                                            class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
+                                                            <i class="ri-play-fill" x-show="!running[step.code_id]"></i>
+                                                            <i class="ri-loader-4-line animate-spin"
+                                                                x-show="running[step.code_id]"></i>
+                                                            Run
+                                                        </button>
+                                                    </div>
+                                                    <div :id="'editor-' + step.code_id"></div>
+                                                    <div class="code-output p-4 min-h-[40px]"
+                                                        x-show="outputs[step.code_id] || errors[step.code_id]">
+                                                        <pre class="text-sm text-green-400"
+                                                            x-text="outputs[step.code_id]"></pre>
+                                                        <pre class="text-sm text-red-400"
+                                                            x-text="errors[step.code_id]"></pre>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <!-- Trace visualization -->
+                                            <template x-if="step.trace">
+                                                <div class="mt-4">
+                                                    <div class="grid grid-cols-5 gap-1 text-center font-mono text-xs">
+                                                        <template x-for="t in step.trace">
+                                                            <div class="p-2 rounded bg-[#4C2A59]/30">
+                                                                <span x-text="'num=' + t.num"></span><br>
+                                                                <span
+                                                                    :class="t.updated ? 'text-green-400' : 'opacity-50'"
+                                                                    x-text="'max=' + t.max"></span>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                    <p class="text-xs opacity-50 mt-2 text-center">Green = max updated
+                                                    </p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                <!-- Takeaway -->
+                                <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                    <p class="font-bold mb-2 flex items-center gap-2">
+                                        <i class="ri-focus-3-line"></i> Key Takeaway
+                                    </p>
+                                    <p class="opacity-80 text-sm" x-text="ch.content.takeaway"></p>
+                                </div>
                             </div>
                         </template>
 
@@ -447,7 +850,8 @@
                                 <div x-show="quizCompleted" class="text-center py-8">
                                     <h3 class="text-3xl font-bold mb-2">Quiz Complete!</h3>
                                     <p class="text-xl accent mb-6"
-                                        x-text="`You scored ${score}/${ch.content.questions.length}`"></p>
+                                        x-text="`You scored ${score}/${ch.content.questions.length}`">
+                                    </p>
                                     <button onclick="location.reload()"
                                         class="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold">Restart
                                         Topic</button>
@@ -503,8 +907,8 @@
                                             <div class="max-w-3xl mx-auto">
                                                 <h3 x-show="block.title" class="text-2xl font-bold mb-4"
                                                     x-text="block.title"></h3>
-                                                <p class="text-lg opacity-80 leading-relaxed whitespace-pre-line"
-                                                    x-html="block.content"></p>
+                                                <p class="text-lg opacity-80 leading-relaxed whitespace-pre-line markdown-body"
+                                                    x-html="parseMarkdown(block.content)"></p>
                                             </div>
                                         </template>
                                         <template x-if="block.type === 'code'">
@@ -534,7 +938,8 @@
                                                 <div>
                                                     <h3 x-show="block.left.title" class="text-xl font-bold mb-3"
                                                         x-text="block.left.title"></h3>
-                                                    <p class="opacity-80 leading-relaxed" x-html="block.left.content">
+                                                    <p class="opacity-80 leading-relaxed markdown-body"
+                                                        x-html="parseMarkdown(block.left.content)">
                                                     </p>
                                                 </div>
                                                 <div>
@@ -545,8 +950,9 @@
                                                     <template x-if="block.right.type === 'code_static'">
                                                         <div
                                                             class="p-6 rounded-xl bg-[#12121a] font-mono text-sm border border-white/5 relative group">
-                                                            <div class="whitespace-pre text-gray-300"
-                                                                x-text="block.right.content"></div>
+                                                            <div class="whitespace-pre-wrap text-gray-300"
+                                                                x-text="block.right.content">
+                                                            </div>
                                                         </div>
                                                     </template>
                                                 </div>
@@ -565,7 +971,9 @@
                                                     }"></i>
                                                 <div>
                                                     <h4 class="font-bold mb-1" x-text="block.title"></h4>
-                                                    <p class="text-sm opacity-80" x-text="block.text"></p>
+                                                    <p class="text-sm opacity-80 markdown-body"
+                                                        x-html="parseMarkdown(block.text)">
+                                                    </p>
                                                 </div>
                                             </div>
                                         </template>
@@ -635,20 +1043,266 @@
                                                     </div>
                                                 </template>
                                             </div>
+                                    </div>
+                                </template>
+
+                                <!-- NEW: CARDS BLOCK -->
+                                <template x-if="block.type === 'cards'">
+                                    <div>
+                                        <h3 x-show="block.title" class="text-2xl font-bold mb-6 text-center"
+                                            x-text="block.title">
+                                        </h3>
+                                        <div class="grid md:grid-cols-3 gap-6">
+                                            <template x-for="card in block.items">
+                                                <div
+                                                    class="group relative p-6 rounded-2xl bg-[#1E1E2F] border border-white/5 hover:border-[#9E4B8A]/50 transition-all hover:-translate-y-1">
+                                                    <div
+                                                        class="absolute inset-0 bg-gradient-to-br from-[#9E4B8A]/0 to-[#9E4B8A]/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl">
+                                                    </div>
+                                                    <div class="relative z-10">
+                                                        <div
+                                                            class="w-12 h-12 rounded-xl bg-[#4C2A59]/20 flex items-center justify-center text-[#9E4B8A] mb-4 text-2xl group-hover:scale-110 transition-transform">
+                                                            <i :class="card.icon || 'ri-briefcase-line'"></i>
+                                                        </div>
+                                                        <h4 class="text-lg font-bold mb-2" x-text="card.title">
+                                                        </h4>
+                                                        <p class="text-2xl font-bold accent mb-4" x-text="card.value">
+                                                        </p>
+                                                        <div class="space-y-2">
+                                                            <p class="text-xs uppercase tracking-widest opacity-50">
+                                                                Stack</p>
+                                                            <div class="flex flex-wrap gap-2">
+                                                                <template x-for="tag in card.tags">
+                                                                    <span
+                                                                        class="px-2 py-1 rounded-md bg-white/5 text-xs font-mono text-gray-300 border border-white/5"
+                                                                        x-text="tag"></span>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- STATIC CODE WITH OUTPUT -->
+                                <template x-if="block.type === 'static_code'">
+                                    <div class="p-6 rounded-2xl bg-[#12121a] mb-8">
+                                        <p class="text-sm opacity-50 mb-4" x-text="block.title"></p>
+                                        <pre class="font-mono text-lg whitespace-pre-wrap"
+                                            x-html="highlightPython(block.code)"></pre>
+                                        <div x-show="block.output" class="mt-4 pt-4 border-t border-[#4C2A59]/50">
+                                            <p class="text-sm opacity-70">Output:</p>
+                                            <pre class="font-mono text-green-400 text-sm mt-2"
+                                                x-text="block.output"></pre>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- SYNTAX BREAKDOWN -->
+                                <template x-if="block.type === 'syntax_breakdown'">
+                                    <div>
+                                        <div class="p-6 rounded-2xl bg-[#12121a] mb-8 font-mono text-lg"
+                                            x-html="highlightPython(block.code)"></div>
+                                        <div class="space-y-4 mb-8">
+                                            <template x-for="part in block.parts">
+                                                <div class="flex items-start gap-4 p-4 rounded-xl bg-[#4C2A59]/20">
+                                                    <span class="accent font-bold font-mono"
+                                                        x-text="part.keyword"></span>
+                                                    <p class="opacity-80" x-text="part.desc"></p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- MENTAL MODEL -->
+                                <template x-if="block.type === 'mental_model'">
+                                    <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A] mb-8">
+                                        <p class="font-bold mb-3 flex items-center gap-2">
+                                            <i class="ri-brain-line text-xl"></i>
+                                            <span x-text="block.title"></span>
+                                        </p>
+                                        <p class="opacity-80 text-sm mb-4 markdown-body"
+                                            x-html="parseMarkdown(block.text)"></p>
+                                        <div x-show="block.examples"
+                                            class="grid grid-cols-3 gap-2 text-center font-mono text-sm">
+                                            <template x-for="ex in block.examples">
+                                                <div class="p-2 rounded bg-[#12121a]" x-text="ex"></div>
+                                            </template>
+                                        </div>
+                                        <p x-show="block.note" class="opacity-60 text-xs mt-3 markdown-body"
+                                            x-html="parseMarkdown(block.note)"></p>
+                                    </div>
+                                </template>
+
+                                <!-- WARNING BOX (Correct vs Wrong) -->
+                                <template x-if="block.type === 'warning_box'">
+                                    <div class="p-6 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/30">
+                                        <p class="font-bold text-[#EF4444] mb-3 flex items-center gap-2">
+                                            <i class="ri-alert-line text-xl"></i>
+                                            <span x-text="block.title"></span>
+                                        </p>
+                                        <p class="opacity-80 text-sm mb-4 markdown-body"
+                                            x-html="parseMarkdown(block.text)"></p>
+                                        <div class="grid md:grid-cols-2 gap-4">
+                                            <div class="p-4 rounded-xl bg-[#12121a]">
+                                                <p class="text-xs text-[#10B981] font-bold mb-2">✓ CORRECT</p>
+                                                <pre class="font-mono text-sm whitespace-pre-wrap"
+                                                    x-text="block.correct"></pre>
+                                            </div>
+                                            <div class="p-4 rounded-xl bg-[#12121a]">
+                                                <p class="text-xs text-[#EF4444] font-bold mb-2">✗ WRONG</p>
+                                                <pre class="font-mono text-sm whitespace-pre-wrap"
+                                                    x-text="block.wrong"></pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- KEYWORD CARDS (break/continue/pass) -->
+                                <template x-if="block.type === 'keyword_cards'">
+                                    <div class="space-y-6 mb-8">
+                                        <template x-for="kw in block.keywords">
+                                            <div class="p-6 rounded-2xl bg-[#12121a]">
+                                                <div class="flex items-center gap-3 mb-3">
+                                                    <code class="text-lg" x-text="kw.name"></code>
+                                                    <span class="text-xs px-2 py-1 rounded"
+                                                        :style="`background: ${kw.tag_color}20; color: ${kw.tag_color}`"
+                                                        x-text="kw.tag"></span>
+                                                </div>
+                                                <p class="opacity-70 text-sm mb-4" x-text="kw.desc"></p>
+                                                <pre class="font-mono text-sm opacity-90 whitespace-pre-wrap"
+                                                    x-text="kw.code"></pre>
+                                            </div>
                                         </template>
+                                    </div>
+                                </template>
+
+                                <!-- RANGE FORMS -->
+                                <template x-if="block.type === 'range_forms'">
+                                    <div class="p-6 rounded-2xl bg-[#12121a] mb-8">
+                                        <p class="text-sm opacity-50 mb-4">THREE FORMS OF RANGE:</p>
+                                        <div class="space-y-4 font-mono">
+                                            <template x-for="form in block.forms">
+                                                <div class="flex items-center gap-4">
+                                                    <code class="bg-[#4C2A59] px-3 py-1" x-text="form.syntax"></code>
+                                                    <span class="text-sm opacity-70" x-text="form.desc"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- RANGE EXAMPLES -->
+                                <template x-if="block.type === 'range_examples'">
+                                    <div class="grid md:grid-cols-3 gap-4 mb-8">
+                                        <template x-for="ex in block.examples">
+                                            <div class="p-4 rounded-xl bg-[#4C2A59]/20">
+                                                <p class="font-mono text-sm mb-2" x-text="ex.input"></p>
+                                                <p class="font-mono accent" x-text="ex.output"></p>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+
+                                <!-- SECTION HEADER -->
+                                <template x-if="block.type === 'section'">
+                                    <div class="mb-6">
+                                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                            <i :class="block.icon"
+                                                class="text-[#9E4B8A] p-2 rounded-lg bg-[#9E4B8A]/20"></i>
+                                            <span x-text="block.title"></span>
+                                        </h3>
+                                        <p class="text-lg opacity-80" x-text="block.text"></p>
+                                    </div>
+                                </template>
+
+                                <!-- PRO TIP -->
+                                <template x-if="block.type === 'pro_tip'">
+                                    <div class="p-5 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                        <p class="font-bold mb-2 flex items-center gap-2">
+                                            <i class="ri-lightbulb-flash-line"></i>
+                                            <span x-text="block.title"></span>
+                                        </p>
+                                        <p class="opacity-80 text-sm mb-3" x-text="block.text"></p>
+                                        <pre x-show="block.code"
+                                            class="font-mono text-sm opacity-90 whitespace-pre-wrap"
+                                            x-text="block.code"></pre>
+                                    </div>
+                                </template>
+
+                                <!-- USE CASES -->
+                                <template x-if="block.type === 'use_cases'">
+                                    <div class="p-5 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                        <p class="font-bold mb-2 flex items-center gap-2">
+                                            <i class="ri-lightbulb-flash-line"></i>
+                                            <span x-text="block.title"></span>
+                                        </p>
+                                        <ul class="space-y-1 opacity-80 text-sm">
+                                            <template x-for="item in block.items">
+                                                <li x-text="'• ' + item"></li>
+                                            </template>
+                                        </ul>
+                                    </div>
+                                </template>
+
+                                <!-- COMPANY CARDS (Interview) -->
+                                <template x-if="block.type === 'company_cards'">
+                                    <div class="grid md:grid-cols-2 gap-4 mb-8">
+                                        <template x-for="q in block.questions">
+                                            <div class="group p-6 rounded-2xl border border-white/5 bg-[#12121a] hover:bg-[#1a1a24] transition-all relative overflow-hidden"
+                                                :style="`--company-color: ${q.color}`">
+                                                <div class="absolute -right-4 -top-4 w-24 h-24 rounded-full blur-2xl transition-all"
+                                                    :style="`background: ${q.color}10`"></div>
+                                                <div class="flex items-center justify-between mb-4 relative">
+                                                    <div class="flex items-center gap-3">
+                                                        <div class="w-10 h-10 rounded-xl flex items-center justify-center"
+                                                            :style="`background: ${q.color}20; color: ${q.color}`">
+                                                            <i :class="q.icon" class="text-xl"></i>
+                                                        </div>
+                                                        <div>
+                                                            <h3 class="font-bold" x-text="q.company"></h3>
+                                                            <p class="text-[10px] uppercase tracking-wider opacity-50"
+                                                                x-text="q.role"></p>
+                                                        </div>
+                                                    </div>
+                                                    <span class="px-3 py-1 rounded-full text-xs font-bold border"
+                                                        :style="`background: ${q.color}10; color: ${q.color}; border-color: ${q.color}30`"
+                                                        x-text="q.tag"></span>
+                                                </div>
+                                                <p class="text-base font-medium leading-snug relative z-10"
+                                                    x-text="'\"' + q.question + ' \"'"></p>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+
+                                <!-- INTERVIEW TIPS -->
+                                <template x-if="block.type === 'interview_tips'">
+                                    <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                        <p class="font-bold mb-3">💡 Pro Tips for Interviews</p>
+                                        <ul class="space-y-2 opacity-80 text-sm">
+                                            <template x-for="tip in block.tips">
+                                                <li class="markdown-body" x-html="parseMarkdown('• ' + tip)"></li>
+                                            </template>
+                                        </ul>
                                     </div>
                                 </template>
                             </div>
                         </template>
-                    </section>
-                </template>
-
-                <!-- LOADING STATE -->
-                <div x-show="loading" class="flex items-center justify-center py-20">
-                    <i class="ri-loader-4-line text-4xl accent animate-spin"></i>
-                </div>
             </div>
-        </main>
+            </template>
+            </section>
+            </template>
+
+            <!-- LOADING STATE -->
+            <div x-show="loading" class="flex items-center justify-center py-20">
+                <i class="ri-loader-4-line text-4xl accent animate-spin"></i>
+            </div>
+    </div>
+    </main>
     </div>
 
     <script>
@@ -844,7 +1498,44 @@
                     this.progressPercent = Math.round((num / (this.chapters.length || 1)) * 100);
                     this.completedChapters = num;
                 },
-                checkScroll(e) { }
+                checkScroll(e) { },
+
+                parseMarkdown(text) {
+                    if (!text) return '';
+                    try {
+                        return marked.parse(text);
+                    } catch (e) {
+                        return text;
+                    }
+                },
+
+                goBack() {
+                    // Use browser history to go back to the section page
+                    if (window.history.length > 1) {
+                        window.history.back();
+                    } else {
+                        // Fallback: go to sections root
+                        window.location.href = 'section.html';
+                    }
+                },
+
+                // Syntax highlighting for static code
+                highlightPython(code) {
+                    if (!code) return '';
+                    // First escape HTML entities
+                    let escaped = code
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+                    // Then apply syntax highlighting
+                    return escaped
+                        .replace(/\b(for|in|if|else|elif|while|def|return|class|import|from|as|try|except|finally|with|break|continue|pass|and|or|not|is|True|False|None)\b/g, '<span class="kw">$1</span>')
+                        .replace(/\b(print|range|len|enumerate|input|int|str|float|list|dict|set|tuple|type|abs|sum|max|min|open)\b/g, '<span class="fn">$1</span>')
+                        .replace(/(&quot;[^&quot;]*&quot;|'[^']*')/g, '<span class="str">$1</span>')
+                        .replace(/#.*/g, '<span class="cmt">$&</span>')
+                        .replace(/\b(\d+)\b/g, '<span class="num">$1</span>')
+                        .replace(/\n/g, '<br>');
+                }
             }));
         });
     </script>
