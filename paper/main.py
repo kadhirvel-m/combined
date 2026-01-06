@@ -1404,55 +1404,29 @@ def assemble_context_for_llm(pages: List[PageExtract], merged_titles: List[str],
     return "\n".join(lines)
 
 
-SYSTEM_INSTRUCTIONS = """You are a senior educational writer building accurate, comprehensive, and exam-ready notes for college students in India.
+SYSTEM_INSTRUCTIONS = """You are a senior educational writer building accurate, well-structured notes for college students in India.
 
 CRITICAL RULES:
-- Use the source excerpts provided as the foundation, but you MAY ALSO ADD your own expert knowledge to make the notes more comprehensive and complete.
+- Use ONLY the source excerpts provided; do not invent facts. If a fact is not supported, mark it as [needs review].
 - Respect section headings actually observed on the referenced pages. You may merge similar headings (e.g., Advantages/Pros).
-- Discuss concepts clearly. For Advantages, Disadvantages, and Applications, keep points concise (1-2 lines).
-- Every section should have substantial content with examples, explanations, and practical insights, except where brevity is requested.
-
-MANDATORY SECTIONS (include ALL that are applicable to the topic):
-1. **TL;DR / Quick Summary** - Concise bullet points for quick revision (Place this FIRST)
-2. **Introduction** - Comprehensive overview of the topic, its importance, and context
-3. **Need / Why It Is Required** - Explain the problem it solves, why it was developed, real-world necessity
-4. **Definition / Concept** - Clear, detailed definition with technical accuracy
-5. **Working Principle / How It Works** - Step-by-step explanation of the mechanism, process, or algorithm
-6. **Components / Parts / Architecture** - Detailed breakdown of constituent parts with their roles
-7. **Types / Classification / Categories** - Different variants, types, or classifications if applicable
-8. **Characteristics / Properties / Features** - Key attributes and distinguishing features
-9. **Formulas / Equations / Mathematical Representation** - Include all relevant formulas with explanations
-10. **Examples / Real-Life Examples / Case Studies** - Multiple practical examples, real-world applications
-11. **Solved Problems / Numerical Examples** - If applicable, include worked-out examples step-by-step
-12. **Advantages / Benefits / Pros** - Brief list, 1-2 lines per point
-13. **Disadvantages / Limitations / Cons** - Brief list, 1-2 lines per point
-14. **Applications / Use Cases** - Brief list, 1-2 lines per point
-15. **Comparison** - Compare with related concepts/technologies if relevant
-16. **Memory Aids / Mnemonics** - Tricks to remember key concepts
-17. **Common Mistakes to Avoid** - Frequent errors students make
-18. **Conclusion** - Summarize key takeaways
-
-NOTE: Include sections only if they are RELEVANT to the topic. For theoretical topics, skip hardware components. For concepts without formulas, skip mathematical sections. Use your judgment.
-
-FORMATTING RULES:
-- Include at least 2-3 Mermaid diagrams when process/relationships/architecture are relevant.
+- You MUST also include these blocks even if not present: Introduction, TL;DR in short simple points, Examples, Conclusion, Memory Aids, Common Mistakes.
+- Keep explanations concise but complete; use bullet points where helpful.
+- Include at least one Mermaid diagram when process/relationships are relevant.
 - Every non-obvious claim MUST carry an inline citation like [GFG], [TP], [Scaler], [Wiki], or [TPT] mapped in the CITATIONS section.
 - Prefer plain text + Mermaid diagrams; do not embed external images.
-- Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (ε-greedy)**, **Markov Decision Process (MDP)**, parameters like **θ**, **γ**, **α**, algorithm names like **Q-learning**.
-- Use tables to organize comparative information, specifications, or properties.
-- Use numbered lists for sequential processes and bullet points for unordered information.
+ - Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (Îµ-greedy)**, **Markov Decision Process (MDP)**, parameters like **Î¸**, **Î³**, **Î±**, algorithm names like **Q-learning**.
 
 OUTPUT FORMAT (STRICT):
 Return a single Markdown document with:
 1) A title line: '# <Topic>'
-2) For each section, a '## <Section>' block with comprehensive content
+2) For each merged section title (after light normalization), a '## <Section>' block
 3) Use bullet points, short paragraphs, tables when appropriate (GitHub MD)
 4) Mermaid diagram(s) in fenced code blocks: ```mermaid ... ```
 5) A final '## CITATIONS' list mapping labels to URLs with short quoted spans
 
 If sources contradict, mark the line with [conflict] and keep both with citations.
 
-TARGET LENGTH: 800-1000 words for comprehensive coverage. Be thorough and detailed.
+Keep it under ~1200â€“1500 words unless the topic is inherently longer.
 """
 
 
@@ -15152,9 +15126,9 @@ def create_app() -> FastAPI:
             "https://www.paperx.tech",
             "https://lionfish-app-ynu29.ondigitalocean.app",
             "https://uppzpkmpxgyipjzcskva.supabase.co",
-            "http://127.0.0.1:5501",
+            "http://127.0.0.1:5500",
             "http://127.0.0.1:8000",
-            "http://localhost:5501",
+            "http://localhost:5500",
             "http://localhost:8000",
             "http://localhost",
         ],
