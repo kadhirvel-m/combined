@@ -1356,6 +1356,7 @@
         const profile = data?.profile || {};
         populateProfile(profile);
         window.__PX_PROFILE_SNAPSHOT = profile;
+        __pxEduMaybeRequire(profile).catch(err => console.error('Education modal failed', err));
         if (typeof window.__PX_NAV_APPLY === 'function') {
           window.__PX_NAV_APPLY(profile);
         }
@@ -1402,9 +1403,817 @@
         handleSignOut();
       });
     });
+
+    // --- Education required modal (reuses profile_edit.html education selection logic) ---
+    const EDUCATION_CUSTOM_VALUE = '__custom__';
+    let __pxEduCollegesCache = [];
+    let __pxEduCollegesLoadPromise = null;
+    const __pxEduCollegeDetailCache = new Map();
+
+    const __pxEduDomReady = new Promise((resolve) => {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', resolve, { once: true });
+      } else {
+        resolve();
+      }
+    });
+
+    let __pxEduBound = false;
+    const __pxEduEls = () => ({
+      modal: document.getElementById('eduRequiredModal'),
+      wrap: document.getElementById('eduRequiredFormWrap'),
+      saveBtn: document.getElementById('eduRequiredSaveBtn'),
+      status: document.getElementById('eduRequiredStatus'),
+    });
+
+    const getAuthHeaders = () => {
+      const currentToken = localStorage.getItem('px_token');
+      return currentToken ? { Authorization: `Bearer ${currentToken}` } : {};
+    };
+
+    async function __pxEduLoadCollegesList() {
+      if (__pxEduCollegesCache.length) return __pxEduCollegesCache;
+      if (!__pxEduCollegesLoadPromise) {
+        __pxEduCollegesLoadPromise = fetch(`${API}/api/colleges`, { headers: getAuthHeaders() })
+          .then(res => (res.ok ? res.json() : []))
+          .catch(err => {
+            console.error('Failed to load colleges', err);
+            return [];
+          })
+          .then(items => {
+            __pxEduCollegesCache = Array.isArray(items)
+              ? items
+                .filter(col => col && col.id && col.name)
+                .map(col => ({ id: String(col.id), name: col.name }))
+              : [];
+            return __pxEduCollegesCache;
+          });
+      }
+      return __pxEduCollegesLoadPromise;
+    }
+
+    function __pxEduGetCollegeById(id) {
+      if (!id) return null;
+      return __pxEduCollegesCache.find(col => String(col.id) === String(id)) || null;
+    }
+
+    function __pxEduFindCollegeByName(name) {
+      if (!name) return null;
+      const target = String(name).trim().toLowerCase();
+      if (!target) return null;
+      return __pxEduCollegesCache.find(col => String(col?.name || '').trim().toLowerCase() === target) || null;
+    }
+
+    async function __pxEduLoadCollegeDetails(collegeId) {
+      if (!collegeId) return null;
+      const key = String(collegeId);
+      if (__pxEduCollegeDetailCache.has(key)) {
+        return __pxEduCollegeDetailCache.get(key);
+      }
+      try {
+        const res = await fetch(`${API}/api/colleges/${key}`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const data = await res.json();
+        __pxEduCollegeDetailCache.set(key, data);
+        return data;
+      } catch (err) {
+        console.error('Failed to load college details', err);
+        __pxEduCollegeDetailCache.set(key, null);
+        return null;
+      }
+    }
+
+    function __pxEduFindDegreeByName(degrees, name) {
+      if (!Array.isArray(degrees) || !name) return null;
+      const target = String(name).trim().toLowerCase();
+      if (!target) return null;
+      return degrees.find(deg => String(deg?.name || '').trim().toLowerCase() === target) || null;
+    }
+
+    function __pxEduFindDepartmentByName(departments, name) {
+      if (!Array.isArray(departments) || !name) return null;
+      const target = String(name).trim().toUpperCase();
+      if (!target) return null;
+      return departments.find(dep => String(dep?.name || '').trim().toUpperCase() === target) || null;
+    }
+
+    function __pxEduFormatBatchRange(batch) {
+      if (!batch) return '';
+      const from = Number(batch.from ?? batch.from_year);
+      const to = Number(batch.to ?? batch.to_year);
+      if (Number.isFinite(from) && Number.isFinite(to)) {
+        return `${from}-${to}`;
+      }
+      return '';
+    }
+
+    function __pxEduFillSelectOptions(select, options, { placeholder = 'Select...', includeCustom = false } = {}) {
+      if (!select) return;
+      select.innerHTML = '';
+      const placeholderOption = document.createElement('option');
+      placeholderOption.value = '';
+      placeholderOption.textContent = placeholder;
+      select.appendChild(placeholderOption);
+      (options || []).forEach(opt => {
+        if (!opt) return;
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.label;
+        select.appendChild(option);
+      });
+      if (includeCustom) {
+        const customOption = document.createElement('option');
+        customOption.value = EDUCATION_CUSTOM_VALUE;
+        customOption.textContent = 'Other / Not listed';
+        select.appendChild(customOption);
+      }
+    }
+
+    function __pxEduToggleCustomInput(input, show) {
+      if (!input) return;
+      if (show) input.classList.remove('hidden');
+      else input.classList.add('hidden');
+    }
+
+    function __pxEduBuildEducationRowNode() {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = `
+        <div class="rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur p-4 grid gap-3" data-entry="education">
+          <input type="hidden" name="edu_id" />
+          <input type="hidden" name="edu_school" />
+          <input type="hidden" name="edu_degree" />
+          <input type="hidden" name="edu_department" />
+          <input type="hidden" name="edu_batch_range" />
+          <input type="hidden" name="edu_college_id" />
+          <input type="hidden" name="edu_degree_id" />
+          <input type="hidden" name="edu_department_id" />
+          <input type="hidden" name="edu_batch_id" />
+
+          <label class="grid gap-1">
+            <span class="text-xs text-black/70 dark:text-white/70">Institution *</span>
+            <select data-role="edu-college" required class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white px-3 py-2">
+              <option value="">Select college</option>
+            </select>
+            <input data-role="edu-college-custom" type="text" placeholder="Enter institution manually" class="hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2 mt-2" />
+          </label>
+
+          <div class="grid md:grid-cols-2 gap-3">
+            <label class="grid gap-1">
+              <span class="text-xs text-black/70 dark:text-white/70">Degree *</span>
+              <select data-role="edu-degree" required disabled class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white px-3 py-2">
+                <option value="">Select degree</option>
+              </select>
+              <input data-role="edu-degree-custom" type="text" placeholder="Enter degree" class="hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2 mt-2" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs text-black/70 dark:text-white/70">Department *</span>
+              <select data-role="edu-department" required disabled class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white px-3 py-2">
+                <option value="">Select department</option>
+              </select>
+              <input data-role="edu-department-custom" type="text" placeholder="Enter department" class="hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2 mt-2" />
+            </label>
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-3">
+            <label class="grid gap-1">
+              <span class="text-xs text-black/70 dark:text-white/70">Batch *</span>
+              <select data-role="edu-batch" required disabled class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white px-3 py-2">
+                <option value="">Select batch</option>
+              </select>
+              <input data-role="edu-batch-custom" type="text" placeholder="e.g., 2022-2026" class="hidden rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2 mt-2" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs text-black/70 dark:text-white/70">Section *</span>
+              <select name="edu_section" required class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white px-3 py-2">
+                <option value="">Select section</option>
+                ${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(ch => `<option value="${ch}">${ch}</option>`).join('')}
+              </select>
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs text-black/70 dark:text-white/70">Current Semester *</span>
+              <input name="edu_current_semester" required type="number" min="1" max="12" placeholder="5" class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2" />
+            </label>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-3">
+            <label class="grid gap-1">
+              <span class="text-xs text-black/70 dark:text-white/70">Registration No. <span class="text-black/45 dark:text-white/45">Optional</span></span>
+              <input name="edu_regno" type="text" placeholder="22TN0049" class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2" />
+            </label>
+            <label class="grid gap-1">
+              <span class="text-xs text-black/70 dark:text-white/70">Grade / GPA <span class="text-black/45 dark:text-white/45">Optional</span></span>
+              <input name="edu_grade" type="text" placeholder="9.1 CGPA" class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2" />
+            </label>
+          </div>
+        </div>
+      `;
+      return wrapper.firstElementChild;
+    }
+
+    async function __pxEduInitializeEducationRow(row, data = {}) {
+      const hiddenSchool = row.querySelector('input[name="edu_school"]');
+      const hiddenDegree = row.querySelector('input[name="edu_degree"]');
+      const hiddenDepartment = row.querySelector('input[name="edu_department"]');
+      const hiddenBatch = row.querySelector('input[name="edu_batch_range"]');
+      const hiddenCollegeId = row.querySelector('input[name="edu_college_id"]');
+      const hiddenDegreeId = row.querySelector('input[name="edu_degree_id"]');
+      const hiddenDepartmentId = row.querySelector('input[name="edu_department_id"]');
+      const hiddenBatchId = row.querySelector('input[name="edu_batch_id"]');
+      const sectionSelect = row.querySelector('select[name="edu_section"]');
+
+      const collegeSelect = row.querySelector('[data-role="edu-college"]');
+      const collegeCustomInput = row.querySelector('[data-role="edu-college-custom"]');
+      const degreeSelect = row.querySelector('[data-role="edu-degree"]');
+      const degreeCustomInput = row.querySelector('[data-role="edu-degree-custom"]');
+      const departmentSelect = row.querySelector('[data-role="edu-department"]');
+      const departmentCustomInput = row.querySelector('[data-role="edu-department-custom"]');
+      const batchSelect = row.querySelector('[data-role="edu-batch"]');
+      const batchCustomInput = row.querySelector('[data-role="edu-batch-custom"]');
+
+      if (!collegeSelect || !degreeSelect || !departmentSelect || !batchSelect) return;
+
+      const state = { degrees: [] };
+      let initialValues = {
+        collegeName: data.school || '',
+        degreeName: data.degree || '',
+        departmentName: data.department || '',
+        batchRange: data.batch_range || '',
+      };
+
+      if (hiddenSchool) hiddenSchool.value = initialValues.collegeName;
+      if (hiddenDegree) hiddenDegree.value = initialValues.degreeName;
+      if (hiddenDepartment) hiddenDepartment.value = initialValues.departmentName;
+      if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
+
+      const colleges = await __pxEduLoadCollegesList().catch(() => []);
+      const collegeOptions = (colleges || []).map(col => ({ value: col.id, label: col.name }));
+      __pxEduFillSelectOptions(collegeSelect, collegeOptions, { placeholder: 'Select college', includeCustom: true });
+
+      if (initialValues.collegeName) {
+        const match = __pxEduFindCollegeByName(initialValues.collegeName);
+        if (match) {
+          collegeSelect.value = match.id;
+        } else {
+          collegeSelect.value = EDUCATION_CUSTOM_VALUE;
+          if (collegeCustomInput) {
+            collegeCustomInput.value = initialValues.collegeName;
+            __pxEduToggleCustomInput(collegeCustomInput, true);
+          }
+        }
+      } else if (!collegeOptions.length) {
+        collegeSelect.value = EDUCATION_CUSTOM_VALUE;
+        if (collegeCustomInput) __pxEduToggleCustomInput(collegeCustomInput, true);
+      }
+
+      let collegeRequestId = 0;
+
+      async function handleCollegeChange(isInitial = false) {
+        const selected = collegeSelect.value;
+        const isCustom = selected === EDUCATION_CUSTOM_VALUE;
+
+        if (isCustom) {
+          if (collegeCustomInput) __pxEduToggleCustomInput(collegeCustomInput, true);
+          if (hiddenSchool) hiddenSchool.value = (collegeCustomInput?.value || '').trim();
+          if (hiddenCollegeId) hiddenCollegeId.value = '';
+
+          degreeSelect.disabled = false;
+          state.degrees = [];
+          __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: true });
+          degreeSelect.value = EDUCATION_CUSTOM_VALUE;
+          if (isInitial && initialValues?.degreeName && degreeCustomInput) {
+            degreeCustomInput.value = initialValues.degreeName;
+          }
+          if (degreeCustomInput) __pxEduToggleCustomInput(degreeCustomInput, true);
+          if (hiddenDegree) hiddenDegree.value = (degreeCustomInput?.value || '').trim();
+
+          departmentSelect.disabled = false;
+          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+          departmentSelect.value = EDUCATION_CUSTOM_VALUE;
+          if (isInitial && initialValues?.departmentName && departmentCustomInput) {
+            departmentCustomInput.value = initialValues.departmentName;
+          }
+          if (departmentCustomInput) __pxEduToggleCustomInput(departmentCustomInput, true);
+          if (hiddenDepartment) hiddenDepartment.value = (departmentCustomInput?.value || '').trim();
+
+          batchSelect.disabled = false;
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          if (isInitial && initialValues?.batchRange) {
+            batchSelect.value = initialValues.batchRange;
+            if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
+            if (batchCustomInput) {
+              __pxEduToggleCustomInput(batchCustomInput, false);
+              batchCustomInput.value = '';
+            }
+          } else {
+            batchSelect.value = EDUCATION_CUSTOM_VALUE;
+            if (batchCustomInput) __pxEduToggleCustomInput(batchCustomInput, true);
+            if (hiddenBatch) hiddenBatch.value = (batchCustomInput?.value || '').trim();
+          }
+          return;
+        }
+
+        if (collegeCustomInput) {
+          __pxEduToggleCustomInput(collegeCustomInput, false);
+          collegeCustomInput.value = '';
+        }
+
+        if (!selected) {
+          if (hiddenSchool) hiddenSchool.value = '';
+          if (hiddenCollegeId) hiddenCollegeId.value = '';
+
+          degreeSelect.disabled = true;
+          __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: true });
+          degreeSelect.value = '';
+          if (degreeCustomInput) {
+            __pxEduToggleCustomInput(degreeCustomInput, false);
+            degreeCustomInput.value = '';
+          }
+          if (hiddenDegree) hiddenDegree.value = '';
+
+          departmentSelect.disabled = true;
+          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+          departmentSelect.value = '';
+          if (departmentCustomInput) {
+            __pxEduToggleCustomInput(departmentCustomInput, false);
+            departmentCustomInput.value = '';
+          }
+          if (hiddenDepartment) hiddenDepartment.value = '';
+
+          batchSelect.disabled = true;
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          batchSelect.value = '';
+          if (batchCustomInput) {
+            __pxEduToggleCustomInput(batchCustomInput, false);
+            batchCustomInput.value = '';
+          }
+          if (hiddenBatch) hiddenBatch.value = '';
+          return;
+        }
+
+        const college = __pxEduGetCollegeById(selected);
+        if (hiddenSchool) hiddenSchool.value = college?.name || '';
+        if (hiddenCollegeId) hiddenCollegeId.value = selected;
+        degreeSelect.disabled = false;
+
+        const requestId = ++collegeRequestId;
+        const details = await __pxEduLoadCollegeDetails(selected);
+        if (collegeSelect.value !== selected || requestId !== collegeRequestId) return;
+
+        state.degrees = Array.isArray(details?.degrees) ? details.degrees : [];
+        const degreeOptions = state.degrees.map(deg => ({ value: String(deg.id), label: deg.name }));
+        __pxEduFillSelectOptions(degreeSelect, degreeOptions, { placeholder: 'Select degree', includeCustom: true });
+
+        let desiredDegree = '';
+        if (isInitial && initialValues?.degreeName) {
+          const match = __pxEduFindDegreeByName(state.degrees, initialValues.degreeName);
+          if (match) {
+            desiredDegree = String(match.id);
+          } else {
+            desiredDegree = EDUCATION_CUSTOM_VALUE;
+            if (degreeCustomInput) degreeCustomInput.value = initialValues.degreeName;
+          }
+        } else if (!degreeOptions.length) {
+          desiredDegree = EDUCATION_CUSTOM_VALUE;
+        }
+
+        degreeSelect.value = desiredDegree;
+        await handleDegreeChange(isInitial);
+      }
+
+      function handleCollegeCustomInput() {
+        if (collegeSelect.value === EDUCATION_CUSTOM_VALUE) {
+          if (hiddenSchool) hiddenSchool.value = (collegeCustomInput?.value || '').trim();
+        }
+      }
+
+      async function handleDegreeChange(isInitial = false) {
+        const selected = degreeSelect.value;
+        const isCustom = selected === EDUCATION_CUSTOM_VALUE;
+
+        if (isCustom) {
+          if (degreeCustomInput) __pxEduToggleCustomInput(degreeCustomInput, true);
+          if (isInitial && initialValues?.degreeName && degreeCustomInput) {
+            degreeCustomInput.value = initialValues.degreeName;
+          }
+          if (hiddenDegree) hiddenDegree.value = (degreeCustomInput?.value || '').trim();
+          if (hiddenDegreeId) hiddenDegreeId.value = '';
+
+          departmentSelect.disabled = false;
+          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+          departmentSelect.value = EDUCATION_CUSTOM_VALUE;
+          await handleDepartmentChange(isInitial);
+          return;
+        }
+
+        if (degreeCustomInput) {
+          __pxEduToggleCustomInput(degreeCustomInput, false);
+          degreeCustomInput.value = '';
+        }
+
+        if (!selected) {
+          if (hiddenDegree) hiddenDegree.value = '';
+          if (hiddenDegreeId) hiddenDegreeId.value = '';
+
+          departmentSelect.disabled = true;
+          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+          departmentSelect.value = '';
+          if (departmentCustomInput) {
+            __pxEduToggleCustomInput(departmentCustomInput, false);
+            departmentCustomInput.value = '';
+          }
+          if (hiddenDepartment) hiddenDepartment.value = '';
+
+          batchSelect.disabled = true;
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          batchSelect.value = '';
+          if (batchCustomInput) {
+            __pxEduToggleCustomInput(batchCustomInput, false);
+            batchCustomInput.value = '';
+          }
+          if (hiddenBatch) hiddenBatch.value = '';
+          return;
+        }
+
+        const degree = state.degrees.find(d => String(d.id) === selected) || null;
+        if (hiddenDegree) hiddenDegree.value = degree?.name || '';
+        if (hiddenDegreeId) hiddenDegreeId.value = selected;
+
+        const departments = Array.isArray(degree?.departments) ? degree.departments : [];
+        const departmentOptions = departments.map(dep => ({ value: String(dep.id), label: dep.name }));
+        departmentSelect.disabled = false;
+        __pxEduFillSelectOptions(departmentSelect, departmentOptions, { placeholder: 'Select department', includeCustom: true });
+
+        let desiredDepartment = '';
+        if (isInitial && initialValues?.departmentName) {
+          const match = __pxEduFindDepartmentByName(departments, initialValues.departmentName);
+          if (match) {
+            desiredDepartment = String(match.id);
+          } else {
+            desiredDepartment = EDUCATION_CUSTOM_VALUE;
+            if (departmentCustomInput) departmentCustomInput.value = initialValues.departmentName;
+          }
+        } else if (!departmentOptions.length) {
+          desiredDepartment = EDUCATION_CUSTOM_VALUE;
+        }
+
+        departmentSelect.value = desiredDepartment;
+        await handleDepartmentChange(isInitial);
+      }
+
+      function handleDegreeCustomInput() {
+        if (degreeSelect.value === EDUCATION_CUSTOM_VALUE) {
+          if (hiddenDegree) hiddenDegree.value = (degreeCustomInput?.value || '').trim();
+        }
+      }
+
+      async function handleDepartmentChange(isInitial = false) {
+        const selected = departmentSelect.value;
+        const isCustom = selected === EDUCATION_CUSTOM_VALUE;
+
+        if (isCustom) {
+          if (departmentCustomInput) __pxEduToggleCustomInput(departmentCustomInput, true);
+          if (isInitial && initialValues?.departmentName && departmentCustomInput) {
+            departmentCustomInput.value = initialValues.departmentName;
+          }
+          if (hiddenDepartment) hiddenDepartment.value = (departmentCustomInput?.value || '').trim();
+          if (hiddenDepartmentId) hiddenDepartmentId.value = '';
+
+          batchSelect.disabled = false;
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          if (isInitial && initialValues?.batchRange) {
+            batchSelect.value = initialValues.batchRange;
+            if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
+            if (batchCustomInput) {
+              __pxEduToggleCustomInput(batchCustomInput, false);
+              batchCustomInput.value = '';
+            }
+          } else {
+            batchSelect.value = EDUCATION_CUSTOM_VALUE;
+            if (batchCustomInput) __pxEduToggleCustomInput(batchCustomInput, true);
+            if (hiddenBatch) hiddenBatch.value = (batchCustomInput?.value || '').trim();
+          }
+          return;
+        }
+
+        if (departmentCustomInput) {
+          __pxEduToggleCustomInput(departmentCustomInput, false);
+          departmentCustomInput.value = '';
+        }
+
+        if (!selected) {
+          if (hiddenDepartment) hiddenDepartment.value = '';
+          if (hiddenDepartmentId) hiddenDepartmentId.value = '';
+
+          batchSelect.disabled = true;
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          batchSelect.value = '';
+          if (batchCustomInput) {
+            __pxEduToggleCustomInput(batchCustomInput, false);
+            batchCustomInput.value = '';
+          }
+          if (hiddenBatch) hiddenBatch.value = '';
+          return;
+        }
+
+        const degree = state.degrees.find(d => String(d.id) === (degreeSelect.value || '')) || null;
+        const departments = Array.isArray(degree?.departments) ? degree.departments : [];
+        const department = departments.find(dep => String(dep.id) === selected) || null;
+        if (hiddenDepartment) hiddenDepartment.value = department?.name || '';
+        if (hiddenDepartmentId) hiddenDepartmentId.value = selected;
+
+        const batches = Array.isArray(department?.batches) ? department.batches : [];
+        const batchOptions = batches
+          .map(batch => {
+            const label = __pxEduFormatBatchRange(batch);
+            return label ? { value: label, label } : null;
+          })
+          .filter(Boolean);
+
+        batchSelect.disabled = false;
+        __pxEduFillSelectOptions(batchSelect, batchOptions, { placeholder: 'Select batch', includeCustom: true });
+
+        let desiredBatch = '';
+        if (isInitial && initialValues?.batchRange) {
+          if (batchOptions.some(opt => opt.value === initialValues.batchRange)) {
+            desiredBatch = initialValues.batchRange;
+          } else {
+            desiredBatch = EDUCATION_CUSTOM_VALUE;
+            if (batchCustomInput) batchCustomInput.value = initialValues.batchRange;
+          }
+        }
+
+        batchSelect.value = desiredBatch;
+        handleBatchChange(isInitial);
+      }
+
+      function handleDepartmentCustomInput() {
+        if (departmentSelect.value === EDUCATION_CUSTOM_VALUE) {
+          if (hiddenDepartment) hiddenDepartment.value = (departmentCustomInput?.value || '').trim();
+        }
+      }
+
+      function handleBatchChange(isInitial = false) {
+        const selected = batchSelect.value;
+        const isCustom = selected === EDUCATION_CUSTOM_VALUE;
+        if (batchCustomInput) __pxEduToggleCustomInput(batchCustomInput, isCustom);
+
+        if (isCustom) {
+          if (isInitial && initialValues?.batchRange && batchCustomInput) {
+            batchCustomInput.value = initialValues.batchRange;
+          }
+          if (hiddenBatch) hiddenBatch.value = (batchCustomInput?.value || '').trim();
+          if (hiddenBatchId) hiddenBatchId.value = '';
+        } else {
+          if (hiddenBatch) hiddenBatch.value = selected || '';
+          if (hiddenBatchId) hiddenBatchId.value = '';
+          if (!selected && batchCustomInput) batchCustomInput.value = '';
+        }
+      }
+
+      function handleBatchCustomInput() {
+        if (batchSelect.value === EDUCATION_CUSTOM_VALUE) {
+          if (hiddenBatch) hiddenBatch.value = (batchCustomInput?.value || '').trim();
+        }
+      }
+
+      collegeSelect.addEventListener('change', () => { handleCollegeChange(false); });
+      collegeCustomInput?.addEventListener('input', handleCollegeCustomInput);
+      degreeSelect.addEventListener('change', () => { handleDegreeChange(false); });
+      degreeCustomInput?.addEventListener('input', handleDegreeCustomInput);
+      departmentSelect.addEventListener('change', () => { handleDepartmentChange(false); });
+      departmentCustomInput?.addEventListener('input', handleDepartmentCustomInput);
+      batchSelect.addEventListener('change', () => { handleBatchChange(false); });
+      batchCustomInput?.addEventListener('input', handleBatchCustomInput);
+      if (sectionSelect && data.section) {
+        sectionSelect.value = String(data.section).trim().toUpperCase();
+      }
+
+      await handleCollegeChange(true);
+      initialValues = null;
+    }
+
+    function __pxEduCollectEducationData(container) {
+      const rows = Array.from(container?.querySelectorAll('[data-entry="education"]') || []);
+      return rows.map(row => {
+        const school = row.querySelector('input[name="edu_school"]').value.trim();
+        if (!school) return null;
+        const currentSemesterRaw = row.querySelector('input[name="edu_current_semester"]').value.trim();
+        const current_semester = currentSemesterRaw ? parseInt(currentSemesterRaw, 10) : null;
+        const college_id = row.querySelector('input[name="edu_college_id"]').value.trim() || null;
+        const degree_id = row.querySelector('input[name="edu_degree_id"]').value.trim() || null;
+        const department_id = row.querySelector('input[name="edu_department_id"]').value.trim() || null;
+        const batch_id = row.querySelector('input[name="edu_batch_id"]').value.trim() || null;
+        return {
+          id: row.querySelector('input[name="edu_id"]').value || null,
+          school,
+          degree: row.querySelector('input[name="edu_degree"]').value.trim() || null,
+          department: row.querySelector('input[name="edu_department"]').value.trim() || null,
+          batch_range: row.querySelector('input[name="edu_batch_range"]').value || null,
+          regno: row.querySelector('input[name="edu_regno"]').value.trim() || null,
+          current_semester: (Number.isFinite(current_semester) && current_semester > 0) ? current_semester : null,
+          grade: row.querySelector('input[name="edu_grade"]').value.trim() || null,
+          activities: null,
+          description: null,
+          college_id,
+          degree_id,
+          department_id,
+          batch_id,
+          section: (row.querySelector('select[name="edu_section"]').value || '').trim() || null,
+        };
+      }).filter(Boolean);
+    }
+
+    function __pxEduNeedsCompletion(profile) {
+      const list = Array.isArray(profile?.education_entries) ? profile.education_entries : [];
+      return !list.some(ed => {
+        const school = (ed?.school || '').trim();
+        const degree = (ed?.degree || '').trim();
+        const department = (ed?.department || '').trim();
+        const batch = (ed?.batch_range || '').trim();
+        const section = (ed?.section || '').trim();
+        const semester = Number(ed?.current_semester);
+        return school && degree && department && batch && section && Number.isFinite(semester) && semester > 0;
+      });
+    }
+
+    function __pxEduShowStatus(message, ok = true) {
+      const { status } = __pxEduEls();
+      if (!status) return;
+      status.classList.remove('hidden');
+      status.textContent = message;
+      status.classList.toggle('border-rose-400/40', !ok);
+      status.classList.toggle('text-rose-600', !ok);
+      status.classList.toggle('border-emerald-400/40', ok);
+      status.classList.toggle('text-emerald-600', ok);
+    }
+
+    function __pxEduOpenModal() {
+      const { modal } = __pxEduEls();
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+    }
+
+    function __pxEduCloseModal() {
+      const { modal } = __pxEduEls();
+      if (!modal) return;
+      modal.classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');
+    }
+
+    function __pxBuildProfileUpdatePayload(profile, educationEntries) {
+      const specializations = Array.isArray(profile?.specializations)
+        ? profile.specializations
+        : (profile?.specializations ? String(profile.specializations).split(',').map(s => s.trim()).filter(Boolean) : []);
+
+      return {
+        name: profile?.name || null,
+        phone: profile?.phone || null,
+        headline: profile?.headline || null,
+        location: profile?.location || null,
+        dob: profile?.dob || null,
+        bio: profile?.bio || null,
+        linkedin: profile?.linkedin || null,
+        github: profile?.github || null,
+        leetcode: profile?.leetcode || null,
+        portfolio_url: profile?.portfolio_url || null,
+        website: profile?.website || null,
+        twitter: profile?.twitter || null,
+        instagram: profile?.instagram || null,
+        medium: profile?.medium || null,
+        specializations,
+        technologies: profile?.technologies || null,
+        skills: profile?.skills || null,
+        certifications: profile?.certifications || null,
+        languages: profile?.languages || null,
+        interests: profile?.interests || null,
+        achievements: profile?.achievements || null,
+        experience: profile?.experience || null,
+        publications: profile?.publications || null,
+        project_info: profile?.project_info || null,
+        experiences: Array.isArray(profile?.experiences) ? profile.experiences : [],
+        education_entries: educationEntries,
+        certification_entries: Array.isArray(profile?.certification_entries) ? profile.certification_entries : [],
+        portfolio_projects: Array.isArray(profile?.portfolio_projects) ? profile.portfolio_projects : [],
+        publication_entries: Array.isArray(profile?.publication_entries) ? profile.publication_entries : [],
+      };
+    }
+
+    async function __pxEduEnsureModalReady(profile) {
+      const { wrap } = __pxEduEls();
+      if (!wrap) return;
+      if (wrap.dataset.ready === 'true') return;
+      wrap.innerHTML = '';
+      const node = __pxEduBuildEducationRowNode();
+      wrap.appendChild(node);
+      await __pxEduInitializeEducationRow(node, profile?.education_entries?.[0] || {});
+      wrap.dataset.ready = 'true';
+    }
+
+    async function __pxEduMaybeRequire(profile) {
+      await __pxEduDomReady;
+      await __pxEduEnsureBound();
+      const { modal } = __pxEduEls();
+      if (!modal) return;
+      if (!__pxEduNeedsCompletion(profile)) {
+        __pxEduCloseModal();
+        return;
+      }
+
+      await __pxEduEnsureModalReady(profile);
+      __pxEduOpenModal();
+    }
+
+    async function __pxEduEnsureBound() {
+      if (__pxEduBound) return;
+      await __pxEduDomReady;
+      const { saveBtn } = __pxEduEls();
+      if (!saveBtn) return;
+      saveBtn.addEventListener('click', async () => {
+        try {
+          const profile = window.__PX_PROFILE_SNAPSHOT || {};
+          const { wrap } = __pxEduEls();
+          const entries = __pxEduCollectEducationData(wrap);
+          const entry = entries[0] || {};
+          const requiredOk = Boolean((entry.school || '').trim())
+            && Boolean((entry.degree || '').trim())
+            && Boolean((entry.department || '').trim())
+            && Boolean((entry.batch_range || '').trim())
+            && Boolean((entry.section || '').trim())
+            && Number.isFinite(Number(entry.current_semester))
+            && Number(entry.current_semester) > 0;
+
+          if (!requiredOk) {
+            __pxEduShowStatus('Please select college, degree, department, batch, section and current semester.', false);
+            return;
+          }
+
+          saveBtn.disabled = true;
+          saveBtn.classList.add('opacity-70');
+          __pxEduShowStatus('Saving…', true);
+
+          const payload = __pxBuildProfileUpdatePayload(profile, [entry]);
+          const res = await fetch(`${API}/api/profile/me`, {
+            method: 'PUT',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const out = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            __pxEduShowStatus(out?.detail || 'Failed to save education.', false);
+            return;
+          }
+
+          __pxEduShowStatus('Saved!', true);
+          __pxEduCloseModal();
+          if (wrap) wrap.dataset.ready = 'false';
+          await loadProfile();
+        } catch (err) {
+          console.error(err);
+          __pxEduShowStatus('Failed to save education. Please try again.', false);
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.classList.remove('opacity-70');
+        }
+      });
+      __pxEduBound = true;
+    }
+
+    // Bind save handler even if modal markup is after this script
+    __pxEduEnsureBound().catch(() => { });
     applyLinkIcons();
     loadProfile();
   </script>
+
+  <!-- Education required modal (shown only when education is missing) -->
+  <div id="eduRequiredModal" class="hidden fixed inset-0 z-50">
+    <div class="absolute inset-0 bg-black/70"></div>
+    <div class="relative h-full w-full flex items-center justify-center p-4">
+      <div
+        class="w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 text-neutral-900 dark:text-white shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="text-lg font-semibold">Add your education</h3>
+            <p class="text-xs text-black/60 dark:text-white/60 mt-1">Select your college, degree, department, batch,
+              section and current semester to continue.</p>
+          </div>
+        </div>
+
+        <div id="eduRequiredStatus"
+          class="hidden mt-3 text-xs rounded-lg border border-black/10 dark:border-white/10 px-3 py-2"></div>
+
+        <div id="eduRequiredFormWrap" class="mt-4"></div>
+
+        <div class="mt-5 flex items-center justify-end gap-2">
+          <button id="eduRequiredSaveBtn" type="button"
+            class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">
+            <span class="icon text-[18px]">save</span>
+            Save education
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 
 </html>
