@@ -89,6 +89,11 @@
   <script type="module" src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.5/dist/dotlottie-wc.js"></script>
 
   <style>
+    /* Role-gating: keep elements hidden unless privileged, without fighting Tailwind responsive classes */
+    .px-privilege-hidden {
+      display: none !important;
+    }
+
     :root {
       /* PaperX light tokens */
       --surface: #ffffff;
@@ -1311,7 +1316,9 @@
 
       function setPrivilegedVisible(visible) {
         privilegedEls.forEach(el => {
-          el.classList.toggle('hidden', !visible);
+          // Use a dedicated class so we don't override Tailwind responsive intent
+          // (e.g., Edit/Download are still hidden on mobile via `hidden sm:inline-flex`).
+          el.classList.toggle('px-privilege-hidden', !visible);
           if (!visible) {
             el.setAttribute('aria-hidden', 'true');
           } else {

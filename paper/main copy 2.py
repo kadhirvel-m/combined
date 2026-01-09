@@ -1497,28 +1497,45 @@ def generate_notes_markdown(topic: str, *, degree: Optional[str] = None) -> str:
     user_prompt = f"""
 You will compose comprehensive, exam-ready Markdown notes for the topic "{topic}".
 
-Context:
+Context from sources:
 {context}
 
-Instructions:
-- Create DETAILED, THOROUGH notes - students need complete understanding for exams.
-- Use the source context as foundation, but ADD your expert knowledge to fill gaps and provide complete coverage.
-- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" pick one).
-- Include the compulsory sections even if they were not present in sources.
-- Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
-- Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
-- Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+IMPORTANT INSTRUCTIONS:
+1. Create DETAILED, THOROUGH notes - students need complete understanding for exams.
+2. Use the source context as foundation, but ADD your expert knowledge to fill gaps and provide complete coverage.
+3. Normalize section titles (e.g., "Applications" vs. "Use Cases" - pick one).
 
 MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
-- **TL;DR / Quick Summary**: Bullet points for quick revision
 - **Introduction**: Comprehensive overview with context and importance
 - **Need / Why It Is Required**: What problem does it solve? Why was it developed?
-- **Definition / Core Concept**: Clear, precise technical definition of the "{topic}"
+- **Definition / Core Concept**: Clear, precise technical definition
+- **Working Principle / How It Works**: Detailed step-by-step mechanism or process
+- **Components / Architecture / Structure**: Break down into constituent parts with roles
+- **Types / Classification**: Different variants or categories if applicable
+- **Characteristics / Properties**: Key distinguishing features
+- **Formulas / Equations**: All relevant mathematical representations with explanations
+- **Examples / Real-Life Examples**: Multiple practical, relatable examples
+- **Solved Problems**: Worked-out numerical examples if applicable
+- **Advantages**: Comprehensive list with brief explanations
+- **Disadvantages / Limitations**: Honest assessment of drawbacks
+- **Applications**: Real-world use cases across industries
+- **Comparison with Related Concepts**: If relevant, compare with alternatives
+- **TL;DR / Quick Summary**: Bullet points for quick revision
+- **Memory Aids / Mnemonics**: Tricks and tips to remember concepts
+- **Common Mistakes to Avoid**: Frequent student errors
+- **Conclusion**: Key takeaways
 
-TARGET LENGTH: 1000-2000 words for comprehensive exam preparation.
+FORMATTING REQUIREMENTS:
+- Generate 2-3 Mermaid diagrams for processes, architectures, or relationships
+- Build a final '## CITATIONS' section mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to source URLs
+- Inline citations: "... property ... [GFG]" or "... step ... [Wiki]" after statements
+- Bold important keywords/terms with **...** (e.g., **algorithm name**, **theta**, **gamma**, **alpha**)
+- Use tables for comparisons, specifications, or structured data
+- Use numbered lists for sequential steps, bullet points for features/properties
 
-Start with '# {topic}' and then the sections in a logical order.
+TARGET LENGTH: 2500-4000 words for comprehensive exam preparation.
+
+Start with '# {topic}' and organize sections in a logical educational flow.
 """
     # Use safe runner to support both CLI and FastAPI contexts
     result = _run_assistant_blocking(assistant, user_prompt)
@@ -1572,28 +1589,45 @@ Output rules (STRICT):
     return f"""
 You will compose comprehensive, exam-ready Markdown notes for the topic "{topic}".
 
-Context:
+Context from sources:
 {context}
 
-Instructions:
-- Create DETAILED, THOROUGH notes - students need complete understanding for exams.
-- Use the source context as foundation, but ADD your expert knowledge to fill gaps and provide complete coverage.
-- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" pick one).
-- Include the compulsory sections even if they were not present in sources.
-- Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
-- Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
-- Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+IMPORTANT INSTRUCTIONS:
+1. Create DETAILED, THOROUGH notes - students need complete understanding for exams.
+2. Use the source context as foundation, but ADD your expert knowledge to fill gaps and provide complete coverage.
+3. Normalize section titles (e.g., "Applications" vs. "Use Cases" → pick one).
 
 MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
-- **TL;DR / Quick Summary**: Bullet points for quick revision
 - **Introduction**: Comprehensive overview with context and importance
 - **Need / Why It Is Required**: What problem does it solve? Why was it developed?
-- **Definition / Core Concept**: Clear, precise technical definition of the "{topic}"
+- **Definition / Core Concept**: Clear, precise technical definition
+- **Working Principle / How It Works**: Detailed step-by-step mechanism or process
+- **Components / Architecture / Structure**: Break down into constituent parts with roles
+- **Types / Classification**: Different variants or categories if applicable
+- **Characteristics / Properties**: Key distinguishing features
+- **Formulas / Equations**: All relevant mathematical representations with explanations
+- **Examples / Real-Life Examples**: Multiple practical, relatable examples
+- **Solved Problems**: Worked-out numerical examples if applicable
+- **Advantages**: Comprehensive list with brief explanations
+- **Disadvantages / Limitations**: Honest assessment of drawbacks
+- **Applications**: Real-world use cases across industries
+- **Comparison with Related Concepts**: If relevant, compare with alternatives
+- **TL;DR / Quick Summary**: Bullet points for quick revision
+- **Memory Aids / Mnemonics**: Tricks and tips to remember concepts
+- **Common Mistakes to Avoid**: Frequent student errors
+- **Conclusion**: Key takeaways
 
-TARGET LENGTH: 1000-2000 words for comprehensive exam preparation.
+FORMATTING REQUIREMENTS:
+- Generate 2-3 Mermaid diagrams for processes, architectures, or relationships
+- Build a final '## CITATIONS' section mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to source URLs
+- Inline citations: "... property ... [GFG]" or "... step ... [Wiki]" after statements
+- Bold important keywords/terms with **...** (e.g., **algorithm name**, **θ**, **γ**, **α**)
+- Use tables for comparisons, specifications, or structured data
+- Use numbered lists for sequential steps, bullet points for features/properties
 
-Start with '# {topic}' and then the sections in a logical order.
+TARGET LENGTH: 2500-4000 words for comprehensive exam preparation.
+
+Start with '# {topic}' and organize sections in a logical educational flow.
 """.strip()
 
 def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None, variant: str = "detailed", degree: Optional[str] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
@@ -6047,18 +6081,7 @@ def _is_admin_user(user_id: Optional[str], email: Optional[str]) -> bool:
 
 
 @academics_router.get("/api/admin/users", summary="Admin: list user profiles")
-def list_admin_users(
-    authorization: Optional[str] = Header(default=None),
-    limit: int = Query(default=500, ge=1, le=2000),
-    q: Optional[str] = Query(default=None, max_length=120),
-    role: Optional[str] = Query(default=None, max_length=32),
-    department: Optional[str] = Query(default=None, max_length=120),
-    section: Optional[str] = Query(default=None, max_length=32),
-    batch_range: Optional[str] = Query(default=None, max_length=32),
-    semester: Optional[int] = Query(default=None, ge=1, le=12),
-    min_streak: Optional[int] = Query(default=None, ge=0, le=3650),
-    last_login_days: Optional[int] = Query(default=None, ge=1, le=3650),
-):
+def list_admin_users(authorization: Optional[str] = Header(default=None), limit: int = Query(default=500, ge=1, le=2000)):
     token = _parse_bearer_token(authorization)
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
@@ -6079,99 +6102,46 @@ def list_admin_users(
         raise HTTPException(status_code=403, detail="Not an admin user")
 
     supabase = get_service_client()
-    # Core fields from user_profiles. Department/batch are sourced from user_education.
+    # Core fields; attempt extended (with department_id/batch_id). Fallback if columns absent (42703).
     base_cols = [
         "id","auth_user_id","email","name","gender","phone","semester","regno",
         "profile_image_url","verification_score","updated_at","created_at","linkedin","github",
         "leetcode","skills","technologies","specializations"
     ]
-    try:
-        query = supabase.table("user_profiles").select(",".join(base_cols))
-        if q:
-            qv = (q or "").strip()
-            if qv:
-                # Search by name/email/regno (case-insensitive)
-                pattern = f"%{qv}%"
-                query = query.or_(
-                    f"name.ilike.{pattern},email.ilike.{pattern},regno.ilike.{pattern}"
-                )
-        res = query.order("updated_at", desc=True).limit(limit).execute()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Supabase error (list users) exec: {str(e)}")
-    err = getattr(res, "error", None)
-    if err:
-        raise HTTPException(status_code=500, detail=f"Supabase error (list users): {err}")
-    rows: List[dict] = getattr(res, "data", []) or []
-
-    # Load roles for all involved auth_user_ids in one query
-    auth_ids = [r.get("auth_user_id") for r in rows if r.get("auth_user_id")]
-    uniq_ids = list({i for i in auth_ids if i})
-
-    # Fetch primary education per profile from user_education.
-    # NOTE: user_education links to user_profiles via user_profile_id (not auth_user_id).
-    edu_map: Dict[str, dict] = {}
-    profile_ids = [r.get("id") for r in rows if r.get("id")]
-    uniq_profile_ids = list({pid for pid in profile_ids if pid})
-    if uniq_profile_ids:
-        # Try with order_index if present, else fallback.
-        edu_select_try = [
-            "user_profile_id,department_id,batch_id,college_id,section,current_semester,regno,order_index,created_at",
-            "user_profile_id,department_id,batch_id,college_id,section,current_semester,regno,created_at",
-            "user_profile_id,department_id,batch_id,college_id,current_semester,regno,order_index,created_at",
-            "user_profile_id,department_id,batch_id,college_id,current_semester,regno,created_at",
-            # Fallback if user_education has no college_id
-            "user_profile_id,department_id,batch_id,section,current_semester,regno,order_index,created_at",
-            "user_profile_id,department_id,batch_id,section,current_semester,regno,created_at",
-            "user_profile_id,department_id,batch_id,current_semester,regno,order_index,created_at",
-            "user_profile_id,department_id,batch_id,current_semester,regno,created_at",
-        ]
-        edu_rows: List[dict] = []
-        for sel in edu_select_try:
-            try:
-                eres = supabase.table("user_education").select(sel).in_("user_profile_id", uniq_profile_ids).execute()
-            except Exception as e:
-                msg = str(e)
-                if "order_index" in sel and "order_index" in msg:
-                    continue
-                # If user_education doesn't exist or query fails, just skip education enrichment.
-                edu_rows = []
-                break
-            if getattr(eres, "error", None):
-                edu_rows = []
-                break
-            edu_rows = getattr(eres, "data", []) or []
-            break
-
-        def _edu_rank(ed: dict) -> Tuple[int, float]:
-            oi_raw = ed.get("order_index")
-            try:
-                oi = int(oi_raw) if oi_raw is not None else 9999
-            except Exception:
-                oi = 9999
-            ts = 0.0
-            try:
-                if ed.get("created_at"):
-                    ts = datetime.fromisoformat(str(ed.get("created_at")).replace("Z", "+00:00")).timestamp()
-            except Exception:
-                ts = 0.0
-            # Prefer lower order_index; for ties prefer latest created_at.
-            return (oi, -ts)
-
-        for ed in edu_rows:
-            pid = ed.get("user_profile_id")
-            if not pid:
+    extended_cols = base_cols + ["department_id","batch_id"]
+    use_extended = True
+    rows: List[dict] = []
+    for attempt in (1,2):
+        select_cols = ",".join(extended_cols if use_extended else base_cols)
+        try:
+            res = (
+                supabase.table("user_profiles")
+                .select(select_cols)
+                .order("updated_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+        except Exception as e:  # Catch APIError directly (column missing)
+            msg = str(e)
+            if use_extended and ("department_id" in msg or "batch_id" in msg):
+                use_extended = False
                 continue
-            prev = edu_map.get(pid)
-            if not prev or _edu_rank(ed) < _edu_rank(prev):
-                edu_map[pid] = ed
+            raise HTTPException(status_code=500, detail=f"Supabase error (list users) exec: {msg}")
 
-    # Preload department + batch + college info to enrich output
-    dept_ids = {ed.get("department_id") for ed in edu_map.values() if ed.get("department_id")}
-    batch_ids = {ed.get("batch_id") for ed in edu_map.values() if ed.get("batch_id")}
-    college_ids = {ed.get("college_id") for ed in edu_map.values() if ed.get("college_id")}
+        err = getattr(res, "error", None)
+        if err:
+            # Some errors might still surface here (non-column related)
+            raise HTTPException(status_code=500, detail=f"Supabase error (list users): {err}")
+        rows = getattr(res, "data", []) or []
+        break
+
+    have_dept_batch = use_extended  # only true if extended columns succeeded
+
+    # Preload department + batch info to enrich output
+    dept_ids = {r.get("department_id") for r in rows if have_dept_batch and r.get("department_id")}
+    batch_ids = {r.get("batch_id") for r in rows if have_dept_batch and r.get("batch_id")}
     dept_map: Dict[str, dict] = {}
     batch_map: Dict[str, dict] = {}
-    college_map: Dict[str, dict] = {}
     role_map: Dict[str, str] = {}
     if dept_ids:
         dres = supabase.table("departments").select("id,name").in_("id", list(dept_ids)).execute()
@@ -6183,12 +6153,10 @@ def list_admin_users(
         if not getattr(bres, "error", None):
             for b in bres.data or []:
                 batch_map[b.get("id")] = b
-    if college_ids:
-        cres = supabase.table("colleges").select("id,name").in_("id", list(college_ids)).execute()
-        if not getattr(cres, "error", None):
-            for c in cres.data or []:
-                college_map[c.get("id")] = c
+    # Load roles for all involved auth_user_ids in one query
     try:
+        auth_ids = [r.get("auth_user_id") for r in rows if r.get("auth_user_id")]
+        uniq_ids = list({i for i in auth_ids if i})
         if uniq_ids:
             rres = supabase.table("admin_roles").select("auth_user_id,role").in_("auth_user_id", uniq_ids).execute()
             if not getattr(rres, "error", None):
@@ -6199,99 +6167,22 @@ def list_admin_users(
     except Exception:
         pass
 
-    # Load streaks for all profiles in one query (table name may vary across deployments).
-    # NOTE: academicas.html uses /api/streak which reads from notex_streak.
-    streak_current_map: Dict[str, int] = {}  # profile_id -> current_streak
-    streak_longest_map: Dict[str, int] = {}  # profile_id -> longest_streak
-    streak_last_activity_map: Dict[str, Any] = {}  # profile_id -> last_activity_date
-    if uniq_profile_ids:
-        for streak_table in ("notex_streak", "user_streaks"):
-            try:
-                sres = supabase.table(streak_table).select(
-                    "user_profile_id,current_streak,longest_streak,last_activity_date"
-                ).in_(
-                    "user_profile_id", uniq_profile_ids
-                ).execute()
-            except Exception:
-                continue
-            if getattr(sres, "error", None):
-                continue
-            for s in (getattr(sres, "data", None) or []):
-                pid = s.get("user_profile_id")
-                if pid:
-                    try:
-                        streak_current_map[pid] = int(s.get("current_streak") or 0)
-                    except Exception:
-                        streak_current_map[pid] = 0
-                    try:
-                        streak_longest_map[pid] = int(s.get("longest_streak") or 0)
-                    except Exception:
-                        streak_longest_map[pid] = 0
-                    if s.get("last_activity_date") is not None:
-                        streak_last_activity_map[pid] = s.get("last_activity_date")
-            # If we got any rows, stop trying fallbacks.
-            if streak_current_map:
-                break
-
-    # Load last_seen_at per auth user from user_sessions (aggregate in Python).
-    last_seen_map: Dict[str, str] = {}  # auth_user_id -> ISO timestamp
-    if uniq_ids:
-        try:
-            # Cap rows to avoid unbounded reads on very large session tables.
-            sres = (
-                supabase.table("user_sessions")
-                .select("user_id,last_seen_at")
-                .in_("user_id", uniq_ids)
-                .order("last_seen_at", desc=True)
-                .limit(50000)
-                .execute()
-            )
-            if not getattr(sres, "error", None):
-                for row in (getattr(sres, "data", None) or []):
-                    uid = row.get("user_id")
-                    ts = row.get("last_seen_at")
-                    if uid and ts and uid not in last_seen_map:
-                        # Because results are ordered desc, first seen is the latest.
-                        last_seen_map[uid] = ts
-        except Exception:
-            pass
-
     out: List[dict] = []
     for r in rows:
-        pid = r.get("id")
-        edu = edu_map.get(pid, {}) if pid else {}
-        dept = dept_map.get(edu.get("department_id")) if edu.get("department_id") else {}
-        batch = batch_map.get(edu.get("batch_id")) if edu.get("batch_id") else {}
-        college = college_map.get(edu.get("college_id")) if edu.get("college_id") else {}
-        semester_val = r.get("semester") if r.get("semester") is not None else edu.get("current_semester")
-        regno_val = r.get("regno") if r.get("regno") else edu.get("regno")
-        user_id_val = r.get("auth_user_id")
-        current_streak_val = streak_current_map.get(pid, 0) if pid else 0
-        longest_streak_val = streak_longest_map.get(pid, 0) if pid else 0
-        last_seen_val = last_seen_map.get(user_id_val) if user_id_val else None
-        batch_range_val = (f"{batch.get('from_year')}-{batch.get('to_year')}" if batch and batch.get('from_year') and batch.get('to_year') else None)
-
+        dept = dept_map.get(r.get("department_id")) if have_dept_batch else {}
+        batch = batch_map.get(r.get("batch_id")) if have_dept_batch else {}
         out.append({
             "profile_id": r.get("id"),
-            "user_id": user_id_val,
+            "user_id": r.get("auth_user_id"),
             "name": r.get("name"),
             "email": r.get("email"),
             "role": role_map.get(r.get("auth_user_id"), "student"),
-            "semester": semester_val,
-            "regno": regno_val,
-            "college": college.get("name") if college else None,
+            "semester": r.get("semester"),
+            "regno": r.get("regno"),
             "department": dept.get("name") if dept else None,
-            "section": edu.get("section") if edu else None,
             "batch_from": batch.get("from_year") if batch else None,
             "batch_to": batch.get("to_year") if batch else None,
-            "batch_range": batch_range_val,
-            # Back-compat (users.html initially used streak_current)
-            "streak_current": current_streak_val,
-            # Align naming with /api/streak response (academicas.html)
-            "current_streak": current_streak_val,
-            "longest_streak": longest_streak_val,
-            "last_activity_date": streak_last_activity_map.get(pid) if pid else None,
-            "last_seen_at": last_seen_val,
+            "batch_range": (f"{batch.get('from_year')}-{batch.get('to_year')}" if batch and batch.get('from_year') and batch.get('to_year') else None),
             "profile_image_url": r.get("profile_image_url"),
             "verification_score": r.get("verification_score"),
             "linkedin": r.get("linkedin"),
@@ -6303,47 +6194,7 @@ def list_admin_users(
             "updated_at": r.get("updated_at"),
             "created_at": r.get("created_at"),
         })
-
-    # Server-side filters (for real-time filter UI)
-    def _norm(s: Any) -> str:
-        return (str(s).strip().lower() if s is not None else "")
-
-    filtered = out
-    if role:
-        want = _norm(role)
-        filtered = [u for u in filtered if _norm(u.get("role")) == want]
-    if department:
-        want = _norm(department)
-        filtered = [u for u in filtered if _norm(u.get("department")) == want]
-    if section:
-        want = _norm(section)
-        filtered = [u for u in filtered if _norm(u.get("section")) == want]
-    if batch_range:
-        want = _norm(batch_range)
-        filtered = [u for u in filtered if _norm(u.get("batch_range")) == want]
-    if semester is not None:
-        filtered = [u for u in filtered if str(u.get("semester") or "") == str(semester)]
-    if min_streak is not None:
-        filtered = [u for u in filtered if int(u.get("current_streak") or 0) >= int(min_streak)]
-    if last_login_days is not None:
-        cutoff = datetime.utcnow() - timedelta(days=int(last_login_days))
-
-        def _is_recent(u: dict) -> bool:
-            ts = u.get("last_seen_at")
-            if not ts:
-                return False
-            try:
-                dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-                # Compare as naive UTC-ish (safe even if dt is tz-aware)
-                if dt.tzinfo is not None:
-                    dt = dt.replace(tzinfo=None)
-                return dt >= cutoff
-            except Exception:
-                return False
-
-        filtered = [u for u in filtered if _is_recent(u)]
-
-    return {"users": filtered, "count": len(filtered)}
+    return {"users": out, "count": len(out)}
 
 
 @academics_router.get("/api/admin/self-check", summary="Admin: verify current token admin status")
@@ -6409,7 +6260,7 @@ def _count_admins(supabase) -> int:
         return 0
 
 
-VALID_ROLES = {"admin", "teacher", "student", "moderator", "employee"}
+VALID_ROLES = {"admin","teacher","student","moderator"}
 
 
 @academics_router.post("/api/admin/users/{auth_user_id}/role", summary="Admin: update a user's role")
@@ -6439,8 +6290,8 @@ def update_user_role(auth_user_id: str, payload: RoleUpdateIn, authorization: Op
             del_res = supabase.table('admin_roles').delete().eq('auth_user_id', auth_user_id).execute()
             if getattr(del_res, 'error', None):
                 raise HTTPException(status_code=500, detail=f"Role demote failed: {del_res.error}")
-        # For non-admin roles we can store or remove row (choose store for non-student roles)
-        if desired in {"teacher", "moderator", "employee"}:
+        # For non-admin roles we can store or remove row (choose store for teacher/moderator custom permissions)
+        if desired in {"teacher","moderator"}:
             up_res = supabase.table('admin_roles').upsert({"auth_user_id": auth_user_id, "role": desired}).execute()
             if getattr(up_res, 'error', None):
                 raise HTTPException(status_code=500, detail=f"Role update failed: {up_res.error}")
