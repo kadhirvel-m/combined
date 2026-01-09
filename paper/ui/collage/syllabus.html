@@ -390,13 +390,46 @@
         }
 
         function showLoader() {
+            // Preserve layout height while loading so the browser doesn't clamp scroll
+            // (which would jump the user toward the top when content is temporarily replaced).
+            const h = results?.getBoundingClientRect ? results.getBoundingClientRect().height : 0;
+            setResultsMinHeight(h);
             results.innerHTML = `
                 <div class="flex items-center justify-center py-16">
                     <div class="h-12 w-12 animate-spin rounded-full border-2 border-brand-500/30 border-t-transparent"></div>
                 </div>`;
         }
 
+        function setResultsMinHeight(px) {
+            if (!results) return;
+            const n = Number(px);
+            if (Number.isFinite(n) && n > 0) results.style.minHeight = `${Math.round(n)}px`;
+            else results.style.minHeight = '';
+        }
+
+        function getScrollY() {
+            return window.scrollY || document.documentElement.scrollTop || 0;
+        }
+
+        function restoreScrollY(y) {
+            const n = Number(y);
+            if (!Number.isFinite(n)) return;
+            const max = Math.max(0, (document.documentElement.scrollHeight || 0) - (window.innerHeight || 0));
+            const target = Math.min(Math.max(0, n), max);
+            // Double rAF gives the browser time to apply layout after innerHTML changes.
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    try {
+                        window.scrollTo({ top: target, left: 0, behavior: 'auto' });
+                    } catch (_) {
+                        window.scrollTo(0, target);
+                    }
+                });
+            });
+        }
+
         function showError(message) {
+            setResultsMinHeight(0);
             results.innerHTML = `
                 <div class="rounded-3xl border border-red-400/35 bg-red-100/70 dark:bg-red-500/10 dark:border-red-400/25 p-8 shadow-soft">
                     <h2 class="text-lg font-semibold text-red-700 dark:text-red-200">Unable to load syllabus</h2>
@@ -405,6 +438,7 @@
         }
 
         function showEmpty() {
+            setResultsMinHeight(0);
             results.innerHTML = `
                 <div class="rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur p-8 text-sm text-neutral-600 dark:text-white/65">
                     <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">No units yet</h2>
@@ -694,6 +728,7 @@
         if (unitDeleteBtn) unitDeleteBtn.addEventListener('click', handleUnitDelete);
 
         function renderUnits(units) {
+            setResultsMinHeight(0);
             if (!units.length) {
                 showEmpty();
                 return;
@@ -986,6 +1021,7 @@
         }
 
         async function loadSyllabus() {
+            const scrollBefore = getScrollY();
             if (!courseId) {
                 showError('Missing courseId.');
                 return;
@@ -1028,7 +1064,8 @@
                 showError(err.message || 'Unexpected error');
             }
 
-            renderUnits(syllabusCourse.units || []);
+            renderUnits(syllabusCourse?.units || []);
+            restoreScrollY(scrollBefore);
         }
 
         addUnitBtn.addEventListener('click', () => openUnitModal('add'));

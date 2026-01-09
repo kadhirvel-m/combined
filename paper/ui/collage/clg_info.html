@@ -536,6 +536,47 @@
             updateMetrics(0, 'Awaiting entries');
         }
 
+        function showAccessDenied(message) {
+            if (addCollegeBtn) addCollegeBtn.classList.add('hidden');
+            results.innerHTML = `
+                <div class="col-span-full p-10 text-center space-y-4 rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl shadow-soft">
+                    <div class="mx-auto w-14 h-14 rounded-full flex items-center justify-center bg-red-500/10 text-red-600 dark:text-red-400">
+                        <span class="material-symbols-rounded">block</span>
+                    </div>
+                    <h2 class="text-xl font-bold text-neutral-900 dark:text-white">Access denied</h2>
+                    <p class="text-sm text-neutral-600 dark:text-white/70 max-w-md mx-auto">${Collage.escapeHtml(message || 'You do not have permission to view this page.')}</p>
+                </div>`;
+            updateMetrics(0, 'Denied');
+        }
+
+        function getAnyToken() {
+            const keys = ['token', 'px_token', 'access_token', 'auth_token', 'sb-access-token'];
+            for (const k of keys) {
+                try {
+                    const v = localStorage.getItem(k);
+                    if (v) return v;
+                } catch (_) { }
+            }
+            return null;
+        }
+
+        async function requireAdminOrEmployee() {
+            const token = getAnyToken();
+            if (!token) {
+                const err = new Error('Missing token');
+                err.status = 401;
+                throw err;
+            }
+            const me = await Collage.fetchJson('/api/admin/roles/me', { headers: { 'Authorization': `Bearer ${token}` } });
+            const role = String(me?.role || 'student').toLowerCase().trim();
+            if (role !== 'admin' && role !== 'employee') {
+                const err = new Error('Access denied');
+                err.status = 403;
+                throw err;
+            }
+            return role;
+        }
+
         function resetModal() {
             collegeForm.reset();
             collegeModalMessage.textContent = '';
@@ -636,7 +677,7 @@
                         try { const jd = await up.json(); msg = jd.detail || jd.error || msg; } catch (e) { }
                         alert(msg);
                         console.warn('[CollegeModal] Explicit upload failed', msg);
-                        +                        console.debug('[CollegeModal] Response status', up.status);
+                        console.debug('[CollegeModal] Response status', up.status);
                     } else {
                         window.__logoUploadedExplicitly = true;
                         uploadLogoNowBtn.textContent = 'Uploaded';
@@ -807,9 +848,21 @@
             });
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            initCollegeManagement();
-            loadColleges();
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                showLoader();
+                await requireAdminOrEmployee();
+                initCollegeManagement();
+                await loadColleges();
+            } catch (err) {
+                console.error(err);
+                const status = err?.status;
+                if (status === 401 || status === 403) {
+                    showAccessDenied('You need an admin or employee account to access the college console.');
+                } else {
+                    showError(err?.message || 'Unexpected error');
+                }
+            }
         });
     </script>
 </body>

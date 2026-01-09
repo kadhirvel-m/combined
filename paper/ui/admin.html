@@ -284,8 +284,7 @@
             <tr class="border-b border-black/5 dark:border-white/10">
               <th class="py-2 pr-3 font-semibold">User</th>
               <th class="py-2 pr-3 font-semibold">Academic</th>
-              <th class="py-2 pr-3 font-semibold">Contacts</th>
-              <th class="py-2 pr-3 font-semibold">Skills</th>
+              <th class="py-2 pr-3 font-semibold">Department</th>
               <th class="py-2 pr-3 font-semibold">Verification</th>
               <th class="py-2 pr-3 font-semibold">Role</th>
               <th class="py-2 pr-3 font-semibold">Updated</th>
@@ -368,10 +367,7 @@
       <td class="py-3 pr-3 text-[12px]">
         <div data-academic class="space-y-1"></div>
       </td>
-      <td class="py-3 pr-3 text-[12px]">
-        <div class="space-y-1" data-links></div>
-      </td>
-      <td class="py-3 pr-3 text-[11px]" data-skills></td>
+      <td class="py-3 pr-3 text-[12px]" data-department></td>
       <td class="py-3 pr-3" data-verify></td>
       <td class="py-3 pr-3 text-[11px]" data-role></td>
       <td class="py-3 pr-3 text-[11px] opacity-60" data-updated></td>
@@ -398,8 +394,6 @@
       </div>
       <div class="mt-3 space-y-2 text-[11px]">
         <div data-academic class="flex flex-wrap gap-2"></div>
-        <div data-skills class="flex flex-wrap gap-1"></div>
-        <div data-links class="flex flex-wrap gap-1 pt-1"></div>
       </div>
       <div class="mt-3 flex items-center justify-between gap-2 text-[10px] opacity-50"><span data-updated></span>
         <div class="flex gap-1" data-actions-card>
@@ -422,6 +416,15 @@
     const $ = (sel, ctx = document) => ctx.querySelector(sel);
     // --- Dynamic API base resolution (so admin page can be served from another port) ---
     let API = (window.API_BASE || '').replace(/\/$/, '');
+    async function fetchWithTimeout(url, options = {}, timeoutMs = 1500) {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(t);
+      }
+    }
     async function resolveApiBase() {
       if (API) return;
       if (location.port === '8000') { API = location.origin; return; }
@@ -429,14 +432,13 @@
       const candidates = [location.origin, `http://${host}:8000`, `https://${host}:8000`];
       for (const base of candidates) {
         try {
-          const r = await fetch(base + '/api/admin/self-check', { method: 'HEAD' });
+          const r = await fetchWithTimeout(base + '/api/admin/self-check', { method: 'HEAD' }, 900);
           if (r.ok || r.status === 401 || r.status === 403) { API = base.replace(/\/$/, ''); window.API_BASE = API; return; }
         } catch (_) { }
       }
       // fallback: current origin
       API = location.origin;
     }
-    resolveApiBase();
 
     const state = { raw: [], filtered: [], view: localStorage.getItem('admin_users_view') || 'table' };
 
@@ -447,9 +449,74 @@
 
     function renderStats() { const s = computeStats(); const el = $('#stats'); if (!el) return; el.innerHTML = [['Users', s.total], ['Semesters', s.semesters], ['Departments', s.depts]].map(([k, v]) => `<span class="chip">${k}: <strong>${v}</strong></span>`).join(''); }
 
-    function buildFilters() { const semesters = [...new Set(state.raw.map(u => u.semester).filter(Boolean))].sort((a, b) => a - b); const semesterSel = $('#semesterFilter'); semesters.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = 'Sem ' + s; semesterSel.appendChild(o); }); const batches = [...new Set(state.raw.map(u => u.batch_range).filter(Boolean))]; const batchSel = $('#batchFilter'); batches.forEach(r => { const o = document.createElement('option'); o.value = r; o.textContent = r; batchSel.appendChild(o); }); const depts = [...new Set(state.raw.map(u => u.department).filter(Boolean))].sort(); const deptSel = $('#deptFilter'); depts.forEach(d => { const o = document.createElement('option'); o.value = d; o.textContent = d; deptSel.appendChild(o); }); }
+    function buildFilters() {
+      const semesterSel = $('#semesterFilter');
+      const batchSel = $('#batchFilter');
+      const deptSel = $('#deptFilter');
+      // Clear previous options but preserve the first placeholder option.
+      [semesterSel, batchSel, deptSel].forEach(sel => {
+        if (!sel) return;
+        while (sel.options.length > 1) sel.remove(1);
+      });
+      const semesters = [...new Set(state.raw.map(u => u.semester).filter(Boolean))].sort((a, b) => a - b);
+      semesters.forEach(s => {
+        const o = document.createElement('option');
+        o.value = s;
+        o.textContent = 'Sem ' + s;
+        semesterSel.appendChild(o);
+      });
+      const batches = [...new Set(state.raw.map(u => u.batch_range).filter(Boolean))];
+      batches.forEach(r => {
+        const o = document.createElement('option');
+        o.value = r;
+        o.textContent = r;
+        batchSel.appendChild(o);
+      });
+      const depts = [...new Set(state.raw.map(u => u.department).filter(Boolean))].sort();
+      depts.forEach(d => {
+        const o = document.createElement('option');
+        o.value = d;
+        o.textContent = d;
+        deptSel.appendChild(o);
+      });
+    }
 
-    function applyFilters() { const q = ($('#searchInput').value || '').toLowerCase(); const sem = $('#semesterFilter').value; const batch = $('#batchFilter').value; const dept = $('#deptFilter').value; state.filtered = state.raw.filter(u => { if (q) { const hay = [u.name, u.email, u.regno, (u.skills || []).join(','), (u.specializations || []).join(',')].join(' ').toLowerCase(); if (!hay.includes(q)) return false; } if (sem && String(u.semester) !== sem) return false; if (batch && u.batch_range !== batch) return false; if (dept && u.department !== dept) return false; return true; }); sortData(); render(); }
+    function applyFilters() {
+      const q = ($('#searchInput').value || '').toLowerCase();
+      const sem = $('#semesterFilter').value;
+      const batch = $('#batchFilter').value;
+      const dept = $('#deptFilter').value;
+
+      const toStrList = (v) => {
+        if (v == null) return [];
+        if (Array.isArray(v)) return v.map(x => String(x ?? '').trim()).filter(Boolean);
+        if (typeof v === 'string') return [v];
+        if (typeof v === 'number' || typeof v === 'boolean') return [String(v)];
+        return [];
+      };
+
+      state.filtered = state.raw.filter(u => {
+        if (q) {
+          const hayParts = [
+            u.name,
+            u.email,
+            u.regno,
+            u.department,
+            u.batch_range,
+            ...toStrList(u.skills),
+            ...toStrList(u.technologies),
+            ...toStrList(u.specializations),
+          ].map(x => String(x ?? '')).join(' ').toLowerCase();
+          if (!hayParts.includes(q)) return false;
+        }
+        if (sem && String(u.semester) !== sem) return false;
+        if (batch && u.batch_range !== batch) return false;
+        if (dept && u.department !== dept) return false;
+        return true;
+      });
+      sortData();
+      render();
+    }
 
     function sortData() { const sort = $('#sortSelect').value; if (!sort) return; const arr = state.filtered; const collator = new Intl.Collator(undefined, { sensitivity: 'base' }); switch (sort) { case 'name': arr.sort((a, b) => collator.compare(a.name || '', b.name || '')); break; case 'semester': arr.sort((a, b) => (b.semester || 0) - (a.semester || 0)); break; case 'created_desc': arr.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break; case 'verification': arr.sort((a, b) => (b.verification_score || 0) - (a.verification_score || 0)); break; } }
 
@@ -461,6 +528,7 @@
       const avatar = node.querySelector('[data-avatar]'); const init = node.querySelector('[data-initial]'); if (avatar) { if (u.profile_image_url) { avatar.src = u.profile_image_url; init.textContent = ''; } else { avatar.removeAttribute('src'); init.textContent = initials(u.name || u.email || ''); } }
       const nameEl = node.querySelector('[data-name]'); if (nameEl) nameEl.textContent = u.name || '(no name)'; const emailEl = node.querySelector('[data-email]'); if (emailEl) emailEl.textContent = u.email || ''; const statusEl = node.querySelector('[data-status]'); if (statusEl) { statusEl.innerHTML = ''; if (u.semester) statusEl.innerHTML += `<span class="chip">Sem ${u.semester}</span>`; if (u.department) statusEl.innerHTML += `<span class="chip">${u.department}</span>`; if (u.batch_range) statusEl.innerHTML += `<span class="chip">${u.batch_range}</span>`; }
       const academic = node.querySelector('[data-academic]'); if (academic) { academic.innerHTML = ''; if (u.regno) academic.innerHTML += `<div><span class="font-medium">Reg:</span> ${u.regno}</div>`; if (u.semester) academic.innerHTML += `<div><span class="font-medium">Sem:</span> ${u.semester}</div>`; if (u.batch_range) academic.innerHTML += `<div><span class="font-medium">Batch:</span> ${u.batch_range}</div>`; }
+      const deptCell = node.querySelector('[data-department]'); if (deptCell) { deptCell.textContent = u.department || '—'; }
       const links = node.querySelector('[data-links]'); if (links) { const mk = (icon, label, url) => `<a href="${url}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 text-[10px]"><span class="material-symbols-rounded text-xs">${icon}</span>${label}</a>`; links.innerHTML = ''; if (u.linkedin) links.innerHTML += mk('work', 'LinkedIn', u.linkedin); if (u.github) links.innerHTML += mk('code', 'GitHub', u.github); if (u.leetcode) links.innerHTML += mk('developer_mode', 'LeetCode', u.leetcode); }
       const skills = node.querySelector('[data-skills]'); if (skills) { const list = [...(u.skills || []), ...(u.technologies || [])].slice(0, 6); skills.innerHTML = list.map(s => `<span class="chip">${s}</span>`).join(''); }
       const verify = node.querySelector('[data-verify]'); if (verify) { const v = u.verification_score || 0; verify.innerHTML = v ? `<span class="status-pill pill-active"><span class="material-symbols-rounded text-[14px]">verified</span>${v.toFixed(0)}</span>` : '<span class="status-pill pill-new">NEW</span>'; }
@@ -477,7 +545,7 @@
       const delBtnRow = node.querySelector('[data-delete-user]'); if (delBtnRow) attachDeleteHandler(delBtnRow, u);
     }
 
-    const ROLE_OPTIONS = ['admin', 'teacher', 'moderator', 'student'];
+    const ROLE_OPTIONS = ['admin', 'teacher', 'moderator', 'student', 'employee'];
     function roleSelectHTML(u) {
       return `<select data-role-select class="rounded-md bg-white/70 dark:bg-white/10 border border-black/10 dark:border-white/10 px-2 py-1 text-[11px] focus:outline-none">
         ${ROLE_OPTIONS.map(r => `<option value="${r}" ${(u.role || 'student') === r ? 'selected' : ''}>${r}</option>`).join('')}
@@ -549,20 +617,34 @@
       </div>`;
     }
 
+    let _usersFetchSeq = 0;
     async function fetchUsers() {
+      const seq = ++_usersFetchSeq;
       $('#loadingState').classList.remove('hidden');
       $('#errorState').classList.add('hidden');
       try {
-        await adminSelfCheck();
+        await resolveApiBase();
+        const prevSem = $('#semesterFilter')?.value || '';
+        const prevBatch = $('#batchFilter')?.value || '';
+        const prevDept = $('#deptFilter')?.value || '';
+        const prevSort = $('#sortSelect')?.value || '';
         const token = await getAccessToken();
-        const res = await fetch(API + '/api/admin/users', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!token) throw new Error('No auth token (px_token) found — please login');
+        const q = ($('#searchInput')?.value || '').trim();
+        const url = q ? `${API}/api/admin/users?q=${encodeURIComponent(q)}` : `${API}/api/admin/users`;
+        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
         if (res.status === 401) { throw new Error('401 Unauthorized – token invalid or expired'); }
         if (res.status === 403) { showNotAdmin(); return; }
         if (!res.ok) { throw new Error('Request failed: ' + res.status); }
         const data = await res.json();
+        if (seq !== _usersFetchSeq) return;
         state.raw = (data.users || data || []).map(row => ({ ...row, batch_range: row.batch_from && row.batch_to ? `${row.batch_from}-${row.batch_to}` : (row.batch_range || '') }));
         renderStats();
         buildFilters();
+        if ($('#semesterFilter')) $('#semesterFilter').value = prevSem;
+        if ($('#batchFilter')) $('#batchFilter').value = prevBatch;
+        if ($('#deptFilter')) $('#deptFilter').value = prevDept;
+        if ($('#sortSelect')) $('#sortSelect').value = prevSort;
         applyFilters();
       } catch (err) {
         const msg = err?.message || 'Error loading users';
@@ -579,11 +661,23 @@
       }
     }
 
-    document.addEventListener('input', e => { if (e.target.matches('#searchInput')) applyFilters(); });
+    let _searchFetchTimer = null;
+    document.addEventListener('input', e => {
+      if (e.target.matches('#searchInput')) {
+        // Immediate client-side filter, plus real-time refresh (debounced).
+        applyFilters();
+        clearTimeout(_searchFetchTimer);
+        _searchFetchTimer = setTimeout(() => { fetchUsers(); }, 250);
+      }
+    });
     document.addEventListener('change', e => { if (e.target.matches('#semesterFilter,#batchFilter,#deptFilter,#sortSelect')) applyFilters(); });
     document.addEventListener('click', e => { const btn = e.target.closest('.layout-toggle button'); if (btn) { setView(btn.dataset.view); } if (e.target.id === 'themeToggle') { const root = document.documentElement; const dark = root.classList.toggle('dark'); localStorage.setItem('px_theme', dark ? 'dark' : 'light'); e.target.textContent = dark ? 'light_mode' : 'dark_mode'; } });
 
-    fetchUsers();
+    (async () => {
+      await fetchUsers();
+      // Load teacher applications after users so page becomes interactive sooner.
+      try { await fetchTeacherApplications(); } catch (_) { /* ignore */ }
+    })();
 
     // ---------- Teacher Applications Review Logic ----------
     const teacherState = { applications: [], status: 'pending' };
