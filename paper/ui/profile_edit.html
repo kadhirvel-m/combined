@@ -39,6 +39,24 @@
         .dark #pageLoader {
             background: rgba(30, 30, 47, 0.7);
         }
+
+        /* Prevent horizontal overflow on small screens (inputs default to a fixed intrinsic width). */
+        #detailsForm input,
+        #detailsForm textarea,
+        #detailsForm select,
+        #imageForm input[type="file"],
+        #resumeForm input[type="file"] {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+        }
+
+        /* Long values (emails/urls) shouldn't stretch the layout. */
+        #email,
+        #name {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
     </style>
 </head>
 
@@ -90,23 +108,24 @@
                         <div class="grid gap-3">
                             <div class="flex items-center gap-4">
                                 <div id="avatar"
-                                    class="h-16 w-16 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 text-white grid place-items-center font-bold text-xl shadow-neon">
-                                    U</div>
-                                <div class="text-sm">
-                                    <div id="email" class="text-slate-600 dark:text-slate-300">—</div>
+                                    class="relative overflow-hidden h-16 w-16 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-500 text-white grid place-items-center font-bold text-xl shadow-neon">
+                                    <img id="avatarImg" alt="Profile photo"
+                                        class="hidden absolute inset-0 h-full w-full object-cover" />
+                                    <span id="avatarInitials" class="relative z-10">U</span>
+                                </div>
+                                <div class="text-sm min-w-0">
+                                    <div id="email" class="text-slate-600 dark:text-slate-300 break-words">—</div>
                                     <div id="name" class="font-medium">—</div>
                                 </div>
                             </div>
                             <form id="imageForm" class="grid gap-2">
                                 <label class="text-xs text-slate-500">Profile image</label>
                                 <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp"
-                                    class="text-xs" />
-                                <img id="imagePreview" alt="Profile preview"
-                                    class="hidden h-24 w-24 rounded-lg object-cover border border-slate-200/60 dark:border-white/10" />
-                                <button type="submit"
-                                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 text-xs">
-                                    <span class="material-symbols-rounded text-[18px]">cloud_upload</span> Upload image
-                                </button>
+                                    class="text-xs w-full" />
+                                <div class="text-[11px] text-slate-500">Select an image, then click <span
+                                        class="font-medium">Save Changes</span>.</div>
+                                <button type="submit" class="hidden" aria-hidden="true" tabindex="-1">Upload
+                                    image</button>
                                 <a id="currentImage" href="#" target="_blank" class="text-xs text-brand-600 hidden">View
                                     current</a>
                             </form>
@@ -115,11 +134,11 @@
                             <form id="resumeForm" class="grid gap-2">
                                 <label class="text-xs text-slate-500">Resume (PDF/DOC)</label>
                                 <input id="resumeInput" type="file" accept="application/pdf,.doc,.docx"
-                                    class="text-xs" />
-                                <button type="submit"
-                                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 dark:border-white/10 px-3 py-1.5 hover:border-brand-400/60 text-xs">
-                                    <span class="material-symbols-rounded text-[18px]">cloud_upload</span> Upload resume
-                                </button>
+                                    class="text-xs w-full" />
+                                <div class="text-[11px] text-slate-500">Select a resume, then click <span
+                                        class="font-medium">Save Changes</span>.</div>
+                                <button type="submit" class="hidden" aria-hidden="true" tabindex="-1">Upload
+                                    resume</button>
                                 <a id="currentResume" href="#" target="_blank"
                                     class="text-xs text-brand-600 hidden">View current</a>
                             </form>
@@ -782,6 +801,35 @@
         let collegesCache = [];
         let collegesLoadPromise = null;
         const collegeDetailCache = new Map();
+
+        function setAvatar(initialsText, imageUrl) {
+            const initialsEl = document.getElementById('avatarInitials');
+            const imgEl = document.getElementById('avatarImg');
+            if (initialsEl) initialsEl.textContent = initialsText || 'U';
+            if (!imgEl) return;
+            if (imageUrl) {
+                imgEl.src = imageUrl;
+                imgEl.classList.remove('hidden');
+                if (initialsEl) initialsEl.classList.add('hidden');
+            } else {
+                imgEl.removeAttribute('src');
+                imgEl.classList.add('hidden');
+                if (initialsEl) initialsEl.classList.remove('hidden');
+            }
+        }
+
+        async function uploadProfileAsset(kind, file) {
+            const fd = new FormData();
+            fd.append('kind', kind);
+            fd.append('file', file);
+            const res = await fetch(`${apiBase}/api/profile/upload`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: fd,
+            });
+            const out = await res.json().catch(() => ({}));
+            return { ok: res.ok, out };
+        }
 
         async function loadCollegesList() {
             if (collegesCache.length) return collegesCache;
@@ -1603,7 +1651,7 @@
                 if (!data) return;
                 document.getElementById('name').textContent = data.name || '—';
                 document.getElementById('email').textContent = data.email || '—';
-                document.getElementById('avatar').textContent = initials(data.name);
+                setAvatar(initials(data.name), data.profile_image_url || null);
                 document.getElementById('f_name').value = data.name || '';
                 document.getElementById('f_email_ro').value = data.email || '';
                 document.getElementById('f_headline').value = data.headline || '';
@@ -1664,7 +1712,6 @@
 
                 if (data.profile_image_url) {
                     const a = document.getElementById('currentImage'); a.href = data.profile_image_url; a.classList.remove('hidden');
-                    const img = document.getElementById('imagePreview'); img.src = data.profile_image_url; img.classList.remove('hidden');
                 }
                 if (data.resume_url) { const a = document.getElementById('currentResume'); a.href = data.resume_url; a.classList.remove('hidden'); }
             } finally {
@@ -1679,31 +1726,22 @@
 
         document.getElementById('imageInput').addEventListener('change', (e) => {
             const file = e.target.files && e.target.files[0];
-            const img = document.getElementById('imagePreview');
             if (file) {
                 const url = URL.createObjectURL(file);
-                img.src = url; img.classList.remove('hidden');
+                // Mirror preview into the avatar immediately.
+                setAvatar(document.getElementById('avatarInitials')?.textContent || 'U', url);
             }
         });
 
-        document.getElementById('imageForm').addEventListener('submit', async (e) => {
-            e.preventDefault(); const file = document.getElementById('imageInput').files[0]; if (!file) return;
-            const fd = new FormData(); fd.append('kind', 'image'); fd.append('file', file);
-            const res = await fetch(`${apiBase}/api/profile/upload`, { method: 'POST', headers: authHeaders(), body: fd });
-            const out = await res.json().catch(() => ({}));
-            const st = document.getElementById('status'); st.classList.remove('hidden');
-            st.textContent = res.ok ? '✔ Image uploaded' : `❌ ${out?.detail || 'Upload failed'}`;
-            if (res.ok) loadProfile();
+        // Image is saved via the top "Save Changes" button (details form submit).
+        document.getElementById('imageForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            document.getElementById('detailsForm')?.requestSubmit();
         });
 
         document.getElementById('resumeForm').addEventListener('submit', async (e) => {
-            e.preventDefault(); const file = document.getElementById('resumeInput').files[0]; if (!file) return;
-            const fd = new FormData(); fd.append('kind', 'resume'); fd.append('file', file);
-            const res = await fetch(`${apiBase}/api/profile/upload`, { method: 'POST', headers: authHeaders(), body: fd });
-            const out = await res.json().catch(() => ({}));
-            const st = document.getElementById('status'); st.classList.remove('hidden');
-            st.textContent = res.ok ? '✔ Resume uploaded' : `❌ ${out?.detail || 'Upload failed'}`;
-            if (res.ok) loadProfile();
+            e.preventDefault();
+            document.getElementById('detailsForm')?.requestSubmit();
         });
 
         document.getElementById('saveChangesBtn')?.addEventListener('click', () => {
@@ -1722,6 +1760,31 @@
             }
 
             try {
+                const st = document.getElementById('status');
+                st.classList.remove('hidden');
+
+                // Upload profile image if user selected a new one.
+                const imageFile = document.getElementById('imageInput')?.files?.[0] || null;
+                if (imageFile) {
+                    st.textContent = '⏳ Uploading profile image…';
+                    const up = await uploadProfileAsset('image', imageFile);
+                    if (!up.ok) {
+                        st.textContent = `❌ ${up?.out?.detail || 'Image upload failed'}`;
+                        return;
+                    }
+                }
+
+                // Upload resume if user selected a new one.
+                const resumeFile = document.getElementById('resumeInput')?.files?.[0] || null;
+                if (resumeFile) {
+                    st.textContent = '⏳ Uploading resume…';
+                    const up = await uploadProfileAsset('resume', resumeFile);
+                    if (!up.ok) {
+                        st.textContent = `❌ ${up?.out?.detail || 'Resume upload failed'}`;
+                        return;
+                    }
+                }
+
                 const specs = document.getElementById('f_specs').value.split(',').map(s => s.trim()).filter(Boolean);
                 const experiences = collectExperienceData();
                 const educationEntries = collectEducationData();
@@ -1761,7 +1824,6 @@
                 };
                 const res = await fetch(`${apiBase}/api/profile/me`, { method: 'PUT', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const out = await res.json().catch(() => ({}));
-                const st = document.getElementById('status'); st.classList.remove('hidden');
                 st.textContent = res.ok ? '✔ Profile updated' : `❌ ${out?.detail || 'Update failed'}`;
                 if (res.ok) {
                     window.location.href = 'academicas.html';
