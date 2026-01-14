@@ -13881,14 +13881,14 @@ def api_list_notes(variant: str = Query("detailed")):
         raise HTTPException(status_code=500, detail=f"Failed to list notes: {e}")
 
 
-@notes_router.get("/api/notes/topics/search", summary="Search syllabus topics for autocomplete")
+@notes_router.get("/api/notes/topics/search", summary="Search AI notes topics for autocomplete")
 def api_search_topics(
     q: str = Query("", min_length=0, max_length=120, description="Topic query string"),
     limit: int = Query(12, ge=1, le=50),
 ):
     """Return topic suggestions from DB as the user types.
 
-    Uses Supabase service role client to query `syllabus_topics.topic`.
+    Uses Supabase service role client to query `ai_notes.title`.
     Results are ranked to prefer starts-with matches, then contains matches.
     """
     query = (q or "").strip()
@@ -13899,20 +13899,20 @@ def api_search_topics(
 
     def _fetch_starts():
         return (
-            supabase.table("syllabus_topics")
-            .select("id,topic")
-            .ilike("topic", f"{query}%")
-            .order("topic")
+            supabase.table("ai_notes")
+            .select("id,title")
+            .ilike("title", f"{query}%")
+            .order("title")
             .limit(limit)
             .execute()
         )
 
     def _fetch_contains():
         return (
-            supabase.table("syllabus_topics")
-            .select("id,topic")
-            .ilike("topic", f"%{query}%")
-            .order("topic")
+            supabase.table("ai_notes")
+            .select("id,title")
+            .ilike("title", f"%{query}%")
+            .order("title")
             .limit(max(50, limit * 4))
             .execute()
         )
@@ -13931,7 +13931,7 @@ def api_search_topics(
 
         def add_rows(rows: List[Dict[str, Any]]):
             for row in rows or []:
-                topic = (row.get("topic") or "").strip()
+                topic = (row.get("title") or "").strip()
                 if not topic:
                     continue
                 key = topic.casefold()
