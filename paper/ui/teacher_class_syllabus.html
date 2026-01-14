@@ -252,7 +252,7 @@
             if (mode === 'edit' && unit) {
                 unitTitleInput.value = unit.unit_title || '';
                 topicsContainer.innerHTML = '';
-                (unit.topics || []).forEach(t => addTopicRow(t.topic || t.topic_title || ''));
+                (unit.topics || []).forEach(t => addTopicRow(t.topic || t.topic_title || '', t.id || null));
                 if (unitDeleteBtn) unitDeleteBtn.classList.remove('hidden');
                 syllabusCourse = syllabusCourse || {};
                 syllabusCourse.editingUnitId = unit.id || unit.unit_id;
@@ -265,11 +265,12 @@
             setTimeout(() => unitTitleInput?.focus(), 50);
         }
 
-        function addTopicRow(value = '') {
+        function addTopicRow(value = '', topicId = null) {
             const id = Math.random().toString(36).slice(2, 9);
             const row = document.createElement('div');
             row.className = 'flex items-center gap-2';
             row.setAttribute('data-topic-row', '');
+            if (topicId) row.setAttribute('data-topic-id', String(topicId));
             row.innerHTML = `
                 <button type="button" data-drag-handle aria-label="Drag to reorder"
                     class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 cursor-grab active:cursor-grabbing transition">
@@ -533,8 +534,14 @@
                 unitTitleInput.focus();
                 return;
             }
-            const topicInputs = [...topicsContainer.querySelectorAll('[data-topic-input]')];
-            const topics = topicInputs.map(inp => (inp.value || '').trim()).filter(Boolean).map(t => ({ topic: t }));
+            const rows = [...topicsContainer.querySelectorAll('[data-topic-row]')];
+            const topics = rows.map(row => {
+                const inp = row.querySelector('[data-topic-input]');
+                const topic = (inp?.value || '').trim();
+                const id = row.getAttribute('data-topic-id');
+                if (!topic) return null;
+                return id ? { id, topic } : { topic };
+            }).filter(Boolean);
             const payload = { unit_title, topics };
             unitModalMessage.classList.add('hidden');
             setUnitModalLoading(true);
