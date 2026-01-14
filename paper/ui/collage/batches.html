@@ -271,12 +271,19 @@
                     </label>
                 </div>
                 <p id="batchModalMessage" class="hidden text-sm text-red-500"></p>
-                <div class="flex items-center justify-end gap-3">
-                    <button id="batchModalCancel" type="button"
-                        class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">Cancel</button>
-                    <button id="batchSubmitBtn" type="submit"
-                        class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition">Save
-                        batch</button>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <button id="batchDeleteBtn" type="button"
+                        class="hidden inline-flex items-center justify-center gap-2 rounded-full border border-red-300/60 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200 px-4 py-2 text-sm font-medium hover:border-red-400/80 transition">
+                        <span class="material-symbols-rounded text-base">delete</span>
+                        Delete
+                    </button>
+                    <div class="flex items-center gap-3 ml-auto">
+                        <button id="batchModalCancel" type="button"
+                            class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">Cancel</button>
+                        <button id="batchSubmitBtn" type="submit"
+                            class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition">Save
+                            batch</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -330,19 +337,98 @@
             }
         })();
         const results = document.getElementById('results'); const titleEl = document.getElementById('pageTitle'); const subtitleEl = document.getElementById('pageSubtitle'); const breadcrumbsEl = document.getElementById('breadcrumbs'); const addBatchBtn = document.getElementById('addBatchBtn');
-        const batchModal = document.getElementById('batchModal'); const batchModalBackdrop = document.getElementById('batchModalBackdrop'); const batchModalTitle = document.getElementById('batchModalTitle'); const batchForm = document.getElementById('batchForm'); const batchFromYearInput = document.getElementById('batchFromYear'); const batchToYearInput = document.getElementById('batchToYear'); const batchModalMessage = document.getElementById('batchModalMessage'); const batchModalCancel = document.getElementById('batchModalCancel'); const batchModalClose = document.getElementById('batchModalClose'); const batchSubmitBtn = document.getElementById('batchSubmitBtn');
+        const batchModal = document.getElementById('batchModal'); const batchModalBackdrop = document.getElementById('batchModalBackdrop'); const batchModalTitle = document.getElementById('batchModalTitle'); const batchForm = document.getElementById('batchForm'); const batchFromYearInput = document.getElementById('batchFromYear'); const batchToYearInput = document.getElementById('batchToYear'); const batchModalMessage = document.getElementById('batchModalMessage'); const batchModalCancel = document.getElementById('batchModalCancel'); const batchModalClose = document.getElementById('batchModalClose'); const batchSubmitBtn = document.getElementById('batchSubmitBtn'); const batchDeleteBtn = document.getElementById('batchDeleteBtn');
         let batchesCache = []; let batchModalMode = 'add'; let editingBatchId = null;
+
+        const deleteBtnDefaultHTML = `<span class="material-symbols-rounded text-base">delete</span>Delete`;
         function makeBreadcrumb(items) { if (!Array.isArray(items)) return ''; return items.map((item, idx) => { if (!item) return ''; if (item.href && idx !== items.length - 1) { return `<a href="${item.href}" class="hover:text-brand-500 dark:hover:text-white">${Collage.escapeHtml(item.label || item.text || '')}</a>`; } return `<span class="text-neutral-900 dark:text-white font-medium">${Collage.escapeHtml(item.label || item.text || '')}</span>`; }).filter(Boolean).join('<span class="text-neutral-400 dark:text-white/40">/</span>'); }
         function showLoader() { results.innerHTML = `<div class=\"col-span-full flex items-center justify-center py-16\"><div class=\"h-12 w-12 animate-spin rounded-full border-2 border-brand-500/30 border-t-transparent\"></div></div>`; }
         function showError(message) { results.innerHTML = `<div class=\"col-span-full rounded-3xl border border-red-400/35 bg-red-100/70 dark:bg-red-500/10 dark:border-red-400/25 p-8 shadow-soft\"><h2 class=\"text-lg font-semibold text-red-700 dark:text-red-200\">Unable to load batches</h2><p class=\"mt-2 text-sm text-red-600/85 dark:text-red-200/80\">${Collage.escapeHtml(message || 'Please check the URL parameters and try again.')}</p></div>`; }
         function showEmpty() { results.innerHTML = `<div class=\"col-span-full rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur p-8 text-sm text-neutral-600 dark:text-white/65\"><h2 class=\"text-lg font-semibold text-neutral-900 dark:text-white\">No batches found</h2><p class=\"mt-2\">Create batches for this department to continue drilling down into subjects.</p></div>`; }
-        function resetBatchModal() { batchForm?.reset(); batchModalMessage.textContent = ''; batchModalMessage.classList.add('hidden'); batchModalMode = 'add'; editingBatchId = null; batchSubmitBtn.innerHTML = '<span class="material-symbols-rounded text-base">save</span>Save batch'; }
+        function resetBatchModal() {
+            batchForm?.reset();
+            batchModalMessage.textContent = '';
+            batchModalMessage.classList.add('hidden');
+            batchModalMode = 'add';
+            editingBatchId = null;
+            batchSubmitBtn.innerHTML = '<span class="material-symbols-rounded text-base">save</span>Save batch';
+            if (batchDeleteBtn) {
+                batchDeleteBtn.classList.add('hidden');
+                batchDeleteBtn.disabled = false;
+                batchDeleteBtn.innerHTML = deleteBtnDefaultHTML;
+            }
+        }
         function setBatchModalLoading(isLoading) { batchSubmitBtn.disabled = isLoading; batchSubmitBtn.innerHTML = isLoading ? '<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Saving…' : (batchModalMode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save batch'); }
+
+        function setBatchDeleteLoading(isLoading) {
+            if (!batchDeleteBtn) return;
+            batchDeleteBtn.disabled = isLoading;
+            batchModalCancel.disabled = isLoading;
+            batchSubmitBtn.disabled = isLoading;
+            batchDeleteBtn.innerHTML = isLoading
+                ? '<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Deleting…'
+                : deleteBtnDefaultHTML;
+        }
         function closeBatchModal() { batchModal.classList.add('hidden'); document.body.classList.remove('overflow-hidden'); resetBatchModal(); }
-        function openBatchModal(mode = 'add', batch) { if (!departmentId) return; resetBatchModal(); batchModalMode = mode; if (mode === 'edit' && batch) { editingBatchId = batch.id; batchFromYearInput.value = batch.from_year; batchToYearInput.value = batch.to_year; } const deptLabel = departmentName || 'this department'; batchModalTitle.textContent = mode === 'edit' ? 'Edit batch' : `Add a new batch for ${deptLabel}`; batchSubmitBtn.innerHTML = mode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save batch'; batchModal.classList.remove('hidden'); document.body.classList.add('overflow-hidden'); setTimeout(() => { (mode === 'edit' ? batchFromYearInput : batchFromYearInput)?.focus(); }, 80); }
+        function openBatchModal(mode = 'add', batch) {
+            if (!departmentId) return;
+            resetBatchModal();
+            batchModalMode = mode;
+            if (mode === 'edit' && batch) {
+                editingBatchId = batch.id;
+                batchFromYearInput.value = batch.from_year;
+                batchToYearInput.value = batch.to_year;
+            }
+            const deptLabel = departmentName || 'this department';
+            batchModalTitle.textContent = mode === 'edit' ? 'Edit batch' : `Add a new batch for ${deptLabel}`;
+            batchSubmitBtn.innerHTML = mode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save batch';
+            if (batchDeleteBtn) {
+                if (mode === 'edit') batchDeleteBtn.classList.remove('hidden');
+                else batchDeleteBtn.classList.add('hidden');
+                batchDeleteBtn.disabled = false;
+                batchDeleteBtn.innerHTML = deleteBtnDefaultHTML;
+            }
+            batchModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => { (mode === 'edit' ? batchFromYearInput : batchFromYearInput)?.focus(); }, 80);
+        }
         function validateBatchYears(fromYear, toYear) { if (!Number.isInteger(fromYear) || !Number.isInteger(toYear)) return 'Enter both from and to years.'; if (fromYear < 1950 || fromYear > 2100 || toYear < 1950 || toYear > 2100) return 'Year range must be between 1950 and 2100.'; if (toYear < fromYear) return 'Ending year must be greater than or equal to the starting year.'; return ''; }
         async function handleBatchSubmit(e) { e.preventDefault(); if (!departmentId) { batchModalMessage.textContent = 'Missing department context. Please navigate from the departments page again.'; batchModalMessage.classList.remove('hidden'); return; } const fromYear = Number.parseInt(batchFromYearInput.value, 10); const toYear = Number.parseInt(batchToYearInput.value, 10); const v = validateBatchYears(fromYear, toYear); if (v) { batchModalMessage.textContent = v; batchModalMessage.classList.remove('hidden'); (Number.isInteger(fromYear) ? batchToYearInput : batchFromYearInput).focus(); return; } batchModalMessage.classList.add('hidden'); setBatchModalLoading(true); const payload = { from: fromYear, to: toYear }; try { if (batchModalMode === 'edit' && editingBatchId) { await Collage.fetchJson(`/api/batches/${editingBatchId}`, { method: 'PUT', body: payload, skipAuth: true }); } else { await Collage.fetchJson(`/api/departments/${departmentId}/batches`, { method: 'POST', body: payload, skipAuth: true }); } closeBatchModal(); await loadBatches(); } catch (error) { let message = error?.message ?? 'Unable to save batch. Please try again.'; if (typeof message !== 'string') { try { message = JSON.stringify(message); } catch (_) { message = 'Unable to save batch. Please try again.'; } } if (message === '[object Object]') message = 'Unexpected response from server. Please try again.'; batchModalMessage.textContent = message; batchModalMessage.classList.remove('hidden'); console.error(error); } finally { setBatchModalLoading(false); } }
-        function initBatchModal() { if (!addBatchBtn) return; if (!departmentId) { addBatchBtn.disabled = true; addBatchBtn.classList.add('opacity-60', 'cursor-not-allowed'); } addBatchBtn.addEventListener('click', () => openBatchModal('add')); batchModalCancel?.addEventListener('click', closeBatchModal); batchModalClose?.addEventListener('click', closeBatchModal); batchModalBackdrop?.addEventListener('click', closeBatchModal); batchForm?.addEventListener('submit', handleBatchSubmit); document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !batchModal.classList.contains('hidden')) closeBatchModal(); }); }
+
+        async function handleBatchDelete() {
+            if (!editingBatchId) return;
+            const ok = window.confirm('Delete this batch and its subjects? This cannot be undone.');
+            if (!ok) return;
+            setBatchDeleteLoading(true);
+            batchModalMessage.classList.add('hidden');
+            try {
+                await Collage.fetchJson(`/api/batches/${editingBatchId}`, { method: 'DELETE', skipAuth: true });
+                closeBatchModal();
+                await loadBatches();
+            } catch (error) {
+                let message = error?.message ?? 'Unable to delete batch. Please try again.';
+                if (typeof message !== 'string') {
+                    try { message = JSON.stringify(message); } catch (_) { message = 'Unable to delete batch. Please try again.'; }
+                }
+                if (message === '[object Object]') message = 'Unexpected response from server. Please try again.';
+                batchModalMessage.textContent = message;
+                batchModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setBatchDeleteLoading(false);
+            }
+        }
+        function initBatchModal() {
+            if (!addBatchBtn) return;
+            if (!departmentId) { addBatchBtn.disabled = true; addBatchBtn.classList.add('opacity-60', 'cursor-not-allowed'); }
+            addBatchBtn.addEventListener('click', () => openBatchModal('add'));
+            batchModalCancel?.addEventListener('click', closeBatchModal);
+            batchModalClose?.addEventListener('click', closeBatchModal);
+            batchModalBackdrop?.addEventListener('click', closeBatchModal);
+            batchForm?.addEventListener('submit', handleBatchSubmit);
+            batchDeleteBtn?.addEventListener('click', handleBatchDelete);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !batchModal.classList.contains('hidden')) closeBatchModal(); });
+        }
         function attachBatchEditHandlers() { results.querySelectorAll('[data-batch-edit]').forEach(btn => { btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const id = btn.getAttribute('data-batch-edit'); const batch = batchesCache.find(b => String(b.id) === String(id)); if (batch) openBatchModal('edit', batch); }); }); }
         function attachBatchCardNavigation() { results.querySelectorAll('[data-batch-card]').forEach(card => { const href = card.getAttribute('data-batch-card'); if (!href) return; card.addEventListener('click', e => { if (e.target.closest('[data-batch-edit]')) return; if (e.target.closest('a')) return; window.location.href = href; }); card.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-batch-edit]')) { e.preventDefault(); window.location.href = href; } }); }); }
         async function loadBatches() {

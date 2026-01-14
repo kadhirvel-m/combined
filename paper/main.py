@@ -2041,6 +2041,16 @@ class TopicIn(BaseModel):
         return trimmed
 
 
+class TopicUpsertIn(TopicIn):
+    """Topic payload for unit create/update.
+
+    When `id` is provided, the server updates that existing topic row.
+    When `id` is omitted, the server inserts a new topic row.
+    """
+
+    id: Optional[uuid.UUID] = None
+
+
 class UnitIn(BaseModel):
     unit_title: str = Field(..., min_length=1)
     topics: List[TopicIn]
@@ -2150,7 +2160,7 @@ class SyllabusCourseSimpleUpdateIn(SyllabusCourseSimpleBase):
 
 class UnitTopicsIn(BaseModel):
     unit_title: str = Field(..., min_length=1, max_length=256)
-    topics: List[TopicIn] = Field(default_factory=list)
+    topics: List[TopicUpsertIn] = Field(default_factory=list)
 
     @validator("unit_title", pre=True)
     def _normalize_unit_title(cls, value: Any):  # noqa: N805
@@ -6115,6 +6125,10 @@ def list_admin_users(
     if uniq_profile_ids:
         # Try with order_index if present, else fallback.
         edu_select_try = [
+            "user_profile_id,department_id,batch_id,college_id,degree_id,section,current_semester,regno,order_index,created_at",
+            "user_profile_id,department_id,batch_id,college_id,degree_id,section,current_semester,regno,created_at",
+            "user_profile_id,department_id,batch_id,college_id,degree_id,current_semester,regno,order_index,created_at",
+            "user_profile_id,department_id,batch_id,college_id,degree_id,current_semester,regno,created_at",
             "user_profile_id,department_id,batch_id,college_id,section,current_semester,regno,order_index,created_at",
             "user_profile_id,department_id,batch_id,college_id,section,current_semester,regno,created_at",
             "user_profile_id,department_id,batch_id,college_id,current_semester,regno,order_index,created_at",
@@ -6132,6 +6146,8 @@ def list_admin_users(
             except Exception as e:
                 msg = str(e)
                 if "order_index" in sel and "order_index" in msg:
+                    continue
+                if "degree_id" in sel and "degree_id" in msg:
                     continue
                 # If user_education doesn't exist or query fails, just skip education enrichment.
                 edu_rows = []
@@ -6165,13 +6181,15 @@ def list_admin_users(
             if not prev or _edu_rank(ed) < _edu_rank(prev):
                 edu_map[pid] = ed
 
-    # Preload department + batch + college info to enrich output
+    # Preload department + batch + college + degree info to enrich output
     dept_ids = {ed.get("department_id") for ed in edu_map.values() if ed.get("department_id")}
     batch_ids = {ed.get("batch_id") for ed in edu_map.values() if ed.get("batch_id")}
     college_ids = {ed.get("college_id") for ed in edu_map.values() if ed.get("college_id")}
+    degree_ids = {ed.get("degree_id") for ed in edu_map.values() if ed.get("degree_id")}
     dept_map: Dict[str, dict] = {}
     batch_map: Dict[str, dict] = {}
     college_map: Dict[str, dict] = {}
+    degree_map: Dict[str, dict] = {}
     role_map: Dict[str, str] = {}
     if dept_ids:
         dres = supabase.table("departments").select("id,name").in_("id", list(dept_ids)).execute()
@@ -6188,6 +6206,11 @@ def list_admin_users(
         if not getattr(cres, "error", None):
             for c in cres.data or []:
                 college_map[c.get("id")] = c
+    if degree_ids:
+        gres = supabase.table("degrees").select("id,name").in_("id", list(degree_ids)).execute()
+        if not getattr(gres, "error", None):
+            for g in gres.data or []:
+                degree_map[g.get("id")] = g
     try:
         if uniq_ids:
             rres = supabase.table("admin_roles").select("auth_user_id,role").in_("auth_user_id", uniq_ids).execute()
@@ -6263,6 +6286,7 @@ def list_admin_users(
         dept = dept_map.get(edu.get("department_id")) if edu.get("department_id") else {}
         batch = batch_map.get(edu.get("batch_id")) if edu.get("batch_id") else {}
         college = college_map.get(edu.get("college_id")) if edu.get("college_id") else {}
+        degree = degree_map.get(edu.get("degree_id")) if edu.get("degree_id") else {}
         semester_val = r.get("semester") if r.get("semester") is not None else edu.get("current_semester")
         regno_val = r.get("regno") if r.get("regno") else edu.get("regno")
         user_id_val = r.get("auth_user_id")
@@ -6280,6 +6304,7 @@ def list_admin_users(
             "semester": semester_val,
             "regno": regno_val,
             "college": college.get("name") if college else None,
+            "degree": degree.get("name") if degree else None,
             "department": dept.get("name") if dept else None,
             "section": edu.get("section") if edu else None,
             "batch_from": batch.get("from_year") if batch else None,
@@ -6371,6 +6396,40 @@ class RoleUpdateIn(BaseModel):
     role: str
 
 
+class AdminAcademicUpdateIn(BaseModel):
+    # Optional FK ids (preferred when known)
+    college_id: Optional[str] = None
+    degree_id: Optional[str] = None
+    department_id: Optional[str] = None
+    batch_id: Optional[str] = None
+
+    college_name: Optional[str] = None
+    degree_name: Optional[str] = None
+    department_name: Optional[str] = None
+    batch_from: Optional[int] = Field(default=None, ge=1900, le=2100)
+    batch_to: Optional[int] = Field(default=None, ge=1900, le=2100)
+    batch_range: Optional[str] = None  # e.g. "2022-2026"
+    section: Optional[str] = None
+    semester: Optional[int] = Field(default=None, ge=1, le=12)
+    regno: Optional[str] = None
+
+    @validator(
+        "college_id",
+        "degree_id",
+        "department_id",
+        "batch_id",
+        "college_name",
+        "degree_name",
+        "department_name",
+        "batch_range",
+        "section",
+        "regno",
+        pre=True,
+    )
+    def _trim_admin_academic(cls, v: Any):  # noqa: N805
+        return _strip_or_none(v)
+
+
 def _get_auth_user(authorization: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
     token = _parse_bearer_token(authorization)
     if not token:
@@ -6410,6 +6469,198 @@ def _count_admins(supabase) -> int:
 
 
 VALID_ROLES = {"admin", "teacher", "student", "moderator", "employee"}
+
+
+def _admin_pick_primary_education_row(supabase, profile_id: str) -> Optional[dict]:
+    try:
+        res = (
+            supabase.table("user_education")
+            .select("id,order_index,created_at")
+            .eq("user_profile_id", profile_id)
+            .limit(50)
+            .execute()
+        )
+    except Exception:
+        return None
+    if getattr(res, "error", None) or not getattr(res, "data", None):
+        return None
+    rows = [r for r in (res.data or []) if isinstance(r, dict) and r.get("id")]
+    if not rows:
+        return None
+
+    def _rank(ed: dict) -> Tuple[int, float]:
+        oi_raw = ed.get("order_index")
+        try:
+            oi = int(oi_raw) if oi_raw is not None else 9999
+        except Exception:
+            oi = 9999
+        ts = 0.0
+        try:
+            if ed.get("created_at"):
+                ts = datetime.fromisoformat(str(ed.get("created_at")).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            ts = 0.0
+        return (oi, -ts)
+
+    rows.sort(key=_rank)
+    return rows[0]
+
+
+def _admin_safe_update_user_education(supabase, edu_id: str, updates: Dict[str, Any]):
+    """Best-effort update: retries by dropping unknown columns if schema differs."""
+    if not updates:
+        return
+    retry_payload = dict(updates)
+    for _attempt in range(3):
+        try:
+            upd = supabase.table("user_education").update(retry_payload).eq("id", edu_id).execute()
+        except APIError as exc:
+            err_message = getattr(exc, "message", None) or getattr(exc, "details", None) or str(exc)
+            lower_msg = (err_message or "").lower()
+            # Undefined column (Postgres 42703)
+            if getattr(exc, "code", None) == "42703" or "42703" in lower_msg or "column" in lower_msg and "does not exist" in lower_msg:
+                # Drop likely FK columns first
+                removed = False
+                for k in ("college_id", "degree_id", "department_id", "batch_id"):
+                    if k in retry_payload:
+                        retry_payload.pop(k, None)
+                        removed = True
+                if removed:
+                    continue
+            raise HTTPException(status_code=500, detail=f"Supabase error (update education): {err_message}")
+        if getattr(upd, "error", None):
+            msg = str(upd.error)
+            lowered = msg.lower()
+            if ("42703" in lowered) or ("does not exist" in lowered and "column" in lowered):
+                removed = False
+                for k in ("college_id", "degree_id", "department_id", "batch_id"):
+                    if k in retry_payload:
+                        retry_payload.pop(k, None)
+                        removed = True
+                if removed:
+                    continue
+            raise HTTPException(status_code=500, detail=f"Supabase error (update education): {msg}")
+        break
+
+
+@academics_router.post("/api/admin/users/{auth_user_id}/academic", summary="Admin: update user's academic/education details")
+def admin_update_user_academic(
+    auth_user_id: str,
+    payload: AdminAcademicUpdateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin(authorization)
+    supabase = get_service_client()
+
+    # Resolve profile id
+    prof_q = (
+        supabase.table("user_profiles")
+        .select("id")
+        .eq("auth_user_id", auth_user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(prof_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get profile): {prof_q.error}")
+    if not prof_q.data:
+        raise HTTPException(status_code=404, detail="User profile not found")
+    profile_id = prof_q.data[0].get("id")
+    if not profile_id:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    data = payload.dict(exclude_unset=True)
+    # Update basic user_profiles fields when present
+    prof_updates: Dict[str, Any] = {}
+    if data.get("semester") is not None:
+        prof_updates["semester"] = data.get("semester")
+    if data.get("regno") is not None:
+        prof_updates["regno"] = data.get("regno")
+    if prof_updates:
+        upd = supabase.table("user_profiles").update(_supabase_payload(prof_updates)).eq("id", profile_id).execute()
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (update profile academic): {upd.error}")
+
+    # Prepare a single education row (for FK resolution) without wiping other rows
+    school = data.get("college_name")
+    college_id = data.get("college_id")
+    degree_name = data.get("degree_name")
+    degree_id = data.get("degree_id")
+    dept = data.get("department_name")
+    department_id = data.get("department_id")
+    batch_id = data.get("batch_id")
+    section = data.get("section")
+    regno = data.get("regno")
+    current_semester = data.get("semester")
+
+    if not school and college_id:
+        try:
+            cres = supabase.table("colleges").select("name").eq("id", college_id).limit(1).execute()
+            if not getattr(cres, "error", None) and (cres.data or []):
+                school = cres.data[0].get("name")
+        except Exception:
+            pass
+
+    batch_range = data.get("batch_range")
+    if not batch_range:
+        bf = data.get("batch_from")
+        bt = data.get("batch_to")
+        if bf is not None and bt is not None:
+            batch_range = f"{int(bf)}-{int(bt)}"
+
+    edu_in = {
+        "school": school or "",
+        "degree": degree_name,
+        "department": dept,
+        "batch_range": batch_range,
+        "section": section,
+        "regno": regno,
+        "current_semester": current_semester,
+        "grade": None,
+        "activities": None,
+        "description": None,
+        "college_id": college_id,
+        "degree_id": degree_id,
+        "department_id": department_id,
+        "batch_id": batch_id,
+    }
+
+    prepared_list = _prepare_education_rows([edu_in])
+    if not prepared_list:
+        # If admin didn't provide college_name, we can't build education entry; still allow profile update.
+        return {"ok": True, "updated": True, "auth_user_id": auth_user_id, "profile_id": profile_id, "education_updated": False}
+
+    prepared = dict(prepared_list[0])
+    # Remove fields not in user_education table payload
+    prepared.pop("id", None)
+    prepared.pop("updated_at", None)
+    # Ensure we don't set null-like empty strings
+    edu_updates = {k: v for k, v in prepared.items() if v is not None}
+    edu_updates["updated_at"] = datetime.utcnow().isoformat()
+
+    # Update primary education row, or insert if missing
+    primary = _admin_pick_primary_education_row(supabase, profile_id)
+    if primary and primary.get("id"):
+        _admin_safe_update_user_education(supabase, primary["id"], edu_updates)
+        edu_row_id = primary["id"]
+    else:
+        insert_payload = {**edu_updates, "user_profile_id": profile_id}
+        if "order_index" not in insert_payload:
+            insert_payload["order_index"] = 0
+        ins = supabase.table("user_education").insert(insert_payload).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert education): {ins.error}")
+        # Try refetch
+        ref = _admin_pick_primary_education_row(supabase, profile_id)
+        edu_row_id = (ref.get("id") if ref else None)
+
+    return {
+        "ok": True,
+        "updated": True,
+        "auth_user_id": auth_user_id,
+        "profile_id": profile_id,
+        "education_updated": True,
+        "user_education_id": edu_row_id,
+    }
 
 
 @academics_router.post("/api/admin/users/{auth_user_id}/role", summary="Admin: update a user's role")
@@ -8883,6 +9134,53 @@ def update_batch(batch_id: uuid.UUID, payload: BatchIn):
     return BatchWithIdOut(id=batch_id, from_year=payload.from_year, to_year=payload.to_year)
 
 
+@academics_router.delete(
+    "/api/batches/{batch_id}",
+    summary="Delete a batch and related syllabus data",
+)
+def delete_batch(batch_id: uuid.UUID):
+    supabase = get_service_client()
+
+    batch_res = (
+        supabase.table("batches")
+        .select("id")
+        .eq("id", str(batch_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(batch_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find batch): {batch_res.error}")
+    if not batch_res.data:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    deleted_courses = 0
+    course_res = (
+        supabase.table("syllabus_courses")
+        .select("id")
+        .eq("batch_id", str(batch_id))
+        .execute()
+    )
+    if getattr(course_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list courses for batch): {course_res.error}")
+
+    for course_row in course_res.data or []:
+        course_id_str = course_row.get("id")
+        if not course_id_str:
+            continue
+        delete_course_cascade(uuid.UUID(course_id_str))
+        deleted_courses += 1
+
+    del_res = supabase.table("batches").delete().eq("id", str(batch_id)).execute()
+    if getattr(del_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete batch): {del_res.error}")
+
+    return {
+        "ok": True,
+        "deleted_batch_id": str(batch_id),
+        "deleted_courses": deleted_courses,
+    }
+
+
 @academics_router.post(
     "/api/batches/{batch_id}/courses",
     response_model=SyllabusCourseSummaryOut,
@@ -9544,22 +9842,103 @@ def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
             raise HTTPException(status_code=409, detail="Another unit with this title already exists for this course.")
         raise HTTPException(status_code=500, detail=f"Supabase error (update unit): {upd.error}")
 
-    del_res = supabase.table("syllabus_topics").delete().eq("unit_id", str(unit_id)).execute()
-    if getattr(del_res, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (delete topics): {del_res.error}")
+    # --- Update topics without wiping per-topic URL fields ---
+    # Strategy:
+    # 1) If client sends topic IDs, upsert by ID and delete removed IDs.
+    # 2) If no IDs are sent (legacy clients), fall back to positional update to
+    #    preserve URLs as much as possible.
 
-    topic_rows = [
-        {
-            "unit_id": str(unit_id),
-            "topic": topic.topic,
-            "order_in_unit": index,
-        }
-        for index, topic in enumerate(payload.topics or [])
-    ]
-    if topic_rows:
-        tins = supabase.table("syllabus_topics").insert(topic_rows).execute()
-        if getattr(tins, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (insert topics): {tins.error}")
+    existing_q = (
+        supabase.table("syllabus_topics")
+        .select("id,order_in_unit")
+        .eq("unit_id", str(unit_id))
+        .order("order_in_unit")
+        .execute()
+    )
+    if getattr(existing_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list existing topics): {existing_q.error}")
+    existing_rows = existing_q.data or []
+    existing_ids: List[str] = [r.get("id") for r in existing_rows if r.get("id")]
+    existing_id_set: Set[str] = set(existing_ids)
+
+    incoming_topics = payload.topics or []
+    incoming_ids: List[str] = [str(t.id) for t in incoming_topics if getattr(t, "id", None)]
+    incoming_id_set: Set[str] = set(incoming_ids)
+    any_ids_provided = bool(incoming_id_set)
+
+    def _delete_topics_and_progress(topic_ids: List[str]) -> None:
+        if not topic_ids:
+            return
+        for i in range(0, len(topic_ids), 100):
+            chunk = topic_ids[i : i + 100]
+            prog_del = (
+                supabase.table("user_topic_progress")
+                .delete()
+                .in_("topic_id", chunk)
+                .execute()
+            )
+            if getattr(prog_del, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (delete progress): {prog_del.error}")
+
+        t_del = supabase.table("syllabus_topics").delete().in_("id", topic_ids).execute()
+        if getattr(t_del, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete topics): {t_del.error}")
+
+    if any_ids_provided:
+        # Update or insert each topic row
+        for index, topic in enumerate(incoming_topics):
+            tid = getattr(topic, "id", None)
+            if tid is not None and str(tid) in existing_id_set:
+                upd_t = (
+                    supabase.table("syllabus_topics")
+                    .update({"topic": topic.topic, "order_in_unit": index})
+                    .eq("id", str(tid))
+                    .eq("unit_id", str(unit_id))
+                    .execute()
+                )
+                if getattr(upd_t, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (update topic): {upd_t.error}")
+            else:
+                ins_t = (
+                    supabase.table("syllabus_topics")
+                    .insert({"unit_id": str(unit_id), "topic": topic.topic, "order_in_unit": index})
+                    .execute()
+                )
+                if getattr(ins_t, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (insert topic): {ins_t.error}")
+
+        # Delete topics that were removed from the unit
+        removed = sorted(existing_id_set - incoming_id_set)
+        _delete_topics_and_progress(removed)
+    else:
+        # Legacy client path: positional update to avoid wiping URL fields.
+        existing_pos_ids = [r.get("id") for r in existing_rows if r.get("id")]
+        keep_count = min(len(existing_pos_ids), len(incoming_topics))
+        for index in range(keep_count):
+            tid = existing_pos_ids[index]
+            topic = incoming_topics[index]
+            upd_t = (
+                supabase.table("syllabus_topics")
+                .update({"topic": topic.topic, "order_in_unit": index})
+                .eq("id", str(tid))
+                .eq("unit_id", str(unit_id))
+                .execute()
+            )
+            if getattr(upd_t, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (update topic): {upd_t.error}")
+
+        for index in range(keep_count, len(incoming_topics)):
+            topic = incoming_topics[index]
+            ins_t = (
+                supabase.table("syllabus_topics")
+                .insert({"unit_id": str(unit_id), "topic": topic.topic, "order_in_unit": index})
+                .execute()
+            )
+            if getattr(ins_t, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (insert topic): {ins_t.error}")
+
+        removed = existing_pos_ids[keep_count:]
+        _delete_topics_and_progress([str(tid) for tid in removed if tid])
 
     return load_unit_with_topics(unit_id)
 
