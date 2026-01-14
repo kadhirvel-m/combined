@@ -446,6 +446,17 @@
                 </div>`;
         }
 
+        function showAccessDenied(message) {
+            try { addUnitBtn?.classList.add('hidden'); } catch (_) { }
+            try { contextPanel?.classList.add('hidden'); } catch (_) { }
+            setResultsMinHeight(0);
+            if (window.Collage && typeof window.Collage.renderAccessDenied === 'function') {
+                window.Collage.renderAccessDenied(results, message || 'You need an admin or employee account to access the college console.');
+            } else {
+                showError(message || 'Access denied');
+            }
+        }
+
         function renderContext() {
             const parts = [
                 courseCode ? `<span class="font-semibold">${Collage.escapeHtml(courseCode)}</span>` : '',
@@ -1076,7 +1087,22 @@
         }
 
         addUnitBtn.addEventListener('click', () => openUnitModal('add'));
-        document.addEventListener('DOMContentLoaded', () => { loadSyllabus(); });
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                if (window.Collage && window.Collage.requireAdminOrEmployee) {
+                    await window.Collage.requireAdminOrEmployee();
+                }
+                loadSyllabus();
+            } catch (err) {
+                console.error(err);
+                const status = err?.status;
+                if (status === 401 || status === 403) {
+                    showAccessDenied('You need an admin or employee account to access the college console.');
+                } else {
+                    showError(err?.message || 'Unexpected error');
+                }
+            }
+        });
     </script>
     <script>
         // Theme

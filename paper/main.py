@@ -8590,6 +8590,133 @@ def update_degree(degree_id: uuid.UUID, payload: DegreeSimpleCreateIn):
     raise HTTPException(status_code=404, detail="Updated degree not found in college snapshot.")
 
 
+def _check_department_delete_blockers(supabase: Client, department_id: str) -> List[str]:
+    """Return list of human-readable blockers for deleting a department id."""
+    blocking_sources: List[str] = []
+    dependency_checks = [
+        ("marketplace_notes", "marketplace notes", "department_id"),
+        ("teacher_applications", "teacher applications", "department_id"),
+        ("teacher_classes", "teacher classes", "department_id"),
+        ("teacher_profiles", "teacher profiles", "department_id"),
+        ("user_education", "user education records", "department_id"),
+    ]
+    for table_name, label, column in dependency_checks:
+        check = (
+            supabase.table(table_name)
+            .select(column)
+            .eq(column, str(department_id))
+            .limit(1)
+            .execute()
+        )
+        if getattr(check, "error", None):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Supabase error (check {label} for department): {check.error}",
+            )
+        if check.data:
+            blocking_sources.append(label)
+    return blocking_sources
+
+
+@academics_router.delete(
+    "/api/degrees/{degree_id}",
+    summary="Delete a degree, its departments, batches, and related syllabus data",
+)
+def delete_degree(degree_id: uuid.UUID):
+    supabase = get_service_client()
+
+    deg_res = (
+        supabase.table("degrees")
+        .select("id,college_id,name")
+        .eq("id", str(degree_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(deg_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find degree): {deg_res.error}")
+    if not deg_res.data:
+        raise HTTPException(status_code=404, detail="Degree not found")
+
+    deg_row = deg_res.data[0]
+    college_id_str = deg_row.get("college_id")
+    if not college_id_str:
+        raise HTTPException(status_code=400, detail="Degree missing college reference")
+
+    # Block deletion if other products depend on the degree directly
+    direct_blockers: List[str] = []
+    for table_name, label, column in (
+        ("teacher_classes", "teacher classes", "degree_id"),
+        ("user_education", "user education records", "degree_id"),
+    ):
+        check = supabase.table(table_name).select(column).eq(column, str(degree_id)).limit(1).execute()
+        if getattr(check, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (check {label} for degree): {check.error}")
+        if check.data:
+            direct_blockers.append(label)
+
+    if direct_blockers:
+        formatted = ", ".join(direct_blockers)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete degree because related data exists: {formatted}. Remove or reassign those records first.",
+        )
+
+    dept_res = (
+        supabase.table("departments")
+        .select("id,name")
+        .eq("degree_id", str(degree_id))
+        .execute()
+    )
+    if getattr(dept_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list departments for degree): {dept_res.error}")
+
+    # Check blockers per department before any deletion
+    per_dept_blockers: Dict[str, List[str]] = {}
+    for dept_row in dept_res.data or []:
+        dept_id = dept_row.get("id")
+        if not dept_id:
+            continue
+        blockers = _check_department_delete_blockers(supabase, dept_id)
+        if blockers:
+            per_dept_blockers[dept_row.get("name") or dept_id] = blockers
+
+    if per_dept_blockers:
+        # Keep message short but actionable
+        names = ", ".join(list(per_dept_blockers.keys())[:5])
+        suffix = "" if len(per_dept_blockers) <= 5 else f" (+{len(per_dept_blockers) - 5} more)"
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete degree because related data exists under departments: {names}{suffix}. Remove or reassign those records first.",
+        )
+
+    stats = {"departments": 0, "batches": 0, "courses": 0}
+    for dept_row in dept_res.data or []:
+        dept_id_str = dept_row.get("id")
+        if not dept_id_str:
+            continue
+        dept_uuid = uuid.UUID(dept_id_str)
+        batch_stats = _cascade_delete_department_batches(supabase, dept_uuid)
+        stats["batches"] += int(batch_stats.get("batches", 0))
+        stats["courses"] += int(batch_stats.get("courses", 0))
+
+        del_dept = supabase.table("departments").delete().eq("id", dept_id_str).execute()
+        if getattr(del_dept, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete department): {del_dept.error}")
+        stats["departments"] += 1
+
+    del_deg = supabase.table("degrees").delete().eq("id", str(degree_id)).execute()
+    if getattr(del_deg, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete degree): {del_deg.error}")
+
+    return {
+        "ok": True,
+        "deleted_degree_id": str(degree_id),
+        "deleted_departments": stats["departments"],
+        "deleted_batches": stats["batches"],
+        "deleted_courses": stats["courses"],
+    }
+
+
 @academics_router.post(
     "/api/degrees/{degree_id}/departments",
     response_model=DepartmentWithBatchesOut,
@@ -8860,6 +8987,115 @@ def rename_college(college_id: uuid.UUID, payload: CollegeNameOnlyIn):
         raise HTTPException(status_code=404, detail="College not found")
     row = ref.data[0]
     return College(id=uuid.UUID(row["id"]), name=row["name"])
+
+
+@academics_router.delete(
+    "/api/colleges/{college_id}",
+    summary="Delete a college, its degrees/departments/batches, and related syllabus data",
+)
+def delete_college(college_id: uuid.UUID):
+    supabase = get_service_client()
+
+    col_res = (
+        supabase.table("colleges")
+        .select("id,name")
+        .eq("id", str(college_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(col_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find college): {col_res.error}")
+    if not col_res.data:
+        raise HTTPException(status_code=404, detail="College not found")
+
+    # Block deletion if other products depend on the college directly
+    direct_blockers: List[str] = []
+    for table_name, label, column in (
+        ("teacher_applications", "teacher applications", "college_id"),
+        ("teacher_profiles", "teacher profiles", "college_id"),
+        ("teacher_classes", "teacher classes", "college_id"),
+        ("user_education", "user education records", "college_id"),
+    ):
+        check = supabase.table(table_name).select(column).eq(column, str(college_id)).limit(1).execute()
+        if getattr(check, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (check {label} for college): {check.error}")
+        if check.data:
+            direct_blockers.append(label)
+
+    if direct_blockers:
+        formatted = ", ".join(direct_blockers)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete college because related data exists: {formatted}. Remove or reassign those records first.",
+        )
+
+    deg_res = (
+        supabase.table("degrees")
+        .select("id")
+        .eq("college_id", str(college_id))
+        .execute()
+    )
+    if getattr(deg_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list degrees for college): {deg_res.error}")
+
+    stats = {"degrees": 0, "departments": 0, "batches": 0, "courses": 0}
+    for deg_row in deg_res.data or []:
+        deg_id_str = deg_row.get("id")
+        if not deg_id_str:
+            continue
+
+        dept_res = (
+            supabase.table("departments")
+            .select("id")
+            .eq("degree_id", deg_id_str)
+            .execute()
+        )
+        if getattr(dept_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (list departments for degree): {dept_res.error}")
+
+        # Ensure no department blockers exist (defensive; should already be implied by direct blockers)
+        for drow in dept_res.data or []:
+            did = drow.get("id")
+            if not did:
+                continue
+            blockers = _check_department_delete_blockers(supabase, did)
+            if blockers:
+                formatted = ", ".join(blockers)
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Cannot delete college because related data exists under a department: {formatted}. Remove or reassign those records first.",
+                )
+
+        for drow in dept_res.data or []:
+            did = drow.get("id")
+            if not did:
+                continue
+            dept_uuid = uuid.UUID(did)
+            batch_stats = _cascade_delete_department_batches(supabase, dept_uuid)
+            stats["batches"] += int(batch_stats.get("batches", 0))
+            stats["courses"] += int(batch_stats.get("courses", 0))
+            del_dept = supabase.table("departments").delete().eq("id", did).execute()
+            if getattr(del_dept, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (delete department): {del_dept.error}")
+            stats["departments"] += 1
+
+        del_deg = supabase.table("degrees").delete().eq("id", deg_id_str).execute()
+        if getattr(del_deg, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete degree): {del_deg.error}")
+        stats["degrees"] += 1
+
+    del_col = supabase.table("colleges").delete().eq("id", str(college_id)).execute()
+    if getattr(del_col, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete college): {del_col.error}")
+
+    return {
+        "ok": True,
+        "deleted_college_id": str(college_id),
+        "deleted_degrees": stats["degrees"],
+        "deleted_departments": stats["departments"],
+        "deleted_batches": stats["batches"],
+        "deleted_courses": stats["courses"],
+    }
 
 
 @academics_router.get("/api/colleges/{college_id}", response_model=CollegeFullOut, summary="Get a college with departments & batches")
@@ -13643,6 +13879,78 @@ def api_list_notes(variant: str = Query("detailed")):
         return {"items": data, "variant": _normalize_variant(variant)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list notes: {e}")
+
+
+@notes_router.get("/api/notes/topics/search", summary="Search syllabus topics for autocomplete")
+def api_search_topics(
+    q: str = Query("", min_length=0, max_length=120, description="Topic query string"),
+    limit: int = Query(12, ge=1, le=50),
+):
+    """Return topic suggestions from DB as the user types.
+
+    Uses Supabase service role client to query `syllabus_topics.topic`.
+    Results are ranked to prefer starts-with matches, then contains matches.
+    """
+    query = (q or "").strip()
+    if not query:
+        return {"query": "", "items": []}
+
+    supabase = get_service_client()
+
+    def _fetch_starts():
+        return (
+            supabase.table("syllabus_topics")
+            .select("id,topic")
+            .ilike("topic", f"{query}%")
+            .order("topic")
+            .limit(limit)
+            .execute()
+        )
+
+    def _fetch_contains():
+        return (
+            supabase.table("syllabus_topics")
+            .select("id,topic")
+            .ilike("topic", f"%{query}%")
+            .order("topic")
+            .limit(max(50, limit * 4))
+            .execute()
+        )
+
+    try:
+        starts_res = _supabase_retry(_fetch_starts)
+        if getattr(starts_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (topic starts): {starts_res.error}")
+
+        contains_res = _supabase_retry(_fetch_contains)
+        if getattr(contains_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (topic contains): {contains_res.error}")
+
+        seen: Set[str] = set()
+        items: List[Dict[str, Any]] = []
+
+        def add_rows(rows: List[Dict[str, Any]]):
+            for row in rows or []:
+                topic = (row.get("topic") or "").strip()
+                if not topic:
+                    continue
+                key = topic.casefold()
+                if key in seen:
+                    continue
+                seen.add(key)
+                items.append({"id": row.get("id"), "topic": topic})
+                if len(items) >= limit:
+                    return
+
+        add_rows(getattr(starts_res, "data", []) or [])
+        if len(items) < limit:
+            add_rows(getattr(contains_res, "data", []) or [])
+
+        return {"query": query, "items": items}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to search topics: {e}")
 
 
 @notes_router.post("/notes")

@@ -386,12 +386,23 @@
         let departmentsCache = [];
         let departmentModalMode = 'add';
         let editingDepartmentId = null;
+        let currentRole = null;
+        let isAdmin = false;
 
         function makeBreadcrumb(items) { if (!Array.isArray(items)) return ''; return items.map((item, idx) => { if (!item) return ''; if (item.href && idx !== items.length - 1) { return `<a href="${item.href}" class="text-neutral-600 dark:text-white/70 hover:text-brand-500 dark:hover:text-white">${Collage.escapeHtml(item.label || item.text || '')}</a>`; } return `<span class="text-neutral-900 dark:text-white font-medium">${Collage.escapeHtml(item.label || item.text || '')}</span>`; }).filter(Boolean).join('<span class="text-neutral-400 dark:text-white/40">/</span>'); }
 
         function showLoader() { results.innerHTML = `<div class="col-span-full flex items-center justify-center py-16"><div class="h-12 w-12 animate-spin rounded-full border-2 border-brand-500/30 border-t-transparent"></div></div>`; }
         function showError(message) { results.innerHTML = `<div class="col-span-full rounded-3xl border border-red-400/35 bg-red-100/70 dark:bg-red-500/10 dark:border-red-400/25 p-8 shadow-soft"><h2 class="text-lg font-semibold text-red-700 dark:text-red-200">Unable to load departments</h2><p class="mt-2 text-sm text-red-600/85 dark:text-red-200/80">${Collage.escapeHtml(message || 'Please verify the degree context and try again.')}</p></div>`; }
         function showEmpty() { results.innerHTML = `<div class="col-span-full rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur p-8 text-sm text-neutral-600 dark:text-white/65"><h2 class="text-lg font-semibold text-neutral-900 dark:text-white">No departments yet</h2><p class="mt-2">Add department information for this degree to continue building the academic hierarchy.</p></div>`; }
+
+        function showAccessDenied(message) {
+            addDepartmentBtn?.classList.add('hidden');
+            if (window.Collage && typeof window.Collage.renderAccessDenied === 'function') {
+                window.Collage.renderAccessDenied(results, message || 'You need an admin or employee account to access the college console.');
+            } else {
+                showError(message || 'Access denied');
+            }
+        }
 
         const deleteBtnDefaultHTML = `<span class="material-symbols-rounded text-base">delete</span>Delete`;
 
@@ -500,13 +511,35 @@
                 currentDegreeLabel = degree?.name || degreeName || 'Selected degree'; titleEl.textContent = degrees.length ? `Departments in ${currentDegreeLabel}` : `Configure departments for ${currentDegreeLabel}`; const departments = Array.isArray(degree.departments) ? degree.departments : []; departmentsCache = departments.slice(); const deptCount = departments.length; subtitleEl.textContent = `${deptCount} department${deptCount === 1 ? '' : 's'} recorded.`; breadcrumbsEl.innerHTML = makeBreadcrumb([{ label: 'Colleges', href: 'clg_info.html' }, { label: collegeLabel, href: `degrees.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeLabel)}` }, { label: currentDegreeLabel }]); if (!deptCount) { showEmpty(); return; }
                 results.innerHTML = departments.map((department, index) => {
                     const batches = Array.isArray(department.batches) ? department.batches : []; const firstBatch = batches[0]; const batchLabel = firstBatch ? Collage.escapeHtml(Collage.formatYearRange(firstBatch.from, firstBatch.to)) : '—'; const accentColor = themeAccentPalette[index % themeAccentPalette.length]; const departmentLink = `batches.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeLabel)}&degreeId=${encodeURIComponent(degreeId)}&degreeName=${encodeURIComponent(currentDegreeLabel)}&departmentId=${encodeURIComponent(department.id)}&departmentName=${encodeURIComponent(department.name || '')}`; const chips = [`<span class=\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\">${batches.length} batch${batches.length === 1 ? '' : 'es'}</span>`]; if (firstBatch) { chips.push(`<span class=\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\">${batchLabel}</span>`); }
-                    return `<article class=\"group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition hover:border-brand-500/50 focus-within:border-brand-500/50\" data-department-card=\"${departmentLink}\" tabindex=\"0\">\n<div class=\"absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accentColor} opacity-20 blur-3xl\"></div>\n<button type=\"button\" data-department-edit=\"${department.id}\" aria-label=\"Edit ${Collage.escapeHtml(department.name || '')}\" class=\"absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition\"><span class=\"material-symbols-rounded text-base\">edit</span></button>\n<div class=\"relative flex flex-wrap gap-2\">${chips.join('')}</div>\n<h2 class=\"relative z-10 mt-6 text-xl font-semibold text-neutral-900 dark:text-white\"><a href=\"${departmentLink}\" class=\"inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900 group-hover:text-brand-500 transition\">${Collage.escapeHtml(department.name || 'Unnamed department')}<span class=\"material-symbols-rounded text-base opacity-0 group-hover:opacity-100 transition\">north_east</span></a></h2>\n<p class=\"relative mt-3 text-sm text-neutral-600 dark:text-white/65\">Explore batches & their subjects mapped to this department.</p>\n<a class=\"relative mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85\" href=\"${departmentLink}\">View batches<span class=\"material-symbols-rounded text-base transition group-hover:translate-x-1\">arrow_forward</span></a>\n</article>`;
+                    const editBtn = isAdmin ? `\n<button type=\"button\" data-department-edit=\"${department.id}\" aria-label=\"Edit ${Collage.escapeHtml(department.name || '')}\" class=\"absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition\"><span class=\"material-symbols-rounded text-base\">edit</span></button>` : '';
+                    return `<article class=\"group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition hover:border-brand-500/50 focus-within:border-brand-500/50\" data-department-card=\"${departmentLink}\" tabindex=\"0\">\n<div class=\"absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accentColor} opacity-20 blur-3xl\"></div>${editBtn}\n<div class=\"relative flex flex-wrap gap-2\">${chips.join('')}</div>\n<h2 class=\"relative z-10 mt-6 text-xl font-semibold text-neutral-900 dark:text-white\"><a href=\"${departmentLink}\" class=\"inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900 group-hover:text-brand-500 transition\">${Collage.escapeHtml(department.name || 'Unnamed department')}<span class=\"material-symbols-rounded text-base opacity-0 group-hover:opacity-100 transition\">north_east</span></a></h2>\n<p class=\"relative mt-3 text-sm text-neutral-600 dark:text-white/65\">Explore batches & their subjects mapped to this department.</p>\n<a class=\"relative mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85\" href=\"${departmentLink}\">View batches<span class=\"material-symbols-rounded text-base transition group-hover:translate-x-1\">arrow_forward</span></a>\n</article>`;
                 }).join('');
                 attachDepartmentEditHandlers(); attachDepartmentCardNavigation();
             } catch (err) { console.error(err); showError(err.message || 'Unexpected error'); }
         }
 
-        document.addEventListener('DOMContentLoaded', () => { initDepartmentModal(); loadDepartments(); });
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                currentRole = (window.Collage && window.Collage.requireAdminOrEmployee)
+                    ? await window.Collage.requireAdminOrEmployee()
+                    : 'student';
+                isAdmin = String(currentRole || '').toLowerCase() === 'admin';
+                if (!isAdmin) {
+                    addDepartmentBtn?.classList.add('hidden');
+                } else {
+                    initDepartmentModal();
+                }
+                loadDepartments();
+            } catch (err) {
+                console.error(err);
+                const status = err?.status;
+                if (status === 401 || status === 403) {
+                    showAccessDenied('You need an admin or employee account to access the college console.');
+                } else {
+                    showError(err?.message || 'Unexpected error');
+                }
+            }
+        });
     </script>
 </body>
 
