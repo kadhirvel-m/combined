@@ -221,7 +221,43 @@
       statusEl.classList.add(type === 'error' ? 'text-red-500' : (type === 'ok' ? 'text-green-600' : 'text-neutral-600'));
     }
 
+    function showAccessDenied(message) {
+      try { submitBtn?.setAttribute('disabled', 'true'); } catch (_) { }
+      try { fileEl?.setAttribute('disabled', 'true'); } catch (_) { }
+      try { semEl?.setAttribute('disabled', 'true'); } catch (_) { }
+      const host = formEl?.parentElement || document.querySelector('.container.max-w-3xl') || document.body;
+      if (window.Collage && typeof window.Collage.renderAccessDenied === 'function') {
+        window.Collage.renderAccessDenied(host, message || 'You need an admin or employee account to access the college console.');
+      } else {
+        setStatus(message || 'Access denied', 'error');
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
+      let role = 'student';
+      try {
+        if (window.Collage && window.Collage.requireAdminOrEmployee) {
+          role = await window.Collage.requireAdminOrEmployee();
+        }
+      } catch (err) {
+        console.error(err);
+        const status = err?.status;
+        if (status === 401 || status === 403) {
+          showAccessDenied('You need an admin or employee account to access the college console.');
+          return;
+        }
+        showAccessDenied(err?.message || 'Access denied');
+        return;
+      }
+
+      // Employees can view the page but cannot upload.
+      if (String(role || '').toLowerCase() !== 'admin') {
+        try { submitBtn?.classList.add('hidden'); } catch (_) { }
+        try { fileEl?.setAttribute('disabled', 'true'); } catch (_) { }
+        try { semEl?.setAttribute('disabled', 'true'); } catch (_) { }
+        setStatus('Read-only: only admin can upload syllabus.', 'info');
+      }
+
       // pick a working API base and reflect it in UI
       const resolved = await resolveApiBase();
       if (resolved && resolved !== API) {

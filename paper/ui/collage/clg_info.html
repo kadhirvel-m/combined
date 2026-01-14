@@ -369,16 +369,23 @@
                     </div>
                 </div>
                 <p id="collegeModalMessage" class="hidden text-sm text-red-500"></p>
-                <div class="flex items-center justify-end gap-3">
-                    <button id="collegeModalCancel" type="button"
-                        class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">
-                        Cancel
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <button id="collegeDeleteBtn" type="button"
+                        class="hidden inline-flex items-center justify-center gap-2 rounded-full border border-red-300/60 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200 px-4 py-2 text-sm font-medium hover:border-red-400/80 transition">
+                        <span class="material-symbols-rounded text-base">delete</span>
+                        Delete
                     </button>
-                    <button id="collegeSubmitBtn" type="submit"
-                        class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition">
-                        <span class="material-symbols-rounded text-base">save</span>
-                        Save college
-                    </button>
+                    <div class="flex items-center gap-3 ml-auto">
+                        <button id="collegeModalCancel" type="button"
+                            class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">
+                            Cancel
+                        </button>
+                        <button id="collegeSubmitBtn" type="submit"
+                            class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition">
+                            <span class="material-symbols-rounded text-base">save</span>
+                            Save college
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -492,12 +499,17 @@
         const collegeModalCancel = document.getElementById('collegeModalCancel');
         const collegeSubmitBtn = document.getElementById('collegeSubmitBtn');
         const collegeModalClose = document.getElementById('collegeModalClose');
+        const collegeDeleteBtn = document.getElementById('collegeDeleteBtn');
         const collegeMetric = document.getElementById('collegeMetric');
         const syncStatusLabel = document.getElementById('syncStatusLabel');
 
         let collegesCache = [];
         let modalMode = 'add';
         let editingCollegeId = null;
+        let currentRole = null;
+        let isAdmin = false;
+
+        const deleteBtnDefaultHTML = `<span class="material-symbols-rounded text-base">delete</span>Delete`;
 
         const apiBase = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
 
@@ -582,6 +594,11 @@
             collegeModalMessage.textContent = '';
             collegeModalMessage.classList.add('hidden');
             editingCollegeId = null;
+            if (collegeDeleteBtn) {
+                collegeDeleteBtn.classList.add('hidden');
+                collegeDeleteBtn.disabled = false;
+                collegeDeleteBtn.innerHTML = deleteBtnDefaultHTML;
+            }
         }
 
         function setModalLoading(isLoading) {
@@ -591,6 +608,16 @@
                 : (modalMode === 'edit'
                     ? `<span class="material-symbols-rounded text-base">save</span>Save changes`
                     : `<span class="material-symbols-rounded text-base">save</span>Save college`);
+        }
+
+        function setCollegeDeleteLoading(isLoading) {
+            if (!collegeDeleteBtn) return;
+            collegeDeleteBtn.disabled = isLoading;
+            collegeModalCancel.disabled = isLoading;
+            collegeSubmitBtn.disabled = isLoading;
+            collegeDeleteBtn.innerHTML = isLoading
+                ? '<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Deleting…'
+                : deleteBtnDefaultHTML;
         }
 
         function closeCollegeModal() {
@@ -627,6 +654,13 @@
             collegeSubmitBtn.innerHTML = mode === 'edit'
                 ? `<span class="material-symbols-rounded text-base">save</span>Save changes`
                 : `<span class="material-symbols-rounded text-base">save</span>Save college`;
+
+            if (collegeDeleteBtn) {
+                if (mode === 'edit') collegeDeleteBtn.classList.remove('hidden');
+                else collegeDeleteBtn.classList.add('hidden');
+                collegeDeleteBtn.disabled = false;
+                collegeDeleteBtn.innerHTML = deleteBtnDefaultHTML;
+            }
             collegeModal.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
             setTimeout(() => {
@@ -635,6 +669,33 @@
                     collegeNameInput?.select();
                 }
             }, 80);
+        }
+
+        async function handleCollegeDelete() {
+            if (!editingCollegeId) return;
+            const college = collegesCache.find(c => String(c.id) === String(editingCollegeId));
+            const label = college?.name ? `"${college.name}"` : 'this college';
+            const ok = window.confirm(`Delete ${label} and all its degrees/departments/batches/subjects? This cannot be undone.`);
+            if (!ok) return;
+
+            setCollegeDeleteLoading(true);
+            collegeModalMessage.classList.add('hidden');
+            try {
+                await Collage.fetchJson(`/api/colleges/${editingCollegeId}`, { method: 'DELETE', skipAuth: true });
+                closeCollegeModal();
+                await loadColleges();
+            } catch (error) {
+                let message = error?.message ?? 'Unable to delete college. Please try again.';
+                if (typeof message !== 'string') {
+                    try { message = JSON.stringify(message); } catch (_) { message = 'Unable to delete college. Please try again.'; }
+                }
+                if (message === '[object Object]') message = 'Unexpected response from server. Please try again.';
+                collegeModalMessage.textContent = message;
+                collegeModalMessage.classList.remove('hidden');
+                console.error(error);
+            } finally {
+                setCollegeDeleteLoading(false);
+            }
         }
 
         if (collegeLogoInput) {
@@ -801,14 +862,16 @@
                     const logoTag = college.logo_url
                         ? `<img src="${college.logo_url}" alt="${label} logo" class=\"h-20 w-20 rounded-2xl object-cover ring-2 ring-white/60 dark:ring-white/10 shadow-md\" />`
                         : `<div class=\"h-20 w-20 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white grid place-items-center text-[11px] font-semibold ring-2 ring-white/40 dark:ring-white/10 shadow-md\">LOGO</div>`;
-                    return `
-                                                <article class="group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition">
-                                                    <div class="absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accentColor} opacity-25 blur-3xl"></div>
+                    const editBtn = isAdmin ? `
                                                     <!-- Edit button top-right -->
                                                     <button type="button" data-college-edit="${college.id}" aria-label="Edit ${label}"
                                                         class="absolute top-5 right-5 z-30 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/95 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition shadow-sm">
                                                         <span class="material-symbols-rounded text-base">edit</span>
-                                                    </button>
+                                                    </button>` : '';
+                    return `
+                                                <article class="group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition">
+                                                    <div class="absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accentColor} opacity-25 blur-3xl"></div>
+                                                    ${editBtn}
                                                     <!-- Logo centered vertically on right -->
                                                     <div class="absolute top-1/2 -translate-y-1/2 right-4 z-20 pointer-events-none">${logoTag}</div>
                                                     <div class="pr-16 pt-1"> <!-- further reduced gap -->
@@ -841,6 +904,7 @@
             collegeModalClose?.addEventListener('click', closeCollegeModal);
             collegeModalBackdrop?.addEventListener('click', closeCollegeModal);
             collegeForm?.addEventListener('submit', handleCollegeSubmit);
+            collegeDeleteBtn?.addEventListener('click', handleCollegeDelete);
             document.addEventListener('keydown', (event) => {
                 if (event.key === 'Escape' && !collegeModal.classList.contains('hidden')) {
                     closeCollegeModal();
@@ -851,8 +915,13 @@
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 showLoader();
-                await requireAdminOrEmployee();
-                initCollegeManagement();
+                currentRole = await requireAdminOrEmployee();
+                isAdmin = String(currentRole || '').toLowerCase() === 'admin';
+                if (!isAdmin) {
+                    addCollegeBtn?.classList.add('hidden');
+                } else {
+                    initCollegeManagement();
+                }
                 await loadColleges();
             } catch (err) {
                 console.error(err);

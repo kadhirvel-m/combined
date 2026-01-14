@@ -339,12 +339,22 @@
         const results = document.getElementById('results'); const titleEl = document.getElementById('pageTitle'); const subtitleEl = document.getElementById('pageSubtitle'); const breadcrumbsEl = document.getElementById('breadcrumbs'); const addBatchBtn = document.getElementById('addBatchBtn');
         const batchModal = document.getElementById('batchModal'); const batchModalBackdrop = document.getElementById('batchModalBackdrop'); const batchModalTitle = document.getElementById('batchModalTitle'); const batchForm = document.getElementById('batchForm'); const batchFromYearInput = document.getElementById('batchFromYear'); const batchToYearInput = document.getElementById('batchToYear'); const batchModalMessage = document.getElementById('batchModalMessage'); const batchModalCancel = document.getElementById('batchModalCancel'); const batchModalClose = document.getElementById('batchModalClose'); const batchSubmitBtn = document.getElementById('batchSubmitBtn'); const batchDeleteBtn = document.getElementById('batchDeleteBtn');
         let batchesCache = []; let batchModalMode = 'add'; let editingBatchId = null;
+        let currentRole = null; let isAdmin = false;
 
         const deleteBtnDefaultHTML = `<span class="material-symbols-rounded text-base">delete</span>Delete`;
         function makeBreadcrumb(items) { if (!Array.isArray(items)) return ''; return items.map((item, idx) => { if (!item) return ''; if (item.href && idx !== items.length - 1) { return `<a href="${item.href}" class="hover:text-brand-500 dark:hover:text-white">${Collage.escapeHtml(item.label || item.text || '')}</a>`; } return `<span class="text-neutral-900 dark:text-white font-medium">${Collage.escapeHtml(item.label || item.text || '')}</span>`; }).filter(Boolean).join('<span class="text-neutral-400 dark:text-white/40">/</span>'); }
         function showLoader() { results.innerHTML = `<div class=\"col-span-full flex items-center justify-center py-16\"><div class=\"h-12 w-12 animate-spin rounded-full border-2 border-brand-500/30 border-t-transparent\"></div></div>`; }
         function showError(message) { results.innerHTML = `<div class=\"col-span-full rounded-3xl border border-red-400/35 bg-red-100/70 dark:bg-red-500/10 dark:border-red-400/25 p-8 shadow-soft\"><h2 class=\"text-lg font-semibold text-red-700 dark:text-red-200\">Unable to load batches</h2><p class=\"mt-2 text-sm text-red-600/85 dark:text-red-200/80\">${Collage.escapeHtml(message || 'Please check the URL parameters and try again.')}</p></div>`; }
         function showEmpty() { results.innerHTML = `<div class=\"col-span-full rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur p-8 text-sm text-neutral-600 dark:text-white/65\"><h2 class=\"text-lg font-semibold text-neutral-900 dark:text-white\">No batches found</h2><p class=\"mt-2\">Create batches for this department to continue drilling down into subjects.</p></div>`; }
+
+        function showAccessDenied(message) {
+            addBatchBtn?.classList.add('hidden');
+            if (window.Collage && typeof window.Collage.renderAccessDenied === 'function') {
+                window.Collage.renderAccessDenied(results, message || 'You need an admin or employee account to access the college console.');
+            } else {
+                showError(message || 'Access denied');
+            }
+        }
         function resetBatchModal() {
             batchForm?.reset();
             batchModalMessage.textContent = '';
@@ -454,11 +464,38 @@
                     'from-[#7F57D1]/55 via-brand-500/60 to-brand-700/80',
                     'from-brand-700/65 via-brandlt-400/55 to-brand-500/70'
                 ];
-                results.innerHTML = list.map((batch, index) => { const range = Collage.formatYearRange(batch.from_year, batch.to_year); const accent = accentPalette[index % accentPalette.length]; const subjectsLink = `subjects.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentId=${encodeURIComponent(departmentId || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(batch.id)}&batchRange=${encodeURIComponent(range)}`; return `<article class=\"group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition hover:shadow-glow focus-within:shadow-glow cursor-pointer\" data-batch-card=\"${subjectsLink}\" tabindex=\"0\"><div class=\"absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accent} opacity-20 blur-3xl\"></div><button type=\"button\" data-batch-edit=\"${batch.id}\" aria-label=\"Edit batch ${Collage.escapeHtml(range)}\" class=\"absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition\"><span class=\"material-symbols-rounded text-base\">edit</span></button><div class=\"relative flex items-center justify-between text-xs text-neutral-600 dark:text-white/70\"><span class=\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\">Batch</span><span class=\"font-mono text-[11px] text-neutral-500/80 dark:text-white/50\">${Collage.escapeHtml(String(batch.id).slice(0, 8))}…</span></div><h2 class=\"relative mt-6 text-xl font-semibold text-neutral-900 dark:text-white group-hover:text-brand-500\"><a href=\"${subjectsLink}\" class=\"inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900\">${Collage.escapeHtml(range)}<span class=\"material-symbols-rounded text-base text-brand-500 opacity-0 group-hover:opacity-100 transition\">north_east</span></a></h2><p class=\"relative mt-3 text-sm text-neutral-600 dark:text-white/65\">View all subjects (syllabus courses) taught in this cohort and dive into their syllabus.</p><a class=\"relative mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85\" href=\"${subjectsLink}\">View subjects<span class=\"material-symbols-rounded text-base transition group-hover:translate-x-1\">arrow_forward</span></a></article>`; }).join('');
+                results.innerHTML = list.map((batch, index) => {
+                    const range = Collage.formatYearRange(batch.from_year, batch.to_year);
+                    const accent = accentPalette[index % accentPalette.length];
+                    const subjectsLink = `subjects.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentId=${encodeURIComponent(departmentId || '')}&departmentName=${encodeURIComponent(departmentName || '')}&batchId=${encodeURIComponent(batch.id)}&batchRange=${encodeURIComponent(range)}`;
+                    const editBtn = isAdmin ? `<button type=\"button\" data-batch-edit=\"${batch.id}\" aria-label=\"Edit batch ${Collage.escapeHtml(range)}\" class=\"absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition\"><span class=\"material-symbols-rounded text-base\">edit</span></button>` : '';
+                    return `<article class=\"group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition hover:shadow-glow focus-within:shadow-glow cursor-pointer\" data-batch-card=\"${subjectsLink}\" tabindex=\"0\"><div class=\"absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accent} opacity-20 blur-3xl\"></div>${editBtn}<div class=\"relative flex items-center justify-between text-xs text-neutral-600 dark:text-white/70\"><span class=\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\">Batch</span><span class=\"font-mono text-[11px] text-neutral-500/80 dark:text-white/50\">${Collage.escapeHtml(String(batch.id).slice(0, 8))}…</span></div><h2 class=\"relative mt-6 text-xl font-semibold text-neutral-900 dark:text-white group-hover:text-brand-500\"><a href=\"${subjectsLink}\" class=\"inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900\">${Collage.escapeHtml(range)}<span class=\"material-symbols-rounded text-base text-brand-500 opacity-0 group-hover:opacity-100 transition\">north_east</span></a></h2><p class=\"relative mt-3 text-sm text-neutral-600 dark:text-white/65\">View all subjects (syllabus courses) taught in this cohort and dive into their syllabus.</p><a class=\"relative mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85\" href=\"${subjectsLink}\">View subjects<span class=\"material-symbols-rounded text-base transition group-hover:translate-x-1\">arrow_forward</span></a></article>`;
+                }).join('');
                 attachBatchEditHandlers(); attachBatchCardNavigation();
             } catch (err) { console.error(err); showError(err.message || 'Unexpected error'); }
         }
-        document.addEventListener('DOMContentLoaded', () => { initBatchModal(); loadBatches(); });
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                currentRole = (window.Collage && window.Collage.requireAdminOrEmployee)
+                    ? await window.Collage.requireAdminOrEmployee()
+                    : 'student';
+                isAdmin = String(currentRole || '').toLowerCase() === 'admin';
+                if (!isAdmin) {
+                    addBatchBtn?.classList.add('hidden');
+                } else {
+                    initBatchModal();
+                }
+                loadBatches();
+            } catch (err) {
+                console.error(err);
+                const status = err?.status;
+                if (status === 401 || status === 403) {
+                    showAccessDenied('You need an admin or employee account to access the college console.');
+                } else {
+                    showError(err?.message || 'Unexpected error');
+                }
+            }
+        });
     </script>
     <script>
         // Theme toggles sync (reuse pattern from degrees.html)

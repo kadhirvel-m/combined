@@ -375,6 +375,8 @@
         let subjectsCache = [];
         let subjectModalMode = 'add';
         let editingSubjectId = null;
+        let currentRole = null;
+        let isAdmin = false;
         const semesterOptions = [1, 2, 3, 4, 5, 6, 7, 8];
 
         function makeBreadcrumb(items) {
@@ -404,6 +406,17 @@
 
         function showEmpty() {
             results.innerHTML = `<div class=\"col-span-full rounded-3xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur p-8 text-sm text-neutral-600 dark:text-white/65\"><h2 class=\"text-lg font-semibold text-neutral-900 dark:text-white\">No subjects yet</h2><p class=\"mt-2\">Add subjects for this batch to continue creating the syllabus hierarchy.</p></div>`;
+        }
+
+        function showAccessDenied(message) {
+            addSubjectBtn?.classList.add('hidden');
+            document.getElementById('uploadSyllabusBtn')?.classList.add('hidden');
+            semesterFilter?.setAttribute('disabled', 'true');
+            if (window.Collage && typeof window.Collage.renderAccessDenied === 'function') {
+                window.Collage.renderAccessDenied(results, message || 'You need an admin or employee account to access the college console.');
+            } else {
+                showError(message || 'Access denied');
+            }
         }
 
         function resetSubjectModal() {
@@ -615,7 +628,8 @@
             results.innerHTML = list.map((subject, index) => {
                 const accent = accentPalette[index % accentPalette.length];
                 const syllabusLink = `syllabus.html?courseId=${encodeURIComponent(subject.id)}&courseCode=${encodeURIComponent(subject.course_code || '')}&courseTitle=${encodeURIComponent(subject.title || '')}&semester=${encodeURIComponent(subject.semester || '')}&batchId=${encodeURIComponent(batchId || '')}&batchRange=${encodeURIComponent(batchRange || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
-                return `<article class=\"group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition hover:shadow-glow focus-within:shadow-glow cursor-pointer\" data-subject-card=\"${syllabusLink}\" tabindex=\"0\"><div class=\"absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accent} opacity-20 blur-3xl\"></div><button type=\"button\" data-subject-edit=\"${subject.id}\" aria-label=\"Edit subject ${Collage.escapeHtml(subject.course_code || '')}\" class=\"absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition\"><span class=\"material-symbols-rounded text-base\">edit</span></button><div class=\"relative flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-white/70\"><span class=\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\">Sem ${Collage.escapeHtml(String(subject.semester || ''))}</span>${subject.credits != null ? `<span class=\\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\\">${subject.credits} cr</span>` : ''}</div><h2 class=\"relative mt-6 text-xl font-semibold text-neutral-900 dark:text-white group-hover:text-brand-500\"><a href=\"${syllabusLink}\" class=\"inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900\">${Collage.escapeHtml(subject.course_code || 'COURSE')}<span class=\"material-symbols-rounded text-base text-brand-500 opacity-0 group-hover:opacity-100 transition\">north_east</span></a></h2><p class=\"relative mt-2 text-sm text-neutral-600 dark:text-white/65\">${Collage.escapeHtml(subject.title || 'Untitled subject')}</p><a href=\"${syllabusLink}\" class=\"relative mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85\">View syllabus<span class=\"material-symbols-rounded text-base transition group-hover:translate-x-1\">arrow_forward</span></a></article>`;
+                const editBtn = isAdmin ? `<button type=\"button\" data-subject-edit=\"${subject.id}\" aria-label=\"Edit subject ${Collage.escapeHtml(subject.course_code || '')}\" class=\"absolute top-5 right-5 z-20 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/85 dark:bg-white/10 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition\"><span class=\"material-symbols-rounded text-base\">edit</span></button>` : '';
+                return `<article class=\"group relative overflow-hidden rounded-3xl border border-black/5 dark:border-white/10 bg-white/75 dark:bg-white/5 backdrop-blur-xl p-6 shadow-soft transition hover:shadow-glow focus-within:shadow-glow cursor-pointer\" data-subject-card=\"${syllabusLink}\" tabindex=\"0\"><div class=\"absolute inset-x-6 top-6 h-32 rounded-3xl bg-gradient-to-r ${accent} opacity-20 blur-3xl\"></div>${editBtn}<div class=\"relative flex flex-wrap gap-2 text-xs text-neutral-600 dark:text-white/70\"><span class=\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\">Sem ${Collage.escapeHtml(String(subject.semester || ''))}</span>${subject.credits != null ? `<span class=\\"inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/50 dark:bg-white/10 px-3 py-1 text-xs text-neutral-700 dark:text-white/80\\">${subject.credits} cr</span>` : ''}</div><h2 class=\"relative mt-6 text-xl font-semibold text-neutral-900 dark:text-white group-hover:text-brand-500\"><a href=\"${syllabusLink}\" class=\"inline-flex items-center gap-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-brand-900\">${Collage.escapeHtml(subject.course_code || 'COURSE')}<span class=\"material-symbols-rounded text-base text-brand-500 opacity-0 group-hover:opacity-100 transition\">north_east</span></a></h2><p class=\"relative mt-2 text-sm text-neutral-600 dark:text-white/65\">${Collage.escapeHtml(subject.title || 'Untitled subject')}</p><a href=\"${syllabusLink}\" class=\"relative mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-500 dark:text-white/85\">View syllabus<span class=\"material-symbols-rounded text-base transition group-hover:translate-x-1\">arrow_forward</span></a></article>`;
             }).join('');
             attachEditHandlers();
             attachCardNavigation();
@@ -659,46 +673,65 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            populateSemesterFilter();
-            initSubjectModal();
-            loadSubjects();
-            semesterFilter.addEventListener('change', filterAndRender);
-            // Ensure back link preserves navigation context
-            if (backLink) {
-                const backUrl = `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentId=${encodeURIComponent(departmentId || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
-                backLink.setAttribute('href', backUrl);
-            }
-            // Persist context so batches.html can recover if user returns without query params
+        document.addEventListener('DOMContentLoaded', async () => {
             try {
-                const ctx = {
-                    collegeId, collegeName, degreeId, degreeName, departmentId, departmentName, batchId, batchRange
-                };
-                sessionStorage.setItem('px_ctx_batches', JSON.stringify(ctx));
-                // Also persist to localStorage as a longer-lived fallback
-                localStorage.setItem('px_ctx_batches_last', JSON.stringify({ ...ctx, ts: Date.now() }));
-                if (window?.console) console.debug('[subjects] stored context', ctx);
-            } catch (_) { /* ignore storage errors */ }
+                currentRole = (window.Collage && window.Collage.requireAdminOrEmployee)
+                    ? await window.Collage.requireAdminOrEmployee()
+                    : 'student';
+                isAdmin = String(currentRole || '').toLowerCase() === 'admin';
+                populateSemesterFilter();
+                if (!isAdmin) {
+                    addSubjectBtn?.classList.add('hidden');
+                    document.getElementById('uploadSyllabusBtn')?.classList.add('hidden');
+                } else {
+                    initSubjectModal();
+                }
+                loadSubjects();
+                semesterFilter.addEventListener('change', filterAndRender);
+                // Ensure back link preserves navigation context
+                if (backLink) {
+                    const backUrl = `batches.html?collegeId=${encodeURIComponent(collegeId || '')}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}&departmentId=${encodeURIComponent(departmentId || '')}&departmentName=${encodeURIComponent(departmentName || '')}`;
+                    backLink.setAttribute('href', backUrl);
+                }
+                // Persist context so batches.html can recover if user returns without query params
+                try {
+                    const ctx = {
+                        collegeId, collegeName, degreeId, degreeName, departmentId, departmentName, batchId, batchRange
+                    };
+                    sessionStorage.setItem('px_ctx_batches', JSON.stringify(ctx));
+                    // Also persist to localStorage as a longer-lived fallback
+                    localStorage.setItem('px_ctx_batches_last', JSON.stringify({ ...ctx, ts: Date.now() }));
+                    if (window?.console) console.debug('[subjects] stored context', ctx);
+                } catch (_) { /* ignore storage errors */ }
 
-            // Upload syllabus button routing with preserved context
-            const uploadBtn = document.getElementById('uploadSyllabusBtn');
-            if (uploadBtn) {
-                const q = new URLSearchParams({
-                    collegeId: collegeId || '',
-                    collegeName: collegeName || '',
-                    degreeId: degreeId || '',
-                    degreeName: degreeName || '',
-                    departmentId: departmentId || '',
-                    departmentName: departmentName || '',
-                    batchId: batchId || '',
-                    batchRange: batchRange || ''
-                }).toString();
-                uploadBtn.addEventListener('click', () => {
-                    window.location.href = `upload_syllabus.html?${q}`;
-                });
-                if (!batchId) {
-                    uploadBtn.disabled = true;
-                    uploadBtn.classList.add('opacity-60', 'cursor-not-allowed');
+                // Upload syllabus button routing with preserved context
+                const uploadBtn = document.getElementById('uploadSyllabusBtn');
+                if (uploadBtn) {
+                    const q = new URLSearchParams({
+                        collegeId: collegeId || '',
+                        collegeName: collegeName || '',
+                        degreeId: degreeId || '',
+                        degreeName: degreeName || '',
+                        departmentId: departmentId || '',
+                        departmentName: departmentName || '',
+                        batchId: batchId || '',
+                        batchRange: batchRange || ''
+                    }).toString();
+                    uploadBtn.addEventListener('click', () => {
+                        window.location.href = `upload_syllabus.html?${q}`;
+                    });
+                    if (!batchId) {
+                        uploadBtn.disabled = true;
+                        uploadBtn.classList.add('opacity-60', 'cursor-not-allowed');
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                const status = err?.status;
+                if (status === 401 || status === 403) {
+                    showAccessDenied('You need an admin or employee account to access the college console.');
+                } else {
+                    showError(err?.message || 'Unexpected error');
                 }
             }
         });
