@@ -149,33 +149,13 @@ def _build_topic_template(*, topic_title: str, language_name: Optional[str]) -> 
             },
             {
                 "chapter_number": 2,
-                "title": "The Syntax",
+                "title": "Key Ideas",
                 "chapter_type": "concept",
                 "content": {
                     "blocks": [
-                        {
-                            "type": "syntax_breakdown",
-                            "code": "",
-                            "parts": [
-                                {"keyword": "", "desc": ""},
-                                {"keyword": "", "desc": ""},
-                                {"keyword": "", "desc": ""},
-                            ],
-                        },
-                        {
-                            "type": "mental_model",
-                            "title": "Mental Model",
-                            "text": "",
-                            "examples": ["", "", ""],
-                            "note": "",
-                        },
-                        {
-                            "type": "warning_box",
-                            "title": "Common pitfall",
-                            "text": "",
-                            "correct": "",
-                            "wrong": "",
-                        },
+                        {"type": "text", "title": "Core idea", "content": ""},
+                        {"type": "static_code", "title": "Quick example", "code": "", "output": ""},
+                        {"type": "callout", "variant": "info", "title": "Why it matters", "text": ""},
                     ]
                 },
             },
@@ -262,10 +242,8 @@ def _build_topic_template(*, topic_title: str, language_name: Optional[str]) -> 
                     "problem": {"title": "", "desc": "", "example": ""},
                     "steps": [
                         {"title": "Step 1: Understand", "text": ""},
-                        {"title": "Step 2: Plan", "items": ["", "", ""]},
-                        {"title": "Step 3: Code", "code_id": cid("walkthrough"), "default_code": ""},
-                        {"title": "Step 4: Trace", "trace": []},
-                        {"title": "Step 5: Complexity", "items": ["", ""]},
+                        {"title": "Step 2: Code", "code_id": cid("walkthrough"), "default_code": ""},
+                        {"title": "Step 3: Complexity", "items": ["", ""]},
                     ],
                     "takeaway": "",
                 },
@@ -578,6 +556,10 @@ CRITICAL:
 - For the carousel in "Patterns & Variations": include Easy/Medium/Hard slides with increasing difficulty, each with a 1-2 sentence description and runnable code.
 - Ensure all multi-line strings are valid JSON strings (use \n for newlines).
 - Use only double quotes for JSON strings and property names.
+- Never include placeholder tasks like "Your code here", "TODO", or assignments to None for required outputs.
+- Every code block must be immediately executable and demonstrate the concept without asking the user to fill anything in.
+- Keep Common Mistakes extremely short: each mistake name under 6 words, each desc 1 sentence, each fix 1 sentence.
+- Keep the Walkthrough simple: 3 steps only (Understand, Code, Complexity), no trace tables, no undefined placeholders.
 
 TEMPLATE:
 {template_json}
