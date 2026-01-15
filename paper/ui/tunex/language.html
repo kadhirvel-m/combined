@@ -1,157 +1,305 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Levels | Tunex</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/tailwind.css">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-    <script src="../../assets/js/theme.js"></script>
-    <!-- ... (styles/tailwind config same as before) ... -->
     <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        gatex: {
-                            bg: '#13131F',
-                            card: '#1E1E2F',
-                            cardHover: '#27293d',
-                            primary: '#9E4B8A',
-                            secondary: '#4C2A59',
-                            accent: '#FF7F50',
-                            success: '#00F090',
-                            info: '#3B82F6'
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    }
-                }
+        // Theme boot (runs before paint to avoid flash)
+        (() => {
+            const stored = localStorage.getItem('px_theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = stored ? stored === 'dark' : prefersDark;
+            if (isDark) document.documentElement.classList.add('dark');
+        })();
+    </script>
+    <!-- ... (styles/tailwind config same as before) ... -->
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            -webkit-box-decoration-break: clone;
+            box-decoration-break: clone;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
             }
         }
-    </script>
-    <style>
+
         .glass-header {
-            background: rgba(19, 19, 31, 0.8);
+            background: rgba(255, 255, 255, 0.7);
             backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .dark .glass-header {
+            background: rgba(19, 19, 31, 0.8);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Light theme: soften GateX cards/inputs so the page doesn't look like dark blocks on a light hero background */
+        html:not(.dark) .bg-gatex-card {
+            background-color: rgba(255, 255, 255, 0.72) !important;
+        }
+
+        html:not(.dark) .bg-gatex-bg {
+            background-color: rgba(255, 255, 255, 0.75) !important;
+        }
+
+        html:not(.dark) .hover\:bg-gatex-cardHover:hover {
+            background-color: rgba(255, 255, 255, 0.9) !important;
+        }
+
+        #mobileNavBackdrop {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s ease;
+        }
+
+        #mobileNavPanel {
+            opacity: 0;
+            transform: translateY(-12px);
+            pointer-events: none;
+            transition: opacity .25s ease, transform .25s ease;
+        }
+
+        #mobileNavBackdrop[data-open="true"],
+        #mobileNavBackdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #mobileNavPanel[data-open="true"],
+        #mobileNavPanel.open {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
         }
     </style>
 </head>
 
-<body class="bg-gatex-bg text-gray-100 font-sans antialiased" x-data="languageApp()">
+<body
+    class="min-h-screen font-sans antialiased text-neutral-900 dark:text-gray-100 bg-hero-light dark:bg-hero-dark transition-colors"
+    x-data="languageApp()">
 
-    <!-- Header -->
-    <header class="h-16 flex items-center justify-between px-6 sticky top-0 z-30 glass-header">
-        <div class="flex items-center gap-4">
-            <a href="index.html" class="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10">
-                <i class="ri-arrow-left-line text-xl"></i>
+    <!-- Navbar (PaperX layout) -->
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10 relative">
+        <div class="container flex items-center justify-between py-4">
+            <a href="../dashboard.html" class="flex items-center gap-3" aria-label="Dashboard">
+                <img src="../assets/img/tunex/tunex-logo-light.svg" alt="TuneX" class="h-10 w-auto dark:hidden">
+                <img src="../assets/img/tunex/tunex-logo-dark.svg" alt="TuneX" class="h-10 w-auto hidden dark:block">
             </a>
-            <h1 class="text-lg font-bold" x-text="language ? language.name + ' - Levels' : 'Loading...'"></h1>
-        </div>
-        <div class="flex items-center gap-4">
-            <button @click="Theme.toggle()" class="p-2 text-gray-400 hover:text-white transition">
-                <i class="ri-moon-line dark:hidden"></i>
-                <i class="ri-sun-line hidden dark:block"></i>
-            </button>
+
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a class="hover:text-brand-700 dark:hover:text-white transition" href="../dashboard.html">Dashboard</a>
+                <a class="inline-flex items-center gap-1 rounded-full bg-brandlt-200/70 px-3 py-1.5 text-brand-700 dark:bg-white/10 dark:text-white"
+                    href="index.html">
+                    <span>Coding Tracks</span>
+                    <span class="material-symbols-rounded text-base">auto_awesome</span>
+                </a>
+                <a class="hover:text-brand-700 dark:hover:text-white transition" href="notebook.html">Notebook</a>
+                <a class="hover:text-brand-700 dark:hover:text-white transition" href="compiler.html">Compiler</a>
+            </nav>
+
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden sm:block">Theme</span>
+                </button>
+            </div>
+
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+                <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="material-symbols-rounded" data-icon>menu</span>
+                </button>
+            </div>
         </div>
     </header>
 
-    <main class="p-6 max-w-5xl mx-auto">
-
-        <!-- Header & Add Button -->
-        <div class="flex justify-between items-end mb-8">
-            <div>
-                <div class="flex items-center gap-3 mb-2">
-                    <img :src="language?.logo_url" x-show="language?.logo_url" class="w-8 h-8 object-contain">
-                    <h2 class="text-3xl font-bold" x-text="language?.name"></h2>
-                </div>
-                <p class="text-gray-400 text-sm max-w-2xl" x-text="language?.description"></p>
-            </div>
-            <button @click="openAddModal()"
-                class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-xl flex items-center gap-2 transition shadow-lg shadow-gatex-primary/20">
-                <i class="ri-add-line"></i> Add Level
+    <!-- Mobile navigation (drawer) -->
+    <div id="mobileNavBackdrop" aria-hidden="true"
+        class="md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+    <nav id="mobileNavPanel" aria-hidden="true"
+        class="md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_1.5rem_4rem_-1.5rem_rgba(30,30,47,0.75)] backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+        <div class="flex flex-col gap-2 text-sm text-neutral-700 dark:text-white/80">
+            <a href="../dashboard.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Dashboard</a>
+            <a href="index.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 bg-brandlt-200/70 dark:bg-white/10 text-brand-700 dark:text-white transition">Coding
+                Tracks</a>
+            <a href="notebook.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Notebook</a>
+            <a href="compiler.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Compiler</a>
+        </div>
+        <div class="flex flex-col gap-3 border-t border-black/5 dark:border-white/10 pt-4">
+            <button @click="openAddModal()" data-close-mobile-nav type="button"
+                class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-3 text-sm font-semibold text-white shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)] transition">
+                <span class="material-symbols-rounded text-base">add</span>
+                Add Level
             </button>
         </div>
+    </nav>
 
-        <!-- Levels List -->
-        <div class="space-y-4">
-            <template x-for="(level, index) in levels" :key="level.id">
-                <div
-                    class="bg-gatex-card border border-white/5 rounded-xl p-5 hover:border-gatex-primary/50 transition group flex items-center justify-between">
-                    <a :href="'level.html?id=' + level.id + '&langName=' + (language?.name || '')"
-                        class="flex-grow flex items-center justify-between mr-4">
-                        <div class="flex items-center gap-4">
-                            <span
-                                class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-sm font-mono text-gray-400"
-                                x-text="index + 1"></span>
-                            <div>
-                                <h3 class="font-bold text-lg group-hover:text-gatex-primary transition"
-                                    x-text="level.title"></h3>
-                                <p class="text-xs text-gray-500 mt-1">Order Index: <span
-                                        x-text="level.order_index"></span></p>
-                            </div>
+    <main class="p-6 max-w-7xl mx-auto">
+
+        <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-8 items-start">
+            <!-- Left portrait box (reserved space) -->
+            <aside class="lg:sticky lg:top-24">
+                <div class="bg-gatex-card border border-white/10 rounded-2xl overflow-hidden">
+                    <div class="aspect-[3/4] bg-gatex-bg/40 relative overflow-hidden">
+                        <img :src="portraitLogoUrl()" x-show="portraitLogoUrl()"
+                            class="absolute inset-0 w-full h-full object-cover" alt="Language">
+                        <div x-show="!portraitLogoUrl()"
+                            class="absolute inset-0 flex items-center justify-center text-6xl text-gatex-accent bg-white/5">
+                            <i class="ri-code-s-slash-line"></i>
                         </div>
-                    </a>
-                    <div class="flex items-center gap-3">
-                        <a :href="'level.html?id=' + level.id + '&langName=' + (language?.name || '')"
-                            class="text-xs bg-white/5 px-2 py-1 rounded text-gray-400 group-hover:bg-gatex-primary/10 group-hover:text-gatex-primary transition cursor-pointer">Manage
-                            Sections</a>
-                        <!-- Edit Button -->
-                        <button @click="openEditModal(level)"
-                            class="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition z-20">
-                            <i class="ri-pencil-line"></i>
-                        </button>
-                        <i class="ri-arrow-right-s-line text-xl text-gray-600 group-hover:text-white transition"></i>
+                    </div>
+                    <div class="p-4">
+                        <div class="text-sm font-semibold gradient-hero-text" x-text="language?.name || 'Language'">
+                        </div>
                     </div>
                 </div>
-            </template>
-        </div>
+            </aside>
 
-        <!-- Empty State -->
-        <div x-show="levels.length === 0 && !loading"
-            class="text-center py-20 bg-gatex-card/50 rounded-2xl border border-white/5 border-dashed">
-            <i class="ri-bar-chart-groupped-line text-4xl mb-3 block opacity-30"></i>
-            <p class="text-gray-500">No levels yet. Add Beginner, Intermediate, etc.</p>
-        </div>
-
-        <!-- Add/Edit Modal -->
-        <div x-show="showModal" class="fixed inset-0 z-50 flex items-center justify-center px-4" style="display: none;">
-            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="closeModal()"></div>
-            <div class="bg-gatex-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative z-10 shadow-2xl">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-bold" x-text="isEdit ? 'Edit Level' : 'Add Level'"></h3>
-                    <button x-show="isEdit" @click="deleteLevel()"
-                        class="text-red-500 hover:text-red-400 text-sm flex items-center gap-1">
-                        <i class="ri-delete-bin-line"></i> Delete
+            <!-- Right content (existing layout, unchanged inside) -->
+            <section>
+                <!-- Header & Add Button -->
+                <div class="flex justify-between items-end mb-8">
+                    <div>
+                        <div class="flex items-center gap-3 mb-2">
+                            <img :src="language?.logo_url" x-show="language?.logo_url" class="w-8 h-8 object-cover rounded-md">
+                            <h2 class="text-3xl font-extrabold gradient-hero-text" x-text="language?.name"></h2>
+                        </div>
+                        <p class="text-neutral-600 dark:text-gray-400 text-sm max-w-2xl" x-text="language?.description">
+                        </p>
+                    </div>
+                    <button @click="openAddModal()"
+                        class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-4 py-2 text-sm font-medium text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition">
+                        <span class="material-symbols-rounded text-base">add</span>
+                        Add Level
                     </button>
                 </div>
 
+                <!-- Levels List -->
                 <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-medium text-gray-400 mb-1">Title</label>
-                        <input type="text" x-model="form.title"
-                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition"
-                            placeholder="e.g., Beginner">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-gray-400 mb-1">Order Index</label>
-                        <input type="number" x-model="form.order_index"
-                            class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition">
-                    </div>
+                    <template x-for="(level, index) in levels" :key="level.id">
+                        <div
+                            class="bg-gatex-card border border-white/5 rounded-xl p-5 hover:border-gatex-primary/50 transition group flex items-center justify-between">
+                            <a :href="'level.html?id=' + level.id + '&langName=' + (language?.name || '')"
+                                class="flex-grow flex items-center justify-between mr-4">
+                                <div class="flex items-center gap-4">
+                                    <span
+                                        class="w-8 h-8 rounded-lg bg-gatex-primary hover:bg-gatex-secondary text-white flex items-center justify-center text-sm font-mono shadow shadow-gatex-primary/20 transition"
+                                        x-text="index + 1"></span>
+                                    <div>
+                                        <h3 class="font-bold text-lg group-hover:text-gatex-primary transition"
+                                            x-text="level.title"></h3>
+                                        <p class="text-xs text-gray-500 mt-1">Order Index: <span
+                                                x-text="level.order_index"></span></p>
+                                    </div>
+                                </div>
+                            </a>
+                            <div class="flex items-center gap-3">
+                                <!-- Edit Button -->
+                                <button @click="openEditModal(level)"
+                                    class="p-2 bg-gatex-primary hover:bg-gatex-secondary rounded-lg text-white transition shadow shadow-gatex-primary/20 z-20">
+                                    <i class="ri-pencil-line"></i>
+                                </button>
+                                <i
+                                    class="ri-arrow-right-s-line text-xl text-gray-600 group-hover:text-white transition"></i>
+                            </div>
+                        </div>
+                    </template>
                 </div>
 
-                <div class="flex justify-end gap-3 mt-6">
-                    <button @click="closeModal()" class="px-4 py-2 rounded-lg hover:bg-white/5 text-sm">Cancel</button>
-                    <button @click="submitForm()"
-                        class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-lg text-sm font-medium transition"
-                        x-text="isEdit ? 'Update' : 'Create'"></button>
+                <!-- Empty State -->
+                <div x-show="levels.length === 0 && !loading"
+                    class="text-center py-20 bg-gatex-card/50 rounded-2xl border border-white/5 border-dashed">
+                    <i class="ri-bar-chart-groupped-line text-4xl mb-3 block opacity-30"></i>
+                    <p class="text-gray-500">No levels yet. Add Beginner, Intermediate, etc.</p>
                 </div>
-            </div>
+
+                <!-- Add/Edit Modal -->
+                <div x-show="showModal" class="fixed inset-0 z-50 flex items-center justify-center px-4"
+                    style="display: none;">
+                    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="closeModal()"></div>
+                    <div
+                        class="bg-gatex-card border border-white/10 rounded-2xl p-6 w-full max-w-md relative z-10 shadow-2xl">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-bold" x-text="isEdit ? 'Edit Level' : 'Add Level'"></h3>
+                            <button x-show="isEdit" @click="deleteLevel()"
+                                class="text-red-500 hover:text-red-400 text-sm flex items-center gap-1">
+                                <i class="ri-delete-bin-line"></i> Delete
+                            </button>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-400 mb-1">Title</label>
+                                <input type="text" x-model="form.title"
+                                    class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition"
+                                    placeholder="e.g., Beginner">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-400 mb-1">Order Index</label>
+                                <input type="number" x-model="form.order_index"
+                                    class="w-full bg-gatex-bg border border-white/10 rounded-lg px-4 py-2 focus:border-gatex-primary outline-none transition">
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end gap-3 mt-6">
+                            <button @click="closeModal()"
+                                class="px-4 py-2 rounded-lg hover:bg-white/5 text-sm">Cancel</button>
+                            <button @click="submitForm()"
+                                class="bg-gatex-primary hover:bg-gatex-secondary text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+                                x-text="isEdit ? 'Update' : 'Create'"></button>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
 
     </main>
@@ -168,6 +316,15 @@
                 showModal: false,
                 isEdit: false,
                 form: { id: null, title: '', order_index: 0 },
+                // Local override image (used for specific language)
+                overrideLogoUrl: "../assets/img/Gemini_Generated_Image_bvveffbvveffbvve%20(1).png",
+
+                portraitLogoUrl() {
+                    // Use the override image only for the left portrait box.
+                    // Keep the real language.logo_url everywhere else (e.g., next to the title).
+                    if (this.langId === '7c559763-2b7a-4042-a047-3d782fb3e381') return this.overrideLogoUrl;
+                    return this.language?.logo_url || '';
+                },
 
                 init() {
                     const params = new URLSearchParams(window.location.search);
@@ -278,6 +435,59 @@
                 }
             }
         }
+    </script>
+
+    <script>
+        // Mobile nav (drawer)
+        (() => {
+            const toggle = document.getElementById('mobileNavToggle');
+            const backdrop = document.getElementById('mobileNavBackdrop');
+            const panel = document.getElementById('mobileNavPanel');
+            if (!toggle || !backdrop || !panel) return;
+
+            const setOpen = (open) => {
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+                backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+                backdrop.dataset.open = open ? 'true' : 'false';
+                panel.dataset.open = open ? 'true' : 'false';
+            };
+
+            const isOpen = () => panel.dataset.open === 'true';
+
+            toggle.addEventListener('click', () => setOpen(!isOpen()));
+            backdrop.addEventListener('click', () => setOpen(false));
+            document.addEventListener('click', (e) => {
+                if (e.target.closest('[data-close-mobile-nav]')) setOpen(false);
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') setOpen(false);
+            });
+        })();
+    </script>
+
+    <script>
+        const root = document.documentElement;
+        const themeToggles = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+        const updateToggleIcons = (mode) => {
+            themeToggles().forEach(btn => {
+                const icon = btn.querySelector('.material-symbols-rounded');
+                if (icon) icon.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+            });
+        };
+        const setTheme = (mode) => {
+            if (mode === 'dark') root.classList.add('dark');
+            else root.classList.remove('dark');
+            localStorage.setItem('px_theme', mode);
+            updateToggleIcons(mode);
+        };
+        setTheme(root.classList.contains('dark') ? 'dark' : 'light');
+        document.addEventListener('click', (e) => {
+            const trigger = e.target.closest('[data-theme-toggle]');
+            if (!trigger) return;
+            const next = root.classList.contains('dark') ? 'light' : 'dark';
+            setTheme(next);
+        });
     </script>
 </body>
 
