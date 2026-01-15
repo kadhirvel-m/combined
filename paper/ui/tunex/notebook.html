@@ -6,10 +6,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Python Notebook | Tunex</title>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+    <!-- Theme Manager (same as topic.html) -->
+    <script>
+        // Migrate old notebook theme preference to shared Theme.STORAGE_KEY
+        (function () {
+            try {
+                const legacy = localStorage.getItem('tunex-theme');
+                const current = localStorage.getItem('theme');
+                if (!current && legacy) localStorage.setItem('theme', legacy);
+            } catch (_) {
+                // ignore
+            }
+        })();
+    </script>
+    <script src="../assets/js/theme.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <!-- CodeMirror 5 (stable, works everywhere) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
@@ -27,96 +43,127 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/anyword-hint.min.js"></script>
 
     <script>
-        // Theme initialization
+        // Extend shared Theme manager with notebook-specific behavior
         (function () {
-            const stored = localStorage.getItem('tunex-theme');
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            const isDark = stored === 'dark' || (!stored && prefersDark);
-            if (isDark) document.documentElement.classList.add('dark');
-        })();
-
-        const Theme = {
-            toggle() {
-                document.documentElement.classList.toggle('dark');
-                const isDark = document.documentElement.classList.contains('dark');
-                localStorage.setItem('tunex-theme', isDark ? 'dark' : 'light');
-                // Update all editors
+            const baseToggle = Theme.toggle.bind(Theme);
+            Theme.toggle = function () {
+                baseToggle();
                 if (window.notebookInstance) {
-                    window.notebookInstance.updateTheme(isDark);
+                    window.notebookInstance.updateTheme(Theme.get() === 'dark');
                 }
-            },
-            isDark() {
-                return document.documentElement.classList.contains('dark');
-            }
-        };
+            };
+            Theme.isDark = function () {
+                return Theme.get() === 'dark';
+            };
+        })();
 
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
-                    colors: { brand: { 500: '#9E4B8A', 600: '#7A3A6B', 700: '#4C2A59' } },
-                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] }
+                    colors: {
+                        gatex: {
+                            bg: '#13131F',
+                            card: '#1E1E2F',
+                            cardHover: '#27293d',
+                            primary: '#9E4B8A',
+                            secondary: '#4C2A59',
+                            accent: '#FF7F50',
+                            success: '#00F090',
+                            info: '#3B82F6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Space Grotesk', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    },
+                    boxShadow: {
+                        mui: '0 10px 30px rgba(0,0,0,0.25)',
+                        muiSm: '0 6px 18px rgba(0,0,0,0.18)'
+                    }
                 }
             }
-        }
+        };
     </script>
     <style>
         :root {
-            --bg-primary: #FAFAFA;
-            --bg-secondary: #FFFFFF;
-            --bg-tertiary: #F4F4F5;
-            --text-primary: #18181B;
-            --text-muted: #A1A1AA;
-            --border-color: #E4E4E7;
+            --bg: #13131F;
+            --surface: #1E1E2F;
+            --surface-2: #171722;
+            --surface-3: #252532;
+            --text: #ffffff;
+            --muted: rgba(255, 255, 255, 0.65);
+            --outline: rgba(255, 255, 255, 0.08);
+            --outline-2: rgba(255, 255, 255, 0.12);
+            --brand: #9E4B8A;
+            --brand-2: #4C2A59;
+            --appbar: rgba(30, 30, 47, 0.8);
         }
 
-        .dark {
-            --bg-primary: #0F0F14;
-            --bg-secondary: #1A1A24;
-            --bg-tertiary: #252532;
-            --text-primary: #FAFAFA;
-            --text-muted: #71717A;
-            --border-color: #27272A;
+        html.light {
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-2: #f1f5f9;
+            --surface-3: #e2e8f0;
+            --text: #0f172a;
+            --muted: rgba(2, 6, 23, 0.65);
+            --outline: rgba(2, 6, 23, 0.10);
+            --outline-2: rgba(2, 6, 23, 0.14);
+            --appbar: rgba(255, 255, 255, 0.85);
         }
 
         body {
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            transition: background-color 0.2s;
+            background: radial-gradient(900px 400px at 15% 0%, rgba(158, 75, 138, 0.15), transparent 55%),
+                radial-gradient(700px 320px at 85% 0%, rgba(59, 130, 246, 0.12), transparent 55%),
+                var(--bg);
+            color: var(--text);
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        /* Hide dark logo in light mode, show light logo */
+        html.light .logo-dark,
+        html:not(.dark) .logo-dark {
+            display: none !important;
+        }
+
+        html.dark .logo-light {
+            display: none !important;
         }
 
         .notebook-cell {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
+            background: var(--surface);
+            border: 1px solid var(--outline);
+            border-radius: 18px;
             transition: all 0.15s ease;
         }
 
+        .notebook-cell.md-rendered {
+            position: relative;
+        }
+
         .notebook-cell:hover {
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transform: none;
+            box-shadow: none;
+            border-color: var(--outline);
         }
 
         .notebook-cell.active {
-            border-color: #9E4B8A;
-            box-shadow: 0 0 0 3px rgba(158, 75, 138, 0.15);
-        }
-
-        .header-bar {
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
+            border-color: rgba(158, 75, 138, 0.45);
+            box-shadow: none;
         }
 
         .btn-icon {
-            color: var(--text-muted);
+            color: var(--muted);
             transition: all 0.15s;
         }
 
         .btn-icon:hover {
-            color: var(--text-primary);
-            background: var(--bg-tertiary);
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #9E4B8A 0%, #7A3A6B 100%);
+            background: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
             color: white;
         }
 
@@ -125,16 +172,16 @@
         }
 
         .btn-ghost {
-            color: var(--text-muted);
+            color: var(--muted);
         }
 
         .btn-ghost:hover {
-            color: var(--text-primary);
-            background: var(--bg-tertiary);
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .run-btn {
-            background: #9E4B8A;
+            background: var(--brand);
             color: white;
             opacity: 0;
             transition: all 0.15s;
@@ -150,23 +197,28 @@
         }
 
         .output-area {
-            background: var(--bg-tertiary);
-            border-top: 1px solid var(--border-color);
+            background: var(--surface-2);
+            border-top: 1px solid var(--outline);
         }
 
         .exec-counter {
             font-family: 'JetBrains Mono', monospace;
-            color: var(--text-muted);
+            color: var(--muted);
             font-size: 11px;
         }
 
         .pill {
-            background: var(--bg-tertiary);
-            color: var(--text-muted);
+            background: rgba(158, 75, 138, 0.16);
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        html.light .pill {
+            background: rgba(158, 75, 138, 0.12);
+            color: #6b21a8;
         }
 
         .fab {
-            background: linear-gradient(135deg, #9E4B8A 0%, #4C2A59 100%);
+            background: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
         }
 
         @keyframes pulse-border {
@@ -191,16 +243,18 @@
             font-size: 14px !important;
             line-height: 1.5 !important;
             height: auto !important;
-            min-height: 100px;
-            padding: 8px 0;
+            min-height: 0;
+            padding: 10px 0;
+            background: #12121a !important;
+            border-radius: 0 0 18px 18px;
         }
 
         .CodeMirror-scroll {
-            min-height: 100px;
+            min-height: 0;
         }
 
         .CodeMirror-gutters {
-            border-right: 1px solid var(--border-color) !important;
+            border-right: 1px solid var(--outline) !important;
         }
 
         .CodeMirror-cursor {
@@ -210,66 +264,222 @@
         .CodeMirror-selected {
             background: rgba(158, 75, 138, 0.2) !important;
         }
+
+        html.light .CodeMirror {
+            background: #eef2ff !important;
+            color: #0f172a !important;
+        }
+
+        html.light .CodeMirror-gutters {
+            background: #e2e8f0 !important;
+            border-right: 1px solid rgba(2, 6, 23, 0.14) !important;
+        }
+
+        .appbar {
+            background: var(--appbar);
+            border-bottom: 1px solid var(--outline);
+            backdrop-filter: blur(18px);
+        }
+
+        .appbar-btn {
+            background: rgba(76, 42, 89, 0.18);
+            border: 1px solid var(--outline);
+            color: rgba(255, 255, 255, 0.78);
+            transition: all 160ms ease;
+        }
+
+        .appbar-btn:hover {
+            background: rgba(158, 75, 138, 0.9);
+            border-color: rgba(158, 75, 138, 0.45);
+            color: #fff;
+        }
+
+        .markdown-preview {
+            padding: 14px 16px;
+            color: var(--text);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .markdown-preview h1 {
+            font-size: 34px;
+            font-weight: 800;
+            margin: 10px 0 8px;
+            letter-spacing: -0.02em;
+        }
+
+        .markdown-preview h2 {
+            font-size: 24px;
+            font-weight: 800;
+            margin: 10px 0 8px;
+            letter-spacing: -0.01em;
+        }
+
+        .markdown-preview h3 {
+            font-size: 18px;
+            font-weight: 750;
+            margin: 10px 0 8px;
+        }
+
+        .markdown-preview p {
+            margin: 8px 0;
+        }
+
+        .markdown-preview ul,
+        .markdown-preview ol {
+            margin: 8px 0 8px 22px;
+        }
+
+        .markdown-preview li {
+            margin: 4px 0;
+        }
+
+        .markdown-preview blockquote {
+            margin: 10px 0;
+            padding: 10px 12px;
+            border-left: 3px solid rgba(158, 75, 138, 0.65);
+            background: rgba(158, 75, 138, 0.08);
+            border-radius: 10px;
+            color: var(--muted);
+        }
+
+        .markdown-preview code {
+            background: rgba(158, 75, 138, 0.14);
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        .markdown-preview pre {
+            margin: 10px 0;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid var(--outline);
+            overflow: auto;
+        }
+
+        html.light .markdown-preview pre {
+            background: rgba(2, 6, 23, 0.04);
+        }
+
+        .markdown-preview pre code {
+            background: transparent;
+            padding: 0;
+            font-size: 13px;
+        }
+
+        .markdown-input {
+            width: 100%;
+            min-height: 56px;
+            resize: vertical;
+            padding: 12px 14px;
+            background: transparent;
+            color: var(--text);
+            border: none;
+            outline: none;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* Markdown: rendered mode shows only content (no top bar) */
+        .notebook-cell.md-rendered .md-meta {
+            display: none;
+        }
+
+        .notebook-cell.md-rendered .md-header {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            left: auto;
+            width: auto;
+            background: transparent !important;
+            border-bottom: none !important;
+            padding: 0 !important;
+            z-index: 5;
+        }
+
+        .notebook-cell.md-rendered .md-actions {
+            opacity: 0;
+            transition: opacity 140ms ease;
+        }
+
+        .notebook-cell.md-rendered:hover .md-actions {
+            opacity: 1;
+        }
+
+        html.light .appbar-btn {
+            background: rgba(2, 6, 23, 0.04);
+            color: #475569;
+        }
+
+        html.light .appbar-btn:hover {
+            background: rgba(158, 75, 138, 0.12);
+            color: #1e293b;
+        }
     </style>
 </head>
 
-<body class="font-sans antialiased min-h-screen">
+<body class="min-h-screen font-sans antialiased">
 
-    <!-- Header -->
-    <header class="header-bar sticky top-0 z-50">
-        <div class="max-w-4xl mx-auto h-14 px-4 flex items-center justify-between">
+    <!-- Header (topic.html style) -->
+    <header class="appbar fixed top-0 left-0 right-0 h-16 z-50 flex items-center justify-between px-6">
+        <div class="flex items-center gap-3">
+            <a href="index.html" class="w-8 h-8 rounded-full appbar-btn flex items-center justify-center" title="Back">
+                <i class="ri-arrow-left-line"></i>
+            </a>
             <div class="flex items-center gap-3">
-                <a href="index.html" class="btn-icon p-2 rounded-lg">
-                    <i class="ri-arrow-left-s-line text-xl"></i>
-                </a>
-                <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-lg fab flex items-center justify-center">
-                        <i class="ri-terminal-box-fill text-white text-sm"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-sm font-semibold">Python Notebook</h1>
-                        <p class="text-xs" style="color: var(--text-muted)">Tunex IDE</p>
-                    </div>
-                </div>
+                <img src="../assets/img/tunex/tunex-logo-dark.svg" alt="Tunex" class="h-8 logo-dark">
+                <img src="../assets/img/tunex/tunex-logo-light.svg" alt="Tunex" class="h-8 logo-light">
+                <span class="font-bold tracking-tight opacity-60 text-sm border-l border-white/20 pl-3">
+                    Python Notebook
+                </span>
             </div>
-            <div class="flex items-center gap-1">
-                <button id="runAllBtn"
-                    class="btn-ghost px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5">
-                    <i class="ri-play-list-2-fill"></i><span class="hidden sm:inline">Run All</span>
-                </button>
-                <button id="clearBtn"
-                    class="btn-ghost px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5">
-                    <i class="ri-eraser-fill"></i><span class="hidden sm:inline">Clear</span>
-                </button>
-                <div class="w-px h-5 mx-1" style="background: var(--border-color)"></div>
-                <button id="themeBtn" class="btn-icon p-2 rounded-lg">
-                    <i class="ri-sun-line dark:hidden text-lg"></i>
-                    <i class="ri-moon-fill hidden dark:inline text-lg"></i>
-                </button>
-            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <button id="runAllBtn" class="px-4 py-2 rounded-lg appbar-btn text-sm font-bold flex items-center gap-2"
+                title="Run all">
+                <i class="ri-play-list-2-fill"></i><span class="hidden sm:inline">Run All</span>
+            </button>
+            <button id="clearBtn" class="px-4 py-2 rounded-lg appbar-btn text-sm font-bold flex items-center gap-2"
+                title="Clear outputs">
+                <i class="ri-eraser-fill"></i><span class="hidden sm:inline">Clear</span>
+            </button>
+            <button id="themeBtn" class="w-9 h-9 rounded-lg appbar-btn flex items-center justify-center"
+                title="Toggle theme">
+                <i class="ri-moon-line dark:hidden text-lg"></i>
+                <i class="ri-sun-line hidden dark:block text-lg"></i>
+            </button>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-4xl mx-auto px-4 py-8">
+    <main class="max-w-5xl mx-auto px-4 pt-24 pb-10">
+        <!-- Intro header removed as requested -->
         <div id="cells-container" class="space-y-4"></div>
 
         <!-- Add Cell Button -->
-        <div class="flex justify-center mt-8">
+        <div class="flex justify-center mt-8 gap-3 flex-wrap">
             <button id="addCellBtn"
                 class="btn-primary px-6 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2">
                 <i class="ri-add-line"></i> Add Cell
             </button>
+            <button id="addMarkdownBtn"
+                class="btn-ghost px-6 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2">
+                <i class="ri-markdown-line"></i> Add Markdown
+            </button>
         </div>
 
         <!-- Keyboard Hints -->
-        <div class="mt-10 flex flex-wrap justify-center gap-4 text-xs" style="color: var(--text-muted)">
+        <div class="mt-10 flex flex-wrap justify-center gap-4 text-xs" style="color: var(--muted)">
             <div class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 rounded font-mono" style="background: var(--bg-tertiary)">Ctrl+Enter</kbd>
+                <kbd class="px-1.5 py-0.5 rounded font-mono" style="background: var(--surface-2)">Ctrl+Enter</kbd>
                 <span>Run cell</span>
             </div>
             <div class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 rounded font-mono" style="background: var(--bg-tertiary)">Shift+Enter</kbd>
+                <kbd class="px-1.5 py-0.5 rounded font-mono" style="background: var(--surface-2)">Shift+Enter</kbd>
                 <span>Run + Add below</span>
             </div>
         </div>
@@ -294,6 +504,7 @@
 
                 // Button handlers
                 document.getElementById('addCellBtn').addEventListener('click', () => this.createCell());
+                document.getElementById('addMarkdownBtn').addEventListener('click', () => this.createCell(-1, 'markdown'));
                 document.getElementById('runAllBtn').addEventListener('click', () => this.runAllCells());
                 document.getElementById('clearBtn').addEventListener('click', () => this.clearAllOutputs());
                 document.getElementById('themeBtn').addEventListener('click', () => Theme.toggle());
@@ -301,15 +512,20 @@
 
             updateTheme(isDark) {
                 this.cells.forEach(cell => {
-                    cell.editor.setOption('theme', isDark ? 'material-darker' : 'eclipse');
+                    if (cell.editor) {
+                        cell.editor.setOption('theme', isDark ? 'material-darker' : 'eclipse');
+                    }
                 });
             }
 
-            createCell(insertAfterIndex = -1) {
+            createCell(insertAfterIndex = -1, type = 'code') {
                 const cellId = Date.now() + Math.random();
                 const cell = {
                     id: cellId,
+                    type,
                     editor: null,
+                    markdownText: '',
+                    markdownEditing: true,
                     output: '',
                     error: '',
                     isRunning: false,
@@ -320,32 +536,59 @@
                 const cellEl = document.createElement('div');
                 cellEl.id = `cell-${cellId}`;
                 cellEl.className = 'notebook-cell rounded-xl overflow-hidden';
-                cellEl.innerHTML = `
-                    <div class="flex items-center justify-between px-4 py-2" style="background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color)">
-                        <div class="flex items-center gap-3">
-                            <span class="exec-counter">[*]</span>
-                            <span class="pill px-2 py-0.5 rounded-full text-[10px] font-medium uppercase">Python</span>
+
+                if (type === 'markdown') {
+                    cellEl.innerHTML = `
+                        <div class="md-header flex items-center justify-between px-4 py-2" style="background: var(--surface-2); border-bottom: 1px solid var(--outline)">
+                            <div class="md-meta flex items-center gap-3">
+                                <span class="exec-counter">[*]</span>
+                                <span class="pill px-2 py-0.5 rounded-full text-[10px] font-medium uppercase">Markdown</span>
+                            </div>
+                            <div class="md-actions flex items-center gap-1">
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center" data-action="toggle-md" title="Edit / Render">
+                                    <i class="ri-check-line text-sm"></i>
+                                </button>
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center" data-action="add">
+                                    <i class="ri-add-line text-sm"></i>
+                                </button>
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center hover:!text-red-500" data-action="delete">
+                                    <i class="ri-delete-bin-6-line text-sm"></i>
+                                </button>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-1">
-                            <button class="run-btn w-7 h-7 rounded-lg flex items-center justify-center" data-action="run">
-                                <i class="ri-play-fill text-sm"></i>
-                            </button>
-                            <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center" data-action="add">
-                                <i class="ri-add-line text-sm"></i>
-                            </button>
-                            <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center hover:!text-red-500" data-action="delete">
-                                <i class="ri-delete-bin-6-line text-sm"></i>
-                            </button>
+                        <div class="markdown-area">
+                            <textarea class="markdown-input" placeholder="Write markdown..." spellcheck="false"></textarea>
+                            <div class="markdown-preview hidden"></div>
                         </div>
-                    </div>
-                    <div class="cm-container"></div>
-                    <div class="output-area hidden">
-                        <div class="px-4 py-3 font-mono text-sm">
-                            <pre class="output-text whitespace-pre-wrap" style="color: var(--text-primary)"></pre>
-                            <pre class="error-text whitespace-pre-wrap text-red-500"></pre>
+                    `;
+                } else {
+                    cellEl.innerHTML = `
+                        <div class="flex items-center justify-between px-4 py-2" style="background: var(--surface-2); border-bottom: 1px solid var(--outline)">
+                            <div class="flex items-center gap-3">
+                                <span class="exec-counter">[*]</span>
+                                <span class="pill px-2 py-0.5 rounded-full text-[10px] font-medium uppercase">Python</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button class="run-btn w-7 h-7 rounded-lg flex items-center justify-center" data-action="run">
+                                    <i class="ri-play-fill text-sm"></i>
+                                </button>
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center" data-action="add">
+                                    <i class="ri-add-line text-sm"></i>
+                                </button>
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center hover:!text-red-500" data-action="delete">
+                                    <i class="ri-delete-bin-6-line text-sm"></i>
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                `;
+                        <div class="cm-container"></div>
+                        <div class="output-area hidden">
+                            <div class="px-4 py-3 font-mono text-sm">
+                                <pre class="output-text whitespace-pre-wrap" style="color: var(--text)"></pre>
+                                <pre class="error-text whitespace-pre-wrap text-red-500"></pre>
+                            </div>
+                        </div>
+                    `;
+                }
 
                 // Insert into DOM
                 if (insertAfterIndex >= 0 && insertAfterIndex < this.cells.length) {
@@ -359,51 +602,156 @@
                     this.activeCellIndex = this.cells.length - 1;
                 }
 
-                // Create CodeMirror editor
-                const cmContainer = cellEl.querySelector('.cm-container');
-                const isDark = Theme.isDark();
+                if (type === 'markdown') {
+                    const input = cellEl.querySelector('.markdown-input');
+                    const preview = cellEl.querySelector('.markdown-preview');
+                    const toggleBtn = cellEl.querySelector('[data-action="toggle-md"]');
 
-                cell.editor = CodeMirror(cmContainer, {
-                    mode: 'python',
-                    theme: isDark ? 'material-darker' : 'eclipse',
-                    lineNumbers: true,
-                    indentUnit: 4,
-                    tabSize: 4,
-                    indentWithTabs: false,
-                    lineWrapping: true,
-                    autoCloseBrackets: true,
-                    matchBrackets: true,
-                    viewportMargin: Infinity,
-                    extraKeys: {
-                        'Ctrl-Enter': () => this.runCell(this.cells.indexOf(cell)),
-                        'Shift-Enter': () => {
-                            this.runCell(this.cells.indexOf(cell));
-                            this.createCell(this.cells.indexOf(cell));
-                        },
-                        'Tab': (cm) => {
-                            if (cm.somethingSelected()) {
-                                cm.indentSelection('add');
+                    const setToggleIcon = () => {
+                        if (!toggleBtn) return;
+                        toggleBtn.innerHTML = cell.markdownEditing
+                            ? '<i class="ri-check-line text-sm"></i>'
+                            : '<i class="ri-edit-2-line text-sm"></i>';
+                    };
+
+                    const renderMarkdown = () => {
+                        const value = input.value || '';
+                        cell.markdownText = value;
+                        if (value.trim().length === 0) {
+                            preview.innerHTML = '<p style="color: var(--muted)">Empty markdown...</p>';
+                        } else {
+                            preview.innerHTML = marked.parse(value);
+                        }
+                    };
+
+                    const showPreview = () => {
+                        renderMarkdown();
+                        input.classList.add('hidden');
+                        preview.classList.remove('hidden');
+                        cell.markdownEditing = false;
+                        cellEl.classList.add('md-rendered');
+                        setToggleIcon();
+                    };
+
+                    const showEditor = () => {
+                        input.classList.remove('hidden');
+                        preview.classList.add('hidden');
+                        cell.markdownEditing = true;
+                        cellEl.classList.remove('md-rendered');
+                        setToggleIcon();
+                        setTimeout(() => input.focus(), 0);
+                    };
+
+                    input.addEventListener('blur', () => {
+                        if (input.value.trim().length > 0) showPreview();
+                    });
+
+                    input.addEventListener('keydown', (e) => {
+                        // Jupyter-like shortcuts
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                            e.preventDefault();
+                            showPreview();
+                        }
+                        if (e.shiftKey && e.key === 'Enter') {
+                            e.preventDefault();
+                            showPreview();
+                            const currentIndex = this.cells.indexOf(cell);
+                            if (currentIndex === this.cells.length - 1) {
+                                this.createCell(currentIndex, 'code');
                             } else {
-                                cm.replaceSelection('    ', 'end');
-                            }
-                        },
-                        'Ctrl-Space': 'autocomplete',
-                        'Backspace': function (cm) {
-                            if (cm.somethingSelected()) return CodeMirror.Pass;
-                            var cursor = cm.getCursor();
-                            var line = cm.getLine(cursor.line);
-                            var before = line.slice(0, cursor.ch);
-                            if (/^\s+$/.test(before) && before.length % 4 === 0 && before.length > 0) {
-                                cm.replaceRange("", {
-                                    line: cursor.line,
-                                    ch: cursor.ch - 4
-                                }, cursor);
-                            } else {
-                                return CodeMirror.Pass;
+                                this.activeCellIndex = Math.min(this.cells.length - 1, currentIndex + 1);
+                                this.updateActiveCellStyles();
                             }
                         }
+                        if (e.key === 'Escape') {
+                            e.preventDefault();
+                            if (input.value.trim().length > 0) showPreview();
+                        }
+                    });
+
+                    preview.addEventListener('dblclick', (e) => {
+                        e.stopPropagation();
+                        showEditor();
+                    });
+
+                    if (toggleBtn) {
+                        toggleBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (cell.markdownEditing) {
+                                showPreview();
+                            } else {
+                                showEditor();
+                            }
+                        });
                     }
-                });
+
+                    renderMarkdown();
+                    // New markdown cells start in edit mode; once rendered, they look like Jupyter.
+                    showEditor();
+                } else {
+                    // Create CodeMirror editor
+                    const cmContainer = cellEl.querySelector('.cm-container');
+                    const isDark = Theme.isDark();
+
+                    cell.editor = CodeMirror(cmContainer, {
+                        mode: 'python',
+                        theme: isDark ? 'material-darker' : 'eclipse',
+                        lineNumbers: true,
+                        indentUnit: 4,
+                        tabSize: 4,
+                        indentWithTabs: false,
+                        lineWrapping: true,
+                        autoCloseBrackets: true,
+                        matchBrackets: true,
+                        viewportMargin: Infinity,
+                        extraKeys: {
+                            'Ctrl-Enter': () => this.runCell(this.cells.indexOf(cell)),
+                            'Shift-Enter': () => {
+                                this.runCell(this.cells.indexOf(cell));
+                                this.createCell(this.cells.indexOf(cell));
+                            },
+                            'Tab': (cm) => {
+                                if (cm.somethingSelected()) {
+                                    cm.indentSelection('add');
+                                } else {
+                                    cm.replaceSelection('    ', 'end');
+                                }
+                            },
+                            'Ctrl-Space': 'autocomplete',
+                            'Backspace': function (cm) {
+                                if (cm.somethingSelected()) return CodeMirror.Pass;
+                                var cursor = cm.getCursor();
+                                var line = cm.getLine(cursor.line);
+                                var before = line.slice(0, cursor.ch);
+                                if (/^\s+$/.test(before) && before.length % 4 === 0 && before.length > 0) {
+                                    cm.replaceRange("", {
+                                        line: cursor.line,
+                                        ch: cursor.ch - 4
+                                    }, cursor);
+                                } else {
+                                    return CodeMirror.Pass;
+                                }
+                            }
+                        }
+                    });
+
+                    // Start ~1 line tall; auto-grow as the user types.
+                    const autoGrow = () => {
+                        const lineHeight = cell.editor.defaultTextHeight();
+                        const lineCount = Math.max(1, cell.editor.lineCount());
+                        const padding = 16;
+                        const desired = (lineCount * lineHeight) + padding;
+                        const maxHeight = 520;
+                        const clamped = Math.min(maxHeight, desired);
+                        cell.editor.setSize(null, clamped);
+                    };
+
+                    cell.editor.on('change', autoGrow);
+                    setTimeout(() => {
+                        autoGrow();
+                        cell.editor.refresh();
+                    }, 0);
+                }
 
                 // Cell click to activate
                 cellEl.addEventListener('click', () => {
@@ -412,10 +760,13 @@
                 });
 
                 // Button handlers
-                cellEl.querySelector('[data-action="run"]').addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.runCell(this.cells.indexOf(cell));
-                });
+                const runBtn = cellEl.querySelector('[data-action="run"]');
+                if (runBtn) {
+                    runBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.runCell(this.cells.indexOf(cell));
+                    });
+                }
                 cellEl.querySelector('[data-action="add"]').addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.createCell(this.cells.indexOf(cell));
@@ -427,8 +778,13 @@
 
                 this.updateActiveCellStyles();
 
-                // Focus the editor
-                setTimeout(() => cell.editor.focus(), 50);
+                // Focus the editor/input
+                if (cell.type === 'markdown') {
+                    const input = cellEl.querySelector('.markdown-input');
+                    if (input) setTimeout(() => input.focus(), 50);
+                } else if (cell.editor) {
+                    setTimeout(() => cell.editor.focus(), 50);
+                }
 
                 return cell;
             }
@@ -488,6 +844,7 @@
 
             async runCell(index) {
                 const cell = this.cells[index];
+                if (cell.type === 'markdown') return;
                 const code = cell.editor.getValue();
 
                 cell.isRunning = true;
@@ -527,7 +884,9 @@
 
             async runAllCells() {
                 for (let i = 0; i < this.cells.length; i++) {
-                    await this.runCell(i);
+                    if (this.cells[i].type !== 'markdown') {
+                        await this.runCell(i);
+                    }
                 }
             }
 
