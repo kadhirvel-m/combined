@@ -717,6 +717,14 @@
                 <i class="ri-moon-line dark:hidden text-lg"></i>
                 <i class="ri-sun-line hidden dark:block text-lg"></i>
             </button>
+            <button @click="regenerateTopic()" :disabled="regenerating"
+                class="px-4 py-2 rounded-lg bg-[#4C2A59]/20 hover:bg-[#9E4B8A] transition-all text-sm font-bold border border-white/5 hover:border-[#9E4B8A]/50 flex items-center gap-2"
+                :class="regenerating ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''"
+                title="Regenerate this topic content">
+                <i class="ri-refresh-line" x-show="!regenerating"></i>
+                <i class="ri-loader-4-line animate-spin" x-show="regenerating"></i>
+                <span x-text="regenerating ? 'Regenerating...' : 'Regenerate'"></span>
+            </button>
             <a href="notebook.html"
                 class="px-4 py-2 rounded-lg bg-[#4C2A59]/20 hover:bg-[#9E4B8A] transition-all text-sm font-bold border border-white/5 hover:border-[#9E4B8A]/50 flex items-center gap-2">
                 <i class="ri-code-s-slash-line"></i> Playground
@@ -2021,6 +2029,8 @@
         window.topicApp = function topicApp() {
             return {
                 loading: true,
+                regenerating: false,
+                topicId: null,
                 trackTitle: '',
                 trackLanguage: '',
                 topicTitle: '',
@@ -2055,11 +2065,61 @@
 
                     if (id) {
                         console.log("Found ID:", id);
+                        this.topicId = id;
                         await this.loadTopic(id);
                     } else {
                         console.warn("No Topic ID found in URL");
                         alert("No Topic ID provided. Please return to the section page.");
                         this.loading = false;
+                    }
+                },
+
+                async regenerateTopic() {
+                    const id = this.topicId || new URLSearchParams(window.location.search).get('id');
+                    if (!id) {
+                        alert('No Topic ID found.');
+                        return;
+                    }
+                    if (this.regenerating) return;
+
+                    const ok = confirm('Regenerate this topic content? This will overwrite existing chapters for this topic.');
+                    if (!ok) return;
+
+                    this.regenerating = true;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/tunex/topics/${id}/ai/ensure?force=true`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        if (!res.ok) {
+                            let msg = `Regeneration failed (${res.status})`;
+                            try {
+                                const err = await res.json();
+                                msg = err.detail || msg;
+                            } catch { }
+                            throw new Error(msg);
+                        }
+
+                        // Reset UI state that depends on chapter content.
+                        this.loading = true;
+                        this.chapters = [];
+                        this.editors = {};
+                        this.outputs = {};
+                        this.errors = {};
+                        this.running = {};
+                        this.currentQuizIndex = 0;
+                        this.selectedOption = null;
+                        this.quizAnswered = false;
+                        this.score = 0;
+                        this.quizCompleted = false;
+
+                        await this.loadTopic(id);
+                    } catch (e) {
+                        console.error('Regenerate error:', e);
+                        alert(e.message || 'Regeneration failed');
+                        this.loading = false;
+                    } finally {
+                        this.regenerating = false;
                     }
                 },
 
