@@ -9,6 +9,8 @@
         href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
 
     <!-- Theme & Config -->
     <script src="../assets/js/theme.js"></script>
@@ -54,6 +56,23 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
 
     <style>
+        :root {
+            --yt-surface: rgba(255, 255, 255, 0.04);
+            --yt-outline: rgba(255, 255, 255, 0.10);
+            --yt-muted: rgba(255, 255, 255, 0.65);
+            --yt-contrast: #ffffff;
+            --yt-brand: #9E4B8A;
+            --yt-brand-strong: #4C2A59;
+        }
+
+        html.light,
+        html:not(.dark) {
+            --yt-surface: rgba(2, 6, 23, 0.04);
+            --yt-outline: rgba(2, 6, 23, 0.10);
+            --yt-muted: rgba(2, 6, 23, 0.65);
+            --yt-contrast: #0f172a;
+        }
+
         /* Base body styling */
         body {
             background: #1E1E2F;
@@ -448,10 +467,232 @@
         html.dark .logo-light {
             display: none !important;
         }
+
+        /* Related videos carousel (ported from notes_generator.html) */
+        .yt-carousel {
+            display: flex;
+            gap: 1.25rem;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+            scroll-snap-type: x mandatory;
+            scrollbar-width: thin;
+        }
+
+        .yt-carousel::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .yt-carousel::-webkit-scrollbar-thumb {
+            background: var(--yt-outline);
+            border-radius: 9999px;
+        }
+
+        .yt-card {
+            flex: 0 0 260px;
+            scroll-snap-align: start;
+            border: 1px solid var(--yt-outline);
+            border-radius: 1rem;
+            overflow: hidden;
+            background: var(--yt-surface);
+            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+            text-decoration: none;
+            color: inherit;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+            position: relative;
+        }
+
+        .yt-card:hover {
+            transform: translateY(-4px);
+            border-color: color-mix(in oklab, var(--yt-brand) 65%, var(--yt-outline));
+            box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        .yt-thumb {
+            position: relative;
+            padding-top: 56.25%;
+            background: #000;
+        }
+
+        .yt-thumb img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .yt-duration {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            padding: 2px 6px;
+            border-radius: 9999px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .yt-hover-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(155deg, rgba(8, 7, 31, 0.75), rgba(88, 28, 135, 0.45));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 2;
+        }
+
+        .yt-card:hover .yt-hover-overlay,
+        .yt-card:focus-within .yt-hover-overlay {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .yt-hover-overlay .yt-hover-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-weight: 600;
+            cursor: pointer;
+            color: #fff;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 12px 22px rgba(15, 23, 42, 0.35);
+            font-size: 0;
+            background: linear-gradient(135deg, var(--yt-brand-strong), color-mix(in oklab, var(--yt-brand) 75%, #ffffff));
+        }
+
+        .yt-hover-overlay .yt-hover-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 24px rgba(15, 23, 42, 0.45);
+        }
+
+        .yt-hover-overlay .yt-hover-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .yt-hover-btn-icon {
+            font-size: 22px;
+            line-height: 1;
+            color: inherit;
+            font-family: 'Material Symbols Rounded', sans-serif;
+            font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .yt-body {
+            padding: 0.75rem 0.95rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+        }
+
+        .yt-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            line-height: 1.3;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        .yt-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--yt-muted);
+        }
+
+        .yt-channel-logo {
+            width: 28px;
+            height: 28px;
+            border-radius: 9999px;
+            object-fit: cover;
+            border: 1px solid var(--yt-outline);
+            flex-shrink: 0;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .yt-channel-name {
+            font-weight: 700;
+            color: var(--yt-contrast);
+            opacity: 0.9;
+        }
+
+        .yt-views {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .yt-skeleton-grid {
+            display: flex;
+            gap: 1.25rem;
+            overflow: hidden;
+        }
+
+        .yt-skeleton-card {
+            flex: 0 0 260px;
+            height: 170px;
+            border-radius: 1rem;
+            background: rgba(148, 163, 184, 0.12);
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.10) 37%, rgba(255, 255, 255, 0.04) 63%);
+            background-size: 800px 100%;
+            animation: shimmer 1.25s linear infinite;
+        }
+
+        html.light .skeleton,
+        html:not(.dark) .skeleton {
+            background: linear-gradient(90deg, rgba(2, 6, 23, 0.04) 25%, rgba(2, 6, 23, 0.10) 37%, rgba(2, 6, 23, 0.04) 63%);
+            background-size: 800px 100%;
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: -468px 0;
+            }
+
+            100% {
+                background-position: 468px 0;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .yt-card {
+                flex: 0 0 210px;
+            }
+
+            .yt-skeleton-card {
+                flex: 0 0 210px;
+                height: 130px;
+            }
+
+            .yt-thumb {
+                padding-top: 45%;
+            }
+        }
     </style>
 </head>
 
-<body class="min-h-screen" x-data="topicApp">
+<body class="min-h-screen" x-data="topicApp()">
 
     <!-- Header -->
     <header
@@ -524,795 +765,265 @@
         <!-- MAIN CONTENT -->
         <main class="flex-1 overflow-y-auto relative scroll-smooth bg-[#1E1E2F] bg-grid custom-scrollbar"
             id="main-content" @scroll="checkScroll">
-            <div class="max-w-4xl mx-auto px-6 md:px-12 py-12">
+            <div class="max-w-7xl mx-auto px-6 md:px-12 py-12">
 
                 <!-- HERO -->
-                <section class="py-16 text-center">
-                    <p class="text-sm uppercase tracking-widest accent mb-4">Python Fundamentals</p>
-                    <h1 class="text-5xl font-bold mb-6" x-text="topicTitle"></h1>
-                    <p class="text-xl opacity-70 max-w-xl mx-auto" x-text="topicDesc"></p>
+                <section class="pt-6 pb-6 text-center">
+                    <p class="text-sm uppercase tracking-widest accent mb-2" x-text="trackTitle || 'Learning Track'">
+                    </p>
+
+                    <div class="max-w-4xl mx-auto">
+                        <h1 class="text-5xl font-bold mb-4" x-text="topicTitle"></h1>
+                        <p class="text-xl opacity-70 max-w-xl mx-auto" x-text="topicDesc"></p>
+                    </div>
                 </section>
 
-                <!-- DYNAMIC CHAPTERS -->
-                <template x-for="ch in chapters" :key="ch.id">
-                    <section :id="'ch' + ch.chapter_number" class="py-16 border-b border-white/5 last:border-0"
-                        x-intersect="setCurrent(ch.chapter_number)">
-
-                        <!-- Chapter Header -->
-                        <div class="flex items-center gap-4 mb-8">
-                            <div class="chapter-num" x-text="ch.chapter_number"></div>
-                            <div>
-                                <p class="text-xs uppercase tracking-wider opacity-50">Chapter <span
-                                        x-text="numberToWord(ch.chapter_number)"></span></p>
-                                <h2 class="text-2xl font-bold" x-text="ch.title"></h2>
+                <!-- Related Videos (below title) -->
+                <section id="relatedVideosSection" class="hidden mb-10 text-left px-1">
+                    <div
+                        class="p-5 rounded-2xl bg-white/70 dark:bg-[#171722]/70 border border-black/10 dark:border-white/10">
+                        <div class="flex items-center justify-between gap-3 mb-4">
+                            <div class="min-w-0">
+                                <h2 class="text-xs uppercase tracking-widest font-bold opacity-60">Related Videos
+                                </h2>
+                                <p id="relatedVideosSummary" class="text-xs opacity-50 truncate">Finding videos…</p>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <select id="videoLanguageSelect" x-model="relatedVideosLanguage"
+                                    @change="refreshRelatedVideos(true)"
+                                    class="px-3 py-2 rounded-xl bg-transparent border border-black/10 dark:border-white/10 text-xs font-bold focus:outline-none">
+                                    <option value="English">English</option>
+                                    <option value="Tamil">Tamil</option>
+                                    <option value="Hindi">Hindi</option>
+                                    <option value="Telugu">Telugu</option>
+                                    <option value="Malayalam">Malayalam</option>
+                                </select>
+                                <button id="refreshVideosBtn" type="button" @click="refreshRelatedVideos(true)"
+                                    class="px-3 py-2 rounded-xl bg-[#4C2A59]/15 hover:bg-[#9E4B8A]/90 transition-all text-xs font-bold border border-black/10 dark:border-white/10">
+                                    <i class="ri-refresh-line"></i>
+                                    <span class="ml-1">Refresh</span>
+                                </button>
                             </div>
                         </div>
 
-                        <!-- 1. CONCEPT (Legacy) -->
-                        <template x-if="ch.chapter_type === 'concept' && !ch.content.blocks">
-                            <div>
-                                <div class="text-lg opacity-80 leading-relaxed mb-8 markdown-body"
-                                    x-html="parseMarkdown(ch.content.description)"></div>
-                                <div class="grid md:grid-cols-2 gap-6">
-                                    <div
-                                        class="p-8 rounded-2xl bg-[#0F0F16] relative overflow-hidden group border border-white/5">
-                                        <p class="text-[10px] uppercase tracking-widest opacity-50 mb-6 font-bold"
-                                            x-text="ch.content.code_title"></p>
-                                        <div class="font-mono text-lg mb-6 relative z-10 whitespace-pre text-gray-300"
-                                            x-text="ch.content.code_snippet"></div>
-                                        <div class="pt-4 border-t border-white/10 relative z-10">
-                                            <p class="text-[10px] uppercase tracking-widest opacity-40 mb-2">Output</p>
-                                            <div class="font-mono text-green-400 text-sm leading-relaxed whitespace-pre"
-                                                x-text="ch.content.code_output"></div>
-                                        </div>
-                                    </div>
-                                    <div
-                                        class="p-8 rounded-2xl bg-gradient-to-br from-[#2D1B36] to-[#1E1E2F] border border-[#4C2A59]/30 flex flex-col justify-center">
-                                        <div class="flex items-center gap-3 mb-4">
-                                            <i class="ri-lightbulb-flash-line text-[#9E4B8A] text-xl"></i>
-                                            <h3 class="font-bold text-lg" x-text="ch.content.mental_model.title"></h3>
-                                        </div>
-                                        <p class="opacity-80 italic mb-6 leading-relaxed"
-                                            x-text="ch.content.mental_model.text"></p>
-                                    </div>
+                        <div id="relatedVideosSkeleton">
+                            <div class="yt-skeleton-grid">
+                                <div class="yt-skeleton-card skeleton"></div>
+                                <div class="yt-skeleton-card skeleton"></div>
+                                <div class="yt-skeleton-card skeleton"></div>
+                            </div>
+                        </div>
+
+                        <div id="relatedVideosWrap" class="hidden">
+                            <div id="relatedVideoCarousel" class="yt-carousel"></div>
+                        </div>
+
+                        <div id="relatedVideosEmpty" class="text-sm opacity-60 hidden">No videos found.</div>
+                    </div>
+                </section>
+
+                <!-- DYNAMIC CHAPTERS -->
+                <div class="max-w-4xl mx-auto">
+                    <template x-for="ch in chapters" :key="ch.id">
+                        <section :id="'ch' + ch.chapter_number" class="py-16 border-b border-white/5 last:border-0"
+                            x-intersect="setCurrent(ch.chapter_number)">
+
+                            <!-- Chapter Header -->
+                            <div class="flex items-center gap-4 mb-8">
+                                <div class="chapter-num" x-text="ch.chapter_number"></div>
+                                <div>
+                                    <p class="text-xs uppercase tracking-wider opacity-50">Chapter <span
+                                            x-text="numberToWord(ch.chapter_number)"></span></p>
+                                    <h2 class="text-2xl font-bold" x-text="ch.title"></h2>
                                 </div>
                             </div>
-                        </template>
 
-                        <!-- 2. SYNTAX -->
-                        <template x-if="ch.chapter_type === 'syntax'">
-                            <div>
-                                <div class="grid lg:grid-cols-2 gap-8 mb-8">
-                                    <div class="p-8 rounded-2xl bg-[#12121a] font-mono text-lg flex items-center justify-center border border-white/5 shadow-lg whitespace-pre"
-                                        x-text="ch.content.syntax_block"></div>
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <template x-for="comp in ch.content.components">
-                                            <div class="p-3 rounded-xl bg-[#4C2A59]/10 border border-[#4C2A59]/20">
-                                                <span class="accent font-bold font-mono text-sm block mb-1"
-                                                    x-text="comp.name"></span>
-                                                <p class="opacity-60 text-xs" x-text="comp.desc"></p>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </div>
-                                <template x-for="tip in ch.content.tips">
-                                    <div class="p-6 rounded-2xl bg-[#12121a] border border-white/5 mb-4">
-                                        <p class="font-bold mb-2 flex items-center gap-2"><i
-                                                class="ri-information-fill text-[#9E4B8A]"></i> <span
-                                                x-text="tip.title"></span></p>
-                                        <p class="opacity-80 text-sm" x-text="tip.text"></p>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-
-                        <!-- 3. MISTAKES -->
-                        <template x-if="ch.chapter_type === 'mistakes'">
-                            <div class="grid md:grid-cols-3 gap-6">
-                                <template x-for="mistake in ch.content.mistakes">
-                                    <div
-                                        class="p-6 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/30 hover:border-[#EF4444] transition-all group">
+                            <!-- 1. CONCEPT (Legacy) -->
+                            <template x-if="ch.chapter_type === 'concept' && !ch.content.blocks">
+                                <div>
+                                    <div class="text-lg opacity-80 leading-relaxed mb-8 markdown-body"
+                                        x-html="parseMarkdown(ch.content.description)"></div>
+                                    <div class="grid md:grid-cols-2 gap-6">
                                         <div
-                                            class="w-10 h-10 rounded-full bg-[#EF4444]/20 flex items-center justify-center text-[#EF4444] mb-4 group-hover:scale-110 transition-transform">
-                                            <i :class="mistake.icon || 'ri-error-warning-fill'"></i>
+                                            class="p-8 rounded-2xl bg-[#0F0F16] relative overflow-hidden group border border-white/5">
+                                            <p class="text-[10px] uppercase tracking-widest opacity-50 mb-6 font-bold"
+                                                x-text="ch.content.code_title"></p>
+                                            <div class="font-mono text-lg mb-6 relative z-10 whitespace-pre text-gray-300"
+                                                x-text="ch.content.code_snippet"></div>
+                                            <div class="pt-4 border-t border-white/10 relative z-10">
+                                                <p class="text-[10px] uppercase tracking-widest opacity-40 mb-2">Output
+                                                </p>
+                                                <div class="font-mono text-green-400 text-sm leading-relaxed whitespace-pre"
+                                                    x-text="ch.content.code_output"></div>
+                                            </div>
                                         </div>
-                                        <h3 class="font-bold text-lg mb-2" x-text="mistake.name"></h3>
-                                        <p class="text-sm opacity-70 mb-4" x-text="mistake.desc"></p>
-                                        <div class="p-3 rounded-lg bg-[#12121a] border border-[#EF4444]/20">
-                                            <p class="text-[10px] text-[#10B981] font-bold uppercase mb-1">Fix</p>
-                                            <code class="bg-transparent p-0 text-xs" x-text="mistake.fix"></code>
+                                        <div
+                                            class="p-8 rounded-2xl bg-gradient-to-br from-[#2D1B36] to-[#1E1E2F] border border-[#4C2A59]/30 flex flex-col justify-center">
+                                            <div class="flex items-center gap-3 mb-4">
+                                                <i class="ri-lightbulb-flash-line text-[#9E4B8A] text-xl"></i>
+                                                <h3 class="font-bold text-lg" x-text="ch.content.mental_model.title">
+                                                </h3>
+                                            </div>
+                                            <p class="opacity-80 italic mb-6 leading-relaxed"
+                                                x-text="ch.content.mental_model.text"></p>
                                         </div>
                                     </div>
-                                </template>
-                            </div>
-                        </template>
+                                </div>
+                            </template>
 
-                        <!-- 4. INTERVIEW -->
-                        <template x-if="ch.chapter_type === 'interview' && !ch.content.layout">
-                            <div class="grid md:grid-cols-2 gap-6">
-                                <template x-for="q in ch.content.questions">
-                                    <div
-                                        class="p-6 rounded-2xl bg-[#1E1E2F] border border-white/5 hover:border-white/10 transition-all group hover:-translate-y-1 shadow-lg">
-                                        <div class="flex items-center justify-between mb-4">
-                                            <div class="flex items-center gap-3">
-                                                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white"
-                                                    :style="`background-color: ${q.color}`">
-                                                    <i :class="q.icon" class="text-xl"></i>
+                            <!-- 2. SYNTAX -->
+                            <template x-if="ch.chapter_type === 'syntax'">
+                                <div>
+                                    <div class="grid lg:grid-cols-2 gap-8 mb-8">
+                                        <div class="p-8 rounded-2xl bg-[#12121a] font-mono text-lg flex items-center justify-center border border-white/5 shadow-lg whitespace-pre"
+                                            x-text="ch.content.syntax_block"></div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <template x-for="comp in ch.content.components">
+                                                <div class="p-3 rounded-xl bg-[#4C2A59]/10 border border-[#4C2A59]/20">
+                                                    <span class="accent font-bold font-mono text-sm block mb-1"
+                                                        x-text="comp.name"></span>
+                                                    <p class="opacity-60 text-xs" x-text="comp.desc"></p>
                                                 </div>
-                                                <span class="font-bold text-lg" x-text="q.company"></span>
-                                            </div>
-                                            <span
-                                                class="text-xs px-2 py-1 rounded bg-[#12121a] border border-white/10 text-gray-400"
-                                                x-text="q.tag"></span>
+                                            </template>
                                         </div>
-                                        <p class="font-medium text-lg leading-relaxed opacity-90 group-hover:opacity-100 transition-opacity"
-                                            x-text="q.q"></p>
                                     </div>
-                                </template>
-                            </div>
-                        </template>
-
-                        <!-- 4B. PRACTICE (New Vertical Layout) -->
-                        <template x-if="ch.chapter_type === 'interview' && ch.content.layout === 'practice_list'">
-                            <div class="space-y-4"> <!-- Vertical Stack -->
-                                <template x-for="(q, idx) in ch.content.questions" :key="idx">
-                                    <div @click="openProblem(q.problem_id)"
-                                        class="p-5 rounded-xl bg-[#1E1E2F] border border-white/5 hover:border-[#9E4B8A] transition-all flex items-start gap-4 group cursor-pointer relative overflow-hidden">
-                                        <div
-                                            class="absolute inset-0 bg-[#9E4B8A]/5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <template x-for="tip in ch.content.tips">
+                                        <div class="p-6 rounded-2xl bg-[#12121a] border border-white/5 mb-4">
+                                            <p class="font-bold mb-2 flex items-center gap-2"><i
+                                                    class="ri-information-fill text-[#9E4B8A]"></i> <span
+                                                    x-text="tip.title"></span></p>
+                                            <p class="opacity-80 text-sm" x-text="tip.text"></p>
                                         </div>
-                                        <!-- Optional: Simple Number or Icon -->
-                                        <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-sm font-bold opacity-60 group-hover:bg-[#9E4B8A] group-hover:text-white transition-colors"
-                                            x-text="idx + 1"></div>
+                                    </template>
+                                </div>
+                            </template>
 
-                                        <div class="flex-grow">
-                                            <div class="flex items-center justify-between mb-2">
-                                                <h4 class="font-bold text-white/90" x-text="q.q"></h4>
+                            <!-- 3. MISTAKES -->
+                            <template x-if="ch.chapter_type === 'mistakes'">
+                                <div class="grid md:grid-cols-3 gap-6">
+                                    <template x-for="mistake in ch.content.mistakes">
+                                        <div
+                                            class="p-6 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/30 hover:border-[#EF4444] transition-all group">
+                                            <div
+                                                class="w-10 h-10 rounded-full bg-[#EF4444]/20 flex items-center justify-center text-[#EF4444] mb-4 group-hover:scale-110 transition-transform">
+                                                <i :class="mistake.icon || 'ri-error-warning-fill'"></i>
+                                            </div>
+                                            <h3 class="font-bold text-lg mb-2" x-text="mistake.name"></h3>
+                                            <p class="text-sm opacity-70 mb-4" x-text="mistake.desc"></p>
+                                            <div class="p-3 rounded-lg bg-[#12121a] border border-[#EF4444]/20">
+                                                <p class="text-[10px] text-[#10B981] font-bold uppercase mb-1">Fix</p>
+                                                <code class="bg-transparent p-0 text-xs" x-text="mistake.fix"></code>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
 
-                                                <!-- Metadata Badges -->
-                                                <div class="flex gap-2">
-                                                    <span
-                                                        class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-white/5 text-gray-400"
-                                                        x-text="q.company"></span>
-                                                    <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded"
-                                                        :class="{
+                            <!-- 4. INTERVIEW -->
+                            <template x-if="ch.chapter_type === 'interview' && !ch.content.layout">
+                                <div class="grid md:grid-cols-2 gap-6">
+                                    <template x-for="q in ch.content.questions">
+                                        <div
+                                            class="p-6 rounded-2xl bg-[#1E1E2F] border border-white/5 hover:border-white/10 transition-all group hover:-translate-y-1 shadow-lg">
+                                            <div class="flex items-center justify-between mb-4">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white"
+                                                        :style="`background-color: ${q.color}`">
+                                                        <i :class="q.icon" class="text-xl"></i>
+                                                    </div>
+                                                    <span class="font-bold text-lg" x-text="q.company"></span>
+                                                </div>
+                                                <span
+                                                    class="text-xs px-2 py-1 rounded bg-[#12121a] border border-white/10 text-gray-400"
+                                                    x-text="q.tag"></span>
+                                            </div>
+                                            <p class="font-medium text-lg leading-relaxed opacity-90 group-hover:opacity-100 transition-opacity"
+                                                x-text="q.q"></p>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <!-- 4B. PRACTICE (New Vertical Layout) -->
+                            <template x-if="ch.chapter_type === 'interview' && ch.content.layout === 'practice_list'">
+                                <div class="space-y-4"> <!-- Vertical Stack -->
+                                    <template x-for="(q, idx) in ch.content.questions" :key="idx">
+                                        <div @click="openProblem(q.problem_id)"
+                                            class="p-5 rounded-xl bg-[#1E1E2F] border border-white/5 hover:border-[#9E4B8A] transition-all flex items-start gap-4 group cursor-pointer relative overflow-hidden">
+                                            <div
+                                                class="absolute inset-0 bg-[#9E4B8A]/5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            </div>
+                                            <!-- Optional: Simple Number or Icon -->
+                                            <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-sm font-bold opacity-60 group-hover:bg-[#9E4B8A] group-hover:text-white transition-colors"
+                                                x-text="idx + 1"></div>
+
+                                            <div class="flex-grow">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <h4 class="font-bold text-white/90" x-text="q.q"></h4>
+
+                                                    <!-- Metadata Badges -->
+                                                    <div class="flex gap-2">
+                                                        <span
+                                                            class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-white/5 text-gray-400"
+                                                            x-text="q.company"></span>
+                                                        <span
+                                                            class="text-[10px] uppercase font-bold px-2 py-0.5 rounded"
+                                                            :class="{
                                                             'bg-green-500/10 text-green-400': q.company === 'Easy',
                                                             'bg-amber-500/10 text-amber-400': q.company === 'Medium',
                                                             'bg-red-500/10 text-red-400': q.company === 'Hard'
                                                         }" x-text="q.tag"></span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
+                                    </template>
+                                </div>
+                            </template>
 
-                        <!-- 4C. COMPANY GRID (New Layout) -->
-                        <template x-if="ch.chapter_type === 'interview' && ch.content.layout === 'company_grid'">
-                            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                                <template x-for="q in ch.content.questions">
-                                    <div @click="openProblem(q.problem_id)"
-                                        class="aspect-square relative group cursor-pointer perspective-1000">
-                                        <div
-                                            class="w-full h-full rounded-2xl bg-[#1E1E2F] border border-white/5 p-4 flex flex-col items-center justify-center text-center transition-all duration-500 group-hover:rotate-y-12 shadow-xl group-hover:shadow-[#9E4B8A]/20">
-
-                                            <!-- Icon -->
-                                            <div class="w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-4 transition-transform group-hover:scale-110"
-                                                :style="`background: ${q.color}20; color: ${q.color}`">
-                                                <i :class="q.icon"></i>
-                                            </div>
-
-                                            <h4 class="font-bold text-lg mb-1" x-text="q.company"></h4>
-                                            <p class="text-[10px] uppercase tracking-wider opacity-50"
-                                                x-text="q.tag_short"></p>
-
-                                            <!-- Hover Overlay -->
-                                            <div
-                                                class="absolute inset-0 bg-[#0F0F16]/95 rounded-2xl flex items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                                                <div>
-                                                    <p class="text-xs text-gray-300 mb-2 leading-relaxed"
-                                                        x-text="q.use_case"></p>
-                                                    <span
-                                                        class="text-[10px] font-bold text-[#9E4B8A] uppercase tracking-widest">View
-                                                        Problem</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-
-
-
-                        <!-- 4E. COMPANY CARDS (Interview with company styling) -->
-                        <template x-if="ch.chapter_type === 'interview' && ch.content.layout === 'company_cards'">
-                            <div>
-                                <div class="grid md:grid-cols-2 gap-4 mb-8">
+                            <!-- 4C. COMPANY GRID (New Layout) -->
+                            <template x-if="ch.chapter_type === 'interview' && ch.content.layout === 'company_grid'">
+                                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                     <template x-for="q in ch.content.questions">
-                                        <div class="group p-6 rounded-2xl border border-white/5 bg-[#12121a] hover:bg-[#1a1a24] transition-all relative overflow-hidden"
-                                            :style="`--company-color: ${q.color}`">
-                                            <div class="absolute -right-4 -top-4 w-24 h-24 rounded-full blur-2xl transition-all"
-                                                :style="`background: ${q.color}10`"></div>
-                                            <div class="flex items-center justify-between mb-4 relative">
-                                                <div class="flex items-center gap-3">
-                                                    <div class="w-10 h-10 rounded-xl flex items-center justify-center"
-                                                        :style="`background: ${q.color}20; color: ${q.color}`">
-                                                        <i :class="q.icon" class="text-xl"></i>
-                                                    </div>
-                                                    <div>
-                                                        <h3 class="font-bold" x-text="q.company"></h3>
-                                                        <p class="text-[10px] uppercase tracking-wider opacity-50"
-                                                            x-text="q.role"></p>
-                                                    </div>
+                                        <div @click="openProblem(q.problem_id)"
+                                            class="aspect-square relative group cursor-pointer perspective-1000">
+                                            <div
+                                                class="w-full h-full rounded-2xl bg-[#1E1E2F] border border-white/5 p-4 flex flex-col items-center justify-center text-center transition-all duration-500 group-hover:rotate-y-12 shadow-xl group-hover:shadow-[#9E4B8A]/20">
+
+                                                <!-- Icon -->
+                                                <div class="w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-4 transition-transform group-hover:scale-110"
+                                                    :style="`background: ${q.color}20; color: ${q.color}`">
+                                                    <i :class="q.icon"></i>
                                                 </div>
-                                                <span class="px-3 py-1 rounded-full text-xs font-bold border"
-                                                    :style="`background: ${q.color}10; color: ${q.color}; border-color: ${q.color}30`"
-                                                    x-text="q.tag"></span>
-                                            </div>
-                                            <p class="text-base font-medium leading-snug relative z-10"
-                                                x-text="'\"' + q.question + ' \"'"></p>
-                                        </div>
-                                    </template>
-                                </div>
-                                <!-- Tips section if available -->
-                                <template x-if="ch.content.tips">
-                                    <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
-                                        <p class="font-bold mb-3">💡 Pro Tips for Interviews</p>
-                                        <ul class="space-y-2 opacity-80 text-sm">
-                                            <template x-for="tip in ch.content.tips">
-                                                <li class="markdown-body" x-html="parseMarkdown('• ' + tip)"></li>
-                                            </template>
-                                        </ul>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
 
-                        <!-- 6. WALKTHROUGH (Step-by-step problem solving) -->
-                        <template x-if="ch.chapter_type === 'walkthrough'">
-                            <div>
-                                <!-- Problem Statement -->
-                                <div class="p-6 rounded-2xl bg-[#4C2A59]/30 mb-8">
-                                    <p class="font-bold text-lg mb-3 flex items-center gap-2">
-                                        <i class="ri-file-list-3-line"></i>
-                                        <span x-text="'Problem: ' + ch.content.problem.title"></span>
-                                    </p>
-                                    <p class="opacity-80" x-text="ch.content.problem.desc"></p>
-                                    <p class="font-mono text-sm mt-3 opacity-60" x-text="ch.content.problem.example">
-                                    </p>
-                                </div>
+                                                <h4 class="font-bold text-lg mb-1" x-text="q.company"></h4>
+                                                <p class="text-[10px] uppercase tracking-wider opacity-50"
+                                                    x-text="q.tag_short"></p>
 
-                                <!-- Steps -->
-                                <div class="space-y-6 mb-8">
-                                    <template x-for="step in ch.content.steps">
-                                        <div class="p-5 rounded-2xl bg-[#12121a]">
-                                            <p class="text-sm font-bold accent mb-3" x-text="step.title"></p>
-                                            <p x-show="step.text" class="opacity-80 text-sm" x-text="step.text"></p>
-                                            <ul x-show="step.items" class="space-y-1 opacity-80 text-sm">
-                                                <template x-for="item in step.items">
-                                                    <li class="markdown-body" x-html="parseMarkdown('• ' + item)"></li>
-                                                </template>
-                                            </ul>
-                                            <!-- Code editor for walkthrough -->
-                                            <template x-if="step.code_id">
-                                                <div class="rounded-xl overflow-hidden border border-[#4C2A59] mt-4">
-                                                    <div
-                                                        class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
-                                                        <span class="text-sm font-bold">Code</span>
-                                                        <button @click="runCode(step.code_id)"
-                                                            class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
-                                                            <i class="ri-play-fill" x-show="!running[step.code_id]"></i>
-                                                            <i class="ri-loader-4-line animate-spin"
-                                                                x-show="running[step.code_id]"></i>
-                                                            Run
-                                                        </button>
-                                                    </div>
-                                                    <div :id="'editor-' + step.code_id"></div>
-                                                    <div class="code-output p-4 min-h-[40px]"
-                                                        x-show="outputs[step.code_id] || errors[step.code_id]">
-                                                        <pre class="text-sm text-green-400"
-                                                            x-text="outputs[step.code_id]"></pre>
-                                                        <pre class="text-sm text-red-400"
-                                                            x-text="errors[step.code_id]"></pre>
-                                                    </div>
-                                                </div>
-                                            </template>
-                                            <!-- Trace visualization -->
-                                            <template x-if="step.trace">
-                                                <div class="mt-4">
-                                                    <div class="grid grid-cols-5 gap-1 text-center font-mono text-xs">
-                                                        <template x-for="t in step.trace">
-                                                            <div class="p-2 rounded bg-[#4C2A59]/30">
-                                                                <span x-text="'num=' + t.num"></span><br>
-                                                                <span
-                                                                    :class="t.updated ? 'text-green-400' : 'opacity-50'"
-                                                                    x-text="'max=' + t.max"></span>
-                                                            </div>
-                                                        </template>
-                                                    </div>
-                                                    <p class="text-xs opacity-50 mt-2 text-center">Green = max updated
-                                                    </p>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </template>
-                                </div>
-
-                                <!-- Takeaway -->
-                                <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
-                                    <p class="font-bold mb-2 flex items-center gap-2">
-                                        <i class="ri-focus-3-line"></i> Key Takeaway
-                                    </p>
-                                    <p class="opacity-80 text-sm" x-text="ch.content.takeaway"></p>
-                                </div>
-                            </div>
-                        </template>
-
-                        <!-- 5. QUIZ -->
-                        <template x-if="ch.chapter_type === 'quiz'">
-                            <div class="bg-[#12121a] rounded-3xl p-8 border border-white/5 text-center">
-                                <div class="mb-4 inline-block p-4 rounded-full bg-[#9E4B8A]/20 text-[#9E4B8A]">
-                                    <i class="ri-trophy-line text-4xl"></i>
-                                </div>
-                                <h2 class="text-3xl font-bold mb-2">Mastery Check</h2>
-                                <p class="opacity-60 mb-8">Test your knowledge.</p>
-
-                                <div x-show="!quizCompleted">
-                                    <div class="mb-8">
-                                        <div class="flex justify-between text-sm opacity-50 mb-2">
-                                            <span
-                                                x-text="`Question ${currentQuizIndex + 1} of ${ch.content.questions.length}`"></span>
-                                        </div>
-                                        <div class="h-2 bg-[#2a2a35] rounded-full overflow-hidden">
-                                            <div class="h-full bg-[#9E4B8A] transition-all"
-                                                :style="`width: ${(currentQuizIndex + 1) / ch.content.questions.length * 100}%`">
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <h3 class="text-xl font-bold mb-6"
-                                        x-text="ch.content.questions[currentQuizIndex].q"></h3>
-
-                                    <div class="grid gap-3 text-left">
-                                        <template x-for="(opt, idx) in ch.content.questions[currentQuizIndex].opts"
-                                            :key="idx">
-                                            <div @click="selectQuizOption(idx, ch.content.questions[currentQuizIndex])"
-                                                class="quiz-opt p-4 rounded-xl transition-all" :class="{
-                                                    'selected': selectedOption === idx,
-                                                    'correct': quizAnswered && idx === ch.content.questions[currentQuizIndex].correct,
-                                                    'wrong': quizAnswered && selectedOption === idx && idx !== ch.content.questions[currentQuizIndex].correct
-                                                }">
-                                                <div class="flex items-center gap-3">
-                                                    <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs"
-                                                        :class="selectedOption === idx ? 'border-[#9E4B8A] bg-[#9E4B8A] text-white' : 'border-gray-600'">
-                                                        <span x-show="selectedOption === idx"
-                                                            x-text="['A','B','C'][idx]"></span>
-                                                    </div>
-                                                    <span x-text="opt"></span>
-                                                </div>
-                                                <div x-show="quizAnswered && idx === ch.content.questions[currentQuizIndex].correct"
-                                                    class="mt-2 text-xs text-[#10B981] font-bold pl-9">
-                                                    <i class="ri-check-line"></i> <span
-                                                        x-text="ch.content.questions[currentQuizIndex].why"></span>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </div>
-
-                                    <button x-show="quizAnswered" @click="nextQuiz(ch.content.questions)"
-                                        class="mt-6 w-full py-3 rounded-xl accent-bg font-bold hover:brightness-110 transition-all">
-                                        <span
-                                            x-text="currentQuizIndex < ch.content.questions.length - 1 ? 'Next Question' : 'See Results'"></span>
-                                    </button>
-                                </div>
-
-                                <div x-show="quizCompleted" class="text-center py-8">
-                                    <h3 class="text-3xl font-bold mb-2">Quiz Complete!</h3>
-                                    <p class="text-xl accent mb-6"
-                                        x-text="`You scored ${score}/${ch.content.questions.length}`">
-                                    </p>
-                                    <button onclick="location.reload()"
-                                        class="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold">Restart
-                                        Topic</button>
-                                </div>
-                            </div>
-                        </template>
-
-                        <!-- 6. GENERIC EDITOR SECTIONS (Sequences, etc.) -->
-                        <template x-if="ch.content.sections && !ch.content.blocks">
-                            <div class="space-y-12">
-                                <template x-for="sect in ch.content.sections">
-                                    <div>
-                                        <h3 class="text-xl font-bold mb-4" x-text="sect.title"></h3>
-                                        <p class="text-sm opacity-80 mb-4" x-text="sect.text"></p>
-                                        <div class="rounded-2xl overflow-hidden border-2 border-[#4C2A59] mb-6">
-                                            <div class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
-                                                <span class="text-sm font-bold">Try Code</span>
-                                                <button @click="runCode(sect.editor_id)"
-                                                    class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
-                                                    <i class="ri-play-fill"></i> Run
-                                                </button>
-                                            </div>
-                                            <div :id="'editor-' + sect.editor_id"></div>
-                                            <div class="code-output p-4 min-h-[40px]"
-                                                x-show="outputs[sect.editor_id] || errors[sect.editor_id]">
-                                                <pre class="text-sm text-green-400"
-                                                    x-text="outputs[sect.editor_id]"></pre>
-                                                <pre class="text-sm text-red-400" x-text="errors[sect.editor_id]"></pre>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-
-                        <!-- 7. VARIATIONS -->
-                        <template x-if="ch.content.variations">
-                            <div class="grid md:grid-cols-3 gap-4 mb-8">
-                                <template x-for="v in ch.content.variations">
-                                    <div class="p-4 rounded-xl bg-[#4C2A59]/20">
-                                        <p class="font-mono text-sm mb-2" x-text="v.code"></p>
-                                        <p class="font-mono accent text-xs" x-text="v.meaning"></p>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
-                        <!-- 11. DYNAMIC BLOCK ENGINE -->
-                        <template x-if="ch.content.blocks">
-                            <div class="space-y-10">
-                                <template x-for="block in ch.content.blocks">
-                                    <div class="block-container">
-                                        <template x-if="block.type === 'text'">
-                                            <div class="max-w-3xl mx-auto">
-                                                <h3 x-show="block.title" class="text-2xl font-bold mb-4"
-                                                    x-text="block.title"></h3>
-                                                <p class="text-lg opacity-80 leading-relaxed whitespace-pre-line markdown-body"
-                                                    x-html="parseMarkdown(block.content)"></p>
-                                            </div>
-                                        </template>
-                                        <template x-if="block.type === 'code'">
-                                            <div class="rounded-2xl overflow-hidden border-2 border-[#4C2A59] my-6">
-                                                <div class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
-                                                    <span class="text-sm font-bold"
-                                                        x-text="block.title || 'Code Playground'"></span>
-                                                    <button @click="runCode(block.id)"
-                                                        class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
-                                                        <i class="ri-play-fill" x-show="!running[block.id]"></i>
-                                                        <i class="ri-loader-4-line animate-spin"
-                                                            x-show="running[block.id]"></i>
-                                                        Run
-                                                    </button>
-                                                </div>
-                                                <div :id="'editor-' + block.id"></div>
-                                                <div class="code-output p-4 min-h-[40px]"
-                                                    x-show="outputs[block.id] || errors[block.id]">
-                                                    <pre class="text-sm text-green-400"
-                                                        x-text="outputs[block.id]"></pre>
-                                                    <pre class="text-sm text-red-400" x-text="errors[block.id]"></pre>
-                                                </div>
-                                            </div>
-                                        </template>
-                                        <template x-if="block.type === 'split'">
-                                            <div class="grid md:grid-cols-2 gap-8 items-center">
-                                                <div>
-                                                    <h3 x-show="block.left.title" class="text-xl font-bold mb-3"
-                                                        x-text="block.left.title"></h3>
-                                                    <p class="opacity-80 leading-relaxed markdown-body"
-                                                        x-html="parseMarkdown(block.left.content)">
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <template x-if="block.right.type === 'image'">
-                                                        <img :src="block.right.url"
-                                                            class="rounded-xl border border-white/10 shadow-lg w-full">
-                                                    </template>
-                                                    <template x-if="block.right.type === 'code_static'">
-                                                        <div
-                                                            class="p-6 rounded-xl bg-[#12121a] font-mono text-sm border border-white/5 relative group">
-                                                            <div class="whitespace-pre-wrap text-gray-300"
-                                                                x-text="block.right.content">
-                                                            </div>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                            </div>
-                                        </template>
-                                        <template x-if="block.type === 'callout'">
-                                            <div class="p-6 rounded-2xl border mb-6 flex gap-4" :class="{
-                                                    'bg-[#9E4B8A]/10 border-[#9E4B8A]/30': block.variant === 'info',
-                                                    'bg-[#EF4444]/10 border-[#EF4444]/30': block.variant === 'warning',
-                                                    'bg-[#10B981]/10 border-[#10B981]/30': block.variant === 'success'
-                                                }">
-                                                <i class="text-2xl" :class="{
-                                                        'ri-information-fill text-[#9E4B8A]': block.variant === 'info',
-                                                        'ri-alert-fill text-[#EF4444]': block.variant === 'warning',
-                                                        'ri-check-double-line text-[#10B981]': block.variant === 'success'
-                                                    }"></i>
-                                                <div>
-                                                    <h4 class="font-bold mb-1" x-text="block.title"></h4>
-                                                    <p class="text-sm opacity-80 markdown-body"
-                                                        x-html="parseMarkdown(block.text)">
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </template>
-
-                                        <template x-if="block.type === 'carousel'">
-                                            <div class="relative bg-[#12121a] rounded-2xl border border-white/5 p-1"
-                                                x-data="{ slide: 0 }"
-                                                x-init="$watch('slide', idx => $nextTick(() => refreshEditor(block.items[idx].code_id)))">
-                                                <!-- Slides -->
-                                                <template x-for="(item, idx) in block.items" :key="idx">
-                                                    <div x-show="slide === idx" class="p-6 transition-all duration-300">
-                                                        <div class="flex justify-between items-start mb-4">
-                                                            <div>
-                                                                <h3 class="font-bold text-xl accent"
-                                                                    x-text="item.title"></h3>
-                                                                <p class="text-sm opacity-70 mt-1" x-text="item.desc">
-                                                                </p>
-                                                            </div>
-                                                            <div class="flex gap-2">
-                                                                <button
-                                                                    @click="slide = (slide - 1 + block.items.length) % block.items.length"
-                                                                    class="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                                                                    <i class="ri-arrow-left-s-line"></i>
-                                                                </button>
-                                                                <button
-                                                                    @click="slide = (slide + 1) % block.items.length"
-                                                                    class="p-2 rounded-lg bg-[#9E4B8A]/20 text-[#9E4B8A] hover:bg-[#9E4B8A] hover:text-white transition-all">
-                                                                    <i class="ri-arrow-right-s-line text-lg"></i>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-
-                                                        <!-- Editor for this slide -->
-                                                        <div
-                                                            class="rounded-xl overflow-hidden border border-[#4C2A59]/40 bg-[#0F0F16]">
-                                                            <div
-                                                                class="px-4 py-2 bg-[#4C2A59]/20 flex items-center justify-between border-b border-[#4C2A59]/20">
-                                                                <span class="text-xs font-mono opacity-60">Example
-                                                                    Code</span>
-                                                                <button @click="runCode(item.code_id)"
-                                                                    class="px-3 py-1 rounded text-xs font-bold bg-[#9E4B8A] hover:bg-[#863e75] flex items-center gap-1 transition-colors">
-                                                                    <i class="ri-play-fill"
-                                                                        x-show="!running[item.code_id]"></i>
-                                                                    <i class="ri-loader-4-line animate-spin"
-                                                                        x-show="running[item.code_id]"></i>
-                                                                    Run
-                                                                </button>
-                                                            </div>
-                                                            <div :id="'editor-' + item.code_id"></div>
-                                                            <div class="code-output p-4 min-h-[40px] border-t border-white/5"
-                                                                x-show="outputs[item.code_id] || errors[item.code_id]">
-                                                                <pre class="text-xs text-green-400 font-mono"
-                                                                    x-text="outputs[item.code_id]"></pre>
-                                                                <pre class="text-xs text-red-400 font-mono"
-                                                                    x-text="errors[item.code_id]"></pre>
-                                                            </div>
-                                                        </div>
-
-                                                        <!-- Dots -->
-                                                        <div class="flex justify-center gap-2 mt-6">
-                                                            <template x-for="(_, i) in block.items">
-                                                                <div class="w-2 h-2 rounded-full transition-all"
-                                                                    :class="slide === i ? 'bg-[#9E4B8A] w-6' : 'bg-white/10'">
-                                                                </div>
-                                                            </template>
-                                                        </div>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                    </div>
-                                </template>
-
-                                <!-- NEW: CARDS BLOCK -->
-                                <template x-if="block.type === 'cards'">
-                                    <div>
-                                        <h3 x-show="block.title" class="text-2xl font-bold mb-6 text-center"
-                                            x-text="block.title">
-                                        </h3>
-                                        <div class="grid md:grid-cols-3 gap-6">
-                                            <template x-for="card in block.items">
+                                                <!-- Hover Overlay -->
                                                 <div
-                                                    class="group relative p-6 rounded-2xl bg-[#1E1E2F] border border-white/5 hover:border-[#9E4B8A]/50 transition-all hover:-translate-y-1">
-                                                    <div
-                                                        class="absolute inset-0 bg-gradient-to-br from-[#9E4B8A]/0 to-[#9E4B8A]/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl">
-                                                    </div>
-                                                    <div class="relative z-10">
-                                                        <div
-                                                            class="w-12 h-12 rounded-xl bg-[#4C2A59]/20 flex items-center justify-center text-[#9E4B8A] mb-4 text-2xl group-hover:scale-110 transition-transform">
-                                                            <i :class="card.icon || 'ri-briefcase-line'"></i>
-                                                        </div>
-                                                        <h4 class="text-lg font-bold mb-2" x-text="card.title">
-                                                        </h4>
-                                                        <p class="text-2xl font-bold accent mb-4" x-text="card.value">
-                                                        </p>
-                                                        <div class="space-y-2">
-                                                            <p class="text-xs uppercase tracking-widest opacity-50">
-                                                                Stack</p>
-                                                            <div class="flex flex-wrap gap-2">
-                                                                <template x-for="tag in card.tags">
-                                                                    <span
-                                                                        class="px-2 py-1 rounded-md bg-white/5 text-xs font-mono text-gray-300 border border-white/5"
-                                                                        x-text="tag"></span>
-                                                                </template>
-                                                            </div>
-                                                        </div>
+                                                    class="absolute inset-0 bg-[#0F0F16]/95 rounded-2xl flex items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                                                    <div>
+                                                        <p class="text-xs text-gray-300 mb-2 leading-relaxed"
+                                                            x-text="q.use_case"></p>
+                                                        <span
+                                                            class="text-[10px] font-bold text-[#9E4B8A] uppercase tracking-widest">View
+                                                            Problem</span>
                                                     </div>
                                                 </div>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- STATIC CODE WITH OUTPUT -->
-                                <template x-if="block.type === 'static_code'">
-                                    <div class="p-6 rounded-2xl bg-[#12121a] mb-8">
-                                        <p class="text-sm opacity-50 mb-4" x-text="block.title"></p>
-                                        <pre class="font-mono text-lg whitespace-pre-wrap"
-                                            x-html="highlightPython(block.code)"></pre>
-                                        <div x-show="block.output" class="mt-4 pt-4 border-t border-[#4C2A59]/50">
-                                            <p class="text-sm opacity-70">Output:</p>
-                                            <pre class="font-mono text-green-400 text-sm mt-2"
-                                                x-text="block.output"></pre>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- SYNTAX BREAKDOWN -->
-                                <template x-if="block.type === 'syntax_breakdown'">
-                                    <div>
-                                        <div class="p-6 rounded-2xl bg-[#12121a] mb-8 font-mono text-lg"
-                                            x-html="highlightPython(block.code)"></div>
-                                        <div class="space-y-4 mb-8">
-                                            <template x-for="part in block.parts">
-                                                <div class="flex items-start gap-4 p-4 rounded-xl bg-[#4C2A59]/20">
-                                                    <span class="accent font-bold font-mono"
-                                                        x-text="part.keyword"></span>
-                                                    <p class="opacity-80" x-text="part.desc"></p>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- MENTAL MODEL -->
-                                <template x-if="block.type === 'mental_model'">
-                                    <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A] mb-8">
-                                        <p class="font-bold mb-3 flex items-center gap-2">
-                                            <i class="ri-brain-line text-xl"></i>
-                                            <span x-text="block.title"></span>
-                                        </p>
-                                        <p class="opacity-80 text-sm mb-4 markdown-body"
-                                            x-html="parseMarkdown(block.text)"></p>
-                                        <div x-show="block.examples"
-                                            class="grid grid-cols-3 gap-2 text-center font-mono text-sm">
-                                            <template x-for="ex in block.examples">
-                                                <div class="p-2 rounded bg-[#12121a]" x-text="ex"></div>
-                                            </template>
-                                        </div>
-                                        <p x-show="block.note" class="opacity-60 text-xs mt-3 markdown-body"
-                                            x-html="parseMarkdown(block.note)"></p>
-                                    </div>
-                                </template>
-
-                                <!-- WARNING BOX (Correct vs Wrong) -->
-                                <template x-if="block.type === 'warning_box'">
-                                    <div class="p-6 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/30">
-                                        <p class="font-bold text-[#EF4444] mb-3 flex items-center gap-2">
-                                            <i class="ri-alert-line text-xl"></i>
-                                            <span x-text="block.title"></span>
-                                        </p>
-                                        <p class="opacity-80 text-sm mb-4 markdown-body"
-                                            x-html="parseMarkdown(block.text)"></p>
-                                        <div class="grid md:grid-cols-2 gap-4">
-                                            <div class="p-4 rounded-xl bg-[#12121a]">
-                                                <p class="text-xs text-[#10B981] font-bold mb-2">✓ CORRECT</p>
-                                                <pre class="font-mono text-sm whitespace-pre-wrap"
-                                                    x-text="block.correct"></pre>
-                                            </div>
-                                            <div class="p-4 rounded-xl bg-[#12121a]">
-                                                <p class="text-xs text-[#EF4444] font-bold mb-2">✗ WRONG</p>
-                                                <pre class="font-mono text-sm whitespace-pre-wrap"
-                                                    x-text="block.wrong"></pre>
                                             </div>
                                         </div>
-                                    </div>
-                                </template>
+                                    </template>
+                                </div>
+                            </template>
 
-                                <!-- KEYWORD CARDS (break/continue/pass) -->
-                                <template x-if="block.type === 'keyword_cards'">
-                                    <div class="space-y-6 mb-8">
-                                        <template x-for="kw in block.keywords">
-                                            <div class="p-6 rounded-2xl bg-[#12121a]">
-                                                <div class="flex items-center gap-3 mb-3">
-                                                    <code class="text-lg" x-text="kw.name"></code>
-                                                    <span class="text-xs px-2 py-1 rounded"
-                                                        :style="`background: ${kw.tag_color}20; color: ${kw.tag_color}`"
-                                                        x-text="kw.tag"></span>
-                                                </div>
-                                                <p class="opacity-70 text-sm mb-4" x-text="kw.desc"></p>
-                                                <pre class="font-mono text-sm opacity-90 whitespace-pre-wrap"
-                                                    x-text="kw.code"></pre>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
 
-                                <!-- RANGE FORMS -->
-                                <template x-if="block.type === 'range_forms'">
-                                    <div class="p-6 rounded-2xl bg-[#12121a] mb-8">
-                                        <p class="text-sm opacity-50 mb-4">THREE FORMS OF RANGE:</p>
-                                        <div class="space-y-4 font-mono">
-                                            <template x-for="form in block.forms">
-                                                <div class="flex items-center gap-4">
-                                                    <code class="bg-[#4C2A59] px-3 py-1" x-text="form.syntax"></code>
-                                                    <span class="text-sm opacity-70" x-text="form.desc"></span>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
 
-                                <!-- RANGE EXAMPLES -->
-                                <template x-if="block.type === 'range_examples'">
-                                    <div class="grid md:grid-cols-3 gap-4 mb-8">
-                                        <template x-for="ex in block.examples">
-                                            <div class="p-4 rounded-xl bg-[#4C2A59]/20">
-                                                <p class="font-mono text-sm mb-2" x-text="ex.input"></p>
-                                                <p class="font-mono accent" x-text="ex.output"></p>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-
-                                <!-- SECTION HEADER -->
-                                <template x-if="block.type === 'section'">
-                                    <div class="mb-6">
-                                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
-                                            <i :class="block.icon"
-                                                class="text-[#9E4B8A] p-2 rounded-lg bg-[#9E4B8A]/20"></i>
-                                            <span x-text="block.title"></span>
-                                        </h3>
-                                        <p class="text-lg opacity-80" x-text="block.text"></p>
-                                    </div>
-                                </template>
-
-                                <!-- PRO TIP -->
-                                <template x-if="block.type === 'pro_tip'">
-                                    <div class="p-5 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
-                                        <p class="font-bold mb-2 flex items-center gap-2">
-                                            <i class="ri-lightbulb-flash-line"></i>
-                                            <span x-text="block.title"></span>
-                                        </p>
-                                        <p class="opacity-80 text-sm mb-3" x-text="block.text"></p>
-                                        <pre x-show="block.code"
-                                            class="font-mono text-sm opacity-90 whitespace-pre-wrap"
-                                            x-text="block.code"></pre>
-                                    </div>
-                                </template>
-
-                                <!-- USE CASES -->
-                                <template x-if="block.type === 'use_cases'">
-                                    <div class="p-5 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
-                                        <p class="font-bold mb-2 flex items-center gap-2">
-                                            <i class="ri-lightbulb-flash-line"></i>
-                                            <span x-text="block.title"></span>
-                                        </p>
-                                        <ul class="space-y-1 opacity-80 text-sm">
-                                            <template x-for="item in block.items">
-                                                <li x-text="'• ' + item"></li>
-                                            </template>
-                                        </ul>
-                                    </div>
-                                </template>
-
-                                <!-- COMPANY CARDS (Interview) -->
-                                <template x-if="block.type === 'company_cards'">
+                            <!-- 4E. COMPANY CARDS (Interview with company styling) -->
+                            <template x-if="ch.chapter_type === 'interview' && ch.content.layout === 'company_cards'">
+                                <div>
                                     <div class="grid md:grid-cols-2 gap-4 mb-8">
-                                        <template x-for="q in block.questions">
+                                        <template x-for="q in ch.content.questions">
                                             <div class="group p-6 rounded-2xl border border-white/5 bg-[#12121a] hover:bg-[#1a1a24] transition-all relative overflow-hidden"
                                                 :style="`--company-color: ${q.color}`">
                                                 <div class="absolute -right-4 -top-4 w-24 h-24 rounded-full blur-2xl transition-all"
@@ -1338,45 +1049,986 @@
                                             </div>
                                         </template>
                                     </div>
-                                </template>
+                                    <!-- Tips section if available -->
+                                    <template x-if="ch.content.tips">
+                                        <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                            <p class="font-bold mb-3">💡 Pro Tips for Interviews</p>
+                                            <ul class="space-y-2 opacity-80 text-sm">
+                                                <template x-for="tip in ch.content.tips">
+                                                    <li class="markdown-body" x-html="parseMarkdown('• ' + tip)"></li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
 
-                                <!-- INTERVIEW TIPS -->
-                                <template x-if="block.type === 'interview_tips'">
-                                    <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
-                                        <p class="font-bold mb-3">💡 Pro Tips for Interviews</p>
-                                        <ul class="space-y-2 opacity-80 text-sm">
-                                            <template x-for="tip in block.tips">
-                                                <li class="markdown-body" x-html="parseMarkdown('• ' + tip)"></li>
-                                            </template>
-                                        </ul>
+                            <!-- 6. WALKTHROUGH (Step-by-step problem solving) -->
+                            <template x-if="ch.chapter_type === 'walkthrough'">
+                                <div>
+                                    <!-- Problem Statement -->
+                                    <div class="p-6 rounded-2xl bg-[#4C2A59]/30 mb-8">
+                                        <p class="font-bold text-lg mb-3 flex items-center gap-2">
+                                            <i class="ri-file-list-3-line"></i>
+                                            <span x-text="'Problem: ' + ch.content.problem.title"></span>
+                                        </p>
+                                        <p class="opacity-80" x-text="ch.content.problem.desc"></p>
+                                        <p class="font-mono text-sm mt-3 opacity-60"
+                                            x-text="ch.content.problem.example">
+                                        </p>
                                     </div>
-                                </template>
-                            </div>
-                        </template>
-            </div>
-            </template>
-            </section>
-            </template>
 
-            <!-- LOADING STATE -->
-            <div x-show="loading" class="flex items-center justify-center py-20">
-                <i class="ri-loader-4-line text-4xl accent animate-spin"></i>
+                                    <!-- Steps -->
+                                    <div class="space-y-6 mb-8">
+                                        <template x-for="step in ch.content.steps">
+                                            <div class="p-5 rounded-2xl bg-[#12121a]">
+                                                <p class="text-sm font-bold accent mb-3" x-text="step.title"></p>
+                                                <p x-show="step.text" class="opacity-80 text-sm" x-text="step.text"></p>
+                                                <ul x-show="step.items" class="space-y-1 opacity-80 text-sm">
+                                                    <template x-for="item in step.items">
+                                                        <li class="markdown-body" x-html="parseMarkdown('• ' + item)">
+                                                        </li>
+                                                    </template>
+                                                </ul>
+                                                <!-- Code editor for walkthrough -->
+                                                <template x-if="step.code_id">
+                                                    <div
+                                                        class="rounded-xl overflow-hidden border border-[#4C2A59] mt-4">
+                                                        <div
+                                                            class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
+                                                            <span class="text-sm font-bold">Code</span>
+                                                            <button @click="runCode(step.code_id)"
+                                                                class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
+                                                                <i class="ri-play-fill"
+                                                                    x-show="!running[step.code_id]"></i>
+                                                                <i class="ri-loader-4-line animate-spin"
+                                                                    x-show="running[step.code_id]"></i>
+                                                                Run
+                                                            </button>
+                                                        </div>
+                                                        <div :id="'editor-' + step.code_id"></div>
+                                                        <div class="code-output p-4 min-h-[40px]"
+                                                            x-show="outputs[step.code_id] || errors[step.code_id]">
+                                                            <pre class="text-sm text-green-400"
+                                                                x-text="outputs[step.code_id]"></pre>
+                                                            <pre class="text-sm text-red-400"
+                                                                x-text="errors[step.code_id]"></pre>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                                <!-- Trace visualization -->
+                                                <template x-if="step.trace">
+                                                    <div class="mt-4">
+                                                        <div
+                                                            class="grid grid-cols-5 gap-1 text-center font-mono text-xs">
+                                                            <template x-for="t in step.trace">
+                                                                <div class="p-2 rounded bg-[#4C2A59]/30">
+                                                                    <span x-text="'num=' + t.num"></span><br>
+                                                                    <span
+                                                                        :class="t.updated ? 'text-green-400' : 'opacity-50'"
+                                                                        x-text="'max=' + t.max"></span>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                        <p class="text-xs opacity-50 mt-2 text-center">Green = max
+                                                            updated
+                                                        </p>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <!-- Takeaway -->
+                                    <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                        <p class="font-bold mb-2 flex items-center gap-2">
+                                            <i class="ri-focus-3-line"></i> Key Takeaway
+                                        </p>
+                                        <p class="opacity-80 text-sm" x-text="ch.content.takeaway"></p>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- 5. QUIZ -->
+                            <template x-if="ch.chapter_type === 'quiz'">
+                                <div class="bg-[#12121a] rounded-3xl p-8 border border-white/5 text-center">
+                                    <div class="mb-4 inline-block p-4 rounded-full bg-[#9E4B8A]/20 text-[#9E4B8A]">
+                                        <i class="ri-trophy-line text-4xl"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-bold mb-2">Mastery Check</h2>
+                                    <p class="opacity-60 mb-8">Test your knowledge.</p>
+
+                                    <div x-show="!quizCompleted">
+                                        <div class="mb-8">
+                                            <div class="flex justify-between text-sm opacity-50 mb-2">
+                                                <span
+                                                    x-text="`Question ${currentQuizIndex + 1} of ${ch.content.questions.length}`"></span>
+                                            </div>
+                                            <div class="h-2 bg-[#2a2a35] rounded-full overflow-hidden">
+                                                <div class="h-full bg-[#9E4B8A] transition-all"
+                                                    :style="`width: ${(currentQuizIndex + 1) / ch.content.questions.length * 100}%`">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <h3 class="text-xl font-bold mb-6"
+                                            x-text="ch.content.questions[currentQuizIndex].q"></h3>
+
+                                        <div class="grid gap-3 text-left">
+                                            <template x-for="(opt, idx) in ch.content.questions[currentQuizIndex].opts"
+                                                :key="idx">
+                                                <div @click="selectQuizOption(idx, ch.content.questions[currentQuizIndex])"
+                                                    class="quiz-opt p-4 rounded-xl transition-all" :class="{
+                                                    'selected': selectedOption === idx,
+                                                    'correct': quizAnswered && idx === ch.content.questions[currentQuizIndex].correct,
+                                                    'wrong': quizAnswered && selectedOption === idx && idx !== ch.content.questions[currentQuizIndex].correct
+                                                }">
+                                                    <div class="flex items-center gap-3">
+                                                        <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs"
+                                                            :class="selectedOption === idx ? 'border-[#9E4B8A] bg-[#9E4B8A] text-white' : 'border-gray-600'">
+                                                            <span x-show="selectedOption === idx"
+                                                                x-text="['A','B','C'][idx]"></span>
+                                                        </div>
+                                                        <span x-text="opt"></span>
+                                                    </div>
+                                                    <div x-show="quizAnswered && idx === ch.content.questions[currentQuizIndex].correct"
+                                                        class="mt-2 text-xs text-[#10B981] font-bold pl-9">
+                                                        <i class="ri-check-line"></i> <span
+                                                            x-text="ch.content.questions[currentQuizIndex].why"></span>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+
+                                        <button x-show="quizAnswered" @click="nextQuiz(ch.content.questions)"
+                                            class="mt-6 w-full py-3 rounded-xl accent-bg font-bold hover:brightness-110 transition-all">
+                                            <span
+                                                x-text="currentQuizIndex < ch.content.questions.length - 1 ? 'Next Question' : 'See Results'"></span>
+                                        </button>
+                                    </div>
+
+                                    <div x-show="quizCompleted" class="text-center py-8">
+                                        <h3 class="text-3xl font-bold mb-2">Quiz Complete!</h3>
+                                        <p class="text-xl accent mb-6"
+                                            x-text="`You scored ${score}/${ch.content.questions.length}`">
+                                        </p>
+                                        <button onclick="location.reload()"
+                                            class="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold">Restart
+                                            Topic</button>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- 6. GENERIC EDITOR SECTIONS (Sequences, etc.) -->
+                            <template x-if="ch.content.sections && !ch.content.blocks">
+                                <div class="space-y-12">
+                                    <template x-for="sect in ch.content.sections">
+                                        <div>
+                                            <h3 class="text-xl font-bold mb-4" x-text="sect.title"></h3>
+                                            <p class="text-sm opacity-80 mb-4" x-text="sect.text"></p>
+                                            <div class="rounded-2xl overflow-hidden border-2 border-[#4C2A59] mb-6">
+                                                <div class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
+                                                    <span class="text-sm font-bold">Try Code</span>
+                                                    <button @click="runCode(sect.editor_id)"
+                                                        class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
+                                                        <i class="ri-play-fill"></i> Run
+                                                    </button>
+                                                </div>
+                                                <div :id="'editor-' + sect.editor_id"></div>
+                                                <div class="code-output p-4 min-h-[40px]"
+                                                    x-show="outputs[sect.editor_id] || errors[sect.editor_id]">
+                                                    <pre class="text-sm text-green-400"
+                                                        x-text="outputs[sect.editor_id]"></pre>
+                                                    <pre class="text-sm text-red-400"
+                                                        x-text="errors[sect.editor_id]"></pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <!-- 7. VARIATIONS -->
+                            <template x-if="ch.content.variations">
+                                <div class="grid md:grid-cols-3 gap-4 mb-8">
+                                    <template x-for="v in ch.content.variations">
+                                        <div class="p-4 rounded-xl bg-[#4C2A59]/20">
+                                            <p class="font-mono text-sm mb-2" x-text="v.code"></p>
+                                            <p class="font-mono accent text-xs" x-text="v.meaning"></p>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                            <!-- 11. DYNAMIC BLOCK ENGINE -->
+                            <template x-if="ch.content.blocks">
+                                <div class="space-y-10">
+                                    <template x-for="block in ch.content.blocks">
+                                        <div class="block-container">
+                                            <template x-if="block.type === 'text'">
+                                                <div class="max-w-3xl mx-auto">
+                                                    <h3 x-show="block.title" class="text-2xl font-bold mb-4"
+                                                        x-text="block.title"></h3>
+                                                    <p class="text-lg opacity-80 leading-relaxed whitespace-pre-line markdown-body"
+                                                        x-html="parseMarkdown(block.content)"></p>
+                                                </div>
+                                            </template>
+                                            <template x-if="block.type === 'code'">
+                                                <div class="rounded-2xl overflow-hidden border-2 border-[#4C2A59] my-6">
+                                                    <div
+                                                        class="px-4 py-2 bg-[#4C2A59] flex items-center justify-between">
+                                                        <span class="text-sm font-bold"
+                                                            x-text="block.title || 'Code Playground'"></span>
+                                                        <button @click="runCode(block.id)"
+                                                            class="px-4 py-1 rounded-lg accent-bg text-white text-sm font-bold flex items-center gap-2">
+                                                            <i class="ri-play-fill" x-show="!running[block.id]"></i>
+                                                            <i class="ri-loader-4-line animate-spin"
+                                                                x-show="running[block.id]"></i>
+                                                            Run
+                                                        </button>
+                                                    </div>
+                                                    <div :id="'editor-' + block.id"></div>
+                                                    <div class="code-output p-4 min-h-[40px]"
+                                                        x-show="outputs[block.id] || errors[block.id]">
+                                                        <pre class="text-sm text-green-400"
+                                                            x-text="outputs[block.id]"></pre>
+                                                        <pre class="text-sm text-red-400"
+                                                            x-text="errors[block.id]"></pre>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <template x-if="block.type === 'split'">
+                                                <div class="grid md:grid-cols-2 gap-8 items-center">
+                                                    <div>
+                                                        <h3 x-show="block.left.title" class="text-xl font-bold mb-3"
+                                                            x-text="block.left.title"></h3>
+                                                        <p class="opacity-80 leading-relaxed markdown-body"
+                                                            x-html="parseMarkdown(block.left.content)">
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <template x-if="block.right.type === 'image'">
+                                                            <img :src="block.right.url"
+                                                                class="rounded-xl border border-white/10 shadow-lg w-full">
+                                                        </template>
+                                                        <template x-if="block.right.type === 'code_static'">
+                                                            <div
+                                                                class="p-6 rounded-xl bg-[#12121a] font-mono text-sm border border-white/5 relative group">
+                                                                <div class="whitespace-pre-wrap text-gray-300"
+                                                                    x-text="block.right.content">
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <template x-if="block.type === 'callout'">
+                                                <div class="p-6 rounded-2xl border mb-6 flex gap-4" :class="{
+                                                    'bg-[#9E4B8A]/10 border-[#9E4B8A]/30': block.variant === 'info',
+                                                    'bg-[#EF4444]/10 border-[#EF4444]/30': block.variant === 'warning',
+                                                    'bg-[#10B981]/10 border-[#10B981]/30': block.variant === 'success'
+                                                }">
+                                                    <i class="text-2xl" :class="{
+                                                        'ri-information-fill text-[#9E4B8A]': block.variant === 'info',
+                                                        'ri-alert-fill text-[#EF4444]': block.variant === 'warning',
+                                                        'ri-check-double-line text-[#10B981]': block.variant === 'success'
+                                                    }"></i>
+                                                    <div>
+                                                        <h4 class="font-bold mb-1" x-text="block.title"></h4>
+                                                        <p class="text-sm opacity-80 markdown-body"
+                                                            x-html="parseMarkdown(block.text)">
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </template>
+
+                                            <template x-if="block.type === 'carousel'">
+                                                <div class="relative bg-[#12121a] rounded-2xl border border-white/5 p-1"
+                                                    x-data="{ slide: 0 }"
+                                                    x-init="$watch('slide', idx => $nextTick(() => refreshEditor(block.items[idx].code_id)))">
+                                                    <!-- Slides -->
+                                                    <template x-for="(item, idx) in block.items" :key="idx">
+                                                        <div x-show="slide === idx"
+                                                            class="p-6 transition-all duration-300">
+                                                            <div class="flex justify-between items-start mb-4">
+                                                                <div>
+                                                                    <h3 class="font-bold text-xl accent"
+                                                                        x-text="item.title"></h3>
+                                                                    <p class="text-sm opacity-70 mt-1"
+                                                                        x-text="item.desc">
+                                                                    </p>
+                                                                </div>
+                                                                <div class="flex gap-2">
+                                                                    <button
+                                                                        @click="slide = (slide - 1 + block.items.length) % block.items.length"
+                                                                        class="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                                                                        <i class="ri-arrow-left-s-line"></i>
+                                                                    </button>
+                                                                    <button
+                                                                        @click="slide = (slide + 1) % block.items.length"
+                                                                        class="p-2 rounded-lg bg-[#9E4B8A]/20 text-[#9E4B8A] hover:bg-[#9E4B8A] hover:text-white transition-all">
+                                                                        <i class="ri-arrow-right-s-line text-lg"></i>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            <!-- Editor for this slide -->
+                                                            <div
+                                                                class="rounded-xl overflow-hidden border border-[#4C2A59]/40 bg-[#0F0F16]">
+                                                                <div
+                                                                    class="px-4 py-2 bg-[#4C2A59]/20 flex items-center justify-between border-b border-[#4C2A59]/20">
+                                                                    <span class="text-xs font-mono opacity-60">Example
+                                                                        Code</span>
+                                                                    <button @click="runCode(item.code_id)"
+                                                                        class="px-3 py-1 rounded text-xs font-bold bg-[#9E4B8A] hover:bg-[#863e75] flex items-center gap-1 transition-colors">
+                                                                        <i class="ri-play-fill"
+                                                                            x-show="!running[item.code_id]"></i>
+                                                                        <i class="ri-loader-4-line animate-spin"
+                                                                            x-show="running[item.code_id]"></i>
+                                                                        Run
+                                                                    </button>
+                                                                </div>
+                                                                <div :id="'editor-' + item.code_id"></div>
+                                                                <div class="code-output p-4 min-h-[40px] border-t border-white/5"
+                                                                    x-show="outputs[item.code_id] || errors[item.code_id]">
+                                                                    <pre class="text-xs text-green-400 font-mono"
+                                                                        x-text="outputs[item.code_id]"></pre>
+                                                                    <pre class="text-xs text-red-400 font-mono"
+                                                                        x-text="errors[item.code_id]"></pre>
+                                                                </div>
+                                                            </div>
+
+                                                            <!-- Dots -->
+                                                            <div class="flex justify-center gap-2 mt-6">
+                                                                <template x-for="(_, i) in block.items">
+                                                                    <div class="w-2 h-2 rounded-full transition-all"
+                                                                        :class="slide === i ? 'bg-[#9E4B8A] w-6' : 'bg-white/10'">
+                                                                    </div>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- NEW: CARDS BLOCK -->
+                                    <template x-if="block.type === 'cards'">
+                                        <div>
+                                            <h3 x-show="block.title" class="text-2xl font-bold mb-6 text-center"
+                                                x-text="block.title">
+                                            </h3>
+                                            <div class="grid md:grid-cols-3 gap-6">
+                                                <template x-for="card in block.items">
+                                                    <div
+                                                        class="group relative p-6 rounded-2xl bg-[#1E1E2F] border border-white/5 hover:border-[#9E4B8A]/50 transition-all hover:-translate-y-1">
+                                                        <div
+                                                            class="absolute inset-0 bg-gradient-to-br from-[#9E4B8A]/0 to-[#9E4B8A]/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl">
+                                                        </div>
+                                                        <div class="relative z-10">
+                                                            <div
+                                                                class="w-12 h-12 rounded-xl bg-[#4C2A59]/20 flex items-center justify-center text-[#9E4B8A] mb-4 text-2xl group-hover:scale-110 transition-transform">
+                                                                <i :class="card.icon || 'ri-briefcase-line'"></i>
+                                                            </div>
+                                                            <h4 class="text-lg font-bold mb-2" x-text="card.title">
+                                                            </h4>
+                                                            <p class="text-2xl font-bold accent mb-4"
+                                                                x-text="card.value">
+                                                            </p>
+                                                            <div class="space-y-2">
+                                                                <p class="text-xs uppercase tracking-widest opacity-50">
+                                                                    Stack</p>
+                                                                <div class="flex flex-wrap gap-2">
+                                                                    <template x-for="tag in card.tags">
+                                                                        <span
+                                                                            class="px-2 py-1 rounded-md bg-white/5 text-xs font-mono text-gray-300 border border-white/5"
+                                                                            x-text="tag"></span>
+                                                                    </template>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- STATIC CODE WITH OUTPUT -->
+                                    <template x-if="block.type === 'static_code'">
+                                        <div class="p-6 rounded-2xl bg-[#12121a] mb-8">
+                                            <p class="text-sm opacity-50 mb-4" x-text="block.title"></p>
+                                            <pre class="font-mono text-lg whitespace-pre-wrap"
+                                                x-html="highlightPython(block.code)"></pre>
+                                            <div x-show="block.output" class="mt-4 pt-4 border-t border-[#4C2A59]/50">
+                                                <p class="text-sm opacity-70">Output:</p>
+                                                <pre class="font-mono text-green-400 text-sm mt-2"
+                                                    x-text="block.output"></pre>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- SYNTAX BREAKDOWN -->
+                                    <template x-if="block.type === 'syntax_breakdown'">
+                                        <div>
+                                            <div class="p-6 rounded-2xl bg-[#12121a] mb-8 font-mono text-lg"
+                                                x-html="highlightPython(block.code)"></div>
+                                            <div class="space-y-4 mb-8">
+                                                <template x-for="part in block.parts">
+                                                    <div class="flex items-start gap-4 p-4 rounded-xl bg-[#4C2A59]/20">
+                                                        <span class="accent font-bold font-mono"
+                                                            x-text="part.keyword"></span>
+                                                        <p class="opacity-80" x-text="part.desc"></p>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- MENTAL MODEL -->
+                                    <template x-if="block.type === 'mental_model'">
+                                        <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A] mb-8">
+                                            <p class="font-bold mb-3 flex items-center gap-2">
+                                                <i class="ri-brain-line text-xl"></i>
+                                                <span x-text="block.title"></span>
+                                            </p>
+                                            <p class="opacity-80 text-sm mb-4 markdown-body"
+                                                x-html="parseMarkdown(block.text)"></p>
+                                            <div x-show="block.examples"
+                                                class="grid grid-cols-3 gap-2 text-center font-mono text-sm">
+                                                <template x-for="ex in block.examples">
+                                                    <div class="p-2 rounded bg-[#12121a]" x-text="ex"></div>
+                                                </template>
+                                            </div>
+                                            <p x-show="block.note" class="opacity-60 text-xs mt-3 markdown-body"
+                                                x-html="parseMarkdown(block.note)"></p>
+                                        </div>
+                                    </template>
+
+                                    <!-- WARNING BOX (Correct vs Wrong) -->
+                                    <template x-if="block.type === 'warning_box'">
+                                        <div class="p-6 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/30">
+                                            <p class="font-bold text-[#EF4444] mb-3 flex items-center gap-2">
+                                                <i class="ri-alert-line text-xl"></i>
+                                                <span x-text="block.title"></span>
+                                            </p>
+                                            <p class="opacity-80 text-sm mb-4 markdown-body"
+                                                x-html="parseMarkdown(block.text)"></p>
+                                            <div class="grid md:grid-cols-2 gap-4">
+                                                <div class="p-4 rounded-xl bg-[#12121a]">
+                                                    <p class="text-xs text-[#10B981] font-bold mb-2">✓ CORRECT</p>
+                                                    <pre class="font-mono text-sm whitespace-pre-wrap"
+                                                        x-text="block.correct"></pre>
+                                                </div>
+                                                <div class="p-4 rounded-xl bg-[#12121a]">
+                                                    <p class="text-xs text-[#EF4444] font-bold mb-2">✗ WRONG</p>
+                                                    <pre class="font-mono text-sm whitespace-pre-wrap"
+                                                        x-text="block.wrong"></pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- KEYWORD CARDS (break/continue/pass) -->
+                                    <template x-if="block.type === 'keyword_cards'">
+                                        <div class="space-y-6 mb-8">
+                                            <template x-for="kw in block.keywords">
+                                                <div class="p-6 rounded-2xl bg-[#12121a]">
+                                                    <div class="flex items-center gap-3 mb-3">
+                                                        <code class="text-lg" x-text="kw.name"></code>
+                                                        <span class="text-xs px-2 py-1 rounded"
+                                                            :style="`background: ${kw.tag_color}20; color: ${kw.tag_color}`"
+                                                            x-text="kw.tag"></span>
+                                                    </div>
+                                                    <p class="opacity-70 text-sm mb-4" x-text="kw.desc"></p>
+                                                    <pre class="font-mono text-sm opacity-90 whitespace-pre-wrap"
+                                                        x-text="kw.code"></pre>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    <!-- RANGE FORMS -->
+                                    <template x-if="block.type === 'range_forms'">
+                                        <div class="p-6 rounded-2xl bg-[#12121a] mb-8">
+                                            <p class="text-sm opacity-50 mb-4">THREE FORMS OF RANGE:</p>
+                                            <div class="space-y-4 font-mono">
+                                                <template x-for="form in block.forms">
+                                                    <div class="flex items-center gap-4">
+                                                        <code class="bg-[#4C2A59] px-3 py-1"
+                                                            x-text="form.syntax"></code>
+                                                        <span class="text-sm opacity-70" x-text="form.desc"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- RANGE EXAMPLES -->
+                                    <template x-if="block.type === 'range_examples'">
+                                        <div class="grid md:grid-cols-3 gap-4 mb-8">
+                                            <template x-for="ex in block.examples">
+                                                <div class="p-4 rounded-xl bg-[#4C2A59]/20">
+                                                    <p class="font-mono text-sm mb-2" x-text="ex.input"></p>
+                                                    <p class="font-mono accent" x-text="ex.output"></p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    <!-- SECTION HEADER -->
+                                    <template x-if="block.type === 'section'">
+                                        <div class="mb-6">
+                                            <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                                <i :class="block.icon"
+                                                    class="text-[#9E4B8A] p-2 rounded-lg bg-[#9E4B8A]/20"></i>
+                                                <span x-text="block.title"></span>
+                                            </h3>
+                                            <p class="text-lg opacity-80" x-text="block.text"></p>
+                                        </div>
+                                    </template>
+
+                                    <!-- PRO TIP -->
+                                    <template x-if="block.type === 'pro_tip'">
+                                        <div class="p-5 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                            <p class="font-bold mb-2 flex items-center gap-2">
+                                                <i class="ri-lightbulb-flash-line"></i>
+                                                <span x-text="block.title"></span>
+                                            </p>
+                                            <p class="opacity-80 text-sm mb-3" x-text="block.text"></p>
+                                            <pre x-show="block.code"
+                                                class="font-mono text-sm opacity-90 whitespace-pre-wrap"
+                                                x-text="block.code"></pre>
+                                        </div>
+                                    </template>
+
+                                    <!-- USE CASES -->
+                                    <template x-if="block.type === 'use_cases'">
+                                        <div class="p-5 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                            <p class="font-bold mb-2 flex items-center gap-2">
+                                                <i class="ri-lightbulb-flash-line"></i>
+                                                <span x-text="block.title"></span>
+                                            </p>
+                                            <ul class="space-y-1 opacity-80 text-sm">
+                                                <template x-for="item in block.items">
+                                                    <li x-text="'• ' + item"></li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                    </template>
+
+                                    <!-- COMPANY CARDS (Interview) -->
+                                    <template x-if="block.type === 'company_cards'">
+                                        <div class="grid md:grid-cols-2 gap-4 mb-8">
+                                            <template x-for="q in block.questions">
+                                                <div class="group p-6 rounded-2xl border border-white/5 bg-[#12121a] hover:bg-[#1a1a24] transition-all relative overflow-hidden"
+                                                    :style="`--company-color: ${q.color}`">
+                                                    <div class="absolute -right-4 -top-4 w-24 h-24 rounded-full blur-2xl transition-all"
+                                                        :style="`background: ${q.color}10`"></div>
+                                                    <div class="flex items-center justify-between mb-4 relative">
+                                                        <div class="flex items-center gap-3">
+                                                            <div class="w-10 h-10 rounded-xl flex items-center justify-center"
+                                                                :style="`background: ${q.color}20; color: ${q.color}`">
+                                                                <i :class="q.icon" class="text-xl"></i>
+                                                            </div>
+                                                            <div>
+                                                                <h3 class="font-bold" x-text="q.company"></h3>
+                                                                <p class="text-[10px] uppercase tracking-wider opacity-50"
+                                                                    x-text="q.role"></p>
+                                                            </div>
+                                                        </div>
+                                                        <span class="px-3 py-1 rounded-full text-xs font-bold border"
+                                                            :style="`background: ${q.color}10; color: ${q.color}; border-color: ${q.color}30`"
+                                                            x-text="q.tag"></span>
+                                                    </div>
+                                                    <p class="text-base font-medium leading-snug relative z-10"
+                                                        x-text="'\"' + q.question + ' \"'"></p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    <!-- INTERVIEW TIPS -->
+                                    <template x-if="block.type === 'interview_tips'">
+                                        <div class="p-6 rounded-2xl bg-[#9E4B8A]/20 border border-[#9E4B8A]">
+                                            <p class="font-bold mb-3">💡 Pro Tips for Interviews</p>
+                                            <ul class="space-y-2 opacity-80 text-sm">
+                                                <template x-for="tip in block.tips">
+                                                    <li class="markdown-body" x-html="parseMarkdown('• ' + tip)"></li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                </div>
+                </template>
+                </section>
+                </template>
+
+                </section>
+                </template>
+
+                <!-- LOADING STATE -->
+                <div x-show="loading" class="flex items-center justify-center py-20">
+                    <i class="ri-loader-4-line text-4xl accent animate-spin"></i>
+                </div>
             </div>
     </div>
     </main>
     </div>
 
     <script>
-        // Define API_BASE inside the event listener or global if needed, but safer inside
+        // NOTE: Some browsers/extensions inject SES/lockdown scripts that can interfere with
+        // Alpine's `alpine:init` timing. Expose `topicApp()` globally so the page still boots.
+        const API_BASE = 'http://127.0.0.1:8000';
 
-        document.addEventListener('alpine:init', () => {
-            const API_BASE = 'http://127.0.0.1:8000';
+        // ===== Related videos (ported from notes_generator.html) =====
+        const apiBase = (window.API_BASE || API_BASE).replace(/\/$/, '');
+        const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
+        const channelLogoCache = new Map();
 
-            Alpine.data('topicApp', () => ({
+        let $relatedVideosSection = null;
+        let $relatedVideosSummary = null;
+        let $relatedVideosSkeleton = null;
+        let $relatedVideosWrap = null;
+        let $relatedVideosCarousel = null;
+        let $relatedVideosEmpty = null;
+        let $videoLanguage = null;
+
+        function initRelatedVideoEls() {
+            // Cache DOM lookups after the document is parsed.
+            if ($relatedVideosSection) return;
+            $relatedVideosSection = document.getElementById('relatedVideosSection');
+            $relatedVideosSummary = document.getElementById('relatedVideosSummary');
+            $relatedVideosSkeleton = document.getElementById('relatedVideosSkeleton');
+            $relatedVideosWrap = document.getElementById('relatedVideosWrap');
+            $relatedVideosCarousel = document.getElementById('relatedVideoCarousel');
+            $relatedVideosEmpty = document.getElementById('relatedVideosEmpty');
+            $videoLanguage = document.getElementById('videoLanguageSelect');
+        }
+        let relatedVideosAbort = null;
+        let relatedVideosFullQuery = '';
+
+        function normalizeVideoLanguage(language) {
+            return (language || '').trim();
+        }
+
+        function inferCodingTrackKeyword(trackText) {
+            // Avoid regex literals here to stay compatible with hardened JS environments.
+            const raw = (trackText || '').trim();
+            if (!raw) return '';
+            const text = raw.toLowerCase();
+
+            if (text.includes('python')) return 'python';
+            if (text.includes('typescript') || text.includes(' ts ')) return 'typescript';
+            if (text.includes('javascript') || text.includes(' js ')) return 'javascript';
+            if (text.includes(' java ') || text.startsWith('java') || text.endsWith(' java')) return 'java';
+            if (text.includes('c++') || text.includes('cpp')) return 'c++';
+            if (text.includes('c#') || text.includes('c sharp') || text.includes('csharp')) return 'c#';
+            if (text.includes(' golang') || text.includes('go ') || text.includes(' go') || text.includes('golang')) return 'go';
+            if (text.includes('rust')) return 'rust';
+            if (text.includes('kotlin')) return 'kotlin';
+            if (text.includes('swift')) return 'swift';
+            if (text.includes('dart')) return 'dart';
+            if (text.includes('php')) return 'php';
+            if (text.includes('ruby')) return 'ruby';
+            if (text.includes('sql')) return 'sql';
+            return '';
+        }
+
+        function buildRelatedVideosQuery(baseTopic, spokenLanguage, trackLanguage) {
+            const topic = (baseTopic || '').trim();
+            if (!topic) return '';
+
+            const normalizedTrack = (trackLanguage || '').trim().toLowerCase();
+            const spoken = normalizeVideoLanguage(spokenLanguage);
+
+            let query = topic;
+
+            // Coding track: "Variables & naming rules in python"
+            if (normalizedTrack) {
+                const trackSuffix = ` in ${normalizedTrack}`;
+                if (!query.toLowerCase().endsWith(trackSuffix)) {
+                    query = `${query}${trackSuffix}`;
+                }
+            }
+
+            // Spoken language: keep as soft hint to avoid "in ... in ..."
+            if (spoken && spoken.toLowerCase() !== 'english') {
+                if (!query.toLowerCase().includes(spoken.toLowerCase())) {
+                    query = `${query} ${spoken}`;
+                }
+            }
+
+            return query;
+        }
+
+        function getChannelLogoAsync(channelPage) {
+            if (!channelPage) return Promise.resolve('');
+            const cached = channelLogoCache.get(channelPage);
+            if (cached !== undefined) {
+                return cached instanceof Promise ? cached : Promise.resolve(cached);
+            }
+            const request = (async () => {
+                try {
+                    const res = await fetch(`${apiBase}/api/youtube/channel-logo?channel_url=${encodeURIComponent(channelPage)}`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const data = await res.json();
+                    const logo = typeof data.logo === 'string' ? data.logo.trim() : '';
+                    channelLogoCache.set(channelPage, logo);
+                    return logo;
+                } catch (error) {
+                    console.warn('Channel logo lookup failed:', error);
+                    channelLogoCache.set(channelPage, '');
+                    return '';
+                }
+            })();
+            channelLogoCache.set(channelPage, request);
+            return request;
+        }
+
+        function hydrateChannelLogo(img, channelPage, shouldAttempt) {
+            if (!img) return;
+            if (channelPage) {
+                img.dataset.channelPage = channelPage;
+            }
+            if (!shouldAttempt || !channelPage) {
+                return;
+            }
+            getChannelLogoAsync(channelPage)
+                .then((logo) => {
+                    if (logo && img.dataset.channelPage === channelPage) {
+                        img.src = logo;
+                        img.dataset.logoLoaded = 'true';
+                    }
+                })
+                .catch(() => { /* already logged */ });
+        }
+
+        function createRelatedVideoCard(video) {
+            const card = document.createElement('div');
+            const link = (typeof video.link === 'string' && video.link.trim()) || '';
+            const notesUrl = link ? `../youtube-notes.html?video=${encodeURIComponent(link)}` : '';
+            card.className = 'yt-card';
+            card.setAttribute('data-video-card', '1');
+
+            const thumb = document.createElement('div');
+            thumb.className = 'yt-thumb';
+            const thumbImg = document.createElement('img');
+            const videoId = typeof video.id === 'string' ? video.id.trim() : '';
+            const thumbSrc = (typeof video.thumbnail === 'string' && video.thumbnail.trim())
+                || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
+            thumbImg.src = thumbSrc || fallbackChannelLogo;
+            thumbImg.alt = (video.title || 'YouTube video').toString();
+            thumbImg.loading = 'lazy';
+            thumbImg.decoding = 'async';
+            thumb.appendChild(thumbImg);
+            if (video.duration) {
+                const badge = document.createElement('span');
+                badge.className = 'yt-duration';
+                badge.textContent = video.duration;
+                thumb.appendChild(badge);
+            }
+            card.appendChild(thumb);
+
+            const body = document.createElement('div');
+            body.className = 'yt-body';
+
+            const titleEl = document.createElement('p');
+            titleEl.className = 'yt-title';
+            const titleText = (typeof video.title === 'string' ? video.title : '').trim() || 'Untitled video';
+            titleEl.textContent = titleText;
+            titleEl.title = titleText;
+            body.appendChild(titleEl);
+
+            const meta = document.createElement('div');
+            meta.className = 'yt-meta';
+
+            const logoImg = document.createElement('img');
+            logoImg.className = 'yt-channel-logo';
+            logoImg.src = (typeof video.channel_logo === 'string' && video.channel_logo.trim()) || fallbackChannelLogo;
+            logoImg.alt = (video.channel || 'Channel').toString();
+            logoImg.loading = 'lazy';
+            logoImg.referrerPolicy = 'no-referrer';
+            meta.appendChild(logoImg);
+
+            const channelName = document.createElement('span');
+            channelName.className = 'yt-channel-name';
+            const channelFull = (video.channel || 'YouTube').toString();
+            channelName.textContent = channelFull;
+            channelName.title = channelFull;
+            meta.appendChild(channelName);
+
+            if (video.views) {
+                const views = document.createElement('span');
+                views.className = 'yt-views';
+                views.textContent = video.views;
+                meta.appendChild(views);
+            }
+
+            body.appendChild(meta);
+            card.appendChild(body);
+
+            const channelPage = (typeof video.channel_page === 'string' ? video.channel_page : '').trim();
+            const logoIsDefault = Boolean(video.channel_logo_is_default) || !video.channel_logo || video.channel_logo === fallbackChannelLogo;
+            hydrateChannelLogo(logoImg, channelPage, logoIsDefault && !!channelPage);
+
+            const overlay = document.createElement('div');
+            overlay.className = 'yt-hover-overlay';
+
+            const playBtn = document.createElement('button');
+            playBtn.type = 'button';
+            playBtn.className = 'yt-hover-btn';
+            playBtn.setAttribute('aria-label', 'Play on YouTube');
+            playBtn.title = 'Play on YouTube';
+            const playIcon = document.createElement('span');
+            playIcon.className = 'yt-hover-btn-icon';
+            playIcon.textContent = 'play_arrow';
+            playBtn.appendChild(playIcon);
+            if (!link) {
+                playBtn.disabled = true;
+                playBtn.style.opacity = '0.6';
+                playBtn.style.cursor = 'not-allowed';
+            }
+            playBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (link) {
+                    window.open(link, '_blank', 'noopener');
+                }
+            });
+
+            const notesBtn = document.createElement('button');
+            notesBtn.type = 'button';
+            notesBtn.className = 'yt-hover-btn';
+            notesBtn.setAttribute('aria-label', 'Open PaperX notes');
+            notesBtn.title = 'Open PaperX notes';
+            const notesIcon = document.createElement('span');
+            notesIcon.className = 'yt-hover-btn-icon';
+            notesIcon.textContent = 'description';
+            notesBtn.appendChild(notesIcon);
+            if (!notesUrl || notesUrl === '#') {
+                notesBtn.disabled = true;
+                notesBtn.style.opacity = '0.6';
+                notesBtn.style.cursor = 'not-allowed';
+            }
+            notesBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (notesUrl && notesUrl !== '#') {
+                    window.open(notesUrl, '_blank', 'noopener');
+                }
+            });
+
+            overlay.appendChild(playBtn);
+            overlay.appendChild(notesBtn);
+            thumb.appendChild(overlay);
+            return card;
+        }
+
+        function renderRelatedVideos(videos, displayQuery) {
+            initRelatedVideoEls();
+            if (!$relatedVideosCarousel || !$relatedVideosWrap) return;
+            $relatedVideosCarousel.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+            videos.forEach(video => fragment.appendChild(createRelatedVideoCard(video)));
+            $relatedVideosCarousel.appendChild(fragment);
+            $relatedVideosSkeleton?.classList.add('hidden');
+            $relatedVideosEmpty?.classList.add('hidden');
+            $relatedVideosWrap.classList.remove('hidden');
+            if ($relatedVideosSummary) {
+                $relatedVideosSummary.textContent = `Showing for "${displayQuery}"`;
+            }
+        }
+
+        async function loadRelatedVideos(topic, options = {}) {
+            initRelatedVideoEls();
+            const displayQuery = ((options.displayTopic ?? topic) || '').trim();
+            const force = Boolean(options.force);
+            const requestedLanguage = normalizeVideoLanguage(options.language || ($videoLanguage?.value || 'English'));
+            const requestedTrackLanguage = ((options.trackLanguage || '').trim() || inferCodingTrackKeyword(options.trackTitle || ''));
+            const searchQuery = buildRelatedVideosQuery(displayQuery, requestedLanguage, requestedTrackLanguage);
+
+            if (!$relatedVideosSection) return;
+            $relatedVideosSection.classList.remove('hidden');
+
+            if (!displayQuery) {
+                if ($relatedVideosSummary) $relatedVideosSummary.textContent = 'No topic selected yet.';
+                if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = '';
+                $relatedVideosSkeleton?.classList.add('hidden');
+                $relatedVideosWrap?.classList.add('hidden');
+                if ($relatedVideosEmpty) {
+                    $relatedVideosEmpty.textContent = 'Videos will appear once the topic loads.';
+                    $relatedVideosEmpty.classList.remove('hidden');
+                }
+                return;
+            }
+
+            if (!force && relatedVideosFullQuery && relatedVideosFullQuery.toLowerCase() === searchQuery.toLowerCase()) {
+                return;
+            }
+            relatedVideosFullQuery = searchQuery;
+
+            if ($relatedVideosSummary) {
+                $relatedVideosSummary.textContent = `Finding videos for "${displayQuery}"...`;
+            }
+
+            if (relatedVideosAbort) {
+                relatedVideosAbort.abort();
+            }
+            relatedVideosAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
+            $relatedVideosSkeleton?.classList.remove('hidden');
+            $relatedVideosWrap?.classList.add('hidden');
+            $relatedVideosEmpty?.classList.add('hidden');
+
+            try {
+                const fetchOptions = relatedVideosAbort ? { signal: relatedVideosAbort.signal } : undefined;
+                const response = await fetch(`${apiBase}/api/youtube/search?query=${encodeURIComponent(searchQuery)}&num=8`, fetchOptions);
+                if (!response.ok) {
+                    throw new Error(`Search failed with status ${response.status}`);
+                }
+                const videos = await response.json();
+                if (!Array.isArray(videos) || videos.length === 0) {
+                    $relatedVideosSkeleton?.classList.add('hidden');
+                    $relatedVideosWrap?.classList.add('hidden');
+                    if ($relatedVideosEmpty) {
+                        $relatedVideosEmpty.textContent = 'No related videos found. Try a more specific topic.';
+                        $relatedVideosEmpty.classList.remove('hidden');
+                    }
+                    if ($relatedVideosSummary) {
+                        $relatedVideosSummary.textContent = `No videos found for "${displayQuery}".`;
+                    }
+                    return;
+                }
+                renderRelatedVideos(videos.slice(0, 8), displayQuery);
+            } catch (error) {
+                if (error?.name === 'AbortError') return;
+                console.error('Related videos error:', error);
+                $relatedVideosSkeleton?.classList.add('hidden');
+                $relatedVideosWrap?.classList.add('hidden');
+                if ($relatedVideosEmpty) {
+                    $relatedVideosEmpty.textContent = 'Unable to load videos right now.';
+                    $relatedVideosEmpty.classList.remove('hidden');
+                }
+                if ($relatedVideosSummary) {
+                    $relatedVideosSummary.textContent = `Unable to load videos for "${displayQuery}".`;
+                }
+            } finally {
+                relatedVideosAbort = null;
+            }
+        }
+
+        window.topicApp = function topicApp() {
+            return {
                 loading: true,
+                trackTitle: '',
+                trackLanguage: '',
                 topicTitle: '',
                 topicDesc: '',
                 chapters: [],
+
+                // Related videos
+                relatedVideosLanguage: 'English',
 
                 // Navigation
                 currentChapter: 'ch1',
@@ -1424,10 +2076,24 @@
                         const data = await res.json();
                         console.log("Topic Data Loaded:", data);
 
+                        this.trackTitle = (data.track_title || data.level_title || data.section_title || '').trim();
+                        this.trackLanguage = inferCodingTrackKeyword(data.language_name || this.trackTitle);
                         this.topicTitle = data.title;
                         this.topicDesc = data.description || '';
                         this.chapters = data.chapters || [];
                         this.loading = false;
+
+                        // Load related videos for the current topic title
+                        this.relatedVideosLanguage = (this.relatedVideosLanguage || ($videoLanguage?.value || 'English'));
+                        setTimeout(() => {
+                            loadRelatedVideos(this.topicTitle, {
+                                force: true,
+                                language: this.relatedVideosLanguage,
+                                trackLanguage: this.trackLanguage,
+                                displayTopic: this.topicTitle,
+                                trackTitle: this.trackTitle,
+                            });
+                        }, 0);
 
                         setTimeout(() => this.initCodeMirrors(), 100);
 
@@ -1441,6 +2107,16 @@
                         alert(`Failed to load topic: ${e.message}`);
                         this.loading = false;
                     }
+                },
+
+                refreshRelatedVideos(force = true) {
+                    loadRelatedVideos(this.topicTitle, {
+                        force: !!force,
+                        language: this.relatedVideosLanguage,
+                        trackLanguage: this.trackLanguage,
+                        displayTopic: this.topicTitle,
+                        trackTitle: this.trackTitle,
+                    });
                 },
 
                 initCodeMirrors() {
@@ -1597,7 +2273,14 @@
                         .replace(/\b(\d+)\b/g, '<span class="num">$1</span>')
                         .replace(/\n/g, '<br>');
                 }
-            }));
+            };
+        };
+
+        document.addEventListener('alpine:init', () => {
+            // Optional: keep Alpine.data registration for compatibility.
+            if (window.Alpine && typeof window.topicApp === 'function') {
+                window.Alpine.data('topicApp', window.topicApp);
+            }
         });
     </script>
 </body>

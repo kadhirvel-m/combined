@@ -37,6 +37,10 @@ async def get_topic_full(topic_id: str):
             "id": topic_id,
             "title": "What is Python & Why Companies Use It",
             "description": "Discover the origins, philosophy, and massive industry adoption that makes Python the #1 language in the world.",
+            "track_title": "Python Fundamentals",
+            "language_name": "Python",
+            "level_title": "Fundamentals",
+            "section_title": "Python",
             "chapters": [
                 {
                     "id": "c1",
@@ -257,11 +261,44 @@ async def get_topic_full(topic_id: str):
         }
 
     # 1. Get Topic Metadata
-    topic_res = supabase.table("lcoding_topics").select("id, title, order_index").eq("id", topic_id).execute()
+    topic_res = supabase.table("lcoding_topics").select("id, title, order_index, section_id").eq("id", topic_id).execute()
     if not topic_res.data:
         raise HTTPException(status_code=404, detail="Topic not found")
     
     topic = topic_res.data[0]
+
+    # 1b. Backtrack Topic -> Section -> Level -> Language (for UI + smarter YouTube searches)
+    section_title: Optional[str] = None
+    level_title: Optional[str] = None
+    language_name: Optional[str] = None
+    track_title: Optional[str] = None
+
+    section_id = topic.get("section_id")
+    if section_id:
+        section_res = supabase.table("lcoding_sections").select("id, title, level_id").eq("id", section_id).execute()
+        if section_res.data:
+            section = section_res.data[0]
+            section_title = section.get("title")
+            level_id = section.get("level_id")
+            if level_id:
+                level_res = supabase.table("lcoding_levels").select("id, title, language_id").eq("id", level_id).execute()
+                if level_res.data:
+                    level = level_res.data[0]
+                    level_title = level.get("title")
+                    language_id = level.get("language_id")
+                    if language_id:
+                        language_res = supabase.table("lcoding_languages").select("id, name").eq("id", language_id).execute()
+                        if language_res.data:
+                            language = language_res.data[0]
+                            language_name = language.get("name")
+
+    if language_name and level_title:
+        if language_name.lower() in level_title.lower():
+            track_title = level_title
+        else:
+            track_title = f"{language_name} {level_title}".strip()
+    else:
+        track_title = language_name or level_title or section_title
     
     # 2. Get Chapters (Sorted)
     chapters_res = supabase.table("lcoding_topic_chapters")\
@@ -274,5 +311,9 @@ async def get_topic_full(topic_id: str):
         "id": topic["id"],
         "title": topic["title"],
         "description": topic.get("description", ""),
-        "chapters": chapters_res.data
+        "chapters": chapters_res.data,
+        "track_title": track_title,
+        "language_name": language_name,
+        "level_title": level_title,
+        "section_title": section_title,
     }
