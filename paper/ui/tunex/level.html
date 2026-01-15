@@ -119,8 +119,8 @@
         class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10 relative">
         <div class="container flex items-center justify-between py-4">
             <a href="../dashboard.html" class="flex items-center gap-3" aria-label="Dashboard">
-                <img src="../assets/img/tunex/tunex-logo-light.svg" alt="TuneX" class="h-10 w-auto dark:hidden">
-                <img src="../assets/img/tunex/tunex-logo-dark.svg" alt="TuneX" class="h-10 w-auto hidden dark:block">
+                <img src="../assets/img/tunex/tunex-logo-light.svg" alt="TuneX" class="h-8 w-auto dark:hidden">
+                <img src="../assets/img/tunex/tunex-logo-dark.svg" alt="TuneX" class="h-8 w-auto hidden dark:block">
             </a>
 
             <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
@@ -194,7 +194,8 @@
                             class="absolute inset-0 w-full h-full object-cover" />
 
                         <!-- Other languages: keep logo centered/contained -->
-                        <div x-show="logoUrl() && !isPython()" class="absolute inset-0 flex items-center justify-center">
+                        <div x-show="logoUrl() && !isPython()"
+                            class="absolute inset-0 flex items-center justify-center">
                             <img :src="logoUrl()" alt="Language" class="w-40 h-40 object-contain drop-shadow" />
                         </div>
 
@@ -228,31 +229,62 @@
                 <div class="space-y-4">
                     <template x-for="(section, index) in sections" :key="section.id">
                         <div
-                            class="bg-gatex-card border border-white/5 rounded-xl p-5 hover:border-gatex-primary/50 transition group flex items-center justify-between">
-                            <a :href="'section.html?id=' + section.id + '&langName=' + langName"
-                                class="flex-grow flex items-center">
-                                <div class="flex items-center gap-4">
-                                    <span
-                                        class="w-8 h-8 rounded-lg bg-gatex-primary hover:bg-gatex-secondary text-white flex items-center justify-center text-sm font-mono shadow shadow-gatex-primary/20 transition"
-                                        x-text="index + 1"></span>
-                                    <div>
-                                        <h3 class="font-bold text-lg group-hover:text-gatex-primary transition"
-                                            x-text="section.title"></h3>
-                                        <p class="text-xs text-gray-500 mt-1">Order Index: <span
-                                                x-text="section.order_index"></span></p>
+                            class="bg-gatex-card border border-white/5 rounded-xl p-5 hover:border-gatex-primary/50 transition group">
+                            <div class="flex items-center justify-between">
+                                <button type="button" @click="toggleSection(section)"
+                                    class="flex-grow flex items-center text-left">
+                                    <div class="flex items-center gap-4">
+                                        <span
+                                            class="w-8 h-8 rounded-lg bg-gatex-primary hover:bg-gatex-secondary text-white flex items-center justify-center text-sm font-mono shadow shadow-gatex-primary/20 transition"
+                                            x-text="index + 1"></span>
+                                        <div>
+                                            <h3 class="font-bold text-lg group-hover:text-gatex-primary transition"
+                                                x-text="section.title"></h3>
+                                            <p class="text-xs text-gray-500 mt-1">Order Index: <span
+                                                    x-text="section.order_index"></span></p>
+                                        </div>
                                     </div>
-                                </div>
-                            </a>
+                                </button>
 
-                            <!-- Edit button (keep), but no 'Manage' button text -->
-                            <div class="flex items-center gap-2 pl-3">
-                                <a :href="'section.html?id=' + section.id + '&langName=' + langName"
-                                    class="inline-flex items-center justify-center size-9 rounded-lg ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition"
-                                    aria-label="Edit section">
-                                    <i class="ri-edit-line text-lg"></i>
-                                </a>
-                                <i
-                                    class="ri-arrow-right-s-line text-xl text-gray-600 group-hover:text-gatex-primary transition"></i>
+                                <div class="flex items-center gap-2 pl-3">
+                                    <a :href="'section.html?id=' + section.id + '&langName=' + langName"
+                                        class="inline-flex items-center justify-center size-9 rounded-lg ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                                        aria-label="Edit section">
+                                        <i class="ri-edit-line text-lg"></i>
+                                    </a>
+                                    <i class="ri-arrow-down-s-line text-xl text-gray-600 group-hover:text-gatex-primary transition"
+                                        :class="sectionOpen[section.id] ? 'rotate-180' : ''"></i>
+                                </div>
+                            </div>
+
+                            <div x-show="sectionOpen[section.id]" class="mt-4 space-y-3" x-transition>
+                                <div x-show="sectionLoading[section.id]"
+                                    class="text-xs text-gray-500 flex items-center gap-2">
+                                    <i class="ri-loader-4-line animate-spin"></i>
+                                    Loading topics...
+                                </div>
+                                <template x-if="!sectionLoading[section.id]">
+                                    <div>
+                                        <template x-if="(sectionTopics[section.id] || []).length === 0">
+                                            <p class="text-xs text-gray-500">No topics yet.</p>
+                                        </template>
+                                        <div class="space-y-2">
+                                            <template x-for="(topic, tIndex) in (sectionTopics[section.id] || [])"
+                                                :key="topic.id">
+                                                <button type="button" @click="goToTopic(section, topic)"
+                                                    class="w-full flex items-center justify-between rounded-lg border border-white/5 bg-black/5 dark:bg-white/5 px-4 py-3 text-left hover:border-gatex-primary/40 transition">
+                                                    <div class="flex items-center gap-3">
+                                                        <span
+                                                            class="w-6 h-6 rounded-md bg-gatex-primary/20 text-gatex-primary flex items-center justify-center text-xs font-mono"
+                                                            x-text="tIndex + 1"></span>
+                                                        <span class="font-medium" x-text="topic.title"></span>
+                                                    </div>
+                                                    <i class="ri-arrow-right-s-line text-lg text-gray-500"></i>
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
                             </div>
                         </div>
                     </template>
@@ -310,6 +342,9 @@
                 level: null,
                 language: null,
                 sections: [],
+                sectionTopics: {},
+                sectionOpen: {},
+                sectionLoading: {},
                 loading: true,
                 showAddModal: false,
                 newSection: { title: '', order_index: 0 },
@@ -362,6 +397,41 @@
                     } finally {
                         this.loading = false;
                     }
+                },
+
+                async toggleSection(section) {
+                    const id = section.id;
+                    this.sectionOpen[id] = !this.sectionOpen[id];
+                    if (this.sectionOpen[id] && !this.sectionTopics[id]) {
+                        await this.loadSectionTopics(id);
+                    }
+                },
+
+                async loadSectionTopics(sectionId) {
+                    this.sectionLoading[sectionId] = true;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/lcoding/sections/${sectionId}/topics`);
+                        if (res.ok) {
+                            this.sectionTopics[sectionId] = await res.json();
+                        } else {
+                            this.sectionTopics[sectionId] = [];
+                        }
+                    } catch (e) {
+                        console.error('Failed to fetch topics', e);
+                        this.sectionTopics[sectionId] = [];
+                    } finally {
+                        this.sectionLoading[sectionId] = false;
+                    }
+                },
+
+                goToTopic(section, topic) {
+                    const params = new URLSearchParams({
+                        id: topic.id,
+                        title: topic.title,
+                        sectionId: section.id,
+                        langName: this.langName
+                    });
+                    window.location.href = `topic.html?${params.toString()}`;
                 },
 
                 async createSection() {
