@@ -16672,6 +16672,7 @@ if __name__ == "__main__":
 
 # --- Python Compiler Endpoint ---
 from packages.python_compiler import execute_python_code
+from packages.java_compiler import execute_java_code
 
 class CompilerRequest(BaseModel):
     code: str
@@ -16682,6 +16683,13 @@ async def run_python_compiler(request: CompilerRequest):
     Executes python code sent from the frontend.
     """
     result = execute_python_code(request.code)
+    return result
+
+
+@app.post("/api/tunex/compiler/java/run")
+async def run_java_compiler(request: CompilerRequest):
+    """Compiles and runs Java code sent from the frontend."""
+    result = execute_java_code(request.code)
     return result
 
 # ... (end of file)

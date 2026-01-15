@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Java Notebook | Tunex</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- CodeMirror 5 (stable, works everywhere) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/anyword-hint.min.js"></script>
+
+    <script>
+        // Theme initialization
+        (function () {
+            const stored = localStorage.getItem('tunex-theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = stored === 'dark' || (!stored && prefersDark);
+            if (isDark) document.documentElement.classList.add('dark');
+        })();
+
+        const Theme = {
+            toggle() {
+                document.documentElement.classList.toggle('dark');
+                const isDark = document.documentElement.classList.contains('dark');
+                localStorage.setItem('tunex-theme', isDark ? 'dark' : 'light');
+                if (window.notebookInstance) {
+                    window.notebookInstance.updateTheme(isDark);
+                }
+            },
+            isDark() {
+                return document.documentElement.classList.contains('dark');
+            }
+        };
+
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { brand: { 500: '#9E4B8A', 600: '#7A3A6B', 700: '#4C2A59' } },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --bg-primary: #FAFAFA;
+            --bg-secondary: #FFFFFF;
+            --bg-tertiary: #F4F4F5;
+            --text-primary: #18181B;
+            --text-muted: #A1A1AA;
+            --border-color: #E4E4E7;
+        }
+
+        .dark {
+            --bg-primary: #0F0F14;
+            --bg-secondary: #1A1A24;
+            --bg-tertiary: #252532;
+            --text-primary: #FAFAFA;
+            --text-muted: #71717A;
+            --border-color: #27272A;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.2s;
+        }
+
+        .notebook-cell {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            transition: all 0.15s ease;
+        }
+
+        .notebook-cell:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .notebook-cell.active {
+            border-color: #9E4B8A;
+            box-shadow: 0 0 0 3px rgba(158, 75, 138, 0.15);
+        }
+
+        .header-bar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .btn-icon {
+            color: var(--text-muted);
+            transition: all 0.15s;
+        }
+
+        .btn-icon:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #9E4B8A 0%, #7A3A6B 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 4px 12px rgba(158, 75, 138, 0.4);
+        }
+
+        .btn-ghost {
+            color: var(--text-muted);
+        }
+
+        .btn-ghost:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .run-btn {
+            background: #9E4B8A;
+            color: white;
+            opacity: 0;
+            transition: all 0.15s;
+        }
+
+        .notebook-cell:hover .run-btn,
+        .notebook-cell.active .run-btn {
+            opacity: 1;
+        }
+
+        .run-btn:hover {
+            background: #7A3A6B;
+        }
+
+        .output-area {
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .exec-counter {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .pill {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+        }
+
+        .fab {
+            background: linear-gradient(135deg, #9E4B8A 0%, #4C2A59 100%);
+        }
+
+        @keyframes pulse-border {
+
+            0%,
+            100% {
+                border-color: #9E4B8A;
+            }
+
+            50% {
+                border-color: #C05AAF;
+            }
+        }
+
+        .running {
+            animation: pulse-border 1s ease infinite;
+        }
+
+        /* CodeMirror Styling */
+        .CodeMirror {
+            font-family: 'JetBrains Mono', monospace !important;
+            font-size: 14px !important;
+            line-height: 1.5 !important;
+            height: auto !important;
+            min-height: 140px;
+            padding: 8px 0;
+        }
+
+        .CodeMirror-scroll {
+            min-height: 140px;
+        }
+
+        .CodeMirror-gutters {
+            border-right: 1px solid var(--border-color) !important;
+        }
+
+        .CodeMirror-cursor {
+            border-left-color: #9E4B8A !important;
+        }
+
+        .CodeMirror-selected {
+            background: rgba(158, 75, 138, 0.2) !important;
+        }
+    </style>
+</head>
+
+<body class="font-sans antialiased min-h-screen">
+
+    <!-- Header -->
+    <header class="header-bar sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto h-14 px-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <a href="index.html" class="btn-icon p-2 rounded-lg">
+                    <i class="ri-arrow-left-s-line text-xl"></i>
+                </a>
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg fab flex items-center justify-center">
+                        <i class="ri-terminal-box-fill text-white text-sm"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-sm font-semibold">Java Notebook</h1>
+                        <p class="text-xs" style="color: var(--text-muted)">Tunex IDE</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-1">
+                <button id="runAllBtn"
+                    class="btn-ghost px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5">
+                    <i class="ri-play-list-2-fill"></i><span class="hidden sm:inline">Run All</span>
+                </button>
+                <button id="clearBtn"
+                    class="btn-ghost px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5">
+                    <i class="ri-eraser-fill"></i><span class="hidden sm:inline">Clear</span>
+                </button>
+                <div class="w-px h-5 mx-1" style="background: var(--border-color)"></div>
+                <button id="themeBtn" class="btn-icon p-2 rounded-lg">
+                    <i class="ri-sun-line dark:hidden text-lg"></i>
+                    <i class="ri-moon-fill hidden dark:inline text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        <div class="mb-5 px-4 py-3 rounded-xl"
+            style="background: var(--bg-secondary); border: 1px solid var(--border-color)">
+            <p class="text-sm font-medium">How this works</p>
+            <p class="text-xs mt-1" style="color: var(--text-muted)">
+                Each cell runs as its own <span class="font-mono">Main.java</span> program. Use <span
+                    class="font-mono">Ctrl+Enter</span> to run a cell.
+            </p>
+        </div>
+
+        <div id="cells-container" class="space-y-4"></div>
+
+        <!-- Add Cell Button -->
+        <div class="flex justify-center mt-8">
+            <button id="addCellBtn"
+                class="btn-primary px-6 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2">
+                <i class="ri-add-line"></i> Add Cell
+            </button>
+        </div>
+
+        <!-- Keyboard Hints -->
+        <div class="mt-10 flex flex-wrap justify-center gap-4 text-xs" style="color: var(--text-muted)">
+            <div class="flex items-center gap-1.5">
+                <kbd class="px-1.5 py-0.5 rounded font-mono" style="background: var(--bg-tertiary)">Ctrl+Enter</kbd>
+                <span>Run cell</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <kbd class="px-1.5 py-0.5 rounded font-mono" style="background: var(--bg-tertiary)">Shift+Enter</kbd>
+                <span>Run + Add below</span>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        const DEFAULT_JAVA = `public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello from Tunex Java Notebook!");
+
+        for (int i = 0; i < 5; i++) {
+            System.out.println("Count: " + i);
+        }
+    }
+}
+`;
+
+        class NotebookApp {
+            constructor() {
+                this.cells = [];
+                this.executionCounter = 1;
+                this.activeCellIndex = 0;
+                this.cellsContainer = document.getElementById('cells-container');
+
+                this.init();
+            }
+
+            init() {
+                this.createCell();
+
+                document.getElementById('addCellBtn').addEventListener('click', () => this.createCell());
+                document.getElementById('runAllBtn').addEventListener('click', () => this.runAllCells());
+                document.getElementById('clearBtn').addEventListener('click', () => this.clearAllOutputs());
+                document.getElementById('themeBtn').addEventListener('click', () => Theme.toggle());
+            }
+
+            updateTheme(isDark) {
+                this.cells.forEach(cell => {
+                    cell.editor.setOption('theme', isDark ? 'material-darker' : 'eclipse');
+                });
+            }
+
+            createCell(insertAfterIndex = -1) {
+                const cellId = Date.now() + Math.random();
+                const cell = {
+                    id: cellId,
+                    editor: null,
+                    output: '',
+                    error: '',
+                    isRunning: false,
+                    executionCount: null
+                };
+
+                const cellEl = document.createElement('div');
+                cellEl.id = `cell-${cellId}`;
+                cellEl.className = 'notebook-cell rounded-xl overflow-hidden';
+                cellEl.innerHTML = `
+                    <div class="flex items-center justify-between px-4 py-2" style="background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color)">
+                        <div class="flex items-center gap-3">
+                            <span class="exec-counter">[*]</span>
+                            <span class="pill px-2 py-0.5 rounded-full text-[10px] font-medium uppercase">Java</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button class="run-btn w-7 h-7 rounded-lg flex items-center justify-center" data-action="run">
+                                <i class="ri-play-fill text-sm"></i>
+                            </button>
+                            <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center" data-action="add">
+                                <i class="ri-add-line text-sm"></i>
+                            </button>
+                            <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center hover:!text-red-500" data-action="delete">
+                                <i class="ri-delete-bin-6-line text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="cm-container"></div>
+                    <div class="output-area hidden">
+                        <div class="px-4 py-3 font-mono text-sm">
+                            <pre class="output-text whitespace-pre-wrap" style="color: var(--text-primary)"></pre>
+                            <pre class="error-text whitespace-pre-wrap text-red-500"></pre>
+                        </div>
+                    </div>
+                `;
+
+                if (insertAfterIndex >= 0 && insertAfterIndex < this.cells.length) {
+                    const afterEl = document.getElementById(`cell-${this.cells[insertAfterIndex].id}`);
+                    afterEl.after(cellEl);
+                    this.cells.splice(insertAfterIndex + 1, 0, cell);
+                    this.activeCellIndex = insertAfterIndex + 1;
+                } else {
+                    this.cellsContainer.appendChild(cellEl);
+                    this.cells.push(cell);
+                    this.activeCellIndex = this.cells.length - 1;
+                }
+
+                const cmContainer = cellEl.querySelector('.cm-container');
+                const isDark = Theme.isDark();
+
+                cell.editor = CodeMirror(cmContainer, {
+                    mode: 'text/x-java',
+                    theme: isDark ? 'material-darker' : 'eclipse',
+                    lineNumbers: true,
+                    indentUnit: 4,
+                    tabSize: 4,
+                    indentWithTabs: false,
+                    smartIndent: true,
+                    lineWrapping: true,
+                    autoCloseBrackets: true,
+                    matchBrackets: true,
+                    viewportMargin: Infinity,
+                    extraKeys: {
+                        'Ctrl-Enter': () => this.runCell(this.cells.indexOf(cell)),
+                        'Shift-Enter': () => {
+                            this.runCell(this.cells.indexOf(cell));
+                            this.createCell(this.cells.indexOf(cell));
+                        },
+                        'Tab': (cm) => {
+                            if (cm.somethingSelected()) {
+                                cm.indentSelection('add');
+                            } else {
+                                cm.replaceSelection('    ', 'end');
+                            }
+                        },
+                        'Shift-Tab': (cm) => cm.indentSelection('subtract'),
+                        'Ctrl-/': (cm) => cm.toggleComment(),
+                        'Ctrl-Space': 'autocomplete',
+                        'Backspace': function (cm) {
+                            if (cm.somethingSelected()) return CodeMirror.Pass;
+                            var cursor = cm.getCursor();
+                            var line = cm.getLine(cursor.line);
+                            var before = line.slice(0, cursor.ch);
+                            if (/^\s+$/.test(before) && before.length % 4 === 0 && before.length > 0) {
+                                cm.replaceRange('', { line: cursor.line, ch: cursor.ch - 4 }, cursor);
+                            } else {
+                                return CodeMirror.Pass;
+                            }
+                        }
+                    }
+                });
+
+                // Put a starter program in brand-new cells
+                cell.editor.setValue(DEFAULT_JAVA);
+
+                cellEl.addEventListener('click', () => {
+                    this.activeCellIndex = this.cells.indexOf(cell);
+                    this.updateActiveCellStyles();
+                });
+
+                cellEl.querySelector('[data-action="run"]').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.runCell(this.cells.indexOf(cell));
+                });
+                cellEl.querySelector('[data-action="add"]').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.createCell(this.cells.indexOf(cell));
+                });
+                cellEl.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteCell(this.cells.indexOf(cell));
+                });
+
+                this.updateActiveCellStyles();
+                setTimeout(() => cell.editor.focus(), 50);
+
+                return cell;
+            }
+
+            deleteCell(index) {
+                if (this.cells.length <= 1) return;
+
+                const cell = this.cells[index];
+                const cellEl = document.getElementById(`cell-${cell.id}`);
+
+                cellEl.remove();
+                this.cells.splice(index, 1);
+
+                if (this.activeCellIndex >= this.cells.length) {
+                    this.activeCellIndex = this.cells.length - 1;
+                }
+                this.updateActiveCellStyles();
+            }
+
+            updateActiveCellStyles() {
+                this.cells.forEach((cell, idx) => {
+                    const el = document.getElementById(`cell-${cell.id}`);
+                    if (el) {
+                        el.classList.toggle('active', idx === this.activeCellIndex);
+                    }
+                });
+            }
+
+            updateCellUI(cell) {
+                const cellEl = document.getElementById(`cell-${cell.id}`);
+                if (!cellEl) return;
+
+                const execCounter = cellEl.querySelector('.exec-counter');
+                const runBtn = cellEl.querySelector('[data-action="run"]');
+                const outputArea = cellEl.querySelector('.output-area');
+                const outputText = cellEl.querySelector('.output-text');
+                const errorText = cellEl.querySelector('.error-text');
+
+                execCounter.textContent = `[${cell.executionCount || '*'}]`;
+
+                if (cell.isRunning) {
+                    runBtn.innerHTML = '<i class="ri-loader-4-line animate-spin text-sm"></i>';
+                    cellEl.classList.add('running');
+                } else {
+                    runBtn.innerHTML = '<i class="ri-play-fill text-sm"></i>';
+                    cellEl.classList.remove('running');
+                }
+
+                if (cell.output || cell.error) {
+                    outputArea.classList.remove('hidden');
+                    outputText.textContent = cell.output;
+                    errorText.textContent = cell.error;
+                } else {
+                    outputArea.classList.add('hidden');
+                }
+            }
+
+            async runCell(index) {
+                const cell = this.cells[index];
+                const code = cell.editor.getValue();
+
+                cell.isRunning = true;
+                cell.output = '';
+                cell.error = '';
+                this.updateCellUI(cell);
+
+                try {
+                    const res = await fetch(`${API_BASE}/api/tunex/compiler/java/run`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code })
+                    });
+                    const data = await res.json();
+                    cell.output = data.output || '';
+                    cell.error = data.error || '';
+                    cell.executionCount = this.executionCounter++;
+                } catch (e) {
+                    cell.error = 'Connection failed. Is the server running?';
+                } finally {
+                    cell.isRunning = false;
+                    this.updateCellUI(cell);
+                }
+            }
+
+            async runAllCells() {
+                for (let i = 0; i < this.cells.length; i++) {
+                    await this.runCell(i);
+                }
+            }
+
+            clearAllOutputs() {
+                this.cells.forEach(cell => {
+                    cell.output = '';
+                    cell.error = '';
+                    cell.executionCount = null;
+                    this.updateCellUI(cell);
+                });
+                this.executionCounter = 1;
+            }
+        }
+
+        window.notebookInstance = new NotebookApp();
+    </script>
+</body>
+
+</html>
