@@ -15780,6 +15780,14 @@ def _get_prev_milestone(current: int) -> int:
             return STREAK_MILESTONES[i]
     return 0
 
+def _compute_current_streak(active_dates, today: date) -> int:
+    streak = 0
+    day = today
+    while day in active_dates:
+        streak += 1
+        day = day - timedelta(days=1)
+    return streak
+
 @academics_router.get("/api/streak", response_model=StreakResponse, summary="Get user streak data")
 def get_user_streak(authorization: Optional[str] = Header(default=None)):
     token = _bearer_token_from_header(authorization)
@@ -15816,73 +15824,53 @@ def get_user_streak(authorization: Optional[str] = Header(default=None)):
         streak_data = new_streak
     else:
         streak_data = streak_q.data[0]
-        last_date_str = streak_data.get("last_activity_date")
-        
-        # Check if we need to update streak
-        if last_date_str:
+
+    # Pull recent activity logs to compute streak and week data
+    lookback_start = today - timedelta(days=400)
+    activity_q = supabase.table("notex_activity_logs").select("activity_date").eq("user_profile_id", profile_id).gte("activity_date", lookback_start.isoformat()).order("activity_date", desc=True).limit(400).execute()
+    active_dates = set()
+    for a in (activity_q.data or []):
+        if a.get("activity_date"):
             try:
-                last_date = date.fromisoformat(str(last_date_str))
-            except:
-                last_date = None
-            
-            if last_date:
-                if last_date == today:
-                    # Already visited today, no change needed
-                    pass
-                elif last_date == yesterday:
-                    # Continue streak
-                    new_current = streak_data.get("current_streak", 0) + 1
-                    new_longest = max(new_current, streak_data.get("longest_streak", 0))
-                    supabase.table("notex_streak").update({
-                        "current_streak": new_current,
-                        "longest_streak": new_longest,
-                        "last_activity_date": today.isoformat(),
-                        "updated_at": datetime.utcnow().isoformat()
-                    }).eq("user_profile_id", profile_id).execute()
-                    streak_data["current_streak"] = new_current
-                    streak_data["longest_streak"] = new_longest
-                    streak_data["last_activity_date"] = today.isoformat()
-                else:
-                    # Streak broken, reset to 1
-                    supabase.table("notex_streak").update({
-                        "current_streak": 1,
-                        "last_activity_date": today.isoformat(),
-                        "updated_at": datetime.utcnow().isoformat()
-                    }).eq("user_profile_id", profile_id).execute()
-                    streak_data["current_streak"] = 1
-                    streak_data["last_activity_date"] = today.isoformat()
-        else:
-            # No last activity, start fresh
-            supabase.table("notex_streak").update({
-                "current_streak": 1,
-                "last_activity_date": today.isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
-            }).eq("user_profile_id", profile_id).execute()
-            streak_data["current_streak"] = 1
-            streak_data["last_activity_date"] = today.isoformat()
-    
-    current = streak_data.get("current_streak", 0)
-    longest = streak_data.get("longest_streak", 0)
-    
+                active_dates.add(date.fromisoformat(str(a["activity_date"])))
+            except Exception:
+                pass
+
+    # Backfill with stored last_activity_date if logs are missing
+    last_date = None
+    last_date_str = streak_data.get("last_activity_date")
+    if last_date_str:
+        try:
+            last_date = date.fromisoformat(str(last_date_str))
+            active_dates.add(last_date)
+        except Exception:
+            last_date = None
+
+    # Count this visit as activity so streak continues for today
+    active_dates.add(today)
+
+    current = _compute_current_streak(active_dates, today)
+    longest = max(int(streak_data.get("longest_streak") or 0), current)
+
+    if current != int(streak_data.get("current_streak") or 0) or (streak_data.get("last_activity_date") != today.isoformat()):
+        supabase.table("notex_streak").update({
+            "current_streak": current,
+            "longest_streak": longest,
+            "last_activity_date": today.isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("user_profile_id", profile_id).execute()
+        streak_data["current_streak"] = current
+        streak_data["longest_streak"] = longest
+        streak_data["last_activity_date"] = today.isoformat()
+
     # Calculate milestones
     next_m = _get_next_milestone(current)
     prev_m = _get_prev_milestone(current)
     range_val = next_m - prev_m
     progress = round(((current - prev_m) / range_val) * 100) if range_val > 0 else 0
-    
-    # Get activity logs for this week
-    week_start = today - timedelta(days=today.weekday())  # Monday
-    activity_q = supabase.table("notex_activity_logs").select("activity_date").eq("user_profile_id", profile_id).gte("activity_date", week_start.isoformat()).execute()
-    active_dates = set()
-    for a in (activity_q.data or []):
-        if a.get("activity_date"):
-            active_dates.add(str(a["activity_date"]))
-    
-    # Also include today if streak is active
-    if streak_data.get("last_activity_date") == today.isoformat():
-        active_dates.add(today.isoformat())
-    
+
     # Build week data
+    week_start = today - timedelta(days=today.weekday())  # Monday
     day_names = ["M", "T", "W", "T", "F", "S", "S"]
     today_index = today.weekday()
     week_data = []
@@ -15890,7 +15878,7 @@ def get_user_streak(authorization: Optional[str] = Header(default=None)):
         day_date = week_start + timedelta(days=i)
         is_today = i == today_index
         is_future = i > today_index
-        is_active = day_date.isoformat() in active_dates
+        is_active = day_date in active_dates
         week_data.append({
             "day": day_names[i],
             "date": day_date.day,
@@ -15898,7 +15886,7 @@ def get_user_streak(authorization: Optional[str] = Header(default=None)):
             "is_active": is_active,
             "is_future": is_future
         })
-    
+
     days_completed = len([d for d in week_data if d["is_active"]])
     
     return StreakResponse(
