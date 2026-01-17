@@ -448,6 +448,10 @@
                 </button>
             </div>
             <div class="md:hidden flex items-center gap-2">
+                <button id="navEduEditBtn" type="button" aria-label="Edit education"
+                    class="hidden inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">edit</span>
+                </button>
                 <button type="button" data-theme-toggle aria-label="Toggle theme"
                     class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
                     <span class="material-symbols-rounded">dark_mode</span>
@@ -545,11 +549,11 @@
                                         class="px-2 py-1 rounded-full ring-1 ring-black/10 dark:ring-white/15">-</span>
                                 </div>
                             </div>
-                            <a href="profile_edit.html"
+                            <button type="button" id="eduEditBtn"
                                 class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
                                 <span class="material-symbols-rounded text-sm">edit</span>
                                 Edit
-                            </a>
+                            </button>
                         </div>
                         <div class="grid sm:grid-cols-3 gap-4 text-xs">
                             <div class="flex flex-col gap-1"><span
@@ -1227,9 +1231,11 @@
             const navProfileImg = document.getElementById('navProfileImg');
             const navProfileInitial = document.getElementById('navProfileInitial');
             const signOutBtn = document.getElementById('signOutBtn');
+            const navEduEditBtn = document.getElementById('navEduEditBtn');
             if (!t) return;
             document.querySelectorAll('a[href="login.html"], a[href="signup.html"]').forEach(a => { a.classList.add('hidden'); a.style.display = 'none'; });
             if (navProfile) navProfile.classList.remove('hidden');
+            if (navEduEditBtn) navEduEditBtn.classList.remove('hidden');
             if (signOutBtn) {
                 signOutBtn.classList.remove('hidden');
                 signOutBtn.onclick = () => { try { localStorage.removeItem('px_token'); } catch { } window.location.href = 'login.html'; };
@@ -1381,6 +1387,7 @@
             wrap: document.getElementById('eduRequiredFormWrap'),
             saveBtn: document.getElementById('eduRequiredSaveBtn'),
             status: document.getElementById('eduRequiredStatus'),
+            closeBtn: document.getElementById('eduRequiredCloseBtn'),
         });
 
         const __pxEduGetAuthHeaders = () => {
@@ -2069,6 +2076,13 @@
             wrap.dataset.ready = 'true';
         }
 
+        async function __pxEduOpenEditorFromProfile() {
+            await __pxEduEnsureBound();
+            const profile = window.__PX_PROFILE_SNAPSHOT || {};
+            await __pxEduEnsureModalReady(profile);
+            __pxEduOpenModal();
+        }
+
         async function __pxEduMaybeRequire(profile) {
             await __pxEduDomReady;
             await __pxEduEnsureBound();
@@ -2085,8 +2099,41 @@
         async function __pxEduEnsureBound() {
             if (__pxEduBound) return;
             await __pxEduDomReady;
-            const { saveBtn } = __pxEduEls();
+            const { saveBtn, closeBtn, modal } = __pxEduEls();
             if (!saveBtn) return;
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', (event) => {
+                    event.preventDefault?.();
+                    __pxEduCloseModal();
+                });
+            }
+
+            if (modal) {
+                modal.addEventListener('click', (event) => {
+                    const { modal: currentModal } = __pxEduEls();
+                    if (!currentModal || currentModal.classList.contains('hidden')) return;
+                    if (event.target.closest('[data-edu-modal-panel]')) return;
+                    __pxEduCloseModal();
+                });
+            }
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') return;
+                const { modal: currentModal } = __pxEduEls();
+                if (!currentModal || currentModal.classList.contains('hidden')) return;
+                __pxEduCloseModal();
+            });
+
+            const bindEdit = (el) => {
+                if (!el) return;
+                el.addEventListener('click', async (event) => {
+                    event.preventDefault?.();
+                    await __pxEduOpenEditorFromProfile();
+                });
+            };
+            bindEdit(document.getElementById('eduEditBtn'));
+            bindEdit(document.getElementById('navEduEditBtn'));
             saveBtn.addEventListener('click', async () => {
                 try {
                     const profile = window.__PX_PROFILE_SNAPSHOT || {};
@@ -2148,7 +2195,8 @@
     <div id="eduRequiredModal" class="hidden fixed inset-0 z-50">
         <div class="absolute inset-0 bg-black/70"></div>
         <div class="relative h-full w-full flex items-center justify-center p-4">
-            <div class="w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 text-neutral-900 dark:text-white shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6 overflow-y-auto overflow-x-hidden"
+            <div data-edu-modal-panel
+                class="w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 text-neutral-900 dark:text-white shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6 overflow-y-auto overflow-x-hidden"
                 style="max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem);">
                 <div class="flex items-start justify-between gap-3">
                     <div>
@@ -2157,6 +2205,10 @@
                             department, batch,
                             section and current semester to continue.</p>
                     </div>
+                    <button id="eduRequiredCloseBtn" type="button" aria-label="Close"
+                        class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                        <span class="material-symbols-rounded">close</span>
+                    </button>
                 </div>
 
                 <div id="eduRequiredStatus"
