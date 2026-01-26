@@ -27,6 +27,15 @@ from urllib.parse import quote, urlparse
 import threading
 import concurrent.futures
 
+# New imports for using google.genai as requested
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
+
+
 from autogen_agentchat.agents import AssistantAgent
 from autogen_core.models import ModelInfo
 from autogen_ext.models.openai import OpenAIChatCompletionClient
@@ -16680,4 +16689,166 @@ async def run_java_compiler(request: CompilerRequest):
     result = execute_java_code(request.code)
     return result
 
-# ... (end of file)
+# ------------------------------------------------------------------------------
+# Blink Generation Endpoint (Gemini 3 Pro + Supabase)
+# ------------------------------------------------------------------------------
+
+class BlinkRequest(BaseModel):
+    topic: Optional[str] = None
+    topic_id: Optional[str] = None
+    note_content: Optional[str] = None # Optional override
+
+@app.get("/api/blink/links")
+async def get_blink_links(topics: str = Query(..., description="Comma-separated list of topic names")):
+    """
+    Fetch existing blink links for given topic names.
+    Returns a map of topic_name -> blink_link for topics that have blinks.
+    """
+    supabase = get_service_client()
+    topics_list = [t.strip().lower() for t in topics.split(",") if t.strip()]
+    
+    if not topics_list:
+        return {"links": {}}
+    
+    try:
+        res = supabase.table(AI_NOTES_TABLE).select("title, title_ci, blink_link").in_("title_ci", topics_list).execute()
+        data = getattr(res, 'data', []) or []
+        
+        links = {}
+        for row in data:
+            blink_link = row.get("blink_link")
+            if blink_link and blink_link.strip():
+                # Use original title as key for better matching
+                links[row.get("title_ci") or row.get("title", "").lower()] = blink_link
+        
+        return {"links": links}
+    except Exception as e:
+        print(f"[Blink] Error fetching links: {e}")
+        return {"links": {}}
+
+@app.post("/api/blink/generate")
+async def generate_blink_endpoint(
+    req: BlinkRequest, 
+    user_id: str = "00000000-0000-0000-0000-000000000000" 
+):
+    """
+    Generate a 'Blink' (landscape illustration) for a given topic or note content.
+    """
+    
+    # 1. Get content
+    content_to_illustrate = req.note_content
+    
+    # If content not provided directly, try to fetch from DB
+    if not content_to_illustrate and (req.topic or req.topic_id):
+        supabase = get_service_client()
+        try:
+            # Attempt 1: Try by ID if provided
+            data = []
+            if req.topic_id:
+                print(f"[Blink] Looking up note by ID: {req.topic_id}")
+                res = supabase.table(AI_NOTES_TABLE).select("markdown, id").eq("id", req.topic_id).limit(1).execute()
+                data = getattr(res, 'data', [])
+            
+            # Attempt 2: If no data yet and topic provided, try by title
+            if not data and req.topic:
+                print(f"[Blink] No note found by ID or no ID. Looking up by title: {req.topic}")
+                res = supabase.table(AI_NOTES_TABLE).select("markdown, id").eq("title_ci", req.topic.strip().lower()).limit(1).execute()
+                data = getattr(res, 'data', [])
+
+            if data:
+                content_to_illustrate = data[0].get("markdown", "")
+                # If we found it by title but didn't have the ID (or it differed), update req.topic_id so we update the correct row later
+                real_id = data[0].get("id")
+                if real_id:
+                     req.topic_id = real_id
+            else:
+                print("[Blink] Note not found in DB.")
+        except Exception as e:
+            print(f"Error fetching note: {e}")
+
+    if not content_to_illustrate:
+         raise HTTPException(status_code=404, detail="Note content not found for this topic. Please generate notes first.")
+
+    # 2. Generate Image
+    if not os.getenv("GEMINI_API_KEY"):
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured.")
+        
+    if genai is None:
+         # raise HTTPException(status_code=500, detail="google-genai library not installed.")
+         print("Warning: google-genai not imported. Simulating or failing.")
+
+    prompt = f"""now,create me an one landscape illustration for the below notes so that just by looking this one illustration, they can understand the entire notes completely i want the ilustratio to be professional and white bg, content ={content_to_illustrate[:8000]}"""  
+
+    print(f"Generating Blink for topic '{req.topic or req.topic_id}'...")
+    
+    try:
+        def _generate_bytes_sync():
+            # Check if genai is available
+            if not genai:
+                raise RuntimeError("google-genai library not available")
+
+            client_g = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            
+            # Using user-provided structure specifically:
+            chat = client_g.chats.create(
+                model="gemini-3-pro-image-preview", 
+                config=types.GenerateContentConfig(
+                    response_modalities=['TEXT', 'IMAGE'],
+                    tools=[{"google_search": {}}]
+                )
+            )
+
+            resp = chat.send_message(prompt,
+                config=types.GenerateContentConfig(
+                    image_config=types.ImageConfig(
+                        aspect_ratio="16:9",
+                        image_size="2K"
+                    ),
+            ))
+            
+            for part in resp.parts:
+                if part.as_image():
+                    return part.as_image().image_bytes
+                elif part.text:
+                    print(f"[Blink] Model returned text: {part.text}")
+            
+            raise RuntimeError(f"No image part in response. Response text: {resp.text if hasattr(resp, 'text') else 'Unknown'}")
+
+        image_bytes = await run_in_threadpool(_generate_bytes_sync)
+        
+        # 3. Upload to Supabase
+        filename = f"gen_blink_{uuid.uuid4().hex[:8]}.png"
+        bucket_name = "blink"
+        
+        supabase = get_service_client()
+        
+        def _upload_sync():
+            res = supabase.storage.from_(bucket_name).upload(
+                path=filename,
+                file=image_bytes,
+                file_options={"content-type": "image/png"}
+            )
+            pub = supabase.storage.from_(bucket_name).get_public_url(filename)
+            return pub
+
+        public_url = await run_in_threadpool(_upload_sync)
+        
+        # 4. Update DB
+        if req.topic_id:
+             supabase.table(AI_NOTES_TABLE).update({"blink_link": public_url}).eq("id", req.topic_id).execute()
+        
+        return {
+            "success": True,
+            "url": public_url,
+            "filename": filename
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+

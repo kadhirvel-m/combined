@@ -961,7 +961,13 @@
                 if (emptyState) emptyState.classList.toggle('hidden', Boolean(syllabus.length));
 
                 const teacherNotesBySubject = await loadTeacherNotesForSubjects(syllabus);
-                renderSyllabus(syllabus, teacherNotesBySubject);
+
+                // Collect all topic names (lowercase) and fetch blink links
+                const allTopicNames = [];
+                syllabus.forEach(c => (c.units || []).forEach(u => (u.topics || []).forEach(t => { if (t.topic) allTopicNames.push(t.topic.toLowerCase()); })));
+                const blinkLinks = await fetchBlinkLinks(allTopicNames);
+
+                renderSyllabus(syllabus, teacherNotesBySubject, blinkLinks);
                 computeAggregateStats(syllabus);
 
                 // Load streak data after main content is loaded
@@ -1020,6 +1026,25 @@
         function pct(done, total) { return total ? Math.round((done / total) * 100) : 0; }
         function updateRing(p) { const ring = $('ringCompletion'); const text = $('ringCompletionText'); if (ring) ring.style.setProperty('--pct', p); if (text) text.textContent = p + '%'; }
 
+        // Fetch blink links for topic names
+        async function fetchBlinkLinks(topicNames) {
+            const blinkLinksMap = new Map();
+            if (!topicNames || !topicNames.length) return blinkLinksMap;
+
+            try {
+                const topicsParam = topicNames.join(',');
+                const res = await fetchJson(`${API_BASE}/api/blink/links?topics=${encodeURIComponent(topicsParam)}`, { headers: authHeaders() });
+                if (isSuccess(res) && res.data?.links) {
+                    Object.entries(res.data.links).forEach(([topicKey, link]) => {
+                        blinkLinksMap.set(topicKey, link);
+                    });
+                }
+            } catch (err) {
+                console.warn('[Academics] Failed to fetch blink links', err);
+            }
+            return blinkLinksMap;
+        }
+
         function computeAggregateStats(syllabus) {
             let totalTopics = 0, doneTopics = 0, courses = 0, semesterLabel = '';
             syllabus.forEach(c => { courses++; semesterLabel = c.semester || semesterLabel; (c.units || []).forEach(u => { (u.topics || []).forEach(t => { totalTopics++; if (completedTopicIds.has(t.id)) doneTopics++; }); }); });
@@ -1027,7 +1052,7 @@
             const completion = pct(doneTopics, totalTopics); updateRing(completion); const bar = $('barTopics'); if (bar) { bar.style.width = (completion || 0) + '%'; bar.classList.remove('animate-pulseBar'); }
         }
 
-        function renderSyllabus(list, teacherNotesBySubject = new Map()) {
+        function renderSyllabus(list, teacherNotesBySubject = new Map(), blinkLinksMap = new Map()) {
             const wrap = $('syllabus'); wrap.innerHTML = ''; const cTpl = $('courseCardTpl'); const uTpl = $('unitItemTpl');
             const courseNodes = [];
             list.forEach(c => {
@@ -1108,6 +1133,82 @@
                                 }
                             };
                             li.appendChild(labLink);
+                        }
+
+                        // Gen Blink / View Button
+                        console.log('Rendering topic:', t.topic);
+                        const existingBlinkLink = blinkLinksMap.get((t.topic || '').toLowerCase());
+                        const blinkBtn = document.createElement('button');
+                        blinkBtn.type = 'button';
+
+                        if (existingBlinkLink) {
+                            // Show View button for existing blink
+                            blinkBtn.className = 'ml-auto mr-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20 hover:bg-emerald-500/20 transition';
+                            if (labUrl) {
+                                blinkBtn.classList.remove('ml-auto');
+                            }
+                            blinkBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">visibility</span><span>View</span>';
+                            blinkBtn.onclick = (e) => {
+                                e.stopPropagation();
+                                window.open(existingBlinkLink, '_blank');
+                            };
+                        } else {
+                            // Show Gen Blink button
+                            blinkBtn.className = 'ml-auto mr-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide bg-brand-500 text-white shadow-sm hover:shadow-glow hover:scale-105 transition transform';
+                            blinkBtn.style.backgroundColor = '#9E4B8A';
+                            blinkBtn.style.color = '#ffffff';
+
+                            if (labUrl) {
+                                blinkBtn.className = 'mr-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide bg-brand-500 text-white shadow-sm hover:shadow-glow hover:scale-105 transition transform';
+                            }
+
+                            blinkBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">auto_awesome</span><span>Gen Blink</span>';
+                            blinkBtn.onclick = async (e) => {
+                                e.stopPropagation();
+                                if (blinkBtn.disabled) return;
+
+                                blinkBtn.disabled = true;
+                                blinkBtn.innerHTML = '<span class="animate-spin material-symbols-rounded text-[14px]">sync</span><span>Gen...</span>';
+                                blinkBtn.classList.add('opacity-75', 'cursor-not-allowed');
+
+                                try {
+                                    const res = await fetch(`${API_BASE}/api/blink/generate`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                                        body: JSON.stringify({ topic_id: t.id, topic: t.topic })
+                                    });
+                                    const data = await res.json();
+                                    if (res.ok && data.url) {
+                                        blinkBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">visibility</span><span>View</span>';
+                                        blinkBtn.className = 'ml-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20 hover:bg-emerald-500/20 transition';
+                                        blinkBtn.style.backgroundColor = '';
+                                        blinkBtn.style.color = '';
+
+                                        blinkBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                                        blinkBtn.disabled = false;
+                                        blinkBtn.onclick = (e2) => {
+                                            e2.stopPropagation();
+                                            window.open(data.url, '_blank');
+                                        };
+                                    } else {
+                                        throw new Error(data.detail || 'Failed');
+                                    }
+                                } catch (err) {
+                                    console.error(err);
+                                    alert('Blink generation failed: ' + err.message);
+                                    blinkBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">auto_awesome</span><span>Gen Blink</span>';
+                                    blinkBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                                    blinkBtn.disabled = false;
+                                }
+                            };
+                        }
+
+                        // Insert before labLink if it exists, otherwise append
+                        if (labUrl && li.contains(li.lastElementChild)) {
+                            li.insertBefore(blinkBtn, li.lastElementChild);
+                        } else {
+                            blinkBtn.classList.add('ml-auto');
+                            li.appendChild(blinkBtn);
                         }
 
                         unitCounts.total++; if (initChecked) unitCounts.done++; topicsWrap.appendChild(li);
