@@ -912,3 +912,15 @@ CREATE TABLE public.youtube_ai_notes (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.topic_ratings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  topic_id uuid NOT NULL,
+  teacher_user_id uuid NOT NULL,
+  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 3),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT topic_ratings_pkey PRIMARY KEY (id),
+  CONSTRAINT topic_ratings_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id) ON DELETE CASCADE,
+  CONSTRAINT topic_ratings_teacher_user_id_fkey FOREIGN KEY (teacher_user_id) REFERENCES auth.users(id),
+  CONSTRAINT topic_ratings_unique UNIQUE (topic_id, teacher_user_id)
+);

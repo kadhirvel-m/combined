@@ -18,7 +18,7 @@ import uuid
 import math
 import ast
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
@@ -10470,6 +10470,268 @@ def clear_topic_lab_url(topic_id: uuid.UUID):
     """Clear (set to null) the lab_url for a single topic."""
 
     return _update_topic_url_field(topic_id, "lab_url", None)
+
+
+# ---------- Topic Ratings ----------
+
+class TopicRatingIn(BaseModel):
+    rating: int = Field(..., ge=1, le=3, description="Rating value from 1 to 3 stars")
+
+
+class TopicRatingOut(BaseModel):
+    topic_id: uuid.UUID
+    rating: int
+    updated_at: Optional[datetime] = None
+
+
+@academics_router.put(
+    "/api/syllabus/topics/{topic_id}/rating",
+    response_model=TopicRatingOut,
+    summary="Set or update rating for a syllabus topic (1-3 stars)",
+)
+def set_topic_rating(
+    topic_id: uuid.UUID,
+    payload: TopicRatingIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Upsert a rating for a single topic by the current teacher.
+
+    Rating must be between 1 and 3 (inclusive).
+    Requires authentication via Bearer token.
+    """
+    token = _parse_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Get user ID from token
+    supabase = get_service_client()
+    try:
+        user_res = supabase.auth.get_user(token)
+        user = getattr(user_res, "user", None)
+        if not user or not getattr(user, "id", None):
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        teacher_user_id = str(user.id)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Verify topic exists
+    topic_q = (
+        supabase.table("syllabus_topics")
+        .select("id")
+        .eq("id", str(topic_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(topic_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find topic): {topic_q.error}")
+    if not topic_q.data:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    # Upsert rating (insert or update based on unique constraint)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    
+    # Check if rating exists
+    existing = (
+        supabase.table("topic_ratings")
+        .select("id")
+        .eq("topic_id", str(topic_id))
+        .eq("teacher_user_id", teacher_user_id)
+        .limit(1)
+        .execute()
+    )
+    
+    if existing.data:
+        # Update existing rating
+        upd = (
+            supabase.table("topic_ratings")
+            .update({"rating": payload.rating, "updated_at": now_iso})
+            .eq("topic_id", str(topic_id))
+            .eq("teacher_user_id", teacher_user_id)
+            .execute()
+        )
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (update rating): {upd.error}")
+    else:
+        # Insert new rating
+        ins = (
+            supabase.table("topic_ratings")
+            .insert({
+                "topic_id": str(topic_id),
+                "teacher_user_id": teacher_user_id,
+                "rating": payload.rating,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            })
+            .execute()
+        )
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert rating): {ins.error}")
+
+    return TopicRatingOut(
+        topic_id=topic_id,
+        rating=payload.rating,
+        updated_at=datetime.now(timezone.utc),
+    )
+
+
+@academics_router.get(
+    "/api/syllabus/topics/{topic_id}/rating",
+    response_model=Optional[TopicRatingOut],
+    summary="Get current user's rating for a syllabus topic",
+)
+def get_topic_rating(
+    topic_id: uuid.UUID,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Get the current teacher's rating for a single topic.
+
+    Returns null if no rating exists.
+    Requires authentication via Bearer token.
+    """
+    token = _parse_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Get user ID from token
+    supabase = get_service_client()
+    try:
+        user_res = supabase.auth.get_user(token)
+        user = getattr(user_res, "user", None)
+        if not user or not getattr(user, "id", None):
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        teacher_user_id = str(user.id)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Get rating
+    rating_q = (
+        supabase.table("topic_ratings")
+        .select("topic_id,rating,updated_at")
+        .eq("topic_id", str(topic_id))
+        .eq("teacher_user_id", teacher_user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(rating_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get rating): {rating_q.error}")
+
+    if not rating_q.data:
+        return None
+
+    row = rating_q.data[0]
+    return TopicRatingOut(
+        topic_id=uuid.UUID(row["topic_id"]),
+        rating=int(row["rating"]),
+        updated_at=row.get("updated_at"),
+    )
+
+
+@academics_router.get(
+    "/api/syllabus/courses/{course_id}/ratings",
+    summary="Get all topic ratings for a course by current user",
+)
+def get_course_topic_ratings(
+    course_id: uuid.UUID,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Get all topic ratings for a course by the current teacher.
+
+    Returns a dict mapping topic_id to rating value.
+    Requires authentication via Bearer token.
+    """
+    token = _parse_bearer_token(authorization)
+    if not token:
+        return {"ratings": {}}
+
+    # Get user ID from token
+    supabase = get_service_client()
+    try:
+        user_res = supabase.auth.get_user(token)
+        user = getattr(user_res, "user", None)
+        if not user or not getattr(user, "id", None):
+            return {"ratings": {}}
+        teacher_user_id = str(user.id)
+    except Exception:
+        return {"ratings": {}}
+
+    # Get all unit IDs for this course
+    units_q = (
+        supabase.table("syllabus_units")
+        .select("id")
+        .eq("course_id", str(course_id))
+        .execute()
+    )
+    if getattr(units_q, "error", None) or not units_q.data:
+        return {"ratings": {}}
+
+    unit_ids = [u["id"] for u in units_q.data]
+
+    # Get all topic IDs for these units
+    topics_q = (
+        supabase.table("syllabus_topics")
+        .select("id")
+        .in_("unit_id", unit_ids)
+        .execute()
+    )
+    if getattr(topics_q, "error", None) or not topics_q.data:
+        return {"ratings": {}}
+
+    topic_ids = [t["id"] for t in topics_q.data]
+
+    # Get all ratings for these topics by this user
+    ratings_q = (
+        supabase.table("topic_ratings")
+        .select("topic_id,rating")
+        .eq("teacher_user_id", teacher_user_id)
+        .in_("topic_id", topic_ids)
+        .execute()
+    )
+    if getattr(ratings_q, "error", None):
+        return {"ratings": {}}
+
+    ratings = {r["topic_id"]: r["rating"] for r in (ratings_q.data or [])}
+    return {"ratings": ratings}
+
+
+@academics_router.post(
+    "/api/syllabus/topics/ratings/batch",
+    summary="Get ratings for multiple topics (public, for student view)",
+)
+def get_topic_ratings_batch(
+    topic_ids: List[uuid.UUID] = Body(..., embed=True),
+):
+    """Get ratings for a batch of topic IDs.
+
+    Returns a dict mapping topic_id to rating value.
+    Public endpoint - no authentication required.
+    Returns the first/only rating for each topic (since one staff per topic typically).
+    """
+    if not topic_ids:
+        return {"ratings": {}}
+
+    supabase = get_service_client()
+    
+    # Convert UUIDs to strings for query
+    topic_id_strs = [str(tid) for tid in topic_ids]
+    
+    # Get all ratings for these topics
+    ratings_q = (
+        supabase.table("topic_ratings")
+        .select("topic_id,rating")
+        .in_("topic_id", topic_id_strs)
+        .execute()
+    )
+    if getattr(ratings_q, "error", None):
+        return {"ratings": {}}
+
+    # Return first rating found for each topic
+    ratings = {}
+    for r in (ratings_q.data or []):
+        tid = r["topic_id"]
+        if tid not in ratings:
+            ratings[tid] = r["rating"]
+    
+    return {"ratings": ratings}
 
 
 # ---------- Progress tracking ----------
