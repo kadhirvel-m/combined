@@ -462,6 +462,54 @@
             background: rgba(255, 255, 255, 0.1);
             border-radius: 10px;
         }
+
+        /* Resizable divider */
+        .resizer {
+            width: 6px;
+            background: var(--outline);
+            cursor: col-resize;
+            flex-shrink: 0;
+            transition: background 0.15s ease;
+            position: relative;
+        }
+
+        .resizer:hover,
+        .resizer.active {
+            background: var(--brand);
+        }
+
+        .resizer::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .resizer:hover::before,
+        .resizer.active::before {
+            opacity: 1;
+        }
+
+        html.light .resizer::before {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        /* Prevent text selection while dragging */
+        body.resizing {
+            cursor: col-resize !important;
+            user-select: none;
+        }
+
+        body.resizing * {
+            cursor: col-resize !important;
+        }
     </style>
 </head>
 
@@ -502,7 +550,9 @@
     <!-- Main Layout: Video Sidebar + Notebook -->
     <div class="flex h-screen pt-16">
         <!-- Video Sidebar -->
-        <aside class="video-sidebar w-80 lg:w-96 flex-shrink-0 p-4 overflow-y-auto custom-scrollbar hidden md:block">
+        <aside id="videoSidebar"
+            class="video-sidebar flex-shrink-0 p-4 overflow-y-auto custom-scrollbar hidden md:block"
+            style="width: 384px; min-width: 280px; max-width: 600px;">
             <div class="space-y-4">
                 <!-- Video Player -->
                 <div class="video-container">
@@ -544,8 +594,11 @@
             </div>
         </aside>
 
+        <!-- Resizable Divider -->
+        <div id="resizer" class="resizer hidden md:block" title="Drag to resize"></div>
+
         <!-- Notebook Main Content -->
-        <main class="flex-1 overflow-y-auto custom-scrollbar pb-10">
+        <main id="notebookMain" class="flex-1 overflow-y-auto custom-scrollbar pb-10">
             <div class="max-w-4xl mx-auto px-4 pt-8">
                 <!-- Cells Container -->
                 <div id="cells-container" class="space-y-4"></div>
@@ -635,7 +688,7 @@
 
             // Fetch video metadata
             try {
-                const res = await fetch(`${API_BASE}/api/youtube/meta`, {
+                const res = await fetch(`${API_BASE}/api/transcripts/meta`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: videoUrl })
@@ -1106,6 +1159,53 @@
         // Initialize
         initVideoPlayer();
         window.notebookInstance = new NotebookApp();
+
+        // Resizer functionality
+        (function initResizer() {
+            const resizer = document.getElementById('resizer');
+            const sidebar = document.getElementById('videoSidebar');
+            const main = document.getElementById('notebookMain');
+
+            if (!resizer || !sidebar || !main) return;
+
+            let isResizing = false;
+            let startX = 0;
+            let startWidth = 0;
+
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startWidth = sidebar.offsetWidth;
+                resizer.classList.add('active');
+                document.body.classList.add('resizing');
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const delta = e.clientX - startX;
+                let newWidth = startWidth + delta;
+                // Enforce min/max constraints
+                newWidth = Math.max(280, Math.min(600, newWidth));
+                sidebar.style.width = newWidth + 'px';
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    resizer.classList.remove('active');
+                    document.body.classList.remove('resizing');
+                    // Save preference to localStorage
+                    localStorage.setItem('videoNotesWidth', sidebar.style.width);
+                }
+            });
+
+            // Restore saved width
+            const savedWidth = localStorage.getItem('videoNotesWidth');
+            if (savedWidth) {
+                sidebar.style.width = savedWidth;
+            }
+        })();
     </script>
 </body>
 
