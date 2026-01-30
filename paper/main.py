@@ -3019,6 +3019,50 @@ def _normalize_parsed_struct(parsed: dict, hints: dict) -> ParsedSyllabusOut:
 GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-2.5-flash").strip()
 
 
+SYLLABUS_AI_PARSE_PROMPT = """Analyze this university syllabus/curriculum document and extract the structure as JSON.
+
+This is a typical university syllabus with the following structure:
+- Subject Code (e.g., 25UMAT21, CS101, AI PE703)
+- Subject Title (e.g., DIFFERENTIAL EQUATIONS & TRANSFORMS)
+- Course Prerequisites, Objectives, Outcomes (CO1-CO5) - skip these sections
+- SYLLABUS section with UNIT I through UNIT V (or more)
+- Each unit has: Unit number, Title, Topics, and Hours (e.g., 12)
+- Text Books, Reference Books sections at the end - skip these
+
+Extract all subjects/courses with their units and topics. Return ONLY valid JSON in this exact format:
+{
+  "subjects": [
+    {
+      "name": "Subject Title Here",
+      "code": "SUBJECT_CODE or null if not found",
+      "units": [
+        {
+          "name": "Unit Title (e.g., ORDINARY DIFFERENTIAL EQUATIONS)",
+          "unit_number": 1,
+          "topics": [
+            {"name": "Topic 1 - should be a specific concept", "order_index": 0},
+            {"name": "Topic 2", "order_index": 1}
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+RULES:
+1. Extract ALL subjects mentioned in the document
+2. For each subject, extract ALL units/modules (usually UNIT I, II, III, IV, V)
+3. For each unit, extract ALL topics - split by commas, dashes, or line breaks
+4. SKIP sections: Course Prerequisites, Course Objectives, Course Outcomes (CO1-CO5), Text Books, Reference Books, Total Periods
+5. If unit numbers are not explicit, infer them from order (1, 2, 3...)
+6. If subject codes are not present, set code to null
+7. Clean up topic names - remove leading bullets, numbers, or special characters
+8. Return ONLY the JSON, no markdown formatting or explanation
+
+Document text:
+"""
+
+
 def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
     if not GEMINI_API_KEY:
         return None
@@ -3030,21 +3074,15 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-2.5-flash")
-        prompt = (
-            "You are a strict JSON parser for academic syllabi. Given the raw syllabus text, return ONLY JSON with keys: "
-            "semester (integer 1-12, optional), course_code (string, optional), title (string, optional), "
-            "units (array of {unit_title (string), topics: array of {topic (string)}}). "
-            "Omit any units or topics that correspond to labs, laboratory sessions, practicals, experiments, or sessionals. "
-            "Do not include explanations or commentary; respond with JSON only."
-        )
+        
         # Limit the text length to keep latency low
-        max_chars = int(os.getenv("GEMINI_PARSE_MAX_CHARS", "20000"))
+        max_chars = int(os.getenv("GEMINI_PARSE_MAX_CHARS", "100000"))
         safe_text = (text or "")[:max_chars]
-        content = f"Hints: {json.dumps(hints or {})}\n\nSyllabus Text:\n{safe_text}"
-        resp = model.generate_content([
-            {"text": prompt},
-            {"text": content},
-        ])
+        
+        # Use the improved syllabus parsing prompt
+        full_prompt = SYLLABUS_AI_PARSE_PROMPT + safe_text
+        
+        resp = model.generate_content(full_prompt)
         raw = getattr(resp, "text", None)
         if not raw:
             try:
@@ -3054,10 +3092,36 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
         if not raw:
             return None
 
+        # Extract JSON from response (might be wrapped in markdown code blocks)
         m = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
         jtxt = m.group(1) if m else raw
-        return json.loads(jtxt)
-    except Exception:
+        
+        parsed = json.loads(jtxt)
+        
+        # Convert new format to expected format if it has 'subjects' key
+        if "subjects" in parsed and parsed["subjects"]:
+            # Take the first subject and convert to old format
+            first_subject = parsed["subjects"][0]
+            units = []
+            for unit in first_subject.get("units", []):
+                topics = []
+                for topic in unit.get("topics", []):
+                    topic_name = topic.get("name") if isinstance(topic, dict) else str(topic)
+                    if topic_name:
+                        topics.append({"topic": topic_name})
+                units.append({
+                    "unit_title": unit.get("name") or f"Unit {unit.get('unit_number', 1)}",
+                    "topics": topics
+                })
+            return {
+                "course_code": first_subject.get("code"),
+                "title": first_subject.get("name"),
+                "units": units
+            }
+        
+        return parsed
+    except Exception as e:
+        print(f"[GEMINI_PARSE] Error: {e}")
         return None
 
 
@@ -5954,6 +6018,106 @@ async def upload_syllabus_pdf_bulk(
 
     sections = _split_subject_sections(raw_text)
     results: List[SyllabusCourseOut] = []
+    use_ai = not _to_bool(prefer_naive)  # Use AI by default unless prefer_naive is set
+    sem_val = int(semester) if semester else 1
+    
+    # Helper function to process a subject from AI-parsed data
+    async def save_subject_from_ai(subject_data: dict, sem: int) -> Optional[SyllabusCourseOut]:
+        try:
+            units_in: List[UnitIn] = []
+            for unit in subject_data.get("units", []):
+                topics_in = []
+                for topic in unit.get("topics", []):
+                    topic_name = topic.get("name") if isinstance(topic, dict) else str(topic)
+                    if topic_name and topic_name.strip():
+                        topics_in.append(TopicIn(topic=topic_name.strip()))
+                if topics_in:
+                    units_in.append(UnitIn(
+                        unit_title=unit.get("name") or f"Unit {unit.get('unit_number', 1)}",
+                        topics=topics_in
+                    ))
+            
+            if not units_in:
+                return None
+            
+            # Filter out lab units
+            filtered_units = _filter_lab_units(units_in)
+            if not filtered_units:
+                filtered_units = units_in
+            
+            course_code = (subject_data.get("code") or "UNKNOWN").upper().strip()
+            title = (subject_data.get("name") or "Untitled Course").strip()
+            
+            course_in = SyllabusCourseIn(
+                batch_id=batch_id,
+                semester=sem,
+                course_code=course_code,
+                title=title,
+                units=filtered_units,
+            )
+            course = await run_in_threadpool(upsert_syllabus_course, course_in)
+            units_saved = await run_in_threadpool(sync_units_and_topics, course.id, filtered_units)
+            return SyllabusCourseOut(
+                id=course.id,
+                batch_id=course.batch_id,
+                semester=course.semester,
+                course_code=course.course_code,
+                title=course.title,
+                units=units_saved,
+            )
+        except Exception as e:
+            print(f"[UPLOAD-BULK] Error saving subject: {e}")
+            return None
+    
+    # Try AI parsing first for better accuracy with university syllabi
+    if use_ai and GEMINI_API_KEY:
+        try:
+            print(f"[UPLOAD-BULK] Using AI (Gemini) for syllabus parsing...")
+            ai_parsed = await run_in_threadpool(_gemini_parse, raw_text, {})
+            
+            if ai_parsed:
+                # Check if AI returned multiple subjects
+                if "subjects" in ai_parsed and ai_parsed["subjects"]:
+                    print(f"[UPLOAD-BULK] AI found {len(ai_parsed['subjects'])} subjects")
+                    for subj in ai_parsed["subjects"]:
+                        result = await save_subject_from_ai(subj, sem_val)
+                        if result:
+                            results.append(result)
+                elif ai_parsed.get("units"):
+                    # Single subject format
+                    subj_data = {
+                        "code": ai_parsed.get("course_code"),
+                        "name": ai_parsed.get("title"),
+                        "units": ai_parsed.get("units", [])
+                    }
+                    # Convert units to new format if needed
+                    converted_units = []
+                    for u in ai_parsed.get("units", []):
+                        topics = []
+                        for t in u.get("topics", []):
+                            topic_name = t.get("topic") if isinstance(t, dict) else str(t)
+                            if topic_name:
+                                topics.append({"name": topic_name})
+                        converted_units.append({
+                            "name": u.get("unit_title", "Unit"),
+                            "unit_number": len(converted_units) + 1,
+                            "topics": topics
+                        })
+                    subj_data["units"] = converted_units
+                    result = await save_subject_from_ai(subj_data, sem_val)
+                    if result:
+                        results.append(result)
+                
+                if results:
+                    print(f"[UPLOAD-BULK] AI parsing successful: saved {len(results)} courses")
+                    return results
+        except Exception as e:
+            print(f"[UPLOAD-BULK] AI parsing failed, falling back to heuristic: {e}")
+    
+    # Fallback to heuristic parsing
+    print(f"[UPLOAD-BULK] Using heuristic parsing...")
+    sections = _split_subject_sections(raw_text)
+    
     if not sections:
         # Fallback: treat as a single subject using the single-subject pipeline
         hints = {"course_code": None, "title": None}
@@ -5969,7 +6133,6 @@ async def upload_syllabus_pdf_bulk(
                     title=fallback_norm.title or norm.title,
                     units=filtered_units,
                 )
-        sem_val = int(semester) if semester else 1
         course_in = SyllabusCourseIn(
             batch_id=batch_id,
             semester=sem_val,
@@ -5992,7 +6155,6 @@ async def upload_syllabus_pdf_bulk(
         return results
 
     # Multi-section path
-    sem_val = int(semester) if semester else 1
     for sec in sections:
         sec_text = sec.get("text") or ""
         hints = {"course_code": sec.get("code"), "title": sec.get("title")}
