@@ -240,13 +240,43 @@
                 if ($('status')) $('status').textContent = 'Please log in to view this content.';
                 return;
             }
+
+            // Fetch topics from syllabus_topics table
             const res = await fetchJson(`${API_BASE}/api/syllabus/units/${encodeURIComponent(unitId)}/topics`, { headers: authHeaders() });
             if (!res || !res.ok) {
                 if ($('status')) $('status').textContent = 'Could not load topics for this unit. Please try again later.';
                 return;
             }
             const rawTopics = Array.isArray(res.data) ? res.data : [];
-            topics = rawTopics.filter(t => (t.image_url || '').trim() !== '');
+
+            // Also fetch blink links from ai_notes table
+            const topicNames = rawTopics.map(t => (t.topic || '').toLowerCase()).filter(Boolean);
+            let aiNotesBlinkMap = new Map();
+            if (topicNames.length > 0) {
+                try {
+                    const blinkRes = await fetchJson(`${API_BASE}/api/blink/links?topics=${encodeURIComponent(topicNames.join(','))}`, { headers: authHeaders() });
+                    if (blinkRes.ok && blinkRes.data?.links) {
+                        Object.entries(blinkRes.data.links).forEach(([key, link]) => {
+                            aiNotesBlinkMap.set(key.toLowerCase(), link);
+                        });
+                    }
+                } catch (err) {
+                    console.warn('Failed to fetch ai_notes blink links:', err);
+                }
+            }
+
+            // Merge: for each topic, use image_url from syllabus_topics OR blink_link from ai_notes
+            topics = rawTopics.map(t => {
+                const topicKey = (t.topic || '').toLowerCase();
+                const aiNotesBlink = aiNotesBlinkMap.get(topicKey);
+                // Prefer syllabus_topics.image_url, fallback to ai_notes.blink_link
+                const imageUrl = (t.image_url || '').trim() || aiNotesBlink || '';
+                return {
+                    ...t,
+                    image_url: imageUrl
+                };
+            }).filter(t => (t.image_url || '').trim() !== '');
+
             cursor = 0;
             renderState();
         }

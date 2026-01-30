@@ -1125,13 +1125,13 @@
                 wishlistedTopicIds.delete(topicId);
                 icon.style.color = 'currentColor';
                 icon.style.fontVariationSettings = "'FILL' 0";
-                btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition opacity-0 group-hover:opacity-100';
+                btn.style.opacity = '0';
                 btn.title = 'Add to wishlist';
             } else {
                 wishlistedTopicIds.add(topicId);
                 icon.style.color = '#ef4444';
                 icon.style.fontVariationSettings = "'FILL' 1";
-                btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition';
+                btn.style.opacity = '1';
                 btn.title = 'Remove from wishlist';
             }
 
@@ -1150,13 +1150,13 @@
                     wishlistedTopicIds.add(topicId);
                     icon.style.color = '#ef4444';
                     icon.style.fontVariationSettings = "'FILL' 1";
-                    btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition';
+                    btn.style.opacity = '1';
                     btn.title = 'Remove from wishlist';
                 } else {
                     wishlistedTopicIds.delete(topicId);
                     icon.style.color = 'currentColor';
                     icon.style.fontVariationSettings = "'FILL' 0";
-                    btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition opacity-0 group-hover:opacity-100';
+                    btn.style.opacity = '0';
                     btn.title = 'Add to wishlist';
                 }
             } catch (err) {
@@ -1166,13 +1166,13 @@
                     wishlistedTopicIds.add(topicId);
                     icon.style.color = '#ef4444';
                     icon.style.fontVariationSettings = "'FILL' 1";
-                    btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition';
+                    btn.style.opacity = '1';
                     btn.title = 'Remove from wishlist';
                 } else {
                     wishlistedTopicIds.delete(topicId);
                     icon.style.color = 'currentColor';
                     icon.style.fontVariationSettings = "'FILL' 0";
-                    btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition opacity-0 group-hover:opacity-100';
+                    btn.style.opacity = '0';
                     btn.title = 'Add to wishlist';
                 }
             }
@@ -1218,7 +1218,26 @@
                     const unitProgBar = uNode.querySelector('[data-unit-progress-bar]');
                     const unitProgText = uNode.querySelector('[data-unit-progress-text]');
                     const blinkBtn = uNode.querySelector('[data-unit-blink]');
-                    const hasImageTopic = Array.isArray(u.topics) && u.topics.some(t => (t.image_url || '').trim() !== '');
+
+                    // Check BOTH tables for blink images:
+                    // 1. syllabus_topics.image_url (old way)
+                    const hasImageInSyllabus = Array.isArray(u.topics) && u.topics.some(t => (t.image_url || '').trim() !== '');
+
+                    // 2. ai_notes.blink_link (new way)
+                    let hasBlinkInAiNotes = false;
+                    if (Array.isArray(u.topics)) {
+                        for (const t of u.topics) {
+                            const topicKey = (t.topic || '').toLowerCase();
+                            if (blinkLinksMap.has(topicKey)) {
+                                hasBlinkInAiNotes = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Show blink button if ANY topic has image in EITHER table
+                    const hasAnyBlink = hasImageInSyllabus || hasBlinkInAiNotes;
+
                     topicsWrap.classList.add('hidden');
                     uHeader.setAttribute('aria-expanded', 'false');
                     unitTitle.textContent = u.unit_title || u.title || 'Unit';
@@ -1233,21 +1252,28 @@
                     });
 
                     if (blinkBtn) {
-                        blinkBtn.classList.toggle('hidden', !hasImageTopic);
                         const unitId = u.id || u.unit_id;
+                        // Show blink button if any topic has image in either table
+                        blinkBtn.classList.toggle('hidden', !hasAnyBlink);
                         blinkBtn.addEventListener('click', (ev) => {
                             ev.stopPropagation();
                             if (!unitId) return;
+                            // Open syllabus_blink.html carousel page
                             const url = `syllabus_blink.html?unit_id=${encodeURIComponent(unitId)}&course_title=${encodeURIComponent(c.title || '')}&unit_title=${encodeURIComponent(u.unit_title || u.title || '')}`;
                             window.open(url, '_blank', 'noopener');
                         });
                     }
                     const unitCounts = { done: 0, total: 0 };
                     (u.topics || []).forEach(t => {
-                        const li = document.createElement('li'); li.className = 'group flex items-center gap-2 py-0.5 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm leading-tight';
+                        const li = document.createElement('li'); li.className = 'flex items-center gap-2 py-0.5 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm leading-tight';
                         const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'p-1 rounded focus:outline-none focus:ring-2 focus:ring-brand-500/40'; const icon = document.createElement('span'); icon.className = 'material-symbols-rounded text-[20px]';
                         const initChecked = completedTopicIds.has(t.id); icon.textContent = initChecked ? 'check_circle' : 'radio_button_unchecked'; icon.style.color = initChecked ? '#10b981' : 'currentColor'; btn.appendChild(icon); btn.dataset.topicId = t.id;
                         btn.addEventListener('click', () => toggleTopic(t.id, icon, unitCounts, courseCounts, unitProgBar, unitProgText, progBar, progText, unitTitle)); li.appendChild(btn);
+
+                        // Create a wrapper for topic name and wishlist button with JS-based hover
+                        const topicWishlistGroup = document.createElement('span');
+                        topicWishlistGroup.className = 'inline-flex items-center gap-1';
+
                         const a = document.createElement('a');
                         a.href = 'notes_generator.html?topic=' + encodeURIComponent(t.topic);
                         a.textContent = t.topic;
@@ -1261,16 +1287,15 @@
                                 window.Analytics.track('topic_opened', { topic: t.topic });
                             }
                         };
-                        li.appendChild(a);
+                        topicWishlistGroup.appendChild(a);
 
                         // Wishlist button
                         const wishBtn = document.createElement('button');
                         wishBtn.type = 'button';
                         const isWishlisted = wishlistedTopicIds.has(t.id);
-                        // Show always if wishlisted, otherwise hide until hover
-                        wishBtn.className = isWishlisted
-                            ? 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition'
-                            : 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition opacity-0 group-hover:opacity-100';
+                        // Show always if wishlisted, otherwise hide until hover via JS events
+                        wishBtn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition';
+                        wishBtn.style.opacity = isWishlisted ? '1' : '0';
                         wishBtn.title = isWishlisted ? 'Remove from wishlist' : 'Add to wishlist';
                         const wishIcon = document.createElement('span');
                         wishIcon.className = 'material-symbols-rounded text-[18px]';
@@ -1282,7 +1307,21 @@
                             e.stopPropagation();
                             toggleWishlist(t.id, wishBtn, wishIcon);
                         });
-                        li.appendChild(wishBtn);
+                        topicWishlistGroup.appendChild(wishBtn);
+
+                        // JavaScript hover handlers for showing/hiding wishlist button on individual topic
+                        topicWishlistGroup.addEventListener('mouseenter', () => {
+                            if (!wishlistedTopicIds.has(t.id)) {
+                                wishBtn.style.opacity = '1';
+                            }
+                        });
+                        topicWishlistGroup.addEventListener('mouseleave', () => {
+                            if (!wishlistedTopicIds.has(t.id)) {
+                                wishBtn.style.opacity = '0';
+                            }
+                        });
+
+                        li.appendChild(topicWishlistGroup);
 
                         // Star rating display (read-only) - show only the number of stars rated
                         const topicRating = topicRatingsMap.get(t.id);
@@ -1317,82 +1356,6 @@
                                 }
                             };
                             li.appendChild(labLink);
-                        }
-
-                        // Gen Blink / View Button
-                        console.log('Rendering topic:', t.topic);
-                        const existingBlinkLink = blinkLinksMap.get((t.topic || '').toLowerCase());
-                        const blinkBtn = document.createElement('button');
-                        blinkBtn.type = 'button';
-
-                        if (existingBlinkLink) {
-                            // Show View button for existing blink
-                            blinkBtn.className = 'ml-auto mr-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20 hover:bg-emerald-500/20 transition';
-                            if (labUrl) {
-                                blinkBtn.classList.remove('ml-auto');
-                            }
-                            blinkBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">visibility</span><span>View</span>';
-                            blinkBtn.onclick = (e) => {
-                                e.stopPropagation();
-                                window.open(existingBlinkLink, '_blank');
-                            };
-                        } else {
-                            // Show Gen Blink button
-                            blinkBtn.className = 'ml-auto mr-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide bg-brand-500 text-white shadow-sm hover:shadow-glow hover:scale-105 transition transform';
-                            blinkBtn.style.backgroundColor = '#9E4B8A';
-                            blinkBtn.style.color = '#ffffff';
-
-                            if (labUrl) {
-                                blinkBtn.className = 'mr-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide bg-brand-500 text-white shadow-sm hover:shadow-glow hover:scale-105 transition transform';
-                            }
-
-                            blinkBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">auto_awesome</span><span>Gen Blink</span>';
-                            blinkBtn.onclick = async (e) => {
-                                e.stopPropagation();
-                                if (blinkBtn.disabled) return;
-
-                                blinkBtn.disabled = true;
-                                blinkBtn.innerHTML = '<span class="animate-spin material-symbols-rounded text-[14px]">sync</span><span>Gen...</span>';
-                                blinkBtn.classList.add('opacity-75', 'cursor-not-allowed');
-
-                                try {
-                                    const res = await fetch(`${API_BASE}/api/blink/generate`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-                                        body: JSON.stringify({ topic_id: t.id, topic: t.topic })
-                                    });
-                                    const data = await res.json();
-                                    if (res.ok && data.url) {
-                                        blinkBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">visibility</span><span>View</span>';
-                                        blinkBtn.className = 'ml-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600 ring-1 ring-emerald-500/20 hover:bg-emerald-500/20 transition';
-                                        blinkBtn.style.backgroundColor = '';
-                                        blinkBtn.style.color = '';
-
-                                        blinkBtn.classList.remove('opacity-75', 'cursor-not-allowed');
-                                        blinkBtn.disabled = false;
-                                        blinkBtn.onclick = (e2) => {
-                                            e2.stopPropagation();
-                                            window.open(data.url, '_blank');
-                                        };
-                                    } else {
-                                        throw new Error(data.detail || 'Failed');
-                                    }
-                                } catch (err) {
-                                    console.error(err);
-                                    alert('Blink generation failed: ' + err.message);
-                                    blinkBtn.innerHTML = '<span class="material-symbols-rounded text-[14px]">auto_awesome</span><span>Gen Blink</span>';
-                                    blinkBtn.classList.remove('opacity-75', 'cursor-not-allowed');
-                                    blinkBtn.disabled = false;
-                                }
-                            };
-                        }
-
-                        // Insert before labLink if it exists, otherwise append
-                        if (labUrl && li.contains(li.lastElementChild)) {
-                            li.insertBefore(blinkBtn, li.lastElementChild);
-                        } else {
-                            blinkBtn.classList.add('ml-auto');
-                            li.appendChild(blinkBtn);
                         }
 
                         unitCounts.total++; if (initChecked) unitCounts.done++; topicsWrap.appendChild(li);
