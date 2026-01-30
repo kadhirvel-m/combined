@@ -84,18 +84,26 @@ from rapidfuzz import fuzz
 from serpapi import GoogleSearch
 from supabase import Client, create_client
 from postgrest.exceptions import APIError
-from packages.yt_transcript import (
-    router as yt_transcript_router,
-    fetch_transcript_paragraph,
-    extract_video_id,
-)
 from packages import tunex_router
 from packages import problems_api # New Problem Solver API
-from packages.youtube_video import (
-    get_channel_logo,
-    get_default_channel_logo,
-    search_youtube_videos,
+
+# Inlined imports
+import html
+import socket
+import unicodedata
+import tempfile
+import regex as rx
+from urllib.error import HTTPError, URLError
+from urllib.request import Request as UrllibRequest, urlopen
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
+from youtube_transcript_api import (
+    YouTubeTranscriptApi,
+    TranscriptsDisabled,
+    NoTranscriptFound,
+    VideoUnavailable,
 )
+from fastapi.responses import PlainTextResponse
 try:
     # Used for fetching YouTube video metadata (channel, views, etc.)
     from yt_dlp import YoutubeDL  # type: ignore
@@ -110,6 +118,714 @@ try:
 except Exception:
     # Fallback to default discovery
     load_dotenv()
+
+# ==========================================
+# INLINED PACKAGES: youtube_video & yt_transcript
+# ==========================================
+
+# --- youtube_video.py content ---
+
+def _parse_video_id(url: str) -> Optional[str]:
+    """Extract video ID from YouTube URL."""
+    if not url:
+        return None
+    # Already just an ID
+    if re.match(r'^[A-Za-z0-9_-]{11}$', url):
+        return url
+    # Extract from various URL formats
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([A-Za-z0-9_-]{11})',
+        r'youtube\.com\/shorts\/([A-Za-z0-9_-]{11})',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _format_duration(seconds: Optional[int]) -> str:
+    """Format duration in seconds to MM:SS or HH:MM:SS."""
+    if seconds is None:
+        return ""
+    try:
+        total_seconds = int(round(float(seconds)))
+    except (TypeError, ValueError):
+        return ""
+    if total_seconds <= 0:
+        return ""
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+def _format_views(views: Optional[int]) -> str:
+    """Format view count with commas."""
+    if views is None:
+        return ""
+    if views >= 1_000_000:
+        return f"{views / 1_000_000:.1f}M views"
+    elif views >= 1_000:
+        return f"{views / 1_000:.1f}K views"
+    return f"{views:,} views"
+
+
+_channel_logo_cache: Dict[str, str] = {}
+_channel_logo_lock = Lock()
+_DEFAULT_CHANNEL_LOGO = "https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png"
+
+
+def _normalize_channel_logo(logo_url: str) -> str:
+    """Downscale large channel logo URLs to a smaller size."""
+    if not logo_url or not isinstance(logo_url, str):
+        return ""
+    return re.sub(r"=s\d+-c", "=s88-c", logo_url, count=1)
+
+
+def _fetch_channel_logo(channel_page_url: Optional[str]) -> str:
+    """
+    Fetch the channel avatar URL by scraping the channel page's open graph metadata.
+    Results are cached per-channel to avoid repeated network requests.
+    """
+    if not channel_page_url:
+        return ""
+
+    channel_page_url = channel_page_url.strip()
+    if not channel_page_url:
+        return ""
+
+    with _channel_logo_lock:
+        cached = _channel_logo_cache.get(channel_page_url)
+    if cached is not None:
+        return cached
+
+    try:
+        req = UrllibRequest(
+            channel_page_url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/116.0 Safari/537.36"
+                )
+            },
+        )
+        with urlopen(req, timeout=4) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            html_text = response.read().decode(charset, errors="ignore")
+    except (ValueError, HTTPError, URLError, TimeoutError, socket.timeout):
+        with _channel_logo_lock:
+            _channel_logo_cache[channel_page_url] = ""
+        return ""
+
+    logo_match = re.search(
+        r'<meta[^>]+property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']',
+        html_text,
+        flags=re.IGNORECASE,
+    )
+    if not logo_match:
+        with _channel_logo_lock:
+            _channel_logo_cache[channel_page_url] = ""
+        return ""
+
+    logo_url = html.unescape(logo_match.group(1))
+    with _channel_logo_lock:
+        _channel_logo_cache[channel_page_url] = logo_url
+    return logo_url
+
+
+def get_channel_logo(channel_page_url: Optional[str]) -> str:
+    """Public helper to resolve and normalize a channel logo."""
+    return _normalize_channel_logo(_fetch_channel_logo(channel_page_url)) or ""
+
+
+def get_default_channel_logo() -> str:
+    return _DEFAULT_CHANNEL_LOGO
+
+
+def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = False) -> List[Dict[str, str]]:
+    """
+    Search YouTube videos using yt-dlp.
+    
+    Args:
+        query: Search query string
+        num: Number of results to return (default 8, max 20)
+    
+    Returns:
+        List of video dictionaries with title, link, channel, views, duration, thumbnail
+    """
+    if not YoutubeDL:
+        raise ImportError("yt-dlp is not installed. Install it with: pip install yt-dlp")
+    
+    if not query or not query.strip():
+        return []
+    
+    # Limit results
+    num = max(1, min(num, 20))
+    
+    # yt-dlp options for searching
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': True,  # Don't download, just extract metadata
+        'force_generic_extractor': False,
+        'default_search': 'ytsearch',  # Use YouTube search
+        'format': 'best',
+        'noplaylist': True,
+        'playlistend': num,
+        'cachedir': False,
+    }
+    
+    videos: List[Dict[str, str]] = []
+    
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            # Search for videos (ytsearch{num}:{query})
+            search_query = f"ytsearch{num}:{query}"
+            result = ydl.extract_info(search_query, download=False)
+            
+            if not result or 'entries' not in result:
+                return []
+            
+            entries = result.get('entries', [])
+            limited_entries = entries[:num]
+
+            if prefetch_logos:
+                unique_pages: List[str] = []
+                for entry in limited_entries:
+                    channel_page = (entry.get('channel_url') or entry.get('uploader_url') or "").strip()
+                    if channel_page and channel_page not in unique_pages:
+                        unique_pages.append(channel_page)
+
+                with _channel_logo_lock:
+                    cached_pages = set(_channel_logo_cache.keys())
+                missing_pages = [
+                    page for page in unique_pages
+                    if page and page not in cached_pages
+                ]
+                if missing_pages:
+                    max_workers = min(6, len(missing_pages))
+                    try:
+                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                            list(executor.map(_fetch_channel_logo, missing_pages))
+                    except RuntimeError:
+                        for page in missing_pages:
+                            _fetch_channel_logo(page)
+
+            for entry in limited_entries:
+                if not entry:
+                    continue
+                
+                # Extract video information
+                video_id = entry.get('id', '')
+                title = entry.get('title', '').strip()
+                channel = entry.get('channel') or entry.get('uploader') or 'YouTube'
+                
+                # Duration
+                duration_sec = entry.get('duration')
+                duration = _format_duration(duration_sec)
+                
+                # Views
+                view_count = entry.get('view_count')
+                views = _format_views(view_count)
+                
+                # Thumbnail - prefer maxresdefault, then hq720
+                thumbnail = entry.get('thumbnail', '')
+                if not thumbnail and video_id:
+                    # Fallback to standard YouTube thumbnail URLs
+                    thumbnail = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
+                
+                # Video URL
+                video_url = entry.get('url', '')
+                if not video_url and video_id:
+                    video_url = f"https://www.youtube.com/watch?v={video_id}"
+                
+                # Channel thumbnail/logo (scraped from channel page metadata)
+                channel_page = (entry.get('channel_url') or entry.get('uploader_url') or "").strip()
+                channel_logo = get_channel_logo(channel_page) if prefetch_logos else ""
+                final_logo = channel_logo or _DEFAULT_CHANNEL_LOGO
+                
+                # Only add if we have essential data
+                if title and video_url and thumbnail:
+                    videos.append({
+                        "title": title,
+                        "link": video_url,
+                        "channel": channel.strip() if channel else "YouTube",
+                        "views": views,
+                        "duration": duration,
+                        "thumbnail": thumbnail,
+                        "channel_logo": final_logo,
+                        "channel_logo_is_default": final_logo == _DEFAULT_CHANNEL_LOGO,
+                        "channel_page": channel_page,
+                    })
+    
+    except Exception as e:
+        # Log error but return empty list instead of raising
+        print(f"Error searching YouTube videos: {e}")
+        return []
+    
+    return videos
+
+# --- yt_transcript.py content ---
+
+# ---------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------
+def fetch_transcript_paragraph(
+    url_or_id: str,
+    lang: str = "en",
+    *,
+    fallback_ytdlp: bool = True,
+    use_whisper: bool = False,
+    clean: bool = True,
+) -> str:
+    """
+    Returns the entire transcript as a single cleaned paragraph (UTF-8 string).
+    No timestamps. No SRT/VTT. Raises HTTPException on failure (FastAPI-friendly).
+    """
+    video_id = extract_video_id(url_or_id)
+    preferred = [lang] if lang else ["en"]
+
+    # 1) Official transcript
+    transcript, _lang_code = try_youtube_transcript_api(video_id, preferred)
+
+    # 2) yt-dlp auto captions
+    if transcript is None and fallback_ytdlp:
+        vtt_path, _ytdlp_lang = try_yt_dlp_captions(video_id, preferred)
+        if vtt_path:
+            transcript = load_vtt_to_segments(vtt_path)
+
+    # 3) Whisper fallback (optional)
+    if transcript is None and use_whisper:
+        text = transcribe_with_whisper(video_id, lang_hint=lang)
+        if not text:
+            raise HTTPException(404, "Transcription failed (Whisper returned empty text).")
+        transcript = [{"start": 0.0, "duration": 0.0, "text": text}]
+
+    if transcript is None:
+        raise HTTPException(404, "No transcript/captions available (or disabled) for this video.")
+
+    if clean:
+        # strip tags, compact word-level repeats, de-dup near-duplicates
+        cleaned = []
+        for seg in transcript:
+            t = strip_inline_tags(seg.get("text", ""))
+            if not t:
+                continue
+            t = compact_repetitions(t)
+            cleaned.append({"start": float(seg.get("start", 0.0)),
+                            "duration": float(seg.get("duration", 0.0)),
+                            "text": t})
+        transcript = dedupe_and_merge_segments(cleaned)
+    else:
+        # just normalize structure
+        transcript = [
+            {"start": float(seg.get("start", 0.0)),
+             "duration": float(seg.get("duration", 0.0)),
+             "text": seg.get("text", "")}
+            for seg in (transcript or [])
+        ]
+
+    # Render a single paragraph
+    return render_paragraph(transcript)
+
+
+# ---------------------------------------------------------------------
+# Optional FastAPI Router (plug-and-play)
+#   from transcript_paragraph import router
+#   app.include_router(router, prefix="/api")
+# GET /api/transcript.txt?url=...&lang=en&fallback_ytdlp=true&use_whisper=false&clean=true
+# ---------------------------------------------------------------------
+yt_transcript_router = APIRouter()
+
+class _Params(BaseModel):
+    url: HttpUrl
+    lang: Optional[str] = "en"
+    fallback_ytdlp: Optional[bool] = True
+    use_whisper: Optional[bool] = False
+    clean: Optional[bool] = True
+
+@yt_transcript_router.get("/transcript.txt")
+def get_transcript_txt(
+    url: str = Query(..., description="YouTube video URL (or ID)"),
+    lang: str = Query("en"),
+    fallback_ytdlp: bool = Query(True),
+    use_whisper: bool = Query(False),
+    clean: bool = Query(True),
+):
+    text = fetch_transcript_paragraph(
+        url_or_id=url,
+        lang=lang,
+        fallback_ytdlp=fallback_ytdlp,
+        use_whisper=use_whisper,
+        clean=clean,
+    )
+    return PlainTextResponse(text, media_type="text/plain; charset=utf-8")
+
+
+# ---------------------------------------------------------------------
+# Helpers: ID parsing
+# ---------------------------------------------------------------------
+YOUTUBE_ID_PATTERNS = [
+    r"(?:v=|/v/|/embed/|/shorts/|youtu\.be/)([A-Za-z0-9_-]{11})",
+    r"^([A-Za-z0-9_-]{11})$",
+]
+
+def extract_video_id(url_or_id: str) -> str:
+    for pat in YOUTUBE_ID_PATTERNS:
+        m = re.search(pat, url_or_id)
+        if m:
+            return m.group(1)
+    token = (url_or_id or "").strip()
+    if re.fullmatch(r"[A-Za-z0-9_-]{11}", token):
+        return token
+    raise HTTPException(400, "Could not parse YouTube video ID from the provided URL or ID.")
+
+
+# ---------------------------------------------------------------------
+# Cleaning utilities
+# ---------------------------------------------------------------------
+TAG_TS_RE        = rx.compile(r"<\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?>", flags=rx.I)
+TAG_C_OPEN_RE    = rx.compile(r"<c(?:\.[^>]*)?>", flags=rx.I)
+TAG_C_CLOSE_RE   = rx.compile(r"</c>", flags=rx.I)
+BRACKET_NOISE_RE = rx.compile(r"\[(?:music|applause|__|noise|silence)\]", flags=rx.I)
+WS_RE            = rx.compile(r"[ \t\u00A0]+")
+
+def strip_inline_tags(text: str) -> str:
+    t = TAG_TS_RE.sub("", text)
+    t = TAG_C_OPEN_RE.sub("", t)
+    t = TAG_C_CLOSE_RE.sub("", t)
+    t = html.unescape(t)
+    t = BRACKET_NOISE_RE.sub("", t)
+    t = t.replace("_", " ")
+    t = WS_RE.sub(" ", t).strip()
+    return t
+
+def normalize_for_compare(text: str) -> str:
+    t = strip_inline_tags(text)
+    t = unicodedata.normalize("NFKC", t)
+    t = rx.sub(r"[^\p{L}\p{N}\s.,!?;:']", "", t)
+    t = WS_RE.sub(" ", t).strip().lower()
+    return t
+
+def smart_sentence_join(chunks: List[str]) -> str:
+    raw = " ".join(chunks)
+    raw = WS_RE.sub(" ", raw).strip()
+    raw = re.sub(r"\s+([.,!?;:])", r"\1", raw)
+    return raw
+
+# Tokenize/untokenize for repetition compaction
+TOKEN_RE = rx.compile(r"\p{L}+\p{M}*|\d+|[^\s\p{L}\p{N}]", rx.UNICODE)
+
+def _tokens(s: str) -> List[str]:
+    return TOKEN_RE.findall(s)
+
+def _untokenize(tokens: List[str]) -> str:
+    out = []
+    for i, tok in enumerate(tokens):
+        if i > 0 and rx.match(r"[\p{L}\p{N}]", tok) and rx.match(r"[\p{L}\p{N}]", tokens[i-1]):
+            out.append(" ")
+        out.append(tok)
+    return "".join(out)
+
+def compact_repetitions(text: str, max_ngram: int = 12, min_chars_per_span: int = 4) -> str:
+    """
+    Removes consecutive duplicated spans like:
+    'hello everyone welcome ... hello everyone welcome ...'
+    Works token-wise, preferring longest repeated spans up to max_ngram.
+    """
+    if not text or len(text) < 2:
+        return text
+
+    # quick stutter fix: 'the the', 'and and'
+    text = rx.sub(r"\b(\p{L}+)\s+\1\b", r"\1", text, flags=rx.IGNORECASE)
+
+    toks = _tokens(text)
+    i = 0
+    out: List[str] = []
+
+    while i < len(toks):
+        matched = False
+        max_n = min(max_ngram, (len(toks) - i) // 2)
+        for n in range(max_n, 0, -1):
+            a = toks[i:i+n]
+            b = toks[i+n:i+2*n]
+            if not a or not b:
+                continue
+            if a == b:
+                span_txt = _untokenize(a)
+                if len(rx.sub(r"\s+", "", span_txt)) >= min_chars_per_span:
+                    j = i + n
+                    while j + n <= len(toks) and toks[j:j+n] == a:
+                        j += n
+                    out.extend(a)  # keep one copy
+                    i = j
+                    matched = True
+                    break
+        if not matched:
+            out.append(toks[i])
+            i += 1
+
+    s = _untokenize(out)
+    s = rx.sub(r"\s+([.,!?;:])", r" \1", s)
+    s = rx.sub(r"([(\[{])\s+", r"\1", s)
+    s = rx.sub(r"\s+([)\]}])", r"\1", s)
+    s = rx.sub(r"\s{2,}", " ", s).strip()
+    return s
+
+
+# ---------------------------------------------------------------------
+# Source fetchers: official API, yt-dlp
+# ---------------------------------------------------------------------
+def prefer_language_candidates(preferred_langs: List[str]) -> List[str]:
+    expanded: List[str] = []
+    for lang in preferred_langs:
+        expanded.append(lang)
+        if "-" in lang:
+            base = lang.split("-")[0]
+            if base not in expanded:
+                expanded.append(base)
+    # common fallbacks
+    for fb in ["en", "en-US", "en-GB", "en-IN"]:
+        if fb not in expanded:
+            expanded.append(fb)
+    return expanded
+
+def _convert_transcript_to_dicts(transcript_list) -> List[dict]:
+    """Convert FetchedTranscriptSnippet objects to dicts for backwards compatibility."""
+    result = []
+    for item in transcript_list:
+        # Handle both new FetchedTranscriptSnippet objects and old dicts
+        if hasattr(item, 'text'):
+            result.append({
+                "text": item.text,
+                "start": item.start,
+                "duration": item.duration,
+            })
+        elif isinstance(item, dict):
+            result.append(item)
+        else:
+            # Fallback: try to convert to dict
+            result.append(dict(item))
+    return result
+
+
+def try_youtube_transcript_api(video_id: str, langs: List[str]) -> Tuple[Optional[List[dict]], Optional[str]]:
+    try:
+        # youtube-transcript-api v1.2+ requires instantiation
+        ytt = YouTubeTranscriptApi()
+        listing = ytt.list(video_id)
+    except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
+        return None, None
+    except Exception:
+        return None, None
+
+    for lang in prefer_language_candidates(langs):
+        try:
+            tr = listing.find_manually_created_transcript([lang])
+            return _convert_transcript_to_dicts(tr.fetch()), tr.language_code
+        except Exception:
+            pass
+        try:
+            tr = listing.find_generated_transcript([lang])
+            return _convert_transcript_to_dicts(tr.fetch()), tr.language_code
+        except Exception:
+            pass
+
+    # as a last resort, try translatable
+    for tr in listing:
+        try:
+            if tr.is_translatable:
+                for lang in prefer_language_candidates(langs):
+                    try:
+                        return _convert_transcript_to_dicts(tr.translate(lang).fetch()), lang
+                    except Exception:
+                        continue
+        except Exception:
+            continue
+
+    try:
+        first = next(iter(listing))
+        return _convert_transcript_to_dicts(first.fetch()), first.language_code
+    except Exception:
+        return None, None
+
+def try_yt_dlp_captions(video_id: str, langs: List[str]) -> Tuple[Optional[str], Optional[str]]:
+    tempdir = tempfile.mkdtemp(prefix="ytcapt_")
+    outtmpl = os.path.join(tempdir, "%(id)s.%(ext)s")
+    ydl_opts = {
+        "skip_download": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitleslangs": prefer_language_candidates(langs),
+        "subtitlesformat": "vtt",
+        "outtmpl": outtmpl,
+        "quiet": True,
+        "no_warnings": True,
+    }
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    with YoutubeDL(ydl_opts) as ydl:
+        try:
+            ydl.extract_info(url, download=True)
+        except Exception:
+            return None, None
+
+    vtts = [os.path.join(tempdir, f) for f in os.listdir(tempdir) if f.endswith(".vtt")]
+    if not vtts:
+        return None, None
+
+    prefs = prefer_language_candidates(langs)
+    chosen = None; chosen_lang = None
+    for lang in prefs:
+        for p in vtts:
+            if re.search(rf"\.{re.escape(lang)}\.vtt$", os.path.basename(p)):
+                chosen, chosen_lang = p, lang
+                break
+        if chosen:
+            break
+    if not chosen:
+        chosen = vtts[0]
+        m = re.search(r"\.([a-zA-Z-]{2,})\.vtt$", os.path.basename(chosen))
+        chosen_lang = m.group(1) if m else None
+    return chosen, chosen_lang
+
+
+# ---------------------------------------------------------------------
+# VTT parsing and merging (for yt-dlp captions)
+# ---------------------------------------------------------------------
+def parse_vtt_timestamp(ts: str) -> float:
+    parts = ts.split(":")
+    if len(parts) == 3:
+        h, m, s = parts
+    elif len(parts) == 2:
+        h = "0"; m, s = parts
+    else:
+        return 0.0
+    if "." in s:
+        sec, ms = s.split("."); ms = int(ms.ljust(3, "0")[:3])
+    else:
+        sec, ms = s, 0
+    return int(h) * 3600 + int(m) * 60 + int(sec) + ms / 1000.0
+
+def load_vtt_to_segments(vtt_path: str) -> List[dict]:
+    with open(vtt_path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = [ln.rstrip("\n") for ln in f]
+
+    segs: List[dict] = []
+    i = 0; n = len(lines)
+    while i < n:
+        line = lines[i].strip(); i += 1
+        if not line or line.upper() == "WEBVTT":
+            continue
+        # optional cue index
+        if re.match(r"^\d+\s*$", line):
+            if i < n:
+                line = lines[i].strip(); i += 1
+        if "-->" in line:
+            times = line.split("-->")
+            if len(times) != 2:
+                while i < n and lines[i].strip():
+                    i += 1
+                continue
+            start_s = parse_vtt_timestamp(times[0].strip())
+            end_s   = parse_vtt_timestamp(times[1].strip())
+            cue = []
+            while i < n and lines[i].strip() != "":
+                cue.append(lines[i]); i += 1
+            while i < n and lines[i].strip() == "":
+                i += 1
+            text_raw = " ".join(cue)
+            text_clean = strip_inline_tags(text_raw)
+            if text_clean:
+                segs.append({"start": start_s, "duration": max(0.0, end_s - start_s), "text": text_clean})
+    return segs
+
+def dedupe_and_merge_segments(segments: List[dict]) -> List[dict]:
+    out: List[dict] = []
+    for seg in segments:
+        t = (seg.get("text") or "").strip()
+        if not t:
+            continue
+        norm = normalize_for_compare(t)
+        if not norm:
+            continue
+
+        if out:
+            last = out[-1]
+            last_norm = last.get("_norm")
+            if norm == last_norm:
+                # merge consecutive identicals
+                last_end = last["start"] + last["duration"]
+                new_end  = seg["start"] + seg["duration"]
+                if seg["start"] <= last_end + 0.2:
+                    last["duration"] = max(last["duration"], new_end - last["start"])
+                continue
+            if t.lower() == last["text"].lower() and seg["start"] <= (last["start"] + last["duration"] + 0.5):
+                # near-dupe contiguous lowercased text
+                last_end = last["start"] + last["duration"]
+                new_end  = seg["start"] + seg["duration"]
+                last["duration"] = max(last["duration"], new_end - last["start"])
+                continue
+
+        seg = dict(seg)
+        seg["_norm"] = norm
+        out.append(seg)
+
+    for s in out:
+        s.pop("_norm", None)
+    return out
+
+
+# ---------------------------------------------------------------------
+# Final paragraph render
+# ---------------------------------------------------------------------
+def render_paragraph(transcript: List[dict]) -> str:
+    chunks = [seg["text"].strip() for seg in transcript if seg.get("text")]
+    text = smart_sentence_join(chunks)
+    # final pass to squash rolling echoes across cue boundaries
+    return compact_repetitions(text) + "\n"
+
+
+# ---------------------------------------------------------------------
+# Optional Whisper fallback
+# ---------------------------------------------------------------------
+def transcribe_with_whisper(video_id: str, lang_hint: Optional[str] = None) -> str:
+    try:
+        import whisper  # pip install openai-whisper; requires ffmpeg
+    except Exception as e:
+        raise HTTPException(
+            501,
+            f"Whisper not available ({e}). Install with `pip install openai-whisper` and ensure ffmpeg is installed."
+        )
+
+    tmp = tempfile.mkdtemp(prefix="whisp_")
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": os.path.join(tmp, "%(id)s.%(ext)s"),
+        "quiet": True, "no_warnings": True,
+        "postprocessors": [
+            {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
+        ],
+    }
+    with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        base = ydl.prepare_filename(info)
+        audio_path = os.path.splitext(base)[0] + ".mp3"
+        if not os.path.exists(audio_path):
+            audio_path = base
+
+    model = whisper.load_model("small")
+    kw = {}
+    if lang_hint:
+        kw["language"] = lang_hint.split("-")[0]
+    result = model.transcribe(audio_path, **kw)
+    text = (result.get("text") or "").strip()
+    return compact_repetitions(text)
+
+# --- End of inlined packages ---
 
 # --- Supabase helpers ---
 
