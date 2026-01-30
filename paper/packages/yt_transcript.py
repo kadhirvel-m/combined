@@ -243,9 +243,30 @@ def prefer_language_candidates(preferred_langs: List[str]) -> List[str]:
             expanded.append(fb)
     return expanded
 
+def _convert_transcript_to_dicts(transcript_list) -> List[dict]:
+    """Convert FetchedTranscriptSnippet objects to dicts for backwards compatibility."""
+    result = []
+    for item in transcript_list:
+        # Handle both new FetchedTranscriptSnippet objects and old dicts
+        if hasattr(item, 'text'):
+            result.append({
+                "text": item.text,
+                "start": item.start,
+                "duration": item.duration,
+            })
+        elif isinstance(item, dict):
+            result.append(item)
+        else:
+            # Fallback: try to convert to dict
+            result.append(dict(item))
+    return result
+
+
 def try_youtube_transcript_api(video_id: str, langs: List[str]) -> Tuple[Optional[List[dict]], Optional[str]]:
     try:
-        listing = YouTubeTranscriptApi.list_transcripts(video_id)
+        # youtube-transcript-api v1.2+ requires instantiation
+        ytt = YouTubeTranscriptApi()
+        listing = ytt.list(video_id)
     except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
         return None, None
     except Exception:
@@ -254,12 +275,12 @@ def try_youtube_transcript_api(video_id: str, langs: List[str]) -> Tuple[Optiona
     for lang in prefer_language_candidates(langs):
         try:
             tr = listing.find_manually_created_transcript([lang])
-            return tr.fetch(), tr.language_code
+            return _convert_transcript_to_dicts(tr.fetch()), tr.language_code
         except Exception:
             pass
         try:
             tr = listing.find_generated_transcript([lang])
-            return tr.fetch(), tr.language_code
+            return _convert_transcript_to_dicts(tr.fetch()), tr.language_code
         except Exception:
             pass
 
@@ -269,7 +290,7 @@ def try_youtube_transcript_api(video_id: str, langs: List[str]) -> Tuple[Optiona
             if tr.is_translatable:
                 for lang in prefer_language_candidates(langs):
                     try:
-                        return tr.translate(lang).fetch(), lang
+                        return _convert_transcript_to_dicts(tr.translate(lang).fetch()), lang
                     except Exception:
                         continue
         except Exception:
@@ -277,7 +298,7 @@ def try_youtube_transcript_api(video_id: str, langs: List[str]) -> Tuple[Optiona
 
     try:
         first = next(iter(listing))
-        return first.fetch(), first.language_code
+        return _convert_transcript_to_dicts(first.fetch()), first.language_code
     except Exception:
         return None, None
 
