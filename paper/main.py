@@ -117,6 +117,25 @@ except Exception:
 supabase_logger = logging.getLogger("paperx.supabase")
 supabase_logger.setLevel(logging.INFO)
 
+# Truncate long uvicorn access log messages
+class TruncateLogFilter(logging.Filter):
+    def filter(self, record):
+        if hasattr(record, 'args') and record.args:
+            # Truncate the message if it contains a very long URL
+            args = list(record.args) if isinstance(record.args, tuple) else [record.args]
+            new_args = []
+            for arg in args:
+                if isinstance(arg, str) and len(arg) > 100:
+                    new_args.append(arg[:97] + "...")
+                else:
+                    new_args.append(arg)
+            record.args = tuple(new_args)
+        return True
+
+# Apply filter to uvicorn.access logger
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.addFilter(TruncateLogFilter())
+
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
@@ -10759,6 +10778,150 @@ def progress_summary(authorization: Optional[str] = Header(default=None)):
     return get_progress_summary(token)
 
 
+# ---------- Wishlist API ----------
+
+
+class WishlistToggleIn(BaseModel):
+    topic_id: uuid.UUID
+
+
+@academics_router.get("/api/wishlist", summary="Get user's wishlisted topics")
+def get_wishlist(authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    _, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+    try:
+        q = supabase.table("user_topic_wishlist").select(
+            "id,topic_id,created_at,syllabus_topics(id,topic,unit_id,syllabus_units(id,unit_title,course_id,syllabus_courses(id,course_code,title)))"
+        ).eq("user_profile_id", profile_id).order("created_at", desc=True).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error fetching wishlist: {exc}")
+    if getattr(q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (wishlist): {q.error}")
+    items = []
+    for row in (q.data or []):
+        topic_data = row.get("syllabus_topics") or {}
+        unit_data = topic_data.get("syllabus_units") or {}
+        course_data = unit_data.get("syllabus_courses") or {}
+        items.append({
+            "id": row.get("id"),
+            "topic_id": row.get("topic_id"),
+            "topic_name": topic_data.get("topic"),
+            "unit_title": unit_data.get("unit_title"),
+            "course_code": course_data.get("course_code"),
+            "course_title": course_data.get("title"),
+            "created_at": row.get("created_at"),
+        })
+    return {"wishlist": items}
+
+
+@academics_router.post("/api/wishlist/toggle", summary="Add/remove topic from wishlist")
+def toggle_wishlist(payload: WishlistToggleIn, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    _, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+    topic_id_str = str(payload.topic_id)
+    # Check if already in wishlist
+    existing = supabase.table("user_topic_wishlist").select("id").eq(
+        "user_profile_id", profile_id
+    ).eq("topic_id", topic_id_str).limit(1).execute()
+    if existing.data:
+        # Remove from wishlist
+        supabase.table("user_topic_wishlist").delete().eq("id", existing.data[0]["id"]).execute()
+        return {"wishlisted": False, "message": "Removed from wishlist"}
+    else:
+        # Add to wishlist
+        try:
+            supabase.table("user_topic_wishlist").insert({
+                "user_profile_id": profile_id,
+                "topic_id": topic_id_str
+            }).execute()
+            return {"wishlisted": True, "message": "Added to wishlist"}
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "duplicate" in msg or "unique" in msg:
+                return {"wishlisted": True, "message": "Already in wishlist"}
+            raise HTTPException(status_code=500, detail=f"Error adding to wishlist: {exc}")
+
+
+@academics_router.delete("/api/wishlist/{topic_id}", summary="Remove topic from wishlist")
+def remove_from_wishlist(topic_id: uuid.UUID, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    _, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+    supabase.table("user_topic_wishlist").delete().eq(
+        "user_profile_id", profile_id
+    ).eq("topic_id", str(topic_id)).execute()
+    return {"message": "Removed from wishlist"}
+
+
+@academics_router.get("/api/wishlist/check/{topic_id}", summary="Check if topic is wishlisted")
+def check_wishlist(topic_id: uuid.UUID, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    _, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+    existing = supabase.table("user_topic_wishlist").select("id").eq(
+        "user_profile_id", profile_id
+    ).eq("topic_id", str(topic_id)).limit(1).execute()
+    return {"wishlisted": bool(existing.data)}
+
+
+# ---------- History API ----------
+
+
+class HistoryRecordIn(BaseModel):
+    topic_id: uuid.UUID
+    topic_name: str
+
+
+@academics_router.get("/api/history", summary="Get user's recently viewed topics")
+def get_history(
+    limit: int = Query(default=50, le=200),
+    authorization: Optional[str] = Header(default=None)
+):
+    token = _parse_bearer_token(authorization)
+    _, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+    try:
+        q = supabase.table("user_topic_history").select(
+            "id,topic_id,topic_name,viewed_at"
+        ).eq("user_profile_id", profile_id).order("viewed_at", desc=True).limit(limit).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error fetching history: {exc}")
+    if getattr(q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (history): {q.error}")
+    return {"history": q.data or []}
+
+
+@academics_router.post("/api/history/record", summary="Record a topic view")
+def record_history(payload: HistoryRecordIn, authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    _, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+    topic_id_str = str(payload.topic_id)
+    topic_name = (payload.topic_name or "").strip()[:500]  # Limit topic name length
+    try:
+        supabase.table("user_topic_history").insert({
+            "user_profile_id": profile_id,
+            "topic_id": topic_id_str,
+            "topic_name": topic_name
+        }).execute()
+        return {"recorded": True}
+    except Exception as exc:
+        # Log but don't fail - history is non-critical
+        supabase_logger.warning("Failed to record history: %s", exc)
+        return {"recorded": False}
+
+
+@academics_router.delete("/api/history/clear", summary="Clear user's history")
+def clear_history(authorization: Optional[str] = Header(default=None)):
+    token = _parse_bearer_token(authorization)
+    _, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+    supabase.table("user_topic_history").delete().eq("user_profile_id", profile_id).execute()
+    return {"message": "History cleared"}
+
+
 # ---------- Profile update & uploads ----------
 
 
@@ -16247,20 +16410,24 @@ def create_app() -> FastAPI:
     # Simple request logger to aid debugging 405/OPTIONS/CORS issues
     @app.middleware("http")
     async def log_requests(request: Request, call_next):  # type: ignore[override]
+        # Use only path (no query params) and truncate if too long
+        path = request.url.path
+        if len(path) > 60:
+            path = path[:57] + "..."
         try:
-            print(f"[REQ] {request.method} {request.url.path} origin={request.headers.get('origin')}")
+            print(f"[REQ] {request.method} {path}")
         except Exception:
             pass
         try:
             response = await call_next(request)
         except Exception as e:
             try:
-                print(f"[ERR] {request.method} {request.url.path} -> {e}")
+                print(f"[ERR] {request.method} {path} -> {e}")
             except Exception:
                 pass
             raise
         try:
-            print(f"[RES] {request.method} {request.url.path} {response.status_code}")
+            print(f"[RES] {request.method} {path} {response.status_code}")
         except Exception:
             pass
         return response

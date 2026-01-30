@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>View History - Paper X</title>
+    <meta name="description" content="Your recently viewed topics" />
+    <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0"
+        rel="stylesheet" />
+
+    <!-- Tailwind (CDN for demo) -->
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.28)',
+                        soft: '0 6px 22px rgba(30,30,47,0.14)',
+                        card: '0 24px 64px -20px rgba(30,30,47,0.45)',
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)',
+                    },
+                    keyframes: {
+                        fadeUp: { '0%': { opacity: 0, transform: 'translateY(14px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+                    },
+                    animation: {
+                        fadeUp: 'fadeUp .6s cubic-bezier(.4,.1,.2,1)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .66));
+            backdrop-filter: blur(28px);
+            box-shadow: 0 12px 42px -10px rgba(30, 30, 47, .18);
+        }
+
+        .dark .glass-panel {
+            background: linear-gradient(180deg, rgba(30, 30, 47, .78), rgba(30, 30, 47, .58));
+            box-shadow: 0 22px 60px -12px rgba(0, 0, 0, .55);
+        }
+
+        #pageLoader {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.4s ease, visibility 0.4s;
+        }
+
+        .loaded #pageLoader {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .dark #pageLoader {
+            background: rgba(30, 30, 47, 0.7);
+        }
+    </style>
+
+    <!-- Persist theme before paint -->
+    <script>
+            (function () {
+                try {
+                    const s = localStorage.getItem('px_theme');
+                    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const useDark = s ? s === 'dark' : prefers;
+                    if (useDark) document.documentElement.classList.add('dark');
+                } catch (_) { }
+            })();
+    </script>
+    <script src="config.js"></script>
+    <script src="auth.js" defer></script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+    <!-- Loading Overlay -->
+    <div id="pageLoader">
+        <div class="animate-spin">
+            <span class="material-symbols-rounded text-4xl text-brand-500">sync</span>
+        </div>
+    </div>
+
+    <!-- ================= NAVBAR ================= -->
+    <header
+        class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
+                <a href="wishlist.html"
+                    class="hover:text-brandlt-900 dark:hover:text-white inline-flex items-center gap-1"><span
+                        class="material-symbols-rounded text-base">favorite</span>Wishlist</a>
+                <a href="history.html" class="text-brand-500 font-semibold inline-flex items-center gap-1"><span
+                        class="material-symbols-rounded text-base">history</span>History</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ================= MAIN CONTENT ================= -->
+    <main class="container py-10">
+        <div class="max-w-4xl mx-auto">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight flex items-center gap-3">
+                        <span class="material-symbols-rounded text-4xl text-brand-500">history</span>
+                        View History
+                    </h1>
+                    <p class="mt-2 text-neutral-600 dark:text-white/70">Topics you've recently viewed</p>
+                </div>
+                <button id="clearHistoryBtn" type="button"
+                    class="hidden inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ring-1 ring-red-500/30 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition">
+                    <span class="material-symbols-rounded text-base">delete_sweep</span>
+                    Clear History
+                </button>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden glass-panel rounded-3xl p-12 text-center animate-fadeUp">
+                <span class="material-symbols-rounded text-6xl text-neutral-300 dark:text-white/30 mb-4">history</span>
+                <h3 class="text-xl font-semibold mb-2">No history yet</h3>
+                <p class="text-neutral-600 dark:text-white/60 mb-6">Topics you view from the academics page will appear
+                    here</p>
+                <a href="academicas.html"
+                    class="inline-flex items-center gap-2 rounded-full bg-brand-500 text-white px-6 py-3 text-sm font-semibold shadow-glow hover:shadow-ringed transition">
+                    <span class="material-symbols-rounded text-base">school</span>
+                    Browse Topics
+                </a>
+            </div>
+
+            <!-- History Items -->
+            <div id="historyItems" class="space-y-6"></div>
+        </div>
+    </main>
+
+    <!-- ================= FOOTER ================= -->
+    <footer
+        class="py-10 border-t border-black/5 dark:border-white/10 text-center text-xs text-neutral-600 dark:text-white/60">
+        © <span id="year"></span> Paper X • View History
+    </footer>
+
+    <script>
+        const API_BASE = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
+        const $ = (id) => document.getElementById(id);
+
+        function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
+        function authHeaders() { const t = getToken(); return t ? { Authorization: `Bearer ${t}` } : {}; }
+
+        async function loadHistory() {
+            if (!getToken()) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/history?limit=100`, {
+                    headers: authHeaders()
+                });
+
+                if (res.status === 401) {
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                const data = await res.json();
+                const history = data.history || [];
+
+                renderHistory(history);
+            } catch (err) {
+                console.error('Failed to load history', err);
+            } finally {
+                document.body.classList.add('loaded');
+            }
+        }
+
+        function renderHistory(items) {
+            const container = $('historyItems');
+            const emptyState = $('emptyState');
+            const clearBtn = $('clearHistoryBtn');
+
+            if (!items.length) {
+                emptyState.classList.remove('hidden');
+                clearBtn.classList.add('hidden');
+                container.innerHTML = '';
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            clearBtn.classList.remove('hidden');
+            container.innerHTML = '';
+
+            // Group items by date
+            const groups = groupByDate(items);
+
+            Object.entries(groups).forEach(([dateLabel, groupItems], groupIndex) => {
+                const section = document.createElement('div');
+                section.className = 'mb-6';
+
+                const header = document.createElement('h3');
+                header.className = 'text-sm font-semibold text-neutral-500 dark:text-white/60 mb-3 flex items-center gap-2';
+                header.innerHTML = `<span class="material-symbols-rounded text-base">schedule</span>${dateLabel}`;
+                section.appendChild(header);
+
+                const list = document.createElement('div');
+                list.className = 'space-y-2';
+
+                groupItems.forEach((item, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'glass-panel rounded-xl p-4 flex items-center gap-4 animate-fadeUp';
+                    card.style.animationDelay = `${(groupIndex * 0.1) + (index * 0.03)}s`;
+
+                    const timeStr = formatTime(item.viewed_at);
+
+                    card.innerHTML = `
+                        <div class="w-10 h-10 rounded-full bg-brand-500/10 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-rounded text-brand-500">article</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <a href="notes_generator.html?topic=${encodeURIComponent(item.topic_name || '')}" 
+                               target="_blank"
+                               class="text-base font-medium text-brand-600 dark:text-brand-300 hover:underline block truncate">
+                                ${escapeHtml(item.topic_name || 'Untitled')}
+                            </a>
+                            <p class="text-xs text-neutral-400 dark:text-white/40 mt-0.5">${timeStr}</p>
+                        </div>
+                        <a href="notes_generator.html?topic=${encodeURIComponent(item.topic_name || '')}" 
+                           target="_blank"
+                           class="inline-flex items-center gap-1 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-300 px-3 py-1.5 text-xs font-semibold hover:bg-brand-500/20 transition shrink-0">
+                            <span class="material-symbols-rounded text-sm">open_in_new</span>
+                            View
+                        </a>
+                    `;
+
+                    list.appendChild(card);
+                });
+
+                section.appendChild(list);
+                container.appendChild(section);
+            });
+        }
+
+        function groupByDate(items) {
+            const groups = {};
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterday = new Date(today - 86400000);
+            const weekAgo = new Date(today - 7 * 86400000);
+
+            items.forEach(item => {
+                const date = new Date(item.viewed_at);
+                const itemDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+                let label;
+                if (itemDate >= today) {
+                    label = 'Today';
+                } else if (itemDate >= yesterday) {
+                    label = 'Yesterday';
+                } else if (itemDate >= weekAgo) {
+                    label = 'This Week';
+                } else {
+                    label = itemDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                }
+
+                if (!groups[label]) groups[label] = [];
+                groups[label].push(item);
+            });
+
+            return groups;
+        }
+
+        function formatTime(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        }
+
+        function escapeHtml(str) {
+            return (str ?? '').toString().replace(/[&<>"']/g, c => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[c]));
+        }
+
+        // Clear history handler
+        $('clearHistoryBtn').addEventListener('click', async () => {
+            if (!confirm('Are you sure you want to clear your entire history?')) return;
+
+            const btn = $('clearHistoryBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="animate-spin material-symbols-rounded text-base">sync</span>Clearing...';
+
+            try {
+                await fetch(`${API_BASE}/api/history/clear`, {
+                    method: 'DELETE',
+                    headers: authHeaders()
+                });
+
+                $('historyItems').innerHTML = '';
+                $('emptyState').classList.remove('hidden');
+                btn.classList.add('hidden');
+            } catch (err) {
+                console.error('Failed to clear history', err);
+                alert('Failed to clear history. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span class="material-symbols-rounded text-base">delete_sweep</span>Clear History';
+            }
+        });
+
+        // Theme toggle
+        (function () {
+            const root = document.documentElement;
+            const applyIcon = (m) => document.querySelectorAll('[data-theme-toggle] .material-symbols-rounded').forEach(i => i.textContent = m === 'dark' ? 'light_mode' : 'dark_mode');
+            const set = (m) => { if (m === 'dark') { root.classList.add('dark'); } else { root.classList.remove('dark'); } localStorage.setItem('px_theme', m); applyIcon(m); };
+            const current = root.classList.contains('dark') ? 'dark' : 'light'; applyIcon(current);
+            document.addEventListener('click', e => { const b = e.target.closest('[data-theme-toggle]'); if (!b) return; set(root.classList.contains('dark') ? 'light' : 'dark'); });
+        })();
+
+        // Year in footer
+        document.getElementById('year').textContent = new Date().getFullYear();
+
+        // Load on page ready
+        document.addEventListener('DOMContentLoaded', loadHistory);
+    </script>
+</body>
+
+</html>

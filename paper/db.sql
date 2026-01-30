@@ -924,3 +924,23 @@ CREATE TABLE public.topic_ratings (
   CONSTRAINT topic_ratings_teacher_user_id_fkey FOREIGN KEY (teacher_user_id) REFERENCES auth.users(id),
   CONSTRAINT topic_ratings_unique UNIQUE (topic_id, teacher_user_id)
 );
+CREATE TABLE public.user_topic_wishlist (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  topic_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_topic_wishlist_pkey PRIMARY KEY (id),
+  CONSTRAINT user_topic_wishlist_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_topic_wishlist_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id) ON DELETE CASCADE,
+  CONSTRAINT user_topic_wishlist_unique UNIQUE (user_profile_id, topic_id)
+);
+CREATE TABLE public.user_topic_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  topic_id uuid NOT NULL,
+  topic_name text NOT NULL,
+  viewed_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_topic_history_pkey PRIMARY KEY (id),
+  CONSTRAINT user_topic_history_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_topic_history_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id) ON DELETE CASCADE
+);

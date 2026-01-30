@@ -438,8 +438,12 @@
             </a>
             <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
                 <a href="index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
-                <a href="about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
-                <a href="contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
+                <a href="wishlist.html"
+                    class="hover:text-brandlt-900 dark:hover:text-white inline-flex items-center gap-1"><span
+                        class="material-symbols-rounded text-base">favorite</span>Wishlist</a>
+                <a href="history.html"
+                    class="hover:text-brandlt-900 dark:hover:text-white inline-flex items-center gap-1"><span
+                        class="material-symbols-rounded text-base">history</span>History</a>
                 <a href="help.html" class="hover:text-brandlt-900 dark:hover:text-white">Help</a>
             </nav>
             <div class="hidden md:flex items-center gap-2">
@@ -830,6 +834,7 @@
     <script>
         const API_BASE = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
         const completedTopicIds = new Set();
+        const wishlistedTopicIds = new Set();
         const $ = (id) => document.getElementById(id);
         const setText = (id, val) => { const n = $(id); if (n) n.textContent = val ?? '-'; };
         function initials(name) { if (!name) return 'U'; return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase()).join('') || 'U'; }
@@ -991,6 +996,9 @@
                 const blinkLinks = await fetchBlinkLinks(allTopicNames);
                 const topicRatings = await fetchTopicRatings(allTopicIds);
 
+                // Fetch wishlist status for all topics
+                await fetchWishlistStatus();
+
                 renderSyllabus(syllabus, teacherNotesBySubject, blinkLinks, topicRatings);
                 computeAggregateStats(syllabus);
 
@@ -1094,6 +1102,95 @@
             return ratingsMap;
         }
 
+        // Fetch user's wishlist to track which topics are wishlisted
+        async function fetchWishlistStatus() {
+            try {
+                const res = await fetchJson(`${API_BASE}/api/wishlist`, { headers: authHeaders() });
+                if (isSuccess(res) && res.data?.wishlist) {
+                    wishlistedTopicIds.clear();
+                    res.data.wishlist.forEach(item => {
+                        if (item.topic_id) wishlistedTopicIds.add(item.topic_id);
+                    });
+                }
+            } catch (err) {
+                console.warn('[Academics] Failed to fetch wishlist', err);
+            }
+        }
+
+        // Toggle wishlist for a topic
+        async function toggleWishlist(topicId, btn, icon) {
+            const wasWishlisted = wishlistedTopicIds.has(topicId);
+            // Optimistic UI update
+            if (wasWishlisted) {
+                wishlistedTopicIds.delete(topicId);
+                icon.style.color = 'currentColor';
+                icon.style.fontVariationSettings = "'FILL' 0";
+                btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition opacity-0 group-hover:opacity-100';
+                btn.title = 'Add to wishlist';
+            } else {
+                wishlistedTopicIds.add(topicId);
+                icon.style.color = '#ef4444';
+                icon.style.fontVariationSettings = "'FILL' 1";
+                btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition';
+                btn.title = 'Remove from wishlist';
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/wishlist/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                    body: JSON.stringify({ topic_id: topicId })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || 'Failed');
+                }
+                // Sync with server response
+                if (data.wishlisted) {
+                    wishlistedTopicIds.add(topicId);
+                    icon.style.color = '#ef4444';
+                    icon.style.fontVariationSettings = "'FILL' 1";
+                    btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition';
+                    btn.title = 'Remove from wishlist';
+                } else {
+                    wishlistedTopicIds.delete(topicId);
+                    icon.style.color = 'currentColor';
+                    icon.style.fontVariationSettings = "'FILL' 0";
+                    btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition opacity-0 group-hover:opacity-100';
+                    btn.title = 'Add to wishlist';
+                }
+            } catch (err) {
+                console.error('[Academics] Wishlist toggle failed', err);
+                // Revert UI on error
+                if (wasWishlisted) {
+                    wishlistedTopicIds.add(topicId);
+                    icon.style.color = '#ef4444';
+                    icon.style.fontVariationSettings = "'FILL' 1";
+                    btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition';
+                    btn.title = 'Remove from wishlist';
+                } else {
+                    wishlistedTopicIds.delete(topicId);
+                    icon.style.color = 'currentColor';
+                    icon.style.fontVariationSettings = "'FILL' 0";
+                    btn.className = 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition opacity-0 group-hover:opacity-100';
+                    btn.title = 'Add to wishlist';
+                }
+            }
+        }
+
+        // Record topic view in history
+        async function recordTopicHistory(topicId, topicName) {
+            try {
+                await fetch(`${API_BASE}/api/history/record`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                    body: JSON.stringify({ topic_id: topicId, topic_name: topicName })
+                });
+            } catch (err) {
+                console.warn('[Academics] Failed to record history', err);
+            }
+        }
+
         function computeAggregateStats(syllabus) {
             let totalTopics = 0, doneTopics = 0, courses = 0, semesterLabel = '';
             syllabus.forEach(c => { courses++; semesterLabel = c.semester || semesterLabel; (c.units || []).forEach(u => { (u.topics || []).forEach(t => { totalTopics++; if (completedTopicIds.has(t.id)) doneTopics++; }); }); });
@@ -1147,7 +1244,7 @@
                     }
                     const unitCounts = { done: 0, total: 0 };
                     (u.topics || []).forEach(t => {
-                        const li = document.createElement('li'); li.className = 'flex items-center gap-2 py-0.5 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm leading-tight';
+                        const li = document.createElement('li'); li.className = 'group flex items-center gap-2 py-0.5 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm leading-tight';
                         const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'p-1 rounded focus:outline-none focus:ring-2 focus:ring-brand-500/40'; const icon = document.createElement('span'); icon.className = 'material-symbols-rounded text-[20px]';
                         const initChecked = completedTopicIds.has(t.id); icon.textContent = initChecked ? 'check_circle' : 'radio_button_unchecked'; icon.style.color = initChecked ? '#10b981' : 'currentColor'; btn.appendChild(icon); btn.dataset.topicId = t.id;
                         btn.addEventListener('click', () => toggleTopic(t.id, icon, unitCounts, courseCounts, unitProgBar, unitProgText, progBar, progText, unitTitle)); li.appendChild(btn);
@@ -1158,11 +1255,34 @@
                         a.rel = 'noopener';
                         a.className = 'text-brand-600 dark:text-brand-300 hover:underline';
                         a.onclick = () => {
+                            // Record to history
+                            recordTopicHistory(t.id, t.topic);
                             if (window.Analytics) {
                                 window.Analytics.track('topic_opened', { topic: t.topic });
                             }
                         };
                         li.appendChild(a);
+
+                        // Wishlist button
+                        const wishBtn = document.createElement('button');
+                        wishBtn.type = 'button';
+                        const isWishlisted = wishlistedTopicIds.has(t.id);
+                        // Show always if wishlisted, otherwise hide until hover
+                        wishBtn.className = isWishlisted
+                            ? 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition'
+                            : 'p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition opacity-0 group-hover:opacity-100';
+                        wishBtn.title = isWishlisted ? 'Remove from wishlist' : 'Add to wishlist';
+                        const wishIcon = document.createElement('span');
+                        wishIcon.className = 'material-symbols-rounded text-[18px]';
+                        wishIcon.textContent = 'favorite';
+                        wishIcon.style.color = isWishlisted ? '#ef4444' : 'currentColor';
+                        wishIcon.style.fontVariationSettings = isWishlisted ? "'FILL' 1" : "'FILL' 0";
+                        wishBtn.appendChild(wishIcon);
+                        wishBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            toggleWishlist(t.id, wishBtn, wishIcon);
+                        });
+                        li.appendChild(wishBtn);
 
                         // Star rating display (read-only) - show only the number of stars rated
                         const topicRating = topicRatingsMap.get(t.id);

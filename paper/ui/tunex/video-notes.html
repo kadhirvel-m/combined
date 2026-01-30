@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Notes | Tunex</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+    <!-- Theme & Config -->
+    <script src="../assets/js/theme.js"></script>
+    <link rel="stylesheet" href="../assets/css/tailwind.css">
+    <script>
+        window.tailwind = window.tailwind || {};
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gatex: {
+                            bg: '#13131F',
+                            card: '#1E1E2F',
+                            cardHover: '#27293d',
+                            primary: '#9E4B8A',
+                            secondary: '#4C2A59',
+                            accent: '#FF7F50',
+                            success: '#00F090',
+                            info: '#3B82F6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    boxShadow: {
+                        mui: '0 10px 30px rgba(0,0,0,0.25)',
+                        muiSm: '0 6px 18px rgba(0,0,0,0.18)'
+                    }
+                }
+            }
+        };
+    </script>
+
+    <!-- CodeMirror 5 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/eclipse.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <script>
+        // Extend shared Theme manager with notebook-specific behavior
+        (function () {
+            const baseToggle = Theme.toggle.bind(Theme);
+            Theme.toggle = function () {
+                baseToggle();
+                if (window.notebookInstance) {
+                    window.notebookInstance.updateTheme(Theme.isDark());
+                }
+            };
+            Theme.isDark = function () {
+                return document.documentElement.classList.contains('dark');
+            };
+        })();
+    </script>
+
+    <style>
+        :root {
+            --bg: #13131F;
+            --surface: #1E1E2F;
+            --surface-2: #171722;
+            --surface-3: #252532;
+            --text: #ffffff;
+            --muted: rgba(255, 255, 255, 0.65);
+            --outline: rgba(255, 255, 255, 0.1);
+            --brand: #9E4B8A;
+            --brand-2: #4C2A59;
+            --appbar: rgba(30, 30, 47, 0.88);
+        }
+
+        html.light {
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-2: #f1f5f9;
+            --surface-3: #e2e8f0;
+            --text: #0f172a;
+            --muted: rgba(15, 23, 42, 0.65);
+            --outline: rgba(2, 6, 23, 0.1);
+            --appbar: rgba(248, 250, 252, 0.88);
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        /* Hide dark logo in light mode, show light logo */
+        html.light .logo-dark,
+        html:not(.dark) .logo-dark {
+            display: none !important;
+        }
+
+        html.dark .logo-light {
+            display: none !important;
+        }
+
+        .notebook-cell {
+            background: var(--surface);
+            border: 1px solid var(--outline);
+            border-radius: 18px;
+            transition: all 0.15s ease;
+        }
+
+        .notebook-cell.md-rendered {
+            position: relative;
+        }
+
+        .notebook-cell:hover {
+            transform: none;
+            box-shadow: none;
+            border-color: var(--outline);
+        }
+
+        .notebook-cell.active {
+            border-color: rgba(158, 75, 138, 0.45);
+            box-shadow: none;
+        }
+
+        .btn-icon {
+            color: var(--muted);
+            transition: all 0.15s;
+        }
+
+        .btn-icon:hover {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 4px 12px rgba(158, 75, 138, 0.4);
+        }
+
+        .btn-ghost {
+            color: var(--muted);
+        }
+
+        .btn-ghost:hover {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .run-btn {
+            background: var(--brand);
+            color: white;
+            opacity: 0;
+            transition: all 0.15s;
+        }
+
+        .notebook-cell:hover .run-btn,
+        .notebook-cell.active .run-btn {
+            opacity: 1;
+        }
+
+        .run-btn:hover {
+            background: #7A3A6B;
+        }
+
+        .output-area {
+            background: var(--surface-2);
+            border-top: 1px solid var(--outline);
+        }
+
+        .exec-counter {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .pill {
+            background: rgba(158, 75, 138, 0.16);
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        html.light .pill {
+            background: rgba(158, 75, 138, 0.12);
+            color: #6b21a8;
+        }
+
+        .fab {
+            background: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
+        }
+
+        @keyframes pulse-border {
+
+            0%,
+            100% {
+                border-color: #9E4B8A;
+            }
+
+            50% {
+                border-color: #C05AAF;
+            }
+        }
+
+        .running {
+            animation: pulse-border 1s ease infinite;
+        }
+
+        /* CodeMirror Styling */
+        .CodeMirror {
+            font-family: 'JetBrains Mono', monospace !important;
+            font-size: 14px !important;
+            line-height: 1.5 !important;
+            height: auto !important;
+            min-height: 0;
+            padding: 10px 0;
+            background: #12121a !important;
+            border-radius: 0 0 18px 18px;
+        }
+
+        .CodeMirror-scroll {
+            min-height: 0;
+        }
+
+        .CodeMirror-gutters {
+            border-right: 1px solid var(--outline) !important;
+        }
+
+        .CodeMirror-cursor {
+            border-left-color: #9E4B8A !important;
+        }
+
+        .CodeMirror-selected {
+            background: rgba(158, 75, 138, 0.2) !important;
+        }
+
+        html.light .CodeMirror {
+            background: #eef2ff !important;
+            color: #0f172a !important;
+        }
+
+        html.light .CodeMirror-gutters {
+            background: #e2e8f0 !important;
+            border-right: 1px solid rgba(2, 6, 23, 0.14) !important;
+        }
+
+        .appbar {
+            background: var(--appbar);
+            border-bottom: 1px solid var(--outline);
+            backdrop-filter: blur(18px);
+        }
+
+        .appbar-btn {
+            background: rgba(76, 42, 89, 0.18);
+            border: 1px solid var(--outline);
+            color: rgba(255, 255, 255, 0.78);
+            transition: all 160ms ease;
+        }
+
+        .appbar-btn:hover {
+            background: rgba(158, 75, 138, 0.9);
+            border-color: rgba(158, 75, 138, 0.45);
+            color: #fff;
+        }
+
+        .markdown-preview {
+            padding: 14px 16px;
+            color: var(--text);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .markdown-preview h1 {
+            font-size: 34px;
+            font-weight: 800;
+            margin: 10px 0 8px;
+            letter-spacing: -0.02em;
+        }
+
+        .markdown-preview h2 {
+            font-size: 24px;
+            font-weight: 800;
+            margin: 10px 0 8px;
+            letter-spacing: -0.01em;
+        }
+
+        .markdown-preview h3 {
+            font-size: 18px;
+            font-weight: 750;
+            margin: 10px 0 8px;
+        }
+
+        .markdown-preview p {
+            margin: 8px 0;
+        }
+
+        .markdown-preview ul,
+        .markdown-preview ol {
+            margin: 8px 0 8px 22px;
+        }
+
+        .markdown-preview li {
+            margin: 4px 0;
+        }
+
+        .markdown-preview blockquote {
+            margin: 10px 0;
+            padding: 10px 12px;
+            border-left: 3px solid rgba(158, 75, 138, 0.65);
+            background: rgba(158, 75, 138, 0.08);
+            border-radius: 10px;
+            color: var(--muted);
+        }
+
+        .markdown-preview code {
+            background: rgba(158, 75, 138, 0.14);
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        .markdown-preview pre {
+            margin: 10px 0;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid var(--outline);
+            overflow: auto;
+        }
+
+        html.light .markdown-preview pre {
+            background: rgba(2, 6, 23, 0.04);
+        }
+
+        .markdown-preview pre code {
+            background: transparent;
+            padding: 0;
+            font-size: 13px;
+        }
+
+        .markdown-input {
+            width: 100%;
+            min-height: 56px;
+            resize: vertical;
+            padding: 12px 14px;
+            background: transparent;
+            color: var(--text);
+            border: none;
+            outline: none;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* Markdown: rendered mode shows only content (no top bar) */
+        .notebook-cell.md-rendered {
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            position: relative;
+        }
+
+        /* Keep actions available as a hover overlay */
+        .notebook-cell.md-rendered .md-header {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            left: auto;
+            width: auto;
+            background: transparent !important;
+            border-bottom: none !important;
+            padding: 0 !important;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .notebook-cell.md-rendered .md-meta {
+            display: none;
+        }
+
+        .notebook-cell.md-rendered .md-actions {
+            pointer-events: auto;
+            opacity: 0;
+            transition: opacity 140ms ease;
+        }
+
+        .notebook-cell.md-rendered:hover .md-actions {
+            opacity: 1;
+        }
+
+        .notebook-cell.md-rendered .md-actions [data-action="add"] {
+            display: none;
+        }
+
+        .notebook-cell.md-rendered .markdown-preview {
+            padding: 0;
+        }
+
+        html.light .appbar-btn {
+            background: rgba(2, 6, 23, 0.04);
+            color: #475569;
+        }
+
+        html.light .appbar-btn:hover {
+            background: rgba(158, 75, 138, 0.12);
+            color: #1e293b;
+        }
+
+        /* Video sidebar styles */
+        .video-sidebar {
+            background: var(--surface-2);
+            border-right: 1px solid var(--outline);
+        }
+
+        .video-container {
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .video-container iframe {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            border: none;
+        }
+
+        .video-info {
+            background: var(--surface);
+            border: 1px solid var(--outline);
+            border-radius: 16px;
+        }
+
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased">
+
+    <!-- Header -->
+    <header class="appbar fixed top-0 left-0 right-0 h-16 z-50 flex items-center justify-between px-6">
+        <div class="flex items-center gap-3">
+            <button onclick="history.back()" class="w-8 h-8 rounded-full appbar-btn flex items-center justify-center"
+                title="Back">
+                <i class="ri-arrow-left-line"></i>
+            </button>
+            <div class="flex items-center gap-3">
+                <img src="../assets/img/tunex/tunex-logo-dark.svg" alt="Tunex" class="h-8 logo-dark">
+                <img src="../assets/img/tunex/tunex-logo-light.svg" alt="Tunex" class="h-8 logo-light">
+                <span class="font-bold tracking-tight opacity-60 text-sm border-l border-white/20 pl-3">
+                    Video Notes
+                </span>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <button id="runAllBtn" class="px-4 py-2 rounded-lg appbar-btn text-sm font-bold flex items-center gap-2"
+                title="Run all">
+                <i class="ri-play-list-2-fill"></i><span class="hidden sm:inline">Run All</span>
+            </button>
+            <button id="clearBtn" class="px-4 py-2 rounded-lg appbar-btn text-sm font-bold flex items-center gap-2"
+                title="Clear outputs">
+                <i class="ri-eraser-fill"></i><span class="hidden sm:inline">Clear</span>
+            </button>
+            <button id="themeBtn" class="w-9 h-9 rounded-lg appbar-btn flex items-center justify-center"
+                title="Toggle theme">
+                <i class="ri-moon-line dark:hidden text-lg"></i>
+                <i class="ri-sun-line hidden dark:block text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Layout: Video Sidebar + Notebook -->
+    <div class="flex h-screen pt-16">
+        <!-- Video Sidebar -->
+        <aside class="video-sidebar w-80 lg:w-96 flex-shrink-0 p-4 overflow-y-auto custom-scrollbar hidden md:block">
+            <div class="space-y-4">
+                <!-- Video Player -->
+                <div class="video-container">
+                    <iframe id="videoEmbed" title="YouTube video player" allowfullscreen></iframe>
+                </div>
+
+                <!-- Video Info -->
+                <div class="video-info p-4 space-y-3">
+                    <h2 id="videoTitle" class="font-bold text-base line-clamp-2">Loading video...</h2>
+                    <div class="flex items-center gap-3">
+                        <img id="channelLogo" src="../assets/img/default-avatar.png" alt="Channel"
+                            class="w-10 h-10 rounded-full object-cover border border-white/10">
+                        <div>
+                            <p id="channelName" class="font-semibold text-sm opacity-90">Channel</p>
+                            <p id="viewCount" class="text-xs opacity-50">Views</p>
+                        </div>
+                    </div>
+                    <div class="pt-2 border-t border-white/10">
+                        <a id="youtubeLink" href="#" target="_blank" rel="noopener"
+                            class="inline-flex items-center gap-2 text-xs font-medium opacity-60 hover:opacity-100 transition">
+                            <i class="ri-youtube-fill text-red-500"></i>
+                            Watch on YouTube
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Quick Tips -->
+                <div class="p-4 rounded-2xl border border-white/10 space-y-2">
+                    <h3 class="text-xs uppercase tracking-widest font-bold opacity-40">Keyboard Shortcuts</h3>
+                    <div class="space-y-1 text-xs opacity-60">
+                        <p><kbd class="px-1.5 py-0.5 rounded font-mono"
+                                style="background: var(--surface)">Ctrl+Enter</kbd>
+                            Run cell</p>
+                        <p><kbd class="px-1.5 py-0.5 rounded font-mono"
+                                style="background: var(--surface)">Shift+Enter</kbd>
+                            Run + Add</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Notebook Main Content -->
+        <main class="flex-1 overflow-y-auto custom-scrollbar pb-10">
+            <div class="max-w-4xl mx-auto px-4 pt-8">
+                <!-- Cells Container -->
+                <div id="cells-container" class="space-y-4"></div>
+
+                <!-- Add Cell Buttons -->
+                <div class="flex justify-center mt-8 gap-3 flex-wrap">
+                    <button id="addCellBtn"
+                        class="btn-primary px-6 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2">
+                        <i class="ri-add-line"></i> Add Cell
+                    </button>
+                    <button id="addMarkdownBtn"
+                        class="btn-ghost px-6 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2">
+                        <i class="ri-markdown-line"></i> Add Markdown
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Mobile Video Toggle -->
+    <button id="mobileVideoBtn"
+        class="md:hidden fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-[#9E4B8A] to-[#4C2A59] text-white shadow-lg flex items-center justify-center z-50"
+        title="Show Video">
+        <i class="ri-video-line text-xl"></i>
+    </button>
+
+    <!-- Mobile Video Modal -->
+    <div id="mobileVideoModal"
+        class="md:hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="w-full max-w-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-white">Video</h3>
+                <button id="closeMobileVideo"
+                    class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                    <i class="ri-close-line text-xl text-white"></i>
+                </button>
+            </div>
+            <div class="video-container rounded-2xl overflow-hidden">
+                <iframe id="mobileVideoEmbed" title="YouTube video player" allowfullscreen
+                    class="w-full aspect-video"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        // Parse video URL from query params
+        function getVideoUrl() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('video') || '';
+        }
+
+        // Extract video ID from YouTube URL
+        function extractVideoId(url) {
+            if (!url) return null;
+            const patterns = [
+                /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+                /^([a-zA-Z0-9_-]{11})$/
+            ];
+            for (const pattern of patterns) {
+                const match = url.match(pattern);
+                if (match) return match[1];
+            }
+            return null;
+        }
+
+        // Initialize video player
+        async function initVideoPlayer() {
+            const videoUrl = getVideoUrl();
+            const videoId = extractVideoId(videoUrl);
+
+            if (!videoId) {
+                document.getElementById('videoTitle').textContent = 'No video provided';
+                return;
+            }
+
+            // Set embed URLs
+            const embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`;
+            document.getElementById('videoEmbed').src = embedUrl;
+            const mobileEmbed = document.getElementById('mobileVideoEmbed');
+            if (mobileEmbed) mobileEmbed.src = embedUrl;
+
+            // Set YouTube link
+            const ytLink = document.getElementById('youtubeLink');
+            if (ytLink) ytLink.href = `https://www.youtube.com/watch?v=${videoId}`;
+
+            // Fetch video metadata
+            try {
+                const res = await fetch(`${API_BASE}/api/youtube/meta`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: videoUrl })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.channel_name) {
+                        document.getElementById('channelName').textContent = data.channel_name;
+                    }
+                    if (data.views) {
+                        document.getElementById('viewCount').textContent = formatViews(data.views) + ' views';
+                    }
+                    if (data.channel_logo) {
+                        document.getElementById('channelLogo').src = data.channel_logo;
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not fetch video metadata:', e);
+            }
+
+            // Set a basic title from the video ID for now
+            document.getElementById('videoTitle').textContent = 'YouTube Video';
+        }
+
+        function formatViews(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        // Mobile video modal
+        const mobileVideoBtn = document.getElementById('mobileVideoBtn');
+        const mobileVideoModal = document.getElementById('mobileVideoModal');
+        const closeMobileVideo = document.getElementById('closeMobileVideo');
+
+        if (mobileVideoBtn && mobileVideoModal) {
+            mobileVideoBtn.addEventListener('click', () => {
+                mobileVideoModal.classList.remove('hidden');
+                mobileVideoModal.classList.add('flex');
+            });
+            closeMobileVideo.addEventListener('click', () => {
+                mobileVideoModal.classList.add('hidden');
+                mobileVideoModal.classList.remove('flex');
+            });
+            mobileVideoModal.addEventListener('click', (e) => {
+                if (e.target === mobileVideoModal) {
+                    mobileVideoModal.classList.add('hidden');
+                    mobileVideoModal.classList.remove('flex');
+                }
+            });
+        }
+
+        class NotebookApp {
+            constructor() {
+                this.cells = [];
+                this.executionCounter = 1;
+                this.activeCellIndex = 0;
+                this.cellsContainer = document.getElementById('cells-container');
+
+                this.init();
+            }
+
+            init() {
+                // Create first cell
+                this.createCell();
+
+                // Button handlers
+                document.getElementById('addCellBtn').addEventListener('click', () => this.createCell());
+                document.getElementById('addMarkdownBtn').addEventListener('click', () => this.createCell(-1, 'markdown'));
+                document.getElementById('runAllBtn').addEventListener('click', () => this.runAllCells());
+                document.getElementById('clearBtn').addEventListener('click', () => this.clearAllOutputs());
+                document.getElementById('themeBtn').addEventListener('click', () => Theme.toggle());
+            }
+
+            updateTheme(isDark) {
+                this.cells.forEach(cell => {
+                    if (cell.editor) {
+                        cell.editor.setOption('theme', isDark ? 'material-darker' : 'eclipse');
+                    }
+                });
+            }
+
+            createCell(insertAfterIndex = -1, type = 'code') {
+                const cellId = Date.now() + Math.random();
+                const cell = {
+                    id: cellId,
+                    type,
+                    editor: null,
+                    markdownText: '',
+                    markdownEditing: true,
+                    output: '',
+                    error: '',
+                    isRunning: false,
+                    executionCount: null
+                };
+
+                // Create cell HTML
+                const cellEl = document.createElement('div');
+                cellEl.id = `cell-${cellId}`;
+                cellEl.className = 'notebook-cell rounded-xl overflow-hidden';
+
+                if (type === 'markdown') {
+                    cellEl.innerHTML = `
+                        <div class="md-header flex items-center justify-between px-4 py-2" style="background: var(--surface-2); border-bottom: 1px solid var(--outline)">
+                            <div class="md-meta flex items-center gap-3">
+                                <span class="exec-counter">[*]</span>
+                                <span class="pill px-2 py-0.5 rounded-full text-[10px] font-medium uppercase">Markdown</span>
+                            </div>
+                            <div class="md-actions flex items-center gap-1">
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center" data-action="toggle-md" title="Edit / Render">
+                                    <i class="ri-check-line text-sm"></i>
+                                </button>
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center" data-action="add">
+                                    <i class="ri-add-line text-sm"></i>
+                                </button>
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center hover:!text-red-500" data-action="delete">
+                                    <i class="ri-delete-bin-6-line text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="markdown-area">
+                            <textarea class="markdown-input" placeholder="Write markdown..." spellcheck="false"></textarea>
+                            <div class="markdown-preview hidden"></div>
+                        </div>
+                    `;
+                } else {
+                    cellEl.innerHTML = `
+                        <div class="flex items-center justify-between px-4 py-2" style="background: var(--surface-2); border-bottom: 1px solid var(--outline)">
+                            <div class="flex items-center gap-3">
+                                <span class="exec-counter">[*]</span>
+                                <span class="pill px-2 py-0.5 rounded-full text-[10px] font-medium uppercase">Python</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button class="run-btn w-7 h-7 rounded-lg flex items-center justify-center" data-action="run">
+                                    <i class="ri-play-fill text-sm"></i>
+                                </button>
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center" data-action="add">
+                                    <i class="ri-add-line text-sm"></i>
+                                </button>
+                                <button class="btn-icon w-7 h-7 rounded-lg flex items-center justify-center hover:!text-red-500" data-action="delete">
+                                    <i class="ri-delete-bin-6-line text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="cm-container"></div>
+                        <div class="output-area hidden">
+                            <div class="px-4 py-3 font-mono text-sm">
+                                <pre class="output-text whitespace-pre-wrap" style="color: var(--text)"></pre>
+                                <pre class="error-text whitespace-pre-wrap text-red-500"></pre>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Insert into DOM
+                if (insertAfterIndex >= 0 && insertAfterIndex < this.cells.length) {
+                    const afterEl = document.getElementById(`cell-${this.cells[insertAfterIndex].id}`);
+                    afterEl.after(cellEl);
+                    this.cells.splice(insertAfterIndex + 1, 0, cell);
+                    this.activeCellIndex = insertAfterIndex + 1;
+                } else {
+                    this.cellsContainer.appendChild(cellEl);
+                    this.cells.push(cell);
+                    this.activeCellIndex = this.cells.length - 1;
+                }
+
+                if (type === 'markdown') {
+                    const input = cellEl.querySelector('.markdown-input');
+                    const preview = cellEl.querySelector('.markdown-preview');
+                    const toggleBtn = cellEl.querySelector('[data-action="toggle-md"]');
+
+                    const setToggleIcon = () => {
+                        if (!toggleBtn) return;
+                        toggleBtn.innerHTML = cell.markdownEditing
+                            ? '<i class="ri-check-line text-sm"></i>'
+                            : '<i class="ri-edit-2-line text-sm"></i>';
+                    };
+
+                    const renderMarkdown = () => {
+                        const value = input.value || '';
+                        cell.markdownText = value;
+                        if (value.trim().length === 0) {
+                            preview.innerHTML = '<p style="color: var(--muted)">Empty markdown...</p>';
+                        } else {
+                            preview.innerHTML = marked.parse(value);
+                        }
+                    };
+
+                    const showPreview = () => {
+                        renderMarkdown();
+                        input.classList.add('hidden');
+                        preview.classList.remove('hidden');
+                        cell.markdownEditing = false;
+                        cellEl.classList.add('md-rendered');
+                        setToggleIcon();
+                    };
+
+                    const showEditor = () => {
+                        input.classList.remove('hidden');
+                        preview.classList.add('hidden');
+                        cell.markdownEditing = true;
+                        cellEl.classList.remove('md-rendered');
+                        setToggleIcon();
+                        setTimeout(() => input.focus(), 0);
+                    };
+
+                    input.addEventListener('blur', () => {
+                        if (input.value.trim().length > 0) showPreview();
+                    });
+
+                    input.addEventListener('keydown', (e) => {
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                            e.preventDefault();
+                            showPreview();
+                        }
+                        if (e.shiftKey && e.key === 'Enter') {
+                            e.preventDefault();
+                            showPreview();
+                            const currentIndex = this.cells.indexOf(cell);
+                            if (currentIndex === this.cells.length - 1) {
+                                this.createCell(currentIndex, 'code');
+                            } else {
+                                this.activeCellIndex = Math.min(this.cells.length - 1, currentIndex + 1);
+                                this.updateActiveCellStyles();
+                            }
+                        }
+                        if (e.key === 'Escape') {
+                            e.preventDefault();
+                            if (input.value.trim().length > 0) showPreview();
+                        }
+                    });
+
+                    preview.addEventListener('dblclick', (e) => {
+                        e.stopPropagation();
+                        showEditor();
+                    });
+
+                    if (toggleBtn) {
+                        toggleBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (cell.markdownEditing) {
+                                showPreview();
+                            } else {
+                                showEditor();
+                            }
+                        });
+                    }
+
+                    renderMarkdown();
+                    showEditor();
+                } else {
+                    // Create CodeMirror editor
+                    const cmContainer = cellEl.querySelector('.cm-container');
+                    const isDark = Theme.isDark();
+
+                    cell.editor = CodeMirror(cmContainer, {
+                        mode: 'python',
+                        theme: isDark ? 'material-darker' : 'eclipse',
+                        lineNumbers: true,
+                        indentUnit: 4,
+                        tabSize: 4,
+                        indentWithTabs: false,
+                        lineWrapping: true,
+                        autoCloseBrackets: true,
+                        matchBrackets: true,
+                        viewportMargin: Infinity,
+                        extraKeys: {
+                            'Ctrl-Enter': () => this.runCell(this.cells.indexOf(cell)),
+                            'Shift-Enter': () => {
+                                this.runCell(this.cells.indexOf(cell));
+                                this.createCell(this.cells.indexOf(cell));
+                            },
+                            'Tab': (cm) => {
+                                if (cm.somethingSelected()) {
+                                    cm.indentSelection('add');
+                                } else {
+                                    cm.replaceSelection('    ', 'end');
+                                }
+                            },
+                            'Ctrl-Space': 'autocomplete',
+                            'Backspace': function (cm) {
+                                if (cm.somethingSelected()) return CodeMirror.Pass;
+                                var cursor = cm.getCursor();
+                                var line = cm.getLine(cursor.line);
+                                var before = line.slice(0, cursor.ch);
+                                if (/^\s+$/.test(before) && before.length % 4 === 0 && before.length > 0) {
+                                    cm.replaceRange("", {
+                                        line: cursor.line,
+                                        ch: cursor.ch - 4
+                                    }, cursor);
+                                } else {
+                                    return CodeMirror.Pass;
+                                }
+                            }
+                        }
+                    });
+
+                    // Auto-grow editor
+                    const autoGrow = () => {
+                        const lineHeight = cell.editor.defaultTextHeight();
+                        const lineCount = Math.max(1, cell.editor.lineCount());
+                        const padding = 16;
+                        const desired = (lineCount * lineHeight) + padding;
+                        const maxHeight = 520;
+                        const clamped = Math.min(maxHeight, desired);
+                        cell.editor.setSize(null, clamped);
+                    };
+
+                    cell.editor.on('change', autoGrow);
+                    setTimeout(() => {
+                        autoGrow();
+                        cell.editor.refresh();
+                    }, 0);
+                }
+
+                // Cell click to activate
+                cellEl.addEventListener('click', () => {
+                    this.activeCellIndex = this.cells.indexOf(cell);
+                    this.updateActiveCellStyles();
+                });
+
+                // Button handlers
+                const runBtn = cellEl.querySelector('[data-action="run"]');
+                if (runBtn) {
+                    runBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.runCell(this.cells.indexOf(cell));
+                    });
+                }
+                cellEl.querySelector('[data-action="add"]').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.createCell(this.cells.indexOf(cell));
+                });
+                cellEl.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteCell(this.cells.indexOf(cell));
+                });
+
+                this.updateActiveCellStyles();
+
+                // Focus the editor/input
+                if (cell.type === 'markdown') {
+                    const input = cellEl.querySelector('.markdown-input');
+                    if (input) setTimeout(() => input.focus(), 50);
+                } else if (cell.editor) {
+                    setTimeout(() => cell.editor.focus(), 50);
+                }
+
+                return cell;
+            }
+
+            deleteCell(index) {
+                if (this.cells.length <= 1) return;
+
+                const cell = this.cells[index];
+                const cellEl = document.getElementById(`cell-${cell.id}`);
+
+                cellEl.remove();
+                this.cells.splice(index, 1);
+
+                if (this.activeCellIndex >= this.cells.length) {
+                    this.activeCellIndex = this.cells.length - 1;
+                }
+                this.updateActiveCellStyles();
+            }
+
+            updateActiveCellStyles() {
+                this.cells.forEach((cell, idx) => {
+                    const el = document.getElementById(`cell-${cell.id}`);
+                    if (el) {
+                        el.classList.toggle('active', idx === this.activeCellIndex);
+                    }
+                });
+            }
+
+            updateCellUI(cell) {
+                const cellEl = document.getElementById(`cell-${cell.id}`);
+                if (!cellEl) return;
+
+                const execCounter = cellEl.querySelector('.exec-counter');
+                const runBtn = cellEl.querySelector('[data-action="run"]');
+                const outputArea = cellEl.querySelector('.output-area');
+                const outputText = cellEl.querySelector('.output-text');
+                const errorText = cellEl.querySelector('.error-text');
+
+                execCounter.textContent = `[${cell.executionCount || '*'}]`;
+
+                if (cell.isRunning) {
+                    runBtn.innerHTML = '<i class="ri-loader-4-line animate-spin text-sm"></i>';
+                    cellEl.classList.add('running');
+                } else {
+                    runBtn.innerHTML = '<i class="ri-play-fill text-sm"></i>';
+                    cellEl.classList.remove('running');
+                }
+
+                if (cell.output || cell.error) {
+                    outputArea.classList.remove('hidden');
+                    outputText.textContent = cell.output;
+                    errorText.textContent = cell.error;
+                } else {
+                    outputArea.classList.add('hidden');
+                }
+            }
+
+            async runCell(index) {
+                const cell = this.cells[index];
+                if (cell.type === 'markdown') return;
+                const code = cell.editor.getValue();
+
+                cell.isRunning = true;
+                cell.output = '';
+                cell.error = '';
+                this.updateCellUI(cell);
+
+                let codeToRun = "import sys\nimport os\n\n";
+
+                if (index > 0) {
+                    codeToRun += "_orig_stdout = sys.stdout\nsys.stdout = open(os.devnull, 'w')\n\n";
+                    for (let i = 0; i < index; i++) {
+                        if (this.cells[i].type === 'code' && this.cells[i].editor) {
+                            codeToRun += this.cells[i].editor.getValue() + "\n\n";
+                        }
+                    }
+                    codeToRun += "sys.stdout = _orig_stdout\n\n";
+                }
+
+                codeToRun += code;
+
+                try {
+                    const res = await fetch(`${API_BASE}/api/tunex/compiler/run`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code: codeToRun })
+                    });
+                    const data = await res.json();
+                    cell.output = data.output || '';
+                    cell.error = data.error || '';
+                    cell.executionCount = this.executionCounter++;
+                } catch (e) {
+                    cell.error = "Connection failed. Is the server running?";
+                } finally {
+                    cell.isRunning = false;
+                    this.updateCellUI(cell);
+                }
+            }
+
+            async runAllCells() {
+                for (let i = 0; i < this.cells.length; i++) {
+                    if (this.cells[i].type !== 'markdown') {
+                        await this.runCell(i);
+                    }
+                }
+            }
+
+            clearAllOutputs() {
+                this.cells.forEach(cell => {
+                    cell.output = '';
+                    cell.error = '';
+                    cell.executionCount = null;
+                    if (cell.type === 'code') {
+                        this.updateCellUI(cell);
+                    }
+                });
+                this.executionCounter = 1;
+            }
+        }
+
+        // Initialize
+        initVideoPlayer();
+        window.notebookInstance = new NotebookApp();
+    </script>
+</body>
+
+</html>
