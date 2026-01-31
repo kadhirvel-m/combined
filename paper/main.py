@@ -18159,3 +18159,106 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
+
+# ==========================================
+# LABX - EXPLORABLE EXPLANATION GENERATOR
+# ==========================================
+
+labx_router = APIRouter(prefix="/api/labx", tags=["labx"])
+
+class LabXGenerateRequest(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=500, description="Topic to generate explorable explanation for")
+
+LABX_PROMPT_TEMPLATE = """You are a world-class "Explorable Explanation" Designer and Senior Creative Developer. You blend the storytelling of Vox, the interactivity of Bret Victor, and the aesthetics of Apple. Your task: produce a single-file, production-ready, fully working HTML deep-dive for the topic {topic}.
+
+Output exactly one file: a single self-contained HTML document. Include Tailwind via CDN, GSAP via CDN, Lucide Icons via CDN, and Three.js via CDN only if 3D is required. No external assets (images may be inline SVG). The file must run locally when opened in a browser.
+
+Follow this exact narrative flow and sectioning:
+A. Kitchen Table Analogy (Hook) — plain-language, everyday metaphor with prominent editorial typography and a large SVG or Lucide icon.
+B. Toy Model (Interactive Core) — state-driven interactive simulator with controls (sliders, toggles, inputs), direct manipulation, and immediate animated feedback using GSAP.
+C. Technical Breakdown (Under the Hood) — real technical terms, formulas, and concrete mapping using a responsive Bento Grid (CSS Grid).
+D. TL;DR + Next Steps — short one-paragraph TL;DR and suggestions for further exploration.
+
+Use PaperX palette: primary #9E4B8A, secondary #4C2A59, deep #1E1E2F. Implement dark/light themes with toggle. Use Tailwind CSS CDN, GSAP for animations, state-driven architecture with visible JSON debug panel.
+
+Include 4 named presets (Simple, Balanced, Extreme, Real-world example), export/import state JSON control, and download buttons.
+
+Return ONLY the raw HTML starting with <!DOCTYPE html>. No markdown, no code fences, no explanatory text."""
+
+@labx_router.post("/generate", summary="Generate explorable explanation for a topic")
+async def generate_labx(req: LabXGenerateRequest):
+    if genai is None:
+        raise HTTPException(status_code=500, detail="google-genai library not installed")
+    
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not gemini_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+    
+    topic = req.topic.strip()
+    prompt = LABX_PROMPT_TEMPLATE.format(topic=topic)
+    
+    try:
+        def _generate_sync():
+            client = genai.Client(api_key=gemini_key)
+            response = client.models.generate_content(
+                model="gemini-3-pro-preview",
+                contents=prompt,
+            )
+            return response.text
+        
+        html_content = await run_in_threadpool(_generate_sync)
+        
+        # Clean up markdown fences if present
+        if html_content.startswith("```html"):
+            html_content = html_content[7:]
+        elif html_content.startswith("```"):
+            html_content = html_content[3:]
+        if html_content.endswith("```"):
+            html_content = html_content[:-3]
+        html_content = html_content.strip()
+        
+        return JSONResponse(content={"success": True, "topic": topic, "html": html_content})
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+
+@labx_router.post("/generate-stream", summary="Generate explorable explanation with streaming")
+async def generate_labx_stream(req: LabXGenerateRequest):
+    if genai is None:
+        raise HTTPException(status_code=500, detail="google-genai library not installed")
+    
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not gemini_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+    
+    topic = req.topic.strip()
+    prompt = LABX_PROMPT_TEMPLATE.format(topic=topic)
+    
+    async def stream_generator():
+        try:
+            client = genai.Client(api_key=gemini_key)
+            response_stream = client.models.generate_content_stream(
+                model="gemini-3-pro-preview",
+                contents=prompt,
+            )
+            
+            first_chunk = True
+            for chunk in response_stream:
+                if chunk.text:
+                    text = chunk.text
+                    if first_chunk:
+                        if text.startswith("```html"):
+                            text = text[7:]
+                        elif text.startswith("```"):
+                            text = text[3:]
+                        first_chunk = False
+                    yield text
+                    
+        except Exception as e:
+            yield f"<!-- Error: {str(e)} -->"
+    
+    return StreamingResponse(stream_generator(), media_type="text/html", headers={"X-Topic": topic})
+
+app.include_router(labx_router)
