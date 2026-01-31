@@ -1,277 +1,780 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Binary Search — Explorable Explanation</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The CPU Register - Explorable Explanation</title>
 
-    <!-- Tailwind CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        paperxPrimary: '#9E4B8A',
-                        paperxSecondary: '#4C2A59',
-                        paperxDeep: '#1E1E2F'
-                    }
-                }
-            }
-        }
-    </script>
-
-    <!-- GSAP -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-
-    <!-- Lucide Icons -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
         :root {
-            --px-primary: #9E4B8A;
-            --px-secondary: #4C2A59;
-            --px-deep: #1E1E2F;
+            --color-primary: #9E4B8A;
+            --color-primary-dark: #7d3b6d;
+            --color-secondary: #4C2A59;
+            --color-deep: #1E1E2F;
+            --color-surface: #2D2D44;
+            --color-text: #E2E2E2;
+            --color-text-muted: #A0A0B0;
+            --color-accent: #FF6B6B;
+            --color-success: #4ADE80;
         }
 
-        .glass {
+        /* Light Theme Overrides */
+        @media (prefers-color-scheme: light) {
+            :root {
+                --color-deep: #F8F9FA;
+                --color-surface: #FFFFFF;
+                --color-text: #1F2937;
+                --color-text-muted: #6B7280;
+            }
+        }
+
+        /* Base Styles */
+        body {
+            background-color: var(--color-deep);
+            color: var(--color-text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            transition: background-color 0.5s ease, color 0.5s ease;
+        }
+
+        /* Custom Focus Ring for Accessibility */
+        *:focus-visible {
+            outline: 3px solid var(--color-primary);
+            outline-offset: 2px;
+            box-shadow: 0 0 10px var(--color-primary);
+        }
+
+        /* Custom UI Elements */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(12px);
-            background: rgba(255, 255, 255, 0.06);
+            -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .light .glass {
-            background: rgba(0, 0, 0, 0.04);
-            border: 1px solid rgba(0, 0, 0, 0.08);
+        .light-theme .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
-        .bar {
-            transition: background 0.3s;
+        .bit-box {
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .bit-box:hover {
+            transform: translateY(-2px);
+        }
+
+        .bit-active {
+            background-color: var(--color-primary);
+            box-shadow: 0 0 15px var(--color-primary);
+            border-color: var(--color-primary);
+        }
+
+        .bit-inactive {
+            background-color: transparent;
+            border-color: var(--color-text-muted);
+        }
+
+        /* Bento Grid Specifics */
+        .bento-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Switch Toggle */
+        .switch-checkbox {
+            height: 0;
+            width: 0;
+            visibility: hidden;
+        }
+
+        .switch-label {
+            cursor: pointer;
+            text-indent: -9999px;
+            width: 50px;
+            height: 28px;
+            background: var(--color-text-muted);
+            display: block;
+            border-radius: 100px;
+            position: relative;
+        }
+
+        .switch-label:after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 24px;
+            height: 24px;
+            background: #fff;
+            border-radius: 90px;
+            transition: 0.3s;
+        }
+
+        .switch-checkbox:checked+.switch-label {
+            background: var(--color-primary);
+        }
+
+        .switch-checkbox:checked+.switch-label:after {
+            left: calc(100% - 2px);
+            transform: translateX(-100%);
         }
     </style>
 </head>
 
-<body class="bg-slate-950 text-slate-200 light:bg-white light:text-slate-900 min-h-screen">
+<body class="antialiased selection:bg-fuchsia-300 selection:text-fuchsia-900">
 
-    <!-- HEADER -->
-    <header class="sticky top-0 z-50 bg-paperxDeep/80 backdrop-blur border-b border-white/10">
-        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <nav class="w-full px-6 py-4 glass-panel sticky top-0 z-50 border-b border-white/10">
+        <div class="max-w-5xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-paperxPrimary flex items-center justify-center text-white font-bold">
-                    PX</div>
+                <div class="p-2 bg-pink-600 rounded-lg">
+                    <i data-lucide="cpu" class="text-white w-6 h-6"></i>
+                </div>
                 <div>
-                    <p class="text-sm opacity-70">PaperX Explorable</p>
-                    <h1 class="font-semibold">Binary Search</h1>
+                    <h1 class="font-bold text-lg tracking-tight">PaperX <span class="opacity-50 font-normal">| The CPU
+                            Register</span></h1>
                 </div>
             </div>
-            <div class="flex items-center gap-3">
-                <button id="themeToggle" class="px-3 py-1 rounded-lg bg-paperxSecondary text-sm">Toggle Theme</button>
+            <div class="flex items-center gap-4">
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-white/10 transition-colors"
+                    aria-label="Toggle Theme">
+                    <i data-lucide="sun" class="w-5 h-5 theme-icon-sun hidden"></i>
+                    <i data-lucide="moon" class="w-5 h-5 theme-icon-moon"></i>
+                </button>
             </div>
         </div>
-    </header>
+    </nav>
 
-    <!-- HERO ANALOGY -->
-    <section class="max-w-5xl mx-auto px-6 py-16 text-center">
-        <div class="flex justify-center mb-6">
-            <i data-lucide="book-open" class="w-16 h-16 text-paperxPrimary"></i>
-        </div>
-        <h2 class="text-4xl md:text-6xl font-bold leading-tight mb-6">
-            Finding a word in a dictionary by opening it in the middle
-        </h2>
-        <p class="text-lg opacity-80 max-w-2xl mx-auto">
-            Instead of checking every page one by one, you flip to the middle, decide which half your word must be in,
-            and ignore the other half. Repeat until you land exactly on it. That strategy is Binary Search.
-        </p>
-    </section>
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-24">
 
-    <!-- TOY MODEL -->
-    <section class="max-w-6xl mx-auto px-4 pb-20">
-        <div class="grid lg:grid-cols-3 gap-6">
+        <section id="analogy" class="space-y-8 animate-enter">
+            <div class="max-w-3xl">
+                <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-6 leading-tight">
+                    The Brain’s <span class="text-[var(--color-primary)]">Sticky Note</span>.
+                </h2>
+                <p class="text-lg md:text-xl text-[var(--color-text-muted)] leading-relaxed">
+                    Imagine you are a master chef (the CPU). Your pantry (Hard Drive) is huge but far away. Your fridge
+                    (RAM) is closer, but still requires walking.
+                    <br><br>
+                    When you are actively chopping an onion, you don't put it in the fridge between every slice. You
+                    keep it on the <strong>cutting board</strong> right in front of you.
+                </p>
+            </div>
 
-            <!-- CONTROLS -->
-            <div class="glass rounded-2xl p-5 space-y-4">
-                <h3 class="text-xl font-semibold mb-2">Controls</h3>
+            <div class="glass-panel p-8 rounded-2xl flex flex-col md:flex-row items-center gap-8">
+                <div class="w-full md:w-1/3 flex justify-center">
+                    <div class="relative w-48 h-48">
+                        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg"
+                            class="w-full h-full text-[var(--color-primary)]">
+                            <circle cx="100" cy="100" r="90" stroke="currentColor" stroke-width="2" opacity="0.2" />
+                            <rect x="50" y="80" width="100" height="60" rx="4" fill="currentColor" opacity="0.1"
+                                stroke="currentColor" stroke-width="2" />
+                            <text x="100" y="115" text-anchor="middle" fill="currentColor" font-size="14"
+                                font-weight="bold">REGISTER</text>
+                            <path d="M50 80 L30 40 M150 80 L170 40" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" />
+                            <text x="30" y="30" text-anchor="middle" fill="currentColor" font-size="12"
+                                opacity="0.7">Data In</text>
+                            <text x="170" y="30" text-anchor="middle" fill="currentColor" font-size="12"
+                                opacity="0.7">Data Out</text>
+                        </svg>
+                    </div>
+                </div>
+                <div class="w-full md:w-2/3 space-y-4">
+                    <h3 class="text-2xl font-bold">The Register</h3>
+                    <p class="text-[var(--color-text-muted)]">
+                        A Register is the computer's cutting board. It's a tiny, ultra-fast memory slot inside the
+                        processor. It holds the number the computer is working on <em>right this microsecond</em>.
+                    </p>
+                    <div
+                        class="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)] bg-[var(--color-primary)]/10 px-4 py-2 rounded-full w-fit">
+                        <i data-lucide="zap" class="w-4 h-4"></i>
+                        <span>Registers are the fastest memory in a computer.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
 
+        <section id="toy-model" class="space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-white/10 pb-4">
                 <div>
-                    <label class="text-sm">Array Size: <span id="sizeLabel"></span></label>
-                    <input id="sizeSlider" type="range" min="5" max="40" value="16" class="w-full">
+                    <h2 class="text-3xl font-bold mb-2">The Bit Flipper</h2>
+                    <p class="text-[var(--color-text-muted)] max-w-xl">
+                        This is an 8-bit register. Each box is a "bit" that can be 0 or 1. <br>
+                        Click the bits to toggle them, or use the controls to perform math.
+                    </p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="demo-btn"
+                        class="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white rounded-lg transition-all font-medium focus:ring-2 ring-offset-2 ring-pink-500">
+                        <i data-lucide="play-circle" class="w-4 h-4"></i> Start Tour
+                    </button>
+                    <button id="reset-btn" class="p-2 glass-panel hover:bg-white/10 rounded-lg transition-colors"
+                        aria-label="Reset">
+                        <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="glass-panel p-6 md:p-10 rounded-2xl shadow-2xl relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                    <span class="text-9xl font-mono font-bold tracking-tighter">101</span>
                 </div>
 
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                    <div class="text-center p-4 bg-black/20 rounded-xl border border-white/5">
+                        <div class="text-sm text-[var(--color-text-muted)] uppercase tracking-wider mb-1">Decimal</div>
+                        <div id="display-decimal"
+                            class="text-4xl md:text-5xl font-mono font-bold text-[var(--color-primary)]">0</div>
+                    </div>
+                    <div class="text-center p-4 bg-black/20 rounded-xl border border-white/5">
+                        <div class="text-sm text-[var(--color-text-muted)] uppercase tracking-wider mb-1">Hexadecimal
+                        </div>
+                        <div id="display-hex" class="text-4xl md:text-5xl font-mono font-bold text-blue-400">0x00</div>
+                    </div>
+                    <div class="text-center p-4 bg-black/20 rounded-xl border border-white/5">
+                        <div class="text-sm text-[var(--color-text-muted)] uppercase tracking-wider mb-1">Binary</div>
+                        <div id="display-binary"
+                            class="text-2xl md:text-3xl font-mono font-bold text-emerald-400 break-all pt-2">00000000
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap justify-center gap-2 md:gap-4 mb-10" id="bit-container">
+                </div>
+
+                <div class="flex flex-wrap justify-center gap-2 md:gap-4 mb-8 px-2">
+                    <div
+                        class="w-full flex justify-between text-xs font-mono text-[var(--color-text-muted)] max-w-[650px] mx-auto px-4">
+                        <span>Bit 7 (MSB)</span>
+                        <span>Bit 0 (LSB)</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <button data-action="increment"
+                        class="control-btn p-3 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 font-semibold transition-all text-sm flex items-center justify-center gap-2">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Add 1
+                    </button>
+                    <button data-action="decrement"
+                        class="control-btn p-3 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 font-semibold transition-all text-sm flex items-center justify-center gap-2">
+                        <i data-lucide="minus" class="w-4 h-4"></i> Subtract 1
+                    </button>
+                    <button data-action="shiftLeft"
+                        class="control-btn p-3 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 font-semibold transition-all text-sm flex items-center justify-center gap-2">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i> Shift Left (x2)
+                    </button>
+                    <button data-action="shiftRight"
+                        class="control-btn p-3 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 font-semibold transition-all text-sm flex items-center justify-center gap-2">
+                        <i data-lucide="chevron-right" class="w-4 h-4"></i> Shift Right (/2)
+                    </button>
+                </div>
+
+                <div class="mt-8 flex justify-center">
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm font-medium">Engineer Mode</span>
+                        <input type="checkbox" id="advanced-toggle" class="switch-checkbox"
+                            aria-label="Toggle Advanced Mode">
+                        <label for="advanced-toggle" class="switch-label">Toggle</label>
+                    </div>
+                </div>
+
+                <div id="advanced-panel" class="mt-6 pt-6 border-t border-white/10 hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-bold mb-3 flex items-center gap-2">
+                                <i data-lucide="flag" class="w-4 h-4 text-yellow-500"></i> Processor Flags
+                            </h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between p-2 rounded bg-black/20">
+                                    <span>Zero Flag (Z):</span>
+                                    <span id="flag-zero"
+                                        class="font-mono font-bold text-[var(--color-text-muted)]">0</span>
+                                </div>
+                                <div class="flex justify-between p-2 rounded bg-black/20">
+                                    <span>Overflow Flag (O):</span>
+                                    <span id="flag-overflow"
+                                        class="font-mono font-bold text-[var(--color-text-muted)]">0</span>
+                                </div>
+                                <div class="flex justify-between p-2 rounded bg-black/20">
+                                    <span>Sign Flag (S):</span>
+                                    <span id="flag-sign"
+                                        class="font-mono font-bold text-[var(--color-text-muted)]">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-bold mb-3 flex items-center gap-2">
+                                <i data-lucide="code" class="w-4 h-4 text-purple-500"></i> Logic Operations
+                            </h4>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button data-action="invert"
+                                    class="p-2 bg-white/5 hover:bg-white/10 rounded text-sm border border-white/5">NOT
+                                    (Invert)</button>
+                                <button data-action="fill"
+                                    class="p-2 bg-white/5 hover:bg-white/10 rounded text-sm border border-white/5">Set
+                                    All 1</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 justify-center text-sm">
+                <span class="px-3 py-1 opacity-60">Presets:</span>
+                <button data-preset="max"
+                    class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors">Max
+                    Value</button>
+                <button data-preset="mid"
+                    class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors">Middle
+                    (128)</button>
+                <button data-preset="alt"
+                    class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors">Alternating</button>
+                <button data-preset="random"
+                    class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors">Random</button>
+            </div>
+
+            <details class="group mt-4 glass-panel rounded-lg overflow-hidden border border-white/5">
+                <summary
+                    class="flex items-center justify-between p-4 cursor-pointer bg-white/5 hover:bg-white/10 transition-colors">
+                    <span class="text-sm font-mono text-[var(--color-primary)]">debug_state.json</span>
+                    <i data-lucide="chevron-down" class="w-4 h-4 transition-transform group-open:rotate-180"></i>
+                </summary>
+                <div class="p-4 bg-black/30">
+                    <pre id="json-inspector"
+                        class="text-xs font-mono text-[var(--color-text-muted)] overflow-x-auto whitespace-pre-wrap"></pre>
+                </div>
+            </details>
+        </section>
+
+        <section id="technical" class="space-y-8">
+            <h2 class="text-3xl font-bold border-l-4 border-[var(--color-primary)] pl-4">Under The Hood</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="bento-card glass-panel p-6 rounded-xl border border-white/5">
+                    <div
+                        class="bg-blue-500/20 w-10 h-10 rounded-lg flex items-center justify-center mb-4 text-blue-400">
+                        <span class="font-bold font-mono">01</span>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">The Bit</h3>
+                    <p class="text-sm text-[var(--color-text-muted)] mb-4">
+                        The smallest unit of data. A switch that is either OFF (0) or ON (1).
+                    </p>
+                    <div class="mt-auto pt-4 border-t border-white/10">
+                        <p class="text-xs font-mono opacity-70">
+                            <span class="font-bold text-white">Math:</span> Value = bit * 2<sup>position</sup>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="bento-card glass-panel p-6 rounded-xl border border-white/5">
+                    <div
+                        class="bg-emerald-500/20 w-10 h-10 rounded-lg flex items-center justify-center mb-4 text-emerald-400">
+                        <i data-lucide="box" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">The Byte</h3>
+                    <p class="text-sm text-[var(--color-text-muted)] mb-4">
+                        A group of 8 bits. This is the standard chunk size for computer memory.
+                    </p>
+                    <div class="mt-auto pt-4 border-t border-white/10">
+                        <p class="text-xs font-mono opacity-70">
+                            <span class="font-bold text-white">Range:</span> 0 to 255 (2<sup>8</sup> combinations)
+                        </p>
+                    </div>
+                </div>
+
+                <div class="bento-card glass-panel p-6 rounded-xl border border-white/5">
+                    <div class="bg-red-500/20 w-10 h-10 rounded-lg flex items-center justify-center mb-4 text-red-400">
+                        <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Overflow</h3>
+                    <p class="text-sm text-[var(--color-text-muted)] mb-4">
+                        What happens if you add 1 to 255? It runs out of room and wraps back to 0. This is a common bug
+                        source.
+                    </p>
+                    <div class="mt-auto pt-4 border-t border-white/10">
+                        <p class="text-xs font-mono opacity-70">
+                            <span class="font-bold text-white">Formula:</span> (value + 1) % 256
+                        </p>
+                    </div>
+                </div>
+
+                <div class="bento-card glass-panel p-6 rounded-xl border border-white/5 md:col-span-2">
+                    <div
+                        class="bg-purple-500/20 w-10 h-10 rounded-lg flex items-center justify-center mb-4 text-purple-400">
+                        <i data-lucide="move-horizontal" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">Bit Shifting (<< and>>)</h3>
+                    <p class="text-sm text-[var(--color-text-muted)] mb-4">
+                        Moving all bits to the left is an ultra-fast way to multiply by 2. Moving right divides by 2
+                        (floored).
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-auto pt-4 border-t border-white/10">
+                        <div class="text-xs font-mono opacity-70">
+                            <span class="font-bold text-white">Left (<<):< /span> 0010 (2) -> 0100 (4)
+                        </div>
+                        <div class="text-xs font-mono opacity-70">
+                            <span class="font-bold text-white">Right (>>):</span> 0100 (4) -> 0010 (2)
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bento-card glass-panel p-6 rounded-xl border border-white/5">
+                    <div
+                        class="bg-yellow-500/20 w-10 h-10 rounded-lg flex items-center justify-center mb-4 text-yellow-400">
+                        <i data-lucide="arrow-up-down" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">MSB & LSB</h3>
+                    <p class="text-sm text-[var(--color-text-muted)] mb-4">
+                        <strong>MSB</strong> (Most Significant Bit) is the leftmost bit (holds the most value, 128).
+                        <strong>LSB</strong> is the rightmost (value 1).
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section id="summary" class="bg-black/20 rounded-2xl p-8 border border-white/10">
+            <h2 class="text-2xl font-bold mb-4">TL;DR</h2>
+            <p class="text-[var(--color-text-muted)] mb-6">
+                A Register is temporary, super-fast storage located directly on the CPU. It uses binary (bits) to
+                represent numbers. Computers manipulate these bits using logic operations like shifts and adds. When
+                numbers get too big for the register, they "overflow" and wrap around.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
                 <div>
-                    <label class="text-sm">Target Value</label>
-                    <input id="targetInput" type="number"
-                        class="w-full mt-1 p-2 rounded bg-black/30 light:bg-white border border-white/10">
+                    <h3 class="font-bold text-lg mb-3 text-[var(--color-primary)]">Experiments to Try</h3>
+                    <ul class="space-y-3 text-sm text-[var(--color-text-muted)]">
+                        <li class="flex gap-2">
+                            <i data-lucide="check-circle" class="w-4 h-4 mt-0.5 text-green-500"></i>
+                            <span><strong>The 255 Cliff:</strong> Set value to 255 (all on). Add 1. Watch the Zero Flag
+                                light up.</span>
+                        </li>
+                        <li class="flex gap-2">
+                            <i data-lucide="check-circle" class="w-4 h-4 mt-0.5 text-green-500"></i>
+                            <span><strong>The Multiplier:</strong> Turn on just the LSB (1). Click "Shift Left"
+                                repeatedly. Watch the value double each time.</span>
+                        </li>
+                    </ul>
                 </div>
-
-                <div class="flex gap-2 flex-wrap">
-                    <button id="startBtn" class="px-3 py-2 bg-paperxPrimary rounded-lg">Start Search</button>
-                    <button id="resetBtn" class="px-3 py-2 bg-paperxSecondary rounded-lg">Reset</button>
-                    <button id="autoBtn" class="px-3 py-2 bg-slate-700 rounded-lg">Auto Demo</button>
-                </div>
-
                 <div>
-                    <p class="text-xs opacity-70">State</p>
-                    <pre id="stateView" class="text-xs bg-black/40 p-2 rounded h-32 overflow-auto"></pre>
+                    <h3 class="font-bold text-lg mb-3 text-red-400">Challenge: Break the Model</h3>
+                    <div class="p-4 bg-red-500/10 rounded-lg border border-red-500/20">
+                        <p class="text-sm text-[var(--color-text-muted)]">
+                            Try to create the number <strong>256</strong>. You can't. Why? Because 8 bits can only hold
+                            256 <em>values</em> (0 to 255). To store 256, you would need a 9th bit (or a 16-bit
+                            register).
+                        </p>
+                    </div>
                 </div>
             </div>
+        </section>
 
-            <!-- VISUALIZER -->
-            <div class="lg:col-span-2 glass rounded-2xl p-6">
-                <div id="arrayContainer" class="flex items-end gap-1 h-56"></div>
-                <div class="flex justify-between text-xs mt-2 opacity-60">
-                    <span>Low</span><span>Mid</span><span>High</span>
-                </div>
-            </div>
+        <footer class="pb-12 pt-12 border-t border-white/10 text-center text-sm text-[var(--color-text-muted)]">
+            <p>Interactive Exploration designed for learning.</p>
+        </footer>
 
-        </div>
-    </section>
-
-    <!-- TECHNICAL BREAKDOWN -->
-    <section class="max-w-6xl mx-auto px-6 pb-24">
-        <h3 class="text-3xl font-bold mb-8">Under the Hood</h3>
-        <div class="grid md:grid-cols-3 gap-6">
-
-            <div class="glass p-5 rounded-xl">
-                <h4 class="font-semibold mb-2">Definition</h4>
-                <p>Binary Search finds a target in a sorted list by repeatedly dividing the search range in half.</p>
-            </div>
-
-            <div class="glass p-5 rounded-xl">
-                <h4 class="font-semibold mb-2">Time Complexity</h4>
-                <p>O(log n) — each step cuts the remaining elements in half.</p>
-            </div>
-
-            <div class="glass p-5 rounded-xl">
-                <h4 class="font-semibold mb-2">Formula</h4>
-                <p><code>mid = Math.floor((low + high) / 2)</code></p>
-            </div>
-
-            <div class="glass p-5 rounded-xl">
-                <h4 class="font-semibold mb-2">Requirements</h4>
-                <p>The array must be sorted. Otherwise results are invalid.</p>
-            </div>
-
-            <div class="glass p-5 rounded-xl">
-                <h4 class="font-semibold mb-2">Common Mistake</h4>
-                <p>Forgetting to update low/high correctly, causing infinite loops.</p>
-            </div>
-
-            <div class="glass p-5 rounded-xl">
-                <h4 class="font-semibold mb-2">Real Uses</h4>
-                <p>Databases, search engines, game engines, and nearly every fast lookup system.</p>
-            </div>
-
-        </div>
-    </section>
+    </main>
 
     <script>
-        lucide.createIcons();
+        /**
+         * HOW IT WORKS:
+         * 1. 'appState' object holds the single source of truth (value, flags, settings).
+         * 2. 'updateState(action)' modifies the state and recalculates derived data (hex, flags).
+         * 3. 'render()' reflects the state into the DOM (classes, text content).
+         * 4. GSAP is used for tweening the visual bits and the guided tour.
+         * 5. Event listeners map clicks/keys to 'updateState'.
+         */
 
-        /* ---------- STATE ---------- */
-        const state = {
-            array: [],
-            low: 0,
-            high: 0,
-            mid: 0,
-            target: null,
-            running: false
-        };
+        (function () {
+            // --- 1. STATE MANAGEMENT ---
+            const appState = {
+                value: 0,           // 0 - 255
+                bitWidth: 8,
+                flags: {
+                    zero: true,
+                    overflow: false,
+                    sign: false
+                },
+                advancedMode: false,
+                isAnimating: false // To lock interactions during demo
+            };
 
-        const container = document.getElementById("arrayContainer");
-        const stateView = document.getElementById("stateView");
-        const sizeSlider = document.getElementById("sizeSlider");
-        const sizeLabel = document.getElementById("sizeLabel");
-        const targetInput = document.getElementById("targetInput");
+            // --- 2. DOM ELEMENTS ---
+            const els = {
+                container: document.getElementById('bit-container'),
+                decimal: document.getElementById('display-decimal'),
+                hex: document.getElementById('display-hex'),
+                binary: document.getElementById('display-binary'),
+                advancedToggle: document.getElementById('advanced-toggle'),
+                advancedPanel: document.getElementById('advanced-panel'),
+                jsonInspector: document.getElementById('json-inspector'),
+                themeToggle: document.getElementById('theme-toggle'),
+                flags: {
+                    zero: document.getElementById('flag-zero'),
+                    overflow: document.getElementById('flag-overflow'),
+                    sign: document.getElementById('flag-sign')
+                },
+                body: document.body
+            };
 
-        /* ---------- INIT ---------- */
-        function generateArray(size) {
-            state.array = Array.from({ length: size }, (_, i) => i * 2 + 1);
-            state.low = 0;
-            state.high = size - 1;
-            renderArray();
-            updateStateView();
-        }
-
-        function renderArray() {
-            container.innerHTML = "";
-            state.array.forEach((num, i) => {
-                const bar = document.createElement("div");
-                bar.className = "bar flex-1 bg-slate-600 rounded-t";
-                bar.style.height = (num * 2) + "px";
-                bar.dataset.index = i;
-                container.appendChild(bar);
-            });
-        }
-
-        function updateHighlights() {
-            document.querySelectorAll(".bar").forEach(bar => {
-                const i = Number(bar.dataset.index);
-                let color = "#475569";
-                if (i === state.mid) color = "#9E4B8A";
-                else if (i === state.low) color = "#22c55e";
-                else if (i === state.high) color = "#ef4444";
-                gsap.to(bar, { backgroundColor: color, duration: 0.4 });
-            });
-        }
-
-        function updateStateView() {
-            stateView.textContent = JSON.stringify(state, null, 2);
-        }
-
-        /* ---------- SEARCH LOGIC ---------- */
-        async function binaryStep() {
-            if (state.low > state.high) {
-                state.running = false;
-                return;
+            // --- 3. CORE LOGIC ---
+            function init() {
+                createBits();
+                render();
+                setupListeners();
+                lucide.createIcons();
             }
-            state.mid = Math.floor((state.low + state.high) / 2);
-            updateHighlights();
-            updateStateView();
 
-            await new Promise(r => setTimeout(r, 800));
+            function createBits() {
+                els.container.innerHTML = '';
+                for (let i = appState.bitWidth - 1; i >= 0; i--) {
+                    const btn = document.createElement('button');
+                    btn.className = 'bit-box w-12 h-16 md:w-16 md:h-20 rounded-lg border-2 border-[var(--color-text-muted)] flex flex-col items-center justify-center transition-all focus:outline-none';
+                    btn.setAttribute('aria-label', `Toggle bit ${i}`);
+                    btn.setAttribute('aria-pressed', 'false');
+                    btn.dataset.index = i;
 
-            if (state.array[state.mid] === state.target) {
-                gsap.to(`[data-index='${state.mid}']`, { backgroundColor: "#facc15", duration: 0.5 });
-                state.running = false;
-                return;
+                    // Bit Label
+                    const label = document.createElement('span');
+                    label.className = 'text-xs mt-1 opacity-50 font-mono pointer-events-none';
+                    label.innerText = i;
+
+                    // Bit Value Visual
+                    const val = document.createElement('span');
+                    val.className = 'text-xl font-bold font-mono pointer-events-none bit-val-text';
+                    val.innerText = '0';
+
+                    btn.appendChild(val);
+                    // We append the label outside or manage layout differently if needed, 
+                    // but for simplicity, let's keep visual inside but position absolute or flex.
+
+                    btn.addEventListener('click', () => toggleBit(i));
+                    els.container.appendChild(btn);
+                }
             }
-            if (state.array[state.mid] < state.target) state.low = state.mid + 1;
-            else state.high = state.mid - 1;
-        }
 
-        /* ---------- CONTROLS ---------- */
-        document.getElementById("startBtn").onclick = async () => {
-            if (state.running) return;
-            state.target = Number(targetInput.value);
-            state.running = true;
-            while (state.running && state.low <= state.high) {
-                await binaryStep();
+            function updateState(action, payload) {
+                if (appState.isAnimating && action !== 'reset') return; // Lock during demo
+
+                let nextVal = appState.value;
+                let overflowed = false;
+
+                switch (action) {
+                    case 'toggleBit':
+                        // XOR with power of 2
+                        nextVal = appState.value ^ (1 << payload);
+                        break;
+                    case 'increment':
+                        nextVal = appState.value + 1;
+                        if (nextVal > 255) {
+                            nextVal = 0;
+                            overflowed = true;
+                        }
+                        break;
+                    case 'decrement':
+                        nextVal = appState.value - 1;
+                        if (nextVal < 0) {
+                            nextVal = 255;
+                            overflowed = true; // Underflow
+                        }
+                        break;
+                    case 'shiftLeft':
+                        nextVal = appState.value << 1;
+                        if (nextVal > 255) {
+                            overflowed = true;
+                            nextVal = nextVal & 255; // Keep lowest 8 bits
+                        }
+                        break;
+                    case 'shiftRight':
+                        nextVal = appState.value >> 1;
+                        break;
+                    case 'invert':
+                        nextVal = ~appState.value & 255;
+                        break;
+                    case 'fill':
+                        nextVal = 255;
+                        break;
+                    case 'setValue':
+                        nextVal = payload;
+                        break;
+                    case 'reset':
+                        nextVal = 0;
+                        overflowed = false;
+                        break;
+                    case 'toggleAdvanced':
+                        appState.advancedMode = !appState.advancedMode;
+                        render(); // Re-render to show/hide panel
+                        return; // No value change
+                }
+
+                appState.value = nextVal;
+
+                // Calculate Flags
+                appState.flags.zero = (nextVal === 0);
+                appState.flags.overflow = overflowed;
+                // Sign flag: In 8-bit signed math, MSB (bit 7) determines sign
+                appState.flags.sign = (nextVal & 128) !== 0;
+
+                render();
+
+                // Trigger haptic/visual pop if overflowed
+                if (overflowed) triggerOverflowEffect();
             }
-        };
 
-        document.getElementById("resetBtn").onclick = () => generateArray(sizeSlider.value);
+            function toggleBit(index) {
+                updateState('toggleBit', index);
+            }
 
-        document.getElementById("autoBtn").onclick = () => {
-            targetInput.value = state.array[Math.floor(Math.random() * state.array.length)];
-            document.getElementById("startBtn").click();
-        };
+            // --- 4. RENDERER ---
+            function render() {
+                // Update Bits UI
+                const bits = Array.from(els.container.children);
+                bits.forEach(btn => {
+                    const idx = parseInt(btn.dataset.index);
+                    const isActive = (appState.value & (1 << idx)) !== 0;
 
-        sizeSlider.oninput = e => {
-            sizeLabel.textContent = e.target.value;
-            generateArray(e.target.value);
-        };
+                    const valSpan = btn.querySelector('.bit-val-text');
+                    valSpan.innerText = isActive ? '1' : '0';
 
-        /* ---------- THEME TOGGLE ---------- */
-        document.getElementById("themeToggle").onclick = () => {
-            document.documentElement.classList.toggle("dark");
-            document.body.classList.toggle("light");
-        };
+                    if (isActive) {
+                        btn.classList.add('bit-active');
+                        btn.classList.remove('bit-inactive');
+                        btn.setAttribute('aria-pressed', 'true');
+                        valSpan.style.color = '#fff';
+                    } else {
+                        btn.classList.add('bit-inactive');
+                        btn.classList.remove('bit-active');
+                        btn.setAttribute('aria-pressed', 'false');
+                        valSpan.style.color = 'var(--color-text-muted)';
+                    }
+                });
 
-        /* ---------- START ---------- */
-        sizeLabel.textContent = sizeSlider.value;
-        generateArray(sizeSlider.value);
+                // Update Text Displays
+                els.decimal.innerText = appState.value;
+                els.hex.innerText = '0x' + appState.value.toString(16).toUpperCase().padStart(2, '0');
+                els.binary.innerText = appState.value.toString(2).padStart(8, '0');
+
+                // Update Flags (Advanced Mode)
+                if (appState.advancedMode) {
+                    els.advancedPanel.classList.remove('hidden');
+                    updateFlagUI(els.flags.zero, appState.flags.zero);
+                    updateFlagUI(els.flags.overflow, appState.flags.overflow);
+                    updateFlagUI(els.flags.sign, appState.flags.sign);
+                } else {
+                    els.advancedPanel.classList.add('hidden');
+                }
+
+                // Update JSON Inspector
+                els.jsonInspector.innerText = JSON.stringify(appState, null, 2);
+            }
+
+            function updateFlagUI(el, isActive) {
+                el.innerText = isActive ? '1' : '0';
+                el.className = isActive
+                    ? 'font-mono font-bold text-[var(--color-primary)]'
+                    : 'font-mono font-bold text-[var(--color-text-muted)]';
+            }
+
+            function triggerOverflowEffect() {
+                // GSAP visual flash on the container
+                gsap.fromTo(els.decimal,
+                    { scale: 1.5, color: '#ff0000' },
+                    { scale: 1, color: 'var(--color-primary)', duration: 0.5, ease: 'elastic.out(1, 0.3)' }
+                );
+            }
+
+            // --- 5. EVENT LISTENERS ---
+            function setupListeners() {
+                // Control buttons
+                document.querySelectorAll('[data-action]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        // Ripple effect (simple)
+                        const action = btn.dataset.action;
+                        updateState(action);
+                    });
+                });
+
+                // Preset buttons
+                document.querySelectorAll('[data-preset]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const type = btn.dataset.preset;
+                        let val = 0;
+                        if (type === 'max') val = 255;
+                        if (type === 'mid') val = 128;
+                        if (type === 'alt') val = 170; // 10101010
+                        if (type === 'random') val = Math.floor(Math.random() * 256);
+                        updateState('setValue', val);
+                    });
+                });
+
+                // Advanced Toggle
+                els.advancedToggle.addEventListener('change', () => {
+                    updateState('toggleAdvanced');
+                });
+
+                // Reset
+                document.getElementById('reset-btn').addEventListener('click', () => {
+                    updateState('reset');
+                });
+
+                // Theme Toggle
+                els.themeToggle.addEventListener('click', () => {
+                    els.body.classList.toggle('light-theme');
+                    const isLight = els.body.classList.contains('light-theme');
+                    document.querySelector('.theme-icon-sun').classList.toggle('hidden', !isLight);
+                    document.querySelector('.theme-icon-moon').classList.toggle('hidden', isLight);
+                });
+
+                // Guided Demo
+                document.getElementById('demo-btn').addEventListener('click', runDemo);
+            }
+
+            // --- 6. ANIMATION & DEMO ---
+            function runDemo() {
+                if (appState.isAnimating) return;
+                appState.isAnimating = true;
+
+                const tl = gsap.timeline({
+                    onComplete: () => {
+                        appState.isAnimating = false;
+                    }
+                });
+
+                // Reset first
+                tl.add(() => updateState('reset'));
+
+                // 1. Count up
+                tl.to(els.decimal, { scale: 1.2, duration: 0.2, yoyo: true, repeat: 1 });
+                for (let i = 0; i < 5; i++) {
+                    tl.add(() => updateState('increment'), "+=0.2");
+                }
+
+                // 2. Shift Left
+                tl.add(() => updateState('shiftLeft'), "+=0.5");
+                tl.add(() => updateState('shiftLeft'), "+=0.5");
+
+                // 3. Max out
+                tl.add(() => updateState('fill'), "+=0.5");
+
+                // 4. Overflow
+                tl.add(() => updateState('increment'), "+=0.8");
+
+                // 5. Random
+                tl.add(() => updateState('setValue', 42), "+=0.5");
+            }
+
+            // Initialize
+            init();
+
+        })();
     </script>
 </body>
 
