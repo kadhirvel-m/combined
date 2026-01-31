@@ -346,18 +346,21 @@
             unitModalMode = mode;
             if (mode === 'edit' && unit) {
                 unitTitleInput.value = unit.unit_title || '';
+                unitTitleInput.disabled = true; // Disable title editing for existing units
                 topicsContainer.innerHTML = '';
                 (unit.topics || []).forEach(t => addTopicRow(t.topic || t.topic_title || '', t.id || null));
-                if (unitDeleteBtn) unitDeleteBtn.classList.remove('hidden');
+                // unitDeleteBtn remains hidden - deleting existing units is disabled
                 syllabusCourse = syllabusCourse || {};
                 syllabusCourse.editingUnitId = unit.id || unit.unit_id;
+            } else {
+                unitTitleInput.disabled = false;
             }
-            unitModalTitle.textContent = mode === 'edit' ? 'Edit unit' : 'Add unit';
+            unitModalTitle.textContent = mode === 'edit' ? 'Add topics to unit' : 'Add unit';
             unitSubmitBtn.innerHTML = mode === 'edit' ? '<span class="material-symbols-rounded text-base">save</span>Save changes' : '<span class="material-symbols-rounded text-base">save</span>Save unit';
             unitModal.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
             document.documentElement.classList.add('overflow-hidden');
-            setTimeout(() => unitTitleInput?.focus(), 50);
+            if (mode !== 'edit') setTimeout(() => unitTitleInput?.focus(), 50);
         }
 
         function addTopicRow(value = '', topicId = null) {
@@ -366,22 +369,43 @@
             row.className = 'flex items-center gap-2';
             row.setAttribute('data-topic-row', '');
             if (topicId) row.setAttribute('data-topic-id', String(topicId));
+
+            const isExisting = !!topicId;
+            const inputState = isExisting ? 'disabled readonly class="flex-1 rounded-2xl border border-transparent bg-black/5 dark:bg-white/10 px-3.5 py-2 text-sm text-neutral-600 dark:text-white/70 cursor-not-allowed"' : 'class="flex-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40"';
+
+            const dragHtml = isExisting
+                ? ``
+                : `<button type="button" data-drag-handle aria-label="Drag to reorder" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 cursor-grab active:cursor-grabbing transition"><span class="material-symbols-rounded text-base">drag_indicator</span></button>`;
+
+            const deleteHtml = isExisting
+                ? ``
+                : `<button type="button" aria-label="Remove topic" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition"><span class="material-symbols-rounded text-base">close</span></button>`;
+
             row.innerHTML = `
-                <button type="button" data-drag-handle aria-label="Drag to reorder"
-                    class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 cursor-grab active:cursor-grabbing transition">
-                    <span class="material-symbols-rounded text-base">drag_indicator</span>
-                </button>
-                <input type="text" data-topic-input id="topic-${id}" placeholder="Topic title" value="${esc(value)}" class="flex-1 rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40" maxlength="256" />
-                <button type="button" aria-label="Remove topic" class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 p-2 text-neutral-500 hover:text-brand-500 hover:border-brand-500/50 transition"><span class="material-symbols-rounded text-base">close</span></button>`;
-            const removeBtn = row.querySelector('button[aria-label="Remove topic"]');
-            removeBtn.addEventListener('click', () => {
-                row.remove();
-                if (!topicsContainer.querySelector('[data-topic-input]')) addTopicRow();
-            });
+                ${dragHtml}
+                <input type="text" data-topic-input id="topic-${id}" placeholder="Topic title" value="${esc(value)}" ${inputState} maxlength="256" />
+                ${deleteHtml}`;
+
+            if (!isExisting) {
+                const removeBtn = row.querySelector('button[aria-label="Remove topic"]');
+                if (removeBtn) {
+                    removeBtn.addEventListener('click', () => {
+                        row.remove();
+                        if (!topicsContainer.querySelector('[data-topic-input]')) addTopicRow();
+                    });
+                }
+            }
             topicsContainer.appendChild(row);
             const handleBtn = row.querySelector('[data-drag-handle]');
             if (handleBtn) handleBtn.setAttribute('draggable', 'true');
             enableTopicDrag();
+
+            // Auto-scroll to the new row if it's a new topic being added manually
+            if (!isExisting) {
+                setTimeout(() => {
+                    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+            }
         }
 
         function enableTopicDrag() {

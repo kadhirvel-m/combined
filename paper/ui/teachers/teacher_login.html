@@ -166,6 +166,53 @@
       </div>
     </section>
   </main>
+
+  <!-- Pending Status Modal -->
+  <div id="pendingModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div
+      class="glass-card rounded-3xl p-6 sm:p-8 shadow-glow ring-1 ring-black/5 dark:ring-white/10 max-w-md mx-4 animate-fade-in">
+      <div class="text-center space-y-4">
+        <div class="mx-auto w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
+          <span class="material-symbols-rounded text-3xl text-amber-600 dark:text-amber-400">hourglass_top</span>
+        </div>
+        <h3 class="text-xl font-semibold text-neutral-800 dark:text-white">Application Pending</h3>
+        <div class="space-y-3 text-sm text-neutral-600 dark:text-white/70">
+          <p class="font-medium">Your application is awaiting approval.</p>
+          <div class="rounded-xl bg-brand-500/10 dark:bg-brand-500/20 px-4 py-3 space-y-2">
+            <p class="flex items-center justify-center gap-2">
+              <span class="material-symbols-rounded text-base text-brand-500">call</span>
+              <span class="font-semibold text-brand-700 dark:text-brand-300">Contact: 9360637060</span>
+            </p>
+            <p class="text-xs text-neutral-500 dark:text-white/50">
+              New sign ups can take upto 3h for approval, from the time of signup
+            </p>
+          </div>
+        </div>
+        <button id="closePendingModal"
+          class="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] px-6 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(158,75,138,0.25)] hover:shadow-[0_12px_28px_rgba(158,75,138,0.32)] transition">
+          <span>Got it</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .animate-fade-in {
+      animation: fade-in 0.2s ease-out;
+    }
+  </style>
   <script>
     // Dynamic API base detection similar to signup page
     let API_BASE = window.API_BASE || '';
@@ -229,12 +276,35 @@
         if (role === 'teacher' && tstatus === 'approved') {
           statusEl.textContent = 'Approved Teacher. Redirecting...';
           setTimeout(() => { location.href = '../teacher_profile.html'; }, 800);
+        } else if (tstatus === 'pending') {
+          // Show pending modal
+          statusEl.classList.add('hidden');
+          showPendingModal();
         } else if (tstatus) {
-          statusEl.textContent = 'Application status: ' + tstatus + '. Awaiting approval.';
+          statusEl.textContent = 'Application status: ' + tstatus + '.';
         } else {
           statusEl.textContent = 'Logged in. Application not found / pending.';
         }
       } catch (err) { friendlyError(err.message || 'Unexpected error'); }
+    });
+
+    // Pending Modal Functions
+    const pendingModal = document.getElementById('pendingModal');
+    const closePendingModalBtn = document.getElementById('closePendingModal');
+
+    function showPendingModal() {
+      pendingModal.classList.remove('hidden');
+      pendingModal.classList.add('flex');
+    }
+
+    function hidePendingModal() {
+      pendingModal.classList.add('hidden');
+      pendingModal.classList.remove('flex');
+    }
+
+    closePendingModalBtn.addEventListener('click', hidePendingModal);
+    pendingModal.addEventListener('click', (e) => {
+      if (e.target === pendingModal) hidePendingModal();
     });
   </script>
 </body>

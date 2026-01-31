@@ -7788,24 +7788,23 @@ async def teacher_signup(
                     subj_list = [s.strip()[:64] for s in subjects.split(',') if s.strip()]
             except Exception:
                 subj_list = []
-        # store images locally (assets/teacher_ids/)
-        base_dir = Path(__file__).parent / "assets" / "teacher_ids"
-        base_dir.mkdir(parents=True, exist_ok=True)
-        front_ext = Path(id_card_front.filename or "front").suffix.lower() or ".jpg"
-        back_ext = Path(id_card_back.filename or "back").suffix.lower() or ".jpg"
-        front_name = f"{auth_user_id}_front{front_ext}"
-        back_name = f"{auth_user_id}_back{back_ext}"
-        front_path = base_dir / front_name
-        back_path = base_dir / back_name
-        # write files
+        # Read image bytes and validate size
         front_bytes = await id_card_front.read()
         back_bytes = await id_card_back.read()
         if len(front_bytes) > 5*1024*1024 or len(back_bytes) > 5*1024*1024:
             raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
-        front_path.write_bytes(front_bytes)
-        back_path.write_bytes(back_bytes)
-        rel_front = f"assets/teacher_ids/{front_name}"
-        rel_back = f"assets/teacher_ids/{back_name}"
+        # Upload images to Supabase 'teacher' bucket
+        front_ext = Path(id_card_front.filename or "front").suffix.lower() or ".jpg"
+        back_ext = Path(id_card_back.filename or "back").suffix.lower() or ".jpg"
+        front_name = f"{auth_user_id}_front{front_ext}"
+        back_name = f"{auth_user_id}_back{back_ext}"
+        front_content_type = id_card_front.content_type or "image/jpeg"
+        back_content_type = id_card_back.content_type or "image/jpeg"
+        # Upload to 'teacher' bucket and get public URLs
+        _storage_upload_bytes(supabase, "teacher", front_name, front_bytes, front_content_type)
+        _storage_upload_bytes(supabase, "teacher", back_name, back_bytes, back_content_type)
+        front_url = _storage_public_url(supabase, "teacher", front_name)
+        back_url = _storage_public_url(supabase, "teacher", back_name)
         ins = supabase.table("teacher_applications").insert({
             "auth_user_id": auth_user_id,
             "email": email,
@@ -7813,8 +7812,8 @@ async def teacher_signup(
             "college_id": college_id,
             "department_id": department_id,
             "subjects": subj_list,
-            "id_card_front_path": rel_front,
-            "id_card_back_path": rel_back,
+            "id_card_front_path": front_url,
+            "id_card_back_path": back_url,
             "status": "pending"
         }).execute()
         if getattr(ins, "error", None):
@@ -17111,106 +17110,129 @@ def get_user_streak(authorization: Optional[str] = Header(default=None)):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
     
-    supabase = get_service_client()
-    today = date.today()
-    yesterday = today - timedelta(days=1)
+    # Retry logic for transient Supabase connection errors
+    max_retries = 3
+    retry_delay = 0.5
+    last_error = None
     
-    # Get user profile ID
-    prof_q = supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
-    if not prof_q.data:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    profile_id = prof_q.data[0]["id"]
-    
-    # Get or create streak record
-    streak_q = supabase.table("notex_streak").select("*").eq("user_profile_id", profile_id).limit(1).execute()
-    
-    if not streak_q.data:
-        # Create new streak record
-        new_streak = {
-            "user_profile_id": profile_id,
-            "current_streak": 1,
-            "longest_streak": 1,
-            "last_activity_date": today.isoformat()
-        }
-        supabase.table("notex_streak").insert(new_streak).execute()
-        streak_data = new_streak
-    else:
-        streak_data = streak_q.data[0]
-
-    # Pull recent activity logs to compute streak and week data
-    lookback_start = today - timedelta(days=400)
-    activity_q = supabase.table("notex_activity_logs").select("activity_date").eq("user_profile_id", profile_id).gte("activity_date", lookback_start.isoformat()).order("activity_date", desc=True).limit(400).execute()
-    active_dates = set()
-    for a in (activity_q.data or []):
-        if a.get("activity_date"):
-            try:
-                active_dates.add(date.fromisoformat(str(a["activity_date"])))
-            except Exception:
-                pass
-
-    # Backfill with stored last_activity_date if logs are missing
-    last_date = None
-    last_date_str = streak_data.get("last_activity_date")
-    if last_date_str:
+    for attempt in range(max_retries):
         try:
-            last_date = date.fromisoformat(str(last_date_str))
-            active_dates.add(last_date)
-        except Exception:
+            supabase = get_service_client()
+            today = date.today()
+            yesterday = today - timedelta(days=1)
+            
+            # Get user profile ID
+            prof_q = supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
+            if not prof_q.data:
+                raise HTTPException(status_code=404, detail="Profile not found")
+            profile_id = prof_q.data[0]["id"]
+            
+            # Get or create streak record
+            streak_q = supabase.table("notex_streak").select("*").eq("user_profile_id", profile_id).limit(1).execute()
+            
+            if not streak_q.data:
+                # Create new streak record
+                new_streak = {
+                    "user_profile_id": profile_id,
+                    "current_streak": 1,
+                    "longest_streak": 1,
+                    "last_activity_date": today.isoformat()
+                }
+                supabase.table("notex_streak").insert(new_streak).execute()
+                streak_data = new_streak
+            else:
+                streak_data = streak_q.data[0]
+
+            # Pull recent activity logs to compute streak and week data
+            lookback_start = today - timedelta(days=400)
+            activity_q = supabase.table("notex_activity_logs").select("activity_date").eq("user_profile_id", profile_id).gte("activity_date", lookback_start.isoformat()).order("activity_date", desc=True).limit(400).execute()
+            active_dates = set()
+            for a in (activity_q.data or []):
+                if a.get("activity_date"):
+                    try:
+                        active_dates.add(date.fromisoformat(str(a["activity_date"])))
+                    except Exception:
+                        pass
+
+            # Backfill with stored last_activity_date if logs are missing
             last_date = None
+            last_date_str = streak_data.get("last_activity_date")
+            if last_date_str:
+                try:
+                    last_date = date.fromisoformat(str(last_date_str))
+                    active_dates.add(last_date)
+                except Exception:
+                    last_date = None
 
-    # Count this visit as activity so streak continues for today
-    active_dates.add(today)
+            # Count this visit as activity so streak continues for today
+            active_dates.add(today)
 
-    current = _compute_current_streak(active_dates, today)
-    longest = max(int(streak_data.get("longest_streak") or 0), current)
+            current = _compute_current_streak(active_dates, today)
+            longest = max(int(streak_data.get("longest_streak") or 0), current)
 
-    if current != int(streak_data.get("current_streak") or 0) or (streak_data.get("last_activity_date") != today.isoformat()):
-        supabase.table("notex_streak").update({
-            "current_streak": current,
-            "longest_streak": longest,
-            "last_activity_date": today.isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }).eq("user_profile_id", profile_id).execute()
-        streak_data["current_streak"] = current
-        streak_data["longest_streak"] = longest
-        streak_data["last_activity_date"] = today.isoformat()
+            if current != int(streak_data.get("current_streak") or 0) or (streak_data.get("last_activity_date") != today.isoformat()):
+                supabase.table("notex_streak").update({
+                    "current_streak": current,
+                    "longest_streak": longest,
+                    "last_activity_date": today.isoformat(),
+                    "updated_at": datetime.utcnow().isoformat()
+                }).eq("user_profile_id", profile_id).execute()
+                streak_data["current_streak"] = current
+                streak_data["longest_streak"] = longest
+                streak_data["last_activity_date"] = today.isoformat()
 
-    # Calculate milestones
-    next_m = _get_next_milestone(current)
-    prev_m = _get_prev_milestone(current)
-    range_val = next_m - prev_m
-    progress = round(((current - prev_m) / range_val) * 100) if range_val > 0 else 0
+            # Calculate milestones
+            next_m = _get_next_milestone(current)
+            prev_m = _get_prev_milestone(current)
+            range_val = next_m - prev_m
+            progress = round(((current - prev_m) / range_val) * 100) if range_val > 0 else 0
 
-    # Build week data
-    week_start = today - timedelta(days=today.weekday())  # Monday
-    day_names = ["M", "T", "W", "T", "F", "S", "S"]
-    today_index = today.weekday()
-    week_data = []
-    for i in range(7):
-        day_date = week_start + timedelta(days=i)
-        is_today = i == today_index
-        is_future = i > today_index
-        is_active = day_date in active_dates
-        week_data.append({
-            "day": day_names[i],
-            "date": day_date.day,
-            "is_today": is_today,
-            "is_active": is_active,
-            "is_future": is_future
-        })
+            # Build week data
+            week_start = today - timedelta(days=today.weekday())  # Monday
+            day_names = ["M", "T", "W", "T", "F", "S", "S"]
+            today_index = today.weekday()
+            week_data = []
+            for i in range(7):
+                day_date = week_start + timedelta(days=i)
+                is_today = i == today_index
+                is_future = i > today_index
+                is_active = day_date in active_dates
+                week_data.append({
+                    "day": day_names[i],
+                    "date": day_date.day,
+                    "is_today": is_today,
+                    "is_active": is_active,
+                    "is_future": is_future
+                })
 
-    days_completed = len([d for d in week_data if d["is_active"]])
+            days_completed = len([d for d in week_data if d["is_active"]])
+            
+            return StreakResponse(
+                current_streak=current,
+                longest_streak=longest,
+                last_activity_date=streak_data.get("last_activity_date"),
+                next_milestone=next_m,
+                prev_milestone=prev_m,
+                milestone_progress=progress,
+                days_completed=days_completed,
+                week_data=week_data
+            )
+        
+        except Exception as e:
+            last_error = e
+            error_msg = str(e).lower()
+            # Only retry on connection/protocol errors
+            if "disconnect" in error_msg or "connection" in error_msg or "remote" in error_msg:
+                import time
+                print(f"[Streak] Retry {attempt + 1}/{max_retries} after error: {e}")
+                time.sleep(retry_delay)
+                continue
+            else:
+                raise
     
-    return StreakResponse(
-        current_streak=current,
-        longest_streak=longest,
-        last_activity_date=streak_data.get("last_activity_date"),
-        next_milestone=next_m,
-        prev_milestone=prev_m,
-        milestone_progress=progress,
-        days_completed=days_completed,
-        week_data=week_data
-    )
+    # If all retries failed
+    print(f"[Streak] All {max_retries} retries failed")
+    raise HTTPException(status_code=500, detail=f"Service temporarily unavailable: {last_error}")
 
 @academics_router.post("/api/streak/ping", summary="Record user activity for streak")
 def ping_streak(authorization: Optional[str] = Header(default=None)):
@@ -18155,6 +18177,30 @@ async def generate_blink_endpoint(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+class BlinkRemoveRequest(BaseModel):
+    topic: str = Field(..., min_length=1, description="Topic name to remove blink for")
+
+@app.post("/api/blink/remove")
+async def remove_blink_endpoint(req: BlinkRemoveRequest):
+    """
+    Remove the blink_link from ai_notes for a given topic.
+    """
+    supabase = get_service_client()
+    topic_ci = req.topic.strip().lower()
+    
+    try:
+        # Update ai_notes to set blink_link to null
+        res = supabase.table(AI_NOTES_TABLE).update({"blink_link": None}).eq("title_ci", topic_ci).execute()
+        
+        return {
+            "success": True,
+            "topic": req.topic,
+            "message": "Blink link removed"
+        }
+    except Exception as e:
+        print(f"[Blink Remove] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
@@ -18356,6 +18402,35 @@ async def list_labx_explanations():
         raise HTTPException(status_code=500, detail=f"Failed to list explanations: {str(e)}")
 
 
+@labx_router.get("/check-batch", summary="Check multiple topics at once")
+async def check_labx_cache_batch(topics: str = Query(..., description="Comma-separated list of topic names")):
+    """Check which topics have cached explanations. Returns a map of topic_name -> exists boolean."""
+    topics_list = [t.strip().lower() for t in topics.split(",") if t.strip()]
+    
+    if not topics_list:
+        return JSONResponse(content={"cached": {}})
+    
+    try:
+        supabase = get_service_client()
+        # Fetch all matching topics in one query
+        result = supabase.table(LABX_EXPLANATIONS_TABLE).select(
+            "topic_ci"
+        ).in_("topic_ci", topics_list).execute()
+        
+        # Build map of which topics exist
+        cached_set = set()
+        if result.data:
+            for row in result.data:
+                cached_set.add(row.get("topic_ci", "").lower())
+        
+        cached_map = {topic: topic in cached_set for topic in topics_list}
+        
+        return JSONResponse(content={"cached": cached_map})
+    except Exception as e:
+        print(f"[LabX] Batch check error: {e}")
+        return JSONResponse(content={"cached": {}})
+
+
 @labx_router.get("/check/{topic}", summary="Check if a topic is cached")
 async def check_labx_cache(topic: str):
     """Check if an explanation exists in cache without returning the full HTML."""
@@ -18370,6 +18445,30 @@ async def check_labx_cache(topic: str):
             "view_count": cached.get("view_count")
         })
     return JSONResponse(content={"exists": False})
+
+
+@labx_router.get("/get/{topic}", summary="Get cached explanation without regenerating")
+async def get_labx_cached(topic: str):
+    """Retrieve cached HTML content for a topic. Does NOT regenerate if not found."""
+    topic_ci = topic.strip().lower()
+    cached = _get_cached_explanation(topic_ci)
+    
+    if cached:
+        # Increment view count
+        _increment_view_count(cached["id"])
+        return JSONResponse(content={
+            "success": True,
+            "topic": cached["topic"],
+            "html": cached["html_content"],
+            "cached": True,
+            "created_at": cached.get("created_at"),
+            "view_count": cached.get("view_count", 0) + 1
+        })
+    
+    return JSONResponse(
+        status_code=404,
+        content={"success": False, "error": "LabX not found for this topic"}
+    )
 
 
 @labx_router.delete("/{topic}", summary="Delete a cached explanation")
@@ -18444,4 +18543,300 @@ async def generate_labx_stream(req: LabXGenerateRequest):
 
 
 app.include_router(labx_router)
+
+
+# ============================================================================
+# GROUP CHAT - WebRTC Signaling Server
+# ============================================================================
+
+# In-memory room storage (for production, use Redis or database)
+group_chat_rooms: Dict[str, Dict[str, Any]] = {}
+group_chat_connections: Dict[str, Dict[str, WebSocket]] = {}  # room_id -> {user_id: websocket}
+
+class GroupChatMessage(BaseModel):
+    type: str  # "join", "leave", "offer", "answer", "ice-candidate", "whiteboard-draw", "screen-share-started", "screen-share-stopped"
+    data: Optional[Dict[str, Any]] = None
+    target_user_id: Optional[str] = None  # For directed messages (offers, answers, ice-candidates)
+
+def generate_room_id() -> str:
+    """Generate a unique room ID."""
+    return str(uuid.uuid4())[:8].upper()
+
+def generate_user_id() -> str:
+    """Generate a unique user ID for anonymous participants."""
+    return f"user-{str(uuid.uuid4())[:6]}"
+
+@app.post("/api/group-chat/create")
+async def create_group_chat_room(
+    name: str = Body("Group Chat", embed=True),
+    authorization: Optional[str] = Header(None),
+):
+    """Create a new group chat room. Returns room ID and join link."""
+    room_id = generate_room_id()
+    
+    # Try to get user info from token
+    host_id = None
+    host_name = "Host"
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        try:
+            supabase = get_service_client()
+            user_resp = supabase.auth.get_user(token)
+            if user_resp and user_resp.user:
+                host_id = user_resp.user.id
+                # Try to get profile name
+                profile = supabase.table("profiles").select("name").eq("user_id", host_id).maybe_single().execute()
+                if profile.data and profile.data.get("name"):
+                    host_name = profile.data["name"]
+        except:
+            pass
+    
+    if not host_id:
+        host_id = generate_user_id()
+    
+    group_chat_rooms[room_id] = {
+        "id": room_id,
+        "name": name,
+        "host_id": host_id,
+        "host_name": host_name,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "participants": {},  # user_id -> {name, joined_at, is_host}
+        "whiteboard_history": [],  # Drawing history for late joiners
+        "screen_share_active": False,
+        "screen_sharer_id": None,
+    }
+    group_chat_connections[room_id] = {}
+    
+    return JSONResponse(content={
+        "room_id": room_id,
+        "name": name,
+        "host_id": host_id,
+        "join_url": f"/ui/group_chat.html?room={room_id}",
+    })
+
+@app.get("/api/group-chat/{room_id}")
+async def get_group_chat_room(room_id: str):
+    """Get room information."""
+    room = group_chat_rooms.get(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    return JSONResponse(content={
+        "id": room["id"],
+        "name": room["name"],
+        "host_id": room["host_id"],
+        "host_name": room["host_name"],
+        "participant_count": len(room["participants"]),
+        "participants": list(room["participants"].values()),
+        "screen_share_active": room.get("screen_share_active", False),
+        "screen_sharer_id": room.get("screen_sharer_id"),
+    })
+
+async def broadcast_to_room(room_id: str, message: dict, exclude_user_id: Optional[str] = None):
+    """Broadcast a message to all participants in a room."""
+    connections = group_chat_connections.get(room_id, {})
+    for user_id, ws in list(connections.items()):
+        if exclude_user_id and user_id == exclude_user_id:
+            continue
+        try:
+            await ws.send_json(message)
+        except Exception as e:
+            print(f"[GroupChat] Failed to send to {user_id}: {e}")
+
+async def send_to_user(room_id: str, target_user_id: str, message: dict):
+    """Send a message to a specific user in a room."""
+    connections = group_chat_connections.get(room_id, {})
+    ws = connections.get(target_user_id)
+    if ws:
+        try:
+            await ws.send_json(message)
+        except Exception as e:
+            print(f"[GroupChat] Failed to send to {target_user_id}: {e}")
+
+@app.websocket("/ws/group-chat/{room_id}")
+async def group_chat_websocket(websocket: WebSocket, room_id: str):
+    """WebSocket endpoint for group chat signaling."""
+    await websocket.accept()
+    
+    room = group_chat_rooms.get(room_id)
+    if not room:
+        await websocket.send_json({"type": "error", "message": "Room not found"})
+        await websocket.close()
+        return
+    
+    user_id = None
+    user_name = "Anonymous"
+    
+    try:
+        # First message should be join with user info
+        join_data = await websocket.receive_json()
+        
+        if join_data.get("type") != "join":
+            await websocket.send_json({"type": "error", "message": "First message must be 'join'"})
+            await websocket.close()
+            return
+        
+        user_id = join_data.get("data", {}).get("user_id") or generate_user_id()
+        user_name = join_data.get("data", {}).get("name") or "Anonymous"
+        is_host = user_id == room["host_id"]
+        
+        # Add to room
+        room["participants"][user_id] = {
+            "user_id": user_id,
+            "name": user_name,
+            "joined_at": datetime.now(timezone.utc).isoformat(),
+            "is_host": is_host,
+        }
+        group_chat_connections[room_id][user_id] = websocket
+        
+        # Send room info and existing participants to new user
+        await websocket.send_json({
+            "type": "room-info",
+            "data": {
+                "room_id": room_id,
+                "name": room["name"],
+                "your_user_id": user_id,
+                "is_host": is_host,
+                "participants": list(room["participants"].values()),
+                "whiteboard_history": room.get("whiteboard_history", [])[-100:],  # Last 100 strokes
+                "screen_share_active": room.get("screen_share_active", False),
+                "screen_sharer_id": room.get("screen_sharer_id"),
+            }
+        })
+        
+        # Notify others about new participant
+        await broadcast_to_room(room_id, {
+            "type": "user-joined",
+            "data": {
+                "user_id": user_id,
+                "name": user_name,
+                "is_host": is_host,
+            }
+        }, exclude_user_id=user_id)
+        
+        # Main message loop
+        while True:
+            message = await websocket.receive_json()
+            msg_type = message.get("type")
+            msg_data = message.get("data", {})
+            target_user_id = message.get("target_user_id")
+            
+            if msg_type == "offer":
+                # Forward SDP offer to target user
+                if target_user_id:
+                    await send_to_user(room_id, target_user_id, {
+                        "type": "offer",
+                        "data": msg_data,
+                        "from_user_id": user_id,
+                        "from_name": user_name,
+                    })
+            
+            elif msg_type == "answer":
+                # Forward SDP answer to target user
+                if target_user_id:
+                    await send_to_user(room_id, target_user_id, {
+                        "type": "answer",
+                        "data": msg_data,
+                        "from_user_id": user_id,
+                    })
+            
+            elif msg_type == "ice-candidate":
+                # Forward ICE candidate to target user
+                if target_user_id:
+                    await send_to_user(room_id, target_user_id, {
+                        "type": "ice-candidate",
+                        "data": msg_data,
+                        "from_user_id": user_id,
+                    })
+            
+            elif msg_type == "whiteboard-draw":
+                # Store in history and broadcast drawing data
+                stroke_data = {**msg_data, "user_id": user_id, "timestamp": time.time()}
+                if len(room.get("whiteboard_history", [])) < 5000:  # Limit history
+                    room.setdefault("whiteboard_history", []).append(stroke_data)
+                
+                await broadcast_to_room(room_id, {
+                    "type": "whiteboard-draw",
+                    "data": stroke_data,
+                }, exclude_user_id=user_id)
+            
+            elif msg_type == "whiteboard-clear":
+                # Clear whiteboard history
+                room["whiteboard_history"] = []
+                await broadcast_to_room(room_id, {
+                    "type": "whiteboard-clear",
+                    "data": {"cleared_by": user_id},
+                })
+            
+            elif msg_type == "screen-share-started":
+                # Host started screen sharing
+                if is_host or not room.get("screen_share_active"):
+                    room["screen_share_active"] = True
+                    room["screen_sharer_id"] = user_id
+                    await broadcast_to_room(room_id, {
+                        "type": "screen-share-started",
+                        "data": {"sharer_id": user_id, "sharer_name": user_name},
+                    }, exclude_user_id=user_id)
+            
+            elif msg_type == "screen-share-stopped":
+                # Screen sharing stopped
+                if room.get("screen_sharer_id") == user_id:
+                    room["screen_share_active"] = False
+                    room["screen_sharer_id"] = None
+                    await broadcast_to_room(room_id, {
+                        "type": "screen-share-stopped",
+                        "data": {"sharer_id": user_id},
+                    }, exclude_user_id=user_id)
+            
+            elif msg_type == "chat-message":
+                # Text chat message
+                await broadcast_to_room(room_id, {
+                    "type": "chat-message",
+                    "data": {
+                        "user_id": user_id,
+                        "name": user_name,
+                        "message": msg_data.get("message", ""),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                })
+    
+    except WebSocketDisconnect:
+        print(f"[GroupChat] User {user_id} disconnected from room {room_id}")
+    except Exception as e:
+        print(f"[GroupChat] Error: {e}")
+    finally:
+        # Clean up on disconnect
+        if user_id and room_id:
+            # Remove from connections
+            if room_id in group_chat_connections:
+                group_chat_connections[room_id].pop(user_id, None)
+            
+            # Remove from participants
+            if room_id in group_chat_rooms and user_id in group_chat_rooms[room_id]["participants"]:
+                del group_chat_rooms[room_id]["participants"][user_id]
+                
+                # Notify others
+                await broadcast_to_room(room_id, {
+                    "type": "user-left",
+                    "data": {"user_id": user_id, "name": user_name}
+                })
+                
+                # Stop screen share if sharer left
+                if group_chat_rooms[room_id].get("screen_sharer_id") == user_id:
+                    group_chat_rooms[room_id]["screen_share_active"] = False
+                    group_chat_rooms[room_id]["screen_sharer_id"] = None
+                    await broadcast_to_room(room_id, {
+                        "type": "screen-share-stopped",
+                        "data": {"sharer_id": user_id, "reason": "sharer_left"}
+                    })
+                
+                # Clean up empty rooms after 5 minutes
+                if not group_chat_rooms[room_id]["participants"]:
+                    async def cleanup_room():
+                        await asyncio.sleep(300)  # 5 minutes
+                        if room_id in group_chat_rooms and not group_chat_rooms[room_id]["participants"]:
+                            del group_chat_rooms[room_id]
+                            group_chat_connections.pop(room_id, None)
+                            print(f"[GroupChat] Cleaned up empty room {room_id}")
+                    asyncio.create_task(cleanup_room())
 

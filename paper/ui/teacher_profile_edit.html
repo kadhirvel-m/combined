@@ -5,187 +5,254 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Edit Teacher Profile — Paper X</title>
-    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
         rel="stylesheet">
     <link rel="stylesheet" href="assets/css/tailwind.css" />
-    <script>tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' } } } } };</script>
-    <script>(() => { const s = localStorage.getItem('px_theme'); const p = matchMedia('(prefers-color-scheme: dark)').matches; const m = s ? s : (p ? 'dark' : 'light'); if (m === 'dark') document.documentElement.classList.add('dark'); })();</script>
-    <script src="./config.js"></script>
-    <script>// Hard-set API base to deployed server
-        window.API_BASE = 'http://127.0.0.1:8000';
+    <script>
+        (function () {
+            try {
+                var k = ['cx-theme', 'theme', 'px_theme'];
+                var m = null;
+                for (var i = 0; i < k.length; i++) {
+                    var v = localStorage.getItem(k[i]);
+                    if (v === 'dark' || v === 'light') { m = v; break; }
+                }
+                if (!m && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { m = 'dark'; }
+                if (m === 'dark') document.documentElement.classList.add('dark');
+            } catch (e) { }
+        })();
     </script>
+    <script src="./config.js"></script>
     <style>
         .material-symbols-rounded {
             vertical-align: -5px
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, .82);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(158, 75, 138, .18);
+        }
+
+        .dark .glass-card {
+            background: rgba(30, 30, 47, .72);
+            border-color: rgba(255, 255, 255, .12);
+            box-shadow: 0 20px 45px rgba(0, 0, 0, .45);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #9E4B8A 0%, #B06AB3 50%, #FF7FD1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
     </style>
 </head>
 
 <body class="min-h-screen font-sans antialiased bg-white dark:bg-[#12121a] text-neutral-900 dark:text-white">
-    <header class="bg-white/70 dark:bg-[#1E1E2F]/70 backdrop-blur border-b border-black/5 dark:border-white/10">
-        <div class="container flex items-center justify-between py-3">
-            <a href="./teacher_profile.html?user=me" class="flex items-center gap-2">
-                <img src="../assets/img/logo-light.svg" class="h-9 dark:hidden" alt="Paper X">
-                <img src="../assets/img/logo-dark.svg" class="h-9 hidden dark:block" alt="Paper X">
-            </a>
-            <div class="flex items-center gap-2">
-                <button data-theme-toggle
-                    class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
-                        class="material-symbols-rounded text-base">dark_mode</span></button>
+    <!-- Background gradients -->
+    <div aria-hidden="true" class="fixed inset-0 -z-10">
+        <div
+            class="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-brand-500/10 blur-[110px] dark:bg-brand-500/20">
+        </div>
+        <div
+            class="absolute top-[40%] -right-24 w-[380px] h-[380px] rounded-full bg-brand-700/10 blur-[120px] dark:bg-brand-700/25">
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header
+        class="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-[#1E1E2F]/50 border-b border-black/5 dark:border-white/5">
+        <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div class="flex h-16 items-center justify-between">
+                <a href="./teacher_profile.html?user=me" class="flex items-center gap-2">
+                    <img src="assets/img/logo-light.svg" class="h-9 dark:hidden" alt="Paper X">
+                    <img src="assets/img/logo-dark.svg" class="h-9 hidden dark:block" alt="Paper X">
+                </a>
+                <div class="flex items-center gap-3">
+                    <a href="./teacher_profile.html?user=me"
+                        class="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 dark:border-white/10 px-4 py-2 text-sm hover:border-brand-400/60 transition">
+                        <span class="material-symbols-rounded text-base">arrow_back</span>
+                        <span class="hidden sm:inline">Back to Profile</span>
+                    </a>
+                    <button type="button" id="saveBtn"
+                        class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] px-5 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(158,75,138,0.25)] hover:shadow-[0_12px_28px_rgba(158,75,138,0.32)] transition">
+                        <span class="material-symbols-rounded text-base">save</span>
+                        <span>Save</span>
+                    </button>
+                    <button data-theme-toggle
+                        class="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200/60 dark:border-white/10 hover:border-brand-400/60 transition">
+                        <span class="material-symbols-rounded text-base">dark_mode</span>
+                    </button>
+                </div>
             </div>
         </div>
     </header>
-    <main class="container py-8 max-w-4xl">
-        <div class="flex items-center justify-between mb-6">
-            <h1 class="text-2xl font-bold tracking-tight">Edit Teacher Profile</h1>
-            <a href="./teacher_profile.html?user=me" class="text-sm text-brand-500 hover:underline">View Profile</a>
-        </div>
-        <form id="profileForm" class="space-y-8">
-            <section
-                class="rounded-2xl bg-white/80 dark:bg-white/5 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-6 space-y-6">
-                <div class="flex flex-col md:flex-row gap-6 items-start">
-                    <div class="w-32 h-32 rounded-2xl overflow-hidden ring-2 ring-black/10 dark:ring-white/15 bg-black/5 dark:bg-white/10 flex items-center justify-center relative"
-                        id="avatarPreview">
-                        <span class="text-xs opacity-60">No Avatar</span>
-                        <img id="avatarImg" class="hidden w-full h-full object-cover" alt="Avatar" />
-                        <button type="button" id="changeAvatarBtn"
-                            class="absolute bottom-1 right-1 px-2 py-0.5 text-[10px] rounded bg-brand-500 text-white shadow hover:bg-brand-600">Change</button>
-                        <input type="file" id="avatarFile" accept="image/*" class="hidden" />
+
+    <main class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8">
+        <h1 class="text-2xl md:text-3xl font-bold tracking-tight mb-8">
+            <span class="gradient-text">Edit Teacher Profile</span>
+        </h1>
+
+        <div class="grid lg:grid-cols-12 gap-8">
+            <!-- Left: Photo & Quick Info -->
+            <div class="lg:col-span-4">
+                <div class="glass-card rounded-2xl p-6 space-y-6">
+                    <!-- Avatar Section -->
+                    <div class="text-center">
+                        <div class="relative inline-block">
+                            <div id="avatarPreview"
+                                class="w-32 h-32 mx-auto rounded-lg overflow-hidden ring-4 ring-brand-500/20 bg-gradient-to-br from-brand-400 via-brand-500 to-pink-500 flex items-center justify-center">
+                                <span id="avatarInitials" class="text-3xl font-bold text-white">T</span>
+                                <img id="avatarImg"
+                                    class="hidden absolute inset-0 w-full h-full object-cover rounded-lg"
+                                    alt="Avatar" />
+                            </div>
+                            <button type="button" id="changeAvatarBtn"
+                                class="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-gradient-to-r from-[#9E4B8A] to-[#FF7FD1] text-white shadow-lg flex items-center justify-center hover:scale-110 transition">
+                                <span class="material-symbols-rounded text-lg">photo_camera</span>
+                            </button>
+                            <input type="file" id="avatarFile" accept="image/*" class="hidden" />
+                        </div>
+                        <p class="mt-4 text-xs text-neutral-500 dark:text-white/50">Click the camera to change photo</p>
                     </div>
-                    <div class="grid md:grid-cols-2 gap-6 flex-1 w-full">
+
+                    <!-- Read-only Info -->
+                    <div class="space-y-4 pt-4 border-t border-black/5 dark:border-white/10">
                         <div>
-                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Name</label>
-                            <input name="name" type="text" disabled readonly
-                                class="w-full rounded-lg bg-white/60 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 opacity-80 cursor-not-allowed"
-                                placeholder="Display name" />
+                            <label
+                                class="block text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-white/40 mb-1">Name</label>
+                            <p id="displayName" class="text-sm font-medium text-neutral-800 dark:text-white">—</p>
                         </div>
                         <div>
-                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Email</label>
-                            <input name="email" type="email" disabled readonly
-                                class="w-full rounded-lg bg-white/60 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 opacity-80 cursor-not-allowed"
-                                placeholder="teacher@example.com" />
+                            <label
+                                class="block text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-white/40 mb-1">Email</label>
+                            <p id="displayEmail" class="text-sm text-neutral-600 dark:text-white/70">—</p>
                         </div>
                         <div>
-                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">College</label>
-                            <input id="collegeNameRO" type="text" disabled readonly
-                                class="w-full rounded-lg bg-white/60 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 opacity-80 cursor-not-allowed"
-                                placeholder="—" />
+                            <label
+                                class="block text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-white/40 mb-1">College</label>
+                            <p id="displayCollege" class="text-sm text-neutral-600 dark:text-white/70">—</p>
                         </div>
                         <div>
-                            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Department</label>
-                            <input id="departmentNameRO" type="text" disabled readonly
-                                class="w-full rounded-lg bg-white/60 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 opacity-80 cursor-not-allowed"
-                                placeholder="—" />
+                            <label
+                                class="block text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-white/40 mb-1">Department</label>
+                            <p id="displayDepartment" class="text-sm text-neutral-600 dark:text-white/70">—</p>
                         </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-black/5 dark:border-white/10">
+                        <p class="text-[11px] text-neutral-400 dark:text-white/40 leading-relaxed">
+                            <span class="material-symbols-rounded text-sm align-middle mr-1">info</span>
+                            Name, email, college and department are set during signup and cannot be changed here.
+                        </p>
                     </div>
                 </div>
-                <div class="grid md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Headline</label>
-                        <input name="headline" type="text"
-                            class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
-                            placeholder="Short intro line" />
-                    </div>
-                    <div>
-                        <label
-                            class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Qualification</label>
-                        <input name="qualification" type="text"
-                            class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
-                            placeholder="e.g. M.Tech, PhD" />
-                    </div>
-                    <div>
-                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Semester</label>
-                        <input name="semester" type="number" min="1" max="12" disabled
-                            class="w-full rounded-lg bg-white/60 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none px-3 py-2 opacity-75 cursor-not-allowed"
-                            placeholder="--" />
-                        <div id="semesterYearLabel"
-                            class="mt-1 text-[11px] font-medium text-neutral-500 dark:text-white/50"></div>
-                    </div>
-                    <div>
-                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Batch (From /
-                            To)</label>
-                        <div class="flex gap-2">
-                            <input name="batch_from" type="number" disabled
-                                class="w-1/2 rounded-lg bg-white/60 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none px-3 py-2 font-mono text-xs opacity-75 cursor-not-allowed"
-                                placeholder="From" />
-                            <input name="batch_to" type="number" disabled
-                                class="w-1/2 rounded-lg bg-white/60 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none px-3 py-2 font-mono text-xs opacity-75 cursor-not-allowed"
-                                placeholder="To" />
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Years
-                            Experience</label>
-                        <input name="years_experience" type="number" min="0" max="80"
-                            class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2" />
-                    </div>
-                    <div>
-                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Specialization
-                            (comma separated)</label>
-                        <input name="specialization" type="text"
-                            class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
-                            placeholder="Mathematics, Data Structures" />
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Bio</label>
-                    <textarea name="bio" rows="4"
-                        class="w-full rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
-                        placeholder="Tell students about your teaching approach..."></textarea>
-                </div>
-                <div class="grid md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Availability
-                            (JSON)</label>
-                        <textarea name="availability" rows="3"
-                            class="w-full font-mono text-xs rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
-                            placeholder='{"mon":"9-11","wed":"14-16"}'></textarea>
-                    </div>
-                    <div>
-                        <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1">Social
-                            (JSON)</label>
-                        <textarea name="social" rows="3"
-                            class="w-full font-mono text-xs rounded-lg bg-white/90 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 focus:outline-none focus:ring-brand-500 px-3 py-2"
-                            placeholder='{"linkedin":"","github":""}'></textarea>
-                    </div>
-                </div>
-            </section>
-            <div class="flex items-center justify-between">
-                <button type="button" id="resetBtn"
-                    class="text-sm px-4 py-2 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15">Reset</button>
-                <button type="submit"
-                    class="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-brand-500 text-white font-semibold shadow hover:bg-brand-600 transition">
-                    <span class="material-symbols-rounded text-base">save</span>Save Changes
-                </button>
             </div>
-            <div id="status" class="text-sm font-medium mt-4"></div>
-        </form>
+
+            <!-- Right: Editable Fields -->
+            <div class="lg:col-span-8">
+                <form id="profileForm" class="space-y-6">
+                    <!-- Professional Info Section -->
+                    <section class="glass-card rounded-2xl p-6">
+                        <h2 class="text-lg font-semibold mb-6 flex items-center gap-2">
+                            <span class="material-symbols-rounded text-brand-500">badge</span>
+                            Professional Information
+                        </h2>
+                        <div class="grid md:grid-cols-2 gap-5">
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-neutral-600 dark:text-white/70 mb-2">Headline</label>
+                                <input name="headline" type="text"
+                                    class="w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition"
+                                    placeholder="e.g., Associate Professor | AI Researcher" />
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-neutral-600 dark:text-white/70 mb-2">Qualification</label>
+                                <input name="qualification" type="text"
+                                    class="w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition"
+                                    placeholder="e.g., Ph.D. Computer Science, M.Tech" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-neutral-600 dark:text-white/70 mb-2">Years
+                                    of Experience</label>
+                                <input name="years_experience" type="number" min="0" max="80"
+                                    class="w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition"
+                                    placeholder="e.g., 10" />
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-neutral-600 dark:text-white/70 mb-2">Specialization</label>
+                                <input name="specialization" type="text"
+                                    class="w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition"
+                                    placeholder="e.g., Machine Learning, Data Structures" />
+                                <p class="mt-1 text-[10px] text-neutral-400 dark:text-white/40">Separate multiple with
+                                    commas</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Bio Section -->
+                    <section class="glass-card rounded-2xl p-6">
+                        <h2 class="text-lg font-semibold mb-6 flex items-center gap-2">
+                            <span class="material-symbols-rounded text-brand-500">person</span>
+                            About You
+                        </h2>
+                        <div>
+                            <label
+                                class="block text-xs font-medium text-neutral-600 dark:text-white/70 mb-2">Bio</label>
+                            <textarea name="bio" rows="5"
+                                class="w-full rounded-xl border border-slate-200/60 dark:border-white/10 bg-white/70 dark:bg-white/5 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition resize-none"
+                                placeholder="Tell students about your teaching philosophy, research interests, and what makes your classes unique..."></textarea>
+                            <p class="mt-2 text-[10px] text-neutral-400 dark:text-white/40">This will be visible on your
+                                public profile</p>
+                        </div>
+                    </section>
+
+                    <!-- Status Message -->
+                    <div id="status" class="hidden rounded-xl px-4 py-3 text-sm font-medium"></div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex items-center justify-between pt-4">
+                        <button type="button" id="resetBtn"
+                            class="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-xl border border-slate-200/60 dark:border-white/10 hover:border-brand-400/60 hover:bg-brand-50 dark:hover:bg-white/5 transition">
+                            <span class="material-symbols-rounded text-base">refresh</span>
+                            Reset
+                        </button>
+                        <button type="submit"
+                            class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] px-6 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(158,75,138,0.25)] hover:shadow-[0_12px_28px_rgba(158,75,138,0.32)] transition">
+                            <span class="material-symbols-rounded text-base">save</span>
+                            Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </main>
+
     <script>
         const API_BASE = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
-        function getToken() { const keys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token']; for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } } return '' }
-        function decodeJwtUserId(t) { try { const p = t.split('.')[1]; if (!p) return null; return JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))).sub || null; } catch { return null } }
-        async function fetchMe() {
-            // If we are in a teacher session, skip /api/me entirely (teacher tokens are not Supabase JWTs)
-            try { if (localStorage.getItem('teacherToken')) return null; } catch {}
-            const tk = getToken(); if (!tk) { return null; }
-            try {
-                const r = await fetch(API_BASE + '/api/me', { headers: { Authorization: 'Bearer ' + tk } });
-                if (!r.ok) return null;
-                const j = await r.json();
-                return j?.profile || null;
-            } catch { return null }
+
+        function getToken() {
+            const keys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+            for (const k of keys) {
+                try { const v = localStorage.getItem(k); if (v) return v; } catch { }
+            }
+            return '';
         }
-        function setThemeToggle() { document.addEventListener('click', e => { if (e.target.closest('[data-theme-toggle]')) { const root = document.documentElement; const d = root.classList.toggle('dark'); localStorage.setItem('px_theme', d ? 'dark' : 'light') } }) }
-        function fillForm(p) { if (!p) return; const f = document.getElementById('profileForm'); f.headline.value = p.headline || ''; f.bio.value = p.bio || ''; f.qualification.value = p.qualification || ''; f.years_experience.value = p.years_experience || ''; f.specialization.value = (p.specialization || []).join(', '); f.availability.value = p.availability ? JSON.stringify(p.availability, null, 2) : ''; f.social.value = p.social ? JSON.stringify(p.social, null, 2) : ''; }
-        function fillIdentity(p) { const f = document.getElementById('profileForm'); f.name.value = p.name || ''; f.email.value = p.email || ''; const c = document.getElementById('collegeNameRO'); const d = document.getElementById('departmentNameRO'); if (c) c.value = p.college_name || p.college_id || ''; if (d) d.value = p.department_name || p.department_id || ''; if (p.avatar_url || p.profile_image_url) { const img = document.getElementById('avatarImg'); img.src = p.avatar_url || p.profile_image_url; img.classList.remove('hidden'); document.querySelector('#avatarPreview span')?.classList.add('hidden'); } }
-        function semesterToYearLabel(sem) { if (!sem || sem < 1) return ''; const year = Math.floor((sem - 1) / 2) + 1; const ordMap = { 1: 'First', 2: 'Second', 3: 'Third', 4: 'Fourth', 5: 'Fifth', 6: 'Sixth' }; return (ordMap[year] || (`Year ${year}`)) + ' Year'; }
-        function updateSemesterYearLabel() { const f = document.getElementById('profileForm'); const semVal = parseInt(f.semester?.value || ''); const lbl = document.getElementById('semesterYearLabel'); if (!semVal) { lbl.textContent = ''; return; } lbl.textContent = semesterToYearLabel(semVal); }
-        function fillAcademic(p) { const f = document.getElementById('profileForm'); if (f.semester) { f.semester.value = p.semester || ''; } if (f.batch_from) { f.batch_from.value = p.batch_from || ''; } if (f.batch_to) { f.batch_to.value = p.batch_to || ''; } updateSemesterYearLabel(); }
+
+        function initials(name) {
+            if (!name) return 'T';
+            const parts = String(name).trim().split(/\s+/).slice(0, 2);
+            return parts.map(x => x[0]?.toUpperCase()).join('') || 'T';
+        }
+
         async function fetchProfileDirect() {
             const tk = getToken();
             if (!tk) return null;
@@ -193,72 +260,162 @@
                 const r = await fetch(`${API_BASE}/api/teacher/profile/me`, { headers: { Authorization: 'Bearer ' + tk } });
                 if (!r.ok) return null;
                 const j = await r.json();
-                // Support both possible response shapes: { teacher: {...} } or direct profile
                 return j.teacher || j.profile || j || null;
             } catch (err) {
                 console.debug('[EDIT_PROFILE] fetchProfileDirect error', err);
                 return null;
             }
         }
-        async function load() {
-            setThemeToggle();
+
+        function fillForm(p) {
+            if (!p) return;
+            const f = document.getElementById('profileForm');
+            f.headline.value = p.headline || '';
+            f.bio.value = p.bio || '';
+            f.qualification.value = p.qualification || '';
+            f.years_experience.value = p.years_experience || '';
+            f.specialization.value = (p.specialization || []).join(', ');
+        }
+
+        function fillIdentity(p) {
+            document.getElementById('displayName').textContent = p.name || '—';
+            document.getElementById('displayEmail').textContent = p.email || '—';
+            document.getElementById('displayCollege').textContent = p.college_name || p.college_id || '—';
+            document.getElementById('displayDepartment').textContent = p.department_name || p.department_id || '—';
+
+            // Avatar
+            const avatarInitials = document.getElementById('avatarInitials');
+            const avatarImg = document.getElementById('avatarImg');
+            avatarInitials.textContent = initials(p.name);
+
+            if (p.avatar_url || p.profile_image_url) {
+                avatarImg.src = p.avatar_url || p.profile_image_url;
+                avatarImg.classList.remove('hidden');
+                avatarInitials.classList.add('hidden');
+            }
+        }
+
+        function showStatus(message, isError = false) {
             const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.classList.remove('hidden');
+            if (isError) {
+                statusEl.className = 'rounded-xl px-4 py-3 text-sm font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+            } else {
+                statusEl.className = 'rounded-xl px-4 py-3 text-sm font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+            }
+        }
+
+        async function load() {
             const token = getToken();
             if (!token) {
-                statusEl.textContent = 'Login required (no token found)';
+                showStatus('Login required (no token found)', true);
                 return;
             }
-            // Try direct secure fetch first
-            let prof = await fetchProfileDirect();
+
+            const prof = await fetchProfileDirect();
             if (!prof) {
-                // Fallback: attempt legacy /api/me only if not a teacher session
-                const me = await fetchMe();
-                if (me?.auth_user_id) {
-                    try {
-                        const r = await fetch(`${API_BASE}/api/teacher/profile/${encodeURIComponent(me.auth_user_id)}`, { headers: { Authorization: 'Bearer ' + token } });
-                        if (r.ok) {
-                            const j = await r.json();
-                            prof = j.teacher || j.profile || j || null;
-                        }
-                    } catch (e) { console.debug('[EDIT_PROFILE] secondary fetch error', e); }
-                }
-            }
-            if (!prof) {
-                statusEl.textContent = 'Login required (profile not accessible)';
+                showStatus('Login required (profile not accessible)', true);
                 return;
             }
+
             fillForm(prof);
             fillIdentity(prof);
-            fillAcademic(prof);
-            statusEl.textContent = 'Profile loaded';
+            showStatus('Profile loaded successfully');
+            setTimeout(() => document.getElementById('status').classList.add('hidden'), 2000);
         }
-        document.getElementById('resetBtn').addEventListener('click', async () => { document.getElementById('status').textContent = 'Resetting...'; await load(); document.getElementById('status').textContent = 'Reset to loaded values.' });
-        document.getElementById('profileForm').addEventListener('submit', async e => { e.preventDefault(); const f = e.target; const tk = getToken(); if (!tk) { alert('Login required'); return; } const statusEl = document.getElementById('status'); statusEl.textContent = 'Saving...'; let availability = null, social = null; try { availability = f.availability.value ? JSON.parse(f.availability.value) : null; } catch { statusEl.textContent = 'Invalid JSON in availability'; return; } try { social = f.social.value ? JSON.parse(f.social.value) : null; } catch { statusEl.textContent = 'Invalid JSON in social'; return; } const body = { headline: f.headline.value || null, bio: f.bio.value || null, qualification: f.qualification.value || null, years_experience: f.years_experience.value ? Number(f.years_experience.value) : null, specialization: f.specialization.value ? f.specialization.value.split(',').map(s => s.trim()).filter(Boolean) : null, availability, social }; try { const r = await fetch(API_BASE + '/api/teacher/profile/me', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Save failed'); statusEl.textContent = 'Saved ✔'; } catch (err) { statusEl.textContent = 'Error: ' + err.message; } });
+
+        // Reset button
+        document.getElementById('resetBtn').addEventListener('click', async () => {
+            showStatus('Resetting...');
+            await load();
+            showStatus('Reset to saved values');
+            setTimeout(() => document.getElementById('status').classList.add('hidden'), 2000);
+        });
+
+        // Form submit
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const f = e.target;
+            const tk = getToken();
+            if (!tk) { alert('Login required'); return; }
+
+            showStatus('Saving...');
+
+            const body = {
+                headline: f.headline.value || null,
+                bio: f.bio.value || null,
+                qualification: f.qualification.value || null,
+                years_experience: f.years_experience.value ? Number(f.years_experience.value) : null,
+                specialization: f.specialization.value ? f.specialization.value.split(',').map(s => s.trim()).filter(Boolean) : null
+            };
+
+            try {
+                const r = await fetch(API_BASE + '/api/teacher/profile/me', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk },
+                    body: JSON.stringify(body)
+                });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.detail || 'Save failed');
+                showStatus('Saved successfully ✓');
+            } catch (err) {
+                showStatus('Error: ' + err.message, true);
+            }
+        });
+
+        // Header save button
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            document.getElementById('profileForm').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        });
+
         // Avatar change
         document.getElementById('changeAvatarBtn').addEventListener('click', () => document.getElementById('avatarFile').click());
-        document.getElementById('avatarFile').addEventListener('change', async e => {
-            const file = e.target.files[0]; if (!file) return;
-            const tk = getToken(); if (!tk) { alert('Login required'); return; }
-            const statusEl = document.getElementById('status'); statusEl.textContent = 'Uploading avatar...';
-            const form = new FormData(); form.append('file', file);
-            // Try primary alt endpoint first, fallback to original if 405/404
+        document.getElementById('avatarFile').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const tk = getToken();
+            if (!tk) { alert('Login required'); return; }
+
+            showStatus('Uploading avatar...');
+            const form = new FormData();
+            form.append('file', file);
+
             const endpoints = ['/api/teacher/profile/me/avatar', '/api/teacher/profile/avatar'];
             let success = false, lastErr = null;
+
             for (const ep of endpoints) {
                 try {
                     const r = await fetch(API_BASE + ep, { method: 'POST', headers: { Authorization: 'Bearer ' + tk }, body: form });
-                    console.debug('[AVATAR_UPLOAD] attempt', ep, r.status);
                     const j = await r.json().catch(() => ({}));
-                    if (!r.ok) { throw new Error(j.detail || ('Upload failed ' + r.status)); }
-                    const img = document.getElementById('avatarImg');
-                    img.src = j.profile_image_url; img.classList.remove('hidden');
-                    document.querySelector('#avatarPreview span')?.classList.add('hidden');
-                    statusEl.textContent = 'Avatar updated ✔';
-                    success = true; break;
-                } catch (err) { lastErr = err; statusEl.textContent = 'Trying fallback...'; }
+                    if (!r.ok) throw new Error(j.detail || ('Upload failed ' + r.status));
+
+                    const avatarImg = document.getElementById('avatarImg');
+                    const avatarInitials = document.getElementById('avatarInitials');
+                    avatarImg.src = j.profile_image_url;
+                    avatarImg.classList.remove('hidden');
+                    avatarInitials.classList.add('hidden');
+                    showStatus('Avatar updated ✓');
+                    success = true;
+                    break;
+                } catch (err) {
+                    lastErr = err;
+                }
             }
-            if (!success) { statusEl.textContent = 'Avatar error: ' + (lastErr ? lastErr.message : 'Unknown'); }
+            if (!success) {
+                showStatus('Avatar error: ' + (lastErr ? lastErr.message : 'Unknown'), true);
+            }
         });
+
+        // Theme toggle
+        document.addEventListener('click', e => {
+            if (e.target.closest('[data-theme-toggle]')) {
+                const root = document.documentElement;
+                const isDark = root.classList.toggle('dark');
+                localStorage.setItem('px_theme', isDark ? 'dark' : 'light');
+            }
+        });
+
         load();
     </script>
 </body>
