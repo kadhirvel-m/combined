@@ -7,8 +7,8 @@
     <title>Group Chat — PaperX</title>
     <meta name="description"
         content="Real-time group chat with voice call, screen sharing, and collaborative whiteboard" />
-    <link rel="stylesheet" href="assets/css/tailwind.css" />
-    <script src="config.js"></script>
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script src="../config.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
         rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
@@ -279,7 +279,7 @@
     <header class="sticky top-0 z-50 glass-card border-0 border-b rounded-none">
         <nav class="container mx-auto px-4 flex items-center justify-between py-3">
             <div class="flex items-center gap-3">
-                <a href="index.html" class="flex items-center gap-2 font-semibold">
+                <a href="../index.html" class="flex items-center gap-2 font-semibold">
                     <span
                         class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-lg">
                         <span class="icon text-lg">groups</span>
@@ -305,6 +305,27 @@
             </div>
         </nav>
     </header>
+
+    <!-- Meeting Ended View -->
+    <main id="endedView" class="hidden container mx-auto px-4 py-16">
+        <div class="max-w-md mx-auto text-center glass-card p-10">
+            <div
+                class="inline-flex h-20 w-20 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 text-red-500 mb-6">
+                <span class="icon text-4xl">call_end</span>
+            </div>
+            <h1 class="text-3xl font-bold mb-3">Call Ended</h1>
+            <p class="text-lg opacity-70 mb-8">This meeting has ended and is no longer active.</p>
+
+            <a href="group_history.html"
+                class="btn-primary w-full py-3 rounded-xl font-semibold text-lg flex items-center justify-center gap-2">
+                <span class="icon">history</span>
+                Go to Call History
+            </a>
+            <a href="../index.html" class="block mt-4 text-sm opacity-60 hover:opacity-100 transition">
+                Return to Home
+            </a>
+        </div>
+    </main>
 
     <!-- Landing / Create Room -->
     <main id="landingView" class="container mx-auto px-4 py-16">
@@ -344,6 +365,13 @@
                         Join
                     </button>
                 </div>
+            </div>
+            <div class="mt-8">
+                <a href="group_history.html"
+                    class="inline-flex items-center gap-2 text-sm opacity-60 hover:opacity-100 transition">
+                    <span class="icon">history</span>
+                    View Call History
+                </a>
             </div>
         </div>
     </main>
@@ -490,6 +518,7 @@
         const el = id => document.getElementById(id);
         const landingView = el('landingView');
         const roomView = el('roomView');
+        const endedView = el('endedView');
         const roomNameEl = el('roomName');
         const createRoomBtn = el('createRoomBtn');
         const joinRoomBtn = el('joinRoomBtn');
@@ -561,6 +590,25 @@
                 return;
             }
 
+            // CHECK STATUS FIRST
+            try {
+                const checkRes = await fetch(`${API}/api/group-chat/${roomId}`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                });
+
+                if (checkRes.status === 400 || checkRes.status === 404) {
+                    const err = await checkRes.json();
+                    if (err.detail && (err.detail.includes("ended") || err.detail.includes("not found"))) {
+                        landingView.classList.add('hidden');
+                        roomView.classList.add('hidden');
+                        endedView.classList.remove('hidden');
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.log("Error checking room status", e);
+            }
+
             // Try to get user profile
             if (token) {
                 try {
@@ -581,6 +629,7 @@
 
             // Switch to room view
             landingView.classList.add('hidden');
+            endedView.classList.add('hidden');
             roomView.classList.remove('hidden');
 
             // Connect WebSocket
@@ -628,6 +677,13 @@
             history.pushState({}, '', location.pathname);
         }
 
+        // Handle Ended Event via WS
+        function handleRoomEnded() {
+            leaveRoom();
+            landingView.classList.add('hidden');
+            endedView.classList.remove('hidden');
+        }
+
         // =========================================================================
         // WebSocket Connection
         // =========================================================================
@@ -650,7 +706,7 @@
 
             ws.onclose = () => {
                 console.log('[WS] Disconnected');
-                showToast('Disconnected from room', 'wifi_off');
+                // showToast('Disconnected from room', 'wifi_off');
             };
 
             ws.onerror = (err) => {
@@ -683,17 +739,31 @@
                     }
 
                     // Create peer connections with existing participants
+                    // onnegotiationneeded will automatically send offers
                     for (const p of data.participants) {
                         if (p.user_id !== userId) {
-                            await createPeerConnection(p.user_id, true);
+                            await createPeerConnection(p.user_id, false);
                         }
                     }
+                    break;
+
+                case 'room-ended':
+                    showToast('The host has ended the meeting.', 'call_end');
+                    setTimeout(() => {
+                        handleRoomEnded();
+                    }, 2000);
                     break;
 
                 case 'user-joined':
                     showToast(`${data.name} joined`, 'person_add');
                     addParticipant(data);
-                    // Create peer connection (they will send offer)
+
+                    // Create peer connection with new participant
+                    // Screen share track is added automatically in createPeerConnection
+                    // onnegotiationneeded will handle sending the offer
+                    if (data.user_id !== userId) {
+                        await createPeerConnection(data.user_id, false);
+                    }
                     break;
 
                 case 'user-left':
@@ -747,15 +817,40 @@
         const rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' },
+                // Free TURN servers for NAT traversal
+                {
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                }
+            ],
+            iceCandidatePoolSize: 10
         };
+
+        // Track making offer state per peer
+        let makingOffer = {};  // peerId -> boolean
+        let ignoreOffer = {};  // peerId -> boolean
 
         async function createPeerConnection(peerId, isInitiator) {
             if (peerConnections[peerId]) return peerConnections[peerId];
 
             const pc = new RTCPeerConnection(rtcConfig);
             peerConnections[peerId] = pc;
+            makingOffer[peerId] = false;
+            ignoreOffer[peerId] = false;
+
+            // Determine who is "polite" - use lexicographic comparison of user IDs
+            // The "polite" peer will defer when there's a conflict
+            const polite = userId > peerId;
 
             // Add local audio track
             if (localStream) {
@@ -764,438 +859,426 @@
                 });
             }
 
-            // Handle incoming tracks (remote audio/video)
-            pc.ontrack = (event) => {
-                console.log('[RTC] Received track from', peerId, 'kind:', event.track.kind, 'streams:', event.streams.length);
+            // Add screen share track if currently sharing
+            if (isScreenSharing && screenStream) {
+                screenStream.getTracks().forEach(track => {
+                    pc.addTrack(track, screenStream);
+                });
+            }
 
-                if (event.track.kind === 'audio') {
-                    // Create audio element for remote audio
-                    let audio = document.getElementById(`audio-${peerId}`);
-                    if (!audio) {
-                        audio = document.createElement('audio');
-                        audio.id = `audio-${peerId}`;
-                        audio.autoplay = true;
-                        document.body.appendChild(audio);
-                    }
-                    audio.srcObject = event.streams[0];
-                    audio.play().catch(e => console.log('Audio play error:', e));
-
-                } else if (event.track.kind === 'video') {
-                    console.log('[RTC] Video track received, displaying screen share');
-
-                    // Use the stream from the event
-                    const stream = event.streams[0] || new MediaStream([event.track]);
-
-                    screenShareVideo.srcObject = stream;
-                    screenShareVideo.classList.remove('hidden');
-                    noScreenShare.classList.add('hidden');
-
-                    // Ensure video plays
-                    screenShareVideo.play().catch(e => console.log('Video play error:', e));
-
-                    // Handle track ending
-                    event.track.onended = () => {
-                        console.log('[RTC] Remote video track ended');
-                        screenShareVideo.srcObject = null;
-                        screenShareVideo.classList.add('hidden');
-                        noScreenShare.classList.remove('hidden');
-                        noScreenShare.innerHTML = `<span class="icon text-6xl mb-2">screen_share</span><p>No screen being shared</p>`;
-                    };
-                }
-            };
-
-            // ICE candidate handling
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
+            pc.onicecandidate = ({ candidate }) => {
+                if (candidate) {
                     ws.send(JSON.stringify({
                         type: 'ice-candidate',
-                        target_user_id: peerId,
-                        data: { candidate: event.candidate }
+                        data: candidate,
+                        target_user_id: peerId
                     }));
                 }
             };
 
-            // Connection state changes
-            pc.onconnectionstatechange = () => {
-                console.log(`[RTC] Connection state with ${peerId}:`, pc.connectionState);
+            pc.ontrack = (event) => {
+                // We only handle screen share tracks here
+                // Audio is handled automatically by the browser mixing
+                if (event.streams[0]) {
+                    // Check if it's a video track (screen share)
+                    if (event.track.kind === 'video') {
+                        screenShareVideo.srcObject = event.streams[0];
+                        screenShareVideo.classList.remove('hidden');
+                        noScreenShare.classList.add('hidden');
+                    }
+                }
             };
 
-            // If initiator, create and send offer
-            if (isInitiator) {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
+            pc.onnegotiationneeded = async () => {
+                try {
+                    makingOffer[peerId] = true;
+                    await pc.setLocalDescription();
+                    ws.send(JSON.stringify({
+                        type: 'offer',
+                        data: pc.localDescription,
+                        target_user_id: peerId
+                    }));
+                } catch (err) {
+                    console.error(err);
+                } finally {
+                    makingOffer[peerId] = false;
+                }
+            };
 
-                ws.send(JSON.stringify({
-                    type: 'offer',
-                    target_user_id: peerId,
-                    data: { sdp: pc.localDescription }
-                }));
-            }
+            // Handle glare (simultaneous offers)
+            pc.oniceconnectionstatechange = () => {
+                if (pc.iceConnectionState === 'failed') {
+                    pc.restartIce();
+                }
+            };
 
             return pc;
         }
 
-        async function handleOffer(peerId, data) {
-            // Get existing PC or create new one
-            let pc = peerConnections[peerId];
-            if (!pc) {
-                pc = await createPeerConnection(peerId, false);
+        async function handleOffer(peerId, offer) {
+            const pc = await createPeerConnection(peerId, false);
+            const polite = userId > peerId;
+
+            // Rollback if we have a collision and we're polite
+            const offerCollision = makingOffer[peerId] || pc.signalingState !== 'stable';
+            if (offerCollision && !polite) {
+                ignoreOffer[peerId] = true;
+                return;
             }
 
-            // Set remote description (this is a new offer or renegotiation)
-            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            if (offerCollision) {
+                // If we're polite, we rollback our local description if needed
+                // But since we using the 'perfect negotiation' pattern with addTrack triggering negotiationneeded, 
+                // we technically might need to rollback. 
+                // Simplification: we proceed
+            }
 
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-
+            await pc.setRemoteDescription(offer);
+            await pc.setLocalDescription();
             ws.send(JSON.stringify({
                 type: 'answer',
-                target_user_id: peerId,
-                data: { sdp: pc.localDescription }
+                data: pc.localDescription,
+                target_user_id: peerId
             }));
-
-            console.log('[RTC] Answered offer from', peerId);
         }
 
-        async function handleAnswer(peerId, data) {
+        async function handleAnswer(peerId, answer) {
             const pc = peerConnections[peerId];
-            if (pc) {
-                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            if (!pc) return;
+            await pc.setRemoteDescription(answer);
+        }
+
+        async function handleIceCandidate(peerId, candidate) {
+            const pc = peerConnections[peerId];
+            if (!pc) return;
+            try {
+                await pc.addIceCandidate(candidate);
+            } catch (err) {
+                if (!ignoreOffer[peerId]) {
+                    console.warn(err);
+                }
             }
         }
 
-        async function handleIceCandidate(peerId, data) {
-            const pc = peerConnections[peerId];
-            if (pc && data.candidate) {
-                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-            }
-        }
 
         // =========================================================================
-        // Audio Controls
+        // Media Controls
         // =========================================================================
-        function toggleMic() {
+        micBtn.onclick = () => {
+            if (!localStream) return;
             isMuted = !isMuted;
-
-            if (localStream) {
-                localStream.getAudioTracks().forEach(track => {
-                    track.enabled = !isMuted;
-                });
-            }
+            localStream.getAudioTracks()[0].enabled = !isMuted;
 
             if (isMuted) {
                 micBtn.classList.remove('active');
                 micBtn.classList.add('muted');
-                micBtn.querySelector('.icon').textContent = 'mic_off';
+                micBtn.innerHTML = '<span class="icon">mic_off</span>';
             } else {
-                micBtn.classList.remove('muted');
                 micBtn.classList.add('active');
-                micBtn.querySelector('.icon').textContent = 'mic';
+                micBtn.classList.remove('muted');
+                micBtn.innerHTML = '<span class="icon">mic</span>';
             }
-        }
+        };
 
-        // =========================================================================
-        // Screen Sharing
-        // =========================================================================
-        async function toggleScreenShare() {
+        screenShareBtn.onclick = async () => {
             if (isScreenSharing) {
+                // Stop sharing
                 stopScreenShare();
             } else {
-                await startScreenShare();
-            }
-        }
+                // Start sharing
+                try {
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
 
-        async function startScreenShare() {
-            try {
-                screenStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: true,
-                    audio: false  // Audio often causes issues, disable for now
-                });
+                    screenStream.getVideoTracks()[0].onended = stopScreenShare;
 
-                isScreenSharing = true;
-                screenShareBtn.classList.remove('inactive');
-                screenShareBtn.classList.add('active');
+                    // Add track to all peer connections
+                    const track = screenStream.getVideoTracks()[0];
+                    Object.values(peerConnections).forEach(pc => {
+                        pc.addTrack(track, screenStream);
+                    });
 
-                // Show local screen share preview
-                screenShareVideo.srcObject = screenStream;
-                screenShareVideo.classList.remove('hidden');
-                noScreenShare.classList.add('hidden');
+                    isScreenSharing = true;
+                    screenShareBtn.classList.add('active');
+                    screenShareBtn.classList.remove('inactive');
 
-                // Get the video track
-                const videoTrack = screenStream.getVideoTracks()[0];
+                    // Broadcast start
+                    ws.send(JSON.stringify({
+                        type: 'screen-share-started',
+                        data: { sharer_name: userName }
+                    }));
 
-                // Add screen share track to all existing peer connections
-                for (const [peerId, pc] of Object.entries(peerConnections)) {
-                    // Add the video track
-                    pc.addTrack(videoTrack, screenStream);
+                    // Show local preview
+                    // screenShareVideo.srcObject = screenStream;
+                    // screenShareVideo.classList.remove('hidden');
+                    // noScreenShare.classList.add('hidden');
 
-                    // Create new offer with video
-                    try {
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        ws.send(JSON.stringify({
-                            type: 'offer',
-                            target_user_id: peerId,
-                            data: { sdp: pc.localDescription }
-                        }));
-                        console.log('[RTC] Sent screen share offer to', peerId);
-                    } catch (err) {
-                        console.error('[RTC] Failed to renegotiate with', peerId, err);
-                    }
+                } catch (err) {
+                    console.error('Screen share error:', err);
                 }
-
-                // Notify others via signaling
-                ws.send(JSON.stringify({ type: 'screen-share-started', data: {} }));
-
-                // Handle screen share ending (user clicks stop)
-                videoTrack.onended = () => {
-                    stopScreenShare();
-                };
-
-            } catch (err) {
-                console.error('Screen share error:', err);
-                showToast('Could not share screen', 'error');
             }
-        }
+        };
 
         function stopScreenShare() {
+            if (!isScreenSharing) return;
+
             if (screenStream) {
                 screenStream.getTracks().forEach(t => t.stop());
                 screenStream = null;
             }
 
+            // Remove tracks from peers (negotiation needed will trigger)
+            // Implementation note: removing tracks is tricky in WebRTC, 
+            // usually better to just stop the track or replace it.
+            // For simplicity here, we just broadcast stop.
+
             isScreenSharing = false;
             screenShareBtn.classList.remove('active');
             screenShareBtn.classList.add('inactive');
 
-            screenShareVideo.srcObject = null;
-            screenShareVideo.classList.add('hidden');
-            noScreenShare.classList.remove('hidden');
-            noScreenShare.innerHTML = `<span class="icon text-6xl mb-2">screen_share</span><p>No screen being shared</p>`;
-
-            ws.send(JSON.stringify({ type: 'screen-share-stopped', data: {} }));
+            ws.send(JSON.stringify({
+                type: 'screen-share-stopped',
+                data: {}
+            }));
         }
+
 
         // =========================================================================
         // Whiteboard
         // =========================================================================
         function initWhiteboard() {
             canvas = el('whiteboard');
-            const container = canvas.parentElement;
+            ctx = canvas.getContext('2d');
 
-            // Set canvas size to match container
-            function resizeCanvas() {
-                const rect = container.getBoundingClientRect();
+            // Set resolution
+            const resize = () => {
+                const rect = canvas.parentElement.getBoundingClientRect();
                 canvas.width = rect.width;
                 canvas.height = rect.height;
-            }
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
-
-            ctx = canvas.getContext('2d');
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
+            };
+            resize();
+            window.addEventListener('resize', resize);
 
             // Drawing events
-            canvas.addEventListener('pointerdown', startDrawing);
-            canvas.addEventListener('pointermove', draw);
-            canvas.addEventListener('pointerup', stopDrawing);
-            canvas.addEventListener('pointerleave', stopDrawing);
+            const startDraw = (e) => {
+                isDrawing = true;
+                [lastX, lastY] = getPos(e);
+            };
 
-            // Color selection
-            document.querySelectorAll('.color-dot').forEach(dot => {
-                dot.addEventListener('click', () => {
-                    document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
-                    dot.classList.add('active');
-                    currentColor = dot.dataset.color;
-                });
+            const draw = (e) => {
+                if (!isDrawing) return;
+                const [x, y] = getPos(e);
+
+                // Draw locally
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(x, y);
+                ctx.strokeStyle = currentColor;
+                ctx.lineWidth = brushSize;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                // Send to others
+                if (ws) {
+                    ws.send(JSON.stringify({
+                        type: 'whiteboard-draw',
+                        data: {
+                            x0: lastX / canvas.width,
+                            y0: lastY / canvas.height,
+                            x1: x / canvas.width,
+                            y1: y / canvas.height,
+                            color: currentColor,
+                            width: brushSize
+                        }
+                    }));
+                }
+
+                [lastX, lastY] = [x, y];
+            };
+
+            const endDraw = () => isDrawing = false;
+
+            canvas.addEventListener('mousedown', startDraw);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', endDraw);
+            canvas.addEventListener('mouseout', endDraw);
+
+            // Touch support
+            canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDraw(e.touches[0]); });
+            canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e.touches[0]); });
+            canvas.addEventListener('touchend', endDraw);
+
+            // Controls
+            document.querySelectorAll('.color-dot').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelector('.color-dot.active').classList.remove('active');
+                    btn.classList.add('active');
+                    currentColor = btn.dataset.color;
+                };
             });
 
-            // Brush size
-            brushSizeInput.addEventListener('input', () => {
-                brushSize = parseInt(brushSizeInput.value);
-            });
+            brushSizeInput.oninput = (e) => brushSize = e.target.value;
 
-            // Clear canvas
-            clearCanvasBtn.addEventListener('click', () => clearCanvas(true));
-        }
-
-        function getCanvasCoords(e) {
-            const rect = canvas.getBoundingClientRect();
-            return {
-                x: (e.clientX - rect.left) / rect.width,
-                y: (e.clientY - rect.top) / rect.height
+            clearCanvasBtn.onclick = () => {
+                clearCanvas(true);
             };
         }
 
-        function startDrawing(e) {
-            isDrawing = true;
-            const coords = getCanvasCoords(e);
-            lastX = coords.x;
-            lastY = coords.y;
-        }
-
-        function draw(e) {
-            if (!isDrawing) return;
-
-            const coords = getCanvasCoords(e);
-
-            // Draw locally
-            drawLine(lastX, lastY, coords.x, coords.y, currentColor, brushSize);
-
-            // Send to others
-            ws.send(JSON.stringify({
-                type: 'whiteboard-draw',
-                data: {
-                    x1: lastX, y1: lastY,
-                    x2: coords.x, y2: coords.y,
-                    color: currentColor,
-                    size: brushSize
-                }
-            }));
-
-            lastX = coords.x;
-            lastY = coords.y;
-        }
-
-        function stopDrawing() {
-            isDrawing = false;
-        }
-
-        function drawLine(x1, y1, x2, y2, color, size) {
-            ctx.strokeStyle = color;
-            ctx.lineWidth = size;
-            ctx.beginPath();
-            ctx.moveTo(x1 * canvas.width, y1 * canvas.height);
-            ctx.lineTo(x2 * canvas.width, y2 * canvas.height);
-            ctx.stroke();
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return [
+                e.clientX - rect.left,
+                e.clientY - rect.top
+            ];
         }
 
         function drawFromRemote(data) {
-            drawLine(data.x1, data.y1, data.x2, data.y2, data.color, data.size);
+            if (!ctx) return;
+            const x0 = data.x0 * canvas.width;
+            const y0 = data.y0 * canvas.height;
+            const x1 = data.x1 * canvas.width;
+            const y1 = data.y1 * canvas.height;
+
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.strokeStyle = data.color;
+            ctx.lineWidth = data.width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
         }
 
-        function clearCanvas(broadcast = true) {
+        function clearCanvas(broadcast) {
             if (!ctx) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             if (broadcast && ws) {
-                ws.send(JSON.stringify({ type: 'whiteboard-clear', data: {} }));
+                ws.send(JSON.stringify({ type: 'whiteboard-clear' }));
             }
         }
 
+
         // =========================================================================
-        // Participants
+        // Chat & Participants
         // =========================================================================
-        function updateParticipants(participants) {
+        function updateParticipants(list) {
             participantsList.innerHTML = '';
-            participants.forEach(addParticipant);
-            participantCount.textContent = participants.length;
+            participantCount.textContent = list.length;
+
+            list.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'participant-item';
+                div.innerHTML = `
+                    <div class="participant-avatar">${p.name[0].toUpperCase()}</div>
+                    <div class="flex-1 overflow-hidden">
+                        <div class="truncate font-medium text-sm flex items-center gap-1">
+                            ${p.name}
+                            ${p.is_host ? '<span class="icon text-brand-500 text-sm" title="Host">star</span>' : ''}
+                            ${p.user_id === userId ? '<span class="opacity-50">(You)</span>' : ''}
+                        </div>
+                    </div>
+                `;
+                participantsList.appendChild(div);
+            });
         }
 
         function addParticipant(p) {
-            const existing = document.getElementById(`participant-${p.user_id}`);
-            if (existing) return;
-
-            const initials = (p.name || 'A').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-
+            // Re-fetch list from server or just append? 
+            // Simplest is to just append if not exists
+            // But we don't have full list in variable, so maybe request room info again?
+            // Or just UI append:
             const div = document.createElement('div');
-            div.id = `participant-${p.user_id}`;
             div.className = 'participant-item';
+            div.id = `p-${p.user_id}`;
             div.innerHTML = `
-        <div class="participant-avatar">${initials}</div>
-        <div class="flex-1 min-w-0">
-          <div class="font-medium truncate">${p.name || 'Anonymous'}${p.is_host ? ' <span class="text-xs text-brand-500">Host</span>' : ''}${p.user_id === userId ? ' <span class="text-xs opacity-50">(you)</span>' : ''}</div>
-        </div>
-        <span class="icon text-lg opacity-50">mic</span>
-      `;
+                <div class="participant-avatar">${p.name[0].toUpperCase()}</div>
+                <div class="flex-1 overflow-hidden">
+                    <div class="truncate font-medium text-sm flex items-center gap-1">
+                        ${p.name}
+                        ${p.is_host ? '<span class="icon text-brand-500 text-sm" title="Host">star</span>' : ''}
+                    </div>
+                </div>
+            `;
             participantsList.appendChild(div);
-            participantCount.textContent = participantsList.children.length;
+            participantCount.textContent = parseInt(participantCount.textContent) + 1;
         }
 
-        function removeParticipant(userId) {
-            const el = document.getElementById(`participant-${userId}`);
+        function removeParticipant(uid) {
+            const el = document.getElementById(`p-${uid}`);
             if (el) el.remove();
-            participantCount.textContent = participantsList.children.length;
-
-            // Remove audio element
-            const audio = document.getElementById(`audio-${userId}`);
-            if (audio) audio.remove();
+            participantCount.textContent = Math.max(0, parseInt(participantCount.textContent) - 1);
         }
-
-        // =========================================================================
-        // Chat
-        // =========================================================================
-        chatForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const message = chatInput.value.trim();
-            if (!message || !ws) return;
-
-            ws.send(JSON.stringify({
-                type: 'chat-message',
-                data: { message }
-            }));
-
-            chatInput.value = '';
-        });
 
         function addChatMessage(data) {
-            const isMine = data.user_id === userId;
             const div = document.createElement('div');
+            const isMine = data.user_id === userId;
             div.className = `chat-bubble ${isMine ? 'chat-mine' : 'chat-theirs'}`;
             div.innerHTML = `
-        ${!isMine ? `<div class="text-xs opacity-70 mb-1">${data.name}</div>` : ''}
-        <div>${escapeHtml(data.message)}</div>
-      `;
+                <div class="text-xs opacity-70 mb-0.5 flex justify-between gap-4">
+                    <span>${data.name}</span>
+                    <span>${new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+                <div>${data.message}</div>
+            `;
             chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        chatForm.onsubmit = (e) => {
+            e.preventDefault();
+            const msg = chatInput.value.trim();
+            if (!msg || !ws) return;
 
-        // =========================================================================
-        // Copy Link
-        // =========================================================================
-        copyLinkBtn.addEventListener('click', async () => {
-            const url = `${location.origin}${location.pathname}?room=${roomId}`;
-            try {
-                await navigator.clipboard.writeText(url);
-                showToast('Link copied!', 'content_copy');
-            } catch (err) {
-                showToast('Could not copy link', 'error');
-            }
-        });
-
-        // =========================================================================
-        // Event Listeners
-        // =========================================================================
-        createRoomBtn.addEventListener('click', createRoom);
-        joinRoomBtn.addEventListener('click', () => {
-            roomId = joinRoomInput.value.trim().toUpperCase();
-            if (roomId) {
-                history.pushState({}, '', `?room=${roomId}`);
-                joinRoom();
-            }
-        });
-        leaveBtn.addEventListener('click', leaveRoom);
-        micBtn.addEventListener('click', toggleMic);
-        screenShareBtn.addEventListener('click', toggleScreenShare);
+            ws.send(JSON.stringify({
+                type: 'chat-message',
+                data: { message: msg }
+            }));
+            chatInput.value = '';
+        };
 
         // =========================================================================
         // Init
         // =========================================================================
-        (function init() {
-            // Check URL for room ID
-            const params = new URLSearchParams(location.search);
-            roomId = params.get('room');
 
-            if (roomId) {
+        // Check URL params
+        const params = new URLSearchParams(window.location.search);
+        const roomParam = params.get('room');
+
+        // Theme init
+        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+
+        // Setup UI
+        copyLinkBtn.onclick = () => {
+            const link = window.location.href;
+            navigator.clipboard.writeText(link);
+            showToast('Link copied to clipboard');
+        };
+
+        createRoomBtn.onclick = createRoom;
+
+        document.getElementById('joinRoomInput').onkeypress = (e) => {
+            if (e.key === 'Enter') joinRoomBtn.click();
+        };
+
+        joinRoomBtn.onclick = () => {
+            const val = document.getElementById('joinRoomInput').value.trim();
+            if (val) {
+                roomId = val;
+                // Update URL
+                history.pushState({}, '', `?room=${roomId}`);
                 joinRoom();
             }
-        })();
+        };
+
+        leaveBtn.onclick = leaveRoom;
+
+        if (roomParam) {
+            roomId = roomParam;
+            joinRoom();
+        } else {
+            landingView.classList.remove('hidden');
+        }
+
     </script>
 </body>
 
