@@ -18604,22 +18604,190 @@ async def create_group_chat_room(
         "whiteboard_history": [],  # Drawing history for late joiners
         "screen_share_active": False,
         "screen_sharer_id": None,
+        "status": "active"
     }
     group_chat_connections[room_id] = {}
+
+    # Store in Database
+    try:
+        supabase = get_service_client()
+        supabase.table("group_calls").insert({
+            "id": room_id,
+            "room_name": name,
+            "host_user_id": host_id,
+            "status": "active"
+        }).execute()
+    except Exception as e:
+        print(f"[GroupChat] DB Insert Error: {e}")
     
     return JSONResponse(content={
         "room_id": room_id,
         "name": name,
         "host_id": host_id,
-        "join_url": f"/ui/group_chat.html?room={room_id}",
+        "join_url": f"/ui/groupChat/group_chat.html?room={room_id}",
     })
+
+@app.post("/api/group-chat/end")
+async def end_group_chat_room(
+    room_id: str = Body(..., embed=True),
+    authorization: Optional[str] = Header(None)
+):
+    """End a group chat room."""
+    # Verify user is host
+    user_id = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        try:
+            supabase = get_service_client()
+            user_resp = supabase.auth.get_user(token)
+            if user_resp and user_resp.user:
+                user_id = user_resp.user.id
+        except:
+            raise HTTPException(status_code=401, detail="Invalid token")
+            
+    if not user_id:
+         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    room = group_chat_rooms.get(room_id)
+    
+    # If not in memory, check DB
+    if not room:
+         supabase = get_service_client()
+         res = supabase.table("group_calls").select("*").eq("id", room_id).execute()
+         if res.data:
+             db_room = res.data[0]
+             if db_room["host_user_id"] != user_id:
+                  raise HTTPException(status_code=403, detail="Only host can end the call")
+             # Mark ended in DB
+             supabase.table("group_calls").update({
+                 "status": "ended",
+                 "ended_at": datetime.now(timezone.utc).isoformat()
+             }).eq("id", room_id).execute()
+             return {"success": True, "message": "Call ended (was not active in memory)"}
+         else:
+             raise HTTPException(status_code=404, detail="Room not found")
+
+    if room["host_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Only host can end the call")
+        
+    # Mark as ended in memory
+    room["status"] = "ended"
+    
+    # Notify all users
+    await broadcast_to_room(room_id, {
+        "type": "room-ended",
+        "data": {"reason": "Host ended the call"}
+    })
+    
+    # Close all connections
+    connections = group_chat_connections.get(room_id, {})
+    for ws in list(connections.values()):
+        await ws.close()
+    
+    # Clean up memory
+    if room_id in group_chat_rooms:
+        del group_chat_rooms[room_id]
+    if room_id in group_chat_connections:
+        del group_chat_connections[room_id]
+        
+    # Update DB
+    try:
+        supabase = get_service_client()
+        supabase.table("group_calls").update({
+            "status": "ended",
+            "ended_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", room_id).execute()
+    except Exception as e:
+        print(f"[GroupChat] DB Update Error: {e}")
+        
+    return {"success": True}
+
+@app.get("/api/group-chat/history")
+async def get_group_chat_history(authorization: Optional[str] = Header(None)):
+    """Get call history for the user."""
+    if not authorization or not authorization.startswith("Bearer "):
+         raise HTTPException(status_code=401, detail="Unauthorized")
+         
+    token = authorization.split(" ")[1]
+    supabase = get_service_client()
+    try:
+        user_resp = supabase.auth.get_user(token)
+        if not user_resp or not user_resp.user:
+             raise HTTPException(status_code=401, detail="Invalid token")
+        user_id = user_resp.user.id
+    except:
+         raise HTTPException(status_code=401, detail="Invalid token")
+         
+    # 1. Active calls created by me
+    active_calls = []
+    try:
+        res = supabase.table("group_calls").select("*").eq("host_user_id", user_id).eq("status", "active").order("created_at", desc=True).execute()
+        active_calls = res.data or []
+    except Exception as e:
+        print(f"Error fetching active calls: {e}")
+
+    # 2. Past calls (created or attended)
+    past_calls = []
+    try:
+        # Calls I created (ended)
+        res_hosted = supabase.table("group_calls").select("*").eq("host_user_id", user_id).neq("status", "active").order("created_at", desc=True).limit(20).execute()
+        hosted = res_hosted.data or []
+        
+        # Calls I attended (via participants table)
+        # Note: This requires a join or two queries.
+        res_attended = supabase.table("group_call_participants").select("call_id, group_calls(*)").eq("user_id", user_id).order("joined_at", desc=True).limit(20).execute()
+        attended = []
+        if res_attended.data:
+            for item in res_attended.data:
+                call = item.get("group_calls")
+                if call and call.get("host_user_id") != user_id: # Avoid duplicates if I hosted it
+                    attended.append(call)
+        
+        # Merge and sort
+        all_past = hosted + attended
+        # Deduplicate by id
+        seen = set()
+        unique_past = []
+        for c in all_past:
+             if c["id"] not in seen:
+                 unique_past.append(c)
+                 seen.add(c["id"])
+                 
+        # Sort by created_at desc
+        unique_past.sort(key=lambda x: x["created_at"], reverse=True)
+        past_calls = unique_past[:50]
+        
+    except Exception as e:
+         print(f"Error fetching past calls: {e}")
+         
+    return {
+        "active_created": active_calls,
+        "history": past_calls
+    }
+
 
 @app.get("/api/group-chat/{room_id}")
 async def get_group_chat_room(room_id: str):
     """Get room information."""
     room = group_chat_rooms.get(room_id)
+    
+    # If not in memory/active, it might be an ended call or just not loaded
     if not room:
-        raise HTTPException(status_code=404, detail="Room not found")
+        # Check DB to see if it exists but ended
+        supabase = get_service_client()
+        try:
+             res = supabase.table("group_calls").select("*").eq("id", room_id).execute()
+             if res.data:
+                 if res.data[0]["status"] != "active":
+                      raise HTTPException(status_code=400, detail="This call has ended")
+                 # If active in DB but not in memory, we could technically resurrect it or just say not found (server restart case)
+                 # For now, simplistic approach:
+                 pass
+        except:
+             pass
+             
+        raise HTTPException(status_code=404, detail="Room not found or ended")
+
     
     return JSONResponse(content={
         "id": room["id"],
@@ -18713,6 +18881,42 @@ async def group_chat_websocket(websocket: WebSocket, room_id: str):
                 "is_host": is_host,
             }
         }, exclude_user_id=user_id)
+        
+        # ---------------------------
+        # Record Attendance in DB
+        # ---------------------------
+        try:
+            supabase = get_service_client()
+            # Check if executing in a way that allows us to check DB
+            # We want to record (call_id, user_id)
+            # Check if already recorded to avoid dups if re-joining?
+            # The table has a PK, so we can just Insert and ignore specific errors active
+            
+            # Since user_id in memory might be "user-xxxx", we should only record if it is a real UUID (authenticated)
+            # OR we just store whatever user_id we have (the schema defined uuid, so we must check)
+            
+            is_valid_uuid = False
+            try:
+                uuid.UUID(user_id)
+                is_valid_uuid = True
+            except:
+                is_valid_uuid = False
+                
+            if is_valid_uuid:
+                # Check if already exists?
+                exists = supabase.table("group_call_participants").select("id").eq("call_id", room_id).eq("user_id", user_id).execute()
+                if not exists.data:
+                     try:
+                        supabase.table("group_call_participants").insert({
+                            "call_id": room_id,
+                            "user_id": user_id
+                        }).execute()
+                     except Exception as ex:
+                          print(f"Error inserting participant: {ex}")
+
+        except Exception as e:
+            print(f"Error recording attendance: {e}")
+
         
         # Main message loop
         while True:
