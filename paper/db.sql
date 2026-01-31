@@ -944,3 +944,16 @@ CREATE TABLE public.user_topic_history (
   CONSTRAINT user_topic_history_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_topic_history_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id) ON DELETE CASCADE
 );
+CREATE TABLE public.labx_explanations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  topic text NOT NULL,
+  topic_ci text NOT NULL,
+  html_content text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  generation_time_ms integer,
+  view_count integer DEFAULT 0,
+  CONSTRAINT labx_explanations_pkey PRIMARY KEY (id),
+  CONSTRAINT labx_explanations_topic_ci_unique UNIQUE (topic_ci)
+);
+CREATE INDEX idx_labx_explanations_topic_ci ON public.labx_explanations(topic_ci);

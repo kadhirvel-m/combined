@@ -18162,12 +18162,19 @@ if __name__ == "__main__":
 
 # ==========================================
 # LABX - EXPLORABLE EXPLANATION GENERATOR
+# With Database Caching for instant retrieval
 # ==========================================
+
+LABX_EXPLANATIONS_TABLE = "labx_explanations"
 
 labx_router = APIRouter(prefix="/api/labx", tags=["labx"])
 
 class LabXGenerateRequest(BaseModel):
     topic: str = Field(..., min_length=1, max_length=500, description="Topic to generate explorable explanation for")
+    force_regenerate: bool = Field(default=False, description="Force regeneration even if cached")
+
+class LabXRegenerateRequest(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=500, description="Topic to regenerate")
 
 LABX_PROMPT_TEMPLATE = """You are a world-class "Explorable Explanation" Designer and Senior Creative Developer. You blend the storytelling of Vox, the interactivity of Bret Victor, and the aesthetics of Apple. Your task: produce a single-file, production-ready, fully working HTML deep-dive for the topic {topic}.
 
@@ -18185,8 +18192,102 @@ Include 4 named presets (Simple, Balanced, Extreme, Real-world example), export/
 
 Return ONLY the raw HTML starting with <!DOCTYPE html>. No markdown, no code fences, no explanatory text."""
 
+
+def _clean_html_response(html_content: str) -> str:
+    """Remove markdown code fences from AI response if present."""
+    if html_content.startswith("```html"):
+        html_content = html_content[7:]
+    elif html_content.startswith("```"):
+        html_content = html_content[3:]
+    if html_content.endswith("```"):
+        html_content = html_content[:-3]
+    return html_content.strip()
+
+
+def _get_cached_explanation(topic_ci: str) -> Optional[dict]:
+    """Check if topic exists in database, return cached data or None."""
+    try:
+        supabase = get_service_client()
+        result = supabase.table(LABX_EXPLANATIONS_TABLE).select(
+            "id, topic, html_content, created_at, generation_time_ms, view_count"
+        ).eq("topic_ci", topic_ci).limit(1).execute()
+        
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[LabX] Cache lookup error: {e}")
+        return None
+
+
+def _increment_view_count(explanation_id: str):
+    """Increment view count for a cached explanation."""
+    try:
+        supabase = get_service_client()
+        # Get current view count and increment
+        current = supabase.table(LABX_EXPLANATIONS_TABLE).select("view_count").eq("id", explanation_id).limit(1).execute()
+        if current.data:
+            new_count = (current.data[0].get("view_count") or 0) + 1
+            supabase.table(LABX_EXPLANATIONS_TABLE).update({"view_count": new_count}).eq("id", explanation_id).execute()
+    except Exception as e:
+        print(f"[LabX] View count update error: {e}")
+
+
+def _save_explanation_to_db(topic: str, html_content: str, generation_time_ms: int) -> Optional[str]:
+    """Save generated explanation to database. Returns the ID or None on error."""
+    try:
+        supabase = get_service_client()
+        topic_ci = topic.strip().lower()
+        
+        # Upsert - update if exists, insert if not
+        payload = {
+            "topic": topic.strip(),
+            "topic_ci": topic_ci,
+            "html_content": html_content,
+            "generation_time_ms": generation_time_ms,
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "view_count": 1
+        }
+        
+        result = supabase.table(LABX_EXPLANATIONS_TABLE).upsert(
+            payload, 
+            on_conflict="topic_ci"
+        ).execute()
+        
+        if result.data and len(result.data) > 0:
+            return result.data[0].get("id")
+        return None
+    except Exception as e:
+        print(f"[LabX] Save to DB error: {e}")
+        return None
+
+
 @labx_router.post("/generate", summary="Generate explorable explanation for a topic")
 async def generate_labx(req: LabXGenerateRequest):
+    """
+    Generate a self-contained, interactive HTML explorable explanation for the given topic.
+    Uses database caching - returns cached version instantly if available.
+    """
+    topic = req.topic.strip()
+    topic_ci = topic.lower()
+    
+    # Check cache first (unless force_regenerate is True)
+    if not req.force_regenerate:
+        cached = _get_cached_explanation(topic_ci)
+        if cached:
+            # Increment view count in background
+            _increment_view_count(cached["id"])
+            return JSONResponse(content={
+                "success": True,
+                "topic": cached["topic"],
+                "html": cached["html_content"],
+                "cached": True,
+                "created_at": cached.get("created_at"),
+                "generation_time_ms": cached.get("generation_time_ms"),
+                "view_count": (cached.get("view_count") or 0) + 1
+            })
+    
+    # Not cached or force regenerate - generate with Gemini
     if genai is None:
         raise HTTPException(status_code=500, detail="google-genai library not installed")
     
@@ -18194,10 +18295,11 @@ async def generate_labx(req: LabXGenerateRequest):
     if not gemini_key:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
     
-    topic = req.topic.strip()
     prompt = LABX_PROMPT_TEMPLATE.format(topic=topic)
     
     try:
+        start_time = time.time()
+        
         def _generate_sync():
             client = genai.Client(api_key=gemini_key)
             response = client.models.generate_content(
@@ -18207,25 +18309,93 @@ async def generate_labx(req: LabXGenerateRequest):
             return response.text
         
         html_content = await run_in_threadpool(_generate_sync)
+        html_content = _clean_html_response(html_content)
         
-        # Clean up markdown fences if present
-        if html_content.startswith("```html"):
-            html_content = html_content[7:]
-        elif html_content.startswith("```"):
-            html_content = html_content[3:]
-        if html_content.endswith("```"):
-            html_content = html_content[:-3]
-        html_content = html_content.strip()
+        generation_time_ms = int((time.time() - start_time) * 1000)
         
-        return JSONResponse(content={"success": True, "topic": topic, "html": html_content})
+        # Save to database
+        saved_id = _save_explanation_to_db(topic, html_content, generation_time_ms)
+        
+        return JSONResponse(content={
+            "success": True,
+            "topic": topic,
+            "html": html_content,
+            "cached": False,
+            "generation_time_ms": generation_time_ms,
+            "saved_to_db": saved_id is not None
+        })
         
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
 
+
+@labx_router.post("/regenerate", summary="Force regenerate an explanation")
+async def regenerate_labx(req: LabXRegenerateRequest):
+    """Force regenerate an explanation even if it exists in cache."""
+    new_req = LabXGenerateRequest(topic=req.topic, force_regenerate=True)
+    return await generate_labx(new_req)
+
+
+@labx_router.get("/list", summary="List all cached explanations")
+async def list_labx_explanations():
+    """Get a list of all cached explanation topics."""
+    try:
+        supabase = get_service_client()
+        result = supabase.table(LABX_EXPLANATIONS_TABLE).select(
+            "id, topic, created_at, updated_at, generation_time_ms, view_count"
+        ).order("view_count", desc=True).limit(100).execute()
+        
+        return JSONResponse(content={
+            "success": True,
+            "count": len(result.data) if result.data else 0,
+            "explanations": result.data or []
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list explanations: {str(e)}")
+
+
+@labx_router.get("/check/{topic}", summary="Check if a topic is cached")
+async def check_labx_cache(topic: str):
+    """Check if an explanation exists in cache without returning the full HTML."""
+    topic_ci = topic.strip().lower()
+    cached = _get_cached_explanation(topic_ci)
+    
+    if cached:
+        return JSONResponse(content={
+            "exists": True,
+            "topic": cached["topic"],
+            "created_at": cached.get("created_at"),
+            "view_count": cached.get("view_count")
+        })
+    return JSONResponse(content={"exists": False})
+
+
+@labx_router.delete("/{topic}", summary="Delete a cached explanation")
+async def delete_labx_explanation(topic: str):
+    """Delete a cached explanation to allow regeneration."""
+    try:
+        supabase = get_service_client()
+        topic_ci = topic.strip().lower()
+        result = supabase.table(LABX_EXPLANATIONS_TABLE).delete().eq("topic_ci", topic_ci).execute()
+        
+        deleted = len(result.data) > 0 if result.data else False
+        return JSONResponse(content={
+            "success": True,
+            "deleted": deleted,
+            "topic": topic
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete: {str(e)}")
+
+
 @labx_router.post("/generate-stream", summary="Generate explorable explanation with streaming")
 async def generate_labx_stream(req: LabXGenerateRequest):
+    """
+    Generate with streaming. Note: Streaming bypasses cache for fresh generation.
+    For cached results, use the regular /generate endpoint.
+    """
     if genai is None:
         raise HTTPException(status_code=500, detail="google-genai library not installed")
     
@@ -18237,6 +18407,9 @@ async def generate_labx_stream(req: LabXGenerateRequest):
     prompt = LABX_PROMPT_TEMPLATE.format(topic=topic)
     
     async def stream_generator():
+        collected_html = []
+        start_time = time.time()
+        
         try:
             client = genai.Client(api_key=gemini_key)
             response_stream = client.models.generate_content_stream(
@@ -18254,11 +18427,21 @@ async def generate_labx_stream(req: LabXGenerateRequest):
                         elif text.startswith("```"):
                             text = text[3:]
                         first_chunk = False
+                    collected_html.append(text)
                     yield text
+            
+            # Save to DB after streaming completes
+            full_html = "".join(collected_html)
+            if full_html.endswith("```"):
+                full_html = full_html[:-3]
+            generation_time_ms = int((time.time() - start_time) * 1000)
+            _save_explanation_to_db(topic, full_html.strip(), generation_time_ms)
                     
         except Exception as e:
             yield f"<!-- Error: {str(e)} -->"
     
     return StreamingResponse(stream_generator(), media_type="text/html", headers={"X-Topic": topic})
 
+
 app.include_router(labx_router)
+
