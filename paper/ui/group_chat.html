@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Group Chat — PaperX</title>
+    <meta name="description"
+        content="Real-time group chat with voice call, screen sharing, and collaborative whiteboard" />
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script src="config.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --brand-50: #eef4ff;
+            --brand-100: #d9e6ff;
+            --brand-500: #3f6fff;
+            --brand-600: #2f56e6;
+            --brand-700: #2846bb;
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(0, 0, 0, 0.08);
+        }
+
+        .dark {
+            --glass-bg: rgba(20, 24, 33, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.12);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        .icon {
+            font-family: 'Material Symbols Outlined';
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .icon-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: saturate(1.2) blur(12px);
+            -webkit-backdrop-filter: saturate(1.2) blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3f6fff 0%, #628fff 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 8px 24px rgba(63, 111, 255, 0.35);
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(63, 111, 255, 0.45);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: rgba(0, 0, 0, 0.06);
+            color: inherit;
+            border: 1px solid var(--glass-border);
+            transition: all 0.2s ease;
+        }
+
+        .dark .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .dark .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+            color: white;
+            box-shadow: 0 8px 24px rgba(239, 68, 68, 0.35);
+        }
+
+        /* Whiteboard canvas */
+        #whiteboard {
+            touch-action: none;
+            cursor: crosshair;
+        }
+
+        /* Video containers */
+        .video-container {
+            position: relative;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* Participant avatars */
+        .participant-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            background: linear-gradient(135deg, #3f6fff 0%, #628fff 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(63, 111, 255, 0.3);
+        }
+
+        /* Control buttons */
+        .control-btn {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: none;
+        }
+
+        .control-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .control-btn.active {
+            background: linear-gradient(135deg, #3f6fff 0%, #628fff 100%);
+            color: white;
+            box-shadow: 0 6px 18px rgba(63, 111, 255, 0.4);
+        }
+
+        .control-btn.inactive {
+            background: rgba(0, 0, 0, 0.08);
+            color: inherit;
+        }
+
+        .dark .control-btn.inactive {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .control-btn.muted {
+            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+            color: white;
+        }
+
+        /* Toolbar for whiteboard */
+        .toolbar-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 1px solid var(--glass-border);
+            background: var(--glass-bg);
+            transition: all 0.2s ease;
+        }
+
+        .toolbar-btn:hover {
+            background: rgba(63, 111, 255, 0.1);
+            border-color: rgba(63, 111, 255, 0.3);
+        }
+
+        .toolbar-btn.active {
+            background: var(--brand-500);
+            color: white;
+            border-color: transparent;
+        }
+
+        /* Color picker */
+        .color-dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .color-dot:hover {
+            transform: scale(1.15);
+        }
+
+        .color-dot.active {
+            border-color: white;
+            box-shadow: 0 0 0 2px var(--brand-500);
+        }
+
+        /* Pulse animation for connecting */
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .connecting {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        /* Participant list */
+        .participant-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            transition: background 0.2s ease;
+        }
+
+        .participant-item:hover {
+            background: rgba(0, 0, 0, 0.04);
+        }
+
+        .dark .participant-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        /* Chat messages */
+        .chat-bubble {
+            max-width: 85%;
+            padding: 0.5rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 14px;
+        }
+
+        .chat-mine {
+            margin-left: auto;
+            background: linear-gradient(135deg, #3f6fff, #628fff);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-theirs {
+            background: rgba(0, 0, 0, 0.06);
+            border-bottom-left-radius: 4px;
+        }
+
+        .dark .chat-theirs {
+            background: rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+
+<body
+    class="bg-gradient-to-br from-slate-50 to-blue-50 dark:from-[#0a0d12] dark:to-[#0f1419] text-[#0d1117] dark:text-zinc-100 min-h-screen">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-50 glass-card border-0 border-b rounded-none">
+        <nav class="container mx-auto px-4 flex items-center justify-between py-3">
+            <div class="flex items-center gap-3">
+                <a href="index.html" class="flex items-center gap-2 font-semibold">
+                    <span
+                        class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-lg">
+                        <span class="icon text-lg">groups</span>
+                    </span>
+                    <span class="hidden sm:inline">Group Chat</span>
+                </a>
+                <span id="roomName" class="hidden sm:inline text-sm opacity-70">— Loading...</span>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button id="copyLinkBtn" class="btn-secondary px-3 py-2 rounded-xl text-sm flex items-center gap-2"
+                    title="Copy invite link">
+                    <span class="icon text-lg">link</span>
+                    <span class="hidden sm:inline">Copy Link</span>
+                </button>
+                <button onclick="Theme.toggle()" class="btn-secondary px-3 py-2 rounded-xl">
+                    <span class="icon">dark_mode</span>
+                </button>
+                <button id="leaveBtn" class="btn-danger px-4 py-2 rounded-xl text-sm flex items-center gap-2">
+                    <span class="icon text-lg">call_end</span>
+                    <span class="hidden sm:inline">Leave</span>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Landing / Create Room -->
+    <main id="landingView" class="container mx-auto px-4 py-16">
+        <div class="max-w-md mx-auto text-center">
+            <div
+                class="inline-flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-2xl mb-6">
+                <span class="icon text-4xl">video_call</span>
+            </div>
+            <h1 class="text-3xl font-bold mb-3">Group Chat</h1>
+            <p class="text-lg opacity-70 mb-8">Start a video room with voice call, screen sharing, and collaborative
+                whiteboard.</p>
+
+            <div class="glass-card p-6 space-y-4">
+                <input type="text" id="roomNameInput" placeholder="Room name (optional)"
+                    class="w-full px-4 py-3 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                <button id="createRoomBtn"
+                    class="btn-primary w-full py-3 rounded-xl font-semibold text-lg flex items-center justify-center gap-2">
+                    <span class="icon">add_circle</span>
+                    Create New Room
+                </button>
+
+                <div class="relative">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-black/10 dark:border-white/10"></div>
+                    </div>
+                    <div class="relative flex justify-center text-sm">
+                        <span class="px-4 bg-white/80 dark:bg-zinc-900/80 opacity-70">or join existing</span>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <input type="text" id="joinRoomInput" placeholder="Enter room ID"
+                        class="flex-1 px-4 py-3 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                    <button id="joinRoomBtn"
+                        class="btn-secondary px-6 py-3 rounded-xl font-semibold flex items-center gap-2">
+                        <span class="icon">login</span>
+                        Join
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Room View -->
+    <main id="roomView" class="hidden container mx-auto px-4 py-4">
+        <div class="grid lg:grid-cols-[1fr,380px] gap-4 h-[calc(100vh-140px)]">
+
+            <!-- Left: Video / Screen Share Area -->
+            <div class="flex flex-col gap-4">
+                <!-- Screen share / main video -->
+                <div id="mainVideoArea" class="video-container flex-1 min-h-[300px] flex items-center justify-center">
+                    <video id="screenShareVideo" autoplay playsinline muted class="hidden w-full h-full"
+                        style="background: #000;"></video>
+                    <div id="noScreenShare" class="text-center text-white/70">
+                        <span class="icon text-6xl mb-2">screen_share</span>
+                        <p>No screen being shared</p>
+                    </div>
+                </div>
+
+                <!-- Controls bar -->
+                <div class="glass-card p-4 flex items-center justify-center gap-4">
+                    <button id="micBtn" class="control-btn active" title="Toggle microphone">
+                        <span class="icon">mic</span>
+                    </button>
+                    <button id="screenShareBtn" class="control-btn inactive" title="Share screen">
+                        <span class="icon">screen_share</span>
+                    </button>
+                    <div class="w-px h-8 bg-black/10 dark:bg-white/10 mx-2"></div>
+                    <button id="chatToggleBtn" class="control-btn inactive lg:hidden" title="Toggle chat">
+                        <span class="icon">chat</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right: Whiteboard + Participants + Chat -->
+            <div class="flex flex-col gap-4">
+
+                <!-- Whiteboard -->
+                <div class="glass-card p-3 flex-1">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-semibold flex items-center gap-2">
+                            <span class="icon text-lg">draw</span>
+                            Whiteboard
+                        </h3>
+                        <div class="flex items-center gap-2">
+                            <!-- Colors -->
+                            <div class="flex gap-1">
+                                <button class="color-dot active" data-color="#000000"
+                                    style="background:#000000"></button>
+                                <button class="color-dot" data-color="#ef4444" style="background:#ef4444"></button>
+                                <button class="color-dot" data-color="#3b82f6" style="background:#3b82f6"></button>
+                                <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
+                                <button class="color-dot" data-color="#f59e0b" style="background:#f59e0b"></button>
+                            </div>
+                            <div class="w-px h-6 bg-black/10 dark:bg-white/10"></div>
+                            <!-- Brush size -->
+                            <input type="range" id="brushSize" min="2" max="20" value="4" class="w-16" />
+                            <button id="clearCanvasBtn" class="toolbar-btn" title="Clear canvas">
+                                <span class="icon text-lg">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="relative bg-white dark:bg-zinc-800 rounded-lg overflow-hidden"
+                        style="aspect-ratio: 4/3;">
+                        <canvas id="whiteboard" class="absolute inset-0 w-full h-full"></canvas>
+                    </div>
+                </div>
+
+                <!-- Participants -->
+                <div class="glass-card p-3">
+                    <h3 class="font-semibold flex items-center gap-2 mb-2">
+                        <span class="icon text-lg">group</span>
+                        Participants
+                        <span id="participantCount"
+                            class="text-xs bg-brand-500 text-white px-2 py-0.5 rounded-full">0</span>
+                    </h3>
+                    <div id="participantsList" class="space-y-1 max-h-32 overflow-y-auto">
+                        <!-- Participants will be added here -->
+                    </div>
+                </div>
+
+                <!-- Chat -->
+                <div class="glass-card p-3 flex flex-col" style="height: 200px;">
+                    <h3 class="font-semibold flex items-center gap-2 mb-2">
+                        <span class="icon text-lg">chat_bubble</span>
+                        Chat
+                    </h3>
+                    <div id="chatMessages" class="flex-1 overflow-y-auto space-y-2 mb-2">
+                        <!-- Chat messages -->
+                    </div>
+                    <form id="chatForm" class="flex gap-2">
+                        <input type="text" id="chatInput" placeholder="Type a message..."
+                            class="flex-1 px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/50 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                        <button type="submit" class="btn-primary px-4 py-2 rounded-lg">
+                            <span class="icon">send</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast notifications -->
+    <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 hidden">
+        <div class="glass-card px-6 py-3 flex items-center gap-3 shadow-xl">
+            <span id="toastIcon" class="icon text-brand-500">check_circle</span>
+            <span id="toastText"></span>
+        </div>
+    </div>
+
+    <script>
+        // =========================================================================
+        // Configuration
+        // =========================================================================
+        const API = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+        const WS_BASE = API.replace(/^http/, 'ws');
+        const token = localStorage.getItem('px_token');
+
+        // =========================================================================
+        // State
+        // =========================================================================
+        let roomId = null;
+        let userId = null;
+        let userName = 'Anonymous';
+        let isHost = false;
+        let ws = null;
+        let localStream = null;
+        let screenStream = null;
+        let peerConnections = {};  // userId -> RTCPeerConnection
+        let isMuted = false;
+        let isScreenSharing = false;
+
+        // Whiteboard state
+        let canvas, ctx;
+        let isDrawing = false;
+        let currentColor = '#000000';
+        let brushSize = 4;
+        let lastX = 0, lastY = 0;
+
+        // =========================================================================
+        // DOM Elements
+        // =========================================================================
+        const el = id => document.getElementById(id);
+        const landingView = el('landingView');
+        const roomView = el('roomView');
+        const roomNameEl = el('roomName');
+        const createRoomBtn = el('createRoomBtn');
+        const joinRoomBtn = el('joinRoomBtn');
+        const roomNameInput = el('roomNameInput');
+        const joinRoomInput = el('joinRoomInput');
+        const copyLinkBtn = el('copyLinkBtn');
+        const leaveBtn = el('leaveBtn');
+        const micBtn = el('micBtn');
+        const screenShareBtn = el('screenShareBtn');
+        const screenShareVideo = el('screenShareVideo');
+        const noScreenShare = el('noScreenShare');
+        const participantsList = el('participantsList');
+        const participantCount = el('participantCount');
+        const chatMessages = el('chatMessages');
+        const chatForm = el('chatForm');
+        const chatInput = el('chatInput');
+        const clearCanvasBtn = el('clearCanvasBtn');
+        const brushSizeInput = el('brushSize');
+
+        // =========================================================================
+        // Toast
+        // =========================================================================
+        function showToast(message, icon = 'check_circle', duration = 3000) {
+            const toast = el('toast');
+            el('toastText').textContent = message;
+            el('toastIcon').textContent = icon;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), duration);
+        }
+
+        // =========================================================================
+        // Room Management
+        // =========================================================================
+        async function createRoom() {
+            createRoomBtn.disabled = true;
+            const name = roomNameInput.value.trim() || 'Group Chat';
+
+            try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+
+                const res = await fetch(`${API}/api/group-chat/create`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ name })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Failed to create room');
+
+                roomId = data.room_id;
+                userId = data.host_id;
+                isHost = true;
+
+                // Update URL
+                history.pushState({}, '', `?room=${roomId}`);
+                await joinRoom();
+
+            } catch (err) {
+                showToast(err.message, 'error', 4000);
+            } finally {
+                createRoomBtn.disabled = false;
+            }
+        }
+
+        async function joinRoom() {
+            if (!roomId) {
+                showToast('No room ID specified', 'error');
+                return;
+            }
+
+            // Try to get user profile
+            if (token) {
+                try {
+                    const res = await fetch(`${API}/api/profile`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const profile = await res.json();
+                        userId = profile.user_id;
+                        userName = profile.name || 'Anonymous';
+                    }
+                } catch (_) { }
+            }
+
+            if (!userId) {
+                userId = 'user-' + Math.random().toString(36).substr(2, 6);
+            }
+
+            // Switch to room view
+            landingView.classList.add('hidden');
+            roomView.classList.remove('hidden');
+
+            // Connect WebSocket
+            connectWebSocket();
+
+            // Initialize whiteboard
+            initWhiteboard();
+
+            // Get microphone access
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            } catch (err) {
+                console.warn('Could not get microphone:', err);
+                showToast('Microphone access denied', 'warning');
+            }
+        }
+
+        function leaveRoom() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+
+            if (localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+                localStream = null;
+            }
+
+            if (screenStream) {
+                screenStream.getTracks().forEach(t => t.stop());
+                screenStream = null;
+            }
+
+            Object.values(peerConnections).forEach(pc => pc.close());
+            peerConnections = {};
+
+            // Reset state
+            roomId = null;
+            isHost = false;
+            isScreenSharing = false;
+
+            // Go back to landing
+            roomView.classList.add('hidden');
+            landingView.classList.remove('hidden');
+            history.pushState({}, '', location.pathname);
+        }
+
+        // =========================================================================
+        // WebSocket Connection
+        // =========================================================================
+        function connectWebSocket() {
+            ws = new WebSocket(`${WS_BASE}/ws/group-chat/${roomId}`);
+
+            ws.onopen = () => {
+                console.log('[WS] Connected');
+                // Send join message
+                ws.send(JSON.stringify({
+                    type: 'join',
+                    data: { user_id: userId, name: userName }
+                }));
+            };
+
+            ws.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+                await handleSignalingMessage(msg);
+            };
+
+            ws.onclose = () => {
+                console.log('[WS] Disconnected');
+                showToast('Disconnected from room', 'wifi_off');
+            };
+
+            ws.onerror = (err) => {
+                console.error('[WS] Error:', err);
+                showToast('Connection error', 'error');
+            };
+        }
+
+        async function handleSignalingMessage(msg) {
+            const { type, data, from_user_id } = msg;
+
+            switch (type) {
+                case 'room-info':
+                    // Room info received after joining
+                    roomNameEl.textContent = `— ${data.name}`;
+                    isHost = data.is_host;
+                    userId = data.your_user_id;
+
+                    // Render existing participants
+                    updateParticipants(data.participants);
+
+                    // Replay whiteboard history
+                    if (data.whiteboard_history) {
+                        data.whiteboard_history.forEach(stroke => drawFromRemote(stroke));
+                    }
+
+                    // Show screen share if active
+                    if (data.screen_share_active) {
+                        noScreenShare.innerHTML = `<span class="icon text-6xl mb-2">screen_share</span><p>${data.screen_sharer_id === userId ? 'You are' : 'Someone is'} sharing screen</p>`;
+                    }
+
+                    // Create peer connections with existing participants
+                    for (const p of data.participants) {
+                        if (p.user_id !== userId) {
+                            await createPeerConnection(p.user_id, true);
+                        }
+                    }
+                    break;
+
+                case 'user-joined':
+                    showToast(`${data.name} joined`, 'person_add');
+                    addParticipant(data);
+                    // Create peer connection (they will send offer)
+                    break;
+
+                case 'user-left':
+                    showToast(`${data.name} left`, 'person_remove');
+                    removeParticipant(data.user_id);
+                    if (peerConnections[data.user_id]) {
+                        peerConnections[data.user_id].close();
+                        delete peerConnections[data.user_id];
+                    }
+                    break;
+
+                case 'offer':
+                    await handleOffer(from_user_id, data);
+                    break;
+
+                case 'answer':
+                    await handleAnswer(from_user_id, data);
+                    break;
+
+                case 'ice-candidate':
+                    await handleIceCandidate(from_user_id, data);
+                    break;
+
+                case 'whiteboard-draw':
+                    drawFromRemote(data);
+                    break;
+
+                case 'whiteboard-clear':
+                    clearCanvas(false);
+                    break;
+
+                case 'screen-share-started':
+                    noScreenShare.innerHTML = `<span class="icon text-6xl mb-2 connecting">screen_share</span><p>${data.sharer_name} is sharing screen</p>`;
+                    break;
+
+                case 'screen-share-stopped':
+                    noScreenShare.innerHTML = `<span class="icon text-6xl mb-2">screen_share</span><p>No screen being shared</p>`;
+                    screenShareVideo.classList.add('hidden');
+                    noScreenShare.classList.remove('hidden');
+                    break;
+
+                case 'chat-message':
+                    addChatMessage(data);
+                    break;
+            }
+        }
+
+        // =========================================================================
+        // WebRTC Peer Connections
+        // =========================================================================
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        async function createPeerConnection(peerId, isInitiator) {
+            if (peerConnections[peerId]) return peerConnections[peerId];
+
+            const pc = new RTCPeerConnection(rtcConfig);
+            peerConnections[peerId] = pc;
+
+            // Add local audio track
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localStream);
+                });
+            }
+
+            // Handle incoming tracks (remote audio/video)
+            pc.ontrack = (event) => {
+                console.log('[RTC] Received track from', peerId, 'kind:', event.track.kind, 'streams:', event.streams.length);
+
+                if (event.track.kind === 'audio') {
+                    // Create audio element for remote audio
+                    let audio = document.getElementById(`audio-${peerId}`);
+                    if (!audio) {
+                        audio = document.createElement('audio');
+                        audio.id = `audio-${peerId}`;
+                        audio.autoplay = true;
+                        document.body.appendChild(audio);
+                    }
+                    audio.srcObject = event.streams[0];
+                    audio.play().catch(e => console.log('Audio play error:', e));
+
+                } else if (event.track.kind === 'video') {
+                    console.log('[RTC] Video track received, displaying screen share');
+
+                    // Use the stream from the event
+                    const stream = event.streams[0] || new MediaStream([event.track]);
+
+                    screenShareVideo.srcObject = stream;
+                    screenShareVideo.classList.remove('hidden');
+                    noScreenShare.classList.add('hidden');
+
+                    // Ensure video plays
+                    screenShareVideo.play().catch(e => console.log('Video play error:', e));
+
+                    // Handle track ending
+                    event.track.onended = () => {
+                        console.log('[RTC] Remote video track ended');
+                        screenShareVideo.srcObject = null;
+                        screenShareVideo.classList.add('hidden');
+                        noScreenShare.classList.remove('hidden');
+                        noScreenShare.innerHTML = `<span class="icon text-6xl mb-2">screen_share</span><p>No screen being shared</p>`;
+                    };
+                }
+            };
+
+            // ICE candidate handling
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({
+                        type: 'ice-candidate',
+                        target_user_id: peerId,
+                        data: { candidate: event.candidate }
+                    }));
+                }
+            };
+
+            // Connection state changes
+            pc.onconnectionstatechange = () => {
+                console.log(`[RTC] Connection state with ${peerId}:`, pc.connectionState);
+            };
+
+            // If initiator, create and send offer
+            if (isInitiator) {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                ws.send(JSON.stringify({
+                    type: 'offer',
+                    target_user_id: peerId,
+                    data: { sdp: pc.localDescription }
+                }));
+            }
+
+            return pc;
+        }
+
+        async function handleOffer(peerId, data) {
+            // Get existing PC or create new one
+            let pc = peerConnections[peerId];
+            if (!pc) {
+                pc = await createPeerConnection(peerId, false);
+            }
+
+            // Set remote description (this is a new offer or renegotiation)
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            ws.send(JSON.stringify({
+                type: 'answer',
+                target_user_id: peerId,
+                data: { sdp: pc.localDescription }
+            }));
+
+            console.log('[RTC] Answered offer from', peerId);
+        }
+
+        async function handleAnswer(peerId, data) {
+            const pc = peerConnections[peerId];
+            if (pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            }
+        }
+
+        async function handleIceCandidate(peerId, data) {
+            const pc = peerConnections[peerId];
+            if (pc && data.candidate) {
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+        }
+
+        // =========================================================================
+        // Audio Controls
+        // =========================================================================
+        function toggleMic() {
+            isMuted = !isMuted;
+
+            if (localStream) {
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = !isMuted;
+                });
+            }
+
+            if (isMuted) {
+                micBtn.classList.remove('active');
+                micBtn.classList.add('muted');
+                micBtn.querySelector('.icon').textContent = 'mic_off';
+            } else {
+                micBtn.classList.remove('muted');
+                micBtn.classList.add('active');
+                micBtn.querySelector('.icon').textContent = 'mic';
+            }
+        }
+
+        // =========================================================================
+        // Screen Sharing
+        // =========================================================================
+        async function toggleScreenShare() {
+            if (isScreenSharing) {
+                stopScreenShare();
+            } else {
+                await startScreenShare();
+            }
+        }
+
+        async function startScreenShare() {
+            try {
+                screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: false  // Audio often causes issues, disable for now
+                });
+
+                isScreenSharing = true;
+                screenShareBtn.classList.remove('inactive');
+                screenShareBtn.classList.add('active');
+
+                // Show local screen share preview
+                screenShareVideo.srcObject = screenStream;
+                screenShareVideo.classList.remove('hidden');
+                noScreenShare.classList.add('hidden');
+
+                // Get the video track
+                const videoTrack = screenStream.getVideoTracks()[0];
+
+                // Add screen share track to all existing peer connections
+                for (const [peerId, pc] of Object.entries(peerConnections)) {
+                    // Add the video track
+                    pc.addTrack(videoTrack, screenStream);
+
+                    // Create new offer with video
+                    try {
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        ws.send(JSON.stringify({
+                            type: 'offer',
+                            target_user_id: peerId,
+                            data: { sdp: pc.localDescription }
+                        }));
+                        console.log('[RTC] Sent screen share offer to', peerId);
+                    } catch (err) {
+                        console.error('[RTC] Failed to renegotiate with', peerId, err);
+                    }
+                }
+
+                // Notify others via signaling
+                ws.send(JSON.stringify({ type: 'screen-share-started', data: {} }));
+
+                // Handle screen share ending (user clicks stop)
+                videoTrack.onended = () => {
+                    stopScreenShare();
+                };
+
+            } catch (err) {
+                console.error('Screen share error:', err);
+                showToast('Could not share screen', 'error');
+            }
+        }
+
+        function stopScreenShare() {
+            if (screenStream) {
+                screenStream.getTracks().forEach(t => t.stop());
+                screenStream = null;
+            }
+
+            isScreenSharing = false;
+            screenShareBtn.classList.remove('active');
+            screenShareBtn.classList.add('inactive');
+
+            screenShareVideo.srcObject = null;
+            screenShareVideo.classList.add('hidden');
+            noScreenShare.classList.remove('hidden');
+            noScreenShare.innerHTML = `<span class="icon text-6xl mb-2">screen_share</span><p>No screen being shared</p>`;
+
+            ws.send(JSON.stringify({ type: 'screen-share-stopped', data: {} }));
+        }
+
+        // =========================================================================
+        // Whiteboard
+        // =========================================================================
+        function initWhiteboard() {
+            canvas = el('whiteboard');
+            const container = canvas.parentElement;
+
+            // Set canvas size to match container
+            function resizeCanvas() {
+                const rect = container.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            ctx = canvas.getContext('2d');
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Drawing events
+            canvas.addEventListener('pointerdown', startDrawing);
+            canvas.addEventListener('pointermove', draw);
+            canvas.addEventListener('pointerup', stopDrawing);
+            canvas.addEventListener('pointerleave', stopDrawing);
+
+            // Color selection
+            document.querySelectorAll('.color-dot').forEach(dot => {
+                dot.addEventListener('click', () => {
+                    document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+                    dot.classList.add('active');
+                    currentColor = dot.dataset.color;
+                });
+            });
+
+            // Brush size
+            brushSizeInput.addEventListener('input', () => {
+                brushSize = parseInt(brushSizeInput.value);
+            });
+
+            // Clear canvas
+            clearCanvasBtn.addEventListener('click', () => clearCanvas(true));
+        }
+
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: (e.clientX - rect.left) / rect.width,
+                y: (e.clientY - rect.top) / rect.height
+            };
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const coords = getCanvasCoords(e);
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+
+            const coords = getCanvasCoords(e);
+
+            // Draw locally
+            drawLine(lastX, lastY, coords.x, coords.y, currentColor, brushSize);
+
+            // Send to others
+            ws.send(JSON.stringify({
+                type: 'whiteboard-draw',
+                data: {
+                    x1: lastX, y1: lastY,
+                    x2: coords.x, y2: coords.y,
+                    color: currentColor,
+                    size: brushSize
+                }
+            }));
+
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        function drawLine(x1, y1, x2, y2, color, size) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = size;
+            ctx.beginPath();
+            ctx.moveTo(x1 * canvas.width, y1 * canvas.height);
+            ctx.lineTo(x2 * canvas.width, y2 * canvas.height);
+            ctx.stroke();
+        }
+
+        function drawFromRemote(data) {
+            drawLine(data.x1, data.y1, data.x2, data.y2, data.color, data.size);
+        }
+
+        function clearCanvas(broadcast = true) {
+            if (!ctx) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (broadcast && ws) {
+                ws.send(JSON.stringify({ type: 'whiteboard-clear', data: {} }));
+            }
+        }
+
+        // =========================================================================
+        // Participants
+        // =========================================================================
+        function updateParticipants(participants) {
+            participantsList.innerHTML = '';
+            participants.forEach(addParticipant);
+            participantCount.textContent = participants.length;
+        }
+
+        function addParticipant(p) {
+            const existing = document.getElementById(`participant-${p.user_id}`);
+            if (existing) return;
+
+            const initials = (p.name || 'A').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+            const div = document.createElement('div');
+            div.id = `participant-${p.user_id}`;
+            div.className = 'participant-item';
+            div.innerHTML = `
+        <div class="participant-avatar">${initials}</div>
+        <div class="flex-1 min-w-0">
+          <div class="font-medium truncate">${p.name || 'Anonymous'}${p.is_host ? ' <span class="text-xs text-brand-500">Host</span>' : ''}${p.user_id === userId ? ' <span class="text-xs opacity-50">(you)</span>' : ''}</div>
+        </div>
+        <span class="icon text-lg opacity-50">mic</span>
+      `;
+            participantsList.appendChild(div);
+            participantCount.textContent = participantsList.children.length;
+        }
+
+        function removeParticipant(userId) {
+            const el = document.getElementById(`participant-${userId}`);
+            if (el) el.remove();
+            participantCount.textContent = participantsList.children.length;
+
+            // Remove audio element
+            const audio = document.getElementById(`audio-${userId}`);
+            if (audio) audio.remove();
+        }
+
+        // =========================================================================
+        // Chat
+        // =========================================================================
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = chatInput.value.trim();
+            if (!message || !ws) return;
+
+            ws.send(JSON.stringify({
+                type: 'chat-message',
+                data: { message }
+            }));
+
+            chatInput.value = '';
+        });
+
+        function addChatMessage(data) {
+            const isMine = data.user_id === userId;
+            const div = document.createElement('div');
+            div.className = `chat-bubble ${isMine ? 'chat-mine' : 'chat-theirs'}`;
+            div.innerHTML = `
+        ${!isMine ? `<div class="text-xs opacity-70 mb-1">${data.name}</div>` : ''}
+        <div>${escapeHtml(data.message)}</div>
+      `;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // =========================================================================
+        // Copy Link
+        // =========================================================================
+        copyLinkBtn.addEventListener('click', async () => {
+            const url = `${location.origin}${location.pathname}?room=${roomId}`;
+            try {
+                await navigator.clipboard.writeText(url);
+                showToast('Link copied!', 'content_copy');
+            } catch (err) {
+                showToast('Could not copy link', 'error');
+            }
+        });
+
+        // =========================================================================
+        // Event Listeners
+        // =========================================================================
+        createRoomBtn.addEventListener('click', createRoom);
+        joinRoomBtn.addEventListener('click', () => {
+            roomId = joinRoomInput.value.trim().toUpperCase();
+            if (roomId) {
+                history.pushState({}, '', `?room=${roomId}`);
+                joinRoom();
+            }
+        });
+        leaveBtn.addEventListener('click', leaveRoom);
+        micBtn.addEventListener('click', toggleMic);
+        screenShareBtn.addEventListener('click', toggleScreenShare);
+
+        // =========================================================================
+        // Init
+        // =========================================================================
+        (function init() {
+            // Check URL for room ID
+            const params = new URLSearchParams(location.search);
+            roomId = params.get('room');
+
+            if (roomId) {
+                joinRoom();
+            }
+        })();
+    </script>
+</body>
+
+</html>
