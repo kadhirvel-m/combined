@@ -27,24 +27,14 @@
                     colors: {
                         brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
                         brandlt: {
-                            50: '#FAF5FB',
-                            100: '#F3E7F2',
-                            200: '#E7D0E4',
-                            300: '#D9B4D3',
-                            400: '#C88DBA',
-                            500: '#9E4B8A',
-                            700: '#4C2A59',
-                            900: '#1E1E2F'
+                            50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3',
+                            400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F'
                         }
                     },
                     boxShadow: {
                         glow: '0 8px 30px rgba(158,75,138,0.35)',
                         soft: '0 10px 30px rgba(0,0,0,0.25)',
                         card: '0 24px 60px rgba(30,30,47,0.35)'
-                    },
-                    backgroundImage: {
-                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
-                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)'
                     }
                 }
             }
@@ -90,7 +80,6 @@
             background-image: linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
         }
 
-        /* Glassmorphism card */
         .glass-card {
             border-radius: 1rem;
             background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(243, 231, 242, 0.95));
@@ -105,7 +94,6 @@
             box-shadow: 0 22px 60px -20px rgba(0, 0, 0, 0.8);
         }
 
-        /* Input styling */
         .topic-input {
             width: 100%;
             padding: 1rem 1.25rem;
@@ -128,7 +116,6 @@
             color: var(--text-sub);
         }
 
-        /* Generate button */
         .generate-btn {
             display: inline-flex;
             align-items: center;
@@ -156,7 +143,6 @@
             cursor: not-allowed;
         }
 
-        /* Spinner */
         .spinner {
             width: 20px;
             height: 20px;
@@ -172,7 +158,6 @@
             }
         }
 
-        /* Preview iframe container */
         .preview-container {
             position: relative;
             width: 100%;
@@ -188,7 +173,6 @@
             border: none;
         }
 
-        /* Action buttons */
         .action-btn {
             display: inline-flex;
             align-items: center;
@@ -209,13 +193,11 @@
             color: var(--primary);
         }
 
-        /* Status area */
         .status-text {
             color: var(--text-sub);
             font-size: 0.9rem;
         }
 
-        /* Examples chips */
         .example-chip {
             display: inline-flex;
             align-items: center;
@@ -234,7 +216,6 @@
             border-color: var(--primary);
         }
 
-        /* Raw HTML display */
         .html-preview {
             background: #1E1E2F;
             color: #E8E3EE;
@@ -247,27 +228,93 @@
             white-space: pre-wrap;
             word-break: break-all;
         }
+
+        /* Cache badges */
+        .cache-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .cache-badge.cached {
+            background: #10B981;
+            color: white;
+        }
+
+        .cache-badge.generated {
+            background: #6366F1;
+            color: white;
+        }
+
+        .meta-info {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--text-sub);
+        }
+
+        .meta-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        /* Cached topics list */
+        .cached-topics-section {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .cached-topic-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.4rem 0.9rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            background: rgba(16, 185, 129, 0.1);
+            color: #059669;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .cached-topic-pill:hover {
+            background: rgba(16, 185, 129, 0.2);
+            border-color: #10B981;
+        }
+
+        .dark .cached-topic-pill {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34D399;
+        }
     </style>
 
-    <!-- Persist theme before paint -->
     <script>
             (function () {
                 try {
                     const s = localStorage.getItem('px_theme');
                     const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                    const useDark = s ? s === 'dark' : prefers;
-                    if (useDark) document.documentElement.classList.add('dark');
+                    if (s ? s === 'dark' : prefers) document.documentElement.classList.add('dark');
                 } catch (_) { }
             })();
     </script>
     <script src="../config.js"></script>
 </head>
 
-<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
 
-    <!-- ============== NAVBAR (Paper X) ============== -->
+    <!-- NAVBAR -->
     <header
-        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        class="sticky top-0 z-50 bg-white/80 dark:bg-brand-900/70 backdrop-blur border-b border-black/5 dark:border-white/10">
         <div class="container flex items-center justify-between py-3.5">
             <a href="../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
                 <img src="../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
@@ -275,27 +322,12 @@
             </a>
             <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
                 <a href="../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
-                <a href="../about.html" class="hover:text-brandlt-900 dark:hover:text-white">About</a>
                 <a href="../academicas.html" class="hover:text-brandlt-900 dark:hover:text-white">Academics</a>
-                <a href="../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Support</a>
             </nav>
-            <div class="hidden md:flex items-center gap-2">
+            <div class="flex items-center gap-2">
                 <button id="themeToggle"
                     class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
                     aria-label="Toggle theme">
-                    <span class="material-symbols-rounded">dark_mode</span>
-                    <span class="hidden lg:block">Theme</span>
-                </button>
-                <a href="../login.html"
-                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
-                    in</a>
-                <a href="../signup.html"
-                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
-                    up</a>
-            </div>
-            <div class="md:hidden flex items-center gap-2">
-                <button type="button" id="themeToggleMobile" aria-label="Toggle theme"
-                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
                     <span class="material-symbols-rounded">dark_mode</span>
                 </button>
             </div>
@@ -304,7 +336,7 @@
 
     <main class="lab-shell pb-16">
 
-        <!-- Hero Section -->
+        <!-- Hero -->
         <section class="pt-12 pb-8">
             <div class="container max-w-4xl mx-auto px-4 text-center">
                 <div
@@ -312,27 +344,25 @@
                     <span class="material-symbols-rounded text-lg">science</span>
                     Explorable Explanations
                 </div>
-                <h1 class="text-4xl md:text-5xl font-bold tracking-tight text-brand-900 dark:text-white mb-4">
-                    LabX Generator
-                </h1>
+                <h1 class="text-4xl md:text-5xl font-bold tracking-tight text-brand-900 dark:text-white mb-4">LabX
+                    Generator</h1>
                 <p class="text-lg text-neutral-600 dark:text-white/70 max-w-2xl mx-auto mb-8">
-                    Transform any topic into an interactive, self-contained HTML deep-dive. Powered by AI, styled with
-                    PaperX aesthetics.
+                    Transform any topic into an interactive, self-contained HTML deep-dive. Cached results return
+                    instantly!
                 </p>
             </div>
         </section>
 
-        <!-- Input Section -->
+        <!-- Input -->
         <section class="pb-8">
             <div class="container max-w-3xl mx-auto px-4">
                 <div class="glass-card p-8">
                     <label for="topicInput"
-                        class="block text-sm font-semibold text-brand-700 dark:text-brandlt-300 mb-3">
-                        Enter a Topic
-                    </label>
+                        class="block text-sm font-semibold text-brand-700 dark:text-brandlt-300 mb-3">Enter a
+                        Topic</label>
                     <input type="text" id="topicInput" class="topic-input mb-6"
-                        placeholder="e.g., Binary Search, Photosynthesis, Blockchain, CPU Registers..." maxlength="500"
-                        aria-label="Topic to generate explorable explanation for" />
+                        placeholder="e.g., Binary Search, Photosynthesis, Blockchain..." maxlength="500"
+                        aria-label="Topic to generate" />
 
                     <div class="flex flex-wrap gap-2 mb-6">
                         <span class="text-sm text-neutral-500 dark:text-white/50 mr-2">Try:</span>
@@ -350,46 +380,69 @@
                         </button>
                         <p id="statusText" class="status-text"></p>
                     </div>
+
+                    <!-- Cached topics -->
+                    <div id="cachedTopicsSection" class="cached-topics-section hidden">
+                        <p class="text-sm font-medium text-brand-700 dark:text-brandlt-300 mb-3">
+                            <span class="material-symbols-rounded text-sm align-middle mr-1">bolt</span>
+                            Instant Access (cached):
+                        </p>
+                        <div id="cachedTopicsList" class="flex flex-wrap gap-2"></div>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Results Section -->
+        <!-- Results -->
         <section id="resultsSection" class="hidden pb-8">
             <div class="container max-w-5xl mx-auto px-4">
                 <div class="glass-card p-6">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <h2 class="text-xl font-bold text-brand-900 dark:text-white">
-                            <span class="material-symbols-rounded text-brand-500 mr-2 align-middle">check_circle</span>
-                            Generated: <span id="generatedTopic" class="text-brand-500"></span>
-                        </h2>
+                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
+                        <div>
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <h2 class="text-xl font-bold text-brand-900 dark:text-white">
+                                    <span id="generatedTopic" class="text-brand-500"></span>
+                                </h2>
+                                <span id="cacheBadge" class="cache-badge cached">
+                                    <span class="material-symbols-rounded text-sm">bolt</span>
+                                    Cached
+                                </span>
+                            </div>
+                            <div id="metaInfo" class="meta-info">
+                                <span class="meta-item"><span class="material-symbols-rounded text-sm">timer</span>
+                                    <span id="genTime">-</span></span>
+                                <span class="meta-item"><span class="material-symbols-rounded text-sm">visibility</span>
+                                    <span id="viewCount">-</span> views</span>
+                            </div>
+                        </div>
                         <div class="flex flex-wrap gap-2">
                             <button class="action-btn" onclick="downloadHTML()">
                                 <span class="material-symbols-rounded text-lg">download</span>
-                                Download HTML
+                                Download
                             </button>
                             <button class="action-btn" onclick="openInNewTab()">
                                 <span class="material-symbols-rounded text-lg">open_in_new</span>
-                                Open in Tab
+                                Open
                             </button>
                             <button class="action-btn" onclick="copyHTML()">
                                 <span class="material-symbols-rounded text-lg">content_copy</span>
                                 Copy
                             </button>
+                            <button id="regenerateBtn" class="action-btn" onclick="regenerateExplanation()">
+                                <span class="material-symbols-rounded text-lg">refresh</span>
+                                Regenerate
+                            </button>
                             <button class="action-btn" onclick="toggleRawView()">
                                 <span class="material-symbols-rounded text-lg">code</span>
-                                <span id="rawToggleText">View Code</span>
+                                <span id="rawToggleText">Code</span>
                             </button>
                         </div>
                     </div>
 
-                    <!-- Preview iframe -->
                     <div id="previewContainer" class="preview-container">
                         <iframe id="previewFrame" sandbox="allow-scripts allow-same-origin"
-                            title="Generated Explorable Explanation"></iframe>
+                            title="Generated Explanation"></iframe>
                     </div>
-
-                    <!-- Raw HTML view (hidden by default) -->
                     <div id="rawContainer" class="hidden mt-4">
                         <div class="html-preview" id="rawHTML"></div>
                     </div>
@@ -400,17 +453,14 @@
     </main>
 
     <script>
-        // =====================================
         // State
-        // =====================================
         let generatedHTML = '';
         let currentTopic = '';
         let isGenerating = false;
         let showingRaw = false;
+        let wasCached = false;
 
-        // =====================================
-        // DOM Elements
-        // =====================================
+        // DOM
         const topicInput = document.getElementById('topicInput');
         const generateBtn = document.getElementById('generateBtn');
         const btnText = document.getElementById('btnText');
@@ -423,31 +473,24 @@
         const rawContainer = document.getElementById('rawContainer');
         const rawHTML = document.getElementById('rawHTML');
         const rawToggleText = document.getElementById('rawToggleText');
+        const cacheBadge = document.getElementById('cacheBadge');
+        const genTimeEl = document.getElementById('genTime');
+        const viewCountEl = document.getElementById('viewCount');
+        const cachedTopicsSection = document.getElementById('cachedTopicsSection');
+        const cachedTopicsList = document.getElementById('cachedTopicsList');
 
-        // =====================================
-        // API Configuration
-        // =====================================
-        const API_BASE = typeof APP_CONFIG !== 'undefined'
-            ? APP_CONFIG.API_BASE_URL
-            : 'http://127.0.0.1:8000';
+        // API
+        const API_BASE = typeof APP_CONFIG !== 'undefined' ? APP_CONFIG.API_BASE_URL : 'http://127.0.0.1:8000';
 
-        // =====================================
-        // Functions
-        // =====================================
-
-        function setTopic(topic) {
-            topicInput.value = topic;
-            topicInput.focus();
-        }
+        function setTopic(topic) { topicInput.value = topic; topicInput.focus(); }
 
         function setLoading(loading) {
             isGenerating = loading;
             generateBtn.disabled = loading;
-
             if (loading) {
                 btnText.textContent = 'Generating...';
                 btnSpinner.classList.remove('hidden');
-                statusText.textContent = 'This may take 30-60 seconds...';
+                statusText.textContent = 'Checking cache...';
             } else {
                 btnText.textContent = 'Generate Explanation';
                 btnSpinner.classList.add('hidden');
@@ -459,28 +502,25 @@
             statusText.style.color = isError ? '#dc2626' : 'var(--text-sub)';
         }
 
-        async function generateExplanation() {
+        function formatTime(ms) {
+            if (!ms) return '-';
+            if (ms < 1000) return `${ms}ms`;
+            return `${(ms / 1000).toFixed(1)}s`;
+        }
+
+        async function generateExplanation(forceRegenerate = false) {
             const topic = topicInput.value.trim();
-
-            if (!topic) {
-                setStatus('Please enter a topic', true);
-                topicInput.focus();
-                return;
-            }
-
+            if (!topic) { setStatus('Please enter a topic', true); topicInput.focus(); return; }
             if (isGenerating) return;
 
             setLoading(true);
             resultsSection.classList.add('hidden');
-            setStatus('Connecting to Gemini AI...');
 
             try {
                 const response = await fetch(`${API_BASE}/api/labx/generate`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ topic })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic, force_regenerate: forceRegenerate })
                 });
 
                 if (!response.ok) {
@@ -493,12 +533,13 @@
                 if (data.success && data.html) {
                     generatedHTML = data.html;
                     currentTopic = data.topic;
-                    displayResult();
-                    setStatus('Generation complete!');
+                    wasCached = data.cached;
+                    displayResult(data);
+                    setStatus(data.cached ? '⚡ Loaded from cache instantly!' : '✅ Generated and saved!');
+                    loadCachedTopics(); // Refresh list
                 } else {
-                    throw new Error('Invalid response from server');
+                    throw new Error('Invalid response');
                 }
-
             } catch (error) {
                 console.error('Generation error:', error);
                 setStatus(`Error: ${error.message}`, true);
@@ -507,34 +548,44 @@
             }
         }
 
-        function displayResult() {
-            generatedTopicEl.textContent = currentTopic;
+        async function regenerateExplanation() {
+            if (!currentTopic) return;
+            topicInput.value = currentTopic;
+            setStatus('🔄 Force regenerating...');
+            await generateExplanation(true);
+        }
 
-            // Write HTML to iframe
+        function displayResult(data) {
+            generatedTopicEl.textContent = data.topic;
+
+            // Cache badge
+            if (data.cached) {
+                cacheBadge.className = 'cache-badge cached';
+                cacheBadge.innerHTML = '<span class="material-symbols-rounded text-sm">bolt</span> Cached';
+            } else {
+                cacheBadge.className = 'cache-badge generated';
+                cacheBadge.innerHTML = '<span class="material-symbols-rounded text-sm">auto_awesome</span> Fresh';
+            }
+
+            // Meta info
+            genTimeEl.textContent = formatTime(data.generation_time_ms);
+            viewCountEl.textContent = data.view_count || 1;
+
+            // Write to iframe
             const doc = previewFrame.contentDocument || previewFrame.contentWindow.document;
             doc.open();
             doc.write(generatedHTML);
             doc.close();
 
-            // Update raw view
             rawHTML.textContent = generatedHTML;
 
-            // Show results with animation
             resultsSection.classList.remove('hidden');
-            gsap.from(resultsSection, {
-                opacity: 0,
-                y: 30,
-                duration: 0.5,
-                ease: 'power2.out'
-            });
-
-            // Scroll to results
+            gsap.from(resultsSection, { opacity: 0, y: 30, duration: 0.5, ease: 'power2.out' });
             resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         function downloadHTML() {
             if (!generatedHTML) return;
-
             const blob = new Blob([generatedHTML], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -544,69 +595,65 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-
             setStatus('Downloaded!');
         }
 
         function openInNewTab() {
             if (!generatedHTML) return;
-
             const blob = new Blob([generatedHTML], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            window.open(url, '_blank');
+            window.open(URL.createObjectURL(blob), '_blank');
         }
 
         async function copyHTML() {
             if (!generatedHTML) return;
-
             try {
                 await navigator.clipboard.writeText(generatedHTML);
-                setStatus('Copied to clipboard!');
-            } catch (err) {
-                setStatus('Failed to copy', true);
-            }
+                setStatus('Copied!');
+            } catch { setStatus('Copy failed', true); }
         }
 
         function toggleRawView() {
             showingRaw = !showingRaw;
+            previewContainer.classList.toggle('hidden', showingRaw);
+            rawContainer.classList.toggle('hidden', !showingRaw);
+            rawToggleText.textContent = showingRaw ? 'Preview' : 'Code';
+        }
 
-            if (showingRaw) {
-                previewContainer.classList.add('hidden');
-                rawContainer.classList.remove('hidden');
-                rawToggleText.textContent = 'View Preview';
-            } else {
-                previewContainer.classList.remove('hidden');
-                rawContainer.classList.add('hidden');
-                rawToggleText.textContent = 'View Code';
+        // Load cached topics
+        async function loadCachedTopics() {
+            try {
+                const res = await fetch(`${API_BASE}/api/labx/list`);
+                const data = await res.json();
+                if (data.success && data.explanations && data.explanations.length > 0) {
+                    cachedTopicsSection.classList.remove('hidden');
+                    cachedTopicsList.innerHTML = data.explanations.slice(0, 10).map(e =>
+                        `<button class="cached-topic-pill" onclick="setTopic('${e.topic.replace(/'/g, "\\'")}'); generateExplanation();">
+                            <span class="material-symbols-rounded text-sm">bolt</span>
+                            ${e.topic}
+                        </button>`
+                    ).join('');
+                } else {
+                    cachedTopicsSection.classList.add('hidden');
+                }
+            } catch (e) {
+                console.log('Could not load cached topics:', e);
             }
         }
 
-        // =====================================
-        // Theme Toggle
-        // =====================================
-        function toggleTheme() {
-            const html = document.documentElement;
-            const isDark = html.classList.toggle('dark');
+        // Theme toggle
+        document.getElementById('themeToggle')?.addEventListener('click', () => {
+            const isDark = document.documentElement.classList.toggle('dark');
             localStorage.setItem('px_theme', isDark ? 'dark' : 'light');
-        }
-
-        document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
-        document.getElementById('themeToggleMobile')?.addEventListener('click', toggleTheme);
-
-        // =====================================
-        // Keyboard shortcuts
-        // =====================================
-        topicInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !isGenerating) {
-                generateExplanation();
-            }
         });
 
-        // =====================================
+        // Enter key
+        topicInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !isGenerating) generateExplanation();
+        });
+
         // Init
-        // =====================================
-        console.log('LabX Generator initialized');
-        console.log('API Base:', API_BASE);
+        loadCachedTopics();
+        console.log('LabX Generator with caching initialized');
     </script>
 </body>
 
