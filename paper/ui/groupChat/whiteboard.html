@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Whiteboard — PaperX Meet</title>
+    <meta name="description" content="Collaborative whiteboard for real-time drawing and brainstorming" />
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script src="../config.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;600&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --brand-500: #9E4B8A;
+            --brand-600: #8A3D78;
+            --brand-gradient: linear-gradient(135deg, #9E4B8A 0%, #FF7FD1 100%);
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(0, 0, 0, 0.08);
+        }
+
+        .dark {
+            --glass-bg: rgba(20, 24, 33, 0.9);
+            --glass-border: rgba(255, 255, 255, 0.12);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+        }
+
+        .icon {
+            font-family: 'Material Symbols Outlined';
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .icon-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: saturate(1.2) blur(16px);
+            -webkit-backdrop-filter: saturate(1.2) blur(16px);
+            border: 1px solid var(--glass-border);
+        }
+
+        /* Toolbar styles */
+        .toolbar {
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 8px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .toolbar-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 1px solid transparent;
+            background: transparent;
+            color: inherit;
+            transition: all 0.2s ease;
+        }
+
+        .toolbar-btn:hover {
+            background: rgba(158, 75, 138, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .toolbar-btn.active {
+            background: var(--brand-gradient);
+            color: white;
+            box-shadow: 0 6px 20px rgba(158, 75, 138, 0.35);
+        }
+
+        .toolbar-divider {
+            width: 1px;
+            height: 32px;
+            background: var(--glass-border);
+            margin: 0 8px;
+        }
+
+        /* Color picker */
+        .color-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .color-btn:hover {
+            transform: scale(1.15);
+        }
+
+        .color-btn.active {
+            border-color: white;
+            box-shadow: 0 0 0 3px var(--brand-500), 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Canvas container */
+        #canvasContainer {
+            position: fixed;
+            top: 72px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+        }
+
+        #whiteboard {
+            touch-action: none;
+            cursor: crosshair;
+            background: white;
+        }
+
+        .dark #whiteboard {
+            background: #1a1a2e;
+        }
+
+        /* Size slider */
+        .size-slider {
+            width: 100px;
+            accent-color: var(--brand-500);
+        }
+
+        /* Connection status */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .status-dot.connected {
+            background: #22c55e;
+        }
+
+        .status-dot.disconnected {
+            background: #ef4444;
+            animation: none;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 72px;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+        }
+
+        /* Cursor indicators */
+        .remote-cursor {
+            position: fixed;
+            pointer-events: none;
+            z-index: 1000;
+            transition: all 0.1s linear;
+        }
+
+        .remote-cursor::before {
+            content: '';
+            display: block;
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 12px solid var(--cursor-color);
+            transform: rotate(-45deg);
+        }
+
+        .remote-cursor-label {
+            position: absolute;
+            top: 16px;
+            left: 8px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+            color: white;
+            background: var(--cursor-color);
+        }
+
+        /* Undo/Redo buttons */
+        .history-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body
+    class="bg-gradient-to-br from-slate-50 to-purple-50 dark:from-[#0a0d12] dark:to-[#1a0f1c] text-[#0d1117] dark:text-zinc-100">
+
+    <!-- Header -->
+    <header class="header glass-card border-0 border-b rounded-none">
+        <div class="flex items-center gap-4">
+            <a href="group_chat.html" id="backBtn"
+                class="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition">
+                <span class="icon">arrow_back</span>
+                <span class="hidden sm:inline">Back to Meeting</span>
+            </a>
+            <div class="w-px h-6 bg-black/10 dark:bg-white/10"></div>
+            <div class="flex items-center gap-2">
+                <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl"
+                    style="background: var(--brand-gradient);">
+                    <span class="icon text-white text-lg">draw</span>
+                </span>
+                <div>
+                    <h1 class="font-semibold text-sm">Collaborative Whiteboard</h1>
+                    <p id="roomName" class="text-xs opacity-60">Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <!-- Connection status -->
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/5 dark:bg-white/5">
+                <div id="statusDot" class="status-dot disconnected"></div>
+                <span id="statusText" class="text-xs font-medium">Connecting...</span>
+            </div>
+
+            <!-- Participants on whiteboard -->
+            <div id="participants" class="hidden sm:flex items-center -space-x-2">
+                <!-- Avatars will be added here -->
+            </div>
+
+            <button onclick="Theme.toggle()" class="p-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition">
+                <span class="icon">dark_mode</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Canvas Container -->
+    <div id="canvasContainer">
+        <canvas id="whiteboard"></canvas>
+    </div>
+
+    <!-- Remote Cursors Container -->
+    <div id="remoteCursors"></div>
+
+    <!-- Floating Toolbar -->
+    <div class="toolbar glass-card">
+        <!-- Drawing Tools -->
+        <button id="penTool" class="toolbar-btn active" title="Pen (P)">
+            <span class="icon">edit</span>
+        </button>
+        <button id="eraserTool" class="toolbar-btn" title="Eraser (E)">
+            <span class="icon">ink_eraser</span>
+        </button>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- Colors -->
+        <div class="flex items-center gap-2">
+            <button class="color-btn active" data-color="#000000" style="background:#000000" title="Black"></button>
+            <button class="color-btn" data-color="#ef4444" style="background:#ef4444" title="Red"></button>
+            <button class="color-btn" data-color="#3b82f6" style="background:#3b82f6" title="Blue"></button>
+            <button class="color-btn" data-color="#22c55e" style="background:#22c55e" title="Green"></button>
+            <button class="color-btn" data-color="#f59e0b" style="background:#f59e0b" title="Orange"></button>
+            <button class="color-btn" data-color="#9E4B8A" style="background:#9E4B8A" title="Purple"></button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- Brush Size -->
+        <div class="flex items-center gap-2">
+            <span class="icon text-sm opacity-50">line_weight</span>
+            <input type="range" id="brushSize" min="2" max="30" value="4" class="size-slider" title="Brush size" />
+            <span id="sizeLabel" class="text-xs font-medium w-6">4</span>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- History -->
+        <button id="undoBtn" class="toolbar-btn history-btn" title="Undo (Ctrl+Z)" disabled>
+            <span class="icon">undo</span>
+        </button>
+        <button id="redoBtn" class="toolbar-btn history-btn" title="Redo (Ctrl+Y)" disabled>
+            <span class="icon">redo</span>
+        </button>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- Actions -->
+        <button id="clearBtn" class="toolbar-btn" title="Clear canvas">
+            <span class="icon">delete_sweep</span>
+        </button>
+        <button id="downloadBtn" class="toolbar-btn" title="Download as image">
+            <span class="icon">download</span>
+        </button>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 hidden">
+        <div class="glass-card px-6 py-3 rounded-xl flex items-center gap-3 shadow-xl">
+            <span id="toastIcon" class="icon" style="color: var(--brand-500)">check_circle</span>
+            <span id="toastText"></span>
+        </div>
+    </div>
+
+    <script>
+        // =========================================================================
+        // Configuration
+        // =========================================================================
+        const API = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+        const WS_BASE = API.replace(/^http/, 'ws');
+        const token = localStorage.getItem('px_token');
+
+        // =========================================================================
+        // State
+        // =========================================================================
+        let roomId = null;
+        let userId = null;
+        let userName = 'Anonymous';
+        let ws = null;
+        let canvas, ctx;
+        let isDrawing = false;
+        let currentTool = 'pen';
+        let currentColor = '#000000';
+        let brushSize = 4;
+        let lastX = 0, lastY = 0;
+
+        // History for undo/redo
+        let history = [];
+        let historyIndex = -1;
+        const maxHistory = 50;
+
+        // Remote cursors
+        let remoteCursors = {};
+
+        // =========================================================================
+        // DOM Elements
+        // =========================================================================
+        const el = id => document.getElementById(id);
+        const canvasContainer = el('canvasContainer');
+        const statusDot = el('statusDot');
+        const statusText = el('statusText');
+        const roomNameEl = el('roomName');
+        const brushSizeInput = el('brushSize');
+        const sizeLabel = el('sizeLabel');
+        const penTool = el('penTool');
+        const eraserTool = el('eraserTool');
+        const undoBtn = el('undoBtn');
+        const redoBtn = el('redoBtn');
+        const clearBtn = el('clearBtn');
+        const downloadBtn = el('downloadBtn');
+        const backBtn = el('backBtn');
+        const remoteCursorsContainer = el('remoteCursors');
+
+        // =========================================================================
+        // Toast
+        // =========================================================================
+        function showToast(message, icon = 'check_circle', duration = 3000) {
+            const toast = el('toast');
+            el('toastText').textContent = message;
+            el('toastIcon').textContent = icon;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), duration);
+        }
+
+        // =========================================================================
+        // Canvas Setup
+        // =========================================================================
+        function initCanvas() {
+            canvas = el('whiteboard');
+            ctx = canvas.getContext('2d');
+
+            const resize = () => {
+                const rect = canvasContainer.getBoundingClientRect();
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                ctx.putImageData(imgData, 0, 0);
+            };
+
+            resize();
+            window.addEventListener('resize', resize);
+
+            // Save initial state
+            saveState();
+
+            // Mouse events
+            canvas.addEventListener('mousedown', startDraw);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', endDraw);
+            canvas.addEventListener('mouseout', endDraw);
+
+            // Touch events
+            canvas.addEventListener('touchstart', e => { e.preventDefault(); startDraw(e.touches[0]); });
+            canvas.addEventListener('touchmove', e => { e.preventDefault(); draw(e.touches[0]); });
+            canvas.addEventListener('touchend', endDraw);
+
+            // Track cursor position for remote display
+            canvas.addEventListener('mousemove', throttle(sendCursorPosition, 50));
+        }
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return [e.clientX - rect.left, e.clientY - rect.top];
+        }
+
+        function startDraw(e) {
+            isDrawing = true;
+            [lastX, lastY] = getPos(e);
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const [x, y] = getPos(e);
+
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+
+            if (currentTool === 'eraser') {
+                ctx.strokeStyle = document.documentElement.classList.contains('dark') ? '#1a1a2e' : '#ffffff';
+                ctx.lineWidth = brushSize * 3;
+            } else {
+                ctx.strokeStyle = currentColor;
+                ctx.lineWidth = brushSize;
+            }
+
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+
+            // Send to others
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'whiteboard-draw',
+                    data: {
+                        x0: lastX / canvas.width,
+                        y0: lastY / canvas.height,
+                        x1: x / canvas.width,
+                        y1: y / canvas.height,
+                        color: currentTool === 'eraser' ? (document.documentElement.classList.contains('dark') ? '#1a1a2e' : '#ffffff') : currentColor,
+                        width: currentTool === 'eraser' ? brushSize * 3 : brushSize
+                    }
+                }));
+            }
+
+            [lastX, lastY] = [x, y];
+        }
+
+        function endDraw() {
+            if (isDrawing) {
+                isDrawing = false;
+                saveState();
+            }
+        }
+
+        // =========================================================================
+        // Remote Drawing
+        // =========================================================================
+        function drawFromRemote(data) {
+            if (!ctx) return;
+            const x0 = data.x0 * canvas.width;
+            const y0 = data.y0 * canvas.height;
+            const x1 = data.x1 * canvas.width;
+            const y1 = data.y1 * canvas.height;
+
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.strokeStyle = data.color;
+            ctx.lineWidth = data.width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+        }
+
+        // =========================================================================
+        // History (Undo/Redo)
+        // =========================================================================
+        function saveState() {
+            if (historyIndex < history.length - 1) {
+                history = history.slice(0, historyIndex + 1);
+            }
+            if (history.length >= maxHistory) {
+                history.shift();
+            }
+            history.push(canvas.toDataURL());
+            historyIndex = history.length - 1;
+            updateHistoryButtons();
+        }
+
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                loadState(history[historyIndex]);
+                updateHistoryButtons();
+            }
+        }
+
+        function redo() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                loadState(history[historyIndex]);
+                updateHistoryButtons();
+            }
+        }
+
+        function loadState(dataUrl) {
+            const img = new Image();
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+            };
+            img.src = dataUrl;
+        }
+
+        function updateHistoryButtons() {
+            undoBtn.disabled = historyIndex <= 0;
+            redoBtn.disabled = historyIndex >= history.length - 1;
+        }
+
+        // =========================================================================
+        // Clear Canvas
+        // =========================================================================
+        function clearCanvas(broadcast = true) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            saveState();
+
+            if (broadcast && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'whiteboard-clear' }));
+            }
+        }
+
+        // =========================================================================
+        // Download
+        // =========================================================================
+        function downloadCanvas() {
+            const link = document.createElement('a');
+            link.download = `whiteboard-${roomId}-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            showToast('Image downloaded!', 'download');
+        }
+
+        // =========================================================================
+        // Remote Cursors
+        // =========================================================================
+        function sendCursorPosition(e) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            const [x, y] = getPos(e);
+            ws.send(JSON.stringify({
+                type: 'cursor-move',
+                data: {
+                    x: x / canvas.width,
+                    y: y / canvas.height
+                }
+            }));
+        }
+
+        function updateRemoteCursor(userId, name, x, y, color) {
+            let cursor = remoteCursors[userId];
+            if (!cursor) {
+                cursor = document.createElement('div');
+                cursor.className = 'remote-cursor';
+                cursor.style.setProperty('--cursor-color', color);
+                cursor.innerHTML = `<div class="remote-cursor-label">${name}</div>`;
+                remoteCursorsContainer.appendChild(cursor);
+                remoteCursors[userId] = cursor;
+            }
+            cursor.style.left = `${x * canvas.width}px`;
+            cursor.style.top = `${72 + y * canvas.height}px`;
+        }
+
+        function removeRemoteCursor(userId) {
+            if (remoteCursors[userId]) {
+                remoteCursors[userId].remove();
+                delete remoteCursors[userId];
+            }
+        }
+
+        // =========================================================================
+        // WebSocket
+        // =========================================================================
+        function connectWebSocket() {
+            ws = new WebSocket(`${WS_BASE}/ws/group-chat/${roomId}`);
+
+            ws.onopen = () => {
+                console.log('[WS] Connected');
+                statusDot.classList.remove('disconnected');
+                statusDot.classList.add('connected');
+                statusText.textContent = 'Connected';
+
+                ws.send(JSON.stringify({
+                    type: 'join',
+                    data: { user_id: userId, name: userName }
+                }));
+            };
+
+            ws.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            };
+
+            ws.onclose = () => {
+                console.log('[WS] Disconnected');
+                statusDot.classList.add('disconnected');
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'Disconnected';
+
+                // Try to reconnect after 3 seconds
+                setTimeout(() => {
+                    if (roomId) connectWebSocket();
+                }, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error('[WS] Error:', err);
+            };
+        }
+
+        function handleMessage(msg) {
+            const { type, data, from_user_id } = msg;
+
+            switch (type) {
+                case 'room-info':
+                    roomNameEl.textContent = data.name;
+                    userId = data.your_user_id;
+
+                    // Replay whiteboard history
+                    if (data.whiteboard_history) {
+                        data.whiteboard_history.forEach(stroke => drawFromRemote(stroke));
+                        saveState();
+                    }
+                    break;
+
+                case 'room-ended':
+                    showToast('The meeting has ended', 'call_end');
+                    setTimeout(() => {
+                        window.location.href = 'create_meet.html';
+                    }, 2000);
+                    break;
+
+                case 'whiteboard-draw':
+                    drawFromRemote(data);
+                    break;
+
+                case 'whiteboard-clear':
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    saveState();
+                    break;
+
+                case 'cursor-move':
+                    if (from_user_id && from_user_id !== userId) {
+                        const colors = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#9E4B8A', '#06b6d4'];
+                        const colorIndex = from_user_id.charCodeAt(0) % colors.length;
+                        updateRemoteCursor(from_user_id, data.name || 'User', data.x, data.y, colors[colorIndex]);
+                    }
+                    break;
+
+                case 'user-left':
+                    removeRemoteCursor(data.user_id);
+                    break;
+            }
+        }
+
+        // =========================================================================
+        // Utilities
+        // =========================================================================
+        function throttle(fn, wait) {
+            let lastTime = 0;
+            return function (...args) {
+                const now = Date.now();
+                if (now - lastTime >= wait) {
+                    lastTime = now;
+                    fn.apply(this, args);
+                }
+            };
+        }
+
+        // =========================================================================
+        // Event Handlers
+        // =========================================================================
+        penTool.onclick = () => {
+            currentTool = 'pen';
+            penTool.classList.add('active');
+            eraserTool.classList.remove('active');
+            canvas.style.cursor = 'crosshair';
+        };
+
+        eraserTool.onclick = () => {
+            currentTool = 'eraser';
+            eraserTool.classList.add('active');
+            penTool.classList.remove('active');
+            canvas.style.cursor = 'cell';
+        };
+
+        document.querySelectorAll('.color-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelector('.color-btn.active')?.classList.remove('active');
+                btn.classList.add('active');
+                currentColor = btn.dataset.color;
+                // Switch to pen when selecting color
+                penTool.click();
+            };
+        });
+
+        brushSizeInput.oninput = (e) => {
+            brushSize = parseInt(e.target.value);
+            sizeLabel.textContent = brushSize;
+        };
+
+        undoBtn.onclick = undo;
+        redoBtn.onclick = redo;
+        clearBtn.onclick = () => clearCanvas(true);
+        downloadBtn.onclick = downloadCanvas;
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'z') {
+                    e.preventDefault();
+                    undo();
+                } else if (e.key === 'y') {
+                    e.preventDefault();
+                    redo();
+                }
+            } else if (e.key === 'p' || e.key === 'P') {
+                penTool.click();
+            } else if (e.key === 'e' || e.key === 'E') {
+                eraserTool.click();
+            }
+        });
+
+        // =========================================================================
+        // Init
+        // =========================================================================
+        async function init() {
+            // Theme
+            if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+
+            // Get room ID from URL
+            const params = new URLSearchParams(window.location.search);
+            roomId = params.get('room');
+
+            if (!roomId) {
+                showToast('No room specified', 'error');
+                setTimeout(() => window.location.href = 'create_meet.html', 2000);
+                return;
+            }
+
+            // Update back button
+            backBtn.href = `group_chat.html?room=${roomId}`;
+
+            // Get user info
+            if (token) {
+                try {
+                    const res = await fetch(`${API}/api/profile`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const profile = await res.json();
+                        userId = profile.user_id;
+                        userName = profile.name || 'Anonymous';
+                    }
+                } catch (_) { }
+            }
+
+            if (!userId) {
+                userId = 'user-' + Math.random().toString(36).substr(2, 6);
+            }
+
+            // Initialize canvas
+            initCanvas();
+
+            // Connect to WebSocket
+            connectWebSocket();
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
