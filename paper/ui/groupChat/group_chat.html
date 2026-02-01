@@ -1758,13 +1758,19 @@
             };
         }
 
-        function sendWs(msg) {
+        function sendWs(msg, opts = {}) {
+            const silent = !!opts.silent;
             if (!ws || ws.readyState !== WebSocket.OPEN) {
-                showToast('Not connected', 'error');
+                if (!silent) showToast('Not connected', 'error');
                 return false;
             }
-            ws.send(JSON.stringify(msg));
-            return true;
+            try {
+                ws.send(JSON.stringify(msg));
+                return true;
+            } catch (_) {
+                if (!silent) showToast('Send failed', 'error');
+                return false;
+            }
         }
 
         function sendHostSettingsPatch(patch) {
@@ -2109,6 +2115,10 @@
                             rtcConfig = { ...rtcConfig, iceTransportPolicy: wsRtc.iceTransportPolicy };
                         }
 
+                        if (wsRtc && typeof wsRtc.turnConfigured === 'boolean') {
+                            turnConfigured = wsRtc.turnConfigured;
+                        }
+
                         // Deterministic behavior: if TURN is required/not configured, do not attempt WebRTC.
                         if (wsRtc && wsRtc.requireTurn && !wsRtc.turnConfigured) {
                             showToast('Meeting server is missing TURN configuration. Audio/screen share will not work on most networks.', 'warning', 8000);
@@ -2173,8 +2183,8 @@
 
                     // Only start WebRTC if TURN is configured when the server requires it.
                     const wsRtc = data.rtc_config;
-                    const canStartRtc = !(wsRtc && wsRtc.requireTurn && !wsRtc.turnConfigured);
-                    if (canStartRtc) {
+                    rtcStartAllowed = !(wsRtc && wsRtc.requireTurn && !wsRtc.turnConfigured);
+                    if (rtcStartAllowed) {
                         for (const p of data.participants) {
                             if (p.user_id !== userId) {
                                 await createPeerConnection(p.user_id, false);
@@ -2191,7 +2201,7 @@
                 case 'user-joined':
                     showToast(`${data.name} joined`, 'person_add');
                     addParticipant(data);
-                    if (data.user_id !== userId) {
+                    if (rtcStartAllowed && data.user_id !== userId) {
                         await createPeerConnection(data.user_id, false);
                     }
                     break;
@@ -2324,9 +2334,11 @@
                     if (data && data.settings) applySettingsToUI(data.settings);
                     if (data && Array.isArray(data.participants)) updateParticipants(data.participants);
                     // Create peer connections for others
-                    for (const p of (data.participants || [])) {
-                        if (p.user_id !== userId) {
-                            await createPeerConnection(p.user_id, false);
+                    if (rtcStartAllowed) {
+                        for (const p of (data.participants || [])) {
+                            if (p.user_id !== userId) {
+                                await createPeerConnection(p.user_id, false);
+                            }
                         }
                     }
                     break;
@@ -2625,6 +2637,10 @@
         // =========================================================================
         // WebRTC Peer Connections
         // =========================================================================
+        let rtcStartAllowed = true;
+        let turnConfigured = false;
+        let warnedTurnOnce = false;
+        const iceRestarting = {};
         let rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -2655,6 +2671,9 @@
                 }
                 if (cfg && typeof cfg.iceTransportPolicy === 'string') {
                     rtcConfig = { ...rtcConfig, iceTransportPolicy: cfg.iceTransportPolicy };
+                }
+                if (cfg && typeof cfg.turnConfigured === 'boolean') {
+                    turnConfigured = cfg.turnConfigured;
                 }
             } catch (_) { }
         }
@@ -2778,17 +2797,27 @@
             } catch (_) { }
 
             pc.onicecandidate = ({ candidate }) => {
-                if (candidate) {
-                    ws.send(JSON.stringify({
-                        type: 'ice-candidate',
-                        data: candidate,
-                        target_user_id: peerId
-                    }));
-                }
+                if (!candidate) return;
+                // ICE candidates are frequent; never spam UI if WS is briefly unavailable.
+                sendWs({
+                    type: 'ice-candidate',
+                    data: candidate,
+                    target_user_id: peerId
+                }, { silent: true });
             };
 
             pc.onicecandidateerror = (e) => {
+                // STUN can fail on many mobile/corporate networks (UDP blocked / broken IPv6). That's normal.
+                // If TURN is configured, STUN errors are usually harmless noise.
+                const url = String(e?.url || '');
+                if (turnConfigured && url.startsWith('stun:')) return;
+
                 console.warn('ICE candidate error', peerId, e);
+
+                if (!turnConfigured && !warnedTurnOnce && url.startsWith('stun:')) {
+                    warnedTurnOnce = true;
+                    showToast('Network is blocking STUN (WebRTC). Configure TURN for reliable audio/screen sharing.', 'warning', 7000);
+                }
             };
 
             pc.ontrack = (event) => {
@@ -2842,11 +2871,11 @@
                 try {
                     makingOffer[peerId] = true;
                     await pc.setLocalDescription();
-                    ws.send(JSON.stringify({
+                    sendWs({
                         type: 'offer',
                         data: pc.localDescription,
                         target_user_id: peerId
-                    }));
+                    }, { silent: true });
                 } catch (err) {
                     console.error(err);
                 } finally {
@@ -2854,16 +2883,63 @@
                 }
             };
 
+            async function tryIceRestart(reason = 'unknown') {
+                if (iceRestarting[peerId]) return;
+                if (!rtcStartAllowed) return;
+                if (!peerConnections[peerId]) return;
+                // Deterministic offerer: the "smaller" id initiates restarts.
+                const iAmOfferer = String(userId) < String(peerId);
+                if (!iAmOfferer) return;
+                if (pc.signalingState !== 'stable') return;
+                try {
+                    iceRestarting[peerId] = true;
+                    const offer = await pc.createOffer({ iceRestart: true });
+                    await pc.setLocalDescription(offer);
+                    sendWs({
+                        type: 'offer',
+                        data: pc.localDescription,
+                        target_user_id: peerId,
+                        data2: { iceRestart: true, reason }
+                    }, { silent: true });
+                } catch (e) {
+                    console.warn('ICE restart failed', peerId, e);
+                } finally {
+                    iceRestarting[peerId] = false;
+                }
+            }
+
             pc.oniceconnectionstatechange = () => {
                 if (pc.iceConnectionState === 'failed') {
                     console.warn('ICE failed for peer', peerId);
+                    // restartIce() alone is not always enough; perform an ICE-restart offer.
                     try { pc.restartIce(); } catch { }
+                    tryIceRestart('iceConnectionState=failed');
+                }
+                if (pc.iceConnectionState === 'disconnected') {
+                    // Many mobile networks flap; try an ICE restart if it stays disconnected.
+                    setTimeout(() => {
+                        const cur = peerConnections[peerId];
+                        if (!cur) return;
+                        if (cur.iceConnectionState === 'disconnected') {
+                            tryIceRestart('iceConnectionState=disconnected');
+                        }
+                    }, 6000);
                 }
             };
 
             pc.onconnectionstatechange = () => {
                 if (pc.connectionState === 'failed') {
                     console.warn('Peer connection failed', peerId);
+                    tryIceRestart('connectionState=failed');
+                }
+                if (pc.connectionState === 'disconnected') {
+                    setTimeout(() => {
+                        const cur = peerConnections[peerId];
+                        if (!cur) return;
+                        if (cur.connectionState === 'disconnected') {
+                            tryIceRestart('connectionState=disconnected');
+                        }
+                    }, 6000);
                 }
             };
 
@@ -2875,10 +2951,11 @@
             const polite = userId > peerId;
 
             const offerCollision = makingOffer[peerId] || pc.signalingState !== 'stable';
-            if (offerCollision && !polite) {
-                ignoreOffer[peerId] = true;
-                return;
-            }
+            // Perfect negotiation: ignore ONLY this offer if we're impolite and there's a collision.
+            // Important: don't leave ignoreOffer stuck "true" forever (that forces users to refresh).
+            const shouldIgnore = offerCollision && !polite;
+            ignoreOffer[peerId] = shouldIgnore;
+            if (shouldIgnore) return;
 
             try {
                 // Perfect negotiation: polite peer rolls back local offer on collision.
@@ -2892,11 +2969,11 @@
                 return;
             }
             await pc.setLocalDescription();
-            ws.send(JSON.stringify({
+            sendWs({
                 type: 'answer',
                 data: pc.localDescription,
                 target_user_id: peerId
-            }));
+            }, { silent: true });
         }
 
         async function handleAnswer(peerId, answer) {
@@ -2999,12 +3076,17 @@
                     // Marker toolkit available while screen sharing
                     setMarkerUIVisible(true);
 
-                    ws.send(JSON.stringify({
+                    sendWs({
                         type: 'screen-share-started',
                         data: { sharer_name: userName }
-                    }));
+                    }, { silent: true });
                 } catch (err) {
                     console.error('Screen share error:', err);
+                    if (err && err.name === 'NotAllowedError') {
+                        showToast('Screen share permission was denied (click Share Screen and allow the prompt)', 'warning', 6000);
+                    } else {
+                        showToast('Screen share failed', 'warning', 4000);
+                    }
                 }
             }
         };
@@ -3034,10 +3116,10 @@
                 }
             }
 
-            ws.send(JSON.stringify({
+            sendWs({
                 type: 'screen-share-stopped',
                 data: {}
-            }));
+            }, { silent: true });
         }
 
         // Whiteboard button - opens new page
@@ -3284,10 +3366,10 @@
                 return;
             }
 
-            ws.send(JSON.stringify({
+            sendWs({
                 type: 'chat-message',
                 data: { message: msg }
-            }));
+            }, { silent: true });
             chatInput.value = '';
         };
 
