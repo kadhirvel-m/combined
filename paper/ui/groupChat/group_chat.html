@@ -1964,6 +1964,9 @@
                 return;
             }
 
+            // Load ICE/TURN config before any peer connections get created.
+            await loadRtcConfig();
+
             // Check room status first
             try {
                 const checkRes = await fetch(`${API}/api/group-chat/${roomId}`, {
@@ -2004,10 +2007,23 @@
 
             // Get microphone access
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                localStream = await acquireMicrophoneStream();
+
+                // If peer connections were created before mic permission resolved,
+                // attach/replace the audio track now.
+                try {
+                    const aTrack = localStream.getAudioTracks?.()?.[0] || null;
+                    if (aTrack) {
+                        for (const [pid, s] of Object.entries(peerSenders || {})) {
+                            if (s?.audio) {
+                                try { await s.audio.replaceTrack(aTrack); } catch (_) { }
+                            }
+                        }
+                    }
+                } catch (_) { }
             } catch (err) {
                 console.warn('Could not get microphone:', err);
-                showToast('Microphone access denied', 'warning');
+                showToast('Microphone not available (check permissions/device)', 'warning');
             }
         }
 
@@ -2166,6 +2182,14 @@
                         peerConnections[data.user_id].close();
                         delete peerConnections[data.user_id];
                     }
+                    try {
+                        const a = peerSenders?.[data.user_id]?.audioEl;
+                        if (a) a.remove();
+                    } catch (_) { }
+                    try { delete peerSenders?.[data.user_id]; } catch (_) { }
+                    try { delete makingOffer?.[data.user_id]; } catch (_) { }
+                    try { delete ignoreOffer?.[data.user_id]; } catch (_) { }
+                    try { delete pendingIce?.[data.user_id]; } catch (_) { }
                     break;
 
                 case 'offer':
@@ -2576,26 +2600,108 @@
         // =========================================================================
         // WebRTC Peer Connections
         // =========================================================================
-        const rtcConfig = {
+        let rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                {
-                    urls: 'turn:openrelay.metered.ca:80',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                }
+                { urls: 'stun:stun.cloudflare.com:3478' },
+                // Best-effort public TURN (often rate-limited). Prefer configuring a TURN server via /api/rtc-config.
+                { urls: 'turn:openrelay.metered.ca:80?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+                { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
             ],
             iceCandidatePoolSize: 10
         };
 
+        async function loadRtcConfig() {
+            try {
+                const res = await fetch(`${API}/api/rtc-config`);
+                if (!res.ok) return;
+                const cfg = await res.json();
+                if (cfg && Array.isArray(cfg.iceServers) && cfg.iceServers.length) {
+                    rtcConfig = { ...rtcConfig, iceServers: cfg.iceServers };
+                }
+            } catch (_) { }
+        }
+
         let makingOffer = {};
         let ignoreOffer = {};
+        let pendingIce = {};
+        let peerSenders = {};
+        let peerRecvStreams = {};
+
+        async function acquireMicrophoneStream() {
+            if (!navigator.mediaDevices?.getUserMedia) {
+                throw new Error('getUserMedia not supported');
+            }
+
+            // Fast path
+            try {
+                return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            } catch (err) {
+                // Fall back to enumerating devices (helps when default device is missing/broken)
+                const name = err?.name || '';
+                if (!navigator.mediaDevices?.enumerateDevices || (name !== 'NotFoundError' && name !== 'OverconstrainedError' && name !== 'AbortError')) {
+                    throw err;
+                }
+            }
+
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const mics = devices.filter(d => d.kind === 'audioinput');
+            if (!mics.length) {
+                const e = new Error('No microphone devices found');
+                e.name = 'NotFoundError';
+                throw e;
+            }
+
+            let lastErr = null;
+            for (const mic of mics) {
+                try {
+                    return await navigator.mediaDevices.getUserMedia({
+                        audio: { deviceId: mic.deviceId ? { exact: mic.deviceId } : undefined },
+                        video: false
+                    });
+                } catch (e) {
+                    lastErr = e;
+                }
+            }
+            throw lastErr || new Error('Could not acquire microphone');
+        }
+
+        // Remote audio playback (one <audio> per peer)
+        const remoteAudioContainer = (() => {
+            const el = document.createElement('div');
+            el.id = 'remoteAudioContainer';
+            el.style.display = 'none';
+            document.body.appendChild(el);
+            return el;
+        })();
+
+        function ensureMediaPlays(mediaEl) {
+            if (!mediaEl) return;
+            try {
+                const p = mediaEl.play?.();
+                if (p && typeof p.catch === 'function') {
+                    p.catch(() => {
+                        // Autoplay may be blocked on mobile until user interaction.
+                        const once = () => {
+                            document.removeEventListener('click', once, true);
+                            try { mediaEl.play?.(); } catch (_) { }
+                        };
+                        document.addEventListener('click', once, true);
+                    });
+                }
+            } catch (_) { }
+        }
+
+        async function flushPendingIce(peerId) {
+            const pc = peerConnections[peerId];
+            if (!pc || !pc.remoteDescription) return;
+            const q = pendingIce[peerId] || [];
+            pendingIce[peerId] = [];
+            for (const c of q) {
+                try { await pc.addIceCandidate(c); } catch (_) { }
+            }
+        }
 
         async function createPeerConnection(peerId, isInitiator) {
             if (peerConnections[peerId]) return peerConnections[peerId];
@@ -2605,19 +2711,34 @@
             makingOffer[peerId] = false;
             ignoreOffer[peerId] = false;
 
-            const polite = userId > peerId;
+            pendingIce[peerId] = [];
+            peerSenders[peerId] = { audio: null, video: null, audioEl: null };
 
-            if (localStream) {
-                localStream.getTracks().forEach(track => {
-                    pc.addTrack(track, localStream);
-                });
-            }
+            // Create transceivers up-front to stabilize renegotiation and allow replaceTrack.
+            try {
+                const at = pc.addTransceiver('audio', { direction: 'sendrecv' });
+                peerSenders[peerId].audio = at.sender;
+            } catch (_) { }
+            try {
+                const vt = pc.addTransceiver('video', { direction: 'sendrecv' });
+                peerSenders[peerId].video = vt.sender;
+            } catch (_) { }
 
-            if (isScreenSharing && screenStream) {
-                screenStream.getTracks().forEach(track => {
-                    pc.addTrack(track, screenStream);
-                });
-            }
+            // Attach local audio if available
+            try {
+                const track = localStream?.getAudioTracks?.()?.[0] || null;
+                if (peerSenders[peerId].audio && track) {
+                    await peerSenders[peerId].audio.replaceTrack(track);
+                }
+            } catch (_) { }
+
+            // Attach local screen track if currently sharing
+            try {
+                const vtrack = (isScreenSharing && screenStream?.getVideoTracks?.()?.[0]) ? screenStream.getVideoTracks()[0] : null;
+                if (peerSenders[peerId].video) {
+                    await peerSenders[peerId].video.replaceTrack(vtrack);
+                }
+            } catch (_) { }
 
             pc.onicecandidate = ({ candidate }) => {
                 if (candidate) {
@@ -2629,11 +2750,50 @@
                 }
             };
 
+            pc.onicecandidateerror = (e) => {
+                console.warn('ICE candidate error', peerId, e);
+            };
+
             pc.ontrack = (event) => {
-                if (event.streams[0] && event.track.kind === 'video') {
-                    screenShareVideo.srcObject = event.streams[0];
+                const kind = event.track?.kind;
+                if (!kind) return;
+
+                // Firefox / some Unified Plan flows may not populate event.streams.
+                let stream = (event.streams && event.streams[0]) ? event.streams[0] : null;
+                if (!stream) {
+                    peerRecvStreams[peerId] ||= { audio: new MediaStream(), video: new MediaStream() };
+                    stream = kind === 'audio' ? peerRecvStreams[peerId].audio : peerRecvStreams[peerId].video;
+                    try {
+                        // Remove existing track of same kind to avoid accumulation.
+                        for (const t of stream.getTracks()) {
+                            if (t.kind === kind) stream.removeTrack(t);
+                        }
+                        stream.addTrack(event.track);
+                    } catch (_) { }
+                }
+
+                if (kind === 'audio') {
+                    let audioEl = peerSenders[peerId]?.audioEl;
+                    if (!audioEl) {
+                        audioEl = document.createElement('audio');
+                        audioEl.autoplay = true;
+                        audioEl.playsInline = true;
+                        audioEl.muted = false;
+                        remoteAudioContainer.appendChild(audioEl);
+                        peerSenders[peerId].audioEl = audioEl;
+                    }
+                    audioEl.srcObject = stream;
+                    ensureMediaPlays(audioEl);
+                    return;
+                }
+
+                if (kind === 'video') {
+                    screenShareVideo.srcObject = stream;
+                    // Keep muted to maximize autoplay success on mobile.
+                    screenShareVideo.muted = true;
                     screenShareVideo.classList.remove('hidden');
                     noScreenShare.classList.add('hidden');
+                    ensureMediaPlays(screenShareVideo);
                 }
             };
 
@@ -2655,7 +2815,14 @@
 
             pc.oniceconnectionstatechange = () => {
                 if (pc.iceConnectionState === 'failed') {
-                    pc.restartIce();
+                    console.warn('ICE failed for peer', peerId);
+                    try { pc.restartIce(); } catch { }
+                }
+            };
+
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === 'failed') {
+                    console.warn('Peer connection failed', peerId);
                 }
             };
 
@@ -2672,7 +2839,17 @@
                 return;
             }
 
-            await pc.setRemoteDescription(offer);
+            try {
+                // Perfect negotiation: polite peer rolls back local offer on collision.
+                if (offerCollision && polite) {
+                    try { await pc.setLocalDescription({ type: 'rollback' }); } catch (_) { }
+                }
+                await pc.setRemoteDescription(offer);
+                await flushPendingIce(peerId);
+            } catch (e) {
+                console.warn('setRemoteDescription(offer) failed', e);
+                return;
+            }
             await pc.setLocalDescription();
             ws.send(JSON.stringify({
                 type: 'answer',
@@ -2684,13 +2861,23 @@
         async function handleAnswer(peerId, answer) {
             const pc = peerConnections[peerId];
             if (!pc) return;
-            await pc.setRemoteDescription(answer);
+            try {
+                await pc.setRemoteDescription(answer);
+                await flushPendingIce(peerId);
+            } catch (e) {
+                console.warn('setRemoteDescription(answer) failed', e);
+            }
         }
 
         async function handleIceCandidate(peerId, candidate) {
             const pc = peerConnections[peerId];
             if (!pc) return;
             try {
+                // Queue candidates until remoteDescription is set.
+                if (!pc.remoteDescription) {
+                    (pendingIce[peerId] ||= []).push(candidate);
+                    return;
+                }
                 await pc.addIceCandidate(candidate);
             } catch (err) {
                 if (!ignoreOffer[peerId]) console.warn(err);
@@ -2700,8 +2887,24 @@
         // =========================================================================
         // Media Controls
         // =========================================================================
-        micBtn.onclick = () => {
-            if (!localStream) return;
+        micBtn.onclick = async () => {
+            if (!localStream) {
+                try {
+                    localStream = await acquireMicrophoneStream();
+                    const aTrack = localStream.getAudioTracks?.()?.[0] || null;
+                    if (aTrack) {
+                        for (const [pid, s] of Object.entries(peerSenders || {})) {
+                            if (s?.audio) {
+                                try { await s.audio.replaceTrack(aTrack); } catch (_) { }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Could not get microphone:', err);
+                    showToast('Microphone not available (check permissions/device)', 'warning');
+                    return;
+                }
+            }
 
             const hostMgmt = !!roomSettings.host_management_enabled;
             if (!canModerate && hostMgmt && !roomSettings.participants_can_unmute && isMuted) {
@@ -2736,9 +2939,15 @@
                     screenStream.getVideoTracks()[0].onended = stopScreenShare;
 
                     const track = screenStream.getVideoTracks()[0];
-                    Object.values(peerConnections).forEach(pc => {
-                        pc.addTrack(track, screenStream);
-                    });
+                    // Prefer replaceTrack to avoid accumulating multiple senders.
+                    for (const [pid, pc] of Object.entries(peerConnections)) {
+                        const s = peerSenders[pid]?.video;
+                        if (s) {
+                            try { await s.replaceTrack(track); } catch (_) { }
+                        } else {
+                            try { pc.addTrack(track, screenStream); } catch (_) { }
+                        }
+                    }
 
                     isScreenSharing = true;
                     screenShareBtn.classList.add('active');
@@ -2772,6 +2981,13 @@
             // Hide marker toolkit and clear canvas
             setMarkerUIVisible(false);
             try { clearMarkerCanvas(true); } catch (_) { }
+
+            // Remove outbound screen track
+            for (const [pid, s] of Object.entries(peerSenders)) {
+                if (s?.video) {
+                    try { s.video.replaceTrack(null); } catch (_) { }
+                }
+            }
 
             ws.send(JSON.stringify({
                 type: 'screen-share-stopped',
