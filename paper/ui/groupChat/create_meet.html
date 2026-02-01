@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create / Join Meet — PaperX</title>
+    <meta name="description" content="Create or join a video meet room" />
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script src="../config.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --ink: #1E1E2F;
+            --plum: #4C2A59;
+            --orchid: #9E4B8A;
+            --glass-bg: rgba(255, 255, 255, 0.78);
+            --glass-bg-2: rgba(255, 255, 255, 0.62);
+            --glass-border: rgba(30, 30, 47, 0.10);
+            --shadow-soft: 0 12px 42px -10px rgba(30, 30, 47, .18);
+        }
+
+        .dark {
+            --glass-bg: rgba(30, 30, 47, 0.74);
+            --glass-bg-2: rgba(30, 30, 47, 0.58);
+            --glass-border: rgba(255, 255, 255, 0.14);
+            --shadow-soft: 0 22px 60px -12px rgba(0, 0, 0, .55);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        /* Match about.html/index.html icon alignment */
+        .material-symbols-rounded {
+            vertical-align: -6px;
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .icon {
+            font-family: 'Material Symbols Rounded';
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: -6px;
+        }
+
+        .page-bg {
+            background:
+                radial-gradient(1000px 560px at 50% -18%, rgba(158, 75, 138, 0.18), transparent 62%),
+                linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 55%, #F7F2F9 100%);
+        }
+
+        .dark .page-bg {
+            background:
+                radial-gradient(900px 520px at 50% -15%, rgba(158, 75, 138, 0.35), transparent 65%),
+                linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        .glass-panel {
+            background: linear-gradient(180deg, var(--glass-bg), var(--glass-bg-2));
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--shadow-soft);
+            border-radius: 1rem;
+        }
+
+        .glass-card {
+            background: linear-gradient(180deg, var(--glass-bg), var(--glass-bg-2));
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.25rem;
+            box-shadow: var(--shadow-soft);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--plum) 0%, var(--orchid) 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 10px 30px rgba(158, 75, 138, 0.30);
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 40px rgba(158, 75, 138, 0.40);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.55);
+            color: inherit;
+            border: 1px solid var(--glass-border);
+            transition: all 0.2s ease;
+        }
+
+        .dark .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.70);
+        }
+
+        .dark .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        .input {
+            border: 1px solid rgba(30, 30, 47, 0.12);
+            background: rgba(255, 255, 255, 0.70);
+        }
+
+        .dark .input {
+            border-color: rgba(255, 255, 255, 0.14);
+            background: rgba(30, 30, 47, 0.40);
+        }
+
+        /* Mobile nav transitions (same as about/index) */
+        #mobileNavBackdrop {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s ease;
+        }
+
+        #mobileNavPanel {
+            opacity: 0;
+            transform: translateY(-12px);
+            pointer-events: none;
+            transition: opacity .25s ease, transform .25s ease;
+        }
+
+        #mobileNavBackdrop[data-open="true"],
+        #mobileNavBackdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #mobileNavPanel[data-open="true"],
+        #mobileNavPanel.open {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen page-bg text-[#0d1117] dark:text-zinc-100">
+
+    <!-- Navbar (same as about.html, paths adjusted) -->
+    <header
+        class="fixed top-0 left-0 right-0 z-40 w-full bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-4">
+            <a href="../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
+                <img src="../assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="../index.html">Home</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="../about.html">About</a>
+                <button
+                    class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">Products
+                    <span
+                        class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span></button>
+                <button
+                    class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">Solutions
+                    <span
+                        class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span></button>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="../contact.html">Contact</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="../help.html">Help</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="../index.html#pricing">Pricing</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button id="themeToggle" data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg:white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden sm:block">Theme</span>
+                </button>
+                <a href="../login.html"
+                    class="text-sm text-neutral-700 dark:text-white/85 hover:text-brandlt-900 dark:hover:text-white px-3 py-2 rounded-full">Log
+                    in</a>
+                <a href="../signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+                <a id="navProfile" href="../profile.html" title="Profile"
+                    class="hidden items-center justify-center w-10 h-10 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60">
+                    <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+                    <span id="navProfileInitial" class="text-xs font-semibold">ME</span>
+                </a>
+                <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out"
+                    class="hidden items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded text-base">logout</span>
+                    <span>Sign out</span>
+                </button>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+                <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg:white/5 transition">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="material-symbols-rounded" data-icon>menu</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Mobile drawer (same as about.html, paths adjusted) -->
+    <div id="mobileNavBackdrop" aria-hidden="true"
+        class="hidden md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+    <nav id="mobileNavPanel" aria-hidden="true"
+        class="hidden md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+        <div class="flex flex-col gap-2 text-sm text-neutral-700 dark:text-white/80">
+            <a href="../index.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Home</a>
+            <a href="../about.html#values" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Values</a>
+            <a href="../about.html#journey" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Journey</a>
+            <a href="../about.html#team" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Team</a>
+            <a href="../contact.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Contact</a>
+            <a href="../help.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Help</a>
+            <a href="../index.html#pricing" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Pricing</a>
+        </div>
+        <div class="flex flex-col gap-3 border-t border-black/5 dark:border-white/10 pt-4">
+            <a href="../login.html" data-close-mobile-nav
+                class="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">Log
+                in</a>
+            <a href="../signup.html" data-close-mobile-nav
+                class="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)] transition">Sign
+                up</a>
+            <a id="navProfileMobile" href="../profile.html" data-close-mobile-nav
+                class="hidden inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/15 px-4 py-2 text-sm text-neutral-700 dark:text-white/80 bg-white/70 dark:bg-brand-900/60">
+                <span class="material-symbols-rounded text-base">account_circle</span>
+                <span data-profile-name>My profile</span>
+            </a>
+            <button id="signOutBtnMobile" type="button"
+                class="hidden inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">
+                <span class="material-symbols-rounded text-base">logout</span>
+                <span>Sign out</span>
+            </button>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-4 pb-12" style="margin-top: 120px !important; padding-top: 0 !important;">
+        <div class="max-w-6xl mx-auto">
+            <!-- Two Column Layout -->
+            <div
+                style="display: flex; flex-direction: row; gap: 4rem; align-items: center; min-height: calc(100vh - 200px);">
+
+                <!-- LEFT Column: Video Carousel -->
+                <div style="flex: 1; width: 50%;">
+                    <div class="video-carousel-container relative">
+                        <!-- Carousel Wrapper - Circular -->
+                        <div
+                            style="position: relative; overflow: hidden; border-radius: 50%; aspect-ratio: 1/1; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); background: linear-gradient(to bottom right, rgba(158, 75, 138, 0.1), rgba(76, 42, 89, 0.1));">
+                            <!-- Videos -->
+                            <div id="videoCarousel" class="relative w-full h-full">
+                                <video
+                                    class="carousel-video absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500"
+                                    src="../assets/video/group/1.mp4" muted loop playsinline></video>
+                                <video
+                                    class="carousel-video absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500"
+                                    src="../assets/video/group/2.mp4" muted loop playsinline></video>
+                                <video
+                                    class="carousel-video absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500"
+                                    src="../assets/video/group/3.mp4" muted loop playsinline></video>
+                            </div>
+
+                            <!-- Navigation Arrows -->
+                            <button id="prevVideo"
+                                class="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/80 dark:bg-black/50 backdrop-blur flex items-center justify-center shadow-lg hover:scale-105 transition z-10">
+                                <span class="icon text-2xl">chevron_left</span>
+                            </button>
+                            <button id="nextVideo"
+                                class="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/80 dark:bg-black/50 backdrop-blur flex items-center justify-center shadow-lg hover:scale-105 transition z-10">
+                                <span class="icon text-2xl">chevron_right</span>
+                            </button>
+                        </div>
+
+                        <!-- Carousel Caption -->
+                        <div class="text-center mt-6">
+                            <h3 id="carouselTitle" class="text-xl font-bold mb-2">Your meeting is safe</h3>
+                            <p id="carouselDesc" class="text-sm opacity-70 max-w-sm mx-auto">No one can join a meeting
+                                unless invited or admitted by the host</p>
+                        </div>
+
+                        <!-- Carousel Dots -->
+                        <div id="carouselDots" class="flex justify-center gap-2 mt-4">
+                            <button
+                                class="carousel-dot w-2.5 h-2.5 rounded-full bg-[#9E4B8A]/30 transition-all duration-300"
+                                data-index="0"></button>
+                            <button
+                                class="carousel-dot w-2.5 h-2.5 rounded-full bg-[#9E4B8A]/30 transition-all duration-300"
+                                data-index="1"></button>
+                            <button
+                                class="carousel-dot w-2.5 h-2.5 rounded-full bg-[#9E4B8A]/30 transition-all duration-300"
+                                data-index="2"></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT Column: Text + Actions -->
+                <div style="flex: 1; width: 50%;">
+                    <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight mb-4">
+                        Video calls and meetings for <span
+                            class="bg-gradient-to-r from-[#9E4B8A] to-[#FF7FD1] bg-clip-text text-transparent">everyone</span>
+                    </h1>
+                    <p class="text-lg sm:text-xl opacity-70 mb-8">
+                        Connect, collaborate and celebrate from anywhere with PaperX Meet
+                    </p>
+
+                    <!-- Combined Create & Join Card -->
+                    <div class="glass-card p-6 sm:p-8">
+                        <!-- Create Meeting Section -->
+                        <div class="flex flex-col sm:flex-row gap-4 mb-6">
+                            <div class="relative flex-shrink-0">
+                                <button id="createRoomBtn"
+                                    class="btn-primary px-6 py-3.5 rounded-xl font-semibold text-base flex items-center justify-center gap-2 w-full sm:w-auto">
+                                    <span class="icon">video_call</span>
+                                    New meeting
+                                </button>
+                            </div>
+
+                            <!-- Join Meeting Section -->
+                            <div class="flex-1 flex gap-2 items-center">
+                                <div class="flex-1 relative">
+                                    <span
+                                        class="absolute left-4 top-1/2 -translate-y-1/2 icon opacity-50">keyboard</span>
+                                    <input type="text" id="joinRoomInput" placeholder="Enter a code or link"
+                                        class="input w-full pl-12 pr-4 py-3.5 rounded-xl focus:outline-none focus:ring-2"
+                                        style="--tw-ring-color: rgba(158, 75, 138, 0.55);" />
+                                </div>
+                                <button id="joinRoomBtn"
+                                    class="text-[#9E4B8A] dark:text-[#FF7FD1] font-semibold px-4 py-3.5 rounded-xl hover:bg-[#9E4B8A]/10 dark:hover:bg-[#FF7FD1]/10 transition whitespace-nowrap disabled:opacity-50">
+                                    Join
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Optional Room Name (Collapsible) -->
+                        <div class="border-t border-black/5 dark:border-white/10 pt-4">
+                            <details class="group">
+                                <summary
+                                    class="flex items-center gap-2 cursor-pointer text-sm opacity-70 hover:opacity-100 transition select-none">
+                                    <span
+                                        class="icon text-base group-open:rotate-90 transition-transform">chevron_right</span>
+                                    Advanced options
+                                </summary>
+                                <div class="mt-4 space-y-3">
+                                    <div>
+                                        <label class="block text-sm font-medium opacity-80 mb-2"
+                                            for="roomNameInput">Room name (optional)</label>
+                                        <input type="text" id="roomNameInput" placeholder="Eg: Data Structures Doubts"
+                                            class="input w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-2"
+                                            style="--tw-ring-color: rgba(158, 75, 138, 0.55);" />
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+
+                        <!-- Quick Links -->
+                        <div
+                            class="mt-6 pt-4 border-t border-black/5 dark:border-white/10 flex items-center justify-between text-sm">
+                            <a href="../index.html"
+                                class="opacity-70 hover:opacity-100 transition flex items-center gap-2">
+                                <span class="icon">home</span>
+                                Home
+                            </a>
+                            <a href="group_history.html"
+                                class="opacity-70 hover:opacity-100 transition flex items-center gap-2">
+                                <span class="icon">history</span>
+                                Call history
+                            </a>
+                        </div>
+                    </div>
+
+                    <p class="text-sm opacity-60 mt-4">
+                        <span class="icon text-base align-middle">info</span>
+                        Share the room ID with your classmates to invite them.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast notifications -->
+    <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 hidden">
+        <div class="glass-card px-6 py-3 flex items-center gap-3 shadow-xl">
+            <span id="toastIcon" class="icon text-brand-500">check_circle</span>
+            <span id="toastText"></span>
+        </div>
+    </div>
+
+    <script>
+        const API = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+        const token = localStorage.getItem('px_token');
+
+        const el = id => document.getElementById(id);
+
+        function showToast(message, icon = 'check_circle', duration = 3000) {
+            const toast = el('toast');
+            el('toastText').textContent = message;
+            el('toastIcon').textContent = icon;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), duration);
+        }
+
+        function goToRoom(roomId) {
+            const target = `group_chat.html?room=${encodeURIComponent(roomId)}`;
+            window.location.href = target;
+        }
+
+        async function createRoom() {
+            const createRoomBtn = el('createRoomBtn');
+            createRoomBtn.disabled = true;
+            const name = el('roomNameInput').value.trim() || 'Group Chat';
+
+            try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+
+                const res = await fetch(`${API}/api/group-chat/create`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ name })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Failed to create room');
+
+                goToRoom(data.room_id);
+            } catch (err) {
+                showToast(err.message || 'Failed to create room', 'error', 4000);
+            } finally {
+                createRoomBtn.disabled = false;
+            }
+        }
+
+        async function joinRoomById(roomId) {
+            const joinRoomBtn = el('joinRoomBtn');
+            joinRoomBtn.disabled = true;
+            try {
+                if (!roomId) {
+                    showToast('Enter a room ID', 'error');
+                    return;
+                }
+
+                const res = await fetch(`${API}/api/group-chat/${encodeURIComponent(roomId)}`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                });
+
+                if (!res.ok) {
+                    let detail = 'Room not found';
+                    try {
+                        const body = await res.json();
+                        detail = body.detail || detail;
+                    } catch (_) { }
+
+                    if (String(detail).toLowerCase().includes('ended')) {
+                        showToast('This meeting has ended', 'call_end', 4000);
+                    } else {
+                        showToast(detail, 'error', 4000);
+                    }
+                    return;
+                }
+
+                goToRoom(roomId);
+            } catch (err) {
+                showToast('Failed to join room', 'error', 4000);
+            } finally {
+                joinRoomBtn.disabled = false;
+            }
+        }
+
+        // Theme boot (match about.html), but also keep compatibility with pages using localStorage.theme
+        (function () {
+            const root = document.documentElement;
+            const stored = localStorage.getItem('px_theme') || localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const initial = stored || (prefersDark ? 'dark' : 'light');
+
+            const toggles = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+            const setIcon = (mode) => toggles().forEach(b => {
+                const i = b.querySelector('.material-symbols-rounded');
+                if (i) i.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+            });
+            const setTheme = (mode) => {
+                mode === 'dark' ? root.classList.add('dark') : root.classList.remove('dark');
+                localStorage.setItem('px_theme', mode);
+                localStorage.setItem('theme', mode);
+                setIcon(mode);
+                return mode;
+            };
+
+            window.Theme = { toggle: () => setTheme(root.classList.contains('dark') ? 'light' : 'dark') };
+            setTheme(initial);
+            document.addEventListener('click', e => {
+                const t = e.target.closest('[data-theme-toggle]');
+                if (!t) return;
+                window.Theme.toggle();
+            });
+        })();
+
+        // Prefill from URL if provided
+        const params = new URLSearchParams(window.location.search);
+        const roomParam = params.get('room');
+        if (roomParam) {
+            el('joinRoomInput').value = roomParam;
+        }
+
+        el('createRoomBtn').onclick = createRoom;
+        el('joinRoomBtn').onclick = () => joinRoomById(el('joinRoomInput').value.trim());
+
+        el('roomNameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') el('createRoomBtn').click();
+        });
+
+        el('joinRoomInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') el('joinRoomBtn').click();
+        });
+
+        // Video Carousel
+        (function () {
+            const videos = document.querySelectorAll('.carousel-video');
+            const dots = document.querySelectorAll('.carousel-dot');
+            const prevBtn = el('prevVideo');
+            const nextBtn = el('nextVideo');
+            const titleEl = el('carouselTitle');
+            const descEl = el('carouselDesc');
+
+            if (!videos.length) return;
+
+            const captions = [
+                { title: 'Your meeting is safe', desc: 'No one can join a meeting unless invited or admitted by the host' },
+                { title: 'Connect from anywhere', desc: 'Join meetings seamlessly from any device, anytime' },
+                { title: 'Collaborate in real-time', desc: 'Share screens, chat, and work together effortlessly' }
+            ];
+
+            let currentIndex = 0;
+            let autoPlayInterval;
+
+            function showSlide(index) {
+                // Update videos
+                videos.forEach((video, i) => {
+                    if (i === index) {
+                        video.style.opacity = '1';
+                        video.play().catch(() => { });
+                    } else {
+                        video.style.opacity = '0';
+                        video.pause();
+                    }
+                });
+
+                // Update dots
+                dots.forEach((dot, i) => {
+                    if (i === index) {
+                        dot.classList.remove('bg-[#9E4B8A]/30');
+                        dot.classList.add('bg-[#9E4B8A]', 'w-6');
+                    } else {
+                        dot.classList.add('bg-[#9E4B8A]/30');
+                        dot.classList.remove('bg-[#9E4B8A]', 'w-6');
+                    }
+                });
+
+                // Update captions
+                if (captions[index]) {
+                    titleEl.textContent = captions[index].title;
+                    descEl.textContent = captions[index].desc;
+                }
+
+                currentIndex = index;
+            }
+
+            function nextSlide() {
+                showSlide((currentIndex + 1) % videos.length);
+            }
+
+            function prevSlide() {
+                showSlide((currentIndex - 1 + videos.length) % videos.length);
+            }
+
+            function startAutoPlay() {
+                stopAutoPlay();
+                autoPlayInterval = setInterval(nextSlide, 5000);
+            }
+
+            function stopAutoPlay() {
+                if (autoPlayInterval) clearInterval(autoPlayInterval);
+            }
+
+            // Event listeners
+            if (prevBtn) prevBtn.onclick = () => { prevSlide(); startAutoPlay(); };
+            if (nextBtn) nextBtn.onclick = () => { nextSlide(); startAutoPlay(); };
+
+            dots.forEach((dot, i) => {
+                dot.onclick = () => { showSlide(i); startAutoPlay(); };
+            });
+
+            // Initialize
+            showSlide(0);
+            startAutoPlay();
+
+            // Pause on hover
+            const carousel = document.querySelector('.video-carousel-container');
+            if (carousel) {
+                carousel.addEventListener('mouseenter', stopAutoPlay);
+                carousel.addEventListener('mouseleave', startAutoPlay);
+            }
+        })();
+    </script>
+
+    <script>
+        // Mobile nav (same behavior as about.html)
+        (function () {
+            const toggle = document.getElementById('mobileNavToggle');
+            const panel = document.getElementById('mobileNavPanel');
+            const backdrop = document.getElementById('mobileNavBackdrop');
+            if (!toggle || !panel || !backdrop) return;
+            const icon = toggle.querySelector('[data-icon]');
+
+            const open = () => {
+                panel.classList.remove('hidden');
+                backdrop.classList.remove('hidden');
+                panel.setAttribute('data-open', 'true');
+                panel.classList.add('open');
+                panel.setAttribute('aria-hidden', 'false');
+                backdrop.setAttribute('data-open', 'true');
+                backdrop.classList.add('open');
+                backdrop.setAttribute('aria-hidden', 'false');
+                toggle.setAttribute('aria-expanded', 'true');
+                if (icon) icon.textContent = 'close';
+                document.body.classList.add('overflow-hidden');
+            };
+
+            const close = () => {
+                panel.removeAttribute('data-open');
+                panel.classList.remove('open');
+                panel.setAttribute('aria-hidden', 'true');
+                backdrop.removeAttribute('data-open');
+                backdrop.classList.remove('open');
+                backdrop.setAttribute('aria-hidden', 'true');
+                toggle.setAttribute('aria-expanded', 'false');
+                if (icon) icon.textContent = 'menu';
+                document.body.classList.remove('overflow-hidden');
+                panel.classList.add('hidden');
+                backdrop.classList.add('hidden');
+            };
+
+            toggle.addEventListener('click', () => toggle.getAttribute('aria-expanded') === 'true' ? close() : open());
+            backdrop.addEventListener('click', close);
+            window.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+            window.matchMedia('(min-width: 768px)').addEventListener('change', e => { if (e.matches) close(); });
+            panel.addEventListener('click', evt => { if (evt.target.closest('[data-close-mobile-nav]')) close(); });
+            close();
+        })();
+    </script>
+
+    <!-- Auth dynamic navbar script (same as about.html) -->
+    <script src="../auth.js"></script>
+</body>
+
+</html>
