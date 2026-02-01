@@ -327,54 +327,6 @@
         </div>
     </main>
 
-    <!-- Landing / Create Room -->
-    <main id="landingView" class="container mx-auto px-4 py-16">
-        <div class="max-w-md mx-auto text-center">
-            <div
-                class="inline-flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-2xl mb-6">
-                <span class="icon text-4xl">video_call</span>
-            </div>
-            <h1 class="text-3xl font-bold mb-3">Group Chat</h1>
-            <p class="text-lg opacity-70 mb-8">Start a video room with voice call, screen sharing, and collaborative
-                whiteboard.</p>
-
-            <div class="glass-card p-6 space-y-4">
-                <input type="text" id="roomNameInput" placeholder="Room name (optional)"
-                    class="w-full px-4 py-3 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                <button id="createRoomBtn"
-                    class="btn-primary w-full py-3 rounded-xl font-semibold text-lg flex items-center justify-center gap-2">
-                    <span class="icon">add_circle</span>
-                    Create New Room
-                </button>
-
-                <div class="relative">
-                    <div class="absolute inset-0 flex items-center">
-                        <div class="w-full border-t border-black/10 dark:border-white/10"></div>
-                    </div>
-                    <div class="relative flex justify-center text-sm">
-                        <span class="px-4 bg-white/80 dark:bg-zinc-900/80 opacity-70">or join existing</span>
-                    </div>
-                </div>
-
-                <div class="flex gap-2">
-                    <input type="text" id="joinRoomInput" placeholder="Enter room ID"
-                        class="flex-1 px-4 py-3 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/50 focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                    <button id="joinRoomBtn"
-                        class="btn-secondary px-6 py-3 rounded-xl font-semibold flex items-center gap-2">
-                        <span class="icon">login</span>
-                        Join
-                    </button>
-                </div>
-            </div>
-            <div class="mt-8">
-                <a href="group_history.html"
-                    class="inline-flex items-center gap-2 text-sm opacity-60 hover:opacity-100 transition">
-                    <span class="icon">history</span>
-                    View Call History
-                </a>
-            </div>
-        </div>
-    </main>
 
     <!-- Room View -->
     <main id="roomView" class="hidden container mx-auto px-4 py-4">
@@ -516,14 +468,9 @@
         // DOM Elements
         // =========================================================================
         const el = id => document.getElementById(id);
-        const landingView = el('landingView');
         const roomView = el('roomView');
         const endedView = el('endedView');
         const roomNameEl = el('roomName');
-        const createRoomBtn = el('createRoomBtn');
-        const joinRoomBtn = el('joinRoomBtn');
-        const roomNameInput = el('roomNameInput');
-        const joinRoomInput = el('joinRoomInput');
         const copyLinkBtn = el('copyLinkBtn');
         const leaveBtn = el('leaveBtn');
         const micBtn = el('micBtn');
@@ -552,38 +499,6 @@
         // =========================================================================
         // Room Management
         // =========================================================================
-        async function createRoom() {
-            createRoomBtn.disabled = true;
-            const name = roomNameInput.value.trim() || 'Group Chat';
-
-            try {
-                const headers = { 'Content-Type': 'application/json' };
-                if (token) headers['Authorization'] = `Bearer ${token}`;
-
-                const res = await fetch(`${API}/api/group-chat/create`, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({ name })
-                });
-
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || 'Failed to create room');
-
-                roomId = data.room_id;
-                userId = data.host_id;
-                isHost = true;
-
-                // Update URL
-                history.pushState({}, '', `?room=${roomId}`);
-                await joinRoom();
-
-            } catch (err) {
-                showToast(err.message, 'error', 4000);
-            } finally {
-                createRoomBtn.disabled = false;
-            }
-        }
-
         async function joinRoom() {
             if (!roomId) {
                 showToast('No room ID specified', 'error');
@@ -599,7 +514,6 @@
                 if (checkRes.status === 400 || checkRes.status === 404) {
                     const err = await checkRes.json();
                     if (err.detail && (err.detail.includes("ended") || err.detail.includes("not found"))) {
-                        landingView.classList.add('hidden');
                         roomView.classList.add('hidden');
                         endedView.classList.remove('hidden');
                         return;
@@ -628,7 +542,6 @@
             }
 
             // Switch to room view
-            landingView.classList.add('hidden');
             endedView.classList.add('hidden');
             roomView.classList.remove('hidden');
 
@@ -647,7 +560,7 @@
             }
         }
 
-        function leaveRoom() {
+        function cleanupRoom() {
             if (ws) {
                 ws.close();
                 ws = null;
@@ -670,18 +583,18 @@
             roomId = null;
             isHost = false;
             isScreenSharing = false;
+        }
 
-            // Go back to landing
-            roomView.classList.add('hidden');
-            landingView.classList.remove('hidden');
-            history.pushState({}, '', location.pathname);
+        function leaveRoom() {
+            cleanupRoom();
+            window.location.href = 'create_meet.html';
         }
 
         // Handle Ended Event via WS
         function handleRoomEnded() {
-            leaveRoom();
-            landingView.classList.add('hidden');
+            cleanupRoom();
             endedView.classList.remove('hidden');
+            roomView.classList.add('hidden');
         }
 
         // =========================================================================
@@ -1254,29 +1167,13 @@
             showToast('Link copied to clipboard');
         };
 
-        createRoomBtn.onclick = createRoom;
-
-        document.getElementById('joinRoomInput').onkeypress = (e) => {
-            if (e.key === 'Enter') joinRoomBtn.click();
-        };
-
-        joinRoomBtn.onclick = () => {
-            const val = document.getElementById('joinRoomInput').value.trim();
-            if (val) {
-                roomId = val;
-                // Update URL
-                history.pushState({}, '', `?room=${roomId}`);
-                joinRoom();
-            }
-        };
-
         leaveBtn.onclick = leaveRoom;
 
         if (roomParam) {
             roomId = roomParam;
             joinRoom();
         } else {
-            landingView.classList.remove('hidden');
+            window.location.replace('create_meet.html');
         }
 
     </script>
