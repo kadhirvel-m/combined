@@ -2099,6 +2099,21 @@
 
             switch (type) {
                 case 'room-info':
+                    // Prefer rtc_config from WebSocket (works even when /api/* is not proxied on prod).
+                    try {
+                        const wsRtc = data.rtc_config;
+                        if (wsRtc && Array.isArray(wsRtc.iceServers) && wsRtc.iceServers.length) {
+                            rtcConfig = { ...rtcConfig, iceServers: wsRtc.iceServers };
+                        }
+                        if (wsRtc && typeof wsRtc.iceTransportPolicy === 'string') {
+                            rtcConfig = { ...rtcConfig, iceTransportPolicy: wsRtc.iceTransportPolicy };
+                        }
+
+                        // Deterministic behavior: if TURN is required/not configured, do not attempt WebRTC.
+                        if (wsRtc && wsRtc.requireTurn && !wsRtc.turnConfigured) {
+                            showToast('Meeting server is missing TURN configuration. Audio/screen share will not work on most networks.', 'warning', 8000);
+                        }
+                    } catch (_) { }
                     isHost = data.is_host;
                     canModerate = !!data.can_moderate;
                     myRole = data.role || (isHost ? 'host' : 'participant');
@@ -2156,9 +2171,14 @@
                         noScreenShare.innerHTML = `<span class="icon" style="font-size:80px;opacity:0.4;">screen_share</span><p class="text-lg font-medium mt-4">${data.screen_sharer_id === userId ? 'You are' : 'Someone is'} sharing screen</p>`;
                     }
 
-                    for (const p of data.participants) {
-                        if (p.user_id !== userId) {
-                            await createPeerConnection(p.user_id, false);
+                    // Only start WebRTC if TURN is configured when the server requires it.
+                    const wsRtc = data.rtc_config;
+                    const canStartRtc = !(wsRtc && wsRtc.requireTurn && !wsRtc.turnConfigured);
+                    if (canStartRtc) {
+                        for (const p of data.participants) {
+                            if (p.user_id !== userId) {
+                                await createPeerConnection(p.user_id, false);
+                            }
                         }
                     }
                     break;
