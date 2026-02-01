@@ -2152,6 +2152,7 @@
                     }
 
                     if (data.screen_share_active) {
+                        currentScreenSharerId = data.screen_sharer_id || null;
                         noScreenShare.innerHTML = `<span class="icon" style="font-size:80px;opacity:0.4;">screen_share</span><p class="text-lg font-medium mt-4">${data.screen_sharer_id === userId ? 'You are' : 'Someone is'} sharing screen</p>`;
                     }
 
@@ -2205,10 +2206,14 @@
                     break;
 
                 case 'screen-share-started':
+                    currentScreenSharerId = data.sharer_id || null;
                     noScreenShare.innerHTML = `<span class="icon" style="font-size:80px;opacity:0.4;animation:pulse 2s infinite;">screen_share</span><p class="text-lg font-medium mt-4">${data.sharer_name} is sharing screen</p>`;
                     break;
 
                 case 'screen-share-stopped':
+                    if (!data.sharer_id || currentScreenSharerId === data.sharer_id) {
+                        currentScreenSharerId = null;
+                    }
                     noScreenShare.innerHTML = `<span class="icon" style="font-size:80px;opacity:0.4;">screen_share</span><p class="text-lg font-medium mt-4">No screen being shared</p><p class="text-sm opacity-60 mt-2">Click "Share Screen" to present</p>`;
                     screenShareVideo.classList.add('hidden');
                     noScreenShare.classList.remove('hidden');
@@ -2605,20 +2610,31 @@
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun.cloudflare.com:3478' },
-                // Best-effort public TURN (often rate-limited). Prefer configuring a TURN server via /api/rtc-config.
-                { urls: 'turn:openrelay.metered.ca:80?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-                { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
             ],
-            iceCandidatePoolSize: 10
+            iceCandidatePoolSize: 10,
+            iceTransportPolicy: 'all'
         };
 
         async function loadRtcConfig() {
             try {
                 const res = await fetch(`${API}/api/rtc-config`);
-                if (!res.ok) return;
+                if (!res.ok) {
+                    if (res.status === 503) {
+                        try {
+                            const err = await res.json();
+                            showToast(err?.detail || 'TURN not configured (WebRTC will be unreliable)', 'warning', 6000);
+                        } catch (_) {
+                            showToast('TURN not configured (WebRTC will be unreliable)', 'warning', 6000);
+                        }
+                    }
+                    return;
+                }
                 const cfg = await res.json();
                 if (cfg && Array.isArray(cfg.iceServers) && cfg.iceServers.length) {
                     rtcConfig = { ...rtcConfig, iceServers: cfg.iceServers };
+                }
+                if (cfg && typeof cfg.iceTransportPolicy === 'string') {
+                    rtcConfig = { ...rtcConfig, iceTransportPolicy: cfg.iceTransportPolicy };
                 }
             } catch (_) { }
         }
@@ -2628,6 +2644,7 @@
         let pendingIce = {};
         let peerSenders = {};
         let peerRecvStreams = {};
+        let currentScreenSharerId = null;
 
         async function acquireMicrophoneStream() {
             if (!navigator.mediaDevices?.getUserMedia) {
@@ -2788,6 +2805,10 @@
                 }
 
                 if (kind === 'video') {
+                    // In a mesh call, multiple peers may have video m-lines; only show the active screen sharer.
+                    if (currentScreenSharerId && peerId !== currentScreenSharerId) {
+                        return;
+                    }
                     screenShareVideo.srcObject = stream;
                     // Keep muted to maximize autoplay success on mobile.
                     screenShareVideo.muted = true;
@@ -2953,6 +2974,8 @@
                     screenShareBtn.classList.add('active');
                     screenShareBtn.classList.remove('inactive');
 
+                    currentScreenSharerId = userId;
+
                     // Marker toolkit available while screen sharing
                     setMarkerUIVisible(true);
 
@@ -2977,6 +3000,8 @@
             isScreenSharing = false;
             screenShareBtn.classList.remove('active');
             screenShareBtn.classList.add('inactive');
+
+            if (currentScreenSharerId === userId) currentScreenSharerId = null;
 
             // Hide marker toolkit and clear canvas
             setMarkerUIVisible(false);
