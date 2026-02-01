@@ -17282,7 +17282,7 @@ def create_app() -> FastAPI:
         allow_origins=[
             "https://paperx.tech",
             "https://www.paperx.tech",
-            "https://lionfish-app-ynu29.ondigitalocean.app",
+            "https://squid-app-6jvdq.ondigitalocean.app",
             "https://uppzpkmpxgyipjzcskva.supabase.co",
             "http://127.0.0.1:5500",
             "http://127.0.0.1:8000",
@@ -18969,6 +18969,8 @@ async def get_rtc_config() -> Dict[str, Any]:
       - PAPERX_TURN_USERNAME
       - PAPERX_TURN_CREDENTIAL
     """
+    require_turn = (os.getenv("PAPERX_REQUIRE_TURN") or "").strip().lower() in {"1", "true", "yes"}
+
     ice_servers: List[Dict[str, Any]] = [
         {"urls": "stun:stun.l.google.com:19302"},
         {"urls": "stun:stun1.l.google.com:19302"},
@@ -18978,7 +18980,8 @@ async def get_rtc_config() -> Dict[str, Any]:
     turn_urls = (os.getenv("PAPERX_TURN_URLS") or "").strip()
     turn_user = (os.getenv("PAPERX_TURN_USERNAME") or "").strip()
     turn_cred = (os.getenv("PAPERX_TURN_CREDENTIAL") or "").strip()
-    if turn_urls and turn_user and turn_cred:
+    turn_configured = bool(turn_urls and turn_user and turn_cred)
+    if turn_configured:
         urls = [u.strip() for u in turn_urls.split(",") if u.strip()]
         if urls:
             ice_servers.append({
@@ -18986,14 +18989,24 @@ async def get_rtc_config() -> Dict[str, Any]:
                 "username": turn_user,
                 "credential": turn_cred,
             })
-    else:
-        # Best-effort public TURN (may be rate-limited/unreliable). Prefer configuring your own TURN above.
-        ice_servers.extend([
-            {"urls": "turn:openrelay.metered.ca:80?transport=tcp", "username": "openrelayproject", "credential": "openrelayproject"},
-            {"urls": "turns:openrelay.metered.ca:443?transport=tcp", "username": "openrelayproject", "credential": "openrelayproject"},
-        ])
 
-    return {"iceServers": ice_servers}
+    if require_turn and not turn_configured:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "TURN is required but not configured. Set PAPERX_TURN_URLS, PAPERX_TURN_USERNAME, PAPERX_TURN_CREDENTIAL. "
+                "(This prevents unreliable WebRTC behavior on NAT/mobile networks.)"
+            ),
+        )
+
+    # When TURN is configured, instruct clients to force relay. This is the most reliable option across NATs.
+    ice_transport_policy = "relay" if turn_configured else "all"
+    return {
+        "iceServers": ice_servers,
+        "iceTransportPolicy": ice_transport_policy,
+        "turnConfigured": turn_configured,
+        "requireTurn": require_turn,
+    }
 
 async def broadcast_to_room(room_id: str, message: dict, exclude_user_id: Optional[str] = None):
     """Broadcast a message to all participants in a room."""

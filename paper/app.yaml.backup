@@ -1,0 +1,43 @@
+spec_version: 2
+name: paperx-flash
+region: blr  # Bangalore (or choose preferred region like nyc, fra, sgp)
+services:
+- name: paperx-api
+  dockerfile_path: Dockerfile
+  source_dir: /
+  github:
+    branch: main
+    deploy_on_push: true
+    # REPLACE WITH YOUR REPO DETAILS
+    repo: kadhirvel-m/PaperX-Flash
+  http_port: 10000
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  routes:
+  - path: /
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 20
+    period_seconds: 30
+    timeout_seconds: 5
+  envs:
+  - key: PORT
+    value: "10000"
+  - key: HOST
+    value: "0.0.0.0"
+  - key: FORCE_SINGLE_WORKER
+    value: "true"
+  # Secrets - these values must be set in the DigitalOcean Dashboard or via CLI
+  # Do not commit actual secrets to git!
+  - key: SUPABASE_URL
+    value: "PLACEHOLDER_SET_IN_DASHBOARD"
+  - key: SUPABASE_SERVICE_ROLE_KEY
+    value: "PLACEHOLDER_SET_IN_DASHBOARD"
+  - key: SUPABASE_ANON_KEY
+    value: "PLACEHOLDER_SET_IN_DASHBOARD"
+  - key: OPENAI_API_KEY
+    value: "PLACEHOLDER_SET_IN_DASHBOARD"
+  - key: GEMINI_API_KEY
+    value: "PLACEHOLDER_SET_IN_DASHBOARD"
+  - key: SERPAPI_API_KEY
+    value: "PLACEHOLDER_SET_IN_DASHBOARD"
