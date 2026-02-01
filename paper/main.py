@@ -19213,6 +19213,7 @@ async def group_chat_websocket(websocket: WebSocket, room_id: str):
             group_chat_connections[room_id][user_id] = websocket
 
             # Send room info and existing participants to new user
+            rtc_cfg = await get_rtc_config()
             await websocket.send_json({
                 "type": "room-info",
                 "data": {
@@ -19230,6 +19231,7 @@ async def group_chat_websocket(websocket: WebSocket, room_id: str):
                     "whiteboard_history": room.get("whiteboard_history", []),
                     "screen_share_active": room.get("screen_share_active", False),
                     "screen_sharer_id": room.get("screen_sharer_id"),
+                    "rtc_config": rtc_cfg,
                 }
             })
 
