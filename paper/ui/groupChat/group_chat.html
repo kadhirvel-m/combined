@@ -4,9 +4,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Group Chat — PaperX</title>
-    <meta name="description"
-        content="Real-time group chat with voice call, screen sharing, and collaborative whiteboard" />
+    <title>Meeting Room — PaperX</title>
+    <meta name="description" content="Real-time video meeting with screen sharing and collaborative tools" />
     <link rel="stylesheet" href="../assets/css/tailwind.css" />
     <script src="../config.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
@@ -15,22 +14,22 @@
         rel="stylesheet" />
     <style>
         :root {
-            --brand-50: #eef4ff;
-            --brand-100: #d9e6ff;
-            --brand-500: #3f6fff;
-            --brand-600: #2f56e6;
-            --brand-700: #2846bb;
-            --glass-bg: rgba(255, 255, 255, 0.85);
+            --brand-500: #9E4B8A;
+            --brand-600: #8A3D78;
+            --brand-gradient: linear-gradient(135deg, #9E4B8A 0%, #FF7FD1 100%);
+            --glass-bg: rgba(255, 255, 255, 0.88);
             --glass-border: rgba(0, 0, 0, 0.08);
+            --sidebar-width: 380px;
         }
 
         .dark {
-            --glass-bg: rgba(20, 24, 33, 0.85);
-            --glass-border: rgba(255, 255, 255, 0.12);
+            --glass-bg: rgba(20, 24, 33, 0.92);
+            --glass-border: rgba(255, 255, 255, 0.1);
         }
 
         body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
         }
 
         .icon {
@@ -44,68 +43,41 @@
 
         .glass-card {
             background: var(--glass-bg);
-            backdrop-filter: saturate(1.2) blur(12px);
-            -webkit-backdrop-filter: saturate(1.2) blur(12px);
+            backdrop-filter: saturate(1.2) blur(20px);
+            -webkit-backdrop-filter: saturate(1.2) blur(20px);
             border: 1px solid var(--glass-border);
-            border-radius: 1rem;
         }
 
-        .btn-primary {
-            background: linear-gradient(135deg, #3f6fff 0%, #628fff 100%);
-            color: white;
-            border: none;
-            box-shadow: 0 8px 24px rgba(63, 111, 255, 0.35);
-            transition: all 0.2s ease;
+        /* ===== Main Content Area ===== */
+        .main-content {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 32px rgba(63, 111, 255, 0.45);
+        .main-content.chat-open {
+            right: var(--sidebar-width);
         }
 
-        .btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
+        @media (max-width: 768px) {
+            .main-content.chat-open {
+                right: 0;
+            }
         }
 
-        .btn-secondary {
-            background: rgba(0, 0, 0, 0.06);
-            color: inherit;
-            border: 1px solid var(--glass-border);
-            transition: all 0.2s ease;
-        }
-
-        .dark .btn-secondary {
-            background: rgba(255, 255, 255, 0.08);
-        }
-
-        .btn-secondary:hover {
-            background: rgba(0, 0, 0, 0.1);
-        }
-
-        .dark .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
-            color: white;
-            box-shadow: 0 8px 24px rgba(239, 68, 68, 0.35);
-        }
-
-        /* Whiteboard canvas */
-        #whiteboard {
-            touch-action: none;
-            cursor: crosshair;
-        }
-
-        /* Video containers */
+        /* ===== Video Area ===== */
         .video-container {
             position: relative;
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            border-radius: 1rem;
+            border-radius: 24px;
             overflow: hidden;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .video-container video {
@@ -114,22 +86,43 @@
             object-fit: contain;
         }
 
-        /* Participant avatars */
-        .participant-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            font-size: 14px;
-            background: linear-gradient(135deg, #3f6fff 0%, #628fff 100%);
-            color: white;
-            box-shadow: 0 4px 12px rgba(63, 111, 255, 0.3);
+        .empty-video-state {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
         }
 
-        /* Control buttons */
+        .empty-video-state .icon {
+            font-size: 80px;
+            margin-bottom: 16px;
+            opacity: 0.4;
+        }
+
+        /* ===== Floating Control Bar ===== */
+        .control-bar {
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            z-index: 90;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.15);
+            transition: transform 0.3s ease;
+        }
+
+        .control-bar.chat-open {
+            transform: translateX(calc(-50% - var(--sidebar-width) / 2));
+        }
+
+        @media (max-width: 768px) {
+            .control-bar.chat-open {
+                transform: translateX(-50%);
+            }
+        }
+
         .control-btn {
             width: 52px;
             height: 52px;
@@ -137,10 +130,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+            font-size: 22px;
             transition: all 0.2s ease;
             cursor: pointer;
             border: none;
+            position: relative;
         }
 
         .control-btn:hover {
@@ -148,18 +142,18 @@
         }
 
         .control-btn.active {
-            background: linear-gradient(135deg, #3f6fff 0%, #628fff 100%);
+            background: var(--brand-gradient);
             color: white;
-            box-shadow: 0 6px 18px rgba(63, 111, 255, 0.4);
+            box-shadow: 0 8px 24px rgba(158, 75, 138, 0.4);
         }
 
         .control-btn.inactive {
-            background: rgba(0, 0, 0, 0.08);
-            color: inherit;
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
         }
 
-        .dark .control-btn.inactive {
-            background: rgba(255, 255, 255, 0.1);
+        .control-btn.inactive:hover {
+            background: rgba(255, 255, 255, 0.25);
         }
 
         .control-btn.muted {
@@ -167,272 +161,1246 @@
             color: white;
         }
 
-        /* Toolbar for whiteboard */
-        .toolbar-btn {
-            width: 40px;
-            height: 40px;
+        .control-btn.danger {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+        }
+
+        .control-divider {
+            width: 1px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.2);
+            margin: 0 8px;
+        }
+
+        /* Notification badge */
+        .notification-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
             border-radius: 10px;
+            background: #ef4444;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
             display: flex;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-            border: 1px solid var(--glass-border);
-            background: var(--glass-bg);
-            transition: all 0.2s ease;
+            animation: pulse 2s ease-in-out infinite;
         }
 
-        .toolbar-btn:hover {
-            background: rgba(63, 111, 255, 0.1);
-            border-color: rgba(63, 111, 255, 0.3);
-        }
-
-        .toolbar-btn.active {
-            background: var(--brand-500);
-            color: white;
-            border-color: transparent;
-        }
-
-        /* Color picker */
-        .color-dot {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            cursor: pointer;
-            border: 3px solid transparent;
-            transition: all 0.2s ease;
-        }
-
-        .color-dot:hover {
-            transform: scale(1.15);
-        }
-
-        .color-dot.active {
-            border-color: white;
-            box-shadow: 0 0 0 2px var(--brand-500);
-        }
-
-        /* Pulse animation for connecting */
         @keyframes pulse {
 
             0%,
             100% {
-                opacity: 1;
+                transform: scale(1);
             }
 
             50% {
-                opacity: 0.5;
+                transform: scale(1.1);
             }
         }
 
-        .connecting {
-            animation: pulse 1.5s ease-in-out infinite;
-        }
-
-        /* Participant list */
-        .participant-item {
+        /* ===== Participants Pills ===== */
+        .participants-bar {
+            position: fixed;
+            top: 80px;
+            left: 20px;
+            z-index: 80;
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            padding: 0.5rem;
-            border-radius: 0.5rem;
-            transition: background 0.2s ease;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 40px;
         }
 
-        .participant-item:hover {
-            background: rgba(0, 0, 0, 0.04);
+        .participant-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            background: var(--brand-gradient);
+            color: white;
+            border: 2px solid white;
+            margin-left: -12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            transition: transform 0.2s ease;
         }
 
-        .dark .participant-item:hover {
-            background: rgba(255, 255, 255, 0.06);
+        .participant-avatar:first-child {
+            margin-left: 0;
         }
 
-        /* Chat messages */
+        .participant-avatar:hover {
+            transform: scale(1.15);
+            z-index: 10;
+        }
+
+        .participant-avatar.speaking {
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.6);
+            animation: speaking 1s ease-in-out infinite;
+        }
+
+        @keyframes speaking {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.6);
+            }
+
+            50% {
+                box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.3);
+            }
+        }
+
+        /* ===== Chat Sidebar ===== */
+        .chat-sidebar {
+            position: fixed;
+            top: 16px;
+            right: -380px;
+            width: 360px;
+            height: calc(100vh - 32px);
+            z-index: 95;
+            display: flex;
+            flex-direction: column;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .dark .chat-sidebar {
+            background: rgba(20, 20, 30, 0.98);
+        }
+
+        .chat-sidebar.open {
+            right: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .chat-sidebar {
+                width: calc(100% - 32px);
+                right: calc(-100% - 32px);
+                top: 16px;
+                height: calc(100vh - 32px);
+            }
+
+            .chat-sidebar.open {
+                right: 16px;
+            }
+        }
+
+        .chat-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 64px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+        }
+
+        .dark .chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .chat-input-area {
+            padding: 16px;
+            border-top: 1px solid var(--glass-border);
+        }
+
         .chat-bubble {
             max-width: 85%;
-            padding: 0.5rem 0.75rem;
-            border-radius: 1rem;
+            padding: 10px 14px;
+            border-radius: 18px;
             font-size: 14px;
+            line-height: 1.4;
         }
 
         .chat-mine {
             margin-left: auto;
-            background: linear-gradient(135deg, #3f6fff, #628fff);
+            background: var(--brand-gradient);
             color: white;
-            border-bottom-right-radius: 4px;
+            border-bottom-right-radius: 6px;
         }
 
         .chat-theirs {
             background: rgba(0, 0, 0, 0.06);
-            border-bottom-left-radius: 4px;
+            border-bottom-left-radius: 6px;
         }
 
         .dark .chat-theirs {
             background: rgba(255, 255, 255, 0.1);
         }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 24px;
+            border: 1px solid var(--glass-border);
+            background: rgba(0, 0, 0, 0.04);
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .dark .chat-input {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .chat-input:focus {
+            border-color: var(--brand-500);
+            box-shadow: 0 0 0 3px rgba(158, 75, 138, 0.15);
+        }
+
+        .chat-send-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--brand-gradient);
+            color: white;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 16px rgba(158, 75, 138, 0.3);
+        }
+
+        .chat-send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(158, 75, 138, 0.4);
+        }
+
+        /* ===== Meeting Ended View ===== */
+        .ended-view {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ended-card {
+            max-width: 400px;
+            padding: 48px;
+            border-radius: 32px;
+            text-align: center;
+        }
+
+        /* ===== Toast ===== */
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 150;
+            padding: 12px 24px;
+            border-radius: 16px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .toast.show {
+            display: flex;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateX(-50%) translateY(20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(-50%) translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* ===== Room Info Badge ===== */
+        .room-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: rgba(0, 0, 0, 0.05);
+            font-size: 13px;
+        }
+
+        .dark .room-badge {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        /* ===== Meeting Info Badge (Bottom Left) ===== */
+        .meeting-info-badge {
+            position: fixed;
+            left: 20px;
+            bottom: 24px;
+            z-index: 80;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.9);
+            background: rgba(30, 30, 47, 0.9);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .meeting-info-badge .divider {
+            width: 1px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        /* ===== Reactions Popup ===== */
+        .reactions-popup {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%) scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.2s ease;
+            padding: 12px 16px;
+            border-radius: 16px;
+            display: flex;
+            gap: 8px;
+            background: rgba(30, 30, 47, 0.95);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .reactions-popup.show {
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+            pointer-events: auto;
+        }
+
+        .reaction-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .reaction-btn:hover {
+            transform: scale(1.2);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* ===== Host Controls Popup ===== */
+        .host-popup {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%) scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.2s ease;
+            padding: 8px;
+            border-radius: 16px;
+            min-width: 180px;
+            background: rgba(30, 30, 47, 0.95);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .host-popup.show {
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+            pointer-events: auto;
+        }
+
+        .host-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            color: white;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .host-option:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .host-option.danger {
+            color: #f87171;
+        }
+
+        .host-option.danger:hover {
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        /* Hand raised indicator */
+        .control-btn.hand-raised {
+            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+            color: white;
+        }
+
+        /* Floating reaction animation */
+        .floating-reaction {
+            position: fixed;
+            bottom: 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+            z-index: 200;
+            animation: floatUp 4s ease-out forwards;
+        }
+
+        .reaction-emoji {
+            font-size: 40px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+        }
+
+        .reaction-name {
+            font-size: 12px;
+            font-weight: 500;
+            background: rgba(30, 30, 47, 0.85);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            margin-top: 4px;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            white-space: nowrap;
+        }
+
+        .dark .reaction-name {
+            background: rgba(255, 255, 255, 0.9);
+            color: black;
+        }
+
+        @keyframes floatUp {
+            0% {
+                transform: translateY(0) scale(0.5);
+                opacity: 0;
+            }
+
+            5% {
+                transform: translateY(-20px) scale(1.2);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(-400px) scale(1) translateX(20px);
+                opacity: 0;
+            }
+        }
+
+        /* ===== Floating Action Buttons (Bottom Right) ===== */
+        .floating-actions {
+            position: fixed;
+            right: 20px;
+            bottom: 24px;
+            z-index: 85;
+            display: flex;
+            flex-direction: row;
+            gap: 12px;
+        }
+
+        .fab-btn {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: none;
+            background: rgba(30, 30, 47, 0.95);
+            color: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .fab-btn:hover {
+            transform: scale(1.1);
+            background: rgba(50, 50, 67, 0.95);
+        }
+
+        .fab-btn.active {
+            background: var(--brand-gradient);
+        }
+
+        .fab-btn .icon {
+            font-size: 24px;
+        }
+
+        /* ===== Right Sidebars (Host Controls & Participants) ===== */
+        .right-sidebar {
+            position: fixed;
+            top: 16px;
+            right: -380px;
+            width: 360px;
+            height: calc(100vh - 32px);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 90;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .dark .right-sidebar {
+            background: rgba(20, 20, 30, 0.98);
+        }
+
+        .right-sidebar.open {
+            right: 16px;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 64px;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .sidebar-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar-content::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+        }
+
+        .dark .sidebar-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Participant List Item */
+        .participant-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            background: rgba(0, 0, 0, 0.03);
+            transition: background 0.2s ease;
+        }
+
+        .dark .participant-item {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .participant-item:hover {
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        .dark .participant-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .participant-avatar-lg {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .participant-info {
+            flex: 1;
+        }
+
+        .participant-name {
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .participant-role {
+            font-size: 12px;
+            opacity: 0.6;
+        }
+
+        /* Host Control Card */
+        .host-control-card {
+            padding: 16px;
+            border-radius: 16px;
+            background: rgba(0, 0, 0, 0.03);
+            margin-bottom: 12px;
+            transition: background 0.2s ease;
+            cursor: pointer;
+        }
+
+        .dark .host-control-card {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .host-control-card:hover {
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        .dark .host-control-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .host-control-card.danger:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .host-control-card .icon {
+            font-size: 28px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .host-control-card h4 {
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .host-control-card p {
+            font-size: 13px;
+            opacity: 0.6;
+        }
+
+        /* ===== Toggle Switch ===== */
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 28px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.2);
+            transition: 0.3s;
+            border-radius: 28px;
+        }
+
+        .dark .toggle-slider {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        input:checked+.toggle-slider {
+            background: var(--brand-gradient);
+        }
+
+        input:checked+.toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        /* ===== Settings Section ===== */
+        .settings-section {
+            margin-bottom: 20px;
+        }
+
+        .section-header {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.5;
+            margin-bottom: 12px;
+            padding: 0 4px;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: rgba(0, 0, 0, 0.03);
+            margin-bottom: 8px;
+            transition: background 0.2s ease;
+        }
+
+        .dark .setting-item {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .setting-item:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .dark .setting-item:hover {
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .setting-info {
+            flex: 1;
+        }
+
+        .setting-title {
+            font-weight: 500;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .setting-description {
+            font-size: 12px;
+            opacity: 0.6;
+            line-height: 1.4;
+        }
+
+        /* ===== Radio Group ===== */
+        .radio-group {
+            margin-top: 8px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-bottom: 8px;
+            background: rgba(0, 0, 0, 0.03);
+            transition: background 0.2s ease;
+        }
+
+        .dark .radio-option {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .radio-option:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .dark .radio-option:hover {
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .radio-option.selected {
+            background: rgba(158, 75, 138, 0.1);
+            border: 1px solid rgba(158, 75, 138, 0.3);
+        }
+
+        .radio-circle {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .dark .radio-circle {
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .radio-option.selected .radio-circle {
+            border-color: var(--brand-500);
+            background: var(--brand-500);
+        }
+
+        .radio-option.selected .radio-circle::after {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+        }
+
+        .radio-info h5 {
+            font-weight: 500;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .radio-info p {
+            font-size: 12px;
+            opacity: 0.6;
+            line-height: 1.4;
+        }
+
+        /* Sub-toggle in radio */
+        .sub-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .dark .sub-toggle {
+            border-top-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .sub-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--brand-500);
+        }
+
+        .sub-toggle span {
+            font-size: 13px;
+        }
+
+        /* Danger button */
+        .danger-btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 14px;
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            font-weight: 600;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.2s ease;
+            margin-top: 16px;
+        }
+
+        .danger-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
     </style>
 </head>
 
 <body
-    class="bg-gradient-to-br from-slate-50 to-blue-50 dark:from-[#0a0d12] dark:to-[#0f1419] text-[#0d1117] dark:text-zinc-100 min-h-screen">
+    class="bg-gradient-to-br from-slate-100 to-purple-100 dark:from-[#0a0d12] dark:to-[#1a0f1c] text-[#0d1117] dark:text-zinc-100">
 
-    <!-- Header -->
-    <header class="sticky top-0 z-50 glass-card border-0 border-b rounded-none">
-        <nav class="container mx-auto px-4 flex items-center justify-between py-3">
+    <!-- Participants Bar (Top Left) -->
+    <div class="participants-bar glass-card" id="participantsBar" style="top: 20px;">
+        <span class="icon text-lg opacity-60">group</span>
+        <div id="participantAvatars" class="flex items-center">
+            <!-- Avatars will be added here -->
+        </div>
+        <span id="participantCount" class="text-sm font-medium opacity-70">0 in call</span>
+    </div>
+
+    <!-- Top Right Actions -->
+    <div class="fixed top-5 right-5 z-80 flex items-center gap-3">
+        <button id="copyLinkBtn" class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition"
+            style="background: rgba(30, 30, 47, 0.9); color: rgba(255,255,255,0.9);" title="Copy invite link">
+            <span class="icon text-lg">link</span>
+            <span class="hidden sm:inline">Copy Link</span>
+        </button>
+        <button onclick="Theme.toggle()" class="p-2.5 rounded-xl transition"
+            style="background: rgba(30, 30, 47, 0.9); color: rgba(255,255,255,0.9);" title="Toggle theme">
+            <span class="icon">dark_mode</span>
+        </button>
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="main-content" id="mainContent">
+        <div class="p-4 h-full">
+            <div class="video-container" id="mainVideoArea">
+                <video id="screenShareVideo" autoplay playsinline muted class="hidden"></video>
+                <div id="noScreenShare" class="empty-video-state">
+                    <span class="icon">screen_share</span>
+                    <p class="text-lg font-medium">No screen being shared</p>
+                    <p class="text-sm opacity-60 mt-2">Click "Share Screen" to present</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Meeting Info Badge (Bottom Left) -->
+    <div class="meeting-info-badge" id="meetingInfoBadge">
+        <span id="currentTime">--:-- --</span>
+        <span class="divider"></span>
+        <span id="meetingId">---</span>
+    </div>
+
+    <!-- Floating Control Bar -->
+    <div class="control-bar glass-card" id="controlBar" style="background: rgba(30, 30, 47, 0.95);">
+        <button id="micBtn" class="control-btn active" title="Toggle microphone">
+            <span class="icon">mic</span>
+        </button>
+        <button id="screenShareBtn" class="control-btn inactive" title="Share screen">
+            <span class="icon">screen_share</span>
+        </button>
+
+        <div class="control-divider"></div>
+
+        <button id="whiteboardBtn" class="control-btn inactive" title="Open Whiteboard">
+            <span class="icon">draw</span>
+        </button>
+        <button id="chatToggleBtn" class="control-btn inactive" title="Toggle chat">
+            <span class="icon">chat</span>
+            <span id="chatBadge" class="notification-badge" style="display: none;">0</span>
+        </button>
+
+        <div class="control-divider"></div>
+
+        <!-- Raise Hand -->
+        <button id="raiseHandBtn" class="control-btn inactive" title="Raise hand">
+            <span class="icon">back_hand</span>
+        </button>
+
+        <!-- Reactions -->
+        <div class="relative">
+            <button id="reactionsBtn" class="control-btn inactive" title="Reactions">
+                <span class="icon">sentiment_satisfied</span>
+            </button>
+            <div class="reactions-popup" id="reactionsPopup">
+                <button class="reaction-btn" data-emoji="👍">👍</button>
+                <button class="reaction-btn" data-emoji="👏">👏</button>
+                <button class="reaction-btn" data-emoji="❤️">❤️</button>
+                <button class="reaction-btn" data-emoji="😂">😂</button>
+                <button class="reaction-btn" data-emoji="🎉">🎉</button>
+                <button class="reaction-btn" data-emoji="🔥">🔥</button>
+            </div>
+        </div>
+
+        <!-- Host Controls -->
+        <div class="relative" id="hostControlsContainer" style="display: none;">
+            <button id="hostControlsBtn" class="control-btn inactive" title="Host controls">
+                <span class="icon">admin_panel_settings</span>
+            </button>
+            <div class="host-popup" id="hostPopup">
+                <div class="host-option" id="muteAllBtn">
+                    <span class="icon">volume_off</span>
+                    Mute all
+                </div>
+                <div class="host-option" id="copyInviteBtn">
+                    <span class="icon">person_add</span>
+                    Invite link
+                </div>
+                <div class="host-option danger" id="endMeetingBtn">
+                    <span class="icon">call_end</span>
+                    End meeting for all
+                </div>
+            </div>
+        </div>
+
+        <div class="control-divider"></div>
+
+        <!-- Leave Button -->
+        <button id="leaveBtn" class="control-btn danger" title="Leave meeting">
+            <span class="icon">call_end</span>
+        </button>
+    </div>
+
+    <!-- Chat Sidebar -->
+    <aside class="chat-sidebar glass-card" id="chatSidebar">
+        <div class="chat-header">
             <div class="flex items-center gap-3">
-                <a href="../index.html" class="flex items-center gap-2 font-semibold">
-                    <span
-                        class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-lg">
-                        <span class="icon text-lg">groups</span>
-                    </span>
-                    <span class="hidden sm:inline">Group Chat</span>
-                </a>
-                <span id="roomName" class="hidden sm:inline text-sm opacity-70">— Loading...</span>
+                <span class="icon text-xl" style="color: var(--brand-500);">chat_bubble</span>
+                <h2 class="font-semibold text-lg">Chat</h2>
+            </div>
+            <button id="closeChatBtn" class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition">
+                <span class="icon">close</span>
+            </button>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <!-- Chat messages will appear here -->
+            <div class="text-center py-8 opacity-50">
+                <span class="icon text-4xl mb-2">forum</span>
+                <p class="text-sm">Messages will appear here</p>
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <form id="chatForm" class="chat-input-wrapper">
+                <input type="text" id="chatInput" class="chat-input" placeholder="Type a message..."
+                    autocomplete="off" />
+                <button type="submit" class="chat-send-btn">
+                    <span class="icon">send</span>
+                </button>
+            </form>
+        </div>
+    </aside>
+
+    <!-- Floating Action Buttons (Bottom Right) -->
+    <div class="floating-actions" id="floatingActions">
+        <button class="fab-btn" id="participantsFab" title="Participants">
+            <span class="icon">people</span>
+        </button>
+        <button class="fab-btn" id="hostControlsFab" title="Host Controls">
+            <span class="icon">admin_panel_settings</span>
+        </button>
+    </div>
+
+    <!-- Participants Sidebar -->
+    <aside class="right-sidebar" id="participantsSidebar">
+        <div class="sidebar-header">
+            <div class="flex items-center gap-3">
+                <span class="icon text-xl" style="color: var(--brand-500);">people</span>
+                <h2 class="font-semibold text-lg">Participants</h2>
+                <span id="participantsCount" class="text-sm opacity-60">(0)</span>
+            </div>
+            <button id="closeParticipantsBtn" class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition">
+                <span class="icon">close</span>
+            </button>
+        </div>
+        <div class="sidebar-content" id="participantsList">
+            <!-- Participants will be added here -->
+            <div class="text-center py-8 opacity-50">
+                <span class="icon text-4xl mb-2">person_search</span>
+                <p class="text-sm">No participants yet</p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Host Controls Sidebar -->
+    <aside class="right-sidebar" id="hostControlsSidebar">
+        <div class="sidebar-header">
+            <div class="flex items-center gap-3">
+                <span class="icon text-xl" style="color: var(--brand-500);">admin_panel_settings</span>
+                <h2 class="font-semibold text-lg">Host Controls</h2>
+            </div>
+            <button id="closeHostControlsBtn" class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition">
+                <span class="icon">close</span>
+            </button>
+        </div>
+        <div class="sidebar-content">
+            <!-- Chat Moderation Section -->
+            <div class="settings-section">
+                <div class="section-header">Chat Moderation</div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-title">Let participants send messages</div>
+                        <div class="setting-description">When on, everyone in the call can send messages</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggleChat" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
 
-            <div class="flex items-center gap-3">
-                <button id="copyLinkBtn" class="btn-secondary px-3 py-2 rounded-xl text-sm flex items-center gap-2"
-                    title="Copy invite link">
-                    <span class="icon text-lg">link</span>
-                    <span class="hidden sm:inline">Copy Link</span>
-                </button>
-                <button onclick="Theme.toggle()" class="btn-secondary px-3 py-2 rounded-xl">
-                    <span class="icon">dark_mode</span>
-                </button>
-                <button id="leaveBtn" class="btn-danger px-4 py-2 rounded-xl text-sm flex items-center gap-2">
-                    <span class="icon text-lg">call_end</span>
-                    <span class="hidden sm:inline">Leave</span>
-                </button>
+            <!-- Meeting Access Section -->
+            <div class="settings-section">
+                <div class="section-header">Meeting Access</div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-title">Host must join before anyone else</div>
+                        <div class="setting-description">Participants wait until host joins</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggleHostFirst">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="section-header" style="margin-top: 16px;">Meeting access type</div>
+                <div class="radio-group" id="accessTypeGroup">
+                    <div class="radio-option" data-value="open">
+                        <div class="radio-circle"></div>
+                        <div class="radio-info">
+                            <h5>Open</h5>
+                            <p>No one has to ask to join. Anyone can dial in.</p>
+                        </div>
+                    </div>
+                    <div class="radio-option selected" data-value="trusted">
+                        <div class="radio-circle"></div>
+                        <div class="radio-info">
+                            <h5>Trusted</h5>
+                            <p>People can join without asking if they're invited using their account.</p>
+                            <div class="sub-toggle">
+                                <input type="checkbox" id="allowAskToJoin" checked>
+                                <span>Anyone with the meeting link can ask to join</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </nav>
-    </header>
+
+            <!-- Meeting Moderation Section -->
+            <div class="settings-section">
+                <div class="section-header">Meeting Moderation</div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-title">Host management</div>
+                        <div class="setting-description">Lets you restrict what contributors can enable</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggleHostManagement" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="section-header" style="margin-top: 16px;">Let Contributors</div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-title">Share their screen</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggleScreenShare" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-title">Send reactions</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggleReactions" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-title">Turn on their microphone</div>
+                        <div class="setting-description">Turning this off might remove people using an outdated app
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggleMic" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-title">Turn on their video</div>
+                        <div class="setting-description">Turning this off might remove people using an outdated app
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggleVideo" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Danger Zone -->
+            <button class="danger-btn" id="hostEndMeetingBtn">
+                <span class="icon">call_end</span>
+                End meeting for everyone
+            </button>
+        </div>
+    </aside>
 
     <!-- Meeting Ended View -->
-    <main id="endedView" class="hidden container mx-auto px-4 py-16">
-        <div class="max-w-md mx-auto text-center glass-card p-10">
-            <div
-                class="inline-flex h-20 w-20 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 text-red-500 mb-6">
-                <span class="icon text-4xl">call_end</span>
+    <div class="ended-view" id="endedView">
+        <div class="ended-card glass-card">
+            <div class="inline-flex h-20 w-20 items-center justify-center rounded-full mb-6"
+                style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%);">
+                <span class="icon text-5xl text-red-500">call_end</span>
             </div>
             <h1 class="text-3xl font-bold mb-3">Call Ended</h1>
-            <p class="text-lg opacity-70 mb-8">This meeting has ended and is no longer active.</p>
-
-            <a href="group_history.html"
-                class="btn-primary w-full py-3 rounded-xl font-semibold text-lg flex items-center justify-center gap-2">
-                <span class="icon">history</span>
+            <p class="text-lg opacity-60 mb-8">This meeting has ended and is no longer active.</p>
+            <a href="group_history.html" class="block w-full py-3.5 rounded-2xl font-semibold text-white text-center"
+                style="background: var(--brand-gradient);">
+                <span class="icon align-middle mr-2">history</span>
                 Go to Call History
             </a>
-            <a href="../index.html" class="block mt-4 text-sm opacity-60 hover:opacity-100 transition">
+            <a href="../index.html" class="block mt-4 text-sm opacity-50 hover:opacity-100 transition">
                 Return to Home
             </a>
         </div>
-    </main>
+    </div>
 
-
-    <!-- Room View -->
-    <main id="roomView" class="hidden container mx-auto px-4 py-4">
-        <div class="grid lg:grid-cols-[1fr,380px] gap-4 h-[calc(100vh-140px)]">
-
-            <!-- Left: Video / Screen Share Area -->
-            <div class="flex flex-col gap-4">
-                <!-- Screen share / main video -->
-                <div id="mainVideoArea" class="video-container flex-1 min-h-[300px] flex items-center justify-center">
-                    <video id="screenShareVideo" autoplay playsinline muted class="hidden w-full h-full"
-                        style="background: #000;"></video>
-                    <div id="noScreenShare" class="text-center text-white/70">
-                        <span class="icon text-6xl mb-2">screen_share</span>
-                        <p>No screen being shared</p>
-                    </div>
-                </div>
-
-                <!-- Controls bar -->
-                <div class="glass-card p-4 flex items-center justify-center gap-4">
-                    <button id="micBtn" class="control-btn active" title="Toggle microphone">
-                        <span class="icon">mic</span>
-                    </button>
-                    <button id="screenShareBtn" class="control-btn inactive" title="Share screen">
-                        <span class="icon">screen_share</span>
-                    </button>
-                    <div class="w-px h-8 bg-black/10 dark:bg-white/10 mx-2"></div>
-                    <button id="chatToggleBtn" class="control-btn inactive lg:hidden" title="Toggle chat">
-                        <span class="icon">chat</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Right: Whiteboard + Participants + Chat -->
-            <div class="flex flex-col gap-4">
-
-                <!-- Whiteboard -->
-                <div class="glass-card p-3 flex-1">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="font-semibold flex items-center gap-2">
-                            <span class="icon text-lg">draw</span>
-                            Whiteboard
-                        </h3>
-                        <div class="flex items-center gap-2">
-                            <!-- Colors -->
-                            <div class="flex gap-1">
-                                <button class="color-dot active" data-color="#000000"
-                                    style="background:#000000"></button>
-                                <button class="color-dot" data-color="#ef4444" style="background:#ef4444"></button>
-                                <button class="color-dot" data-color="#3b82f6" style="background:#3b82f6"></button>
-                                <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
-                                <button class="color-dot" data-color="#f59e0b" style="background:#f59e0b"></button>
-                            </div>
-                            <div class="w-px h-6 bg-black/10 dark:bg-white/10"></div>
-                            <!-- Brush size -->
-                            <input type="range" id="brushSize" min="2" max="20" value="4" class="w-16" />
-                            <button id="clearCanvasBtn" class="toolbar-btn" title="Clear canvas">
-                                <span class="icon text-lg">delete</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="relative bg-white dark:bg-zinc-800 rounded-lg overflow-hidden"
-                        style="aspect-ratio: 4/3;">
-                        <canvas id="whiteboard" class="absolute inset-0 w-full h-full"></canvas>
-                    </div>
-                </div>
-
-                <!-- Participants -->
-                <div class="glass-card p-3">
-                    <h3 class="font-semibold flex items-center gap-2 mb-2">
-                        <span class="icon text-lg">group</span>
-                        Participants
-                        <span id="participantCount"
-                            class="text-xs bg-brand-500 text-white px-2 py-0.5 rounded-full">0</span>
-                    </h3>
-                    <div id="participantsList" class="space-y-1 max-h-32 overflow-y-auto">
-                        <!-- Participants will be added here -->
-                    </div>
-                </div>
-
-                <!-- Chat -->
-                <div class="glass-card p-3 flex flex-col" style="height: 200px;">
-                    <h3 class="font-semibold flex items-center gap-2 mb-2">
-                        <span class="icon text-lg">chat_bubble</span>
-                        Chat
-                    </h3>
-                    <div id="chatMessages" class="flex-1 overflow-y-auto space-y-2 mb-2">
-                        <!-- Chat messages -->
-                    </div>
-                    <form id="chatForm" class="flex gap-2">
-                        <input type="text" id="chatInput" placeholder="Type a message..."
-                            class="flex-1 px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 bg-white/70 dark:bg-zinc-900/50 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                        <button type="submit" class="btn-primary px-4 py-2 rounded-lg">
-                            <span class="icon">send</span>
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- Toast notifications -->
-    <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 hidden">
-        <div class="glass-card px-6 py-3 flex items-center gap-3 shadow-xl">
-            <span id="toastIcon" class="icon text-brand-500">check_circle</span>
-            <span id="toastText"></span>
-        </div>
+    <!-- Toast -->
+    <div class="toast glass-card" id="toast">
+        <span id="toastIcon" class="icon" style="color: var(--brand-500);">check_circle</span>
+        <span id="toastText"></span>
     </div>
 
     <script>
@@ -453,37 +1421,58 @@
         let ws = null;
         let localStream = null;
         let screenStream = null;
-        let peerConnections = {};  // userId -> RTCPeerConnection
+        let peerConnections = {};
         let isMuted = false;
         let isScreenSharing = false;
-
-        // Whiteboard state
-        let canvas, ctx;
-        let isDrawing = false;
-        let currentColor = '#000000';
-        let brushSize = 4;
-        let lastX = 0, lastY = 0;
+        let isChatOpen = false;
+        let unreadMessages = 0;
 
         // =========================================================================
         // DOM Elements
         // =========================================================================
         const el = id => document.getElementById(id);
-        const roomView = el('roomView');
+        const mainContent = el('mainContent');
+        const controlBar = el('controlBar');
+        const chatSidebar = el('chatSidebar');
+        const chatToggleBtn = el('chatToggleBtn');
+        const closeChatBtn = el('closeChatBtn');
+        const chatBadge = el('chatBadge');
         const endedView = el('endedView');
         const roomNameEl = el('roomName');
         const copyLinkBtn = el('copyLinkBtn');
         const leaveBtn = el('leaveBtn');
         const micBtn = el('micBtn');
         const screenShareBtn = el('screenShareBtn');
+        const whiteboardBtn = el('whiteboardBtn');
         const screenShareVideo = el('screenShareVideo');
         const noScreenShare = el('noScreenShare');
-        const participantsList = el('participantsList');
+        const participantAvatars = el('participantAvatars');
         const participantCount = el('participantCount');
         const chatMessages = el('chatMessages');
         const chatForm = el('chatForm');
         const chatInput = el('chatInput');
-        const clearCanvasBtn = el('clearCanvasBtn');
-        const brushSizeInput = el('brushSize');
+
+        // New control elements
+        const raiseHandBtn = el('raiseHandBtn');
+        const reactionsBtn = el('reactionsBtn');
+        const reactionsPopup = el('reactionsPopup');
+        const hostControlsContainer = el('hostControlsContainer');
+        const hostControlsBtn = el('hostControlsBtn');
+        const hostPopup = el('hostPopup');
+
+        // Sidebar elements
+        const participantsFab = el('participantsFab');
+        const hostControlsFab = el('hostControlsFab');
+        const participantsSidebar = el('participantsSidebar');
+        const hostControlsSidebar = el('hostControlsSidebar');
+        const closeParticipantsBtn = el('closeParticipantsBtn');
+        const closeHostControlsBtn = el('closeHostControlsBtn');
+        const participantsList = el('participantsList');
+        const participantsCountEl = el('participantsCount');
+
+        let isHandRaised = false;
+        let isParticipantsSidebarOpen = false;
+        let isHostControlsSidebarOpen = false;
 
         // =========================================================================
         // Toast
@@ -492,9 +1481,205 @@
             const toast = el('toast');
             el('toastText').textContent = message;
             el('toastIcon').textContent = icon;
-            toast.classList.remove('hidden');
-            setTimeout(() => toast.classList.add('hidden'), duration);
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), duration);
         }
+
+        // =========================================================================
+        // Chat Sidebar Toggle
+        // =========================================================================
+        function toggleChat() {
+            isChatOpen = !isChatOpen;
+
+            if (isChatOpen) {
+                chatSidebar.classList.add('open');
+                mainContent.classList.add('chat-open');
+                controlBar.classList.add('chat-open');
+                chatToggleBtn.classList.add('active');
+                chatToggleBtn.classList.remove('inactive');
+
+                // Clear unread
+                unreadMessages = 0;
+                chatBadge.style.display = 'none';
+
+                // Focus input
+                setTimeout(() => chatInput.focus(), 300);
+            } else {
+                chatSidebar.classList.remove('open');
+                mainContent.classList.remove('chat-open');
+                controlBar.classList.remove('chat-open');
+                chatToggleBtn.classList.remove('active');
+                chatToggleBtn.classList.add('inactive');
+            }
+        }
+
+        chatToggleBtn.onclick = toggleChat;
+        closeChatBtn.onclick = toggleChat;
+
+        // =========================================================================
+        // Participants Sidebar Toggle
+        // =========================================================================
+        function toggleParticipantsSidebar() {
+            isParticipantsSidebarOpen = !isParticipantsSidebarOpen;
+
+            if (isParticipantsSidebarOpen) {
+                participantsSidebar.classList.add('open');
+                participantsFab.classList.add('active');
+
+                // Close other sidebars
+                hostControlsSidebar.classList.remove('open');
+                hostControlsFab.classList.remove('active');
+                isHostControlsSidebarOpen = false;
+
+                // Update participants list
+                updateParticipantsList();
+            } else {
+                participantsSidebar.classList.remove('open');
+                participantsFab.classList.remove('active');
+            }
+        }
+
+        participantsFab.onclick = toggleParticipantsSidebar;
+        closeParticipantsBtn.onclick = toggleParticipantsSidebar;
+
+        // =========================================================================
+        // Host Controls Sidebar Toggle
+        // =========================================================================
+        function toggleHostControlsSidebar() {
+            isHostControlsSidebarOpen = !isHostControlsSidebarOpen;
+
+            if (isHostControlsSidebarOpen) {
+                hostControlsSidebar.classList.add('open');
+                hostControlsFab.classList.add('active');
+
+                // Close other sidebars
+                participantsSidebar.classList.remove('open');
+                participantsFab.classList.remove('active');
+                isParticipantsSidebarOpen = false;
+            } else {
+                hostControlsSidebar.classList.remove('open');
+                hostControlsFab.classList.remove('active');
+            }
+        }
+
+        hostControlsFab.onclick = toggleHostControlsSidebar;
+        closeHostControlsBtn.onclick = toggleHostControlsSidebar;
+
+        // Radio button selection
+        document.querySelectorAll('.radio-option').forEach(option => {
+            option.onclick = () => {
+                document.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+                showToast(`Access type: ${option.dataset.value}`, 'info');
+            };
+        });
+
+        // End meeting button
+        const hostEndMeetingBtn = el('hostEndMeetingBtn');
+        if (hostEndMeetingBtn) {
+            hostEndMeetingBtn.onclick = () => {
+                if (confirm('End the meeting for all participants?')) {
+                    showToast('Ending meeting...', 'call_end');
+                    setTimeout(leaveRoom, 1500);
+                }
+            };
+        }
+
+        // Toggle handlers (show toast for feedback)
+        ['toggleChat', 'toggleHostFirst', 'toggleHostManagement', 'toggleScreenShare', 'toggleReactions', 'toggleMic', 'toggleVideo'].forEach(id => {
+            const toggle = el(id);
+            if (toggle) {
+                toggle.onchange = () => {
+                    const label = toggle.parentElement.previousElementSibling?.querySelector('.setting-title')?.textContent || id;
+                    showToast(`${label}: ${toggle.checked ? 'On' : 'Off'}`, toggle.checked ? 'toggle_on' : 'toggle_off');
+                };
+            }
+        });
+
+        // =========================================================================
+        // Raise Hand
+        // =========================================================================
+        raiseHandBtn.onclick = () => {
+            isHandRaised = !isHandRaised;
+            if (isHandRaised) {
+                raiseHandBtn.classList.add('hand-raised');
+                raiseHandBtn.classList.remove('inactive');
+                showToast('Hand raised', 'back_hand');
+
+                // Broadcast to others
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'hand-raised',
+                        data: { name: userName }
+                    }));
+                }
+            } else {
+                raiseHandBtn.classList.remove('hand-raised');
+                raiseHandBtn.classList.add('inactive');
+                showToast('Hand lowered', 'pan_tool_alt');
+
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'hand-lowered',
+                        data: { name: userName }
+                    }));
+                }
+            }
+        };
+
+        // =========================================================================
+        // Reactions
+        // =========================================================================
+        reactionsBtn.onclick = (e) => {
+            e.stopPropagation();
+            reactionsPopup.classList.toggle('show');
+            hostPopup.classList.remove('show');
+        };
+
+        // (Old showFloatingReaction removed - replaced with new version)
+
+        // =========================================================================
+        // Host Controls
+        // =========================================================================
+        if (hostControlsBtn) {
+            hostControlsBtn.onclick = (e) => {
+                e.stopPropagation();
+                hostPopup.classList.toggle('show');
+                reactionsPopup.classList.remove('show');
+            };
+        }
+
+        if (muteAllBtn) {
+            muteAllBtn.onclick = () => {
+                hostPopup.classList.remove('show');
+                showToast('Mute all is not yet implemented', 'info');
+            };
+        }
+
+        if (copyInviteBtn) {
+            copyInviteBtn.onclick = () => {
+                navigator.clipboard.writeText(window.location.href);
+                hostPopup.classList.remove('show');
+                showToast('Invite link copied!', 'link');
+            };
+        }
+
+        if (endMeetingBtn) {
+            endMeetingBtn.onclick = () => {
+                hostPopup.classList.remove('show');
+                if (confirm('End the meeting for all participants?')) {
+                    // TODO: Implement end meeting for all via API
+                    showToast('Ending meeting...', 'call_end');
+                    setTimeout(leaveRoom, 1500);
+                }
+            };
+        }
+
+        // Close popups when clicking outside
+        document.addEventListener('click', () => {
+            reactionsPopup.classList.remove('show');
+            hostPopup.classList.remove('show');
+        });
 
         // =========================================================================
         // Room Management
@@ -505,7 +1690,7 @@
                 return;
             }
 
-            // CHECK STATUS FIRST
+            // Check room status first
             try {
                 const checkRes = await fetch(`${API}/api/group-chat/${roomId}`, {
                     headers: token ? { 'Authorization': `Bearer ${token}` } : {}
@@ -514,8 +1699,7 @@
                 if (checkRes.status === 400 || checkRes.status === 404) {
                     const err = await checkRes.json();
                     if (err.detail && (err.detail.includes("ended") || err.detail.includes("not found"))) {
-                        roomView.classList.add('hidden');
-                        endedView.classList.remove('hidden');
+                        showEndedView();
                         return;
                     }
                 }
@@ -523,7 +1707,7 @@
                 console.log("Error checking room status", e);
             }
 
-            // Try to get user profile
+            // Get user profile
             if (token) {
                 try {
                     const res = await fetch(`${API}/api/profile`, {
@@ -541,15 +1725,8 @@
                 userId = 'user-' + Math.random().toString(36).substr(2, 6);
             }
 
-            // Switch to room view
-            endedView.classList.add('hidden');
-            roomView.classList.remove('hidden');
-
             // Connect WebSocket
             connectWebSocket();
-
-            // Initialize whiteboard
-            initWhiteboard();
 
             // Get microphone access
             try {
@@ -558,6 +1735,10 @@
                 console.warn('Could not get microphone:', err);
                 showToast('Microphone access denied', 'warning');
             }
+        }
+
+        function showEndedView() {
+            endedView.style.display = 'flex';
         }
 
         function cleanupRoom() {
@@ -579,7 +1760,6 @@
             Object.values(peerConnections).forEach(pc => pc.close());
             peerConnections = {};
 
-            // Reset state
             roomId = null;
             isHost = false;
             isScreenSharing = false;
@@ -590,11 +1770,9 @@
             window.location.href = 'create_meet.html';
         }
 
-        // Handle Ended Event via WS
         function handleRoomEnded() {
             cleanupRoom();
-            endedView.classList.remove('hidden');
-            roomView.classList.add('hidden');
+            showEndedView();
         }
 
         // =========================================================================
@@ -605,7 +1783,6 @@
 
             ws.onopen = () => {
                 console.log('[WS] Connected');
-                // Send join message
                 ws.send(JSON.stringify({
                     type: 'join',
                     data: { user_id: userId, name: userName }
@@ -619,7 +1796,6 @@
 
             ws.onclose = () => {
                 console.log('[WS] Disconnected');
-                // showToast('Disconnected from room', 'wifi_off');
             };
 
             ws.onerror = (err) => {
@@ -633,26 +1809,24 @@
 
             switch (type) {
                 case 'room-info':
-                    // Room info received after joining
-                    roomNameEl.textContent = `— ${data.name}`;
                     isHost = data.is_host;
                     userId = data.your_user_id;
-
-                    // Render existing participants
                     updateParticipants(data.participants);
 
-                    // Replay whiteboard history
-                    if (data.whiteboard_history) {
-                        data.whiteboard_history.forEach(stroke => drawFromRemote(stroke));
+                    // Show host controls if user is the host
+                    if (isHost) {
+                        if (hostControlsContainer) {
+                            hostControlsContainer.style.display = 'block';
+                        }
+                        if (hostControlsFab) {
+                            hostControlsFab.style.display = 'flex';
+                        }
                     }
 
-                    // Show screen share if active
                     if (data.screen_share_active) {
-                        noScreenShare.innerHTML = `<span class="icon text-6xl mb-2">screen_share</span><p>${data.screen_sharer_id === userId ? 'You are' : 'Someone is'} sharing screen</p>`;
+                        noScreenShare.innerHTML = `<span class="icon" style="font-size:80px;opacity:0.4;">screen_share</span><p class="text-lg font-medium mt-4">${data.screen_sharer_id === userId ? 'You are' : 'Someone is'} sharing screen</p>`;
                     }
 
-                    // Create peer connections with existing participants
-                    // onnegotiationneeded will automatically send offers
                     for (const p of data.participants) {
                         if (p.user_id !== userId) {
                             await createPeerConnection(p.user_id, false);
@@ -662,18 +1836,12 @@
 
                 case 'room-ended':
                     showToast('The host has ended the meeting.', 'call_end');
-                    setTimeout(() => {
-                        handleRoomEnded();
-                    }, 2000);
+                    setTimeout(handleRoomEnded, 2000);
                     break;
 
                 case 'user-joined':
                     showToast(`${data.name} joined`, 'person_add');
                     addParticipant(data);
-
-                    // Create peer connection with new participant
-                    // Screen share track is added automatically in createPeerConnection
-                    // onnegotiationneeded will handle sending the offer
                     if (data.user_id !== userId) {
                         await createPeerConnection(data.user_id, false);
                     }
@@ -700,29 +1868,91 @@
                     await handleIceCandidate(from_user_id, data);
                     break;
 
-                case 'whiteboard-draw':
-                    drawFromRemote(data);
-                    break;
-
-                case 'whiteboard-clear':
-                    clearCanvas(false);
-                    break;
-
                 case 'screen-share-started':
-                    noScreenShare.innerHTML = `<span class="icon text-6xl mb-2 connecting">screen_share</span><p>${data.sharer_name} is sharing screen</p>`;
+                    noScreenShare.innerHTML = `<span class="icon" style="font-size:80px;opacity:0.4;animation:pulse 2s infinite;">screen_share</span><p class="text-lg font-medium mt-4">${data.sharer_name} is sharing screen</p>`;
                     break;
 
                 case 'screen-share-stopped':
-                    noScreenShare.innerHTML = `<span class="icon text-6xl mb-2">screen_share</span><p>No screen being shared</p>`;
+                    noScreenShare.innerHTML = `<span class="icon" style="font-size:80px;opacity:0.4;">screen_share</span><p class="text-lg font-medium mt-4">No screen being shared</p><p class="text-sm opacity-60 mt-2">Click "Share Screen" to present</p>`;
                     screenShareVideo.classList.add('hidden');
                     noScreenShare.classList.remove('hidden');
                     break;
 
                 case 'chat-message':
                     addChatMessage(data);
+                    if (!isChatOpen) {
+                        unreadMessages++;
+                        chatBadge.textContent = unreadMessages > 9 ? '9+' : unreadMessages;
+                        chatBadge.style.display = 'flex';
+                    }
+                    break;
+
+                case 'reaction':
+                    showFloatingReaction(data.emoji, data.name);
+                    break;
+
+                case 'hand-raised':
+                    showToast(`${data.name} raised hand`, 'back_hand');
+                    break;
+
+                case 'hand-lowered':
+                    showToast(`${data.name} lowered hand`, 'pan_tool_alt');
                     break;
             }
         }
+
+        // =========================================================================
+        // Floating Reactions
+        // =========================================================================
+        function showFloatingReaction(emoji, name = 'Someone') {
+            const container = document.createElement('div');
+            container.className = 'floating-reaction';
+            container.style.left = `${50 + (Math.random() - 0.5) * 40}%`; // Spread out more (-20% to +20%)
+
+            // Emoji
+            const emojiSpan = document.createElement('span');
+            emojiSpan.className = 'reaction-emoji';
+            emojiSpan.textContent = emoji;
+
+            // Name label
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'reaction-name';
+            nameSpan.textContent = name;
+
+            container.appendChild(emojiSpan);
+            container.appendChild(nameSpan);
+            document.body.appendChild(container);
+
+            setTimeout(() => container.remove(), 4000);
+        }
+
+        // =========================================================================
+        // UI Handlers (updated)
+        // =========================================================================
+        reactionsBtn.onclick = (e) => {
+            e.stopPropagation();
+            reactionsPopup.classList.toggle('show');
+            hostPopup.classList.remove('show');
+        };
+
+        document.querySelectorAll('.reaction-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const emoji = btn.dataset.emoji;
+                reactionsPopup.classList.remove('show');
+
+                // Show floating reaction locally
+                showFloatingReaction(emoji, 'You');
+
+                // Broadcast to others
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'reaction',
+                        data: { emoji, name: userName }
+                    }));
+                }
+            };
+        });
 
         // =========================================================================
         // WebRTC Peer Connections
@@ -731,10 +1961,6 @@
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' },
-                // Free TURN servers for NAT traversal
                 {
                     urls: 'turn:openrelay.metered.ca:80',
                     username: 'openrelayproject',
@@ -749,9 +1975,8 @@
             iceCandidatePoolSize: 10
         };
 
-        // Track making offer state per peer
-        let makingOffer = {};  // peerId -> boolean
-        let ignoreOffer = {};  // peerId -> boolean
+        let makingOffer = {};
+        let ignoreOffer = {};
 
         async function createPeerConnection(peerId, isInitiator) {
             if (peerConnections[peerId]) return peerConnections[peerId];
@@ -761,18 +1986,14 @@
             makingOffer[peerId] = false;
             ignoreOffer[peerId] = false;
 
-            // Determine who is "polite" - use lexicographic comparison of user IDs
-            // The "polite" peer will defer when there's a conflict
             const polite = userId > peerId;
 
-            // Add local audio track
             if (localStream) {
                 localStream.getTracks().forEach(track => {
                     pc.addTrack(track, localStream);
                 });
             }
 
-            // Add screen share track if currently sharing
             if (isScreenSharing && screenStream) {
                 screenStream.getTracks().forEach(track => {
                     pc.addTrack(track, screenStream);
@@ -790,15 +2011,10 @@
             };
 
             pc.ontrack = (event) => {
-                // We only handle screen share tracks here
-                // Audio is handled automatically by the browser mixing
-                if (event.streams[0]) {
-                    // Check if it's a video track (screen share)
-                    if (event.track.kind === 'video') {
-                        screenShareVideo.srcObject = event.streams[0];
-                        screenShareVideo.classList.remove('hidden');
-                        noScreenShare.classList.add('hidden');
-                    }
+                if (event.streams[0] && event.track.kind === 'video') {
+                    screenShareVideo.srcObject = event.streams[0];
+                    screenShareVideo.classList.remove('hidden');
+                    noScreenShare.classList.add('hidden');
                 }
             };
 
@@ -818,7 +2034,6 @@
                 }
             };
 
-            // Handle glare (simultaneous offers)
             pc.oniceconnectionstatechange = () => {
                 if (pc.iceConnectionState === 'failed') {
                     pc.restartIce();
@@ -832,18 +2047,10 @@
             const pc = await createPeerConnection(peerId, false);
             const polite = userId > peerId;
 
-            // Rollback if we have a collision and we're polite
             const offerCollision = makingOffer[peerId] || pc.signalingState !== 'stable';
             if (offerCollision && !polite) {
                 ignoreOffer[peerId] = true;
                 return;
-            }
-
-            if (offerCollision) {
-                // If we're polite, we rollback our local description if needed
-                // But since we using the 'perfect negotiation' pattern with addTrack triggering negotiationneeded, 
-                // we technically might need to rollback. 
-                // Simplification: we proceed
             }
 
             await pc.setRemoteDescription(offer);
@@ -867,12 +2074,9 @@
             try {
                 await pc.addIceCandidate(candidate);
             } catch (err) {
-                if (!ignoreOffer[peerId]) {
-                    console.warn(err);
-                }
+                if (!ignoreOffer[peerId]) console.warn(err);
             }
         }
-
 
         // =========================================================================
         // Media Controls
@@ -895,16 +2099,12 @@
 
         screenShareBtn.onclick = async () => {
             if (isScreenSharing) {
-                // Stop sharing
                 stopScreenShare();
             } else {
-                // Start sharing
                 try {
                     screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-
                     screenStream.getVideoTracks()[0].onended = stopScreenShare;
 
-                    // Add track to all peer connections
                     const track = screenStream.getVideoTracks()[0];
                     Object.values(peerConnections).forEach(pc => {
                         pc.addTrack(track, screenStream);
@@ -914,17 +2114,10 @@
                     screenShareBtn.classList.add('active');
                     screenShareBtn.classList.remove('inactive');
 
-                    // Broadcast start
                     ws.send(JSON.stringify({
                         type: 'screen-share-started',
                         data: { sharer_name: userName }
                     }));
-
-                    // Show local preview
-                    // screenShareVideo.srcObject = screenStream;
-                    // screenShareVideo.classList.remove('hidden');
-                    // noScreenShare.classList.add('hidden');
-
                 } catch (err) {
                     console.error('Screen share error:', err);
                 }
@@ -939,11 +2132,6 @@
                 screenStream = null;
             }
 
-            // Remove tracks from peers (negotiation needed will trigger)
-            // Implementation note: removing tracks is tricky in WebRTC, 
-            // usually better to just stop the track or replace it.
-            // For simplicity here, we just broadcast stop.
-
             isScreenSharing = false;
             screenShareBtn.classList.remove('active');
             screenShareBtn.classList.add('inactive');
@@ -954,185 +2142,139 @@
             }));
         }
 
+        // Whiteboard button - opens new page
+        whiteboardBtn.onclick = () => {
+            window.open(`whiteboard.html?room=${roomId}`, '_blank');
+        };
 
         // =========================================================================
-        // Whiteboard
+        // Participants
         // =========================================================================
-        function initWhiteboard() {
-            canvas = el('whiteboard');
-            ctx = canvas.getContext('2d');
+        let participantsData = [];
 
-            // Set resolution
-            const resize = () => {
-                const rect = canvas.parentElement.getBoundingClientRect();
-                canvas.width = rect.width;
-                canvas.height = rect.height;
-            };
-            resize();
-            window.addEventListener('resize', resize);
+        function updateParticipants(list) {
+            participantsData = list;
+            participantAvatars.innerHTML = '';
+            participantCount.textContent = `${list.length} in call`;
+            participantsCountEl.textContent = `(${list.length})`;
 
-            // Drawing events
-            const startDraw = (e) => {
-                isDrawing = true;
-                [lastX, lastY] = getPos(e);
-            };
+            const colors = ['#9E4B8A', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
 
-            const draw = (e) => {
-                if (!isDrawing) return;
-                const [x, y] = getPos(e);
-
-                // Draw locally
-                ctx.beginPath();
-                ctx.moveTo(lastX, lastY);
-                ctx.lineTo(x, y);
-                ctx.strokeStyle = currentColor;
-                ctx.lineWidth = brushSize;
-                ctx.lineCap = 'round';
-                ctx.stroke();
-
-                // Send to others
-                if (ws) {
-                    ws.send(JSON.stringify({
-                        type: 'whiteboard-draw',
-                        data: {
-                            x0: lastX / canvas.width,
-                            y0: lastY / canvas.height,
-                            x1: x / canvas.width,
-                            y1: y / canvas.height,
-                            color: currentColor,
-                            width: brushSize
-                        }
-                    }));
-                }
-
-                [lastX, lastY] = [x, y];
-            };
-
-            const endDraw = () => isDrawing = false;
-
-            canvas.addEventListener('mousedown', startDraw);
-            canvas.addEventListener('mousemove', draw);
-            canvas.addEventListener('mouseup', endDraw);
-            canvas.addEventListener('mouseout', endDraw);
-
-            // Touch support
-            canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDraw(e.touches[0]); });
-            canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e.touches[0]); });
-            canvas.addEventListener('touchend', endDraw);
-
-            // Controls
-            document.querySelectorAll('.color-dot').forEach(btn => {
-                btn.onclick = () => {
-                    document.querySelector('.color-dot.active').classList.remove('active');
-                    btn.classList.add('active');
-                    currentColor = btn.dataset.color;
-                };
+            list.slice(0, 5).forEach((p, i) => {
+                const avatar = document.createElement('div');
+                avatar.className = 'participant-avatar';
+                avatar.style.background = colors[i % colors.length];
+                avatar.textContent = p.name[0].toUpperCase();
+                avatar.title = p.name + (p.is_host ? ' (Host)' : '') + (p.user_id === userId ? ' (You)' : '');
+                participantAvatars.appendChild(avatar);
             });
 
-            brushSizeInput.oninput = (e) => brushSize = e.target.value;
+            if (list.length > 5) {
+                const more = document.createElement('div');
+                more.className = 'participant-avatar';
+                more.style.background = 'rgba(0,0,0,0.3)';
+                more.textContent = `+${list.length - 5}`;
+                participantAvatars.appendChild(more);
+            }
 
-            clearCanvasBtn.onclick = () => {
-                clearCanvas(true);
-            };
-        }
-
-        function getPos(e) {
-            const rect = canvas.getBoundingClientRect();
-            return [
-                e.clientX - rect.left,
-                e.clientY - rect.top
-            ];
-        }
-
-        function drawFromRemote(data) {
-            if (!ctx) return;
-            const x0 = data.x0 * canvas.width;
-            const y0 = data.y0 * canvas.height;
-            const x1 = data.x1 * canvas.width;
-            const y1 = data.y1 * canvas.height;
-
-            ctx.beginPath();
-            ctx.moveTo(x0, y0);
-            ctx.lineTo(x1, y1);
-            ctx.strokeStyle = data.color;
-            ctx.lineWidth = data.width;
-            ctx.lineCap = 'round';
-            ctx.stroke();
-        }
-
-        function clearCanvas(broadcast) {
-            if (!ctx) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (broadcast && ws) {
-                ws.send(JSON.stringify({ type: 'whiteboard-clear' }));
+            // Update sidebar if open
+            if (isParticipantsSidebarOpen) {
+                updateParticipantsList();
             }
         }
 
+        function updateParticipantsList() {
+            const colors = ['#9E4B8A', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
 
-        // =========================================================================
-        // Chat & Participants
-        // =========================================================================
-        function updateParticipants(list) {
-            participantsList.innerHTML = '';
-            participantCount.textContent = list.length;
-
-            list.forEach(p => {
-                const div = document.createElement('div');
-                div.className = 'participant-item';
-                div.innerHTML = `
-                    <div class="participant-avatar">${p.name[0].toUpperCase()}</div>
-                    <div class="flex-1 overflow-hidden">
-                        <div class="truncate font-medium text-sm flex items-center gap-1">
-                            ${p.name}
-                            ${p.is_host ? '<span class="icon text-brand-500 text-sm" title="Host">star</span>' : ''}
-                            ${p.user_id === userId ? '<span class="opacity-50">(You)</span>' : ''}
-                        </div>
+            if (participantsData.length === 0) {
+                participantsList.innerHTML = `
+                    <div class="text-center py-8 opacity-50">
+                        <span class="icon text-4xl mb-2">person_search</span>
+                        <p class="text-sm">No participants yet</p>
                     </div>
                 `;
-                participantsList.appendChild(div);
+                return;
+            }
+
+            participantsList.innerHTML = '';
+            participantsData.forEach((p, i) => {
+                const item = document.createElement('div');
+                item.className = 'participant-item';
+                item.innerHTML = `
+                    <div class="participant-avatar-lg" style="background: ${colors[i % colors.length]}">
+                        ${p.name[0].toUpperCase()}
+                    </div>
+                    <div class="participant-info">
+                        <div class="participant-name">${p.name}${p.user_id === userId ? ' (You)' : ''}</div>
+                        <div class="participant-role">${p.is_host ? 'Host' : 'Participant'}</div>
+                    </div>
+                `;
+                participantsList.appendChild(item);
             });
         }
 
         function addParticipant(p) {
-            // Re-fetch list from server or just append? 
-            // Simplest is to just append if not exists
-            // But we don't have full list in variable, so maybe request room info again?
-            // Or just UI append:
-            const div = document.createElement('div');
-            div.className = 'participant-item';
-            div.id = `p-${p.user_id}`;
-            div.innerHTML = `
-                <div class="participant-avatar">${p.name[0].toUpperCase()}</div>
-                <div class="flex-1 overflow-hidden">
-                    <div class="truncate font-medium text-sm flex items-center gap-1">
-                        ${p.name}
-                        ${p.is_host ? '<span class="icon text-brand-500 text-sm" title="Host">star</span>' : ''}
-                    </div>
-                </div>
-            `;
-            participantsList.appendChild(div);
-            participantCount.textContent = parseInt(participantCount.textContent) + 1;
+            participantsData.push(p);
+            const count = participantsData.length;
+            participantCount.textContent = `${count} in call`;
+            participantsCountEl.textContent = `(${count})`;
+
+            const colors = ['#9E4B8A', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4'];
+            const avatar = document.createElement('div');
+            avatar.className = 'participant-avatar';
+            avatar.id = `avatar-${p.user_id}`;
+            avatar.style.background = colors[Math.floor(Math.random() * colors.length)];
+            avatar.textContent = p.name[0].toUpperCase();
+            avatar.title = p.name;
+            participantAvatars.appendChild(avatar);
+
+            // Update sidebar if open
+            if (isParticipantsSidebarOpen) {
+                updateParticipantsList();
+            }
         }
 
         function removeParticipant(uid) {
-            const el = document.getElementById(`p-${uid}`);
-            if (el) el.remove();
-            participantCount.textContent = Math.max(0, parseInt(participantCount.textContent) - 1);
+            participantsData = participantsData.filter(p => p.user_id !== uid);
+            const avatar = document.getElementById(`avatar-${uid}`);
+            if (avatar) avatar.remove();
+
+            const count = participantsData.length;
+            participantCount.textContent = `${count} in call`;
+            participantsCountEl.textContent = `(${count})`;
+
+            // Update sidebar if open
+            if (isParticipantsSidebarOpen) {
+                updateParticipantsList();
+            }
         }
 
+        // =========================================================================
+        // Chat
+        // =========================================================================
         function addChatMessage(data) {
-            const div = document.createElement('div');
+            // Remove the empty state if present
+            const emptyState = chatMessages.querySelector('.text-center.py-8');
+            if (emptyState) emptyState.remove();
+
             const isMine = data.user_id === userId;
+            const div = document.createElement('div');
             div.className = `chat-bubble ${isMine ? 'chat-mine' : 'chat-theirs'}`;
             div.innerHTML = `
-                <div class="text-xs opacity-70 mb-0.5 flex justify-between gap-4">
-                    <span>${data.name}</span>
+                <div class="text-xs opacity-70 mb-1 flex justify-between gap-4">
+                    <span>${isMine ? 'You' : data.name}</span>
                     <span>${new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
-                <div>${data.message}</div>
+                <div>${escapeHtml(data.message)}</div>
             `;
             chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         chatForm.onsubmit = (e) => {
@@ -1150,8 +2292,6 @@
         // =========================================================================
         // Init
         // =========================================================================
-
-        // Check URL params
         const params = new URLSearchParams(window.location.search);
         const roomParam = params.get('room');
 
@@ -1162,8 +2302,7 @@
 
         // Setup UI
         copyLinkBtn.onclick = () => {
-            const link = window.location.href;
-            navigator.clipboard.writeText(link);
+            navigator.clipboard.writeText(window.location.href);
             showToast('Link copied to clipboard');
         };
 
@@ -1171,11 +2310,51 @@
 
         if (roomParam) {
             roomId = roomParam;
+
+            // Display meeting ID in bottom left
+            el('meetingId').textContent = roomId;
+
+            // Update time every second
+            function updateClock() {
+                const now = new Date();
+                el('currentTime').textContent = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+            }
+            updateClock();
+            setInterval(updateClock, 1000);
+
             joinRoom();
+
+            // =========================================================================
+            // Click Outside to Close Sidebars
+            // =========================================================================
+            document.addEventListener('click', (e) => {
+                // 1. Chat Sidebar
+                if (isChatOpen &&
+                    chatSidebar &&
+                    !chatSidebar.contains(e.target) &&
+                    !chatToggleBtn.contains(e.target)) {
+                    toggleChat();
+                }
+
+                // 2. Participants Sidebar
+                if (isParticipantsSidebarOpen &&
+                    participantsSidebar &&
+                    !participantsSidebar.contains(e.target) &&
+                    !participantsFab.contains(e.target)) {
+                    toggleParticipantsSidebar();
+                }
+
+                // 3. Host Controls Sidebar
+                if (isHostControlsSidebarOpen &&
+                    hostControlsSidebar &&
+                    !hostControlsSidebar.contains(e.target) &&
+                    !hostControlsFab.contains(e.target)) {
+                    toggleHostControlsSidebar();
+                }
+            });
         } else {
             window.location.replace('create_meet.html');
         }
-
     </script>
 </body>
 

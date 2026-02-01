@@ -18828,6 +18828,43 @@ async def group_chat_websocket(websocket: WebSocket, room_id: str):
     
     room = group_chat_rooms.get(room_id)
     if not room:
+        # Try to restore from DB if not in memory (e.g. server restart)
+        try:
+            supabase = get_service_client()
+            res = supabase.table("group_calls").select("*").eq("id", room_id).execute()
+            if res.data and res.data[0]["status"] == "active":
+                db_room = res.data[0]
+                host_id = db_room["host_user_id"]
+                
+                # Try to fetch host name
+                host_name = "Host"
+                try:
+                    p_res = supabase.table("profiles").select("name").eq("user_id", host_id).maybe_single().execute()
+                    if p_res.data and p_res.data.get("name"):
+                        host_name = p_res.data["name"]
+                except:
+                    pass
+
+                # Restore to memory
+                group_chat_rooms[room_id] = {
+                    "id": room_id,
+                    "name": db_room["room_name"],
+                    "host_id": host_id,
+                    "host_name": host_name,
+                    "created_at": db_room.get("created_at") or datetime.now(timezone.utc).isoformat(),
+                    "participants": {},
+                    "whiteboard_history": [],
+                    "screen_share_active": False,
+                    "screen_sharer_id": None,
+                    "status": "active"
+                }
+                group_chat_connections[room_id] = {}
+                room = group_chat_rooms[room_id]
+                print(f"[GroupChat] Restored room {room_id} from DB")
+        except Exception as e:
+            print(f"[GroupChat] Error restoring room: {e}")
+
+    if not room:
         await websocket.send_json({"type": "error", "message": "Room not found"})
         await websocket.close()
         return
@@ -19002,6 +19039,30 @@ async def group_chat_websocket(websocket: WebSocket, room_id: str):
                         "message": msg_data.get("message", ""),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
+                })
+
+            elif msg_type == "reaction":
+                # Broadcast reaction to others
+                await broadcast_to_room(room_id, {
+                    "type": "reaction",
+                    "data": msg_data,
+                    "from_user_id": user_id,
+                }, exclude_user_id=user_id)
+
+            elif msg_type == "hand-raised":
+                await broadcast_to_room(room_id, {
+                    "type": "hand-raised",
+                    "data": msg_data,
+                    "from_user_id": user_id,
+                    "name": user_name
+                }) # Don't exclude sender so they see confirmation if needed (though UI handles local)
+
+            elif msg_type == "hand-lowered":
+                 await broadcast_to_room(room_id, {
+                    "type": "hand-lowered",
+                    "data": msg_data,
+                    "from_user_id": user_id,
+                    "name": user_name
                 })
     
     except WebSocketDisconnect:
