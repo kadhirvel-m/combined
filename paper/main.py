@@ -18880,22 +18880,69 @@ async def get_group_chat_history(authorization: Optional[str] = Header(None)):
 async def get_group_chat_room(room_id: str):
     """Get room information."""
     room = group_chat_rooms.get(room_id)
-    
-    # If not in memory/active, it might be an ended call or just not loaded
+
+    # If not in memory, attempt to restore if active in DB (server restart / memory eviction).
     if not room:
-        # Check DB to see if it exists but ended
         supabase = get_service_client()
         try:
-             res = supabase.table("group_calls").select("*").eq("id", room_id).execute()
-             if res.data:
-                 if res.data[0]["status"] != "active":
-                      raise HTTPException(status_code=400, detail="This call has ended")
-                 # If active in DB but not in memory, we could technically resurrect it or just say not found (server restart case)
-                 # For now, simplistic approach:
-                 pass
-        except:
-             pass
-             
+            res = supabase.table("group_calls").select("*").eq("id", room_id).execute()
+            if res.data:
+                db_room = res.data[0]
+                if db_room.get("status") != "active":
+                    raise HTTPException(status_code=400, detail="This call has ended")
+
+                host_id = db_room.get("host_user_id")
+                host_name = "Host"
+                try:
+                    if host_id:
+                        p_res = supabase.table("profiles").select("name").eq("user_id", host_id).maybe_single().execute()
+                        if p_res.data and p_res.data.get("name"):
+                            host_name = p_res.data["name"]
+                except Exception:
+                    pass
+
+                group_chat_rooms[room_id] = {
+                    "id": room_id,
+                    "name": db_room.get("room_name") or "Group Chat",
+                    "host_id": host_id or generate_user_id(),
+                    "host_name": host_name,
+                    "created_at": db_room.get("created_at") or datetime.now(timezone.utc).isoformat(),
+                    "participants": {},
+                    "pending": {},
+                    "cohosts": set(),
+                    "muted_user_ids": set(),
+                    "settings": dict(DEFAULT_GROUP_CHAT_SETTINGS),
+                    "whiteboard_history": [],
+                    "screen_share_active": False,
+                    "screen_sharer_id": None,
+                    "status": "active",
+                }
+                group_chat_connections.setdefault(room_id, {})
+                room = group_chat_rooms[room_id]
+
+                # Restore settings + cohosts (best-effort)
+                try:
+                    s_res = supabase.table("group_call_settings").select("settings").eq("call_id", room_id).maybe_single().execute()
+                    if s_res.data and isinstance(s_res.data.get("settings"), dict):
+                        room["settings"] = _merge_settings(dict(DEFAULT_GROUP_CHAT_SETTINGS), s_res.data["settings"])
+                except Exception:
+                    pass
+                try:
+                    r_res = supabase.table("group_call_roles").select("user_id, role").eq("call_id", room_id).execute()
+                    cohosts: Set[str] = set()
+                    if r_res.data:
+                        for item in r_res.data:
+                            if item.get("role") == "cohost" and item.get("user_id"):
+                                cohosts.add(str(item["user_id"]))
+                    room["cohosts"] = cohosts
+                except Exception:
+                    pass
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    if not room:
         raise HTTPException(status_code=404, detail="Room not found or ended")
 
     
@@ -18910,6 +18957,43 @@ async def get_group_chat_room(room_id: str):
         "screen_share_active": room.get("screen_share_active", False),
         "screen_sharer_id": room.get("screen_sharer_id"),
     })
+
+
+@app.get("/api/rtc-config")
+async def get_rtc_config() -> Dict[str, Any]:
+    """Return ICE server configuration for WebRTC.
+
+    For reliable audio/video across networks you need a working TURN server.
+    Configure via env:
+      - PAPERX_TURN_URLS: comma-separated (e.g. turns:turn.example.com:443?transport=tcp,turn:turn.example.com:3478?transport=udp)
+      - PAPERX_TURN_USERNAME
+      - PAPERX_TURN_CREDENTIAL
+    """
+    ice_servers: List[Dict[str, Any]] = [
+        {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun1.l.google.com:19302"},
+        {"urls": "stun:stun.cloudflare.com:3478"},
+    ]
+
+    turn_urls = (os.getenv("PAPERX_TURN_URLS") or "").strip()
+    turn_user = (os.getenv("PAPERX_TURN_USERNAME") or "").strip()
+    turn_cred = (os.getenv("PAPERX_TURN_CREDENTIAL") or "").strip()
+    if turn_urls and turn_user and turn_cred:
+        urls = [u.strip() for u in turn_urls.split(",") if u.strip()]
+        if urls:
+            ice_servers.append({
+                "urls": urls,
+                "username": turn_user,
+                "credential": turn_cred,
+            })
+    else:
+        # Best-effort public TURN (may be rate-limited/unreliable). Prefer configuring your own TURN above.
+        ice_servers.extend([
+            {"urls": "turn:openrelay.metered.ca:80?transport=tcp", "username": "openrelayproject", "credential": "openrelayproject"},
+            {"urls": "turns:openrelay.metered.ca:443?transport=tcp", "username": "openrelayproject", "credential": "openrelayproject"},
+        ])
+
+    return {"iceServers": ice_servers}
 
 async def broadcast_to_room(room_id: str, message: dict, exclude_user_id: Optional[str] = None):
     """Broadcast a message to all participants in a room."""
@@ -19128,7 +19212,9 @@ async def group_chat_websocket(websocket: WebSocket, room_id: str):
                     "settings": room.get("settings") or dict(DEFAULT_GROUP_CHAT_SETTINGS),
                     "pending": list((room.get("pending") or {}).values()) if can_moderate else [],
                     "participants": _participants_payload(room),
-                    "whiteboard_history": room.get("whiteboard_history", [])[-100:],  # Last 100 strokes
+                    # Send full in-memory history (capped when stored) so refresh/new joiners
+                    # can fully reconstruct the whiteboard.
+                    "whiteboard_history": room.get("whiteboard_history", []),
                     "screen_share_active": room.get("screen_share_active", False),
                     "screen_sharer_id": room.get("screen_sharer_id"),
                 }

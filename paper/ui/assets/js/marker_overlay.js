@@ -13,6 +13,13 @@
 
   const style = document.createElement('style');
   style.textContent = `
+    #pxMarkerRoot{
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: ${Z};
+      pointer-events: none;
+    }
+
     .px-marker-fab{
       position: fixed;
       right: 18px;
@@ -32,6 +39,7 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       user-select: none;
+      pointer-events: auto;
     }
     .px-marker-fab:hover{ filter: brightness(1.06); }
 
@@ -52,6 +60,7 @@
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
       user-select: none;
+      pointer-events: auto;
     }
 
     .px-marker-btn{
@@ -65,22 +74,42 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
+      pointer-events: auto;
     }
     .px-marker-btn:hover{ background: rgba(255,255,255,0.10); }
     .px-marker-btn.px-active{ background: rgba(158,75,138,0.35); border-color: rgba(158,75,138,0.6); }
 
+    .px-marker-fab svg,
+    .px-marker-btn svg{
+      width: 22px;
+      height: 22px;
+      fill: currentColor;
+    }
+
     #pxMarkerCanvas{
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100vh;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
       z-index: ${Z - 1};
       display: none;
       pointer-events: none;
+      touch-action: none;
     }
 
     .px-marker-range{ width: 110px; }
-    .px-marker-color{ width: 40px; height: 40px; padding: 0; border: none; background: transparent; }
+    .px-marker-palette{ display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: 210px; }
+    .px-marker-swatch{
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.28);
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+      pointer-events: auto;
+    }
+    .px-marker-swatch[data-active="true"]{ outline: 2px solid rgba(255,255,255,0.92); outline-offset: 1px; }
+    .px-marker-swatch[data-edge="true"]{ border-color: rgba(255,255,255,0.55); }
 
     @media (max-width: 520px){
       .px-marker-toolkit{ right: 10px; bottom: 70px; }
@@ -89,9 +118,36 @@
   `;
   document.head.appendChild(style);
 
+  const ICONS = {
+    pencil: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/></svg>`,
+    pen: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm14.71-9.04a1.003 1.003 0 0 0 0-1.42l-2.5-2.5a1.003 1.003 0 0 0-1.42 0l-1.29 1.29 3.75 3.75 1.46-1.12z"/></svg>`,
+    eraser: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.24 3.56a2 2 0 0 0-2.83 0L3.56 13.41a2 2 0 0 0 0 2.83l4.2 4.2c.38.38.88.56 1.41.56H21v-2H12.17l8.54-8.54a2 2 0 0 0 0-2.83l-4.47-4.07zM9.17 19l-4.2-4.2 7.07-7.07 4.2 4.2L9.17 19z"/></svg>`,
+    trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zm3.46-8.12L11 12.42l1.54-1.54L14.08 12.4l-1.54 1.54 1.54 1.54-1.54 1.54-1.54-1.54-1.54 1.54-1.54-1.54 1.54-1.54-1.54-1.54 1.54-1.54zM15.5 4l-1-1h-5l-1 1H5v2h14V4h-3.5z"/></svg>`,
+    close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3z"/></svg>`,
+  };
+
   const canvas = document.createElement('canvas');
   canvas.id = 'pxMarkerCanvas';
-  document.body.appendChild(canvas);
+  // Harden against pages that override canvas positioning.
+  canvas.style.position = 'absolute';
+  canvas.style.top = '0';
+  canvas.style.left = '0';
+  canvas.style.width = '100%';
+  canvas.style.margin = '0';
+  canvas.style.padding = '0';
+
+  // Canvas is page-anchored so drawings stay at their document position.
+  // Toolbar is mounted separately as fixed UI under <html>.
+  // Insert canvas early in the body so it's not affected by layout stacking quirks.
+  if (document.body.firstChild) {
+    document.body.insertBefore(canvas, document.body.firstChild);
+  } else {
+    document.body.appendChild(canvas);
+  }
+
+  const root = document.createElement('div');
+  root.id = 'pxMarkerRoot';
+  document.documentElement.appendChild(root);
 
   const CURSORS = {
     pen: (() => {
@@ -124,44 +180,104 @@
   fab.type = 'button';
   fab.className = 'px-marker-fab';
   fab.title = 'Marker (M)';
-  fab.innerHTML = '<span class="icon">edit</span>';
-  document.body.appendChild(fab);
+  fab.innerHTML = ICONS.pencil;
+  root.appendChild(fab);
 
   const toolkit = document.createElement('div');
   toolkit.className = 'px-marker-toolkit';
   toolkit.innerHTML = `
-    <button type="button" class="px-marker-btn px-active" data-tool="pen" title="Pen (P)"><span class="icon">draw</span></button>
-    <button type="button" class="px-marker-btn" data-tool="eraser" title="Eraser (E)"><span class="icon">ink_eraser</span></button>
-    <input class="px-marker-color" id="pxMarkerColor" type="color" value="#ff0000" title="Color" />
+    <button type="button" class="px-marker-btn px-active" data-tool="pen" title="Pen (P)">${ICONS.pen}</button>
+    <button type="button" class="px-marker-btn" data-tool="eraser" title="Eraser (E)">${ICONS.eraser}</button>
+    <div class="px-marker-palette" id="pxMarkerPalette" title="Color">
+      <button type="button" class="px-marker-swatch" data-color="#ef4444" aria-label="Red" style="background:#ef4444"></button>
+      <button type="button" class="px-marker-swatch" data-color="#f59e0b" aria-label="Orange" style="background:#f59e0b"></button>
+      <button type="button" class="px-marker-swatch" data-color="#eab308" aria-label="Yellow" style="background:#eab308" data-edge="true"></button>
+      <button type="button" class="px-marker-swatch" data-color="#22c55e" aria-label="Green" style="background:#22c55e"></button>
+      <button type="button" class="px-marker-swatch" data-color="#3b82f6" aria-label="Blue" style="background:#3b82f6"></button>
+      <button type="button" class="px-marker-swatch" data-color="#a855f7" aria-label="Purple" style="background:#a855f7"></button>
+      <button type="button" class="px-marker-swatch" data-color="#111827" aria-label="Black" style="background:#111827" data-edge="true"></button>
+    </div>
     <input class="px-marker-range" id="pxMarkerSize" type="range" min="2" max="18" value="6" title="Size" />
-    <button type="button" class="px-marker-btn" id="pxMarkerClear" title="Clear (C)"><span class="icon">delete_sweep</span></button>
-    <button type="button" class="px-marker-btn" id="pxMarkerClose" title="Close (Esc)"><span class="icon">close</span></button>
+    <button type="button" class="px-marker-btn" id="pxMarkerClear" title="Clear (C)">${ICONS.trash}</button>
+    <button type="button" class="px-marker-btn" id="pxMarkerClose" title="Close (Esc)">${ICONS.close}</button>
   `;
-  document.body.appendChild(toolkit);
+  root.appendChild(toolkit);
 
   const ctx = canvas.getContext('2d');
   let enabled = false;
   let drawing = false;
   let tool = 'pen';
   let prev = null;
+  let currentColor = '#ef4444';
 
-  const colorEl = toolkit.querySelector('#pxMarkerColor');
+  const paletteEl = toolkit.querySelector('#pxMarkerPalette');
   const sizeEl = toolkit.querySelector('#pxMarkerSize');
   const clearBtn = toolkit.querySelector('#pxMarkerClear');
   const closeBtn = toolkit.querySelector('#pxMarkerClose');
 
+  function setColor(next) {
+    currentColor = next || '#ef4444';
+    paletteEl?.querySelectorAll('.px-marker-swatch').forEach(btn => {
+      btn.setAttribute('data-active', btn.getAttribute('data-color') === currentColor ? 'true' : 'false');
+    });
+  }
+
+  // Initialize palette selection
+  setColor(currentColor);
+
+  function docSize() {
+    const se = document.scrollingElement || document.documentElement;
+    const w = Math.max(
+      se.scrollWidth,
+      se.clientWidth,
+      document.documentElement.scrollWidth,
+      document.documentElement.clientWidth,
+      document.body?.scrollWidth || 0,
+      document.body?.clientWidth || 0,
+    );
+    const h = Math.max(
+      se.scrollHeight,
+      se.clientHeight,
+      document.documentElement.scrollHeight,
+      document.documentElement.clientHeight,
+      document.body?.scrollHeight || 0,
+      document.body?.clientHeight || 0,
+    );
+    return { w, h };
+  }
+
   function ensureSize() {
     const dpr = window.devicePixelRatio || 1;
-    const w = Math.floor(window.innerWidth * dpr);
-    const h = Math.floor(window.innerHeight * dpr);
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w;
-      canvas.height = h;
-      canvas.style.width = '100vw';
-      canvas.style.height = '100vh';
+    const { w, h } = docSize();
+    const nextW = Math.max(1, Math.floor(w * dpr));
+    const nextH = Math.max(1, Math.floor(h * dpr));
+    if (canvas.width !== nextW || canvas.height !== nextH) {
+      // Preserve existing drawing when the document grows.
+      const snapshot = document.createElement('canvas');
+      snapshot.width = canvas.width || 1;
+      snapshot.height = canvas.height || 1;
+      const sctx = snapshot.getContext('2d');
+      if (sctx) sctx.drawImage(canvas, 0, 0);
+
+      canvas.width = nextW;
+      canvas.height = nextH;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+
+      if (snapshot.width > 1 && snapshot.height > 1) {
+        // Draw previous buffer at 1:1 CSS pixels.
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(snapshot, 0, 0);
+        ctx.restore();
+      }
+    } else {
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
     }
   }
 
@@ -189,11 +305,10 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
-  function normPoint(e) {
-    return {
-      x: Math.max(0, Math.min(1, e.clientX / window.innerWidth)),
-      y: Math.max(0, Math.min(1, e.clientY / window.innerHeight)),
-    };
+  function point(e) {
+    const px = typeof e.pageX === 'number' ? e.pageX : (e.clientX + window.scrollX);
+    const py = typeof e.pageY === 'number' ? e.pageY : (e.clientY + window.scrollY);
+    return { x: px, y: py };
   }
 
   function drawSegment(a, b) {
@@ -205,12 +320,12 @@
       ctx.strokeStyle = 'rgba(0,0,0,1)';
     } else {
       ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = colorEl.value || '#ff0000';
+      ctx.strokeStyle = currentColor || '#ef4444';
     }
     ctx.lineWidth = size;
     ctx.beginPath();
-    ctx.moveTo(a.x * window.innerWidth, a.y * window.innerHeight);
-    ctx.lineTo(b.x * window.innerWidth, b.y * window.innerHeight);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
     ctx.stroke();
     ctx.restore();
   }
@@ -223,16 +338,21 @@
     btn.addEventListener('click', () => setTool(btn.getAttribute('data-tool')));
   });
 
+  paletteEl?.querySelectorAll('.px-marker-swatch').forEach(btn => {
+    btn.addEventListener('click', () => setColor(btn.getAttribute('data-color')));
+  });
+
   canvas.addEventListener('pointerdown', (e) => {
     if (!enabled) return;
     drawing = true;
-    prev = normPoint(e);
+    prev = point(e);
+    try { canvas.setPointerCapture(e.pointerId); } catch {}
     e.preventDefault();
   });
 
   window.addEventListener('pointermove', (e) => {
     if (!enabled || !drawing) return;
-    const cur = normPoint(e);
+    const cur = point(e);
     drawSegment(prev, cur);
     prev = cur;
     e.preventDefault();
@@ -246,6 +366,18 @@
   window.addEventListener('pointercancel', stop);
 
   window.addEventListener('resize', ensureSize);
+
+  // If content height changes (accordion, lazy-load), keep canvas covering it.
+  const mo = new MutationObserver(() => {
+    if (!enabled) return;
+    ensureSize();
+  });
+  mo.observe(document.body, { childList: true, subtree: true, attributes: true });
+
+  window.addEventListener('scroll', () => {
+    // No redraw needed; just ensure it still covers document.
+    if (enabled) ensureSize();
+  }, { passive: true });
 
   // Keyboard shortcuts
   window.addEventListener('keydown', (e) => {
