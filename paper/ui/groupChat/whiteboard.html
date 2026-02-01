@@ -348,6 +348,7 @@
         let userId = null;
         let userName = 'Anonymous';
         let ws = null;
+        let reconnectEnabled = true;
         let canvas, ctx;
         let isDrawing = false;
         let currentTool = 'pen';
@@ -622,7 +623,7 @@
 
                 ws.send(JSON.stringify({
                     type: 'join',
-                    data: { user_id: userId, name: userName }
+                    data: { user_id: userId, name: userName, token: token || null }
                 }));
             };
 
@@ -639,7 +640,7 @@
 
                 // Try to reconnect after 3 seconds
                 setTimeout(() => {
-                    if (roomId) connectWebSocket();
+                    if (reconnectEnabled && roomId) connectWebSocket();
                 }, 3000);
             };
 
@@ -664,10 +665,32 @@
                     break;
 
                 case 'room-ended':
+                    reconnectEnabled = false;
                     showToast('The meeting has ended', 'call_end');
                     setTimeout(() => {
                         window.location.href = 'create_meet.html';
                     }, 2000);
+                    break;
+
+                case 'join-denied':
+                    reconnectEnabled = false;
+                    showToast(`Join denied: ${data?.reason || 'not allowed'}`, 'error');
+                    statusText.textContent = 'Join denied';
+                    break;
+
+                case 'kicked':
+                    reconnectEnabled = false;
+                    showToast('You were removed from the meeting', 'person_remove');
+                    statusText.textContent = 'Removed';
+                    break;
+
+                case 'waiting-room':
+                    statusText.textContent = 'Waiting for host…';
+                    break;
+
+                case 'admitted':
+                    statusText.textContent = 'Connected';
+                    // whiteboard history is sent via room-info
                     break;
 
                 case 'whiteboard-draw':

@@ -26,6 +26,7 @@ CREATE TABLE public.ai_notes (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   image_urls ARRAY DEFAULT '{}'::text[],
   labs text,
+  blink_link text CHECK (blink_link ~* '^https?://'::text),
   CONSTRAINT ai_notes_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.ai_notes_cheatsheet (
@@ -117,6 +118,37 @@ CREATE TABLE public.departments (
   CONSTRAINT departments_pkey PRIMARY KEY (id),
   CONSTRAINT departments_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
   CONSTRAINT departments_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id)
+);
+CREATE TABLE public.group_call_participants (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  call_id text NOT NULL,
+  user_id uuid NOT NULL,
+  joined_at timestamp with time zone DEFAULT now(),
+  left_at timestamp with time zone,
+  CONSTRAINT group_call_participants_pkey PRIMARY KEY (id),
+  CONSTRAINT group_call_participants_call_fkey FOREIGN KEY (call_id) REFERENCES public.group_calls(id),
+  CONSTRAINT group_call_participants_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.group_calls (
+  id text NOT NULL,
+  room_name text NOT NULL,
+  host_user_id uuid NOT NULL,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'ended'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  ended_at timestamp with time zone,
+  CONSTRAINT group_calls_pkey PRIMARY KEY (id),
+  CONSTRAINT group_calls_host_fkey FOREIGN KEY (host_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.labx_explanations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  topic text NOT NULL,
+  topic_ci text NOT NULL UNIQUE,
+  html_content text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  generation_time_ms integer,
+  view_count integer DEFAULT 0,
+  CONSTRAINT labx_explanations_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.lcoding_languages (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -685,6 +717,17 @@ CREATE TABLE public.topic_feedback (
   CONSTRAINT topic_feedback_pkey PRIMARY KEY (id),
   CONSTRAINT topic_feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.topic_ratings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  topic_id uuid NOT NULL,
+  teacher_user_id uuid NOT NULL,
+  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 3),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT topic_ratings_pkey PRIMARY KEY (id),
+  CONSTRAINT topic_ratings_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id),
+  CONSTRAINT topic_ratings_teacher_user_id_fkey FOREIGN KEY (teacher_user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.topics (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   unit_id uuid,
@@ -892,6 +935,16 @@ CREATE TABLE public.user_streaks (
   CONSTRAINT user_streaks_pkey PRIMARY KEY (id),
   CONSTRAINT user_streaks_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
 );
+CREATE TABLE public.user_topic_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  topic_id uuid NOT NULL,
+  topic_name text NOT NULL,
+  viewed_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_topic_history_pkey PRIMARY KEY (id),
+  CONSTRAINT user_topic_history_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_topic_history_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
+);
 CREATE TABLE public.user_topic_progress (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_profile_id uuid NOT NULL,
@@ -900,6 +953,15 @@ CREATE TABLE public.user_topic_progress (
   CONSTRAINT user_topic_progress_pkey PRIMARY KEY (id),
   CONSTRAINT user_topic_progress_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_topic_progress_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
+);
+CREATE TABLE public.user_topic_wishlist (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_profile_id uuid NOT NULL,
+  topic_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_topic_wishlist_pkey PRIMARY KEY (id),
+  CONSTRAINT user_topic_wishlist_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_topic_wishlist_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
 );
 CREATE TABLE public.youtube_ai_notes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -912,48 +974,3 @@ CREATE TABLE public.youtube_ai_notes (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.topic_ratings (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  topic_id uuid NOT NULL,
-  teacher_user_id uuid NOT NULL,
-  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 3),
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT topic_ratings_pkey PRIMARY KEY (id),
-  CONSTRAINT topic_ratings_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id) ON DELETE CASCADE,
-  CONSTRAINT topic_ratings_teacher_user_id_fkey FOREIGN KEY (teacher_user_id) REFERENCES auth.users(id),
-  CONSTRAINT topic_ratings_unique UNIQUE (topic_id, teacher_user_id)
-);
-CREATE TABLE public.user_topic_wishlist (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_profile_id uuid NOT NULL,
-  topic_id uuid NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT user_topic_wishlist_pkey PRIMARY KEY (id),
-  CONSTRAINT user_topic_wishlist_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
-  CONSTRAINT user_topic_wishlist_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id) ON DELETE CASCADE,
-  CONSTRAINT user_topic_wishlist_unique UNIQUE (user_profile_id, topic_id)
-);
-CREATE TABLE public.user_topic_history (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_profile_id uuid NOT NULL,
-  topic_id uuid NOT NULL,
-  topic_name text NOT NULL,
-  viewed_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT user_topic_history_pkey PRIMARY KEY (id),
-  CONSTRAINT user_topic_history_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
-  CONSTRAINT user_topic_history_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id) ON DELETE CASCADE
-);
-CREATE TABLE public.labx_explanations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  topic text NOT NULL,
-  topic_ci text NOT NULL,
-  html_content text NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  generation_time_ms integer,
-  view_count integer DEFAULT 0,
-  CONSTRAINT labx_explanations_pkey PRIMARY KEY (id),
-  CONSTRAINT labx_explanations_topic_ci_unique UNIQUE (topic_ci)
-);
-CREATE INDEX idx_labx_explanations_topic_ci ON public.labx_explanations(topic_ci);
