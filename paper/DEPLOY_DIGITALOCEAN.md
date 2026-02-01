@@ -77,3 +77,91 @@ If you have the `doctl` CLI installed, you can deploy using the included `app.ya
 3.  Navigate to `/health` to verify the API is running (should return `{"status": "ok"}`).
 4.  Navigate to `/docs` to see the API documentation.
 5.  Navigate to `/ui/index.html` to see the frontend.
+
+---
+
+## WebRTC (Group Call) reliability: TURN is required
+
+If you're seeing issues like:
+
+- Audio/screen share works only sometimes
+- It starts working after many refreshes
+- Console logs show `ICE candidate error` / `Peer connection failed`
+
+…that usually means users are behind NAT/mobile/corporate networks where **STUN-only** WebRTC fails.
+
+### Important: DigitalOcean App Platform cannot host TURN
+
+TURN needs **UDP** (and often a wide relay port range). DigitalOcean **App Platform does not support UDP services**, so you must run TURN separately:
+
+- Option A (recommended): a small DigitalOcean Droplet running **coturn**
+- Option B: a managed TURN provider (Twilio / Xirsys / etc.)
+
+### Option A: coturn on a Droplet (recommended)
+
+1. Create an Ubuntu Droplet (Basic is fine) and attach a static IP if possible.
+2. Point a DNS record to it (example: `turn.yourdomain.com`).
+3. Install coturn:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y coturn
+```
+
+4. Create/edit `/etc/turnserver.conf` (minimal working config):
+
+```conf
+listening-port=3478
+tls-listening-port=5349
+
+fingerprint
+lt-cred-mech
+
+# Replace with your public IP or DNS name
+realm=turn.yourdomain.com
+
+# Create credentials (example)
+user=paperx:CHANGE_ME_STRONG_PASSWORD
+
+# Relay port range (must be opened in firewall)
+min-port=49152
+max-port=65535
+
+# Good defaults
+no-multicast-peers
+no-cli
+```
+
+5. Enable/start coturn:
+
+```bash
+sudo sed -i 's/#TURNSERVER_ENABLED=0/TURNSERVER_ENABLED=1/' /etc/default/coturn
+sudo systemctl enable coturn
+sudo systemctl restart coturn
+sudo systemctl status coturn --no-pager
+```
+
+6. Firewall: open these ports on the Droplet firewall (and `ufw` if you use it):
+
+- `3478` TCP + UDP (TURN)
+- `5349` TCP (TURN over TLS)
+- `49152-65535` UDP (relay traffic)
+
+### Wire TURN into PaperX (App Platform env vars)
+
+In DigitalOcean App Platform → **Settings** → **Environment Variables**, add:
+
+- `PAPERX_TURN_URLS=turn:turn.yourdomain.com:3478?transport=udp,turns:turn.yourdomain.com:5349?transport=tcp`
+- `PAPERX_TURN_USERNAME=paperx`
+- `PAPERX_TURN_CREDENTIAL=CHANGE_ME_STRONG_PASSWORD`
+
+Recommended to make behavior deterministic:
+
+- `PAPERX_REQUIRE_TURN=true`
+
+After redeploy, `/api/rtc-config` should return `turnConfigured: true` and clients should connect reliably.
+
+### Notes
+
+- You may still see occasional `ICE candidate error` warnings for STUN; that’s normal. With TURN configured, the call should still connect.
+- For the highest success rate on restrictive networks, expose TURN-TLS on port **443** (optional). That requires configuring coturn to listen on 443 and ensuring nothing else is using that port on the TURN host.
