@@ -550,9 +550,12 @@
             Note</a>
         </div>
         <div class="ml-auto flex items-center gap-2">
-          <button id="flashcardBtn"
-            class="ripple hidden px-3 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
-            disabled aria-disabled="true">Flashcards</button>
+          <button id="feedbackBtn"
+            class="ripple inline-flex items-center gap-2 px-3 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold shadow-glow transition hover:opacity-95"
+            type="button">
+            <span class="material-symbols-rounded text-[18px] leading-none">feedback</span>
+            Feedback
+          </button>
           <button id="mcqBtn"
             class="ripple hidden px-3 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
             disabled aria-disabled="true">MCQ</button>
@@ -850,6 +853,112 @@
   <div id="snack"
     class="fixed left-1/2 -translate-x-1/2 bottom-4 px-4 py-2 rounded-xl shadow-glow bg-[var(--surface)] border text-sm hidden"
     style="border-color: var(--outline)">Copied</div>
+
+  <!-- Feedback Modal (opened by Feedback button) -->
+  <div id="feedbackModal" class="hidden fixed inset-0" style="z-index: 2147483647;" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70"></div>
+    <div class="relative h-full w-full flex items-center justify-center p-4">
+      <div data-feedback-modal-panel
+        class="w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 text-neutral-900 dark:text-white shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6 overflow-y-auto overflow-x-hidden"
+        style="max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem);">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-rounded text-brand-500">feedback</span>
+              <h3 class="text-lg font-semibold">Feedback</h3>
+            </div>
+            <p class="text-xs text-black/60 dark:text-white/60 mt-1">Report anything wrong/unclear/missing in the notes.</p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <a id="feedbackInboxLink" href="./admin/notes_feedback.html"
+              class="px-4 py-2 rounded-2xl text-xs font-semibold ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition px-privilege-hidden">
+              Open Inbox
+            </a>
+            <button id="feedbackModalClose" type="button" aria-label="Close"
+              class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Category</label>
+            <select id="fbCategory"
+              class="w-full px-3 py-2.5 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40">
+              <option value="Wrong information">Wrong information</option>
+              <option value="Missing details">Missing details</option>
+              <option value="Needs examples">Needs examples</option>
+              <option value="Spelling / grammar">Spelling / grammar</option>
+              <option value="Formatting issue">Formatting issue</option>
+              <option value="Outdated">Outdated</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Rating <span class="font-normal">(optional)</span></label>
+            <div id="fbRating" class="flex flex-wrap items-center gap-2">
+              <button type="button" data-rating="1" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">1</button>
+              <button type="button" data-rating="2" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">2</button>
+              <button type="button" data-rating="3" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">3</button>
+              <button type="button" data-rating="4" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">4</button>
+              <button type="button" data-rating="5" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">5</button>
+            </div>
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick tags</label>
+            <div id="fbTags" class="flex flex-wrap gap-2">
+              <button type="button" data-tag="Wrong" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong</button>
+              <button type="button" data-tag="Unclear" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Unclear</button>
+              <button type="button" data-tag="Too long" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too long</button>
+              <button type="button" data-tag="Too short" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too short</button>
+              <button type="button" data-tag="Example needed" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Example needed</button>
+              <button type="button" data-tag="Equation" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Equation</button>
+            </div>
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick templates</label>
+            <div id="fbTemplates" class="flex flex-wrap gap-2">
+              <button type="button" data-template="This section seems wrong: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong section</button>
+              <button type="button" data-template="Please add an example for: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Need example</button>
+              <button type="button" data-template="Please simplify this part: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too complex</button>
+              <button type="button" data-template="Spelling/grammar issue here: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Grammar</button>
+            </div>
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Your feedback</label>
+            <textarea id="fbMessage" rows="5" placeholder="Write what’s wrong / what to improve…"
+              class="w-full px-4 py-3 rounded-3xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40"></textarea>
+
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <button id="fbUseSelection" type="button"
+                class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                <span class="material-symbols-rounded text-[16px]">content_copy</span>
+                Use selected text
+              </button>
+              <div id="fbSelPreview" class="text-xs text-black/60 dark:text-white/60 truncate max-w-[min(720px,90vw)]"></div>
+            </div>
+          </div>
+
+          <div class="md:col-span-2 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div id="fbStatus" class="text-xs text-black/60 dark:text-white/60"></div>
+              <div id="fbAuthHint" class="text-xs text-black/60 dark:text-white/60 hidden">Sign in required to send feedback.</div>
+            </div>
+            <button id="fbSubmit" type="button"
+              class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">
+              <span class="material-symbols-rounded text-[18px]">send</span>
+              Send feedback
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Inline Gemini helper affordances -->
   <button id="geminiSelectionBtn" type="button" aria-label="Ask TuneAI about selection"
@@ -1317,7 +1426,8 @@
         (typeof $regenMobile !== 'undefined' ? $regenMobile : null),
         (typeof $editToggle !== 'undefined' ? $editToggle : null),
         (typeof $download !== 'undefined' ? $download : null),
-        document.getElementById('geminiSelectionEdit')
+        document.getElementById('geminiSelectionEdit'),
+        document.getElementById('feedbackInboxLink')
       ].filter(Boolean);
 
       function setPrivilegedVisible(visible) {
@@ -2345,7 +2455,7 @@
 
     [$variantDetailed, $variantCheatsheet, $variantSimple].forEach(btn => {
       if (!btn) return;
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const v = btn.dataset.variant;
         if (!v || !VARIANTS.includes(v)) return;
         currentVariant = v;
@@ -2357,44 +2467,84 @@
         // If a topic is present, auto-click Generate to regenerate for the new variant
         const t0 = ($topic.value || '').trim();
         if (t0) { $generate.click(); return; }
-        // load last note for this variant if available; else auto-generate using current topic/heading
+        // load last note for this variant if available; else try DB resolve by topic/heading
         const lastId = localStorage.getItem(noteKey(currentVariant)) || '';
-        const fallbackGenerate = () => {
-          const t = currentTopicOrHeading();
-          if (!t) {
-            snack('Enter a topic');
-            console.warn('[Variant] No topic/heading to generate');
-            return;
+        const t = currentTopicOrHeading();
+
+        async function tryRenderResolvedByTitle(title) {
+          const clean = (title || '').trim();
+          if (!clean) return { loaded: false, definitiveMissing: false };
+          $meta.textContent = `Checking DB • ${currentVariant}`;
+          const url = `${apiBase}/api/notes/resolve?title=${encodeURIComponent(clean)}&variant=${encodeURIComponent(currentVariant)}`;
+          const res = await fetchJsonWithRetry(url, { timeoutMs: 8000, attempts: 3 });
+          if (res.status === 200 && res.data && res.data.markdown) {
+            renderMarkdown(res.data.markdown);
+            renderImageGallery(res.data.image_urls || []);
+            currentNoteId = res.data.id || '';
+            try {
+              if (currentNoteId) localStorage.setItem(noteKey(currentVariant), currentNoteId);
+            } catch { }
+            const loadedTopic = (res.data.title || document.querySelector('#output h1')?.textContent || '').trim();
+            $meta.textContent = `Loaded • ${currentNoteId || '-'} • ${currentVariant}`;
+            if (currentNoteId) {
+              enableFlashcardAccess(currentNoteId, loadedTopic);
+              enableMCQAccess(currentNoteId, loadedTopic);
+            }
+            return { loaded: true, definitiveMissing: false };
           }
-          console.log('[Variant] auto-generate for topic:', t, 'variant:', currentVariant);
-          logEvent('Auto-generate', `${currentVariant} • ${t}`);
-          startGeneration(t, false);
-        };
+          if (res.status === 404) return { loaded: false, definitiveMissing: true };
+          return { loaded: false, definitiveMissing: false };
+        }
+
         if (lastId) {
           $meta.textContent = `Loading • ${lastId} • ${currentVariant}`;
-          fetch(`${apiBase}/notes/${encodeURIComponent(lastId)}?variant=${encodeURIComponent(currentVariant)}`)
-            .then(r => {
-              if (!r.ok) return null;
-              return r.json();
-            })
-            .then(data => {
-              if (data && data.markdown) {
-                renderMarkdown(data.markdown);
-                renderImageGallery(data.image_urls || []);
-                $meta.textContent = `Loaded • ${data.id || lastId} • ${currentVariant}`;
-                currentNoteId = data.id || lastId;
-                const loadedTopic = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
-                enableFlashcardAccess(currentNoteId, loadedTopic);
-                enableMCQAccess(currentNoteId, loadedTopic);
-              } else {
-                console.warn('[Variant] No cached note for id; generating…', lastId, currentVariant);
-                fallbackGenerate();
-              }
-            })
-            .catch(err => { console.error('[Variant] Fetch by id failed:', err); fallbackGenerate(); });
-        } else {
-          fallbackGenerate();
+          const url = `${apiBase}/notes/${encodeURIComponent(lastId)}?variant=${encodeURIComponent(currentVariant)}`;
+          const res = await fetchJsonWithRetry(url, { timeoutMs: 8000, attempts: 3 });
+          if (res.status === 200 && res.data && res.data.markdown) {
+            renderMarkdown(res.data.markdown);
+            renderImageGallery(res.data.image_urls || []);
+            $meta.textContent = `Loaded • ${res.data.id || lastId} • ${currentVariant}`;
+            currentNoteId = res.data.id || lastId;
+            const loadedTopic = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+            if (currentNoteId) {
+              enableFlashcardAccess(currentNoteId, loadedTopic);
+              enableMCQAccess(currentNoteId, loadedTopic);
+            }
+            return;
+          }
+
+          if (res.status === 404) {
+            // Stale localStorage id; try exact DB resolve by title.
+            const resolved = await tryRenderResolvedByTitle(t);
+            if (resolved.loaded) return;
+            if (resolved.definitiveMissing) {
+              if (!t) { snack('Enter a topic'); return; }
+              console.log('[Variant] auto-generate (definitive missing) for topic:', t, 'variant:', currentVariant);
+              logEvent('Auto-generate', `${currentVariant} • ${t}`);
+              startGeneration(t, false);
+              return;
+            }
+            snack('Unable to confirm saved note right now');
+            return;
+          }
+
+          // Any other error: do NOT auto-generate.
+          console.warn('[Variant] Fetch by id not definitive; skipping auto-generate', res);
+          snack('Unable to load saved note right now');
+          return;
         }
+
+        // No lastId; try DB resolve by title, then (only if 404) auto-generate.
+        const resolved = await tryRenderResolvedByTitle(t);
+        if (resolved.loaded) return;
+        if (resolved.definitiveMissing) {
+          if (!t) { snack('Enter a topic'); return; }
+          console.log('[Variant] auto-generate (definitive missing) for topic:', t, 'variant:', currentVariant);
+          logEvent('Auto-generate', `${currentVariant} • ${t}`);
+          startGeneration(t, false);
+          return;
+        }
+        snack('Unable to confirm note in DB right now');
       });
     });
     let dense = false;
@@ -2830,12 +2980,88 @@
       setBusy(false);
     });
 
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function fetchJsonWithTimeout(url, { timeoutMs = 8000 } = {}) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        let data = null;
+        try { data = await res.json(); } catch { }
+        return { ok: res.ok, status: res.status, data };
+      } catch (err) {
+        return { ok: false, status: 0, data: null, error: err };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function fetchJsonWithRetry(url, { timeoutMs = 8000, attempts = 3 } = {}) {
+      let last = null;
+      for (let i = 0; i < attempts; i++) {
+        const r = await fetchJsonWithTimeout(url, { timeoutMs });
+        last = r;
+        // 200/404 are definitive for our purposes.
+        if (r.status === 200 || r.status === 404) return r;
+        // Retry on network/timeout and server errors.
+        if (r.status === 0 || r.status >= 500) {
+          await sleep(250 * (i + 1));
+          continue;
+        }
+        // Other 4xx (401/403/429) are not definitive for existence.
+        return r;
+      }
+      return last || { ok: false, status: 0, data: null };
+    }
+
     // Unified generator: supports force to bypass cache
     async function startGeneration(topic, force = false) {
       const t = (topic || '').trim();
       if (!t) { alert('Enter a topic'); return; }
       loadRelatedVideos(t, { force: true });
       if (es) { try { es.close(); } catch { } es = null; }
+      // DB-first behavior: only generate when we are definitively sure it doesn't exist.
+      if (!force) {
+        setBusy(true);
+        showOutputLoader();
+        $meta.textContent = `Checking DB • ${currentVariant}`;
+        const resolveUrl = `${apiBase}/api/notes/resolve?title=${encodeURIComponent(t)}&variant=${encodeURIComponent(currentVariant)}`;
+        const check = await fetchJsonWithRetry(resolveUrl, { timeoutMs: 8000, attempts: 3 });
+        if (check.status === 200 && check.data && check.data.markdown) {
+          clearUI();
+          renderMarkdown(check.data.markdown);
+          renderImageGallery(check.data.image_urls || []);
+          setEmphasis(emphasis);
+          currentNoteId = check.data.id || '';
+          try {
+            if (currentNoteId) {
+              localStorage.setItem(noteKey(currentVariant), currentNoteId);
+              if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+            }
+          } catch { }
+          $meta.textContent = `Loaded • ${currentNoteId || '-'} • ${currentVariant}`;
+          if (currentNoteId) {
+            enableFlashcardAccess(currentNoteId, (check.data.title || t).trim());
+            enableMCQAccess(currentNoteId, (check.data.title || t).trim());
+          }
+          hideOutputLoader();
+          setBusy(false);
+          return;
+        }
+        if (check.status !== 404) {
+          // Not definitive -> do not generate.
+          console.warn('[Generate] DB check not definitive; refusing to generate', check);
+          hideOutputLoader();
+          setBusy(false);
+          snack('Unable to confirm in DB. Try again.');
+          return;
+        }
+        // check.status === 404 => definitively missing; proceed to generation.
+      }
+
       clearUI();
       setBusy(true);
       showOutputLoader();
@@ -3379,6 +3605,258 @@
         const rect = panel.getBoundingClientRect();
         if (e.clientX < rect.left - 20 || e.clientY < rect.top - 20) toggle(false);
       });
+    })();
+  </script>
+
+  <script>
+    // Notes Feedback widget
+    (function () {
+      const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+      const modal = document.getElementById('feedbackModal');
+      const btnOpen = document.getElementById('feedbackBtn');
+      const btnClose = document.getElementById('feedbackModalClose');
+      if (!modal || !btnOpen) return;
+
+      const $stickyHeader = document.querySelector('header');
+
+      function setHeaderHidden(hidden) {
+        if (!$stickyHeader) return;
+        if (hidden) {
+          if ($stickyHeader.dataset.prevVisibility === undefined) {
+            $stickyHeader.dataset.prevVisibility = $stickyHeader.style.visibility || '';
+          }
+          $stickyHeader.style.visibility = 'hidden';
+        } else {
+          const prev = $stickyHeader.dataset.prevVisibility;
+          $stickyHeader.style.visibility = prev || '';
+          delete $stickyHeader.dataset.prevVisibility;
+        }
+      }
+
+      const $category = document.getElementById('fbCategory');
+      const $message = document.getElementById('fbMessage');
+      const $submit = document.getElementById('fbSubmit');
+      const $status = document.getElementById('fbStatus');
+      const $authHint = document.getElementById('fbAuthHint');
+
+      const $tagsWrap = document.getElementById('fbTags');
+      const $templatesWrap = document.getElementById('fbTemplates');
+      const $ratingWrap = document.getElementById('fbRating');
+      const $useSel = document.getElementById('fbUseSelection');
+      const $selPreview = document.getElementById('fbSelPreview');
+
+      let selectedTags = new Set();
+      let selectedRating = null;
+      let selectedText = '';
+
+      function safeGetToken() {
+        try {
+          if (typeof getAuthToken === 'function') return getAuthToken() || '';
+        } catch { }
+        // fallback: same keys
+        const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+        for (const k of keys) {
+          try { const v = localStorage.getItem(k); if (v) return v; } catch { }
+        }
+        return '';
+      }
+
+      function withinOutput(node) {
+        const out = document.getElementById('output');
+        if (!out || !node) return false;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        return out.contains(node);
+      }
+
+      function setStatus(text, isError) {
+        if (!$status) return;
+        $status.textContent = text || '';
+        $status.style.color = isError ? '#ef4444' : 'var(--muted)';
+      }
+
+      function openModal() {
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        setHeaderHidden(true);
+        setStatus('', false);
+        setTimeout(() => { $message?.focus(); }, 50);
+      }
+
+      function closeModal() {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        setHeaderHidden(false);
+      }
+
+      btnOpen.addEventListener('click', openModal);
+      btnClose?.addEventListener('click', closeModal);
+      modal.addEventListener('click', (event) => {
+        if (modal.classList.contains('hidden')) return;
+        if (event.target?.closest?.('[data-feedback-modal-panel]')) return;
+        closeModal();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+      });
+
+      function setTagButtonState(btn, on) {
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.classList.toggle('bg-[var(--brand-soft)]', on);
+      }
+
+      $tagsWrap?.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('button[data-tag]');
+        const tag = btn?.getAttribute?.('data-tag');
+        if (!btn || !tag) return;
+        if (selectedTags.has(tag)) selectedTags.delete(tag);
+        else selectedTags.add(tag);
+        setTagButtonState(btn, selectedTags.has(tag));
+      });
+
+      $templatesWrap?.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('button[data-template]');
+        const tpl = btn?.getAttribute?.('data-template');
+        if (!btn || !tpl || !$message) return;
+        const cur = ($message.value || '').trim();
+        $message.value = cur ? (cur + '\n' + tpl) : tpl;
+        $message.focus();
+      });
+
+      $ratingWrap?.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('button[data-rating]');
+        const r = btn?.getAttribute?.('data-rating');
+        if (!btn || !r) return;
+        const num = parseInt(r, 10);
+        if (!Number.isFinite(num)) return;
+        selectedRating = num;
+        $ratingWrap.querySelectorAll('button[data-rating]').forEach(b => {
+          b.classList.toggle('bg-[var(--brand-soft)]', b.getAttribute('data-rating') === r);
+        });
+      });
+
+      $useSel?.addEventListener('click', () => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) {
+          setStatus('Select some text in the output first.', true);
+          return;
+        }
+        if (!withinOutput(sel.anchorNode) || !withinOutput(sel.focusNode)) {
+          setStatus('Selection must be inside the Final Output.', true);
+          return;
+        }
+        const txt = (sel.toString() || '').trim();
+        if (!txt) {
+          setStatus('Selection is empty.', true);
+          return;
+        }
+        selectedText = txt.slice(0, 1200);
+        if ($selPreview) $selPreview.textContent = `Selected: ${selectedText.length > 120 ? selectedText.slice(0, 120) + '…' : selectedText}`;
+        setStatus('Added selection to feedback.', false);
+      });
+
+      function resolveVariant() {
+        // Try to infer from active variant buttons
+        const active = document.querySelector('[data-variant][aria-selected="true"]')?.getAttribute('data-variant');
+        if (active) return active;
+        // fallback: localStorage last variant if present
+        try {
+          const v = localStorage.getItem('paperx:notesVariant');
+          if (v) return v;
+        } catch { }
+        return null;
+      }
+
+      function resolveNoteId(variant) {
+        try {
+          const key = variant ? `paperx:lastNoteId:${variant}` : null;
+          const v = key ? localStorage.getItem(key) : null;
+          if (v) return v;
+          return localStorage.getItem('paperx:lastNoteId') || '';
+        } catch { return ''; }
+      }
+
+      function resolveTitleTopic() {
+        const h1 = document.querySelector('#output h1')?.textContent || '';
+        const topic = (document.getElementById('topic')?.value || '').trim();
+        return {
+          title: (h1 || topic || '').trim(),
+          topic: (topic || h1 || '').trim()
+        };
+      }
+
+      async function submit() {
+        const token = safeGetToken();
+        const msg = ($message?.value || '').trim();
+        if (!token) {
+          $authHint?.classList.remove('hidden');
+          setStatus('Sign in required to send feedback.', true);
+          return;
+        }
+        $authHint?.classList.add('hidden');
+        if (!msg) {
+          setStatus('Please write a short message.', true);
+          $message?.focus();
+          return;
+        }
+        const category = ($category?.value || 'Other').trim();
+        const variant = resolveVariant();
+        const noteId = resolveNoteId(variant);
+        const { title, topic } = resolveTitleTopic();
+        const tags = Array.from(selectedTags);
+
+        const body = {
+          category,
+          message: msg,
+          quick_tags: tags,
+          rating: selectedRating,
+          note_id: noteId || null,
+          note_variant: variant || null,
+          note_title: title || null,
+          topic: topic || null,
+          page_path: (location && location.pathname) ? location.pathname : null,
+          page_url: (location && location.href) ? location.href : null,
+          selected_text: selectedText || null,
+          meta: {
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+            lang: navigator.language || null,
+            screen: { w: window.screen?.width || null, h: window.screen?.height || null },
+          }
+        };
+
+        $submit.disabled = true;
+        $submit.classList.add('opacity-70');
+        setStatus('Sending…', false);
+        try {
+          const res = await fetch(`${apiBase}/api/notes/feedback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+          setStatus('Thanks! Feedback sent.', false);
+          try { if (typeof snack === 'function') snack('Feedback sent'); } catch { }
+          $message.value = '';
+          selectedText = '';
+          if ($selPreview) $selPreview.textContent = '';
+          selectedTags.clear();
+          $tagsWrap?.querySelectorAll('button[data-tag]').forEach(b => setTagButtonState(b, false));
+          selectedRating = null;
+          $ratingWrap?.querySelectorAll('button[data-rating]').forEach(b => b.classList.remove('bg-[var(--brand-soft)]'));
+          // Close modal after successful submit
+          closeModal();
+        } catch (e) {
+          console.error(e);
+          setStatus(e?.message || 'Failed to send', true);
+        } finally {
+          $submit.disabled = false;
+          $submit.classList.remove('opacity-70');
+        }
+      }
+
+      $submit?.addEventListener('click', submit);
     })();
   </script>
 </body>

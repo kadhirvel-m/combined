@@ -12135,6 +12135,223 @@ def api_delete_domain(degree: str = Query(..., min_length=1), domain: str = Quer
 def api_list_degrees():
     return db_list_degree_configs()
 
+
+# ---- Notes Feedback (Notes Generator) ----
+
+NOTES_FEEDBACK_TABLE = os.getenv("NOTES_FEEDBACK_TABLE", "notes_feedback")
+VALID_NOTES_FEEDBACK_STATUS = {"new", "reviewing", "resolved", "ignored"}
+
+
+def _require_feedback_staff(authorization: Optional[str]) -> Tuple[str, Optional[str]]:
+    """Allow admin OR employee to access feedback inbox endpoints."""
+    uid, email = _get_auth_user(authorization)
+    if _is_admin_user(uid, email):
+        return str(uid), email
+    # Employee role in admin_roles table
+    try:
+        supabase = get_service_client()
+        r = supabase.table("admin_roles").select("role").eq("auth_user_id", uid).limit(1).execute()
+        row = (getattr(r, 'data', []) or [{}])[0]
+        if (row.get("role") or "").strip().lower() == "employee":
+            return str(uid), email
+    except Exception:
+        pass
+    raise HTTPException(status_code=403, detail="Not authorized")
+
+
+class NotesFeedbackIn(BaseModel):
+    category: str = Field(..., min_length=1, max_length=80)
+    message: str = Field(..., min_length=1, max_length=2000)
+
+    quick_tags: List[str] = Field(default_factory=list)
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
+
+    note_id: Optional[str] = Field(default=None, description="ai_notes UUID (if available)")
+    note_variant: Optional[str] = Field(default=None, description="detailed|cheatsheet|simple")
+    note_title: Optional[str] = Field(default=None, max_length=256)
+    topic: Optional[str] = Field(default=None, max_length=256)
+
+    page_path: Optional[str] = Field(default=None, max_length=256)
+    page_url: Optional[str] = Field(default=None, max_length=1200)
+    selected_text: Optional[str] = Field(default=None, max_length=1200)
+
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+    @validator("quick_tags", pre=True)
+    def _clean_quick_tags(cls, v: Any):  # noqa: N805
+        if v is None:
+            return []
+        if isinstance(v, str):
+            v = [p.strip() for p in v.split(",")]
+        if not isinstance(v, (list, tuple)):
+            return []
+        cleaned: List[str] = []
+        for raw in v:
+            s = str(raw or "").strip()
+            if not s:
+                continue
+            if len(s) > 40:
+                s = s[:40]
+            if s not in cleaned:
+                cleaned.append(s)
+            if len(cleaned) >= 12:
+                break
+        return cleaned
+
+
+class NotesFeedbackAdminUpdateIn(BaseModel):
+    status: Optional[str] = Field(default=None)
+    admin_notes: Optional[str] = Field(default=None, max_length=2000)
+
+    @validator("status")
+    def _validate_status(cls, v: Optional[str]):  # noqa: N805
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if s not in VALID_NOTES_FEEDBACK_STATUS:
+            raise ValueError("Invalid status")
+        return s
+
+
+@notes_router.post("/api/notes/feedback", summary="Submit feedback about generated notes")
+def submit_notes_feedback(payload: NotesFeedbackIn, request: Request, authorization: Optional[str] = Header(default=None)):
+    user_id, email = _get_auth_user(authorization)
+    supabase = get_service_client()
+
+    note_uuid: Optional[str] = None
+    raw_note_id = (payload.note_id or "").strip()
+    if raw_note_id:
+        try:
+            note_uuid = str(uuid.UUID(raw_note_id))
+        except Exception:
+            note_uuid = None
+
+    now = _now_iso()
+    ip = None
+    try:
+        if request.client:
+            ip = request.client.host
+    except Exception:
+        ip = None
+
+    user_agent = (request.headers.get("user-agent") or "")[:400]
+
+    row: Dict[str, Any] = {
+        "created_at": now,
+        "updated_at": now,
+        "status": "new",
+        "user_id": str(user_id),
+        "user_email": (email or "")[:320] if email else None,
+
+        "note_id": note_uuid,
+        "note_variant": (payload.note_variant or "")[:32] if payload.note_variant else None,
+        "note_title": (payload.note_title or "")[:256] if payload.note_title else None,
+        "topic": (payload.topic or "")[:256] if payload.topic else None,
+
+        "page_path": (payload.page_path or "")[:256] if payload.page_path else None,
+        "page_url": (payload.page_url or "")[:1200] if payload.page_url else None,
+
+        "category": (payload.category or "")[:80],
+        "quick_tags": payload.quick_tags or [],
+        "rating": payload.rating,
+        "message": payload.message,
+        "selected_text": payload.selected_text,
+
+        "ip": ip,
+        "user_agent": user_agent,
+        "meta": payload.meta or {},
+    }
+    if raw_note_id and not note_uuid:
+        # Preserve raw ID if UI sent a non-UUID identifier
+        try:
+            row["meta"] = {**(row.get("meta") or {}), "note_id_raw": raw_note_id}
+        except Exception:
+            pass
+
+    try:
+        res = supabase.table(NOTES_FEEDBACK_TABLE).insert(_supabase_payload(row)).execute()
+        if getattr(res, "error", None):
+            raise Exception(res.error)
+        inserted = (getattr(res, "data", []) or [{}])[0]
+        return {"ok": True, "feedback": inserted}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to store feedback: {e}")
+
+
+@notes_router.get("/api/admin/notes-feedback", summary="Admin: list notes feedback")
+def admin_list_notes_feedback(
+    status: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None),
+    limit: int = Query(default=1000, ge=1, le=5000),
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_feedback_staff(authorization)
+    supabase = get_service_client()
+    cols = "id,created_at,updated_at,status,user_id,user_email,note_id,note_variant,note_title,topic,page_path,page_url,category,quick_tags,rating,message,selected_text,ip,user_agent,meta,admin_notes,resolved_at"
+    try:
+        builder = supabase.table(NOTES_FEEDBACK_TABLE).select(cols).order("created_at", desc=True).limit(limit)
+        if status:
+            builder = builder.eq("status", str(status).strip().lower())
+        res = builder.execute()
+        data = (getattr(res, "data", []) or [])
+        if q:
+            qq = (q or "").strip().lower()
+            if qq:
+                def _match(r: Dict[str, Any]) -> bool:
+                    blob = " ".join(
+                        str(r.get(k, "") or "")
+                        for k in ("user_email", "user_id", "topic", "note_title", "note_variant", "category", "message", "page_path")
+                    ).lower()
+                    return qq in blob
+                data = [r for r in data if isinstance(r, dict) and _match(r)]
+        return {"feedback": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list feedback: {e}")
+
+
+@notes_router.get("/api/admin/notes-feedback/{feedback_id}", summary="Admin: get a single feedback item")
+def admin_get_notes_feedback(feedback_id: str, authorization: Optional[str] = Header(default=None)):
+    _require_feedback_staff(authorization)
+    supabase = get_service_client()
+    try:
+        res = supabase.table(NOTES_FEEDBACK_TABLE).select("*").eq("id", feedback_id).limit(1).execute()
+        row = (getattr(res, "data", []) or [{}])[0]
+        if not row:
+            raise HTTPException(status_code=404, detail="Feedback not found")
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch feedback: {e}")
+
+
+@notes_router.patch("/api/admin/notes-feedback/{feedback_id}", summary="Admin: update feedback status/notes")
+def admin_update_notes_feedback(
+    feedback_id: str,
+    payload: NotesFeedbackAdminUpdateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_feedback_staff(authorization)
+    supabase = get_service_client()
+    updates: Dict[str, Any] = {"updated_at": _now_iso()}
+    if payload.status is not None:
+        updates["status"] = payload.status
+        if payload.status == "resolved":
+            updates["resolved_at"] = _now_iso()
+    if payload.admin_notes is not None:
+        updates["admin_notes"] = payload.admin_notes
+    if len(updates) == 1:
+        return admin_get_notes_feedback(feedback_id, authorization)
+    try:
+        upd = supabase.table(NOTES_FEEDBACK_TABLE).update(_supabase_payload(updates)).eq("id", feedback_id).execute()
+        if getattr(upd, "error", None):
+            raise Exception(upd.error)
+        return admin_get_notes_feedback(feedback_id, authorization)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update feedback: {e}")
+
 # --- Print API ---
 print_router = APIRouter()
 
@@ -15262,6 +15479,51 @@ def api_search_topics(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to search topics: {e}")
+
+
+@notes_router.get("/api/notes/resolve", summary="Resolve AI note by exact title + variant")
+def api_resolve_note(
+    title: str = Query(..., min_length=1, max_length=200),
+    variant: str = Query("detailed"),
+):
+    """Return a note if it exists in DB for an exact title+variant match.
+
+    This is intended for client-side 'DB-first' behavior: only generate if we are
+    definitively sure the note does not exist (404).
+    """
+    clean_title = (title or "").strip()
+    if not clean_title:
+        raise HTTPException(status_code=400, detail="Missing title")
+
+    used_variant = _normalize_variant(variant)
+    supabase = get_service_client()
+    table = _table_for_variant(used_variant)
+
+    try:
+        res = (
+            supabase.table(table)
+            .select("id,title,markdown,updated_at,image_urls")
+            .eq("title", clean_title)
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        if not rows:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        row = rows[0] or {}
+        return {
+            "id": row.get("id"),
+            "title": row.get("title"),
+            "markdown": row.get("markdown", ""),
+            "updated_at": row.get("updated_at"),
+            "image_urls": row.get("image_urls") or [],
+            "variant": used_variant,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to resolve note: {e}")
 
 
 @notes_router.post("/notes")
