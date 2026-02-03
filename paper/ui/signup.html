@@ -369,7 +369,11 @@
           } catch { }
         }
         status.textContent = '✔ Account created. Redirecting…';
-        setTimeout(() => { window.location.href = 'profile_edit.html'; }, 600);
+        setTimeout(() => {
+          const next = new URLSearchParams(window.location.search).get('next');
+          const safeNext = next && /^[a-zA-Z0-9_\-/]+\.html$/.test(next) ? next : null;
+          window.location.href = safeNext || 'academicas.html';
+        }, 600);
       } catch (err) { status.textContent = '❌ Network error. Please try again.'; }
       finally { setSubmitState(false); }
     });
