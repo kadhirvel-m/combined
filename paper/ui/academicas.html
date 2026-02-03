@@ -1633,6 +1633,7 @@
         const __pxEduEls = () => ({
             modal: document.getElementById('eduRequiredModal'),
             wrap: document.getElementById('eduRequiredFormWrap'),
+            nameInput: document.getElementById('eduRequiredNameInput'),
             saveBtn: document.getElementById('eduRequiredSaveBtn'),
             status: document.getElementById('eduRequiredStatus'),
             closeBtn: document.getElementById('eduRequiredCloseBtn'),
@@ -2239,7 +2240,8 @@
 
         function __pxEduNeedsCompletion(profile) {
             const list = Array.isArray(profile?.education_entries) ? profile.education_entries : [];
-            return !list.some(ed => {
+            const hasName = Boolean(String(profile?.name || '').trim());
+            const hasEducation = list.some(ed => {
                 const school = (ed?.school || '').trim();
                 const degree = (ed?.degree || '').trim();
                 const department = (ed?.department || '').trim();
@@ -2248,6 +2250,7 @@
                 const semester = Number(ed?.current_semester);
                 return school && degree && department && batch && section && Number.isFinite(semester) && semester > 0;
             });
+            return !hasName || !hasEducation;
         }
 
         function __pxEduShowStatus(message, ok = true) {
@@ -2314,7 +2317,10 @@
         }
 
         async function __pxEduEnsureModalReady(profile) {
-            const { wrap } = __pxEduEls();
+            const { wrap, nameInput } = __pxEduEls();
+            if (nameInput) {
+                nameInput.value = String(profile?.name || '').trim();
+            }
             if (!wrap) return;
             if (wrap.dataset.ready === 'true') return;
             wrap.innerHTML = '';
@@ -2386,6 +2392,14 @@
                 try {
                     const profile = window.__PX_PROFILE_SNAPSHOT || {};
                     const { wrap } = __pxEduEls();
+                    const { nameInput } = __pxEduEls();
+                    const enteredName = (nameInput?.value || '').trim();
+                    if (!enteredName) {
+                        __pxEduShowStatus('Please enter your name to continue.', false);
+                        nameInput?.focus?.();
+                        return;
+                    }
+
                     const entries = __pxEduCollectEducationData(wrap);
                     const entry = entries[0] || {};
                     const requiredOk = Boolean((entry.school || '').trim())
@@ -2405,7 +2419,7 @@
                     saveBtn.classList.add('opacity-70');
                     __pxEduShowStatus('Saving…', true);
 
-                    const payload = __pxBuildProfileUpdatePayload(profile, [entry]);
+                    const payload = __pxBuildProfileUpdatePayload({ ...profile, name: enteredName }, [entry]);
                     const res = await fetch(`${API_BASE}/api/profile/me`, {
                         method: 'PUT',
                         headers: { ...__pxEduGetAuthHeaders(), 'Content-Type': 'application/json' },
@@ -2448,10 +2462,9 @@
                 style="max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem);">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <h3 class="text-lg font-semibold">Add your education</h3>
-                        <p class="text-xs text-black/60 dark:text-white/60 mt-1">Select your college, degree,
-                            department, batch,
-                            section and current semester to continue.</p>
+                        <h3 class="text-lg font-semibold">Complete your profile</h3>
+                        <p class="text-xs text-black/60 dark:text-white/60 mt-1">Add your name and education (college,
+                            degree, department, batch, section and current semester) to continue.</p>
                     </div>
                     <button id="eduRequiredCloseBtn" type="button" aria-label="Close"
                         class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
@@ -2462,13 +2475,19 @@
                 <div id="eduRequiredStatus"
                     class="hidden mt-3 text-xs rounded-lg border border-black/10 dark:border-white/10 px-3 py-2"></div>
 
+                <label class="mt-4 grid gap-1 min-w-0">
+                    <span class="text-xs text-black/70 dark:text-white/70">Your name *</span>
+                    <input id="eduRequiredNameInput" type="text" autocomplete="name" placeholder="e.g., Dhanush"
+                        class="w-full min-w-0 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-brand-900/70 text-neutral-900 dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 px-3 py-2" />
+                </label>
+
                 <div id="eduRequiredFormWrap" class="mt-4"></div>
 
                 <div class="mt-5 flex items-center justify-end gap-2">
                     <button id="eduRequiredSaveBtn" type="button"
                         class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">
                         <span class="material-symbols-rounded text-[18px]">save</span>
-                        Save education
+                        Save
                     </button>
                 </div>
             </div>

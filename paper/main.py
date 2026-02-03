@@ -7097,34 +7097,76 @@ def list_admin_users(
     college_map: Dict[str, dict] = {}
     degree_map: Dict[str, dict] = {}
     role_map: Dict[str, str] = {}
-    if dept_ids:
-        dres = supabase.table("departments").select("id,name").in_("id", list(dept_ids)).execute()
-        if not getattr(dres, "error", None):
-            for d in dres.data or []:
-                dept_map[d.get("id")] = d
-    if batch_ids:
-        bres = supabase.table("batches").select("id,from_year,to_year").in_("id", list(batch_ids)).execute()
-        if not getattr(bres, "error", None):
-            for b in bres.data or []:
-                batch_map[b.get("id")] = b
-    if college_ids:
-        cres = supabase.table("colleges").select("id,name").in_("id", list(college_ids)).execute()
-        if not getattr(cres, "error", None):
-            for c in cres.data or []:
-                college_map[c.get("id")] = c
-    if degree_ids:
-        gres = supabase.table("degrees").select("id,name").in_("id", list(degree_ids)).execute()
-        if not getattr(gres, "error", None):
-            for g in gres.data or []:
-                degree_map[g.get("id")] = g
+
+    def _chunked(values: List[str], size: int = 150) -> List[List[str]]:
+        return [values[i : i + size] for i in range(0, len(values), size)]
+
+    def _as_id_list(values_set) -> List[str]:
+        out_ids: List[str] = []
+        for v in (values_set or []):
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s:
+                out_ids.append(s)
+        return list(dict.fromkeys(out_ids))
+
+    def _safe_in_select(table: str, cols: str, key: str, ids_list: List[str], size: int = 150) -> List[dict]:
+        if not ids_list:
+            return []
+        out_rows: List[dict] = []
+        for chunk in _chunked(ids_list, size=size):
+            try:
+                res = supabase.table(table).select(cols).in_(key, chunk).execute()
+                if getattr(res, "error", None):
+                    continue
+                out_rows.extend(getattr(res, "data", None) or [])
+            except Exception:
+                # Do not fail entire /api/admin/users just because enrichment failed
+                continue
+        return out_rows
+
+    # These queries can create very large URLs when the IN list is big; batch them.
     try:
-        if uniq_ids:
-            rres = supabase.table("admin_roles").select("auth_user_id,role").in_("auth_user_id", uniq_ids).execute()
-            if not getattr(rres, "error", None):
-                for rr in (rres.data or []):
-                    rid = rr.get("auth_user_id")
-                    if rid:
-                        role_map[rid] = rr.get("role") or "student"
+        dept_rows = _safe_in_select("departments", "id,name", "id", _as_id_list(dept_ids))
+        for d in dept_rows:
+            if isinstance(d, dict) and d.get("id"):
+                dept_map[d.get("id")] = d
+    except Exception:
+        pass
+
+    try:
+        batch_rows = _safe_in_select("batches", "id,from_year,to_year", "id", _as_id_list(batch_ids))
+        for b in batch_rows:
+            if isinstance(b, dict) and b.get("id"):
+                batch_map[b.get("id")] = b
+    except Exception:
+        pass
+
+    try:
+        college_rows = _safe_in_select("colleges", "id,name", "id", _as_id_list(college_ids))
+        for c in college_rows:
+            if isinstance(c, dict) and c.get("id"):
+                college_map[c.get("id")] = c
+    except Exception:
+        pass
+
+    try:
+        degree_rows = _safe_in_select("degrees", "id,name", "id", _as_id_list(degree_ids))
+        for g in degree_rows:
+            if isinstance(g, dict) and g.get("id"):
+                degree_map[g.get("id")] = g
+    except Exception:
+        pass
+
+    try:
+        role_rows = _safe_in_select("admin_roles", "auth_user_id,role", "auth_user_id", _as_id_list(uniq_ids), size=200)
+        for rr in role_rows:
+            if not isinstance(rr, dict):
+                continue
+            rid = rr.get("auth_user_id")
+            if rid:
+                role_map[str(rid)] = (rr.get("role") or "student")
     except Exception:
         pass
 
