@@ -611,7 +611,7 @@ CREATE TABLE public.teacher_applications (
 );
 CREATE TABLE public.teacher_classes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  teacher_user_id uuid NOT NULL,
+  teacher_user_id uuid,
   batch_id uuid,
   semester integer CHECK (semester >= 1 AND semester <= 12),
   subject text NOT NULL,

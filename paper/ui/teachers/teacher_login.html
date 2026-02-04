@@ -246,6 +246,15 @@
       catch (err) { console.warn('[login] JSON parse error', err, { sample: text.slice(0, 120) }); return {}; }
     }
 
+    async function hasHodAccess(base, token) {
+      try {
+        const res = await fetch(base + '/api/hod/me', { headers: { 'Authorization': 'Bearer ' + token } });
+        return !!res.ok;
+      } catch (_) {
+        return false;
+      }
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       statusEl.textContent = 'Logging in...';
@@ -273,9 +282,15 @@
         }
         const sdata = await safeJson(st);
         const role = sdata.role; const tstatus = sdata.status;
-        if (role === 'teacher' && tstatus === 'approved') {
-          statusEl.textContent = 'Approved Teacher. Redirecting...';
-          setTimeout(() => { location.href = '../teacher_profile.html'; }, 800);
+
+        if (tstatus === 'approved') {
+          statusEl.textContent = 'Approved. Redirecting...';
+          const isHod = (role === 'hod') || await hasHodAccess(base, data.access_token);
+          if (isHod) {
+            setTimeout(() => { location.href = '../hod/hod_dashboard.html'; }, 600);
+          } else {
+            setTimeout(() => { location.href = '../teacher_profile.html'; }, 600);
+          }
         } else if (tstatus === 'pending') {
           // Show pending modal
           statusEl.classList.add('hidden');
