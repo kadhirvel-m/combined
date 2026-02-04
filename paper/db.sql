@@ -150,6 +150,8 @@ CREATE TABLE public.labx_explanations (
   view_count integer DEFAULT 0,
   CONSTRAINT labx_explanations_pkey PRIMARY KEY (id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_labx_explanations_topic_ci ON public.labx_explanations USING btree (topic_ci);
 CREATE TABLE public.lcoding_languages (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   name text NOT NULL,
