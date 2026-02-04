@@ -123,6 +123,9 @@
                                 <a href="./teacher_classes_manage.html"
                                     class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white/90 dark:hover:bg-white/20"><span
                                         class="material-symbols-rounded text-base">class</span>Classes</a>
+                                <a id="hodPortalBtn" href="./hod/hod_dashboard.html"
+                                    class="hidden items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-brand-500/10 text-brand-700 dark:text-fuchsia-100 ring-1 ring-brand-500/30 hover:bg-brand-500/20">
+                                    <span class="material-symbols-rounded text-base">space_dashboard</span>HOD Portal</a>
                                 <a href="./teacher_test_builder.html"
                                     class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-brand-500/10 text-brand-700 dark:text-fuchsia-100 ring-1 ring-brand-500/30 hover:bg-brand-500/20">
                                     <span class="material-symbols-rounded text-base">quiz</span>Create Test</a>
@@ -284,7 +287,23 @@
                 // decode token (fallback) to determine if same user
                 const parts = token.split('.'); if (parts.length > 1) { try { const p = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))); selfUserId = p.sub || p.user_id || p.uid || null; } catch { } }
             }
-            if ((dynamicSelfMode && token) || (selfUserId && selfUserId === targetUser)) { document.getElementById('selfActions').classList.remove('hidden'); document.getElementById('selfActions').classList.add('flex'); }
+            const isSelf = (dynamicSelfMode && token) || (selfUserId && selfUserId === targetUser);
+            if (isSelf) {
+                const selfActions = document.getElementById('selfActions');
+                selfActions.classList.remove('hidden');
+                selfActions.classList.add('flex');
+                // Reveal HOD portal only if user is actually HOD/admin.
+                try {
+                    const hodBtn = document.getElementById('hodPortalBtn');
+                    if (hodBtn && token) {
+                        const hodRes = await fetch(`${base}/api/hod/me`, { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' });
+                        if (hodRes.ok) {
+                            hodBtn.classList.remove('hidden');
+                            hodBtn.classList.add('inline-flex');
+                        }
+                    }
+                } catch (_) { }
+            }
         }
 
         function renderError(msg) { $('#tName').textContent = 'Teacher'; $('#tHeadline').textContent = msg; $('#tMeta').innerHTML = ''; $('#classesGroups').innerHTML = `<div class='text-sm text-red-600 dark:text-red-400'>${esc(msg)}</div>`; }

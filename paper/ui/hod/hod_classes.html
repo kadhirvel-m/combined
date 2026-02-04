@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paper X — HOD • Classes</title>
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
+  <script>(() => { const s = localStorage.getItem('px_theme'); const p = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches; const dark = s ? s === 'dark' : !!p; if (dark) document.documentElement.classList.add('dark'); })();</script>
+  <script src="../config.js"></script>
+  <script src="../auth.js" defer></script>
+  <script src="./hod.js" defer></script>
+  <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js" type="module"></script>
+  <style>
+    .material-symbols-rounded{ vertical-align:-6px }
+    .glass{ background: linear-gradient(180deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .66)); backdrop-filter: blur(28px); box-shadow: 0 12px 42px -10px rgba(30, 30, 47, .18) }
+    .dark .glass{ background: linear-gradient(180deg, rgba(30, 30, 47, .78), rgba(30, 30, 47, .58)); box-shadow: 0 22px 60px -12px rgba(0, 0, 0, .55) }
+
+    /* Match academicas.html loader overlay exactly */
+    #pageLoader{ position:fixed; inset:0; z-index:9999; background:rgba(255,255,255,0.6); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; transition:opacity 0.4s ease, visibility 0.4s }
+    .loaded #pageLoader{ opacity:0; visibility:hidden; pointer-events:none }
+    .dark #pageLoader{ background:rgba(30, 30, 47, 0.7) }
+
+    .skeleton{ position:relative; overflow:hidden; background:linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.08), rgba(0,0,0,.04)); background-size:300% 100%; animation:shimmer 2.3s linear infinite }
+    .dark .skeleton{ background:linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.12), rgba(255,255,255,.06)) }
+    @keyframes shimmer{ 0%{ background-position:0 0 } 100%{ background-position:-300% 0 } }
+
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+  <!-- Loading Overlay (same as Academics) -->
+  <div id="pageLoader">
+    <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
+      style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
+  </div>
+
+  <header class="sticky top-0 z-40 backdrop-blur bg-white/70 dark:bg-brand-900/70 border-b border-black/5 dark:border-white/10">
+    <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+      <a href="./hod_dashboard.html" class="flex items-center gap-2 font-bold tracking-tight text-lg">
+        <img src="../assets/img/logo-light.svg" class="h-8 w-auto dark:hidden" alt="Paper X" />
+        <img src="../assets/img/logo-dark.svg" class="h-8 w-auto hidden dark:block" alt="Paper X" />
+        <span class="hidden sm:inline text-neutral-600 dark:text-white/70 font-semibold">HOD • Classes</span>
+      </a>
+      <div class="flex items-center gap-2">
+        <a href="../teacher_profile.html?user=me" class="hidden sm:inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition">Teacher Profile</a>
+        <button data-theme-toggle class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition material-symbols-rounded" title="Toggle theme">dark_mode</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-10">
+    <section class="flex flex-col lg:flex-row lg:items-end gap-6">
+      <div class="flex-1 space-y-2">
+        <div class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold bg-brand-500/10 text-brand-700 dark:text-fuchsia-100 ring-1 ring-brand-500/20">
+          <span class="material-symbols-rounded text-[16px]">radar</span>
+          CURRENT CLASSES ONLY
+        </div>
+        <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">
+          HOD
+          <span class="bg-gradient-to-r from-brand-500 via-brand-700 to-brand-900 bg-clip-text text-transparent">Class Command Center</span>
+        </h1>
+        <p class="text-sm text-neutral-600 dark:text-white/60">Section-first view of your department’s active classes with instant reassign.</p>
+      </div>
+      <div id="hodNav" class="flex flex-wrap gap-2"></div>
+    </section>
+
+    <section class="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Command Deck -->
+      <aside class="lg:col-span-4 space-y-4">
+        <div class="glass rounded-3xl ring-1 ring-black/10 dark:ring-white/10 p-5">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="text-xs text-neutral-500 dark:text-white/50">Scope</div>
+              <div id="scopeLine" class="mt-1 font-bold tracking-tight">—</div>
+              <div id="scopeSub" class="mt-1 text-[11px] text-neutral-500 dark:text-white/45">—</div>
+            </div>
+            <a href="./batch_management.html" class="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/15">
+              <span class="material-symbols-rounded text-[16px]">tune</span>Batch Mgmt
+            </a>
+          </div>
+
+          <div class="mt-4 grid grid-cols-3 gap-3">
+            <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-3">
+              <div class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/45">Students</div>
+              <div id="statStudents" class="mt-1 text-lg font-bold">0</div>
+            </div>
+            <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-3">
+              <div class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/45">Sections</div>
+              <div id="statSections" class="mt-1 text-lg font-bold">0</div>
+            </div>
+            <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-3">
+              <div class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/45">Subjects</div>
+              <div id="statSubjects" class="mt-1 text-lg font-bold">0</div>
+            </div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button id="refreshBtn" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600">
+              <span class="material-symbols-rounded text-[18px]">refresh</span>Refresh
+            </button>
+            <button id="expandAllBtn" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/15">
+              <span class="material-symbols-rounded text-[18px]">unfold_more</span>Expand
+            </button>
+            <button id="collapseAllBtn" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/15">
+              <span class="material-symbols-rounded text-[18px]">unfold_less</span>Collapse
+            </button>
+          </div>
+        </div>
+
+        <div class="glass rounded-3xl ring-1 ring-black/10 dark:ring-white/10 p-5">
+          <div class="flex items-center justify-between">
+            <div class="text-sm font-bold">Jump to year</div>
+            <div class="text-[11px] text-neutral-500 dark:text-white/45">Fast navigation</div>
+          </div>
+          <div class="mt-3 grid grid-cols-2 gap-2">
+            <button class="yearJump rounded-2xl px-4 py-3 text-left bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white dark:hover:bg-white/10" data-year="1">
+              <div class="text-xs text-neutral-500 dark:text-white/45">Year 1</div>
+              <div class="font-semibold">First</div>
+            </button>
+            <button class="yearJump rounded-2xl px-4 py-3 text-left bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white dark:hover:bg-white/10" data-year="2">
+              <div class="text-xs text-neutral-500 dark:text-white/45">Year 2</div>
+              <div class="font-semibold">Second</div>
+            </button>
+            <button class="yearJump rounded-2xl px-4 py-3 text-left bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white dark:hover:bg-white/10" data-year="3">
+              <div class="text-xs text-neutral-500 dark:text-white/45">Year 3</div>
+              <div class="font-semibold">Third</div>
+            </button>
+            <button class="yearJump rounded-2xl px-4 py-3 text-left bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 hover:bg-white dark:hover:bg-white/10" data-year="4">
+              <div class="text-xs text-neutral-500 dark:text-white/45">Year 4</div>
+              <div class="font-semibold">Final</div>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Mission View -->
+      <section class="lg:col-span-8">
+        <div class="glass rounded-3xl ring-1 ring-black/10 dark:ring-white/10 p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div class="text-sm font-bold">Active sections</div>
+              <div class="text-[11px] text-neutral-500 dark:text-white/45">Click a section to reveal subjects + assigned staff</div>
+            </div>
+            <div class="text-xs text-neutral-500 dark:text-white/45">Shown: <strong id="shownCount">0</strong></div>
+          </div>
+
+          <div id="errBox" class="hidden mt-4 text-sm text-red-600 dark:text-red-300"></div>
+          <div id="skel" class="hidden mt-6 space-y-3">
+            <div class="h-14 rounded-2xl skeleton"></div>
+            <div class="h-14 rounded-2xl skeleton"></div>
+            <div class="h-24 rounded-2xl skeleton"></div>
+          </div>
+          <div id="groups" class="mt-6 space-y-8"></div>
+          <div id="empty" class="hidden mt-6 text-sm opacity-70">No classes found.</div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <!-- Reassign modal -->
+  <div id="modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" data-close></div>
+    <div class="absolute inset-x-0 top-14 mx-auto max-w-lg px-4">
+      <div class="glass rounded-3xl ring-1 ring-black/10 dark:ring-white/10 p-6">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-lg font-bold tracking-tight">Reassign class</div>
+            <div class="text-xs text-neutral-500 dark:text-white/45" id="modalSub">–</div>
+          </div>
+          <button class="rounded-xl px-3 py-2 bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15" data-close>
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
+        <div class="mt-4">
+          <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1 text-neutral-500 dark:text-white/50">New teacher</label>
+          <select id="teacherSelect" class="w-full rounded-xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 text-sm focus:outline-none focus:ring-brand-500"></select>
+        </div>
+        <div id="modalErr" class="hidden mt-3 text-xs text-red-600 dark:text-red-300"></div>
+        <div class="mt-5 flex items-center justify-end gap-2">
+          <button class="rounded-full px-4 py-2 text-sm font-semibold bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20" data-close>Cancel</button>
+          <button id="saveReassign" class="rounded-full px-4 py-2 text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const $ = (s, r=document) => r.querySelector(s);
+      const groups = $('#groups');
+      const empty = $('#empty');
+      const errBox = $('#errBox');
+      const skel = $('#skel');
+      const shown = $('#shownCount');
+      const scopeLine = $('#scopeLine');
+      const scopeSub = $('#scopeSub');
+      const statStudents = $('#statStudents');
+      const statSections = $('#statSections');
+      const statSubjects = $('#statSubjects');
+
+      const refreshBtn = $('#refreshBtn');
+      const expandAllBtn = $('#expandAllBtn');
+      const collapseAllBtn = $('#collapseAllBtn');
+
+      let staff = [];
+      let staffLoaded = false;
+      let classes = [];
+      let meta = {};
+      let activeClassId = null;
+
+      function setLoading(on){
+        if (on){
+          skel.classList.remove('hidden');
+          groups.classList.add('hidden');
+          empty.classList.add('hidden');
+          document.body.classList.remove('loaded');
+        } else {
+          skel.classList.add('hidden');
+          groups.classList.remove('hidden');
+          document.body.classList.add('loaded');
+        }
+      }
+
+      function card(c){
+        const dept = c.department_name || '';
+        const batch = c.batch_label ? ('Batch ' + c.batch_label) : '';
+        const meta = [dept, batch, c.section ? ('Sec ' + c.section) : '', c.semester ? ('Sem ' + c.semester) : ''].filter(Boolean).join(' • ');
+        const isVirtual = !!c.virtual || String(c.id || '').startsWith('virtual:');
+        const isAssigned = !!(c.teacher_user_id);
+        const tname = (isAssigned ? (c.teacher_name || 'Assigned') : 'Unassigned');
+        const tsub = (isAssigned ? 'Assigned staff' : 'No staff assigned');
+        return `
+          <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-4 flex flex-col gap-3 hover:shadow-[0_18px_60px_-28px_rgba(158,75,138,.65)] transition">
+            <div class="min-w-0">
+              <div class="font-semibold leading-snug line-clamp-2">${HOD.esc(c.subject || 'Subject')}</div>
+              <div class="mt-1 text-[11px] text-neutral-500 dark:text-white/45">${HOD.esc(meta || '—')}</div>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs">
+                <div class="font-semibold">${HOD.esc(tname)}</div>
+                <div class="text-[11px] text-neutral-500 dark:text-white/45">${HOD.esc(tsub || '—')}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                ${isVirtual ? `
+                  <div class="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold bg-black/5 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 text-neutral-600 dark:text-white/70">
+                    <span class="material-symbols-rounded text-[16px]">person_off</span>Unassigned
+                  </div>
+                ` : `
+                  <button class="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold bg-brand-500/10 text-brand-700 dark:text-fuchsia-100 ring-1 ring-brand-500/25 hover:bg-brand-500/20" data-reassign="${HOD.esc(c.id)}">
+                    <span class="material-symbols-rounded text-[16px]">swap_horiz</span>Reassign
+                  </button>
+                `}
+              </div>
+            </div>
+          </div>`;
+      }
+
+      function yearIndexForSem(semNum){
+        const s = parseInt(semNum, 10);
+        if (!s || s < 1) return null;
+        return Math.floor((s - 1) / 2) + 1;
+      }
+
+      function yearTitle(yearIndex){
+        const map = { 1: 'First Year', 2: 'Second Year', 3: 'Third Year', 4: 'Final Year' };
+        return map[yearIndex] || `Year ${yearIndex}`;
+      }
+
+      function yearSemesters(yearIndex){
+        // Standard mapping: (1,2), (3,4), (5,6), (7,8)
+        const start = (yearIndex - 1) * 2 + 1;
+        return [start, start + 1];
+      }
+
+      function parseBatchStartYear(label){
+        // label like "2022-2026" -> 2022
+        const m = String(label || '').match(/(\d{4})\s*[-–]\s*(\d{4})/);
+        if (!m) return null;
+        const y = parseInt(m[1], 10);
+        return Number.isFinite(y) ? y : null;
+      }
+
+      function groupBy(list, keyFn){
+        const out = new Map();
+        list.forEach(item => {
+          const k = keyFn(item) ?? '';
+          const key = String(k);
+          if (!out.has(key)) out.set(key, []);
+          out.get(key).push(item);
+        });
+        return out;
+      }
+
+      function badge(label, icon, strong){
+        const cls = strong
+          ? 'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold bg-brand-500/10 text-brand-700 dark:text-fuchsia-100 ring-1 ring-brand-500/25'
+          : 'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] bg-black/5 dark:bg-white/10 text-neutral-700 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/10';
+        return `<span class="${cls}"><span class="material-symbols-rounded text-[16px]">${HOD.esc(icon)}</span>${HOD.esc(label)}</span>`;
+      }
+
+      function updateStats(list){
+        const secKey = (c) => {
+          const y = yearIndexForSem(c.semester) || 0;
+          const s = String(c.section || '').trim() || '—';
+          const d = String(c.department_id || '');
+          return d + '|' + y + '|' + s;
+        };
+        const sections = new Set(list.map(secKey));
+        statSections.textContent = String(sections.size);
+
+        // Overall students: sum unique section counts (avoid double counting across subjects)
+        const sectionStudents = new Map();
+        list.forEach(c => {
+          const k = secKey(c);
+          const sc = (typeof c.students_count === 'number') ? c.students_count : null;
+          if (sc === null) return;
+          const prev = sectionStudents.get(k);
+          if (prev === undefined || sc > prev) sectionStudents.set(k, sc);
+        });
+        let totalStudents = 0;
+        for (const v of sectionStudents.values()) totalStudents += (Number(v) || 0);
+        statStudents.textContent = String(totalStudents);
+
+        // Keep subject rows count available (previously "classes")
+        statSubjects.textContent = String(list.length);
+
+        shown.textContent = String(list.length);
+      }
+
+      function renderGrouped(list){
+        groups.innerHTML = '';
+        if (!list.length) {
+          empty.classList.remove('hidden');
+          return;
+        }
+        empty.classList.add('hidden');
+
+        // Stable sorting within groups
+        const sorted = list.slice().sort((a, b) => {
+          const ay = yearIndexForSem(a.semester) || 99;
+          const by = yearIndexForSem(b.semester) || 99;
+          if (ay !== by) return ay - by;
+          const as = parseInt(a.semester || 0, 10) || 0;
+          const bs = parseInt(b.semester || 0, 10) || 0;
+          if (as !== bs) return as - bs;
+          const ab = parseBatchStartYear(a.batch_label) || 9999;
+          const bb = parseBatchStartYear(b.batch_label) || 9999;
+          if (ab !== bb) return ab - bb;
+          return String(a.subject || '').localeCompare(String(b.subject || ''));
+        });
+
+        const byYear = groupBy(sorted, c => yearIndexForSem(c.semester) || 0);
+        const yearOrder = Array.from(byYear.keys()).map(k => parseInt(k, 10)).sort((a, b) => a - b);
+        yearOrder.forEach((yIdx) => {
+          const yearList = byYear.get(String(yIdx)) || [];
+          if (!yearList.length) return;
+
+          // Year-level students (sum unique section counts)
+          const yearSectionStudents = new Map();
+          yearList.forEach(c => {
+            const sec = String(c.section || '').trim() || '—';
+            const k = String(c.department_id || '') + '|' + String(yIdx) + '|' + sec;
+            const sc = (typeof c.students_count === 'number') ? c.students_count : null;
+            if (sc === null) return;
+            const prev = yearSectionStudents.get(k);
+            if (prev === undefined || sc > prev) yearSectionStudents.set(k, sc);
+          });
+          let yearStudents = 0;
+          for (const v of yearSectionStudents.values()) yearStudents += (Number(v) || 0);
+
+          const yearHdr = `
+            <div id="year-${HOD.esc(String(yIdx))}" class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="h-9 w-9 rounded-2xl bg-brand-500/15 ring-1 ring-brand-500/25 flex items-center justify-center">
+                  <span class="material-symbols-rounded text-[18px]">orbit</span>
+                </div>
+                <div>
+                  <div class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/45">Year ${HOD.esc(String(yIdx))}</div>
+                  <div class="text-lg font-semibold tracking-tight">${HOD.esc(yearTitle(yIdx))}</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                ${badge(String(yearStudents) + ' students', 'groups', true)}
+              </div>
+            </div>`;
+
+          const bySection = groupBy(yearList, c => {
+            const s = String(c.section || '').trim();
+            return s || '—';
+          });
+
+          const sectionKeys = Array.from(bySection.keys()).sort((a, b) => {
+            if (a === '—' && b !== '—') return 1;
+            if (a !== '—' && b === '—') return -1;
+            return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+          });
+
+          const sectionBlocks = sectionKeys.map((sec) => {
+            const secList = bySection.get(sec) || [];
+            if (!secList.length) return '';
+
+            const studentCounts = new Set(secList.map(x => (typeof x.students_count === 'number') ? x.students_count : null).filter(v => v !== null));
+            const sectionStudents = (studentCounts.size === 1) ? Array.from(studentCounts)[0] : null;
+            const rightMeta = (sectionStudents === null)
+              ? ''
+              : badge(String(sectionStudents) + ' students', 'groups', true);
+
+            const cards = secList.map(card).join('');
+            return `
+              <details class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 overflow-hidden" data-section>
+                <summary class="cursor-pointer select-none px-4 py-3 flex items-center justify-between gap-3 hover:bg-black/5 dark:hover:bg-white/5">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-sm font-semibold tracking-tight">Section ${HOD.esc(sec)}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">${secList.length}</span>
+                  </div>
+                  <div class="text-[11px] text-neutral-500 dark:text-white/45 truncate">${rightMeta || ''}</div>
+                </summary>
+                <div class="p-4">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">${cards}</div>
+                </div>
+              </details>`;
+          }).filter(Boolean).join('');
+
+          groups.insertAdjacentHTML('beforeend', `<div class="space-y-4">
+            ${yearHdr}
+            <div class="space-y-3">${sectionBlocks}</div>
+          </div>`);
+        });
+      }
+
+      function showEmptyState(){
+        const hasMapping = meta && meta.has_mapping;
+        if (hasMapping === false) {
+          empty.innerHTML = 'Configure <a href="./batch_management.html" class="underline font-semibold">Batch Mgmt</a> (batch + current term) to see current classes.';
+        } else {
+          empty.textContent = 'No classes found.';
+        }
+      }
+
+      async function loadAll(){
+        HOD.bindThemeToggle();
+        HOD.mountNav('classes');
+        errBox.classList.add('hidden');
+        setLoading(true);
+
+        let me;
+        try {
+          me = await HOD.requireHod();
+        } catch(e){
+          errBox.textContent = e.message || 'Failed to load HOD scope';
+          errBox.classList.remove('hidden');
+          setLoading(false);
+          return;
+        }
+        const deps = (me && me.departments) ? me.departments : [];
+        scopeLine.textContent = (deps.length ? (deps.length + ' department' + (deps.length > 1 ? 's' : '')) : 'No departments');
+        scopeSub.textContent = deps.length ? deps.map(d => d.name).slice(0, 3).join(' • ') + (deps.length > 3 ? ' • …' : '') : 'Ask admin to configure HOD scope.';
+
+        const token = HOD.getToken();
+
+        // Staff list is lazy-loaded only when opening the reassign modal.
+        staff = [];
+        staffLoaded = false;
+        $('#teacherSelect').innerHTML = '<option value="">Loading staff…</option>';
+
+        try {
+          const resp = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/classes?current_only=1', { headers: { Authorization: 'Bearer ' + token } });
+          classes = resp.classes || [];
+          meta = resp.meta || {};
+          updateStats(classes);
+          showEmptyState();
+          renderGrouped(classes);
+        } catch(e){
+          errBox.textContent = e.message || 'Failed to load classes';
+          errBox.classList.remove('hidden');
+          classes = [];
+          meta = {};
+          updateStats([]);
+          showEmptyState();
+          renderGrouped([]);
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function loadStaffIfNeeded(){
+        if (staffLoaded) return;
+        try {
+          const token = HOD.getToken();
+          const staffResp = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/staff', { headers: { Authorization: 'Bearer ' + token } });
+          staff = staffResp.staff || [];
+          staffLoaded = true;
+          $('#teacherSelect').innerHTML = staff.map(t => `<option value="${HOD.esc(t.auth_user_id)}">${HOD.esc(t.name || t.email || t.auth_user_id)}</option>`).join('') || '<option value="">No staff</option>';
+        } catch(_){
+          staff = [];
+          staffLoaded = true;
+          $('#teacherSelect').innerHTML = '<option value="">Failed to load staff</option>';
+        }
+      }
+
+      // Modal logic
+      const modal = $('#modal');
+      const modalErr = $('#modalErr');
+      const modalSub = $('#modalSub');
+
+      function openModal(classId){
+        activeClassId = classId;
+        modalErr.classList.add('hidden');
+        const c = classes.find(x => String(x.id) === String(classId));
+        modalSub.textContent = c ? (c.label || c.subject || classId) : classId;
+        modal.classList.remove('hidden');
+        loadStaffIfNeeded();
+      }
+      function closeModal(){
+        modal.classList.add('hidden');
+        activeClassId = null;
+      }
+
+      document.addEventListener('click', (e) => {
+        const close = e.target.closest('[data-close]');
+        if (close) closeModal();
+        const btn = e.target.closest('[data-reassign]');
+        if (btn){
+          openModal(btn.getAttribute('data-reassign'));
+        }
+      });
+
+      $('#saveReassign').addEventListener('click', async () => {
+        if (!activeClassId) return;
+        modalErr.classList.add('hidden');
+        try {
+          const token = HOD.getToken();
+          const newTeacher = ($('#teacherSelect').value || '').trim();
+          if (!newTeacher) throw new Error('Select a teacher');
+          await HOD.fetchJSON(HOD.API_BASE + '/api/hod/classes/' + encodeURIComponent(activeClassId) + '/reassign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ new_teacher_user_id: newTeacher })
+          });
+          closeModal();
+          await loadAll();
+        } catch(e){
+          modalErr.textContent = e.message || 'Reassign failed';
+          modalErr.classList.remove('hidden');
+        }
+      });
+
+      refreshBtn.addEventListener('click', loadAll);
+      expandAllBtn.addEventListener('click', () => {
+        document.querySelectorAll('details[data-section]').forEach(d => { d.open = true; });
+      });
+      collapseAllBtn.addEventListener('click', () => {
+        document.querySelectorAll('details[data-section]').forEach(d => { d.open = false; });
+      });
+
+      document.querySelectorAll('.yearJump').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const y = btn.getAttribute('data-year');
+          const el = document.getElementById('year-' + String(y));
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadAll, { once:true });
+      else loadAll();
+    })();
+  </script>
+</body>
+</html>

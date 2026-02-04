@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paper X — HOD • AI Insights</title>
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
+  <script>(() => { const s = localStorage.getItem('px_theme'); const p = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches; const dark = s ? s === 'dark' : !!p; if (dark) document.documentElement.classList.add('dark'); })();</script>
+  <script src="../config.js"></script>
+  <script src="../auth.js" defer></script>
+  <script src="./hod.js" defer></script>
+  <style>
+    .material-symbols-rounded{ vertical-align:-5px }
+    html.dark body{ background: radial-gradient(circle at 25% 15%, rgba(76,42,89,.75) 0%, rgba(30,30,47,0) 55%), linear-gradient(135deg, #1E1E2F 0%, #221B38 40%, #141321 100%) }
+    body{ background: linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 50%,#F7F2F9 100%) }
+    .glass{ background: linear-gradient(135deg, rgba(255,255,255,.76), rgba(255,255,255,.56)); backdrop-filter:saturate(1.35) blur(14px) }
+    .dark .glass{ background: linear-gradient(135deg, rgba(40, 28, 55, .75), rgba(30, 24, 47, .65)) }
+    pre{ white-space:pre-wrap }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
+  <header class="sticky top-0 z-40 backdrop-blur bg-white/70 dark:bg-brand-900/70 border-b border-black/5 dark:border-white/10">
+    <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+      <a href="./hod_dashboard.html" class="flex items-center gap-2 font-bold tracking-tight text-lg">
+        <img src="../assets/img/logo-light.svg" class="h-8 w-auto dark:hidden" alt="Paper X" />
+        <img src="../assets/img/logo-dark.svg" class="h-8 w-auto hidden dark:block" alt="Paper X" />
+        <span class="hidden sm:inline text-neutral-600 dark:text-white/70 font-semibold">HOD • AI Insights</span>
+      </a>
+      <div class="flex items-center gap-2">
+        <a href="../teacher_profile.html?user=me" class="hidden sm:inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition">Teacher Profile</a>
+        <button data-theme-toggle class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition material-symbols-rounded" title="Toggle theme">dark_mode</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-10 space-y-6">
+    <section class="flex flex-col lg:flex-row lg:items-end gap-6">
+      <div class="flex-1 space-y-2">
+        <h1 class="text-3xl font-extrabold tracking-tight">AI insights</h1>
+        <p class="text-sm text-neutral-600 dark:text-white/60">Generate department meeting agenda and risk flags (safe fallback if AI keys are not configured).</p>
+      </div>
+      <div id="hodNav" class="flex flex-wrap gap-2"></div>
+    </section>
+
+    <section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div class="glass rounded-3xl p-6 ring-1 ring-black/10 dark:ring-white/10">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-lg font-bold tracking-tight">Meeting agenda</div>
+            <div class="text-xs text-neutral-500 dark:text-white/45">Auto-generate a structured agenda for HOD review.</div>
+          </div>
+          <button id="agendaBtn" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600">
+            <span class="material-symbols-rounded text-[18px]">auto_awesome</span>Generate
+          </button>
+        </div>
+        <div class="mt-4">
+          <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1 text-neutral-500 dark:text-white/50">Optional focus</label>
+          <input id="agendaFocus" placeholder="Example: lab readiness, exam schedule, slow sections" class="w-full rounded-2xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-3 text-sm focus:outline-none focus:ring-brand-500" />
+        </div>
+        <div id="agendaErr" class="hidden mt-3 text-xs text-red-600 dark:text-red-300"></div>
+        <pre id="agendaOut" class="mt-4 rounded-2xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 p-4 text-sm overflow-auto min-h-[140px]"></pre>
+      </div>
+
+      <div class="glass rounded-3xl p-6 ring-1 ring-black/10 dark:ring-white/10">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-lg font-bold tracking-tight">Risk flags</div>
+            <div class="text-xs text-neutral-500 dark:text-white/45">Highlights workload imbalance, gaps, and urgent follow-ups.</div>
+          </div>
+          <button id="riskBtn" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15">
+            <span class="material-symbols-rounded text-[18px]">warning</span>Analyze
+          </button>
+        </div>
+        <div class="mt-4">
+          <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1 text-neutral-500 dark:text-white/50">Optional context</label>
+          <input id="riskFocus" placeholder="Example: new faculty onboarding, project reviews" class="w-full rounded-2xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-3 text-sm focus:outline-none focus:ring-brand-500" />
+        </div>
+        <div id="riskErr" class="hidden mt-3 text-xs text-red-600 dark:text-red-300"></div>
+        <pre id="riskOut" class="mt-4 rounded-2xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 p-4 text-sm overflow-auto min-h-[140px]"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const $ = (s, r=document) => r.querySelector(s);
+      const agendaBtn = $('#agendaBtn');
+      const riskBtn = $('#riskBtn');
+      const agendaOut = $('#agendaOut');
+      const riskOut = $('#riskOut');
+      const agendaErr = $('#agendaErr');
+      const riskErr = $('#riskErr');
+
+      async function boot(){
+        HOD.bindThemeToggle();
+        HOD.mountNav('ai');
+        await HOD.requireHod();
+      }
+
+      async function doAgenda(){
+        agendaErr.classList.add('hidden');
+        agendaOut.textContent = 'Generating...';
+        agendaBtn.disabled = true;
+        try {
+          const token = HOD.getToken();
+          const focus = ($('#agendaFocus').value || '').trim();
+          const resp = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/ai/meeting-agenda', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ focus })
+          });
+          agendaOut.textContent = resp.markdown || '';
+        } catch(e){
+          agendaOut.textContent = '';
+          agendaErr.textContent = e.message || 'Failed to generate agenda';
+          agendaErr.classList.remove('hidden');
+        } finally {
+          agendaBtn.disabled = false;
+        }
+      }
+
+      async function doRisk(){
+        riskErr.classList.add('hidden');
+        riskOut.textContent = 'Analyzing...';
+        riskBtn.disabled = true;
+        try {
+          const token = HOD.getToken();
+          const focus = ($('#riskFocus').value || '').trim();
+          const resp = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/ai/risk-flags', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ focus })
+          });
+          riskOut.textContent = resp.markdown || '';
+        } catch(e){
+          riskOut.textContent = '';
+          riskErr.textContent = e.message || 'Failed to analyze risks';
+          riskErr.classList.remove('hidden');
+        } finally {
+          riskBtn.disabled = false;
+        }
+      }
+
+      agendaBtn.addEventListener('click', doAgenda);
+      riskBtn.addEventListener('click', doRisk);
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
+      else boot();
+    })();
+  </script>
+</body>
+</html>

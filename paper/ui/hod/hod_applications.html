@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paper X — HOD • Applications</title>
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
+  <script>(() => { const s = localStorage.getItem('px_theme'); const p = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches; const dark = s ? s === 'dark' : !!p; if (dark) document.documentElement.classList.add('dark'); })();</script>
+  <script src="../config.js"></script>
+  <script src="../auth.js" defer></script>
+  <script src="./hod.js" defer></script>
+  <style>
+    .material-symbols-rounded{ vertical-align:-5px }
+    html.dark body{ background: radial-gradient(circle at 25% 15%, rgba(76,42,89,.75) 0%, rgba(30,30,47,0) 55%), linear-gradient(135deg, #1E1E2F 0%, #221B38 40%, #141321 100%) }
+    body{ background: linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 50%,#F7F2F9 100%) }
+    .glass{ background: linear-gradient(135deg, rgba(255,255,255,.76), rgba(255,255,255,.56)); backdrop-filter:saturate(1.35) blur(14px) }
+    .dark .glass{ background: linear-gradient(135deg, rgba(40, 28, 55, .75), rgba(30, 24, 47, .65)) }
+    textarea{ min-height: 96px }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
+  <header class="sticky top-0 z-40 backdrop-blur bg-white/70 dark:bg-brand-900/70 border-b border-black/5 dark:border-white/10">
+    <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+      <a href="./hod_dashboard.html" class="flex items-center gap-2 font-bold tracking-tight text-lg">
+        <img src="../assets/img/logo-light.svg" class="h-8 w-auto dark:hidden" alt="Paper X" />
+        <img src="../assets/img/logo-dark.svg" class="h-8 w-auto hidden dark:block" alt="Paper X" />
+        <span class="hidden sm:inline text-neutral-600 dark:text-white/70 font-semibold">HOD • Applications</span>
+      </a>
+      <div class="flex items-center gap-2">
+        <a href="../teacher_profile.html?user=me" class="hidden sm:inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition">Teacher Profile</a>
+        <button data-theme-toggle class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition material-symbols-rounded" title="Toggle theme">dark_mode</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-10 space-y-6">
+    <section class="flex flex-col lg:flex-row lg:items-end gap-6">
+      <div class="flex-1 space-y-2">
+        <h1 class="text-3xl font-extrabold tracking-tight">Teacher applications</h1>
+        <p class="text-sm text-neutral-600 dark:text-white/60">Review pending applications and add your recommendation note.</p>
+      </div>
+      <div id="hodNav" class="flex flex-wrap gap-2"></div>
+    </section>
+
+    <section class="glass rounded-3xl p-6 ring-1 ring-black/10 dark:ring-white/10">
+      <div class="flex flex-col lg:flex-row gap-3 lg:items-end lg:justify-between">
+        <div class="flex flex-wrap gap-3 items-end">
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1 text-neutral-500 dark:text-white/50">Status</label>
+            <select id="statusSelect" class="rounded-xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 text-sm focus:outline-none focus:ring-brand-500">
+              <option value="">All</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+          <div class="min-w-[260px] flex-1">
+            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1 text-neutral-500 dark:text-white/50">Search</label>
+            <input id="qInput" placeholder="Name / email" class="w-full rounded-xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 text-sm focus:outline-none focus:ring-brand-500" />
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="refreshBtn" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600">
+            <span class="material-symbols-rounded text-[18px]">refresh</span>Refresh
+          </button>
+          <span class="text-xs text-neutral-500 dark:text-white/45">Shown: <strong id="shownCount">0</strong></span>
+        </div>
+      </div>
+
+      <div id="errBox" class="hidden mt-4 text-sm text-red-600 dark:text-red-300"></div>
+      <div id="list" class="mt-6 space-y-4"></div>
+      <div id="empty" class="hidden mt-6 text-sm opacity-60">No applications found.</div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const $ = (s, r=document) => r.querySelector(s);
+      const list = $('#list');
+      const empty = $('#empty');
+      const errBox = $('#errBox');
+      const shown = $('#shownCount');
+      const statusSelect = $('#statusSelect');
+      const qInput = $('#qInput');
+
+      let apps = [];
+
+      function badge(status){
+        const s = String(status || '').toLowerCase();
+        if (s === 'approved') return '<span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-200 ring-1 ring-emerald-500/25">APPROVED</span>';
+        if (s === 'rejected') return '<span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-rose-500/15 text-rose-700 dark:text-rose-200 ring-1 ring-rose-500/25">REJECTED</span>';
+        return '<span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500/25">PENDING</span>';
+      }
+
+      function row(a){
+        const name = a.full_name || a.name || 'Applicant';
+        const email = a.email || '';
+        const dept = a.department_name || '';
+        const created = a.created_at ? new Date(a.created_at).toLocaleString() : '';
+        const note = (a.hod_review && a.hod_review.note) ? a.hod_review.note : '';
+
+        return `
+          <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-5" data-app="${HOD.esc(a.id)}">
+            <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <div class="text-lg font-bold tracking-tight truncate">${HOD.esc(name)}</div>
+                  ${badge(a.status)}
+                </div>
+                <div class="mt-1 text-xs text-neutral-500 dark:text-white/45">${HOD.esc([email, dept].filter(Boolean).join(' • '))}</div>
+                <div class="mt-1 text-[11px] text-neutral-500 dark:text-white/45">${HOD.esc(created)}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15" data-save>
+                  <span class="material-symbols-rounded text-[18px]">save</span>Save note
+                </button>
+              </div>
+            </div>
+
+            <div class="mt-4">
+              <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1 text-neutral-500 dark:text-white/50">HOD recommendation note</label>
+              <textarea class="w-full rounded-2xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-3 text-sm focus:outline-none focus:ring-brand-500" placeholder="Write your recommendation for admin review..." data-note>${HOD.esc(note)}</textarea>
+              <div class="mt-2 text-xs text-neutral-500 dark:text-white/45" data-statusline></div>
+              <div class="mt-2 hidden text-xs text-red-600 dark:text-red-300" data-err></div>
+            </div>
+          </div>`;
+      }
+
+      function applyFilters(){
+        const st = (statusSelect.value || '').trim().toLowerCase();
+        const q = (qInput.value || '').trim().toLowerCase();
+        let list2 = apps.slice();
+        if (st) list2 = list2.filter(a => String(a.status||'').toLowerCase() === st);
+        if (q) list2 = list2.filter(a => String(a.full_name||a.name||'').toLowerCase().includes(q) || String(a.email||'').toLowerCase().includes(q));
+        list.innerHTML = list2.map(row).join('');
+        empty.classList.toggle('hidden', list2.length > 0);
+        shown.textContent = String(list2.length);
+      }
+
+      async function loadAll(){
+        HOD.bindThemeToggle();
+        HOD.mountNav('apps');
+        errBox.classList.add('hidden');
+
+        try {
+          await HOD.requireHod();
+        } catch(e){
+          errBox.textContent = e.message || 'Failed to load HOD scope';
+          errBox.classList.remove('hidden');
+          return;
+        }
+
+        try {
+          const token = HOD.getToken();
+          const resp = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/applications', { headers: { Authorization: 'Bearer ' + token } });
+          apps = resp.applications || [];
+          applyFilters();
+        } catch(e){
+          errBox.textContent = e.message || 'Failed to load applications';
+          errBox.classList.remove('hidden');
+          apps = [];
+          applyFilters();
+        }
+      }
+
+      // Save handler (event delegation)
+      document.addEventListener('click', async (e) => {
+        const saveBtn = e.target.closest('[data-save]');
+        if (!saveBtn) return;
+        const cardEl = e.target.closest('[data-app]');
+        if (!cardEl) return;
+        const appId = cardEl.getAttribute('data-app');
+        const noteEl = cardEl.querySelector('[data-note]');
+        const errEl = cardEl.querySelector('[data-err]');
+        const statusLine = cardEl.querySelector('[data-statusline]');
+        errEl.classList.add('hidden');
+
+        try {
+          saveBtn.disabled = true;
+          saveBtn.classList.add('opacity-60');
+          const token = HOD.getToken();
+          const note = (noteEl.value || '').trim();
+          await HOD.fetchJSON(HOD.API_BASE + '/api/hod/applications/' + encodeURIComponent(appId) + '/review', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ note })
+          });
+          statusLine.textContent = 'Saved at ' + new Date().toLocaleTimeString();
+        } catch(err){
+          errEl.textContent = err.message || 'Save failed';
+          errEl.classList.remove('hidden');
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.classList.remove('opacity-60');
+        }
+      });
+
+      $('#refreshBtn').addEventListener('click', loadAll);
+      statusSelect.addEventListener('change', applyFilters);
+      qInput.addEventListener('input', () => { window.clearTimeout(window.__qT); window.__qT = setTimeout(applyFilters, 120); });
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadAll, { once:true });
+      else loadAll();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paper X — HOD • Batch Management</title>
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
+  <script>(() => { const s = localStorage.getItem('px_theme'); const p = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches; const dark = s ? s === 'dark' : !!p; if (dark) document.documentElement.classList.add('dark'); })();</script>
+  <script src="../config.js"></script>
+  <script src="../auth.js" defer></script>
+  <script src="./hod.js" defer></script>
+  <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js" type="module"></script>
+  <style>
+    .material-symbols-rounded{ vertical-align:-6px }
+    .glass{ background: linear-gradient(135deg, rgba(255,255,255,.76), rgba(255,255,255,.56)); backdrop-filter:saturate(1.35) blur(14px) }
+    .dark .glass{ background: linear-gradient(135deg, rgba(40, 28, 55, .75), rgba(30, 24, 47, .65)) }
+
+    /* Match academicas.html loader overlay exactly */
+    #pageLoader{ position:fixed; inset:0; z-index:9999; background:rgba(255,255,255,0.6); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; transition:opacity 0.4s ease, visibility 0.4s }
+    .loaded #pageLoader{ opacity:0; visibility:hidden; pointer-events:none }
+    .dark #pageLoader{ background:rgba(30, 30, 47, 0.7) }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+  <!-- Loading Overlay (same as Academics) -->
+  <div id="pageLoader">
+    <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
+      style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
+  </div>
+  <header class="sticky top-0 z-40 backdrop-blur bg-white/70 dark:bg-brand-900/70 border-b border-black/5 dark:border-white/10">
+    <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+      <a href="./hod_dashboard.html" class="flex items-center gap-2 font-bold tracking-tight text-lg">
+        <img src="../assets/img/logo-light.svg" class="h-8 w-auto dark:hidden" alt="Paper X" />
+        <img src="../assets/img/logo-dark.svg" class="h-8 w-auto hidden dark:block" alt="Paper X" />
+        <span class="hidden sm:inline text-neutral-600 dark:text-white/70 font-semibold">HOD • Batch Management</span>
+      </a>
+      <div class="flex items-center gap-2">
+        <a href="../teacher_profile.html?user=me" class="hidden sm:inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition">Teacher Profile</a>
+        <button data-theme-toggle class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition material-symbols-rounded" title="Toggle theme">dark_mode</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-10 space-y-6">
+    <section class="flex flex-col lg:flex-row lg:items-end gap-6">
+      <div class="flex-1 space-y-2">
+        <h1 class="text-3xl font-semibold tracking-tight">
+          <span class="bg-gradient-to-r from-brand-500 via-brand-700 to-brand-900 bg-clip-text text-transparent">Batch Management</span>
+        </h1>
+        <p class="text-sm text-neutral-600 dark:text-white/60">HOD controls only 2nd/3rd/final year mapping. First year is managed by coordinators.</p>
+      </div>
+      <div id="hodNav" class="flex flex-wrap gap-2"></div>
+    </section>
+
+    <section class="glass rounded-3xl p-6 ring-1 ring-black/10 dark:ring-white/10 space-y-6">
+      <div class="flex flex-col lg:flex-row gap-4 lg:items-end lg:justify-between">
+        <div class="flex flex-wrap gap-3 items-end">
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1 text-neutral-500 dark:text-white/50">Department</label>
+            <select id="deptSelect" class="min-w-[260px] rounded-xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 text-sm focus:outline-none focus:ring-brand-500"></select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide mb-1 text-neutral-500 dark:text-white/50">Current Term</label>
+            <select id="termSelect" class="min-w-[240px] rounded-xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 text-sm focus:outline-none focus:ring-brand-500">
+              <option value="">— Not set —</option>
+              <option value="odd">Odd term (3 / 5 / 7)</option>
+              <option value="even">Even term (4 / 6 / 8)</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="refreshBtn" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20">
+            <span class="material-symbols-rounded text-[18px]">refresh</span>Reload
+          </button>
+          <button id="saveBtn" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600">
+            <span class="material-symbols-rounded text-[18px]">save</span>Save
+          </button>
+        </div>
+      </div>
+
+      <div id="errBox" class="hidden text-sm text-red-600 dark:text-red-300"></div>
+      <div id="okBox" class="hidden text-sm text-emerald-700 dark:text-emerald-300"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-5 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div class="font-bold">Second Year</div>
+            <div class="text-[11px] text-neutral-500 dark:text-white/45">Current: <span id="syCur">—</span></div>
+          </div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Batch</label>
+          <select id="secondYear" class="w-full rounded-xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 text-sm focus:outline-none focus:ring-brand-500"></select>
+        </div>
+
+        <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-5 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div class="font-bold">Third Year</div>
+            <div class="text-[11px] text-neutral-500 dark:text-white/45">Current: <span id="tyCur">—</span></div>
+          </div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Batch</label>
+          <select id="thirdYear" class="w-full rounded-xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 text-sm focus:outline-none focus:ring-brand-500"></select>
+        </div>
+
+        <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-5 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div class="font-bold">Final Year</div>
+            <div class="text-[11px] text-neutral-500 dark:text-white/45">Current: <span id="lyCur">—</span></div>
+          </div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Batch</label>
+          <select id="finalYear" class="w-full rounded-xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-3 py-2 text-sm focus:outline-none focus:ring-brand-500"></select>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const $ = (s, r=document) => r.querySelector(s);
+      const deptSelect = $('#deptSelect');
+      const termSelect = $('#termSelect');
+      const errBox = $('#errBox');
+      const okBox = $('#okBox');
+      const secondYear = $('#secondYear');
+      const thirdYear = $('#thirdYear');
+      const finalYear = $('#finalYear');
+
+      const syCur = $('#syCur');
+      const tyCur = $('#tyCur');
+      const lyCur = $('#lyCur');
+
+      let me = null;
+      let departments = [];
+      let management = {};
+      let batchesByDept = {};
+
+      function showErr(msg){
+        errBox.textContent = msg || 'Error';
+        errBox.classList.remove('hidden');
+        okBox.classList.add('hidden');
+      }
+      function showOk(msg){
+        okBox.textContent = msg || 'Saved';
+        okBox.classList.remove('hidden');
+        errBox.classList.add('hidden');
+      }
+
+      function option(label, value){
+        return `<option value="${HOD.esc(value || '')}">${HOD.esc(label || '—')}</option>`;
+      }
+
+      function inferTerm(){
+        // Determine odd/even based on stored sem values.
+        // Any deviation -> unset (keeps UI simple: only Odd/Even supported).
+        const deptId = deptSelect.value;
+        const row = management[String(deptId)] || {};
+        const b = row.second_year_sem ? String(row.second_year_sem) : '';
+        const c = row.third_year_sem ? String(row.third_year_sem) : '';
+        const d = row.final_year_sem ? String(row.final_year_sem) : '';
+        if (!b && !c && !d) return '';
+        if (b === '3' && c === '5' && d === '7') return 'odd';
+        if (b === '4' && c === '6' && d === '8') return 'even';
+        return '';
+      }
+
+      function semsForTerm(mode){
+        if (mode === 'odd') return { sy: 3, ty: 5, ly: 7 };
+        if (mode === 'even') return { sy: 4, ty: 6, ly: 8 };
+        return { sy: null, ty: null, ly: null };
+      }
+
+      function renderCurrentLabels(){
+        const mode = termSelect.value;
+        const sems = semsForTerm(mode);
+        syCur.textContent = sems.sy ? ('Sem ' + sems.sy) : '—';
+        tyCur.textContent = sems.ty ? ('Sem ' + sems.ty) : '—';
+        lyCur.textContent = sems.ly ? ('Sem ' + sems.ly) : '—';
+      }
+
+      function setLoading(on){
+        if (on) document.body.classList.remove('loaded');
+        else document.body.classList.add('loaded');
+      }
+
+      function renderBatchSelects(){
+        const deptId = deptSelect.value;
+
+        const deptBatches = (batchesByDept[String(deptId)] || []);
+        const opts = [option('— Not set —', '')].concat(
+          deptBatches.map(b => option((b.label ? ('Batch ' + b.label) : (b.from_year + '-' + b.to_year)), b.id))
+        ).join('');
+        [secondYear, thirdYear, finalYear].forEach(sel => sel.innerHTML = opts);
+
+        const row = management[String(deptId)] || {};
+        secondYear.value = row.second_year_batch_id || '';
+        thirdYear.value = row.third_year_batch_id || '';
+        finalYear.value = row.final_year_batch_id || '';
+
+        termSelect.value = inferTerm();
+        renderCurrentLabels();
+      }
+
+      async function loadDepartmentData(deptId){
+        const token = HOD.getToken();
+        const [batchResp, mgmtResp] = await Promise.all([
+          HOD.fetchJSON(HOD.API_BASE + '/api/hod/batches?department_id=' + encodeURIComponent(deptId), { headers: { Authorization: 'Bearer ' + token } }),
+          HOD.fetchJSON(HOD.API_BASE + '/api/hod/batch-management?department_id=' + encodeURIComponent(deptId), { headers: { Authorization: 'Bearer ' + token } }),
+        ]);
+
+        batchesByDept[String(deptId)] = (batchResp.batches || []).sort((a,b) => (b.from_year||0) - (a.from_year||0));
+        management = mgmtResp.management || management;
+      }
+
+      async function loadAll(){
+        HOD.bindThemeToggle();
+        HOD.mountNav('batches');
+        errBox.classList.add('hidden');
+        okBox.classList.add('hidden');
+        setLoading(true);
+
+        try {
+          me = await HOD.requireHod();
+          departments = me.departments || [];
+          deptSelect.innerHTML = departments.map(d => `<option value="${HOD.esc(d.id)}">${HOD.esc(d.name)}</option>`).join('');
+          if (departments.length) deptSelect.value = String(departments[0].id);
+
+          const deptId = deptSelect.value;
+          if (deptId) {
+            await loadDepartmentData(deptId);
+          }
+          renderBatchSelects();
+        } catch(e){
+          showErr(e.message || 'Failed to load');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function save(){
+        errBox.classList.add('hidden');
+        okBox.classList.add('hidden');
+        setLoading(true);
+        try {
+          const token = HOD.getToken();
+          const deptId = deptSelect.value;
+          if (!deptId) throw new Error('Select a department');
+          const term = termSelect.value;
+          if (term !== 'odd' && term !== 'even') throw new Error('Select Current Term (Odd/Even)');
+          const sems = semsForTerm(term);
+          await HOD.fetchJSON(HOD.API_BASE + '/api/hod/batch-management', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({
+              department_id: deptId,
+              second_year_batch_id: secondYear.value || null,
+              second_year_sem: sems.sy,
+              third_year_batch_id: thirdYear.value || null,
+              third_year_sem: sems.ty,
+              final_year_batch_id: finalYear.value || null,
+              final_year_sem: sems.ly,
+            })
+          });
+          showOk('Saved successfully');
+          // refresh mapping
+          const mgmtResp = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/batch-management?department_id=' + encodeURIComponent(deptId), { headers: { Authorization: 'Bearer ' + token } });
+          management = mgmtResp.management || management;
+          renderBatchSelects();
+        } catch(e){
+          showErr(e.message || 'Save failed');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      $('#refreshBtn').addEventListener('click', loadAll);
+      $('#saveBtn').addEventListener('click', save);
+      deptSelect.addEventListener('change', async () => {
+        const deptId = deptSelect.value;
+        if (!deptId) return;
+        errBox.classList.add('hidden');
+        okBox.classList.add('hidden');
+        setLoading(true);
+        try {
+          await loadDepartmentData(deptId);
+          renderBatchSelects();
+        } catch(e){
+          showErr(e.message || 'Failed to load');
+        } finally {
+          setLoading(false);
+        }
+      });
+
+      termSelect.addEventListener('change', () => {
+        renderCurrentLabels();
+      });
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadAll, { once:true });
+      else loadAll();
+    })();
+  </script>
+</body>
+</html>

@@ -7416,7 +7416,7 @@ def _count_admins(supabase) -> int:
         return 0
 
 
-VALID_ROLES = {"admin", "teacher", "student", "moderator", "employee"}
+VALID_ROLES = {"admin", "teacher", "hod", "student", "moderator", "employee"}
 
 
 def _admin_pick_primary_education_row(supabase, profile_id: str) -> Optional[dict]:
@@ -7639,7 +7639,7 @@ def update_user_role(auth_user_id: str, payload: RoleUpdateIn, authorization: Op
             if getattr(del_res, 'error', None):
                 raise HTTPException(status_code=500, detail=f"Role demote failed: {del_res.error}")
         # For non-admin roles we can store or remove row (choose store for non-student roles)
-        if desired in {"teacher", "moderator", "employee"}:
+        if desired in {"teacher", "hod", "moderator", "employee"}:
             up_res = supabase.table('admin_roles').upsert({"auth_user_id": auth_user_id, "role": desired}).execute()
             if getattr(up_res, 'error', None):
                 raise HTTPException(status_code=500, detail=f"Role update failed: {up_res.error}")
@@ -7775,9 +7775,111 @@ def _require_teacher(authorization: Optional[str]):
         raise HTTPException(status_code=500, detail=f"Supabase error (role check): {role_q.error}")
     data = role_q.data or []
     role = data[0].get("role") if data else "student"
-    if role not in {"teacher","admin"}:  # admins also allowed
+    if role not in {"teacher", "hod", "admin"}:  # admins + hod also allowed
         raise HTTPException(status_code=403, detail="Teacher role required")
     return uid
+
+
+def _require_hod(authorization: Optional[str]) -> str:
+    """Require a user to be HOD (or admin).
+
+    This uses `public.admin_roles.role` and expects HOD users to have `role='hod'`.
+    """
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    role_q = supabase.table("admin_roles").select("role").eq("auth_user_id", uid).limit(1).execute()
+    if getattr(role_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (role check): {role_q.error}")
+    data = role_q.data or []
+    role = data[0].get("role") if data else "student"
+    if role not in {"hod", "admin"}:
+        raise HTTPException(status_code=403, detail="HOD role required")
+    return uid
+
+
+def _hod_scope_departments(supabase: Client, hod_user_id: str) -> Tuple[Optional[str], List[str]]:
+    """Return (college_id, department_ids) for the HOD.
+
+    Priority:
+      1) `public.hod_departments` rows
+      2) fallback: `public.teacher_profiles.department_id`
+      3) fallback: `public.teacher_applications.department_id`
+    """
+    # 1) explicit mapping table (supports multiple departments)
+    dept_ids: List[str] = []
+    try:
+        q = supabase.table("hod_departments").select("department_id").eq("hod_user_id", hod_user_id).limit(200).execute()
+        if not getattr(q, "error", None) and q.data:
+            dept_ids = [r.get("department_id") for r in (q.data or []) if r.get("department_id")]
+    except Exception:
+        dept_ids = []
+
+    college_id: Optional[str] = None
+    # Resolve college/department from teacher_profiles or application
+    prof = supabase.table("teacher_profiles").select("college_id,department_id").eq("auth_user_id", hod_user_id).limit(1).execute()
+    if not getattr(prof, "error", None) and prof.data:
+        college_id = prof.data[0].get("college_id") or None
+        if not dept_ids and prof.data[0].get("department_id"):
+            dept_ids = [prof.data[0].get("department_id")]
+    if not college_id or not dept_ids:
+        app = supabase.table("teacher_applications").select("college_id,department_id").eq("auth_user_id", hod_user_id).limit(1).execute()
+        if not getattr(app, "error", None) and app.data:
+            college_id = college_id or (app.data[0].get("college_id") or None)
+            if not dept_ids and app.data[0].get("department_id"):
+                dept_ids = [app.data[0].get("department_id")]
+
+    # De-dupe, preserve order
+    seen: Set[str] = set()
+    unique: List[str] = []
+    for d in dept_ids:
+        if not d or d in seen:
+            continue
+        seen.add(d)
+        unique.append(d)
+    return college_id, unique
+
+
+def _build_hod_ai_agent() -> AssistantAgent:
+    system = """You are an assistant for a Head of Department (HOD).
+
+Rules:
+- Be practical and concise.
+- Use only the provided data; do not invent numbers.
+- If data is missing, explicitly say what is missing.
+- Output Markdown with short headings and bullets.
+"""
+    return AssistantAgent(
+        "paperx_hod_agent",
+        model_client=gemini_model_client,
+        system_message=system,
+    )
+
+
+def _hod_ai_generate_markdown(user_prompt: str) -> str:
+    """Generate markdown text for HOD pages using configured LLM.
+
+    Falls back to a deterministic template if LLM isn't configured.
+    """
+    try:
+        if not (os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY")):
+            raise RuntimeError("No AI API key configured")
+        agent = _build_hod_ai_agent()
+        result = _run_assistant_blocking(agent, user_prompt)
+        content = result.messages[-1].content
+        return str(content or "").strip() or "(empty AI response)"
+    except Exception as e:
+        # Safe fallback: still return something useful
+        return "\n".join([
+            "# HOD Assistant (Fallback)",
+            "", 
+            "AI provider is not configured or failed.",
+            f"Error: {str(e)}",
+            "", 
+            "## Suggested Next Actions",
+            "- Review pending teacher applications in your department",
+            "- Check unassigned/overloaded classes",
+            "- Schedule a short staff sync (15–20 mins)",
+        ])
 
 
 @teacher_router.post("/api/teacher/signup", summary="Teacher signup with ID card images (multipart)")
@@ -7865,6 +7967,193 @@ async def teacher_signup(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected signup error: {e}")
+
+
+@teacher_router.post("/api/hod/signup", summary="HOD signup (creates teacher + HOD role applications)")
+async def hod_signup(
+    email: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    name: str = Form(...),
+    college: Optional[str] = Form(None),
+    department: Optional[str] = Form(None),
+    motivation: Optional[str] = Form(None),
+    id_card_front: UploadFile = File(...),
+    id_card_back: UploadFile = File(...),
+):
+    """HOD-only signup flow.
+
+    Creates:
+      - public.teacher_applications (pending)
+      - public.hod_role_applications (pending)
+
+    Admin later reviews hod_role_applications and assigns role='hod'.
+    """
+    if password != confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+    allowed = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+    if id_card_front.content_type not in allowed or id_card_back.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="ID card images must be png/jpg/webp")
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Auth disabled")
+    try:
+        auth_res = anon_client.auth.sign_up({"email": email, "password": password})
+        auth_user_id = _get_user_id_from_auth_response(auth_res)
+        if not auth_user_id:
+            raise HTTPException(status_code=400, detail="Failed to create auth user")
+        access_token = _extract_access_token(auth_res)
+        supabase = get_service_client()
+
+        college_id = None
+        department_id = None
+        if college:
+            try:
+                college_id = str(_resolve_college_id_by_name(college))
+            except Exception:
+                college_id = None
+        if department and college_id:
+            try:
+                department_id = str(_resolve_department_id(uuid.UUID(college_id), department.upper()))
+            except Exception:
+                department_id = None
+
+        front_bytes = await id_card_front.read()
+        back_bytes = await id_card_back.read()
+        if len(front_bytes) > 5 * 1024 * 1024 or len(back_bytes) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+
+        front_ext = Path(id_card_front.filename or "front").suffix.lower() or ".jpg"
+        back_ext = Path(id_card_back.filename or "back").suffix.lower() or ".jpg"
+        front_name = f"{auth_user_id}_front{front_ext}"
+        back_name = f"{auth_user_id}_back{back_ext}"
+        front_content_type = id_card_front.content_type or "image/jpeg"
+        back_content_type = id_card_back.content_type or "image/jpeg"
+        _storage_upload_bytes(supabase, "teacher", front_name, front_bytes, front_content_type)
+        _storage_upload_bytes(supabase, "teacher", back_name, back_bytes, back_content_type)
+        front_url = _storage_public_url(supabase, "teacher", front_name)
+        back_url = _storage_public_url(supabase, "teacher", back_name)
+
+        # Always create a teacher application too (so HOD is also a teacher).
+        ins_teacher = supabase.table("teacher_applications").insert({
+            "auth_user_id": auth_user_id,
+            "email": email,
+            "name": name,
+            "college_id": college_id,
+            "department_id": department_id,
+            "subjects": [],
+            "id_card_front_path": front_url,
+            "id_card_back_path": back_url,
+            "status": "pending",
+        }).execute()
+        if getattr(ins_teacher, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (teacher application insert): {ins_teacher.error}")
+
+        ins_hod = supabase.table("hod_role_applications").insert({
+            "auth_user_id": auth_user_id,
+            "email": email,
+            "name": name,
+            "college_id": college_id,
+            "department_id": department_id,
+            "motivation": motivation,
+            "id_card_front_path": front_url,
+            "id_card_back_path": back_url,
+            "status": "pending",
+        }).execute()
+        if getattr(ins_hod, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (hod application insert): {ins_hod.error}")
+
+        return {"message": "HOD application submitted", "access_token": access_token, "user_id": auth_user_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected signup error: {e}")
+
+
+class HodRoleApproveIn(BaseModel):
+    status: str = Field(..., description="approved|rejected")
+    notes: Optional[str] = None
+
+
+@teacher_router.get("/api/admin/hod-applications", summary="Admin: list HOD role applications")
+def list_hod_role_applications(status: Optional[str] = Query(default=None), authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    query = supabase.table("hod_role_applications").select("*").order("created_at", desc=True)
+    if status:
+        query = query.eq("status", status)
+    res = query.execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list hod apps): {res.error}")
+    return {"applications": res.data or []}
+
+
+@teacher_router.post("/api/admin/hod-applications/{application_id}/review", summary="Admin: approve or reject a HOD role application")
+def review_hod_role_application(application_id: str, payload: HodRoleApproveIn, authorization: Optional[str] = Header(default=None)):
+    admin_uid, _ = _require_admin(authorization)
+    status = (payload.status or "").strip().lower()
+    if status not in {"approved", "rejected"}:
+        raise HTTPException(status_code=400, detail="Invalid status (approved|rejected)")
+    supabase = get_service_client()
+
+    app_q = supabase.table("hod_role_applications").select("auth_user_id,status,department_id").eq("id", application_id).limit(1).execute()
+    if getattr(app_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (fetch hod app): {app_q.error}")
+    if not app_q.data:
+        raise HTTPException(status_code=404, detail="HOD application not found")
+    row = app_q.data[0]
+    target_uid = row.get("auth_user_id")
+    department_id = row.get("department_id")
+
+    upd = supabase.table("hod_role_applications").update({
+        "status": status,
+        "notes": payload.notes,
+        "reviewed_by": admin_uid,
+        "reviewed_at": datetime.utcnow().isoformat(),
+    }).eq("id", application_id).execute()
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update hod app): {upd.error}")
+
+    if status == "approved" and target_uid:
+        # Ensure teacher application is approved and profile is synced.
+        try:
+            tapp = supabase.table("teacher_applications").select("id,status").eq("auth_user_id", target_uid).limit(1).execute()
+            if not getattr(tapp, "error", None) and tapp.data:
+                if tapp.data[0].get("status") != "approved":
+                    supabase.table("teacher_applications").update({
+                        "status": "approved",
+                        "notes": (payload.notes or ""),
+                        "reviewed_by": admin_uid,
+                        "reviewed_at": datetime.utcnow().isoformat(),
+                    }).eq("id", tapp.data[0].get("id")).execute()
+        except Exception:
+            pass
+
+        try:
+            _ensure_teacher_role(target_uid)
+        except Exception:
+            pass
+        try:
+            _sync_teacher_profile_from_application(supabase, target_uid)
+        except Exception:
+            pass
+
+        # Assign HOD role.
+        try:
+            supabase.table("admin_roles").upsert({"auth_user_id": target_uid, "role": "hod"}).execute()
+        except Exception:
+            pass
+
+        # Map HOD to their department.
+        if department_id:
+            try:
+                existing = supabase.table("hod_departments").select("id").eq("hod_user_id", target_uid).eq("department_id", department_id).limit(1).execute()
+                if not getattr(existing, "error", None) and not (existing.data or []):
+                    supabase.table("hod_departments").insert({"hod_user_id": target_uid, "department_id": department_id}).execute()
+            except Exception:
+                pass
+
+    return {"ok": True, "application_id": application_id, "status": status}
 
 
 @teacher_router.get("/api/teacher/applications", summary="Admin: list teacher applications")
@@ -8926,6 +9215,837 @@ def get_teacher_academics_mine(authorization: Optional[str] = Header(default=Non
         "batches": batches,
         "degrees": degrees,
     }
+
+
+# ================= HOD Portal (Department-level) ==================
+
+class HodClassReassignIn(BaseModel):
+    new_teacher_user_id: uuid.UUID
+
+
+class HodStaffRemoveIn(BaseModel):
+    teacher_user_id: uuid.UUID
+    department_id: Optional[uuid.UUID] = None
+
+
+class HodApplicationReviewIn(BaseModel):
+    recommendation: Literal["approve", "reject", "review"] = "review"
+    note: Optional[str] = None
+
+
+class HodAiAgendaIn(BaseModel):
+    focus: Optional[str] = None
+    days: int = Field(default=14, ge=1, le=180)
+
+
+def _enrich_departments(supabase: Client, department_ids: List[str]) -> List[Dict[str, Any]]:
+    if not department_ids:
+        return []
+    d = supabase.table("departments").select("id,name,college_id,degree_id").in_("id", department_ids).order("name").execute()
+    if getattr(d, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (departments lookup): {d.error}")
+    return d.data or []
+
+
+@teacher_router.get("/api/hod/me", summary="HOD: current scope + departments")
+def hod_me(authorization: Optional[str] = Header(default=None)):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    college_id, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No department scope configured for this HOD")
+
+    # Core profile
+    core: Dict[str, Any] = {"auth_user_id": hod_user_id, "role": "hod"}
+    tprof = supabase.table("teacher_profiles").select("name,email,college_id,department_id,profile_image_url").eq("auth_user_id", hod_user_id).limit(1).execute()
+    if not getattr(tprof, "error", None) and tprof.data:
+        row = tprof.data[0]
+        for k in ["name", "email", "college_id", "department_id"]:
+            if row.get(k) is not None:
+                core[k] = row.get(k)
+        if row.get("profile_image_url"):
+            core["avatar_url"] = row.get("profile_image_url")
+
+    # Role readback (admin can be HOD too)
+    role_q = supabase.table("admin_roles").select("role").eq("auth_user_id", hod_user_id).limit(1).execute()
+    if not getattr(role_q, "error", None) and role_q.data:
+        core["role"] = role_q.data[0].get("role") or core.get("role")
+
+    departments = _enrich_departments(supabase, dept_ids)
+
+    college = None
+    if college_id:
+        cres = supabase.table("colleges").select("id,name,logo_url").eq("id", str(college_id)).limit(1).execute()
+        if not getattr(cres, "error", None) and cres.data:
+            college = cres.data[0]
+
+    return {
+        "hod": core,
+        "scope": {"college_id": college_id, "department_ids": dept_ids},
+        "departments": departments,
+        "college": college,
+    }
+
+
+@teacher_router.get("/api/hod/classes", summary="HOD: list classes in my departments")
+def hod_list_classes(
+    authorization: Optional[str] = Header(default=None),
+    department_id: Optional[str] = Query(default=None),
+    semester: Optional[int] = Query(default=None, ge=1, le=12),
+    batch_id: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None, description="Search in subject/section"),
+    current_only: bool = Query(default=False, description="If true, restrict to current batch+semester pairs from hod_batch_management"),
+):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+    if department_id:
+        if department_id not in dept_ids:
+            raise HTTPException(status_code=403, detail="Department out of scope")
+        dept_ids = [department_id]
+
+    allowed_pairs: Optional[set[str]] = None
+    allowed_batch_ids: Optional[List[str]] = None
+    allowed_semesters: Optional[List[int]] = None
+
+    if current_only:
+        mg = (
+            supabase.table("hod_batch_management")
+            .select(
+                "department_id,first_year_batch_id,first_year_sem,second_year_batch_id,second_year_sem,third_year_batch_id,third_year_sem,final_year_batch_id,final_year_sem"
+            )
+            .in_("department_id", dept_ids)
+            .execute()
+        )
+        if getattr(mg, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (hod batch management): {mg.error}")
+
+        rows = mg.data or []
+        pairs: set[str] = set()
+        bset: set[str] = set()
+        sset: set[int] = set()
+
+        def _add(bid: Any, semv: Any) -> None:
+            if not bid or not semv:
+                return
+            try:
+                sem_i = int(semv)
+            except Exception:
+                return
+            bid_s = str(bid)
+            pairs.add(f"{bid_s}|{sem_i}")
+            bset.add(bid_s)
+            sset.add(sem_i)
+
+        for r in rows:
+            _add(r.get("first_year_batch_id"), r.get("first_year_sem"))
+            _add(r.get("second_year_batch_id"), r.get("second_year_sem"))
+            _add(r.get("third_year_batch_id"), r.get("third_year_sem"))
+            _add(r.get("final_year_batch_id"), r.get("final_year_sem"))
+
+        if not pairs:
+            return {"total": 0, "classes": [], "meta": {"current_only": True, "has_mapping": False}}
+
+        allowed_pairs = pairs
+        allowed_batch_ids = sorted(bset)
+        allowed_semesters = sorted(sset)
+
+        # If caller asked for a specific batch/semester, validate it's still within the allowed set.
+        if batch_id and batch_id not in allowed_batch_ids:
+            return {"total": 0, "classes": [], "meta": {"current_only": True, "has_mapping": True}}
+        if semester is not None and semester not in allowed_semesters:
+            return {"total": 0, "classes": [], "meta": {"current_only": True, "has_mapping": True}}
+
+    query = supabase.table("teacher_classes").select(
+        "id,teacher_user_id,batch_id,semester,subject,subject_id,section,department_id"
+    ).in_("department_id", dept_ids)
+
+    if current_only and allowed_batch_ids and allowed_semesters:
+        query = query.in_("batch_id", allowed_batch_ids).in_("semester", allowed_semesters)
+    if semester is not None:
+        query = query.eq("semester", semester)
+    if batch_id:
+        query = query.eq("batch_id", batch_id)
+    # NOTE: postgrest ilike is supported via .ilike, but we keep safe fallback by client-side filtering
+    res = query.order("id", desc=True).limit(1200).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (hod classes): {res.error}")
+    classes = res.data or []
+
+    if current_only and allowed_pairs is not None:
+        filtered = []
+        for c in classes:
+            bid = c.get("batch_id")
+            semv = c.get("semester")
+            if not bid or not semv:
+                continue
+            try:
+                sem_i = int(semv)
+            except Exception:
+                continue
+            if f"{str(bid)}|{sem_i}" in allowed_pairs:
+                filtered.append(c)
+        classes = filtered
+
+    # client-side filter for q (fast enough for <=1000)
+    if q:
+        needle = q.strip().lower()
+        if needle:
+            def _hit(row: Dict[str, Any]) -> bool:
+                return needle in str(row.get("subject") or "").lower() or needle in str(row.get("section") or "").lower()
+            classes = [c for c in classes if _hit(c)]
+
+    # Students count (fast): count user_education entries matching batch + section + current_semester
+    students_count_map: Dict[str, int] = {}
+    try:
+        rel_batch_ids = sorted({str(c.get("batch_id")) for c in classes if c.get("batch_id")})
+        rel_sems = sorted({int(c.get("semester")) for c in classes if c.get("semester")})
+        if rel_batch_ids and rel_sems:
+            edu = (
+                supabase.table("user_education")
+                .select("batch_id,section,current_semester")
+                .in_("department_id", dept_ids)
+                .in_("batch_id", rel_batch_ids)
+                .in_("current_semester", rel_sems)
+                .limit(20000)
+                .execute()
+            )
+            if not getattr(edu, "error", None):
+                for r in edu.data or []:
+                    bid = r.get("batch_id")
+                    sec = r.get("section")
+                    semv = r.get("current_semester")
+                    if not bid or not sec or not semv:
+                        continue
+                    try:
+                        sem_i = int(semv)
+                    except Exception:
+                        continue
+                    k = f"{str(bid)}|{str(sec)}|{sem_i}"
+                    students_count_map[k] = students_count_map.get(k, 0) + 1
+    except Exception:
+        students_count_map = {}
+
+    # Ensure we display all subjects for each section/semester, even when no teacher is assigned.
+    # We do this by reading syllabus_courses (per batch + semester) and synthesizing virtual rows.
+    if current_only and allowed_batch_ids and allowed_semesters:
+        try:
+            # Map: (batch_id, semester) -> list of courses
+            sc = (
+                supabase.table("syllabus_courses")
+                .select("id,batch_id,semester,course_code,title,type")
+                .in_("batch_id", allowed_batch_ids)
+                .in_("semester", allowed_semesters)
+                .limit(5000)
+                .execute()
+            )
+            if not getattr(sc, "error", None):
+                courses_by_pair: Dict[str, List[Dict[str, Any]]] = {}
+                for cr in sc.data or []:
+                    bid = cr.get("batch_id")
+                    semv = cr.get("semester")
+                    if not bid or not semv:
+                        continue
+                    try:
+                        sem_i = int(semv)
+                    except Exception:
+                        continue
+                    key = f"{str(bid)}|{sem_i}"
+                    courses_by_pair.setdefault(key, []).append(cr)
+
+                # Existing: (batch_id, semester, section) -> set(course_id)
+                existing_course_ids: Dict[str, set[str]] = {}
+                section_keys: set[str] = set()
+                for c in classes:
+                    bid = c.get("batch_id")
+                    semv = c.get("semester")
+                    sec = c.get("section")
+                    if not bid or not semv or not sec:
+                        continue
+                    try:
+                        sem_i = int(semv)
+                    except Exception:
+                        continue
+                    sk = f"{str(bid)}|{sem_i}|{str(sec)}"
+                    section_keys.add(sk)
+                    sid = c.get("subject_id")
+                    if sid:
+                        existing_course_ids.setdefault(sk, set()).add(str(sid))
+
+                virtual_rows: List[Dict[str, Any]] = []
+                for sk in sorted(section_keys):
+                    bid, sem_s, sec = sk.split("|", 2)
+                    try:
+                        sem_i = int(sem_s)
+                    except Exception:
+                        continue
+                    course_list = courses_by_pair.get(f"{bid}|{sem_i}") or []
+                    if not course_list:
+                        continue
+                    have = existing_course_ids.get(sk, set())
+                    for cr in course_list:
+                        cid = cr.get("id")
+                        if not cid:
+                            continue
+                        cid_s = str(cid)
+                        if cid_s in have:
+                            continue
+                        title = cr.get("title") or "Subject"
+                        code = cr.get("course_code")
+                        subj = f"{code} — {title}" if code else str(title)
+                        virtual_id = f"virtual:{cid_s}:{bid}:{sem_i}:{sec}"
+                        dept_guess = None
+                        # Best-effort: infer department from existing rows of same section key
+                        for c in classes:
+                            if str(c.get("batch_id")) == bid and int(c.get("semester") or 0) == sem_i and str(c.get("section")) == sec:
+                                dept_guess = c.get("department_id")
+                                break
+                        row = {
+                            "id": virtual_id,
+                            "virtual": True,
+                            "teacher_user_id": None,
+                            "batch_id": bid,
+                            "semester": sem_i,
+                            "subject": subj,
+                            "subject_id": cid_s,
+                            "section": sec,
+                            "department_id": dept_guess,
+                        }
+                        virtual_rows.append(row)
+
+                if virtual_rows:
+                    classes.extend(virtual_rows)
+        except Exception:
+            pass
+
+    teacher_ids = sorted({c.get("teacher_user_id") for c in classes if c.get("teacher_user_id")})
+    batch_ids = sorted({c.get("batch_id") for c in classes if c.get("batch_id")})
+    dept_ids2 = sorted({c.get("department_id") for c in classes if c.get("department_id")})
+
+    teacher_map: Dict[str, Dict[str, Any]] = {}
+    if teacher_ids:
+        t = supabase.table("teacher_profiles").select("auth_user_id,name,email,profile_image_url,department_id").in_("auth_user_id", teacher_ids).execute()
+        if not getattr(t, "error", None):
+            for r in t.data or []:
+                teacher_map[str(r.get("auth_user_id"))] = r
+
+    batch_map: Dict[str, Dict[str, Any]] = {}
+    if batch_ids:
+        b = supabase.table("batches").select("id,from_year,to_year,department_id").in_("id", batch_ids).execute()
+        if not getattr(b, "error", None):
+            for r in b.data or []:
+                batch_map[str(r.get("id"))] = r
+
+    dept_map: Dict[str, Dict[str, Any]] = {}
+    if dept_ids2:
+        d = supabase.table("departments").select("id,name").in_("id", dept_ids2).execute()
+        if not getattr(d, "error", None):
+            for r in d.data or []:
+                dept_map[str(r.get("id"))] = r
+
+    # attach derived fields
+    for c in classes:
+        # students count
+        try:
+            bid = c.get("batch_id")
+            sec = c.get("section")
+            semv = c.get("semester")
+            if bid and sec and semv:
+                sem_i = int(semv)
+                c["students_count"] = students_count_map.get(f"{str(bid)}|{str(sec)}|{sem_i}", 0)
+        except Exception:
+            pass
+
+        tid = str(c.get("teacher_user_id")) if c.get("teacher_user_id") else None
+        if tid and tid in teacher_map:
+            tp = teacher_map[tid]
+            c["teacher_name"] = tp.get("name")
+            c["teacher_email"] = tp.get("email")
+            c["teacher_avatar_url"] = tp.get("profile_image_url")
+        bid = str(c.get("batch_id")) if c.get("batch_id") else None
+        if bid and bid in batch_map:
+            br = batch_map[bid]
+            fy, ty = br.get("from_year"), br.get("to_year")
+            c["batch_label"] = f"{fy}-{ty}" if fy and ty else None
+        did = str(c.get("department_id")) if c.get("department_id") else None
+        if did and did in dept_map:
+            c["department_name"] = dept_map[did].get("name")
+        sem = c.get("semester")
+        subj = c.get("subject")
+        c["label"] = f"Sem {sem}: {subj}" if sem and subj else (subj or "Class")
+
+    meta: Dict[str, Any] = {}
+    if current_only:
+        meta = {"current_only": True, "has_mapping": True}
+    return {"total": len(classes), "classes": classes, "meta": meta}
+
+
+@teacher_router.get("/api/hod/batches", summary="HOD: list batches in my departments")
+def hod_list_batches(
+    authorization: Optional[str] = Header(default=None),
+    department_id: Optional[str] = Query(default=None),
+):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+    if department_id:
+        if department_id not in dept_ids:
+            raise HTTPException(status_code=403, detail="Department out of scope")
+        dept_ids = [department_id]
+
+    res = (
+        supabase.table("batches")
+        .select("id,college_id,department_id,from_year,to_year,created_at")
+        .in_("department_id", dept_ids)
+        .order("from_year", desc=True)
+        .limit(2000)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (hod batches): {res.error}")
+    batches = res.data or []
+
+    # Attach department names for UI.
+    dept_map: Dict[str, str] = {}
+    try:
+        d = supabase.table("departments").select("id,name").in_("id", list({str(b.get("department_id")) for b in batches if b.get("department_id")}) or ["00000000-0000-0000-0000-000000000000"]).execute()
+        if not getattr(d, "error", None):
+            for r in d.data or []:
+                dept_map[str(r.get("id"))] = r.get("name")
+    except Exception:
+        pass
+
+    for b in batches:
+        fy, ty = b.get("from_year"), b.get("to_year")
+        b["label"] = f"{fy}-{ty}" if fy and ty else None
+        did = b.get("department_id")
+        if did:
+            b["department_name"] = dept_map.get(str(did))
+
+    return {"total": len(batches), "batches": batches}
+
+
+class HodBatchManagementIn(BaseModel):
+    department_id: str
+    first_year_batch_id: Optional[str] = None
+    first_year_sem: Optional[int] = None
+    second_year_batch_id: Optional[str] = None
+    second_year_sem: Optional[int] = None
+    third_year_batch_id: Optional[str] = None
+    third_year_sem: Optional[int] = None
+    final_year_batch_id: Optional[str] = None
+    final_year_sem: Optional[int] = None
+
+
+@teacher_router.get("/api/hod/batch-management", summary="HOD: get batch management selections")
+def hod_get_batch_management(
+    authorization: Optional[str] = Header(default=None),
+    department_id: Optional[str] = Query(default=None),
+):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+    if department_id:
+        if department_id not in dept_ids:
+            raise HTTPException(status_code=403, detail="Department out of scope")
+        dept_ids = [department_id]
+
+    q = (
+        supabase.table("hod_batch_management")
+        .select(
+            "department_id,first_year_batch_id,first_year_sem,second_year_batch_id,second_year_sem,third_year_batch_id,third_year_sem,final_year_batch_id,final_year_sem,updated_at"
+        )
+        .in_("department_id", dept_ids)
+        .execute()
+    )
+    if getattr(q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get batch management): {q.error}")
+    rows = q.data or []
+    # Return as map for easy UI.
+    by_dept: Dict[str, Any] = {}
+    for r in rows:
+        by_dept[str(r.get("department_id"))] = r
+    return {"departments": dept_ids, "management": by_dept}
+
+
+@teacher_router.post("/api/hod/batch-management", summary="HOD: update batch management selections")
+def hod_update_batch_management(payload: HodBatchManagementIn, authorization: Optional[str] = Header(default=None)):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+    department_id = str(payload.department_id or "").strip()
+    if not department_id:
+        raise HTTPException(status_code=400, detail="department_id is required")
+    if department_id not in dept_ids:
+        raise HTTPException(status_code=403, detail="Department out of scope")
+
+    def _validate_sem(year_label: str, sem: Optional[int], allowed) -> None:
+        if sem is None:
+            return
+        if sem not in allowed:
+            raise HTTPException(status_code=400, detail=f"Invalid {year_label} semester")
+
+    _validate_sem("second_year_sem", payload.second_year_sem, {3, 4})
+    _validate_sem("third_year_sem", payload.third_year_sem, {5, 6})
+    _validate_sem("final_year_sem", payload.final_year_sem, {7, 8})
+
+    if payload.second_year_sem is not None and not payload.second_year_batch_id:
+        raise HTTPException(status_code=400, detail="Select second year batch")
+    if payload.third_year_sem is not None and not payload.third_year_batch_id:
+        raise HTTPException(status_code=400, detail="Select third year batch")
+    if payload.final_year_sem is not None and not payload.final_year_batch_id:
+        raise HTTPException(status_code=400, detail="Select final year batch")
+
+    # NOTE: First-year is managed by coordinators (not HOD). Never update or validate it here.
+    chosen = [payload.second_year_batch_id, payload.third_year_batch_id, payload.final_year_batch_id]
+    chosen = [c for c in chosen if c]
+    if chosen:
+        # Validate all chosen batches belong to this department.
+        bq = supabase.table("batches").select("id,department_id").in_("id", chosen).execute()
+        if getattr(bq, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (validate batches): {bq.error}")
+        found = {str(r.get("id")): str(r.get("department_id")) for r in (bq.data or [])}
+        for bid in chosen:
+            if str(bid) not in found:
+                raise HTTPException(status_code=400, detail=f"Invalid batch_id: {bid}")
+            if found[str(bid)] != department_id:
+                raise HTTPException(status_code=400, detail=f"Batch {bid} does not belong to department")
+
+    # Preserve any existing first-year mapping/semester.
+    # (Older clients might send null/empty and we must not clear coordinator-managed values.)
+    upsert_payload: Dict[str, Any] = {
+        "department_id": department_id,
+        "second_year_batch_id": payload.second_year_batch_id,
+        "second_year_sem": payload.second_year_sem,
+        "third_year_batch_id": payload.third_year_batch_id,
+        "third_year_sem": payload.third_year_sem,
+        "final_year_batch_id": payload.final_year_batch_id,
+        "final_year_sem": payload.final_year_sem,
+        "updated_by": hod_user_id,
+    }
+
+    up = supabase.table("hod_batch_management").upsert(upsert_payload, on_conflict="department_id").execute()
+    if getattr(up, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update batch management): {up.error}")
+    return {"ok": True, "department_id": department_id}
+
+
+@teacher_router.get("/api/hod/staff", summary="HOD: list staff (teachers) in my departments")
+def hod_list_staff(
+    authorization: Optional[str] = Header(default=None),
+    q: Optional[str] = Query(default=None, description="Search by name/email"),
+    department_id: Optional[str] = Query(default=None, description="Filter to a single department (must be in HOD scope)"),
+):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+
+    if department_id:
+        dep = str(department_id).strip()
+        if dep not in dept_ids:
+            raise HTTPException(status_code=403, detail="Department out of scope")
+        dept_ids = [dep]
+
+    needle = (q or "").strip()
+    needle_l = needle.lower()
+
+    tq = supabase.table("teacher_profiles").select(
+        "auth_user_id,name,email,department_id,college_id,profile_image_url,headline,updated_at"
+    ).in_("department_id", dept_ids)
+    if needle:
+        # Best-effort server-side search (name/email)
+        # Supabase: OR across columns
+        escaped = needle.replace(",", " ").strip()
+        tq = tq.or_(f"name.ilike.%{escaped}%,email.ilike.%{escaped}%")
+    staff_res = tq.order("updated_at", desc=True).limit(500).execute()
+    if getattr(staff_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (staff list): {staff_res.error}")
+    staff = staff_res.data or []
+
+    # Add quick workload estimate (class count)
+    teacher_ids = [str(r.get("auth_user_id")) for r in staff if r.get("auth_user_id")]
+    class_counts: Dict[str, int] = {tid: 0 for tid in teacher_ids}
+    if teacher_ids:
+        # Supabase doesn't give per-user counts in one query; do a lightweight scan instead (bounded)
+        cls_rows = supabase.table("teacher_classes").select("teacher_user_id").in_("teacher_user_id", teacher_ids).limit(5000).execute()
+        if not getattr(cls_rows, "error", None):
+            for row in cls_rows.data or []:
+                tid = str(row.get("teacher_user_id") or "")
+                if tid in class_counts:
+                    class_counts[tid] += 1
+
+    # Fallback client-side search (in case OR/ilike isn't supported by client/table)
+    if needle_l:
+        def _hit(row: Dict[str, Any]) -> bool:
+            return needle_l in str(row.get("name") or "").lower() or needle_l in str(row.get("email") or "").lower()
+        staff = [r for r in staff if _hit(r)]
+
+    for r in staff:
+        tid = str(r.get("auth_user_id") or "")
+        r["classes_count"] = class_counts.get(tid, 0)
+
+    return {"total": len(staff), "staff": staff}
+
+
+@teacher_router.post("/api/hod/staff/remove", summary="HOD: remove a staff member from a department and unassign their classes")
+def hod_remove_staff(payload: HodStaffRemoveIn, authorization: Optional[str] = Header(default=None)):
+    hod_user_id = _require_hod(authorization)
+    if str(payload.teacher_user_id) == str(hod_user_id):
+        raise HTTPException(status_code=400, detail="You cannot remove yourself")
+
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+
+    # Resolve staff department
+    prof = supabase.table("teacher_profiles").select("auth_user_id,department_id,college_id,name,email").eq(
+        "auth_user_id", str(payload.teacher_user_id)
+    ).limit(1).execute()
+    if getattr(prof, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (staff lookup): {prof.error}")
+    if not prof.data:
+        raise HTTPException(status_code=404, detail="Staff not found")
+
+    current_dept_id = prof.data[0].get("department_id")
+    target_dept_id = str(payload.department_id) if payload.department_id else (str(current_dept_id) if current_dept_id else None)
+    if not target_dept_id:
+        raise HTTPException(status_code=400, detail="Staff has no department")
+    if target_dept_id not in dept_ids:
+        raise HTTPException(status_code=403, detail="Staff out of scope")
+
+    # Count classes to be unassigned (bounded scan)
+    cls_rows = supabase.table("teacher_classes").select("id").eq("teacher_user_id", str(payload.teacher_user_id)).eq(
+        "department_id", target_dept_id
+    ).limit(5000).execute()
+    if getattr(cls_rows, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (classes scan): {cls_rows.error}")
+    classes_count = len(cls_rows.data or [])
+
+    # 1) Remove staff from the department
+    upd_prof = supabase.table("teacher_profiles").update({"department_id": None}).eq(
+        "auth_user_id", str(payload.teacher_user_id)
+    ).eq("department_id", target_dept_id).execute()
+    if getattr(upd_prof, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (remove staff from dept): {upd_prof.error}")
+
+    # 2) Unassign their classes (teacher_user_id -> NULL)
+    upd_cls = supabase.table("teacher_classes").update({"teacher_user_id": None}).eq(
+        "teacher_user_id", str(payload.teacher_user_id)
+    ).eq("department_id", target_dept_id).execute()
+    if getattr(upd_cls, "error", None):
+        err_txt = str(upd_cls.error)
+        hint = "Run packages/sql/hod_unassign_teacher_classes.sql to allow unassigned classes" if ("not-null" in err_txt.lower() or "null value" in err_txt.lower()) else None
+        if hint:
+            raise HTTPException(status_code=500, detail=f"Supabase error (unassign classes): {err_txt}. Hint: {hint}")
+        raise HTTPException(status_code=500, detail=f"Supabase error (unassign classes): {upd_cls.error}")
+
+    return {
+        "ok": True,
+        "teacher_user_id": str(payload.teacher_user_id),
+        "department_id": target_dept_id,
+        "classes_unassigned": classes_count,
+    }
+
+
+@teacher_router.post("/api/hod/classes/{class_id}/reassign", summary="HOD: reassign a class to another teacher")
+def hod_reassign_class(class_id: uuid.UUID, payload: HodClassReassignIn, authorization: Optional[str] = Header(default=None)):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+
+    cls = supabase.table("teacher_classes").select("id,department_id").eq("id", str(class_id)).limit(1).execute()
+    if getattr(cls, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (class lookup): {cls.error}")
+    if not cls.data:
+        raise HTTPException(status_code=404, detail="Class not found")
+    dept_id = cls.data[0].get("department_id")
+    if dept_id not in dept_ids:
+        raise HTTPException(status_code=403, detail="Class out of scope")
+
+    # Ensure the target teacher belongs to the same department (best-effort)
+    t = supabase.table("teacher_profiles").select("auth_user_id,department_id").eq("auth_user_id", str(payload.new_teacher_user_id)).limit(1).execute()
+    if not getattr(t, "error", None) and t.data:
+        if t.data[0].get("department_id") and t.data[0].get("department_id") != dept_id:
+            raise HTTPException(status_code=400, detail="Target teacher belongs to a different department")
+
+    upd = supabase.table("teacher_classes").update({"teacher_user_id": str(payload.new_teacher_user_id)}).eq("id", str(class_id)).execute()
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (reassign): {upd.error}")
+    return {"ok": True, "class_id": str(class_id), "new_teacher_user_id": str(payload.new_teacher_user_id)}
+
+
+@teacher_router.get("/api/hod/applications", summary="HOD: list teacher applications in my departments")
+def hod_list_teacher_applications(
+    authorization: Optional[str] = Header(default=None),
+    status: Optional[str] = Query(default=None, description="pending|approved|rejected"),
+):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+
+    query = supabase.table("teacher_applications").select(
+        "id,auth_user_id,email,name,college_id,department_id,subjects,status,notes,reviewed_by,reviewed_at,created_at,updated_at"
+    ).in_("department_id", dept_ids)
+    if status:
+        query = query.eq("status", status)
+    apps_res = query.order("created_at", desc=True).limit(500).execute()
+    if getattr(apps_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (applications): {apps_res.error}")
+    apps = apps_res.data or []
+
+    # Attach HOD review notes if table exists
+    try:
+        app_ids = [a.get("id") for a in apps if a.get("id")]
+        review_map: Dict[str, Dict[str, Any]] = {}
+        if app_ids:
+            rres = supabase.table("hod_application_reviews").select("application_id,hod_user_id,recommendation,note,updated_at").eq("hod_user_id", hod_user_id).in_("application_id", app_ids).execute()
+            if not getattr(rres, "error", None):
+                for r in rres.data or []:
+                    review_map[str(r.get("application_id"))] = r
+        for a in apps:
+            rid = review_map.get(str(a.get("id")))
+            if rid:
+                a["hod_review"] = {
+                    "recommendation": rid.get("recommendation"),
+                    "note": rid.get("note"),
+                    "updated_at": rid.get("updated_at"),
+                }
+    except Exception:
+        pass
+
+    return {"total": len(apps), "applications": apps}
+
+
+@teacher_router.post("/api/hod/applications/{application_id}/review", summary="HOD: save recommendation note for an application")
+def hod_review_application(application_id: uuid.UUID, payload: HodApplicationReviewIn, authorization: Optional[str] = Header(default=None)):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+
+    app_res = supabase.table("teacher_applications").select("id,department_id").eq("id", str(application_id)).limit(1).execute()
+    if getattr(app_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (application lookup): {app_res.error}")
+    if not app_res.data:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if app_res.data[0].get("department_id") not in dept_ids:
+        raise HTTPException(status_code=403, detail="Application out of scope")
+
+    row = {
+        "application_id": str(application_id),
+        "hod_user_id": hod_user_id,
+        "recommendation": payload.recommendation,
+        "note": payload.note,
+    }
+    try:
+        up = supabase.table("hod_application_reviews").upsert(row).execute()
+        if getattr(up, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (save review): {up.error}")
+    except APIError as e:
+        raise HTTPException(status_code=500, detail=f"Missing table for HOD reviews. Run packages/sql/hod_portal.sql. {e}")
+    return {"ok": True, "application_id": str(application_id), "saved": True}
+
+
+@teacher_router.post("/api/hod/ai/meeting-agenda", summary="HOD AI: generate meeting agenda for the department")
+def hod_ai_meeting_agenda(payload: HodAiAgendaIn, authorization: Optional[str] = Header(default=None)):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    college_id, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+
+    # Gather lightweight stats
+    classes = supabase.table("teacher_classes").select("id,teacher_user_id,semester,subject,department_id", count="estimated").in_("department_id", dept_ids).execute()
+    classes_count = getattr(classes, "count", None) or (len(classes.data or []) if getattr(classes, "data", None) else 0)
+    apps = supabase.table("teacher_applications").select("id,status", count="estimated").in_("department_id", dept_ids).execute()
+    pending_apps = 0
+    if getattr(apps, "data", None):
+        pending_apps = len([a for a in (apps.data or []) if a.get("status") == "pending"])
+    staff = supabase.table("teacher_profiles").select("auth_user_id", count="estimated").in_("department_id", dept_ids).execute()
+    staff_count = getattr(staff, "count", None) or (len(staff.data or []) if getattr(staff, "data", None) else 0)
+
+    dept_rows = _enrich_departments(supabase, dept_ids)
+    dept_names = [d.get("name") for d in dept_rows if d.get("name")]
+
+    prompt = "\n".join([
+        "Generate a staff meeting agenda for the HOD.",
+        "", 
+        f"Department(s): {', '.join(dept_names) if dept_names else '(unknown)'}",
+        f"College ID: {college_id or '(unknown)'}",
+        f"Window (days): {payload.days}",
+        f"Classes count: {classes_count}",
+        f"Staff count: {staff_count}",
+        f"Pending teacher applications: {pending_apps}",
+        "", 
+        "Constraints:",
+        "- Keep it to 30–40 minutes total",
+        "- Include: quick metrics, curriculum/syllabus, student performance signals, blockers, action items",
+        f"Extra focus from HOD: {payload.focus or '(none)'}",
+    ])
+    md = _hod_ai_generate_markdown(prompt)
+    return {"ok": True, "markdown": md}
+
+
+@teacher_router.post("/api/hod/ai/risk-flags", summary="HOD AI: generate risk flags and recommendations")
+def hod_ai_risk_flags(payload: HodAiAgendaIn, authorization: Optional[str] = Header(default=None)):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+
+    cls_res = supabase.table("teacher_classes").select("id,teacher_user_id,semester,subject,section,department_id").in_("department_id", dept_ids).limit(2000).execute()
+    if getattr(cls_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (classes): {cls_res.error}")
+    classes = cls_res.data or []
+    workload: Dict[str, int] = {}
+    for c in classes:
+        tid = str(c.get("teacher_user_id") or "")
+        if not tid:
+            continue
+        workload[tid] = workload.get(tid, 0) + 1
+    top_load = sorted(workload.items(), key=lambda kv: kv[1], reverse=True)[:10]
+
+    apps_res = supabase.table("teacher_applications").select("id,status").in_("department_id", dept_ids).limit(1000).execute()
+    pending_apps = len([a for a in (apps_res.data or []) if a.get("status") == "pending"]) if not getattr(apps_res, "error", None) else 0
+
+    dept_rows = _enrich_departments(supabase, dept_ids)
+    dept_names = [d.get("name") for d in dept_rows if d.get("name")]
+
+    prompt = "\n".join([
+        "Identify risks for the department(s) and propose mitigations.",
+        "", 
+        f"Departments: {', '.join(dept_names) if dept_names else '(unknown)'}",
+        f"Classes: {len(classes)}",
+        f"Pending teacher applications: {pending_apps}",
+        "", 
+        "Top teacher workloads (teacher_id -> classes_count):",
+        *(f"- {tid}: {cnt}" for tid, cnt in top_load),
+        "", 
+        "Output format:",
+        "- ## Risks (bullets)",
+        "- ## Recommendations (bullets)",
+        "- ## Quick Wins (next 7 days)",
+        f"Extra focus from HOD: {payload.focus or '(none)'}",
+    ])
+    md = _hod_ai_generate_markdown(prompt)
+    return {"ok": True, "markdown": md}
 # ================= Debug Helpers (can be removed in production) ==================
 @teacher_router.get("/api/debug/teacher-routes", summary="Debug: list registered teacher routes")
 def debug_list_teacher_routes():

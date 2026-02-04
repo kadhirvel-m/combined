@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paper X — HOD Portal</title>
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
+
+  <script>
+    // Keep theme consistent with the rest of PaperX
+    (() => {
+      const stored = localStorage.getItem('px_theme');
+      const prefers = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches;
+      const dark = stored ? stored === 'dark' : !!prefers;
+      if (dark) document.documentElement.classList.add('dark');
+    })();
+  </script>
+  <script src="../config.js"></script>
+  <script src="../auth.js" defer></script>
+  <script src="./hod.js" defer></script>
+
+  <style>
+    .material-symbols-rounded{ vertical-align:-5px }
+    html.dark body{ background: radial-gradient(circle at 25% 15%, rgba(76,42,89,.75) 0%, rgba(30,30,47,0) 55%), linear-gradient(135deg, #1E1E2F 0%, #221B38 40%, #141321 100%) }
+    body{ background: linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 50%,#F7F2F9 100%) }
+    .glass{ background: linear-gradient(135deg, rgba(255,255,255,.76), rgba(255,255,255,.56)); backdrop-filter:saturate(1.35) blur(14px) }
+    .dark .glass{ background: linear-gradient(135deg, rgba(40, 28, 55, .75), rgba(30, 24, 47, .65)) }
+  </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white">
+  <header class="sticky top-0 z-40 backdrop-blur bg-white/70 dark:bg-brand-900/70 border-b border-black/5 dark:border-white/10">
+    <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
+      <a href="../index.html" class="flex items-center gap-2 font-bold tracking-tight text-lg">
+        <img src="../assets/img/logo-light.svg" class="h-8 w-auto dark:hidden" alt="Paper X" />
+        <img src="../assets/img/logo-dark.svg" class="h-8 w-auto hidden dark:block" alt="Paper X" />
+        <span class="hidden sm:inline text-neutral-600 dark:text-white/70 font-semibold">HOD Portal</span>
+      </a>
+      <div class="flex items-center gap-2">
+        <a href="../teacher_profile.html?user=me" class="hidden sm:inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition">Teacher Profile</a>
+        <button data-theme-toggle class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition material-symbols-rounded" title="Toggle theme">dark_mode</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-10 space-y-8">
+    <section class="flex flex-col lg:flex-row lg:items-end gap-6">
+      <div class="flex-1 space-y-2">
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">Department Overview</h1>
+        <p class="text-sm md:text-base text-neutral-600 dark:text-white/60 max-w-2xl">All classes, staff, and teacher applications across your department scope.</p>
+        <div id="scopeLine" class="text-xs text-neutral-500 dark:text-white/45"></div>
+      </div>
+      <div id="hodNav" class="flex flex-wrap gap-2"></div>
+    </section>
+
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div class="glass rounded-2xl p-5 ring-1 ring-black/10 dark:ring-white/10">
+        <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Departments</div>
+        <div class="mt-2 text-3xl font-extrabold" id="kpiDepartments">–</div>
+      </div>
+      <div class="glass rounded-2xl p-5 ring-1 ring-black/10 dark:ring-white/10">
+        <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Classes</div>
+        <div class="mt-2 text-3xl font-extrabold" id="kpiClasses">–</div>
+      </div>
+      <div class="glass rounded-2xl p-5 ring-1 ring-black/10 dark:ring-white/10">
+        <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Staff</div>
+        <div class="mt-2 text-3xl font-extrabold" id="kpiStaff">–</div>
+      </div>
+      <div class="glass rounded-2xl p-5 ring-1 ring-black/10 dark:ring-white/10">
+        <div class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-white/50">Pending Applications</div>
+        <div class="mt-2 text-3xl font-extrabold" id="kpiPending">–</div>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 glass rounded-3xl p-6 ring-1 ring-black/10 dark:ring-white/10">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div class="text-sm font-semibold tracking-tight">Departments in Scope</div>
+            <div class="text-[11px] text-neutral-500 dark:text-white/45">Configured via HOD mapping (or your teacher profile department).</div>
+          </div>
+          <a href="./hod_classes.html" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600">
+            <span class="material-symbols-rounded text-[18px]">class</span>View classes
+          </a>
+        </div>
+        <div id="deptGrid" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        <div id="deptErr" class="hidden mt-4 text-sm text-red-600 dark:text-red-300"></div>
+      </div>
+
+      <div class="glass rounded-3xl p-6 ring-1 ring-black/10 dark:ring-white/10">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-sm font-semibold tracking-tight">Quick AI</div>
+            <div class="text-[11px] text-neutral-500 dark:text-white/45">Generate a quick meeting agenda.</div>
+          </div>
+          <button id="btnAgenda" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600">
+            <span class="material-symbols-rounded text-[18px]">auto_awesome</span>Generate
+          </button>
+        </div>
+        <div class="mt-4">
+          <textarea id="agendaFocus" rows="3" placeholder="Optional focus: e.g., syllabus coverage, test performance, staff allocation"
+            class="w-full rounded-2xl bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 px-4 py-3 text-sm focus:outline-none focus:ring-brand-500"></textarea>
+        </div>
+        <pre id="agendaOut" class="mt-4 text-xs whitespace-pre-wrap rounded-2xl bg-black/5 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-4 max-h-72 overflow-auto"></pre>
+        <div id="aiErr" class="hidden mt-3 text-xs text-red-600 dark:text-red-300"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const $ = (s, r=document) => r.querySelector(s);
+      const setText = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = (v == null ? '–' : String(v)); };
+
+      function deptCard(d){
+        const name = HOD.esc(d.name || 'DEPARTMENT');
+        return `
+          <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-4">
+            <div class="flex items-center justify-between">
+              <div class="font-semibold">${name}</div>
+              <span class="text-[11px] px-2 py-1 rounded-full bg-brand-500/10 text-brand-700 dark:text-fuchsia-100 ring-1 ring-brand-500/25">In scope</span>
+            </div>
+            <div class="mt-2 text-[11px] text-neutral-500 dark:text-white/45">Department ID: ${HOD.esc(d.id || '')}</div>
+          </div>`;
+      }
+
+      async function load(){
+        HOD.bindThemeToggle();
+        HOD.mountNav('dashboard');
+
+        let me;
+        try {
+          me = await HOD.requireHod();
+        } catch (e){
+          $('#deptErr').textContent = (e && e.message) ? e.message : 'Failed to load scope';
+          $('#deptErr').classList.remove('hidden');
+          return;
+        }
+
+        const deptCount = (me.departments || []).length;
+        setText('kpiDepartments', deptCount);
+        $('#deptGrid').innerHTML = (me.departments || []).map(deptCard).join('') || '<div class="text-sm opacity-60">No departments</div>';
+        const scopeNames = (me.departments || []).map(d => d.name).filter(Boolean);
+        $('#scopeLine').textContent = scopeNames.length ? ('Scope: ' + scopeNames.join(', ')) : 'Scope loaded.';
+
+        try {
+          const token = HOD.getToken();
+          const classes = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/classes', { headers: { Authorization: 'Bearer ' + token } });
+          setText('kpiClasses', classes.total || 0);
+        } catch(_){ setText('kpiClasses', '—'); }
+
+        try {
+          const token = HOD.getToken();
+          const staff = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/staff', { headers: { Authorization: 'Bearer ' + token } });
+          setText('kpiStaff', staff.total || 0);
+        } catch(_){ setText('kpiStaff', '—'); }
+
+        try {
+          const token = HOD.getToken();
+          const apps = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/applications?status=pending', { headers: { Authorization: 'Bearer ' + token } });
+          setText('kpiPending', apps.total || 0);
+        } catch(_){ setText('kpiPending', '—'); }
+      }
+
+      document.getElementById('btnAgenda').addEventListener('click', async () => {
+        const out = document.getElementById('agendaOut');
+        const err = document.getElementById('aiErr');
+        out.textContent = 'Generating…';
+        err.classList.add('hidden');
+        try {
+          const token = HOD.getToken();
+          const focus = (document.getElementById('agendaFocus').value || '').trim();
+          const data = await HOD.fetchJSON(HOD.API_BASE + '/api/hod/ai/meeting-agenda', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ focus, days: 14 })
+          });
+          out.textContent = (data && data.markdown) ? data.markdown : 'No output';
+        } catch (e){
+          out.textContent = '';
+          err.textContent = (e && e.message) ? e.message : 'AI request failed';
+          err.classList.remove('hidden');
+        }
+      });
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load, { once:true });
+      else load();
+    })();
+  </script>
+</body>
+</html>
