@@ -993,13 +993,17 @@
                     if (t.topic) allTopicNames.push(t.topic.toLowerCase());
                     if (t.id) allTopicIds.push(t.id);
                 })));
-                const blinkLinks = await fetchBlinkLinks(allTopicNames);
-                const topicRatings = await fetchTopicRatings(allTopicIds);
+                const uniqueTopicNames = Array.from(new Set(allTopicNames));
+                const [blinkLinks, labxStatus, topicRatings] = await Promise.all([
+                    fetchBlinkLinks(uniqueTopicNames),
+                    fetchLabxStatus(uniqueTopicNames),
+                    fetchTopicRatings(allTopicIds)
+                ]);
 
                 // Fetch wishlist status for all topics
                 await fetchWishlistStatus();
 
-                renderSyllabus(syllabus, teacherNotesBySubject, blinkLinks, topicRatings);
+                renderSyllabus(syllabus, teacherNotesBySubject, blinkLinks, topicRatings, labxStatus);
                 computeAggregateStats(syllabus);
 
                 // Load streak data after main content is loaded
@@ -1075,6 +1079,61 @@
                 console.warn('[Academics] Failed to fetch blink links', err);
             }
             return blinkLinksMap;
+        }
+
+        // Fetch LabX cache status for topic names from labx_explanations (bulk)
+        async function fetchLabxStatus(topicNames) {
+            const labxMap = new Map();
+            if (!topicNames || !topicNames.length) return labxMap;
+
+            try {
+                const topicsParam = topicNames.join(',');
+                const res = await fetch(`${API_BASE}/api/labx/check-batch?topics=${encodeURIComponent(topicsParam)}`, {
+                    headers: authHeaders()
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const cached = data?.cached || {};
+                    Object.entries(cached).forEach(([topicCi, exists]) => {
+                        if (exists) labxMap.set(String(topicCi || '').toLowerCase(), true);
+                    });
+                }
+            } catch (err) {
+                console.warn('[Academics] Failed to fetch LabX status', err);
+            }
+            return labxMap;
+        }
+
+        async function openLabxInNewTab(topicName) {
+            const topic = (topicName || '').trim();
+            if (!topic) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/labx/get/${encodeURIComponent(topic)}`, {
+                    headers: authHeaders()
+                });
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        alert('LabX is not available for this topic yet.');
+                        return;
+                    }
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err?.detail || err?.error || `HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                const html = data?.html || '';
+                if (!html) {
+                    alert('LabX content was empty.');
+                    return;
+                }
+                const blob = new Blob([html], { type: 'text/html' });
+                window.open(URL.createObjectURL(blob), '_blank');
+                if (window.Analytics) {
+                    window.Analytics.track('labx_opened', { topic });
+                }
+            } catch (err) {
+                console.warn('[Academics] LabX open failed', err);
+                alert(err?.message || 'Unable to open LabX right now.');
+            }
         }
 
         // Fetch topic ratings for display
@@ -1198,7 +1257,7 @@
             const completion = pct(doneTopics, totalTopics); updateRing(completion); const bar = $('barTopics'); if (bar) { bar.style.width = (completion || 0) + '%'; bar.classList.remove('animate-pulseBar'); }
         }
 
-        function renderSyllabus(list, teacherNotesBySubject = new Map(), blinkLinksMap = new Map(), topicRatingsMap = new Map()) {
+        function renderSyllabus(list, teacherNotesBySubject = new Map(), blinkLinksMap = new Map(), topicRatingsMap = new Map(), labxStatusMap = new Map()) {
             const wrap = $('syllabus'); wrap.innerHTML = ''; const cTpl = $('courseCardTpl'); const uTpl = $('unitItemTpl');
             const courseNodes = [];
             list.forEach(c => {
@@ -1356,6 +1415,22 @@
                                 }
                             };
                             li.appendChild(labLink);
+                        }
+
+                        // LabX (cached HTML explorable) - show ONLY if it exists in labx_explanations
+                        const topicKey = (t.topic || '').trim().toLowerCase();
+                        if (topicKey && labxStatusMap.has(topicKey)) {
+                            const labxBtn = document.createElement('button');
+                            labxBtn.type = 'button';
+                            labxBtn.innerHTML = '<span class="material-symbols-rounded text-[16px]">science</span><span>LabX</span>';
+                            labxBtn.className = (labUrl ? '' : 'ml-auto ') + 'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold ring-1 ring-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/20 hover:shadow-glow transition';
+                            labxBtn.title = 'Open LabX explorable explanation';
+                            labxBtn.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                openLabxInNewTab(t.topic);
+                            });
+                            li.appendChild(labxBtn);
                         }
 
                         unitCounts.total++; if (initChecked) unitCounts.done++; topicsWrap.appendChild(li);
