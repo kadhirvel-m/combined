@@ -9,6 +9,7 @@
     <script src="./config.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js" type="module"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
     <style>
         :root {
@@ -124,10 +125,39 @@
             border-color: rgba(239, 68, 68, .60);
             background: rgba(239, 68, 68, .18);
         }
+
+        /* Loader Styles */
+        #pageLoader {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.4s ease, visibility 0.4s;
+        }
+
+        .loaded #pageLoader {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        [data-theme="dark"] #pageLoader {
+            background: rgba(30, 30, 47, 0.7);
+        }
     </style>
 </head>
 
 <body>
+    <!-- Loading Overlay -->
+    <div id="pageLoader">
+        <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
+            style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
+    </div>
     <header class="sticky top-0 z-30 bg-white/75 dark:bg-brand-900/60 backdrop-blur border-b"
         style="border-color:var(--outline)">
         <div class="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
@@ -398,6 +428,9 @@
                 console.error('MCQ error', err);
                 $title.textContent = 'MCQ generation failed';
                 $subtitle.textContent = err && err.message ? err.message : 'Try regenerating notes and retry.';
+            } finally {
+                // Remove loader
+                document.body.classList.add('loaded');
             }
         }
 
