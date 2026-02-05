@@ -9223,6 +9223,16 @@ class HodClassReassignIn(BaseModel):
     new_teacher_user_id: uuid.UUID
 
 
+class HodClassAssignIn(BaseModel):
+    department_id: uuid.UUID
+    batch_id: uuid.UUID
+    semester: int = Field(ge=1, le=12)
+    section: Optional[str] = None
+    subject_id: uuid.UUID
+    subject: str
+    new_teacher_user_id: uuid.UUID
+
+
 class HodStaffRemoveIn(BaseModel):
     teacher_user_id: uuid.UUID
     department_id: Optional[uuid.UUID] = None
@@ -9443,6 +9453,22 @@ def hod_list_classes(
             )
             if not getattr(sc, "error", None):
                 courses_by_pair: Dict[str, List[Dict[str, Any]]] = {}
+                courses_by_code: Dict[str, Dict[str, Any]] = {}
+                courses_by_title: Dict[str, Dict[str, Any]] = {}
+                valid_course_ids: Dict[str, set[str]] = {}
+
+                def _norm_title(val: Any) -> str:
+                    s = str(val or "").strip().lower()
+                    s = re.sub(r"\s+", " ", s)
+                    s = re.sub(r"[^a-z0-9 ]+", "", s)
+                    return s.strip()
+
+                def _extract_code(val: Any) -> Optional[str]:
+                    s = str(val or "").strip().upper()
+                    # Match code at start: AMHS405, AMPC401A, etc.
+                    m = re.match(r"^([A-Z]{2,}\d{2,}[A-Z]?)\b", s)
+                    return m.group(1) if m else None
+
                 for cr in sc.data or []:
                     bid = cr.get("batch_id")
                     semv = cr.get("semester")
@@ -9454,6 +9480,59 @@ def hod_list_classes(
                         continue
                     key = f"{str(bid)}|{sem_i}"
                     courses_by_pair.setdefault(key, []).append(cr)
+                    if cr.get("id"):
+                        valid_course_ids.setdefault(key, set()).add(str(cr.get("id")))
+
+                    code = (cr.get("course_code") or "").strip().upper()
+                    if code:
+                        courses_by_code[f"{str(bid)}|{sem_i}|{code}"] = cr
+                    title_norm = _norm_title(cr.get("title"))
+                    if title_norm:
+                        courses_by_title[f"{str(bid)}|{sem_i}|{title_norm}"] = cr
+
+                # Backfill missing subject_id on existing teacher_classes rows.
+                # This avoids creating a virtual Unassigned row when the class is actually assigned,
+                # but was saved without subject_id (legacy data) or with formatting-only subject text.
+                for c in classes:
+                    bid = c.get("batch_id")
+                    semv = c.get("semester")
+                    if not bid or not semv:
+                        continue
+                    try:
+                        sem_i = int(semv)
+                    except Exception:
+                        continue
+
+                    pair_key = f"{str(bid)}|{sem_i}"
+                    sid = c.get("subject_id")
+                    # Only attempt remap when missing OR clearly invalid for this batch+semester syllabus set.
+                    if sid and str(sid) in (valid_course_ids.get(pair_key) or set()):
+                        continue
+
+                    subj_text = c.get("subject")
+                    code = _extract_code(subj_text)
+                    match = None
+                    if code:
+                        match = courses_by_code.get(f"{str(bid)}|{sem_i}|{code}")
+
+                    if not match:
+                        # Try title-based match, stripping any leading code/dash.
+                        raw = str(subj_text or "")
+                        if "—" in raw:
+                            raw = raw.split("—", 1)[1]
+                        elif "-" in raw:
+                            raw = raw.split("-", 1)[1]
+                        title_norm = _norm_title(raw)
+                        if title_norm:
+                            match = courses_by_title.get(f"{str(bid)}|{sem_i}|{title_norm}")
+
+                    if match and match.get("id"):
+                        c["subject_id"] = str(match.get("id"))
+                        # Prefer the canonical display form with course code if available.
+                        cc = (match.get("course_code") or "").strip()
+                        tt = match.get("title") or c.get("subject")
+                        if cc and tt:
+                            c["subject"] = f"{cc} — {tt}"
 
                 # Existing: (batch_id, semester, section) -> set(course_id)
                 existing_course_ids: Dict[str, set[str]] = {}
@@ -9958,7 +10037,95 @@ def hod_review_application(application_id: uuid.UUID, payload: HodApplicationRev
         if getattr(up, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (save review): {up.error}")
     except APIError as e:
-        raise HTTPException(status_code=500, detail=f"Missing table for HOD reviews. Run packages/sql/hod_portal.sql. {e}")
+        raise HTTPException(status_code=500, detail=f"Supabase error (save review): {e}")
+
+@teacher_router.post("/api/hod/classes/assign", summary="HOD: assign a staff to an unassigned/virtual subject")
+def hod_assign_class(payload: HodClassAssignIn, authorization: Optional[str] = Header(default=None)):
+    hod_user_id = _require_hod(authorization)
+    supabase = get_service_client()
+    _, dept_ids = _hod_scope_departments(supabase, hod_user_id)
+    if not dept_ids:
+        raise HTTPException(status_code=404, detail="No departments configured for this HOD")
+
+    dep_id = str(payload.department_id)
+    if dep_id not in dept_ids:
+        raise HTTPException(status_code=403, detail="Department out of scope")
+
+    # Validate batch belongs to department
+    bq = supabase.table("batches").select("id,department_id").eq("id", str(payload.batch_id)).limit(1).execute()
+    if getattr(bq, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (batch lookup): {bq.error}")
+    if not bq.data:
+        raise HTTPException(status_code=400, detail="Invalid batch")
+    if str(bq.data[0].get("department_id")) != dep_id:
+        raise HTTPException(status_code=400, detail="Batch does not belong to department")
+
+    # Validate syllabus course matches batch+semester
+    cq = supabase.table("syllabus_courses").select("id,batch_id,semester,course_code,title").eq("id", str(payload.subject_id)).limit(1).execute()
+    if getattr(cq, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (course lookup): {cq.error}")
+    if not cq.data:
+        raise HTTPException(status_code=400, detail="Invalid subject")
+    if str(cq.data[0].get("batch_id")) != str(payload.batch_id) or int(cq.data[0].get("semester") or 0) != int(payload.semester):
+        raise HTTPException(status_code=400, detail="Subject does not match batch/semester")
+
+    # Ensure the target teacher belongs to the same department (best-effort)
+    t = supabase.table("teacher_profiles").select("auth_user_id,department_id").eq("auth_user_id", str(payload.new_teacher_user_id)).limit(1).execute()
+    if getattr(t, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (teacher lookup): {t.error}")
+    if not t.data:
+        raise HTTPException(status_code=400, detail="Target staff not found")
+    if t.data[0].get("department_id") and str(t.data[0].get("department_id")) != dep_id:
+        raise HTTPException(status_code=400, detail="Target staff belongs to a different department")
+
+    # Department meta for insert
+    d = supabase.table("departments").select("id,college_id,degree_id").eq("id", dep_id).limit(1).execute()
+    if getattr(d, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (department lookup): {d.error}")
+    if not d.data:
+        raise HTTPException(status_code=400, detail="Invalid department")
+    college_id = d.data[0].get("college_id")
+    degree_id = d.data[0].get("degree_id")
+
+    sec = (payload.section or "").strip() or None
+
+    # Find existing matching class row
+    q = supabase.table("teacher_classes").select("id,teacher_user_id").eq("department_id", dep_id).eq("batch_id", str(payload.batch_id)).eq(
+        "semester", int(payload.semester)
+    ).eq("subject_id", str(payload.subject_id))
+    if sec is None:
+        q = q.is_("section", "null")
+    else:
+        q = q.eq("section", sec)
+    existing = q.limit(1).execute()
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (class lookup): {existing.error}")
+
+    if existing.data:
+        row = existing.data[0]
+        if row.get("teacher_user_id"):
+            raise HTTPException(status_code=409, detail="Class already assigned; use reassign")
+        upd = supabase.table("teacher_classes").update({"teacher_user_id": str(payload.new_teacher_user_id)}).eq("id", str(row.get("id"))).execute()
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (assign class): {upd.error}")
+        return {"ok": True, "class_id": str(row.get("id")), "assigned": True, "created": False}
+
+    ins_payload: Dict[str, Any] = {
+        "teacher_user_id": str(payload.new_teacher_user_id),
+        "batch_id": str(payload.batch_id),
+        "semester": int(payload.semester),
+        "subject": str(payload.subject).strip() or f"{cq.data[0].get('course_code')} — {cq.data[0].get('title')}",
+        "section": sec,
+        "degree_id": degree_id,
+        "department_id": dep_id,
+        "college_id": college_id,
+        "subject_id": str(payload.subject_id),
+    }
+    ins = supabase.table("teacher_classes").insert(ins_payload).execute()
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (create class): {ins.error}")
+    new_id = (ins.data or [{}])[0].get("id")
+    return {"ok": True, "class_id": str(new_id) if new_id else None, "assigned": True, "created": True}
     return {"ok": True, "application_id": str(application_id), "saved": True}
 
 
@@ -18013,6 +18180,286 @@ def _fetch_test_questions(supabase, test_id: str) -> List[Dict[str, Any]]:
     return getattr(res, "data", None) or []
 
 
+def _ensure_user_allowed_for_test(supabase, test_row: Dict[str, Any], user_id: str):
+    """Gate test access based on class membership.
+
+    - If test has class_id: only enrolled students of that class can access.
+    - Owning teacher always has access.
+    - If class_id is null: open to all signed-in users.
+    """
+    try:
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authentication required")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    if (test_row.get("teacher_user_id") or "") == user_id:
+        return
+
+    class_id = test_row.get("class_id")
+    if not class_id:
+        return
+
+    try:
+        check = (
+            supabase
+            .table("teacher_class_students")
+            .select("id")
+            .eq("class_id", class_id)
+            .eq("student_user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if getattr(check, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (class access): {check.error}")
+        rows = getattr(check, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=403, detail="This test is restricted to students of the selected class")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to validate class access: {exc}") from exc
+
+
+class TeacherAIGenerateTestIn(BaseModel):
+    # Academic test mode can build a multi-line prompt from many unit/topics.
+    # Keep an upper bound to avoid accidental huge payloads.
+    topic: str = Field(..., min_length=3, max_length=5000)
+    count: int = Field(10, ge=1, le=30)
+
+
+def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[Dict[str, Any]], str]:
+    """Generate MCQ questions from a topic for the teacher test builder.
+
+    IMPORTANT: Per product requirement, this uses gemini-2.5-flash only.
+
+    Returns (title, questions, model_name).
+    """
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured for AI test generation.")
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
+
+    model_name = "gemini-2.5-flash"
+    safe_count = int(max(1, min(int(count or 10), 30)))
+    cleaned_topic = (topic or "").strip()
+    if not cleaned_topic:
+        raise HTTPException(status_code=400, detail="topic is required")
+
+    # Keep the schema example short even if the actual topic prompt is long.
+    cleaned_topic_one_line = re.sub(r"\s+", " ", cleaned_topic).strip()
+    schema_title = (cleaned_topic_one_line[:80] + "…") if len(cleaned_topic_one_line) > 80 else cleaned_topic_one_line
+
+    prompt = textwrap.dedent(
+        f"""
+        You are PaperX's quiz compiler.
+
+        Create EXACTLY {safe_count} multiple-choice questions (MCQ) for the topic: "{cleaned_topic}".
+
+        Constraints:
+        - Each question MUST have 4 options.
+        - Options must be plausible and unambiguous.
+        - Provide: prompt, options (length 4), correct_index (0..3), explanation (<= 18 words).
+        - Difficulty: mixed (basic to moderate), suitable for classroom assessment.
+        - Return ONLY strict JSON (no markdown fences, no commentary).
+
+        Schema (exact keys):
+        {{"title":"...","description":"...","questions":[{{"prompt":"...","options":["...","...","...","..."],"correct_index":0,"explanation":"..."}}]}}
+        """
+    ).strip()
+
+    compact_prompt = textwrap.dedent(
+        f"""
+        Return STRICT JSON ONLY.
+        Make it small to avoid truncation.
+
+        Topic: "{cleaned_topic}"
+
+        Output EXACTLY {safe_count} questions.
+
+        Hard limits:
+        - prompt <= 120 chars
+        - each option <= 70 chars
+                - explanation <= 12 words
+
+                Schema:
+                {{"title":"{schema_title} MCQ","questions":[{{"prompt":"...","options":["...","...","...","..."],"correct_index":0,"explanation":"..."}}]}}
+                """
+        ).strip()
+
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(model_name)
+    generation_config = genai.GenerationConfig(
+        response_mime_type="application/json",
+        temperature=0.25,
+        top_p=0.9,
+        max_output_tokens=int(os.getenv("GEMINI_TEACHER_TEST_MAX_TOKENS", "3600") or "3600"),
+        candidate_count=1,
+    )
+
+    request_timeout = float(os.getenv("GEMINI_TEACHER_TEST_TIMEOUT", "35"))
+    def _extract_text(resp_obj: Any) -> Optional[str]:
+        try:
+            t = resp_obj.text  # type: ignore[attr-defined]
+            if t and str(t).strip():
+                return str(t)
+        except Exception:
+            pass
+        try:
+            if getattr(resp_obj, "candidates", None):
+                for cand in resp_obj.candidates:
+                    content = getattr(cand, "content", None)
+                    parts = getattr(content, "parts", None) if content is not None else None
+                    if parts:
+                        s = "".join(getattr(p, "text", "") for p in parts if hasattr(p, "text"))
+                        if s and s.strip():
+                            return s
+        except Exception:
+            pass
+        return None
+
+    def _call(prompt_text: str) -> str:
+        try:
+            r = model.generate_content(
+                [{"text": prompt_text}],
+                generation_config=generation_config,
+                request_options={"timeout": request_timeout},
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Gemini request failed: {exc}") from exc
+        txt = _extract_text(r)
+        if not txt:
+            raise HTTPException(status_code=502, detail="Gemini returned no content")
+        return txt
+
+    raw = _call(prompt)
+
+    def _strip_code_fences(txt: str) -> str:
+        s = txt.strip()
+        if s.startswith("```"):
+            s = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", s)
+            s = re.sub(r"\s*```$", "", s)
+        return s.strip()
+
+    def _extract_first_json_object(txt: str) -> Optional[str]:
+        start = txt.find('{')
+        if start == -1:
+            return None
+        depth = 0
+        for i in range(start, len(txt)):
+            c = txt[i]
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return txt[start:i+1]
+        return None
+
+    def _try_parse_payload(raw_text: str) -> Dict[str, Any]:
+        s = _strip_code_fences(raw_text)
+        try:
+            return json.loads(s)
+        except Exception:
+            pass
+        block = _extract_first_json_object(s)
+        if block:
+            try:
+                return json.loads(block)
+            except Exception:
+                pass
+        # literal eval fallback
+        t = s
+        try:
+            t = re.sub(r"\btrue\b", "True", t)
+            t = re.sub(r"\bfalse\b", "False", t)
+            t = re.sub(r"\bnull\b", "None", t)
+            val = ast.literal_eval(t)
+            if isinstance(val, dict):
+                return val
+        except Exception:
+            pass
+        raise ValueError("Unable to parse JSON")
+
+    try:
+        data = _try_parse_payload(raw)
+    except Exception:
+        # Retry once with compact prompt to reduce truncation risk
+        raw2 = _call(compact_prompt)
+        try:
+            data = _try_parse_payload(raw2)
+        except Exception as exc:
+            preview1 = (raw or "")[:360].replace("\n", " ")
+            preview2 = (raw2 or "")[:360].replace("\n", " ")
+            raise HTTPException(status_code=500, detail=f"Failed to parse AI JSON after retry: {exc}; preview1={preview1}; preview2={preview2}") from exc
+
+    title = str(data.get("title") or f"{cleaned_topic} MCQ").strip()[:200]
+    qlist = data.get("questions")
+    if not isinstance(qlist, list) or not qlist:
+        raise HTTPException(status_code=500, detail="AI response missing 'questions' list")
+
+    out_questions: List[Dict[str, Any]] = []
+    for idx, item in enumerate(qlist[:safe_count]):
+        if not isinstance(item, dict):
+            continue
+        prompt_text = str(item.get("prompt") or "").strip()
+        options = item.get("options")
+        correct_index = item.get("correct_index")
+        if not isinstance(options, list):
+            options = []
+        norm_options = [str(o or "").strip()[:500] for o in options if str(o or "").strip()]
+        norm_options = norm_options[:4]
+        while len(norm_options) < 4:
+            norm_options.append(norm_options[-1] if norm_options else "")
+        try:
+            ci = int(correct_index)
+        except Exception:
+            ci = 0
+        ci = max(0, min(ci, 3))
+
+        # Validate through existing schema
+        try:
+            q_in = TestQuestionIn(
+                prompt=prompt_text,
+                options=norm_options,
+                correct_index=ci,
+                points=1,
+                order=idx,
+            )
+        except Exception:
+            continue
+
+        out_questions.append({
+            "prompt": q_in.prompt,
+            "options": q_in.options,
+            "correct_index": q_in.correct_index,
+            "points": q_in.points,
+            "order": idx,
+        })
+
+    if len(out_questions) < max(1, min(3, safe_count)):
+        raise HTTPException(status_code=500, detail="AI returned too few valid questions")
+
+    return title, out_questions, model_name
+
+
+@teacher_router.post("/api/teacher/tests/ai", summary="Teacher: generate MCQ questions with AI")
+def api_teacher_generate_test_ai(payload: TeacherAIGenerateTestIn, authorization: Optional[str] = Header(default=None)):
+    _ = _require_teacher(authorization)
+    title, out_questions, model = _generate_topic_mcq_for_teacher(payload.topic, payload.count)
+    return {
+        "topic": payload.topic,
+        "title": title,
+        "description": f"AI generated MCQ test on {payload.topic}.",
+        "questions": out_questions,
+        "model": model,
+        "count": len(out_questions),
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
 @teacher_router.post("/api/teacher/tests", summary="Create a test (MCQ)")
 def api_create_test(payload: CreateTestIn, authorization: Optional[str] = Header(default=None)):
     teacher_id = _require_teacher(authorization)
@@ -18293,6 +18740,7 @@ def api_get_test(test_id: str, authorization: Optional[str] = Header(default=Non
     user_id, _ = _get_auth_user(authorization)
     supabase = get_service_client()
     test_row = _fetch_test_row(supabase, test_id)
+    _ensure_user_allowed_for_test(supabase, test_row, user_id)
     questions = _fetch_test_questions(supabase, test_id)
 
     attempt_res = (
@@ -18338,8 +18786,8 @@ def api_get_test(test_id: str, authorization: Optional[str] = Header(default=Non
 def api_start_attempt(test_id: str, authorization: Optional[str] = Header(default=None)):
     user_id, _ = _get_auth_user(authorization)
     supabase = get_service_client()
-    _ = _fetch_test_row(supabase, test_id)  # ensure exists
     test_row = _fetch_test_row(supabase, test_id)
+    _ensure_user_allowed_for_test(supabase, test_row, user_id)
     if not test_row.get("accepting_submissions", True):
         raise HTTPException(status_code=410, detail="Test submissions are closed")
 
@@ -18395,6 +18843,7 @@ def api_submit_attempt(test_id: str, payload: SubmitAttemptIn, authorization: Op
     user_id, _ = _get_auth_user(authorization)
     supabase = get_service_client()
     test_row = _fetch_test_row(supabase, test_id)
+    _ensure_user_allowed_for_test(supabase, test_row, user_id)
     if not test_row.get("accepting_submissions", True):
         raise HTTPException(status_code=410, detail="Test submissions are closed")
     questions = _fetch_test_questions(supabase, test_id)
