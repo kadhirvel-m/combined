@@ -225,11 +225,25 @@
                 const base = await resolveApi();
                 const res = await fetch(`${base}/api/tests/${testId}`, { headers: { Authorization: 'Bearer ' + token } });
                 if (res.status === 401) { renderEmpty('Session expired. Sign in again.'); return; }
+                if (res.status === 403) {
+                    const err = await res.json().catch(() => ({}));
+                    renderEmpty((err && err.detail) ? err.detail : 'This test is restricted to a specific class.');
+                    $('#notice').classList.remove('hidden');
+                    $('#notice').textContent = 'Ask your teacher to assign you to that class, or request an open-to-all test link.';
+                    return;
+                }
                 if (!res.ok) {
                     // Retry once after a short delay for transient backend errors
                     await new Promise(r => setTimeout(r, 150));
                     const res2 = await fetch(`${base}/api/tests/${testId}`, { headers: { Authorization: 'Bearer ' + token } });
                     if (res2.status === 401) { renderEmpty('Session expired. Sign in again.'); return; }
+                    if (res2.status === 403) {
+                        const err2 = await res2.json().catch(() => ({}));
+                        renderEmpty((err2 && err2.detail) ? err2.detail : 'This test is restricted to a specific class.');
+                        $('#notice').classList.remove('hidden');
+                        $('#notice').textContent = 'Ask your teacher to assign you to that class, or request an open-to-all test link.';
+                        return;
+                    }
                     if (!res2.ok) { renderEmpty('Could not load this test.'); return; }
                     var data = await res2.json();
                 } else {
