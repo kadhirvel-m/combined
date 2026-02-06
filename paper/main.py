@@ -8880,7 +8880,55 @@ async def get_teacher_profile(
         degree_fut = asyncio.to_thread(_sel, "degrees", degree_ids, "id,name")
         dept_fut = asyncio.to_thread(_sel, "departments", dept_ids, "id,name")
         college_fut = asyncio.to_thread(_sel, "colleges", college_ids, "id,name")
-        batch_map, degree_map, dept_map, college_map = await asyncio.gather(batch_fut, degree_fut, dept_fut, college_fut)
+        
+        # Also fetch student counts in parallel
+        async def _fetch_student_counts():
+            # Gather unique combinations to query
+            keys = set()
+            for c in classes:
+                bid = str(c.get("batch_id")) if c.get("batch_id") else None
+                sec = str(c.get("section")) if c.get("section") else None
+                sem = int(c.get("semester")) if c.get("semester") else None
+                if bid and sec and sem:
+                    keys.add((bid, sec, sem))
+            
+            if not keys:
+                return {}
+            
+            # We can't easily do a precise "IN" query for tuples in Supabase/PostgREST without a stored procedure 
+            # or complex OR filtering which might hit URL length limits.
+            # Instead, we'll fetch students filter by the set of batch_ids (which is usually small)
+            # and then aggregate in memory. This is generally safe as a teacher doesn't have thousands of classes.
+            relevant_batch_ids = {k[0] for k in keys}
+            if not relevant_batch_ids:
+                return {}
+            
+            try:
+                # Fetch minimal fields for counting
+                loop = asyncio.get_running_loop()
+                res = await loop.run_in_executor(None, lambda: supabase.table("user_education")
+                    .select("batch_id,section,current_semester")
+                    .in_("batch_id", list(relevant_batch_ids))
+                    .execute())
+                
+                if getattr(res, "error", None):
+                    return {}
+                
+                rows = res.data or []
+                counts = {}
+                for r in rows:
+                    b = str(r.get("batch_id"))
+                    s = str(r.get("section"))
+                    sm = int(r.get("current_semester") or 0)
+                    k = f"{b}|{s}|{sm}"
+                    counts[k] = counts.get(k, 0) + 1
+                return counts
+            except Exception:
+                return {}
+
+        batch_map, degree_map, dept_map, college_map, student_counts = await asyncio.gather(
+            batch_fut, degree_fut, dept_fut, college_fut, _fetch_student_counts()
+        )
 
         for c in classes:
             bid = c.get("batch_id"); b = batch_map.get(bid)
@@ -8892,6 +8940,16 @@ async def get_teacher_profile(
                 c["department_name"] = dept_map.get(c.get("department_id"), {}).get("name")
             if c.get("college_id"):
                 c["college_name"] = college_map.get(c.get("college_id"), {}).get("name")
+            
+            # Map student count
+            bid_str = str(c.get("batch_id")) if c.get("batch_id") else None
+            sec_str = str(c.get("section")) if c.get("section") else None
+            sem_int = int(c.get("semester")) if c.get("semester") else None
+            if bid_str and sec_str and sem_int:
+               c["student_count"] = student_counts.get(f"{bid_str}|{sec_str}|{sem_int}", 0)
+            else:
+               c["student_count"] = 0
+
             sem = c.get("semester"); subj = c.get("subject")
             c["label"] = f"Sem {sem}: {subj}" if sem and subj else (subj or "Class")
         return classes
@@ -22055,7 +22113,39 @@ def list_assignments(
     query = query.order("created_at", desc=True)
     result = query.execute()
     
-    return {"assignments": result.data or []}
+    assignments = result.data or []
+    if not assignments:
+        return {"assignments": []}
+    
+    # Batch fetch submissions to avoid N+1
+    assign_ids = [a["id"] for a in assignments]
+    
+    # Fetch all submissions for these assignments (just status is enough)
+    sub_query = supabase.table("assignment_submissions").select("assignment_id,status").in_("assignment_id", assign_ids)
+    sub_res = sub_query.execute()
+    all_subs = sub_res.data or []
+    
+    # Group by assignment_id
+    stats_map = {}
+    for s in all_subs:
+        aid = s.get("assignment_id")
+        if aid not in stats_map:
+            stats_map[aid] = {"submission_count": 0, "graded_count": 0, "pending_count": 0}
+        
+        stats_map[aid]["submission_count"] += 1
+        if s.get("status") == "graded":
+            stats_map[aid]["graded_count"] += 1
+        elif s.get("status") == "pending":
+            stats_map[aid]["pending_count"] += 1
+            
+    # Attach stats
+    for a in assignments:
+        stats = stats_map.get(a["id"], {})
+        a["submission_count"] = stats.get("submission_count", 0)
+        a["graded_count"] = stats.get("graded_count", 0)
+        a["pending_count"] = stats.get("pending_count", 0)
+    
+    return {"assignments": assignments}
 
 
 @app.get("/api/assignments/{assignment_id}")
@@ -22490,7 +22580,26 @@ async def upload_assignment_file(
     content = await file.read()
     
     # Calculate SHA-256 hash for duplicate detection
+    # Default to binary content hash
     file_hash = hashlib.sha256(content).hexdigest()
+    
+    # Try text-based hashing for PDFs (robust against metadata/filename changes)
+    if (file.filename or "").lower().endswith(".pdf"):
+        try:
+            import fitz  # PyMuPDF
+            with fitz.open(stream=content, filetype="pdf") as doc:
+                text = ""
+                for page in doc:
+                    text += page.get_text()
+                
+                # Only use text hash if we extracted significant text
+                if len(text.strip()) > 50:
+                    # Normalize text (remove whitespace noise)
+                    clean_text = "".join(text.split())
+                    file_hash = hashlib.sha256(clean_text.encode("utf-8")).hexdigest()
+                    print(f"[Duplicate Check] Used text hash for {file.filename}")
+        except Exception as e:
+            print(f"[Duplicate Check] Text extraction failed: {e}, falling back to binary hash")
     
     # Generate unique filename
     ext = os.path.splitext(file.filename)[1] if file.filename else ""
@@ -22799,3 +22908,624 @@ def delete_template(template_id: str, authorization: Optional[str] = Header(defa
     ).execute()
     
     return {"success": True}
+
+
+# =============================================
+# STUDENT FEEDBACK COLLECTION SYSTEM APIs
+# =============================================
+
+import secrets
+
+class FeedbackFormCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    class_id: Optional[str] = None
+    is_anonymous_display: bool = True
+    settings: Optional[Dict[str, Any]] = None
+    questions: List[Dict[str, Any]] = []
+
+class FeedbackFormUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    class_id: Optional[str] = None
+    is_anonymous_display: Optional[bool] = None
+    settings: Optional[Dict[str, Any]] = None
+    questions: Optional[List[Dict[str, Any]]] = None
+
+class FeedbackSubmission(BaseModel):
+    answers: List[Dict[str, Any]]
+
+class FeedbackAIGenerateRequest(BaseModel):
+    topic: str
+    requirements: Optional[str] = None
+    count: int = 8
+    mix: str = "balanced"  # balanced, rating, text, mcq
+
+def generate_share_code() -> str:
+    """Generate a short unique share code (8 chars)"""
+    return secrets.token_urlsafe(6)[:8]
+
+
+@app.post("/api/feedback/generate-questions")
+def generate_feedback_questions(payload: FeedbackAIGenerateRequest, authorization: Optional[str] = Header(default=None)):
+    """Generate feedback questions using Gemini 2.5 Flash AI"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Build prompt based on mix type
+    mix_instructions = {
+        "balanced": "Include a balanced mix of question types: 2-3 rating questions (1-5 stars), 2-3 scale questions (1-10), 1-2 multiple choice, and 2-3 text/textarea questions.",
+        "rating": "Focus mostly on star rating (1-5) and scale (1-10) questions. Include 1-2 text questions for open feedback.",
+        "text": "Focus mostly on open-ended text and textarea questions. Include 1-2 rating questions.",
+        "mcq": "Focus mostly on multiple choice (mcq_single) and yes/no questions. Include 1-2 text questions."
+    }
+    
+    mix_guide = mix_instructions.get(payload.mix, mix_instructions["balanced"])
+    
+    prompt = f"""You are an expert at creating student feedback survey questions. Generate exactly {payload.count} feedback questions for the following topic:
+
+TOPIC: {payload.topic}
+
+{"ADDITIONAL REQUIREMENTS: " + payload.requirements if payload.requirements else ""}
+
+{mix_guide}
+
+AVAILABLE QUESTION TYPES:
+- "text": Short text answer (single line)
+- "textarea": Long text answer (multiple lines) 
+- "rating": Star rating 1-5
+- "scale": Numeric scale 1-10
+- "mcq_single": Single choice (provide 3-5 options)
+- "mcq_multiple": Multiple choice (provide 3-5 options)
+- "yes_no": Yes/No question (no options needed)
+- "dropdown": Dropdown select (provide 3-5 options)
+
+RESPOND WITH ONLY A VALID JSON ARRAY. Each question object must have:
+- "question_type": one of the types above
+- "question_text": the question text
+- "options": array of option strings (only for mcq_single, mcq_multiple, dropdown)
+
+Example:
+[
+  {{"question_type": "rating", "question_text": "How would you rate the overall teaching quality?", "options": null}},
+  {{"question_type": "mcq_single", "question_text": "How often did you attend the classes?", "options": ["Always", "Most of the time", "Sometimes", "Rarely", "Never"]}},
+  {{"question_type": "textarea", "question_text": "What improvements would you suggest?", "options": null}}
+]
+
+Generate {payload.count} professional, insightful feedback questions. Output ONLY the JSON array, no other text."""
+
+    try:
+        import google.generativeai as genai
+        
+        # Use Gemini 2.5 Flash as specified
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(prompt)
+        
+        response_text = response.text.strip()
+        
+        # Clean up response - extract JSON array
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        # Find the JSON array
+        start_idx = response_text.find("[")
+        end_idx = response_text.rfind("]") + 1
+        if start_idx != -1 and end_idx > start_idx:
+            response_text = response_text[start_idx:end_idx]
+        
+        questions = json.loads(response_text)
+        
+        # Validate and clean questions
+        valid_types = ["text", "textarea", "rating", "scale", "mcq_single", "mcq_multiple", "yes_no", "dropdown"]
+        cleaned_questions = []
+        
+        for q in questions:
+            if not isinstance(q, dict):
+                continue
+            q_type = q.get("question_type", "text")
+            if q_type not in valid_types:
+                q_type = "text"
+            
+            cleaned = {
+                "question_type": q_type,
+                "question_text": q.get("question_text", ""),
+                "options": q.get("options") if q_type in ["mcq_single", "mcq_multiple", "dropdown"] else None
+            }
+            
+            if cleaned["question_text"]:
+                cleaned_questions.append(cleaned)
+        
+        return {"questions": cleaned_questions[:payload.count], "model": "gemini-2.5-flash"}
+        
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
+@app.get("/api/feedback/forms")
+def list_feedback_forms(authorization: Optional[str] = Header(default=None)):
+    """List all feedback forms for the authenticated teacher"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Get forms with response count
+    forms = supabase.table("feedback_forms").select("*").eq(
+        "teacher_id", user_id
+    ).order("created_at", desc=True).execute()
+    
+    form_data = forms.data or []
+    
+    # Get response counts for each form
+    for form in form_data:
+        resp_count = supabase.table("feedback_responses").select(
+            "id", count="exact"
+        ).eq("form_id", form["id"]).execute()
+        form["response_count"] = resp_count.count or 0
+    
+    return {"forms": form_data}
+
+
+@app.post("/api/feedback/forms")
+def create_feedback_form(payload: FeedbackFormCreate, authorization: Optional[str] = Header(default=None)):
+    """Create a new feedback form with questions"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Create the form
+    form_data = {
+        "teacher_id": user_id,
+        "title": payload.title,
+        "description": payload.description,
+        "class_id": payload.class_id,
+        "is_anonymous_display": payload.is_anonymous_display,
+        "settings": payload.settings or {},
+        "status": "draft"
+    }
+    
+    result = supabase.table("feedback_forms").insert(form_data).execute()
+    
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to create form")
+    
+    form = result.data[0]
+    form_id = form["id"]
+    
+    # Add questions
+    if payload.questions:
+        questions_data = []
+        for idx, q in enumerate(payload.questions):
+            questions_data.append({
+                "form_id": form_id,
+                "question_type": q.get("question_type", "text"),
+                "question_text": q.get("question_text", ""),
+                "description": q.get("description"),
+                "options": q.get("options"),
+                "settings": q.get("settings", {}),
+                "display_order": idx
+            })
+        
+        if questions_data:
+            supabase.table("feedback_questions").insert(questions_data).execute()
+    
+    return {"success": True, "form": form}
+
+
+@app.get("/api/feedback/forms/{form_id}")
+def get_feedback_form(form_id: str, authorization: Optional[str] = Header(default=None)):
+    """Get a feedback form with its questions"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Get form
+    form_res = supabase.table("feedback_forms").select("*").eq(
+        "id", form_id
+    ).eq("teacher_id", user_id).execute()
+    
+    if not form_res.data:
+        raise HTTPException(status_code=404, detail="Form not found")
+    
+    form = form_res.data[0]
+    
+    # Get questions
+    questions = supabase.table("feedback_questions").select("*").eq(
+        "form_id", form_id
+    ).order("display_order").execute()
+    
+    form["questions"] = questions.data or []
+    
+    # Get response count
+    resp_count = supabase.table("feedback_responses").select(
+        "id", count="exact"
+    ).eq("form_id", form_id).execute()
+    form["response_count"] = resp_count.count or 0
+    
+    return form
+
+
+@app.put("/api/feedback/forms/{form_id}")
+def update_feedback_form(form_id: str, payload: FeedbackFormUpdate, authorization: Optional[str] = Header(default=None)):
+    """Update a feedback form and its questions"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Verify ownership
+    existing = supabase.table("feedback_forms").select("id, status").eq(
+        "id", form_id
+    ).eq("teacher_id", user_id).execute()
+    
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Form not found")
+    
+    # Update form fields
+    update_data = {"updated_at": "now()"}
+    if payload.title is not None:
+        update_data["title"] = payload.title
+    if payload.description is not None:
+        update_data["description"] = payload.description
+    if payload.class_id is not None:
+        update_data["class_id"] = payload.class_id
+    if payload.is_anonymous_display is not None:
+        update_data["is_anonymous_display"] = payload.is_anonymous_display
+    if payload.settings is not None:
+        update_data["settings"] = payload.settings
+    
+    supabase.table("feedback_forms").update(update_data).eq("id", form_id).execute()
+    
+    # Update questions if provided
+    if payload.questions is not None:
+        # Delete existing questions
+        supabase.table("feedback_questions").delete().eq("form_id", form_id).execute()
+        
+        # Insert new questions
+        if payload.questions:
+            questions_data = []
+            for idx, q in enumerate(payload.questions):
+                questions_data.append({
+                    "form_id": form_id,
+                    "question_type": q.get("question_type", "text"),
+                    "question_text": q.get("question_text", ""),
+                    "description": q.get("description"),
+                    "options": q.get("options"),
+                    "settings": q.get("settings", {}),
+                    "display_order": idx
+                })
+            
+            supabase.table("feedback_questions").insert(questions_data).execute()
+    
+    return {"success": True}
+
+
+@app.delete("/api/feedback/forms/{form_id}")
+def delete_feedback_form(form_id: str, authorization: Optional[str] = Header(default=None)):
+    """Delete a feedback form"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    supabase.table("feedback_forms").delete().eq("id", form_id).eq(
+        "teacher_id", user_id
+    ).execute()
+    
+    return {"success": True}
+
+
+@app.post("/api/feedback/forms/{form_id}/publish")
+def publish_feedback_form(form_id: str, authorization: Optional[str] = Header(default=None)):
+    """Publish a feedback form and generate a share code"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Verify ownership
+    existing = supabase.table("feedback_forms").select("id, share_code, status").eq(
+        "id", form_id
+    ).eq("teacher_id", user_id).execute()
+    
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Form not found")
+    
+    form = existing.data[0]
+    
+    # Generate share code if not exists
+    share_code = form.get("share_code") or generate_share_code()
+    
+    supabase.table("feedback_forms").update({
+        "status": "published",
+        "share_code": share_code,
+        "updated_at": "now()"
+    }).eq("id", form_id).execute()
+    
+    return {"success": True, "share_code": share_code}
+
+
+@app.post("/api/feedback/forms/{form_id}/close")
+def close_feedback_form(form_id: str, authorization: Optional[str] = Header(default=None)):
+    """Close a feedback form to stop accepting submissions"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    supabase.table("feedback_forms").update({
+        "status": "closed",
+        "updated_at": "now()"
+    }).eq("id", form_id).eq("teacher_id", user_id).execute()
+    
+    return {"success": True}
+
+
+# --- Public/Student facing endpoints ---
+
+@app.get("/api/feedback/f/{share_code}")
+def get_feedback_form_public(share_code: str, authorization: Optional[str] = Header(default=None)):
+    """Get a published feedback form for student submission"""
+    supabase = get_supabase()
+    
+    # Get form by share code
+    form_res = supabase.table("feedback_forms").select("*").eq(
+        "share_code", share_code
+    ).execute()
+    
+    if not form_res.data:
+        raise HTTPException(status_code=404, detail="Form not found")
+    
+    form = form_res.data[0]
+    
+    if form["status"] != "published":
+        raise HTTPException(status_code=400, detail="Form is not accepting submissions")
+    
+    # Get questions
+    questions = supabase.table("feedback_questions").select(
+        "id, question_type, question_text, description, options, settings, display_order"
+    ).eq("form_id", form["id"]).order("display_order").execute()
+    
+    # Get teacher info
+    teacher = supabase.table("teacher_profiles").select("name").eq(
+        "auth_user_id", form["teacher_id"]
+    ).execute()
+    
+    teacher_name = teacher.data[0]["name"] if teacher.data else "Teacher"
+    
+    # Check if user already submitted
+    already_submitted = False
+    user_id = get_user_id_from_token(authorization)
+    if user_id:
+        existing = supabase.table("feedback_responses").select("id").eq(
+            "form_id", form["id"]
+        ).eq("student_id", user_id).execute()
+        already_submitted = bool(existing.data)
+    
+    return {
+        "id": form["id"],
+        "title": form["title"],
+        "description": form["description"],
+        "is_anonymous_display": form["is_anonymous_display"],
+        "teacher_name": teacher_name,
+        "questions": questions.data or [],
+        "already_submitted": already_submitted
+    }
+
+
+@app.post("/api/feedback/f/{share_code}/submit")
+def submit_feedback(share_code: str, payload: FeedbackSubmission, authorization: Optional[str] = Header(default=None)):
+    """Submit a feedback response"""
+    supabase = get_supabase()
+    
+    # Get form
+    form_res = supabase.table("feedback_forms").select("id, status").eq(
+        "share_code", share_code
+    ).execute()
+    
+    if not form_res.data:
+        raise HTTPException(status_code=404, detail="Form not found")
+    
+    form = form_res.data[0]
+    
+    if form["status"] != "published":
+        raise HTTPException(status_code=400, detail="Form is not accepting submissions")
+    
+    # Get student info (names stored even if displayed as anonymous)
+    user_id = get_user_id_from_token(authorization)
+    student_name = None
+    student_email = None
+    
+    if user_id:
+        # Check if already submitted
+        existing = supabase.table("feedback_responses").select("id").eq(
+            "form_id", form["id"]
+        ).eq("student_id", user_id).execute()
+        
+        if existing.data:
+            raise HTTPException(status_code=400, detail="You have already submitted feedback for this form")
+        
+        # Get student profile
+        profile = supabase.table("user_profiles").select("name, email").eq(
+            "auth_user_id", user_id
+        ).execute()
+        
+        if profile.data:
+            student_name = profile.data[0].get("name")
+            student_email = profile.data[0].get("email")
+    
+    # Create response
+    response_data = {
+        "form_id": form["id"],
+        "student_id": user_id,
+        "student_name": student_name,
+        "student_email": student_email
+    }
+    
+    response_res = supabase.table("feedback_responses").insert(response_data).execute()
+    
+    if not response_res.data:
+        raise HTTPException(status_code=500, detail="Failed to submit feedback")
+    
+    response_id = response_res.data[0]["id"]
+    
+    # Insert answers
+    if payload.answers:
+        answers_data = []
+        for answer in payload.answers:
+            answers_data.append({
+                "response_id": response_id,
+                "question_id": answer.get("question_id"),
+                "answer_text": answer.get("answer_text"),
+                "answer_options": answer.get("answer_options"),
+                "answer_rating": answer.get("answer_rating")
+            })
+        
+        if answers_data:
+            supabase.table("feedback_answers").insert(answers_data).execute()
+    
+    return {"success": True, "message": "Thank you for your feedback!"}
+
+
+# --- Teacher responses view ---
+
+@app.get("/api/feedback/forms/{form_id}/responses")
+def get_feedback_responses(form_id: str, authorization: Optional[str] = Header(default=None)):
+    """Get all responses for a feedback form (teacher only)"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Verify ownership
+    form = supabase.table("feedback_forms").select("id, title").eq(
+        "id", form_id
+    ).eq("teacher_id", user_id).execute()
+    
+    if not form.data:
+        raise HTTPException(status_code=404, detail="Form not found")
+    
+    # Get all responses
+    responses = supabase.table("feedback_responses").select("*").eq(
+        "form_id", form_id
+    ).order("submitted_at", desc=True).execute()
+    
+    # Get answers for each response
+    response_data = []
+    for resp in (responses.data or []):
+        answers = supabase.table("feedback_answers").select("*").eq(
+            "response_id", resp["id"]
+        ).execute()
+        resp["answers"] = answers.data or []
+        response_data.append(resp)
+    
+    # Get questions for context
+    questions = supabase.table("feedback_questions").select("*").eq(
+        "form_id", form_id
+    ).order("display_order").execute()
+    
+    return {
+        "form": form.data[0],
+        "questions": questions.data or [],
+        "responses": response_data,
+        "total_responses": len(response_data)
+    }
+
+
+@app.get("/api/feedback/forms/{form_id}/analytics")
+def get_feedback_analytics(form_id: str, authorization: Optional[str] = Header(default=None)):
+    """Get analytics for a feedback form"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Verify ownership
+    form = supabase.table("feedback_forms").select("*").eq(
+        "id", form_id
+    ).eq("teacher_id", user_id).execute()
+    
+    if not form.data:
+        raise HTTPException(status_code=404, detail="Form not found")
+    
+    # Get questions
+    questions = supabase.table("feedback_questions").select("*").eq(
+        "form_id", form_id
+    ).order("display_order").execute()
+    
+    # Get all answers
+    responses = supabase.table("feedback_responses").select("id").eq(
+        "form_id", form_id
+    ).execute()
+    
+    total_responses = len(responses.data or [])
+    response_ids = [r["id"] for r in (responses.data or [])]
+    
+    analytics = {
+        "total_responses": total_responses,
+        "questions": []
+    }
+    
+    for q in (questions.data or []):
+        q_analytics = {
+            "id": q["id"],
+            "question_text": q["question_text"],
+            "question_type": q["question_type"]
+        }
+        
+        # Get answers for this question
+        if response_ids:
+            answers = supabase.table("feedback_answers").select("*").eq(
+                "question_id", q["id"]
+            ).in_("response_id", response_ids).execute()
+            
+            answer_list = answers.data or []
+            
+            if q["question_type"] in ["rating", "scale"]:
+                # Calculate average rating
+                ratings = [a["answer_rating"] for a in answer_list if a.get("answer_rating") is not None]
+                if ratings:
+                    q_analytics["average"] = round(sum(ratings) / len(ratings), 2)
+                    q_analytics["distribution"] = {}
+                    for r in ratings:
+                        q_analytics["distribution"][str(r)] = q_analytics["distribution"].get(str(r), 0) + 1
+                else:
+                    q_analytics["average"] = 0
+                    
+            elif q["question_type"] in ["mcq_single", "mcq_multiple", "yes_no", "dropdown"]:
+                # Calculate option distribution
+                options = q.get("options") or []
+                distribution = {str(i): 0 for i in range(len(options))}
+                
+                for a in answer_list:
+                    opts = a.get("answer_options") or []
+                    for opt_idx in opts:
+                        if str(opt_idx) in distribution:
+                            distribution[str(opt_idx)] += 1
+                
+                q_analytics["distribution"] = distribution
+                q_analytics["options"] = options
+                
+            elif q["question_type"] in ["text", "textarea"]:
+                # Return text responses
+                q_analytics["responses"] = [a.get("answer_text", "") for a in answer_list if a.get("answer_text")]
+        
+        analytics["questions"].append(q_analytics)
+    
+    return analytics

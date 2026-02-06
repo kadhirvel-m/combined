@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Feedback Responses — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script src="../config.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4' }
+                    },
+                    boxShadow: { glow: '0 8px 30px rgba(158,75,138,0.28)' },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        .filled {
+            font-variation-settings: 'FILL' 1;
+        }
+
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .66));
+            backdrop-filter: blur(28px);
+            box-shadow: 0 12px 42px -10px rgba(30, 30, 47, .18);
+        }
+
+        .dark .glass-panel {
+            background: linear-gradient(180deg, rgba(30, 30, 47, .78), rgba(30, 30, 47, .58));
+            box-shadow: 0 22px 60px -12px rgba(0, 0, 0, .55);
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, rgba(0, 0, 0, .04), rgba(0, 0, 0, .08), rgba(0, 0, 0, .04));
+            background-size: 300% 100%;
+            animation: shimmer 2.3s linear infinite;
+        }
+
+        .dark .skeleton {
+            background: linear-gradient(90deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .12), rgba(255, 255, 255, .06));
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: 0 0
+            }
+
+            100% {
+                background-position: -300% 0
+            }
+        }
+    </style>
+    <script>
+            (() => {
+                const s = localStorage.getItem('px_theme');
+                const prefers = matchMedia('(prefers-color-scheme: dark)').matches;
+                if (s ? s === 'dark' : prefers) document.documentElement.classList.add('dark');
+            })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- Navbar -->
+    <header
+        class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="../teacher_profile.html" class="flex items-center gap-3 shrink-0">
+                <img src="../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <div class="flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+                <a href="teacher_feedback_list.html"
+                    class="inline-flex items-center gap-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-sm font-medium px-4 py-2.5 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded text-base">arrow_back</span>
+                    Back
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container py-8">
+        <!-- Loading -->
+        <div id="loadingState">
+            <div class="skeleton h-20 rounded-2xl mb-4"></div>
+            <div class="skeleton h-48 rounded-2xl"></div>
+        </div>
+
+        <!-- Content -->
+        <div id="content" class="hidden">
+            <!-- Header -->
+            <div class="glass-panel rounded-2xl p-6 mb-6">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <h1 id="formTitle" class="text-2xl font-bold mb-1">Loading...</h1>
+                        <p class="text-neutral-600 dark:text-white/60">
+                            <span id="responseCount">0</span> responses collected
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <a id="analyticsLink" href="#"
+                            class="inline-flex items-center gap-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-sm font-medium px-4 py-2.5 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                            <span class="material-symbols-rounded text-base">bar_chart</span>
+                            Analytics
+                        </a>
+                        <button id="exportBtn"
+                            class="inline-flex items-center gap-2 rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">
+                            <span class="material-symbols-rounded text-base">download</span>
+                            Export CSV
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View Toggle -->
+            <div class="flex items-center gap-2 mb-6">
+                <button id="viewIndividual"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-brand-500 text-white">
+                    <span class="material-symbols-rounded text-base">person</span>
+                    Individual Responses
+                </button>
+                <button id="viewByQuestion"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">
+                    <span class="material-symbols-rounded text-base">quiz</span>
+                    By Question
+                </button>
+            </div>
+
+            <!-- Responses -->
+            <div id="responsesContainer" class="space-y-4"></div>
+            <div id="questionsContainer" class="hidden space-y-4"></div>
+
+            <!-- Empty -->
+            <div id="emptyState" class="hidden glass-panel rounded-2xl p-10 text-center">
+                <span class="material-symbols-rounded text-4xl text-neutral-400 mb-4 block">inbox</span>
+                <h2 class="text-lg font-semibold mb-2">No Responses Yet</h2>
+                <p class="text-neutral-600 dark:text-white/60">Share your form link to start collecting feedback.</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                localStorage.setItem('px_theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+            });
+        });
+
+        const API = window.API_BASE || location.origin;
+        const token = localStorage.getItem('teacherToken') || localStorage.getItem('px_auth_token');
+        if (!token) location.href = 'teacher_login.html';
+
+        const params = new URLSearchParams(location.search);
+        const formId = params.get('id');
+        if (!formId) location.href = 'teacher_feedback_list.html';
+
+        const $ = id => document.getElementById(id);
+        let data = { form: null, questions: [], responses: [] };
+        let viewMode = 'individual';
+
+        async function load() {
+            try {
+                const res = await fetch(`${API}/api/feedback/forms/${formId}/responses`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error('Failed to load');
+                data = await res.json();
+                render();
+            } catch (e) {
+                console.error(e);
+                $('loadingState').innerHTML = `
+                    <div class="glass-panel rounded-2xl p-10 text-center">
+                        <span class="material-symbols-rounded text-4xl text-red-500 mb-3 block">error</span>
+                        <h3 class="font-semibold text-lg mb-2">Failed to load</h3>
+                        <p class="text-neutral-600 dark:text-white/60">${e.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function formatDate(d) {
+            if (!d) return '-';
+            return new Date(d).toLocaleString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric',
+                hour: 'numeric', minute: '2-digit'
+            });
+        }
+
+        function getAnswerDisplay(answer, question) {
+            if (!answer) return '<span class="text-neutral-400 italic">No answer</span>';
+
+            if (question.question_type === 'rating') {
+                const rating = answer.answer_rating || 0;
+                return '<span class="text-amber-500">' + '★'.repeat(rating) + '☆'.repeat(5 - rating) + '</span>';
+            }
+            if (question.question_type === 'scale') {
+                return `<span class="font-bold text-brand-600 dark:text-brand-400">${answer.answer_rating || 0}</span>/10`;
+            }
+            if (['mcq_single', 'mcq_multiple', 'dropdown', 'yes_no'].includes(question.question_type)) {
+                const opts = answer.answer_options || [];
+                const labels = opts.map(i => (question.options || [])[i] || `Option ${i + 1}`);
+                return labels.join(', ') || '<span class="text-neutral-400 italic">None selected</span>';
+            }
+            return answer.answer_text || '<span class="text-neutral-400 italic">No answer</span>';
+        }
+
+        function renderIndividual() {
+            const container = $('responsesContainer');
+
+            if (!data.responses.length) {
+                container.innerHTML = '';
+                $('emptyState').classList.remove('hidden');
+                return;
+            }
+
+            $('emptyState').classList.add('hidden');
+
+            container.innerHTML = data.responses.map((resp, idx) => {
+                const answersHtml = data.questions.map(q => {
+                    const answer = (resp.answers || []).find(a => a.question_id === q.id);
+                    return `
+                        <div class="py-3 border-b border-black/5 dark:border-white/10 last:border-0">
+                            <p class="text-xs text-neutral-500 dark:text-white/50 mb-1">${q.question_text}</p>
+                            <div class="text-sm">${getAnswerDisplay(answer, q)}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="glass-panel rounded-2xl p-5">
+                        <div class="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-black/5 dark:border-white/10">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-600 font-bold">
+                                    ${(resp.student_name || 'A')[0].toUpperCase()}
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold">${resp.student_name || 'Anonymous'}</h3>
+                                    <p class="text-xs text-neutral-500 dark:text-white/50">${resp.student_email || 'No email'}</p>
+                                </div>
+                            </div>
+                            <span class="text-xs text-neutral-500 dark:text-white/50">${formatDate(resp.submitted_at)}</span>
+                        </div>
+                        <div class="divide-y divide-black/5 dark:divide-white/5">
+                            ${answersHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderByQuestion() {
+            const container = $('questionsContainer');
+
+            if (!data.responses.length) {
+                container.innerHTML = '';
+                $('emptyState').classList.remove('hidden');
+                return;
+            }
+
+            $('emptyState').classList.add('hidden');
+
+            container.innerHTML = data.questions.map(q => {
+                const allAnswers = data.responses.map(resp => {
+                    const answer = (resp.answers || []).find(a => a.question_id === q.id);
+                    return { resp, answer };
+                });
+
+                const answersHtml = allAnswers.map(({ resp, answer }) => `
+                    <div class="flex items-start gap-3 py-2 border-b border-black/5 dark:border-white/10 last:border-0">
+                        <span class="text-xs text-neutral-500 dark:text-white/50 w-24 shrink-0 truncate">${resp.student_name || 'Anonymous'}</span>
+                        <div class="text-sm flex-1">${getAnswerDisplay(answer, q)}</div>
+                    </div>
+                `).join('');
+
+                return `
+                    <div class="glass-panel rounded-2xl p-5">
+                        <h3 class="font-semibold mb-4">${q.question_text}</h3>
+                        <div class="divide-y divide-black/5 dark:divide-white/5 max-h-64 overflow-y-auto">
+                            ${answersHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function render() {
+            $('loadingState').classList.add('hidden');
+            $('content').classList.remove('hidden');
+
+            $('formTitle').textContent = data.form?.title || 'Feedback Form';
+            $('responseCount').textContent = data.total_responses || 0;
+            $('analyticsLink').href = `teacher_feedback_analytics.html?id=${formId}`;
+
+            if (viewMode === 'individual') {
+                $('responsesContainer').classList.remove('hidden');
+                $('questionsContainer').classList.add('hidden');
+                renderIndividual();
+            } else {
+                $('responsesContainer').classList.add('hidden');
+                $('questionsContainer').classList.remove('hidden');
+                renderByQuestion();
+            }
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+
+            if (mode === 'individual') {
+                $('viewIndividual').className = 'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-brand-500 text-white';
+                $('viewByQuestion').className = 'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5';
+            } else {
+                $('viewByQuestion').className = 'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-brand-500 text-white';
+                $('viewIndividual').className = 'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5';
+            }
+
+            render();
+        }
+
+        function exportCSV() {
+            if (!data.responses.length) {
+                alert('No responses to export');
+                return;
+            }
+
+            const headers = ['Student Name', 'Email', 'Submitted At', ...data.questions.map(q => q.question_text)];
+            const rows = data.responses.map(resp => {
+                const row = [
+                    resp.student_name || 'Anonymous',
+                    resp.student_email || '',
+                    resp.submitted_at || ''
+                ];
+                data.questions.forEach(q => {
+                    const answer = (resp.answers || []).find(a => a.question_id === q.id);
+                    if (!answer) {
+                        row.push('');
+                    } else if (q.question_type === 'rating' || q.question_type === 'scale') {
+                        row.push(answer.answer_rating || '');
+                    } else if (['mcq_single', 'mcq_multiple', 'dropdown', 'yes_no'].includes(q.question_type)) {
+                        const opts = (answer.answer_options || []).map(i => (q.options || [])[i] || '');
+                        row.push(opts.join('; '));
+                    } else {
+                        row.push(answer.answer_text || '');
+                    }
+                });
+                return row;
+            });
+
+            const csvContent = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `feedback_${formId}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        $('viewIndividual').addEventListener('click', () => setViewMode('individual'));
+        $('viewByQuestion').addEventListener('click', () => setViewMode('byQuestion'));
+        $('exportBtn').addEventListener('click', exportCSV);
+
+        load();
+    </script>
+</body>
+
+</html>

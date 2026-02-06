@@ -71,6 +71,126 @@ CREATE TABLE public.analytics_events (
   CONSTRAINT analytics_events_pkey PRIMARY KEY (id),
   CONSTRAINT analytics_events_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.user_sessions(id)
 );
+CREATE TABLE public.assignment_comments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  assignment_id uuid,
+  submission_id uuid,
+  user_id uuid NOT NULL,
+  content text NOT NULL,
+  is_private boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT assignment_comments_pkey PRIMARY KEY (id),
+  CONSTRAINT assignment_comments_assignment_id_fkey FOREIGN KEY (assignment_id) REFERENCES public.assignments(id),
+  CONSTRAINT assignment_comments_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.assignment_submissions(id)
+);
+CREATE TABLE public.assignment_extensions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  assignment_id uuid,
+  student_user_id uuid NOT NULL,
+  requested_date timestamp with time zone,
+  reason text,
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'denied'::text])),
+  approved_by uuid,
+  new_due_date timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT assignment_extensions_pkey PRIMARY KEY (id),
+  CONSTRAINT assignment_extensions_assignment_id_fkey FOREIGN KEY (assignment_id) REFERENCES public.assignments(id)
+);
+CREATE TABLE public.assignment_rubrics (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  assignment_id uuid,
+  criterion text NOT NULL,
+  max_points integer NOT NULL,
+  description text,
+  order_index integer DEFAULT 0,
+  CONSTRAINT assignment_rubrics_pkey PRIMARY KEY (id),
+  CONSTRAINT assignment_rubrics_assignment_id_fkey FOREIGN KEY (assignment_id) REFERENCES public.assignments(id)
+);
+CREATE TABLE public.assignment_submission_files (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  submission_id uuid,
+  assignment_id uuid,
+  student_user_id uuid NOT NULL,
+  file_url text NOT NULL,
+  file_name text NOT NULL,
+  file_size_bytes bigint,
+  file_type text,
+  file_hash text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT assignment_submission_files_pkey PRIMARY KEY (id),
+  CONSTRAINT assignment_submission_files_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.assignment_submissions(id),
+  CONSTRAINT assignment_submission_files_assignment_id_fkey FOREIGN KEY (assignment_id) REFERENCES public.assignments(id)
+);
+CREATE TABLE public.assignment_submissions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  assignment_id uuid NOT NULL,
+  student_user_id uuid NOT NULL,
+  team_id uuid,
+  file_urls jsonb DEFAULT '[]'::jsonb,
+  text_content text,
+  is_draft boolean DEFAULT false,
+  version integer DEFAULT 1,
+  total_marks integer,
+  rubric_scores jsonb DEFAULT '{}'::jsonb,
+  feedback text,
+  graded_by uuid,
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'submitted'::text, 'graded'::text, 'returned'::text])),
+  submitted_at timestamp with time zone,
+  graded_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT assignment_submissions_pkey PRIMARY KEY (id),
+  CONSTRAINT assignment_submissions_assignment_id_fkey FOREIGN KEY (assignment_id) REFERENCES public.assignments(id),
+  CONSTRAINT assignment_submissions_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.assignment_teams(id)
+);
+CREATE TABLE public.assignment_team_members (
+  team_id uuid NOT NULL,
+  student_user_id uuid NOT NULL,
+  joined_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT assignment_team_members_pkey PRIMARY KEY (team_id, student_user_id),
+  CONSTRAINT assignment_team_members_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.assignment_teams(id)
+);
+CREATE TABLE public.assignment_teams (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  assignment_id uuid,
+  team_name text,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT assignment_teams_pkey PRIMARY KEY (id),
+  CONSTRAINT assignment_teams_assignment_id_fkey FOREIGN KEY (assignment_id) REFERENCES public.assignments(id)
+);
+CREATE TABLE public.assignment_templates (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  teacher_user_id uuid NOT NULL,
+  title text NOT NULL,
+  template_data jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT assignment_templates_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.assignments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  teacher_user_id uuid NOT NULL,
+  class_id uuid,
+  title text NOT NULL,
+  description text,
+  instructions_md text,
+  resource_links jsonb DEFAULT '[]'::jsonb,
+  assignment_type text DEFAULT 'individual'::text CHECK (assignment_type = ANY (ARRAY['individual'::text, 'group'::text, 'peer_review'::text])),
+  max_team_size integer DEFAULT 1,
+  max_marks integer DEFAULT 100,
+  allowed_file_types jsonb DEFAULT '["pdf", "jpg", "jpeg", "png", "doc", "docx", "ppt", "pptx"]'::jsonb,
+  max_files integer DEFAULT 5,
+  max_file_size_mb integer DEFAULT 10,
+  due_date timestamp with time zone NOT NULL,
+  allow_late_submission boolean DEFAULT false,
+  late_penalty_percent integer DEFAULT 0,
+  grace_period_hours integer DEFAULT 0,
+  status text DEFAULT 'draft'::text CHECK (status = ANY (ARRAY['draft'::text, 'published'::text, 'closed'::text, 'archived'::text])),
+  published_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT assignments_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.batches (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   college_id uuid NOT NULL,
@@ -119,6 +239,81 @@ CREATE TABLE public.departments (
   CONSTRAINT departments_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
   CONSTRAINT departments_degree_id_fkey FOREIGN KEY (degree_id) REFERENCES public.degrees(id)
 );
+CREATE TABLE public.feedback_answers (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  response_id uuid NOT NULL,
+  question_id uuid NOT NULL,
+  answer_text text,
+  answer_options jsonb,
+  answer_rating integer,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT feedback_answers_pkey PRIMARY KEY (id),
+  CONSTRAINT feedback_answers_response_id_fkey FOREIGN KEY (response_id) REFERENCES public.feedback_responses(id),
+  CONSTRAINT feedback_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.feedback_questions(id)
+);
+CREATE TABLE public.feedback_forms (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  teacher_id uuid NOT NULL,
+  class_id uuid,
+  title text NOT NULL,
+  description text,
+  status text NOT NULL DEFAULT 'draft'::text CHECK (status = ANY (ARRAY['draft'::text, 'published'::text, 'closed'::text])),
+  is_anonymous_display boolean NOT NULL DEFAULT true,
+  share_code text UNIQUE,
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT feedback_forms_pkey PRIMARY KEY (id),
+  CONSTRAINT feedback_forms_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teacher_profiles(auth_user_id),
+  CONSTRAINT feedback_forms_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.teacher_classes(id)
+);
+CREATE TABLE public.feedback_questions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  form_id uuid NOT NULL,
+  question_type text NOT NULL CHECK (question_type = ANY (ARRAY['text'::text, 'textarea'::text, 'rating'::text, 'mcq_single'::text, 'mcq_multiple'::text, 'scale'::text, 'yes_no'::text, 'dropdown'::text])),
+  question_text text NOT NULL,
+  description text,
+  options jsonb,
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  display_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT feedback_questions_pkey PRIMARY KEY (id),
+  CONSTRAINT feedback_questions_form_id_fkey FOREIGN KEY (form_id) REFERENCES public.feedback_forms(id)
+);
+CREATE TABLE public.feedback_responses (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  form_id uuid NOT NULL,
+  student_id uuid,
+  student_name text,
+  student_email text,
+  submitted_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT feedback_responses_pkey PRIMARY KEY (id),
+  CONSTRAINT feedback_responses_form_id_fkey FOREIGN KEY (form_id) REFERENCES public.feedback_forms(id),
+  CONSTRAINT feedback_responses_student_id_fkey FOREIGN KEY (student_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.group_call_bans (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  call_id text NOT NULL,
+  user_id uuid NOT NULL,
+  banned_by uuid,
+  reason text,
+  banned_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT group_call_bans_pkey PRIMARY KEY (id),
+  CONSTRAINT group_call_bans_call_id_fkey FOREIGN KEY (call_id) REFERENCES public.group_calls(id),
+  CONSTRAINT group_call_bans_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT group_call_bans_banned_by_fkey FOREIGN KEY (banned_by) REFERENCES auth.users(id)
+);
+CREATE TABLE public.group_call_events (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  call_id text NOT NULL,
+  actor_user_id uuid,
+  event_type text NOT NULL,
+  event_data jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT group_call_events_pkey PRIMARY KEY (id),
+  CONSTRAINT group_call_events_call_id_fkey FOREIGN KEY (call_id) REFERENCES public.group_calls(id),
+  CONSTRAINT group_call_events_actor_user_id_fkey FOREIGN KEY (actor_user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.group_call_participants (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   call_id text NOT NULL,
@@ -129,6 +324,24 @@ CREATE TABLE public.group_call_participants (
   CONSTRAINT group_call_participants_call_fkey FOREIGN KEY (call_id) REFERENCES public.group_calls(id),
   CONSTRAINT group_call_participants_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.group_call_roles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  call_id text NOT NULL,
+  user_id uuid NOT NULL,
+  role text NOT NULL CHECK (role = 'cohost'::text),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT group_call_roles_pkey PRIMARY KEY (id),
+  CONSTRAINT group_call_roles_call_id_fkey FOREIGN KEY (call_id) REFERENCES public.group_calls(id),
+  CONSTRAINT group_call_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.group_call_settings (
+  call_id text NOT NULL,
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT group_call_settings_pkey PRIMARY KEY (call_id),
+  CONSTRAINT group_call_settings_call_id_fkey FOREIGN KEY (call_id) REFERENCES public.group_calls(id)
+);
 CREATE TABLE public.group_calls (
   id text NOT NULL,
   room_name text NOT NULL,
@@ -138,6 +351,71 @@ CREATE TABLE public.group_calls (
   ended_at timestamp with time zone,
   CONSTRAINT group_calls_pkey PRIMARY KEY (id),
   CONSTRAINT group_calls_host_fkey FOREIGN KEY (host_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.hod_application_reviews (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  application_id uuid NOT NULL,
+  hod_user_id uuid NOT NULL,
+  recommendation text NOT NULL DEFAULT 'review'::text CHECK (recommendation = ANY (ARRAY['approve'::text, 'reject'::text, 'review'::text])),
+  note text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT hod_application_reviews_pkey PRIMARY KEY (id),
+  CONSTRAINT hod_application_reviews_application_id_fkey FOREIGN KEY (application_id) REFERENCES public.teacher_applications(id),
+  CONSTRAINT hod_application_reviews_hod_user_id_fkey FOREIGN KEY (hod_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.hod_batch_management (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  department_id uuid NOT NULL UNIQUE,
+  first_year_batch_id uuid,
+  second_year_batch_id uuid,
+  third_year_batch_id uuid,
+  final_year_batch_id uuid,
+  updated_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  first_year_sem smallint,
+  second_year_sem smallint,
+  third_year_sem smallint,
+  final_year_sem smallint,
+  CONSTRAINT hod_batch_management_pkey PRIMARY KEY (id),
+  CONSTRAINT hod_batch_management_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT hod_batch_management_first_year_batch_id_fkey FOREIGN KEY (first_year_batch_id) REFERENCES public.batches(id),
+  CONSTRAINT hod_batch_management_second_year_batch_id_fkey FOREIGN KEY (second_year_batch_id) REFERENCES public.batches(id),
+  CONSTRAINT hod_batch_management_third_year_batch_id_fkey FOREIGN KEY (third_year_batch_id) REFERENCES public.batches(id),
+  CONSTRAINT hod_batch_management_final_year_batch_id_fkey FOREIGN KEY (final_year_batch_id) REFERENCES public.batches(id),
+  CONSTRAINT hod_batch_management_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
+);
+CREATE TABLE public.hod_departments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  hod_user_id uuid NOT NULL,
+  department_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT hod_departments_pkey PRIMARY KEY (id),
+  CONSTRAINT hod_departments_hod_user_id_fkey FOREIGN KEY (hod_user_id) REFERENCES auth.users(id),
+  CONSTRAINT hod_departments_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id)
+);
+CREATE TABLE public.hod_role_applications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL UNIQUE,
+  email text NOT NULL,
+  name text,
+  college_id uuid,
+  department_id uuid,
+  motivation text,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])),
+  notes text,
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  id_card_front_path text,
+  id_card_back_path text,
+  CONSTRAINT hod_role_applications_pkey PRIMARY KEY (id),
+  CONSTRAINT hod_role_applications_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT hod_role_applications_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id),
+  CONSTRAINT hod_role_applications_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
+  CONSTRAINT hod_role_applications_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES auth.users(id)
 );
 CREATE TABLE public.labx_explanations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -150,8 +428,6 @@ CREATE TABLE public.labx_explanations (
   view_count integer DEFAULT 0,
   CONSTRAINT labx_explanations_pkey PRIMARY KEY (id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_labx_explanations_topic_ci ON public.labx_explanations USING btree (topic_ci);
 CREATE TABLE public.lcoding_languages (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   name text NOT NULL,
@@ -342,6 +618,32 @@ CREATE TABLE public.marketplace_reviews (
   CONSTRAINT marketplace_reviews_pkey PRIMARY KEY (id),
   CONSTRAINT marketplace_reviews_note_id_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id),
   CONSTRAINT marketplace_reviews_reviewer_user_id_fkey FOREIGN KEY (reviewer_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.notes_feedback (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  status text NOT NULL DEFAULT 'new'::text CHECK (status = ANY (ARRAY['new'::text, 'reviewing'::text, 'resolved'::text, 'ignored'::text])),
+  user_id uuid NOT NULL,
+  user_email text,
+  note_id uuid,
+  note_variant text,
+  note_title text,
+  topic text,
+  page_path text,
+  page_url text,
+  category text,
+  quick_tags ARRAY NOT NULL DEFAULT '{}'::text[],
+  rating integer,
+  message text,
+  selected_text text,
+  ip text,
+  user_agent text,
+  meta jsonb NOT NULL DEFAULT '{}'::jsonb,
+  admin_notes text,
+  resolved_at timestamp with time zone,
+  CONSTRAINT notes_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT notes_feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.notex_activity_logs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
