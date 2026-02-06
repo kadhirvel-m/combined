@@ -14,7 +14,7 @@
     <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js" type="module"></script>
     <script defer src="assets/js/analytics-tracker.js"></script>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap"
         rel="stylesheet" />
 
     <!-- Tailwind (CDN for demo) -->
@@ -1027,23 +1027,25 @@
             if (!subjectIds.size) {
                 return notesBySubject;
             }
-            await Promise.all(
-                Array.from(subjectIds).map(async (sid) => {
-                    try {
-                        const notesRes = await fetchJson(`${API_BASE}/api/marketplace/subjects/${encodeURIComponent(sid)}/teacher-notes`, { headers: authHeaders() });
-                        if (isSuccess(notesRes) && Array.isArray(notesRes.data?.notes) && notesRes.data.notes.length) {
-                            const sorted = [...notesRes.data.notes].sort((a, b) => {
-                                const aDate = Date.parse(a.updated_at || a.created_at || '') || 0;
-                                const bDate = Date.parse(b.updated_at || b.created_at || '') || 0;
-                                return bDate - aDate;
-                            });
-                            notesBySubject.set(sid, sorted);
-                        }
-                    } catch (err) {
-                        console.warn('[Academics] teacher notes fetch failed', sid, err);
+            try {
+                const res = await fetch(`${API_BASE}/api/marketplace/subjects/teacher-notes/batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                    body: JSON.stringify({ subject_ids: Array.from(subjectIds), limit: 20 })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    throw new Error(data?.detail || data?.error || `HTTP ${res.status}`);
+                }
+                const notesMap = data?.notes || {};
+                Object.entries(notesMap).forEach(([sid, notes]) => {
+                    if (Array.isArray(notes) && notes.length) {
+                        notesBySubject.set(String(sid), notes);
                     }
-                })
-            );
+                });
+            } catch (err) {
+                console.warn('[Academics] teacher notes batch fetch failed', err);
+            }
             return notesBySubject;
         }
 
@@ -1397,33 +1399,15 @@
                             li.appendChild(starContainer);
                         }
 
-                        const labUrl = (t.lab_url || '').trim();
-                        if (labUrl) {
-                            const labLink = document.createElement('a');
-                            labLink.href = labUrl;
-                            labLink.target = '_blank';
-                            labLink.rel = 'noopener';
-                            labLink.innerHTML = '<span class="material-symbols-rounded text-[16px]">science</span><span>Labs</span>';
-                            labLink.className = 'ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold bg-brand-500/10 text-brand-700 dark:text-brandlt-200 ring-1 ring-brand-500/25 hover:bg-brand-500/20 hover:shadow-glow transition';
-                            labLink.title = 'Open lab material';
-                            labLink.onclick = () => {
-                                if (window.Analytics) {
-                                    window.Analytics.track('lab_started', {
-                                        url: labUrl,
-                                        topic: t.topic
-                                    });
-                                }
-                            };
-                            li.appendChild(labLink);
-                        }
-
-                        // LabX (cached HTML explorable) - show ONLY if it exists in labx_explanations
                         const topicKey = (t.topic || '').trim().toLowerCase();
-                        if (topicKey && labxStatusMap.has(topicKey)) {
+                        const hasLabX = topicKey && labxStatusMap.has(topicKey);
+
+                        // Priority 1: LabX (cached HTML explorable)
+                        if (hasLabX) {
                             const labxBtn = document.createElement('button');
                             labxBtn.type = 'button';
                             labxBtn.innerHTML = '<span class="material-symbols-rounded text-[16px]">science</span><span>LabX</span>';
-                            labxBtn.className = (labUrl ? '' : 'ml-auto ') + 'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold ring-1 ring-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/20 hover:shadow-glow transition';
+                            labxBtn.className = 'ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold ring-1 ring-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/20 hover:shadow-glow transition';
                             labxBtn.title = 'Open LabX explorable explanation';
                             labxBtn.addEventListener('click', (e) => {
                                 e.preventDefault();
@@ -1431,6 +1415,28 @@
                                 openLabxInNewTab(t.topic);
                             });
                             li.appendChild(labxBtn);
+                        }
+                        // Priority 2: Standard Labs URL (fallback)
+                        else {
+                            const labUrl = (t.lab_url || '').trim();
+                            if (labUrl) {
+                                const labLink = document.createElement('a');
+                                labLink.href = labUrl;
+                                labLink.target = '_blank';
+                                labLink.rel = 'noopener';
+                                labLink.innerHTML = '<span class="material-symbols-rounded text-[16px]">science</span><span>Labs</span>';
+                                labLink.className = 'ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold bg-brand-500/10 text-brand-700 dark:text-brandlt-200 ring-1 ring-brand-500/25 hover:bg-brand-500/20 hover:shadow-glow transition';
+                                labLink.title = 'Open lab material';
+                                labLink.onclick = () => {
+                                    if (window.Analytics) {
+                                        window.Analytics.track('lab_started', {
+                                            url: labUrl,
+                                            topic: t.topic
+                                        });
+                                    }
+                                };
+                                li.appendChild(labLink);
+                            }
                         }
 
                         unitCounts.total++; if (initChecked) unitCounts.done++; topicsWrap.appendChild(li);
@@ -1940,22 +1946,24 @@
 
             const colleges = await __pxEduLoadCollegesList().catch(() => []);
             const collegeOptions = (colleges || []).map(col => ({ value: col.id, label: col.name }));
-            __pxEduFillSelectOptions(collegeSelect, collegeOptions, { placeholder: 'Select college', includeCustom: true });
+            __pxEduFillSelectOptions(collegeSelect, collegeOptions, { placeholder: 'Select college', includeCustom: false });
 
             if (initialValues.collegeName) {
                 const match = __pxEduFindCollegeByName(initialValues.collegeName);
                 if (match) {
                     collegeSelect.value = match.id;
                 } else {
-                    collegeSelect.value = EDUCATION_CUSTOM_VALUE;
-                    if (collegeCustomInput) {
-                        collegeCustomInput.value = initialValues.collegeName;
-                        __pxEduToggleCustomInput(collegeCustomInput, true);
-                    }
+                    // collegeSelect.value = EDUCATION_CUSTOM_VALUE;
+                    // if (collegeCustomInput) {
+                    //     collegeCustomInput.value = initialValues.collegeName;
+                    //     __pxEduToggleCustomInput(collegeCustomInput, true);
+                    // }
+                    collegeSelect.value = '';
                 }
             } else if (!collegeOptions.length) {
-                collegeSelect.value = EDUCATION_CUSTOM_VALUE;
-                if (collegeCustomInput) __pxEduToggleCustomInput(collegeCustomInput, true);
+                // collegeSelect.value = EDUCATION_CUSTOM_VALUE;
+                // if (collegeCustomInput) __pxEduToggleCustomInput(collegeCustomInput, true);
+                collegeSelect.value = '';
             }
 
             async function handleCollegeChange(isInitial = false) {
@@ -1969,7 +1977,7 @@
 
                     degreeSelect.disabled = false;
                     state.degrees = [];
-                    __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: true });
+                    __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: false });
                     degreeSelect.value = EDUCATION_CUSTOM_VALUE;
                     if (isInitial && initialValues?.degreeName && degreeCustomInput) {
                         degreeCustomInput.value = initialValues.degreeName;
@@ -1978,7 +1986,7 @@
                     if (hiddenDegree) hiddenDegree.value = (degreeCustomInput?.value || '').trim();
 
                     departmentSelect.disabled = false;
-                    __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+                    __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
                     departmentSelect.value = EDUCATION_CUSTOM_VALUE;
                     if (isInitial && initialValues?.departmentName && departmentCustomInput) {
                         departmentCustomInput.value = initialValues.departmentName;
@@ -1987,7 +1995,7 @@
                     if (hiddenDepartment) hiddenDepartment.value = (departmentCustomInput?.value || '').trim();
 
                     batchSelect.disabled = false;
-                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
                     if (isInitial && initialValues?.batchRange) {
                         batchSelect.value = initialValues.batchRange;
                         if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
@@ -2013,7 +2021,7 @@
                     if (hiddenCollegeId) hiddenCollegeId.value = '';
 
                     degreeSelect.disabled = true;
-                    __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: true });
+                    __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: false });
                     degreeSelect.value = '';
                     if (degreeCustomInput) {
                         __pxEduToggleCustomInput(degreeCustomInput, false);
@@ -2022,7 +2030,7 @@
                     if (hiddenDegree) hiddenDegree.value = '';
 
                     departmentSelect.disabled = true;
-                    __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+                    __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
                     departmentSelect.value = '';
                     if (departmentCustomInput) {
                         __pxEduToggleCustomInput(departmentCustomInput, false);
@@ -2031,7 +2039,7 @@
                     if (hiddenDepartment) hiddenDepartment.value = '';
 
                     batchSelect.disabled = true;
-                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
                     batchSelect.value = '';
                     if (batchCustomInput) {
                         __pxEduToggleCustomInput(batchCustomInput, false);
@@ -2054,18 +2062,19 @@
 
                 degreeSelect.disabled = false;
                 const degreeOptions = degrees.map(d => ({ value: String(d.id), label: d.name }));
-                __pxEduFillSelectOptions(degreeSelect, degreeOptions, { placeholder: 'Select degree', includeCustom: true });
+                __pxEduFillSelectOptions(degreeSelect, degreeOptions, { placeholder: 'Select degree', includeCustom: false });
 
                 if (isInitial && initialValues?.degreeName) {
                     const match = __pxEduFindDegreeByName(degrees, initialValues.degreeName);
                     if (match) {
                         degreeSelect.value = String(match.id);
                     } else {
-                        degreeSelect.value = EDUCATION_CUSTOM_VALUE;
-                        if (degreeCustomInput) {
-                            degreeCustomInput.value = initialValues.degreeName;
-                            __pxEduToggleCustomInput(degreeCustomInput, true);
-                        }
+                        // degreeSelect.value = EDUCATION_CUSTOM_VALUE;
+                        // if (degreeCustomInput) {
+                        //     degreeCustomInput.value = initialValues.degreeName;
+                        //     __pxEduToggleCustomInput(degreeCustomInput, true);
+                        // }
+                        degreeSelect.value = '';
                     }
                 }
 
@@ -2081,7 +2090,7 @@
                     if (hiddenDegreeId) hiddenDegreeId.value = '';
 
                     departmentSelect.disabled = false;
-                    __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+                    __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
                     departmentSelect.value = EDUCATION_CUSTOM_VALUE;
                     if (isInitial && initialValues?.departmentName && departmentCustomInput) {
                         departmentCustomInput.value = initialValues.departmentName;
@@ -2106,7 +2115,7 @@
                     if (hiddenDegree) hiddenDegree.value = '';
                     if (hiddenDegreeId) hiddenDegreeId.value = '';
                     departmentSelect.disabled = true;
-                    __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+                    __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
                     departmentSelect.value = '';
                     if (departmentCustomInput) {
                         __pxEduToggleCustomInput(departmentCustomInput, false);
@@ -2115,7 +2124,7 @@
                     if (hiddenDepartment) hiddenDepartment.value = '';
 
                     batchSelect.disabled = true;
-                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
                     batchSelect.value = '';
                     if (batchCustomInput) {
                         __pxEduToggleCustomInput(batchCustomInput, false);
@@ -2132,18 +2141,19 @@
                 const departments = Array.isArray(degree?.departments) ? degree.departments : [];
                 departmentSelect.disabled = false;
                 const departmentOptions = departments.map(dep => ({ value: String(dep.id), label: dep.name }));
-                __pxEduFillSelectOptions(departmentSelect, departmentOptions, { placeholder: 'Select department', includeCustom: true });
+                __pxEduFillSelectOptions(departmentSelect, departmentOptions, { placeholder: 'Select department', includeCustom: false });
 
                 if (isInitial && initialValues?.departmentName) {
                     const match = __pxEduFindDepartmentByName(departments, initialValues.departmentName);
                     if (match) {
                         departmentSelect.value = String(match.id);
                     } else {
-                        departmentSelect.value = EDUCATION_CUSTOM_VALUE;
-                        if (departmentCustomInput) {
-                            departmentCustomInput.value = initialValues.departmentName;
-                            __pxEduToggleCustomInput(departmentCustomInput, true);
-                        }
+                        // departmentSelect.value = EDUCATION_CUSTOM_VALUE;
+                        // if (departmentCustomInput) {
+                        //     departmentCustomInput.value = initialValues.departmentName;
+                        //     __pxEduToggleCustomInput(departmentCustomInput, true);
+                        // }
+                        departmentSelect.value = '';
                     }
                 }
 
@@ -2159,7 +2169,7 @@
                     if (hiddenDepartmentId) hiddenDepartmentId.value = '';
 
                     batchSelect.disabled = false;
-                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
                     batchSelect.value = EDUCATION_CUSTOM_VALUE;
                     if (isInitial && initialValues?.batchRange && batchCustomInput) {
                         batchCustomInput.value = initialValues.batchRange;
@@ -2179,7 +2189,7 @@
                     if (hiddenDepartment) hiddenDepartment.value = '';
                     if (hiddenDepartmentId) hiddenDepartmentId.value = '';
                     batchSelect.disabled = true;
-                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+                    __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
                     batchSelect.value = '';
                     if (batchCustomInput) {
                         __pxEduToggleCustomInput(batchCustomInput, false);
@@ -2196,25 +2206,25 @@
                 if (hiddenDepartment) hiddenDepartment.value = department?.name || '';
                 if (hiddenDepartmentId) hiddenDepartmentId.value = selected;
 
-                // Batch list comes from college details (details.batches)
-                const details = await __pxEduLoadCollegeDetails(collegeSelect.value);
-                const batches = Array.isArray(details?.batches) ? details.batches : [];
+                // Batch list comes from the department object directly
+                const batches = Array.isArray(department?.batches) ? department.batches : [];
                 batchSelect.disabled = false;
                 const batchOptions = batches
                     .map(b => ({ value: __pxEduFormatBatchRange(b), label: __pxEduFormatBatchRange(b) }))
                     .filter(opt => opt.value);
-                __pxEduFillSelectOptions(batchSelect, batchOptions, { placeholder: 'Select batch', includeCustom: true });
+                __pxEduFillSelectOptions(batchSelect, batchOptions, { placeholder: 'Select batch', includeCustom: false });
 
                 if (isInitial && initialValues?.batchRange) {
                     const found = batchOptions.find(o => o.value === initialValues.batchRange);
                     if (found) {
                         batchSelect.value = found.value;
                     } else {
-                        batchSelect.value = EDUCATION_CUSTOM_VALUE;
-                        if (batchCustomInput) {
-                            batchCustomInput.value = initialValues.batchRange;
-                            __pxEduToggleCustomInput(batchCustomInput, true);
-                        }
+                        // batchSelect.value = EDUCATION_CUSTOM_VALUE;
+                        // if (batchCustomInput) {
+                        //     batchCustomInput.value = initialValues.batchRange;
+                        //     __pxEduToggleCustomInput(batchCustomInput, true);
+                        // }
+                        batchSelect.value = '';
                     }
                 }
 

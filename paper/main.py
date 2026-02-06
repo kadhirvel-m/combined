@@ -44,6 +44,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Body, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, Request
 from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 try:
@@ -10856,7 +10857,7 @@ def _check_department_delete_blockers(supabase: Client, department_id: str) -> L
     "/api/degrees/{degree_id}",
     summary="Delete a degree, its departments, batches, and related syllabus data",
 )
-def delete_degree(degree_id: uuid.UUID):
+def delete_degree(degree_id: uuid.UUID, force: bool = False):
     supabase = get_service_client()
 
     deg_res = (
@@ -10878,22 +10879,31 @@ def delete_degree(degree_id: uuid.UUID):
 
     # Block deletion if other products depend on the degree directly
     direct_blockers: List[str] = []
-    for table_name, label, column in (
-        ("teacher_classes", "teacher classes", "degree_id"),
-        ("user_education", "user education records", "degree_id"),
-    ):
-        check = supabase.table(table_name).select(column).eq(column, str(degree_id)).limit(1).execute()
-        if getattr(check, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (check {label} for degree): {check.error}")
-        if check.data:
-            direct_blockers.append(label)
+    
+    # If force is True, we will attempt to delete or unlink these records instead of blocking
+    if not force:
+        for table_name, label, column in (
+            ("teacher_classes", "teacher classes", "degree_id"),
+            ("user_education", "user education records", "degree_id"),
+        ):
+            check = supabase.table(table_name).select(column).eq(column, str(degree_id)).limit(1).execute()
+            if getattr(check, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (check {label} for degree): {check.error}")
+            if check.data:
+                direct_blockers.append(label)
 
-    if direct_blockers:
-        formatted = ", ".join(direct_blockers)
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot delete degree because related data exists: {formatted}. Remove or reassign those records first.",
-        )
+        if direct_blockers:
+            formatted = ", ".join(direct_blockers)
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot delete degree because related data exists: {formatted}. Remove or reassign those records first.",
+            )
+    else:
+        # Force delete: clean up direct dependencies
+        # 1. User Education - delete records linked to this degree
+        _ = supabase.table("user_education").delete().eq("degree_id", str(degree_id)).execute()
+        # 2. Teacher Classes - delete classes linked to this degree
+        _ = supabase.table("teacher_classes").delete().eq("degree_id", str(degree_id)).execute()
 
     dept_res = (
         supabase.table("departments")
@@ -10904,30 +10914,45 @@ def delete_degree(degree_id: uuid.UUID):
     if getattr(dept_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (list departments for degree): {dept_res.error}")
 
-    # Check blockers per department before any deletion
-    per_dept_blockers: Dict[str, List[str]] = {}
-    for dept_row in dept_res.data or []:
-        dept_id = dept_row.get("id")
-        if not dept_id:
-            continue
-        blockers = _check_department_delete_blockers(supabase, dept_id)
-        if blockers:
-            per_dept_blockers[dept_row.get("name") or dept_id] = blockers
+    # Check blockers per department before any deletion (unless forced)
+    if not force:
+        per_dept_blockers: Dict[str, List[str]] = {}
+        for dept_row in dept_res.data or []:
+            dept_id = dept_row.get("id")
+            if not dept_id:
+                continue
+            blockers = _check_department_delete_blockers(supabase, dept_id)
+            if blockers:
+                per_dept_blockers[dept_row.get("name") or dept_id] = blockers
 
-    if per_dept_blockers:
-        # Keep message short but actionable
-        names = ", ".join(list(per_dept_blockers.keys())[:5])
-        suffix = "" if len(per_dept_blockers) <= 5 else f" (+{len(per_dept_blockers) - 5} more)"
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot delete degree because related data exists under departments: {names}{suffix}. Remove or reassign those records first.",
-        )
+        if per_dept_blockers:
+            # Keep message short but actionable
+            names = ", ".join(list(per_dept_blockers.keys())[:5])
+            suffix = "" if len(per_dept_blockers) <= 5 else f" (+{len(per_dept_blockers) - 5} more)"
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot delete degree because related data exists under departments: {names}{suffix}. Remove or reassign those records first.",
+            )
 
     stats = {"departments": 0, "batches": 0, "courses": 0}
     for dept_row in dept_res.data or []:
         dept_id_str = dept_row.get("id")
         if not dept_id_str:
             continue
+        
+        if force:
+            # Force cleanup for department dependencies
+            # 1. Marketplace Notes
+            _ = supabase.table("marketplace_notes").delete().eq("department_id", dept_id_str).execute()
+            # 2. Teacher Applications
+            _ = supabase.table("teacher_applications").delete().eq("department_id", dept_id_str).execute()
+            # 3. Teacher Classes (by department)
+            _ = supabase.table("teacher_classes").delete().eq("department_id", dept_id_str).execute()
+            # 4. User Education (by department)
+            _ = supabase.table("user_education").delete().eq("department_id", dept_id_str).execute()
+            # 5. Teacher Profiles - Update to NULL (don't delete user profile)
+            _ = supabase.table("teacher_profiles").update({"department_id": None}).eq("department_id", dept_id_str).execute()
+
         dept_uuid = uuid.UUID(dept_id_str)
         batch_stats = _cascade_delete_department_batches(supabase, dept_uuid)
         stats["batches"] += int(batch_stats.get("batches", 0))
@@ -11368,15 +11393,11 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
         if dept_ids:
             force_stats["teacher_profiles_detached"] += _try_update_in("teacher_profiles", "department_id", dept_ids, {"department_id": None, "college_id": None})
 
-        # User education + profiles + experiences: detach FKs so batch/department/degree/college deletions won't fail.
-        edu_updates = {"college_id": None, "degree_id": None, "department_id": None, "batch_id": None}
-        upd_ue = supabase.table("user_education").update(edu_updates).eq("college_id", str(college_id)).execute()
-        if getattr(upd_ue, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (detach user education): {upd_ue.error}")
-        force_stats["user_education_detached"] = len(getattr(upd_ue, "data", None) or [])
-        force_stats["user_education_detached"] += _try_update_in("user_education", "degree_id", deg_ids, edu_updates)
-        force_stats["user_education_detached"] += _try_update_in("user_education", "department_id", dept_ids, edu_updates)
-        force_stats["user_education_detached"] += _try_update_in("user_education", "batch_id", batch_ids, edu_updates)
+        # User education: delete records (aligns with delete_degree behavior)
+        del_ue = supabase.table("user_education").delete().eq("college_id", str(college_id)).execute()
+        if getattr(del_ue, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete user education): {del_ue.error}")
+        force_stats["user_education_deleted"] = len(getattr(del_ue, "data", None) or [])
 
         upd_up = supabase.table("user_profiles").update({"college_id": None}).eq("college_id", str(college_id)).execute()
         if getattr(upd_up, "error", None):
@@ -14850,6 +14871,156 @@ def mp_list_notes(
     total = len(filtered)
     paged = filtered[offset: offset + limit]
     return {"items": paged, "total": total, "limit": limit, "offset": offset}
+
+
+class TeacherNotesBatchIn(BaseModel):
+    subject_ids: List[str] = Field(..., min_items=1, max_items=200)
+    limit: int = Field(default=6, ge=1, le=50)
+
+
+@marketplace_router.post("/api/marketplace/subjects/teacher-notes/batch", summary="Batch list teacher marketplace notes for subjects")
+def mp_teacher_notes_by_subject_batch(payload: TeacherNotesBatchIn):
+    raw_ids = [str(s).strip() for s in (payload.subject_ids or []) if s]
+    cleaned = []
+    seen = set()
+    for sid in raw_ids:
+        if not sid or sid.lower() in {"null", "undefined"}:
+            continue
+        if sid in seen:
+            continue
+        seen.add(sid)
+        cleaned.append(sid)
+    if not cleaned:
+        return {"notes": {}, "count": 0, "limit": payload.limit}
+
+    supabase = get_service_client()
+    # Fetch a bounded window; we'll group and cap per-subject in app code
+    max_total = min(500, max(1, payload.limit) * len(cleaned) * 2)
+    notes_res = (
+        supabase.table("marketplace_notes")
+        .select("id,title,subject,subject_id,price_cents,owner_user_id,updated_at,created_at,semester,unit,exam_type")
+        .in_("subject_id", cleaned)
+        .order("updated_at", desc=True)
+        .limit(max_total)
+        .execute()
+    )
+    if getattr(notes_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (notes by subject batch): {notes_res.error}")
+
+    notes: List[Dict[str, Any]] = notes_res.data or []
+    if not notes:
+        return {"notes": {}, "count": 0, "limit": payload.limit}
+
+    owner_ids = {n.get("owner_user_id") for n in notes if n.get("owner_user_id")}
+    if not owner_ids:
+        return {"notes": {}, "count": 0, "limit": payload.limit}
+
+    teacher_ids: Set[str] = set()
+    try:
+        role_res = (
+            supabase.table("admin_roles")
+            .select("auth_user_id,role")
+            .in_("auth_user_id", list(owner_ids))
+            .eq("role", "teacher")
+            .execute()
+        )
+        if getattr(role_res, "error", None):
+            teacher_ids = set(owner_ids)
+        else:
+            teacher_ids = {row.get("auth_user_id") for row in (role_res.data or []) if row.get("auth_user_id")}
+    except Exception:
+        teacher_ids = set(owner_ids)
+
+    filtered_notes = [row for row in notes if row.get("owner_user_id") in teacher_ids]
+    if not filtered_notes:
+        return {"notes": {}, "count": 0, "limit": payload.limit}
+
+    seller_ids = {row.get("owner_user_id") for row in filtered_notes if row.get("owner_user_id")}
+    user_profiles_map: Dict[str, Dict[str, Any]] = {}
+    teacher_profiles_map: Dict[str, Dict[str, Any]] = {}
+
+    if seller_ids:
+        try:
+            prof_res = (
+                supabase.table("user_profiles")
+                .select("auth_user_id,name,profile_image_url")
+                .in_("auth_user_id", list(seller_ids))
+                .execute()
+            )
+            if not getattr(prof_res, "error", None):
+                for row in prof_res.data or []:
+                    uid = row.get("auth_user_id")
+                    if uid:
+                        user_profiles_map[uid] = row
+        except Exception:
+            pass
+        try:
+            tprof_res = (
+                supabase.table("teacher_profiles")
+                .select("auth_user_id,name,profile_image_url")
+                .in_("auth_user_id", list(seller_ids))
+                .execute()
+            )
+            if not getattr(tprof_res, "error", None):
+                for row in tprof_res.data or []:
+                    uid = row.get("auth_user_id")
+                    if uid:
+                        teacher_profiles_map[uid] = row
+        except Exception:
+            pass
+
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for row in filtered_notes:
+        sid = row.get("subject_id")
+        if not sid:
+            continue
+        key = str(sid)
+        bucket = grouped.setdefault(key, [])
+        if len(bucket) >= payload.limit:
+            continue
+        owner_id = row.get("owner_user_id")
+        teacher_profile = teacher_profiles_map.get(owner_id)
+        user_profile = user_profiles_map.get(owner_id)
+        seller_name = None
+        seller_avatar = None
+        if teacher_profile and teacher_profile.get("name"):
+            seller_name = teacher_profile.get("name")
+        elif user_profile and user_profile.get("name"):
+            seller_name = user_profile.get("name")
+        elif owner_id:
+            seller_name = owner_id[:6] + "..."
+        if teacher_profile and teacher_profile.get("profile_image_url"):
+            seller_avatar = teacher_profile.get("profile_image_url")
+        elif user_profile and user_profile.get("profile_image_url"):
+            seller_avatar = user_profile.get("profile_image_url")
+
+        seller = {"id": owner_id, "is_teacher": True, "verified": True}
+        if seller_name:
+            seller["name"] = seller_name
+        if seller_avatar:
+            seller["avatar_url"] = seller_avatar
+        if owner_id:
+            seller["profile_href"] = f"/ui/teacher_profile.html?user={owner_id}"
+
+        bucket.append(
+            {
+                "id": row.get("id"),
+                "title": row.get("title"),
+                "subject": row.get("subject"),
+                "subject_id": row.get("subject_id"),
+                "price_cents": int(row.get("price_cents") or 0),
+                "owner_user_id": owner_id,
+                "updated_at": row.get("updated_at") or row.get("created_at"),
+                "created_at": row.get("created_at"),
+                "semester": row.get("semester"),
+                "unit": row.get("unit"),
+                "exam_type": row.get("exam_type"),
+                "seller": seller,
+            }
+        )
+
+    total = sum(len(v) for v in grouped.values())
+    return {"notes": grouped, "count": total, "limit": payload.limit}
 
 
 @marketplace_router.get("/api/marketplace/subjects/{subject_id}/teacher-notes", summary="List teacher marketplace notes for a subject")
@@ -18332,18 +18503,49 @@ def _ensure_user_allowed_for_test(supabase, test_row: Dict[str, Any], user_id: s
         return
 
     try:
-        check = (
-            supabase
-            .table("teacher_class_students")
-            .select("id")
-            .eq("class_id", class_id)
-            .eq("student_user_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        if getattr(check, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (class access): {check.error}")
-        rows = getattr(check, "data", None) or []
+        # First fetch the class row to get matching criteria
+        class_res = _supabase_retry(lambda: supabase.table("teacher_classes").select("*").eq("id", str(class_id)).limit(1).execute())
+        if getattr(class_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (get class): {class_res.error}")
+        if not class_res.data:
+            # Class not found - deny access
+            raise HTTPException(status_code=403, detail="This test is restricted to students of the selected class")
+        class_row = class_res.data[0]
+
+        # Get user's profile ID from auth_user_id
+        prof_res = _supabase_retry(lambda: supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute())
+        if getattr(prof_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (get profile): {prof_res.error}")
+        if not prof_res.data:
+            raise HTTPException(status_code=403, detail="This test is restricted to students of the selected class")
+        profile_id = prof_res.data[0].get("id")
+
+        # Build query to check if user's education record matches class criteria
+        edu_query = supabase.table("user_education").select("id").eq("user_profile_id", profile_id)
+
+        filter_count = 0
+        for column, value in (
+            ("batch_id", class_row.get("batch_id")),
+            ("section", class_row.get("section")),
+            ("current_semester", class_row.get("semester")),
+            ("degree_id", class_row.get("degree_id")),
+            ("department_id", class_row.get("department_id")),
+            ("college_id", class_row.get("college_id")),
+        ):
+            if value not in {None, ""}:
+                eq_value = str(value) if column.endswith("_id") or column == "batch_id" else value
+                edu_query = edu_query.eq(column, eq_value)
+                filter_count += 1
+
+        if filter_count == 0:
+            # No filters means class has no criteria - allow access
+            return
+
+        edu_res = _supabase_retry(lambda: edu_query.limit(1).execute())
+
+        if getattr(edu_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (class access): {edu_res.error}")
+        rows = getattr(edu_res, "data", None) or []
         if not rows:
             raise HTTPException(status_code=403, detail="This test is restricted to students of the selected class")
     except HTTPException:
@@ -18874,7 +19076,7 @@ def api_get_test(test_id: str, authorization: Optional[str] = Header(default=Non
     _ensure_user_allowed_for_test(supabase, test_row, user_id)
     questions = _fetch_test_questions(supabase, test_id)
 
-    attempt_res = (
+    attempt_res = _supabase_retry(lambda: (
         supabase
         .table("test_attempts")
         .select("id,submitted_at,score")
@@ -18882,7 +19084,7 @@ def api_get_test(test_id: str, authorization: Optional[str] = Header(default=Non
         .eq("student_user_id", user_id)
         .limit(1)
         .execute()
-    )
+    ))
     if getattr(attempt_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (attempt check): {attempt_res.error}")
     attempt = (getattr(attempt_res, "data", None) or [None])[0]
@@ -19298,6 +19500,31 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Compress large HTML/CSS/JS/JSON responses to reduce bandwidth
+    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
+
+    # Cache static assets to reduce repeated downloads
+    STATIC_CACHE_EXTENSIONS = {
+        ".css", ".js", ".mjs", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg",
+        ".ico", ".woff2", ".woff", ".ttf", ".mp4", ".webm"
+    }
+    HTML_EXTENSIONS = {".html", ".htm"}
+
+    @app.middleware("http")
+    async def add_static_cache_headers(request: Request, call_next):  # type: ignore[override]
+        response = await call_next(request)
+        if request.method in ("GET", "HEAD"):
+            path = request.url.path or ""
+            if path.startswith("/ui/") or path.startswith("/assets/"):
+                ext = Path(path).suffix.lower()
+                if ext in HTML_EXTENSIONS:
+                    response.headers.setdefault("Cache-Control", "public, max-age=120")
+                elif ext in STATIC_CACHE_EXTENSIONS:
+                    response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
+                else:
+                    response.headers.setdefault("Cache-Control", "public, max-age=3600")
+        return response
 
     app.include_router(projects_router)
     app.include_router(notes_router)
@@ -21656,3 +21883,919 @@ async def group_chat_websocket(websocket: WebSocket, room_id: str):
                             print(f"[GroupChat] Cleaned up empty room {room_id}")
                     asyncio.create_task(cleanup_room())
 
+
+# ============================================
+# ASSIGNMENTS PORTAL
+# ============================================
+
+
+import hashlib
+
+def get_supabase() -> Client:
+    """Get or create Supabase client"""
+    # Try to find global client first
+    if 'supabase' in globals():
+        return globals()['supabase']
+    
+    # Fallback: create new client (should ideally reuse global)
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_KEY")
+    if not url or not key:
+        raise ValueError("Supabase credentials not found")
+    return create_client(url, key)
+
+def get_user_id_from_token(authorization: Optional[str]) -> Optional[str]:
+    """Extract user ID from Authorization header"""
+    if not authorization:
+        return None
+        
+    try:
+        token = authorization.replace("Bearer ", "").strip()
+        if not token:
+            return None
+            
+        supabase = get_supabase()
+        user = supabase.auth.get_user(token)
+        return user.user.id if user and user.user else None
+    except Exception as e:
+        print(f"[Auth] Error validating token: {e}")
+        return None
+
+
+# Pydantic models for assignments
+class AssignmentCreate(BaseModel):
+    class_id: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    instructions_md: Optional[str] = None
+    resource_links: Optional[List[str]] = []
+    assignment_type: Optional[str] = "individual"
+    max_team_size: Optional[int] = 1
+    max_marks: Optional[int] = 100
+    allowed_file_types: Optional[List[str]] = ["pdf", "jpg", "jpeg", "png", "doc", "docx", "ppt", "pptx"]
+    max_files: Optional[int] = 5
+    max_file_size_mb: Optional[int] = 10
+    due_date: str
+    allow_late_submission: Optional[bool] = False
+    late_penalty_percent: Optional[int] = 0
+    grace_period_hours: Optional[int] = 0
+    status: Optional[str] = "draft"
+    rubrics: Optional[List[Dict[str, Any]]] = []
+
+class AssignmentUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    instructions_md: Optional[str] = None
+    resource_links: Optional[List[str]] = None
+    assignment_type: Optional[str] = None
+    max_team_size: Optional[int] = None
+    max_marks: Optional[int] = None
+    allowed_file_types: Optional[List[str]] = None
+    max_files: Optional[int] = None
+    max_file_size_mb: Optional[int] = None
+    due_date: Optional[str] = None
+    allow_late_submission: Optional[bool] = None
+    late_penalty_percent: Optional[int] = None
+    grace_period_hours: Optional[int] = None
+    status: Optional[str] = None
+
+class SubmissionCreate(BaseModel):
+    file_urls: Optional[List[Dict[str, Any]]] = []
+    text_content: Optional[str] = None
+    is_draft: Optional[bool] = False
+
+class GradeSubmission(BaseModel):
+    total_marks: Optional[int] = None
+    rubric_scores: Optional[Dict[str, int]] = {}
+    feedback: Optional[str] = None
+
+class ExtensionRequest(BaseModel):
+    requested_date: str
+    reason: str
+
+class ExtensionResponse(BaseModel):
+    status: str  # approved, denied
+    new_due_date: Optional[str] = None
+
+
+# --- Staff Assignment Management ---
+
+@app.post("/api/assignments")
+def create_assignment(payload: AssignmentCreate, authorization: Optional[str] = Header(default=None)):
+    """Create a new assignment"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Build assignment row
+    assignment_data = {
+        "teacher_user_id": user_id,
+        "class_id": payload.class_id,
+        "title": payload.title,
+        "description": payload.description,
+        "instructions_md": payload.instructions_md,
+        "resource_links": payload.resource_links or [],
+        "assignment_type": payload.assignment_type or "individual",
+        "max_team_size": payload.max_team_size or 1,
+        "max_marks": payload.max_marks or 100,
+        "allowed_file_types": payload.allowed_file_types or ["pdf", "jpg", "jpeg", "png", "doc", "docx"],
+        "max_files": payload.max_files or 5,
+        "max_file_size_mb": payload.max_file_size_mb or 10,
+        "due_date": payload.due_date,
+        "allow_late_submission": payload.allow_late_submission or False,
+        "late_penalty_percent": payload.late_penalty_percent or 0,
+        "grace_period_hours": payload.grace_period_hours or 0,
+        "status": payload.status or "draft",
+    }
+    
+    if payload.status == "published":
+        assignment_data["published_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = supabase.table("assignments").insert(assignment_data).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to create assignment")
+    
+    assignment = result.data[0]
+    
+    # Insert rubrics if provided
+    if payload.rubrics:
+        for idx, rubric in enumerate(payload.rubrics):
+            supabase.table("assignment_rubrics").insert({
+                "assignment_id": assignment["id"],
+                "criterion": rubric.get("criterion", ""),
+                "max_points": rubric.get("max_points", 0),
+                "description": rubric.get("description", ""),
+                "order_index": idx
+            }).execute()
+    
+    return {"success": True, "assignment": assignment}
+
+
+@app.get("/api/assignments")
+def list_assignments(
+    class_id: Optional[str] = None,
+    status: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None)
+):
+    """List assignments created by the teacher"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    query = supabase.table("assignments").select("*").eq("teacher_user_id", user_id)
+    
+    if class_id:
+        query = query.eq("class_id", class_id)
+    if status:
+        query = query.eq("status", status)
+    
+    query = query.order("created_at", desc=True)
+    result = query.execute()
+    
+    return {"assignments": result.data or []}
+
+
+@app.get("/api/assignments/{assignment_id}")
+def get_assignment(assignment_id: str, authorization: Optional[str] = Header(default=None)):
+    """Get assignment details with rubrics"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    result = supabase.table("assignments").select("*").eq("id", assignment_id).limit(1).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    assignment = result.data[0]
+    
+    # Fetch rubrics
+    rubrics = supabase.table("assignment_rubrics").select("*").eq(
+        "assignment_id", assignment_id
+    ).order("order_index").execute()
+    
+    assignment["rubrics"] = rubrics.data or []
+    
+    return {"assignment": assignment}
+
+
+@app.put("/api/assignments/{assignment_id}")
+def update_assignment(
+    assignment_id: str,
+    payload: AssignmentUpdate,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Update an assignment"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Verify ownership
+    existing = supabase.table("assignments").select("teacher_user_id").eq("id", assignment_id).limit(1).execute()
+    if not existing.data or existing.data[0].get("teacher_user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    updates = {k: v for k, v in payload.dict().items() if v is not None}
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    if updates.get("status") == "published":
+        updates["published_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = supabase.table("assignments").update(updates).eq("id", assignment_id).execute()
+    
+    return {"success": True, "assignment": result.data[0] if result.data else None}
+
+
+@app.delete("/api/assignments/{assignment_id}")
+def delete_assignment(assignment_id: str, authorization: Optional[str] = Header(default=None)):
+    """Delete an assignment"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Verify ownership
+    existing = supabase.table("assignments").select("teacher_user_id").eq("id", assignment_id).limit(1).execute()
+    if not existing.data or existing.data[0].get("teacher_user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    supabase.table("assignments").delete().eq("id", assignment_id).execute()
+    
+    return {"success": True}
+
+
+@app.post("/api/assignments/{assignment_id}/publish")
+def publish_assignment(assignment_id: str, authorization: Optional[str] = Header(default=None)):
+    """Publish a draft assignment"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    result = supabase.table("assignments").update({
+        "status": "published",
+        "published_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", assignment_id).eq("teacher_user_id", user_id).execute()
+    
+    return {"success": True, "assignment": result.data[0] if result.data else None}
+
+
+@app.post("/api/assignments/{assignment_id}/close")
+def close_assignment(assignment_id: str, authorization: Optional[str] = Header(default=None)):
+    """Close submissions for an assignment"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    result = supabase.table("assignments").update({
+        "status": "closed",
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", assignment_id).eq("teacher_user_id", user_id).execute()
+    
+    return {"success": True}
+
+
+# --- Submissions ---
+
+@app.get("/api/assignments/{assignment_id}/submissions")
+def get_submissions(assignment_id: str, authorization: Optional[str] = Header(default=None)):
+    """Get all submissions for an assignment (teacher only)"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Verify teacher owns assignment
+    assignment = supabase.table("assignments").select("*").eq("id", assignment_id).limit(1).execute()
+    if not assignment.data or assignment.data[0].get("teacher_user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    submissions = supabase.table("assignment_submissions").select("*").eq(
+        "assignment_id", assignment_id
+    ).order("submitted_at", desc=True).execute()
+    
+    # Fetch student info for each submission
+    student_ids = [s.get("student_user_id") for s in (submissions.data or [])]
+    student_info = {}
+    if student_ids:
+        profiles = supabase.table("user_profiles").select("auth_user_id,name").in_(
+            "auth_user_id", student_ids
+        ).execute()
+        for p in (profiles.data or []):
+            student_info[p.get("auth_user_id")] = p.get("name", "Unknown")
+    
+    for sub in (submissions.data or []):
+        sub["student_name"] = student_info.get(sub.get("student_user_id"), "Unknown")
+    
+    return {"submissions": submissions.data or [], "assignment": assignment.data[0]}
+
+
+@app.get("/api/assignments/{assignment_id}/duplicates")
+def get_duplicate_submissions(assignment_id: str, authorization: Optional[str] = Header(default=None)):
+    """Get duplicate file submissions based on file hash"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Verify teacher owns assignment
+    assignment = supabase.table("assignments").select("teacher_user_id").eq("id", assignment_id).limit(1).execute()
+    if not assignment.data or assignment.data[0].get("teacher_user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Find duplicate files by hash
+    files = supabase.table("assignment_submission_files").select(
+        "id,submission_id,student_user_id,file_name,file_hash,file_size_bytes"
+    ).eq("assignment_id", assignment_id).execute()
+    
+    # Group by hash
+    hash_groups = {}
+    for f in (files.data or []):
+        file_hash = f.get("file_hash")
+        if not file_hash:
+            continue
+        if file_hash not in hash_groups:
+            hash_groups[file_hash] = []
+        hash_groups[file_hash].append(f)
+    
+    # Filter to only duplicates (2+ files with same hash)
+    duplicates = []
+    for file_hash, file_list in hash_groups.items():
+        if len(file_list) > 1:
+            student_ids = [f.get("student_user_id") for f in file_list]
+            # Fetch student names
+            profiles = supabase.table("user_profiles").select("auth_user_id,full_name").in_(
+                "auth_user_id", student_ids
+            ).execute()
+            name_map = {p.get("auth_user_id"): p.get("full_name") for p in (profiles.data or [])}
+            
+            for f in file_list:
+                f["student_name"] = name_map.get(f.get("student_user_id"), "Unknown")
+            
+            duplicates.append({
+                "file_hash": file_hash,
+                "file_size_bytes": file_list[0].get("file_size_bytes"),
+                "count": len(file_list),
+                "submissions": file_list
+            })
+    
+    return {"duplicates": duplicates}
+
+
+@app.put("/api/assignments/{assignment_id}/submissions/{submission_id}/grade")
+def grade_submission(
+    assignment_id: str,
+    submission_id: str,
+    payload: GradeSubmission,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Grade a submission"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Verify teacher owns assignment
+    assignment = supabase.table("assignments").select("teacher_user_id").eq("id", assignment_id).limit(1).execute()
+    if not assignment.data or assignment.data[0].get("teacher_user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    updates = {
+        "total_marks": payload.total_marks,
+        "rubric_scores": payload.rubric_scores or {},
+        "feedback": payload.feedback,
+        "graded_by": user_id,
+        "graded_at": datetime.now(timezone.utc).isoformat(),
+        "status": "graded",
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    result = supabase.table("assignment_submissions").update(updates).eq("id", submission_id).execute()
+    
+    return {"success": True, "submission": result.data[0] if result.data else None}
+
+
+# --- Student Endpoints ---
+
+@app.get("/api/student/assignments")
+def get_student_assignments(authorization: Optional[str] = Header(default=None)):
+    """Get assignments for the student's class"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Get student's education info to determine class
+    profile = supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
+    if not profile.data:
+        return {"assignments": []}
+    
+    profile_id = profile.data[0].get("id")
+    education = supabase.table("user_education").select("*").eq("user_profile_id", profile_id).limit(1).execute()
+    
+    if not education.data:
+        return {"assignments": []}
+    
+    edu = education.data[0]
+    
+    # Find matching classes
+    class_query = supabase.table("teacher_classes").select("id")
+    for col, val in [
+        ("batch_id", edu.get("batch_id")),
+        ("department_id", edu.get("department_id")),
+        ("semester", edu.get("current_semester")),
+        ("section", edu.get("section")),
+    ]:
+        if val:
+            class_query = class_query.eq(col, val)
+    
+    classes = class_query.execute()
+    class_ids = [c.get("id") for c in (classes.data or [])]
+    
+    if not class_ids:
+        return {"assignments": []}
+    
+    # Get published/closed assignments for these classes
+    assignments = supabase.table("assignments").select("*").in_(
+        "class_id", class_ids
+    ).in_("status", ["published", "closed"]).order("due_date").execute()
+    
+    # Get student's submissions
+    submissions = supabase.table("assignment_submissions").select(
+        "assignment_id,status,total_marks,submitted_at"
+    ).eq("student_user_id", user_id).execute()
+    
+    sub_map = {s.get("assignment_id"): s for s in (submissions.data or [])}
+    
+    for a in (assignments.data or []):
+        sub = sub_map.get(a.get("id"))
+        a["submission"] = sub
+        a["is_submitted"] = bool(sub and sub.get("status") != "pending")
+        a["is_graded"] = bool(sub and sub.get("status") == "graded")
+    
+    return {"assignments": assignments.data or []}
+
+
+@app.get("/api/student/assignments/{assignment_id}")
+def get_student_assignment(assignment_id: str, authorization: Optional[str] = Header(default=None)):
+    """Get assignment details for student"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    assignment = supabase.table("assignments").select("*").eq("id", assignment_id).limit(1).execute()
+    if not assignment.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    a = assignment.data[0]
+    
+    # Fetch rubrics
+    rubrics = supabase.table("assignment_rubrics").select("*").eq(
+        "assignment_id", assignment_id
+    ).order("order_index").execute()
+    a["rubrics"] = rubrics.data or []
+    
+    # Fetch student's submission if exists
+    submission = supabase.table("assignment_submissions").select("*").eq(
+        "assignment_id", assignment_id
+    ).eq("student_user_id", user_id).limit(1).execute()
+    a["my_submission"] = submission.data[0] if submission.data else None
+    
+    return {"assignment": a}
+
+
+@app.post("/api/student/assignments/{assignment_id}/submit")
+def submit_assignment(
+    assignment_id: str,
+    payload: SubmissionCreate,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Submit or update assignment submission"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Check assignment exists and is open
+    assignment = supabase.table("assignments").select("*").eq("id", assignment_id).limit(1).execute()
+    if not assignment.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    a = assignment.data[0]
+    
+    # Check deadline
+    due_date = datetime.fromisoformat(a.get("due_date").replace("Z", "+00:00"))
+    now = datetime.now(timezone.utc)
+    
+    if now > due_date and not a.get("allow_late_submission"):
+        # Check for extension
+        extension = supabase.table("assignment_extensions").select("new_due_date").eq(
+            "assignment_id", assignment_id
+        ).eq("student_user_id", user_id).eq("status", "approved").limit(1).execute()
+        
+        if extension.data:
+            ext_date = datetime.fromisoformat(extension.data[0].get("new_due_date").replace("Z", "+00:00"))
+            if now > ext_date:
+                raise HTTPException(status_code=400, detail="Submission deadline has passed")
+        else:
+            raise HTTPException(status_code=400, detail="Submission deadline has passed")
+    
+    # Check if submission exists
+    existing = supabase.table("assignment_submissions").select("id,version").eq(
+        "assignment_id", assignment_id
+    ).eq("student_user_id", user_id).limit(1).execute()
+    
+    submission_data = {
+        "file_urls": payload.file_urls or [],
+        "text_content": payload.text_content,
+        "is_draft": payload.is_draft or False,
+        "status": "pending" if payload.is_draft else "submitted",
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    if not payload.is_draft:
+        submission_data["submitted_at"] = datetime.now(timezone.utc).isoformat()
+    
+    if existing.data:
+        # Update existing
+        submission_data["version"] = (existing.data[0].get("version") or 1) + 1
+        result = supabase.table("assignment_submissions").update(submission_data).eq(
+            "id", existing.data[0].get("id")
+        ).execute()
+        submission_id = existing.data[0].get("id")
+    else:
+        # Create new
+        submission_data["assignment_id"] = assignment_id
+        submission_data["student_user_id"] = user_id
+        submission_data["version"] = 1
+        result = supabase.table("assignment_submissions").insert(submission_data).execute()
+        submission_id = result.data[0].get("id") if result.data else None
+    
+    # Store file metadata with hash for duplicate detection
+    if submission_id and payload.file_urls:
+        # Clear old files
+        supabase.table("assignment_submission_files").delete().eq("submission_id", submission_id).execute()
+        
+        # Insert new file records
+        for file_info in payload.file_urls:
+            file_record = {
+                "submission_id": submission_id,
+                "assignment_id": assignment_id,
+                "student_user_id": user_id,
+                "file_url": file_info.get("url", ""),
+                "file_name": file_info.get("name", ""),
+                "file_size_bytes": file_info.get("size", 0),
+                "file_type": file_info.get("type", ""),
+                "file_hash": file_info.get("hash", "")  # Hash calculated on frontend
+            }
+            supabase.table("assignment_submission_files").insert(file_record).execute()
+    
+    return {"success": True, "submission": result.data[0] if result.data else None}
+
+
+# --- File Upload ---
+
+@app.post("/api/assignments/upload")
+async def upload_assignment_file(
+    file: UploadFile = File(...),
+    assignment_id: str = Form(...),
+    authorization: Optional[str] = Header(default=None)
+):
+    """Upload file to assignments bucket and return URL with hash"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Read file content
+    content = await file.read()
+    
+    # Calculate SHA-256 hash for duplicate detection
+    file_hash = hashlib.sha256(content).hexdigest()
+    
+    # Generate unique filename
+    ext = os.path.splitext(file.filename)[1] if file.filename else ""
+    unique_name = f"{assignment_id}/{user_id}/{uuid.uuid4()}{ext}"
+    
+    # Upload to Supabase bucket
+    try:
+        result = supabase.storage.from_("assignments").upload(
+            unique_name,
+            content,
+            {"content-type": file.content_type or "application/octet-stream"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    
+    # Get public URL
+    public_url = supabase.storage.from_("assignments").get_public_url(unique_name)
+    
+    return {
+        "success": True,
+        "file": {
+            "url": public_url,
+            "name": file.filename,
+            "size": len(content),
+            "type": file.content_type,
+            "hash": file_hash
+        }
+    }
+
+
+# --- Extensions ---
+
+@app.post("/api/student/assignments/{assignment_id}/request-extension")
+def request_extension(
+    assignment_id: str,
+    payload: ExtensionRequest,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Request deadline extension"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Check if request already exists
+    existing = supabase.table("assignment_extensions").select("id").eq(
+        "assignment_id", assignment_id
+    ).eq("student_user_id", user_id).limit(1).execute()
+    
+    if existing.data:
+        raise HTTPException(status_code=400, detail="Extension request already exists")
+    
+    result = supabase.table("assignment_extensions").insert({
+        "assignment_id": assignment_id,
+        "student_user_id": user_id,
+        "requested_date": payload.requested_date,
+        "reason": payload.reason,
+        "status": "pending"
+    }).execute()
+    
+    return {"success": True, "extension": result.data[0] if result.data else None}
+
+
+@app.get("/api/assignments/{assignment_id}/extensions")
+def get_extensions(assignment_id: str, authorization: Optional[str] = Header(default=None)):
+    """Get extension requests for an assignment (teacher only)"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    extensions = supabase.table("assignment_extensions").select("*").eq(
+        "assignment_id", assignment_id
+    ).order("created_at", desc=True).execute()
+    
+    # Fetch student names
+    student_ids = [e.get("student_user_id") for e in (extensions.data or [])]
+    if student_ids:
+        profiles = supabase.table("user_profiles").select("auth_user_id,full_name").in_(
+            "auth_user_id", student_ids
+        ).execute()
+        name_map = {p.get("auth_user_id"): p.get("full_name") for p in (profiles.data or [])}
+        for e in (extensions.data or []):
+            e["student_name"] = name_map.get(e.get("student_user_id"), "Unknown")
+    
+    return {"extensions": extensions.data or []}
+
+
+@app.put("/api/assignments/extensions/{extension_id}")
+def respond_to_extension(
+    extension_id: str,
+    payload: ExtensionResponse,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Approve or deny extension request (teacher only)"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    updates = {
+        "status": payload.status,
+        "approved_by": user_id if payload.status == "approved" else None,
+    }
+    
+    if payload.new_due_date:
+        updates["new_due_date"] = payload.new_due_date
+    
+    result = supabase.table("assignment_extensions").update(updates).eq("id", extension_id).execute()
+    
+    return {"success": True, "extension": result.data[0] if result.data else None}
+
+
+# --- Comments ---
+
+@app.get("/api/assignments/{assignment_id}/comments")
+def get_comments(
+    assignment_id: str,
+    submission_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Get comments for assignment or submission"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    query = supabase.table("assignment_comments").select("*").eq("assignment_id", assignment_id)
+    
+    if submission_id:
+        query = query.eq("submission_id", submission_id)
+    
+    comments = query.order("created_at").execute()
+    
+    # Fetch user names
+    user_ids = list(set([c.get("user_id") for c in (comments.data or [])]))
+    if user_ids:
+        profiles = supabase.table("user_profiles").select("auth_user_id,full_name").in_(
+            "auth_user_id", user_ids
+        ).execute()
+        name_map = {p.get("auth_user_id"): p.get("full_name") for p in (profiles.data or [])}
+        for c in (comments.data or []):
+            c["user_name"] = name_map.get(c.get("user_id"), "Unknown")
+    
+    return {"comments": comments.data or []}
+
+
+class CommentCreate(BaseModel):
+    content: str
+    submission_id: Optional[str] = None
+    is_private: Optional[bool] = False
+
+
+@app.post("/api/assignments/{assignment_id}/comments")
+def add_comment(
+    assignment_id: str,
+    payload: CommentCreate,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Add comment to assignment or submission"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    result = supabase.table("assignment_comments").insert({
+        "assignment_id": assignment_id,
+        "submission_id": payload.submission_id,
+        "user_id": user_id,
+        "content": payload.content,
+        "is_private": payload.is_private or False
+    }).execute()
+    
+    return {"success": True, "comment": result.data[0] if result.data else None}
+
+
+# --- Analytics ---
+
+@app.get("/api/assignments/{assignment_id}/analytics")
+def get_assignment_analytics(assignment_id: str, authorization: Optional[str] = Header(default=None)):
+    """Get analytics for an assignment"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    # Get assignment and class info
+    assignment = supabase.table("assignments").select("*").eq("id", assignment_id).limit(1).execute()
+    if not assignment.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    a = assignment.data[0]
+    
+    # Get all submissions
+    submissions = supabase.table("assignment_submissions").select("*").eq(
+        "assignment_id", assignment_id
+    ).execute()
+    
+    subs = submissions.data or []
+    
+    # Calculate stats
+    total_submitted = len([s for s in subs if s.get("status") != "pending"])
+    total_graded = len([s for s in subs if s.get("status") == "graded"])
+    total_pending = len([s for s in subs if s.get("status") == "pending"])
+    
+    grades = [s.get("total_marks") for s in subs if s.get("total_marks") is not None]
+    avg_grade = sum(grades) / len(grades) if grades else 0
+    max_grade = max(grades) if grades else 0
+    min_grade = min(grades) if grades else 0
+    
+    # Late submissions
+    due_date = datetime.fromisoformat(a.get("due_date").replace("Z", "+00:00"))
+    late_count = 0
+    for s in subs:
+        if s.get("submitted_at"):
+            sub_date = datetime.fromisoformat(s.get("submitted_at").replace("Z", "+00:00"))
+            if sub_date > due_date:
+                late_count += 1
+    
+    # Grade distribution
+    grade_ranges = {"0-40": 0, "41-60": 0, "61-80": 0, "81-100": 0}
+    max_marks = a.get("max_marks", 100)
+    for g in grades:
+        pct = (g / max_marks) * 100 if max_marks else 0
+        if pct <= 40:
+            grade_ranges["0-40"] += 1
+        elif pct <= 60:
+            grade_ranges["41-60"] += 1
+        elif pct <= 80:
+            grade_ranges["61-80"] += 1
+        else:
+            grade_ranges["81-100"] += 1
+    
+    return {
+        "analytics": {
+            "total_submitted": total_submitted,
+            "total_graded": total_graded,
+            "total_pending": total_pending,
+            "late_submissions": late_count,
+            "average_grade": round(avg_grade, 2),
+            "max_grade": max_grade,
+            "min_grade": min_grade,
+            "grade_distribution": grade_ranges
+        }
+    }
+
+
+# --- Templates ---
+
+@app.get("/api/assignment-templates")
+def list_templates(authorization: Optional[str] = Header(default=None)):
+    """List assignment templates"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    templates = supabase.table("assignment_templates").select("*").eq(
+        "teacher_user_id", user_id
+    ).order("created_at", desc=True).execute()
+    
+    return {"templates": templates.data or []}
+
+
+class TemplateCreate(BaseModel):
+    title: str
+    template_data: Dict[str, Any]
+
+
+@app.post("/api/assignment-templates")
+def create_template(payload: TemplateCreate, authorization: Optional[str] = Header(default=None)):
+    """Save assignment as template"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    result = supabase.table("assignment_templates").insert({
+        "teacher_user_id": user_id,
+        "title": payload.title,
+        "template_data": payload.template_data
+    }).execute()
+    
+    return {"success": True, "template": result.data[0] if result.data else None}
+
+
+@app.delete("/api/assignment-templates/{template_id}")
+def delete_template(template_id: str, authorization: Optional[str] = Header(default=None)):
+    """Delete a template"""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_supabase()
+    
+    supabase.table("assignment_templates").delete().eq("id", template_id).eq(
+        "teacher_user_id", user_id
+    ).execute()
+    
+    return {"success": True}

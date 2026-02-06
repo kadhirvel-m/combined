@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0&display=swap"
     rel="stylesheet">
 
   <!-- Tailwind (forms/typography/aspect-ratio) -->
@@ -56,7 +56,6 @@
     }
   </script>
   <script src="config.js"></script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
     .material-symbols-rounded {
       vertical-align: -6px;
@@ -164,7 +163,6 @@
       })();
 
   </script>
-  <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js" type="module"></script>
   <style>
     #pageLoader {
       position: fixed;
@@ -295,8 +293,8 @@
           </h1>
           <div
             class="rounded-3xl overflow-hidden bg-white/80 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 shadow-soft dark:shadow-glow aspect-[16/9] md:aspect-[21/10] max-w-xl md:max-w-lg mx-auto">
-            <video class="w-full h-full object-cover" autoplay muted loop playsinline>
-              <source src="assets/video/login.mp4" type="video/mp4" />
+            <video id="heroVideo" class="w-full h-full object-cover" muted loop playsinline preload="none" data-autoplay="1">
+              <source data-src="assets/video/login.mp4" type="video/mp4" />
               Your browser does not support the video tag.
             </video>
           </div>
@@ -501,6 +499,28 @@
     const submitLabel = submitBtn?.querySelector('[data-label]');
     const googleBtn = document.getElementById('googleBtn');
     let supabaseClient = null;
+    const __scriptCache = new Map();
+
+    function loadScriptOnce(src, opts = {}) {
+      if (__scriptCache.has(src)) return __scriptCache.get(src);
+      const p = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        if (opts.module) s.type = 'module';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(s);
+      });
+      __scriptCache.set(src, p);
+      return p;
+    }
+
+    const LOTTIE_SRC = 'https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js';
+    async function ensureLottie() {
+      if (window.customElements && window.customElements.get('dotlottie-wc')) return;
+      try { await loadScriptOnce(LOTTIE_SRC, { module: true }); } catch { }
+    }
 
     const setSubmitState = (loading) => {
       if (!submitBtn) return;
@@ -513,6 +533,9 @@
     async function ensureSupabase() {
       if (supabaseClient) return supabaseClient;
       try {
+        if (!window.supabase || !window.supabase.createClient) {
+          await loadScriptOnce('https://unpkg.com/@supabase/supabase-js@2');
+        }
         const cfg = await fetch(`${apiBase}/api/public/supabase`).then(r => r.json());
         if (!cfg?.url || !cfg?.anonKey) throw new Error('Missing Supabase config');
         supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
@@ -619,12 +642,43 @@
 
     function showLoader() {
       const loader = document.getElementById('pageLoader');
+      ensureLottie();
       if (loader) loader.classList.add('active');
     }
     function hideLoader() {
       const loader = document.getElementById('pageLoader');
       if (loader) loader.classList.remove('active');
     }
+
+    function initHeroVideo() {
+      const video = document.getElementById('heroVideo');
+      if (!video) return;
+      const source = video.querySelector('source[data-src]');
+      const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      const saveData = conn && conn.saveData;
+      const slow = conn && /2g|3g/.test(conn.effectiveType || '');
+      const shouldAutoplay = !prefersReduced && !saveData && !slow;
+
+      const loadAndPlay = () => {
+        if (source && !source.src) {
+          source.src = source.dataset.src || '';
+          video.load();
+        }
+        if (shouldAutoplay) {
+          const p = video.play();
+          if (p && typeof p.catch === 'function') { p.catch(() => { }); }
+        }
+      };
+
+      if (shouldAutoplay) {
+        loadAndPlay();
+      } else {
+        video.addEventListener('click', loadAndPlay, { once: true });
+      }
+    }
+
+    initHeroVideo();
   </script>
 </body>
 

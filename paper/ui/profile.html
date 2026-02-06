@@ -443,6 +443,10 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
+          <a href="assignments.html"
+            class="inline-flex items-center gap-2 rounded-full border border-brand-500/30 bg-brandlt-100/80 dark:bg-brand-700/30 px-4 py-2 text-sm font-medium text-brand-700 dark:text-brandlt-100 transition hover:border-brand-500/60 hover:shadow-glow">
+            <span class="icon text-base">assignment</span> Assignments
+          </a>
           <a href="academicas.html"
             class="inline-flex items-center gap-2 rounded-full border border-brand-500/30 bg-brandlt-100/80 dark:bg-brand-700/30 px-4 py-2 text-sm font-medium text-brand-700 dark:text-brandlt-100 transition hover:border-brand-500/60 hover:shadow-glow">
             <span class="icon text-base">school</span> Academics
@@ -1648,22 +1652,24 @@
 
       const colleges = await __pxEduLoadCollegesList().catch(() => []);
       const collegeOptions = (colleges || []).map(col => ({ value: col.id, label: col.name }));
-      __pxEduFillSelectOptions(collegeSelect, collegeOptions, { placeholder: 'Select college', includeCustom: true });
+      __pxEduFillSelectOptions(collegeSelect, collegeOptions, { placeholder: 'Select college', includeCustom: false });
 
       if (initialValues.collegeName) {
         const match = __pxEduFindCollegeByName(initialValues.collegeName);
         if (match) {
           collegeSelect.value = match.id;
         } else {
-          collegeSelect.value = EDUCATION_CUSTOM_VALUE;
-          if (collegeCustomInput) {
-            collegeCustomInput.value = initialValues.collegeName;
-            __pxEduToggleCustomInput(collegeCustomInput, true);
-          }
+          // collegeSelect.value = EDUCATION_CUSTOM_VALUE;
+          // if (collegeCustomInput) {
+          //   collegeCustomInput.value = initialValues.collegeName;
+          //   __pxEduToggleCustomInput(collegeCustomInput, true);
+          // }
+          collegeSelect.value = '';
         }
       } else if (!collegeOptions.length) {
-        collegeSelect.value = EDUCATION_CUSTOM_VALUE;
-        if (collegeCustomInput) __pxEduToggleCustomInput(collegeCustomInput, true);
+        // collegeSelect.value = EDUCATION_CUSTOM_VALUE;
+        // if (collegeCustomInput) __pxEduToggleCustomInput(collegeCustomInput, true);
+        collegeSelect.value = '';
       }
 
       let collegeRequestId = 0;
@@ -1679,7 +1685,7 @@
 
           degreeSelect.disabled = false;
           state.degrees = [];
-          __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: true });
+          __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: false });
           degreeSelect.value = EDUCATION_CUSTOM_VALUE;
           if (isInitial && initialValues?.degreeName && degreeCustomInput) {
             degreeCustomInput.value = initialValues.degreeName;
@@ -1688,7 +1694,7 @@
           if (hiddenDegree) hiddenDegree.value = (degreeCustomInput?.value || '').trim();
 
           departmentSelect.disabled = false;
-          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
           departmentSelect.value = EDUCATION_CUSTOM_VALUE;
           if (isInitial && initialValues?.departmentName && departmentCustomInput) {
             departmentCustomInput.value = initialValues.departmentName;
@@ -1697,7 +1703,7 @@
           if (hiddenDepartment) hiddenDepartment.value = (departmentCustomInput?.value || '').trim();
 
           batchSelect.disabled = false;
-          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
           if (isInitial && initialValues?.batchRange) {
             batchSelect.value = initialValues.batchRange;
             if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
@@ -1723,7 +1729,7 @@
           if (hiddenCollegeId) hiddenCollegeId.value = '';
 
           degreeSelect.disabled = true;
-          __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: true });
+          __pxEduFillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: false });
           degreeSelect.value = '';
           if (degreeCustomInput) {
             __pxEduToggleCustomInput(degreeCustomInput, false);
@@ -1732,7 +1738,7 @@
           if (hiddenDegree) hiddenDegree.value = '';
 
           departmentSelect.disabled = true;
-          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
           departmentSelect.value = '';
           if (departmentCustomInput) {
             __pxEduToggleCustomInput(departmentCustomInput, false);
@@ -1741,7 +1747,7 @@
           if (hiddenDepartment) hiddenDepartment.value = '';
 
           batchSelect.disabled = true;
-          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
           batchSelect.value = '';
           if (batchCustomInput) {
             __pxEduToggleCustomInput(batchCustomInput, false);
@@ -1762,7 +1768,7 @@
 
         state.degrees = Array.isArray(details?.degrees) ? details.degrees : [];
         const degreeOptions = state.degrees.map(deg => ({ value: String(deg.id), label: deg.name }));
-        __pxEduFillSelectOptions(degreeSelect, degreeOptions, { placeholder: 'Select degree', includeCustom: true });
+        __pxEduFillSelectOptions(degreeSelect, degreeOptions, { placeholder: 'Select degree', includeCustom: false });
 
         let desiredDegree = '';
         if (isInitial && initialValues?.degreeName) {
@@ -1770,11 +1776,13 @@
           if (match) {
             desiredDegree = String(match.id);
           } else {
-            desiredDegree = EDUCATION_CUSTOM_VALUE;
-            if (degreeCustomInput) degreeCustomInput.value = initialValues.degreeName;
+            // desiredDegree = EDUCATION_CUSTOM_VALUE;
+            // if (degreeCustomInput) degreeCustomInput.value = initialValues.degreeName;
+            desiredDegree = '';
           }
         } else if (!degreeOptions.length) {
-          desiredDegree = EDUCATION_CUSTOM_VALUE;
+          // desiredDegree = EDUCATION_CUSTOM_VALUE;
+          desiredDegree = '';
         }
 
         degreeSelect.value = desiredDegree;
@@ -1800,7 +1808,7 @@
           if (hiddenDegreeId) hiddenDegreeId.value = '';
 
           departmentSelect.disabled = false;
-          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
           departmentSelect.value = EDUCATION_CUSTOM_VALUE;
           await handleDepartmentChange(isInitial);
           return;
@@ -1816,7 +1824,7 @@
           if (hiddenDegreeId) hiddenDegreeId.value = '';
 
           departmentSelect.disabled = true;
-          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+          __pxEduFillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
           departmentSelect.value = '';
           if (departmentCustomInput) {
             __pxEduToggleCustomInput(departmentCustomInput, false);
@@ -1825,7 +1833,7 @@
           if (hiddenDepartment) hiddenDepartment.value = '';
 
           batchSelect.disabled = true;
-          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
           batchSelect.value = '';
           if (batchCustomInput) {
             __pxEduToggleCustomInput(batchCustomInput, false);
@@ -1842,7 +1850,7 @@
         const departments = Array.isArray(degree?.departments) ? degree.departments : [];
         const departmentOptions = departments.map(dep => ({ value: String(dep.id), label: dep.name }));
         departmentSelect.disabled = false;
-        __pxEduFillSelectOptions(departmentSelect, departmentOptions, { placeholder: 'Select department', includeCustom: true });
+        __pxEduFillSelectOptions(departmentSelect, departmentOptions, { placeholder: 'Select department', includeCustom: false });
 
         let desiredDepartment = '';
         if (isInitial && initialValues?.departmentName) {
@@ -1850,11 +1858,13 @@
           if (match) {
             desiredDepartment = String(match.id);
           } else {
-            desiredDepartment = EDUCATION_CUSTOM_VALUE;
-            if (departmentCustomInput) departmentCustomInput.value = initialValues.departmentName;
+            // desiredDepartment = EDUCATION_CUSTOM_VALUE;
+            // if (departmentCustomInput) departmentCustomInput.value = initialValues.departmentName;
+            desiredDepartment = '';
           }
         } else if (!departmentOptions.length) {
-          desiredDepartment = EDUCATION_CUSTOM_VALUE;
+          // desiredDepartment = EDUCATION_CUSTOM_VALUE;
+          desiredDepartment = '';
         }
 
         departmentSelect.value = desiredDepartment;
@@ -1880,7 +1890,7 @@
           if (hiddenDepartmentId) hiddenDepartmentId.value = '';
 
           batchSelect.disabled = false;
-          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
           if (isInitial && initialValues?.batchRange) {
             batchSelect.value = initialValues.batchRange;
             if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
@@ -1906,7 +1916,7 @@
           if (hiddenDepartmentId) hiddenDepartmentId.value = '';
 
           batchSelect.disabled = true;
-          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+          __pxEduFillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
           batchSelect.value = '';
           if (batchCustomInput) {
             __pxEduToggleCustomInput(batchCustomInput, false);
@@ -1931,15 +1941,16 @@
           .filter(Boolean);
 
         batchSelect.disabled = false;
-        __pxEduFillSelectOptions(batchSelect, batchOptions, { placeholder: 'Select batch', includeCustom: true });
+        __pxEduFillSelectOptions(batchSelect, batchOptions, { placeholder: 'Select batch', includeCustom: false });
 
         let desiredBatch = '';
         if (isInitial && initialValues?.batchRange) {
           if (batchOptions.some(opt => opt.value === initialValues.batchRange)) {
             desiredBatch = initialValues.batchRange;
           } else {
-            desiredBatch = EDUCATION_CUSTOM_VALUE;
-            if (batchCustomInput) batchCustomInput.value = initialValues.batchRange;
+            // desiredBatch = EDUCATION_CUSTOM_VALUE;
+            // if (batchCustomInput) batchCustomInput.value = initialValues.batchRange;
+            desiredBatch = '';
           }
         }
 
