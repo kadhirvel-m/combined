@@ -11227,7 +11227,7 @@ def rename_college(college_id: uuid.UUID, payload: CollegeNameOnlyIn):
     "/api/colleges/{college_id}",
     summary="Delete a college, its degrees/departments/batches, and related syllabus data",
 )
-def delete_college(college_id: uuid.UUID):
+def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
     supabase = get_service_client()
 
     col_res = (
@@ -11242,26 +11242,65 @@ def delete_college(college_id: uuid.UUID):
     if not col_res.data:
         raise HTTPException(status_code=404, detail="College not found")
 
-    # Block deletion if other products depend on the college directly
-    direct_blockers: List[str] = []
-    for table_name, label, column in (
-        ("teacher_applications", "teacher applications", "college_id"),
-        ("teacher_profiles", "teacher profiles", "college_id"),
-        ("teacher_classes", "teacher classes", "college_id"),
-        ("user_education", "user education records", "college_id"),
-    ):
-        check = supabase.table(table_name).select(column).eq(column, str(college_id)).limit(1).execute()
-        if getattr(check, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (check {label} for college): {check.error}")
-        if check.data:
-            direct_blockers.append(label)
+    def _chunked(values: List[str], size: int = 150) -> List[List[str]]:
+        return [values[i : i + size] for i in range(0, len(values), size)]
 
-    if direct_blockers:
-        formatted = ", ".join(direct_blockers)
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot delete college because related data exists: {formatted}. Remove or reassign those records first.",
-        )
+    def _as_id_list(values) -> List[str]:
+        out_ids: List[str] = []
+        for v in (values or []):
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s:
+                out_ids.append(s)
+        return list(dict.fromkeys(out_ids))
+
+    def _try_delete_in(table: str, key: str, ids_list: List[str]) -> int:
+        if not ids_list:
+            return 0
+        deleted = 0
+        for chunk in _chunked(_as_id_list(ids_list)):
+            res = supabase.table(table).delete().in_(key, chunk).execute()
+            if getattr(res, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (delete {table}): {res.error}")
+            deleted += len(getattr(res, "data", None) or [])
+        return deleted
+
+    def _try_update_in(table: str, key: str, ids_list: List[str], updates: Dict[str, Any]) -> int:
+        if not ids_list:
+            return 0
+        updated = 0
+        for chunk in _chunked(_as_id_list(ids_list)):
+            res = supabase.table(table).update(updates).in_(key, chunk).execute()
+            if getattr(res, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (update {table}): {res.error}")
+            updated += len(getattr(res, "data", None) or [])
+        return updated
+
+    if not force:
+        # Block deletion if other products depend on the college directly
+        direct_blockers: List[str] = []
+        for table_name, label, column in (
+            ("teacher_applications", "teacher applications", "college_id"),
+            ("teacher_profiles", "teacher profiles", "college_id"),
+            ("teacher_classes", "teacher classes", "college_id"),
+            ("user_education", "user education records", "college_id"),
+            ("user_profiles", "user profiles", "college_id"),
+            ("marketplace_notes", "marketplace notes", "college_id"),
+            ("hod_role_applications", "hod role applications", "college_id"),
+        ):
+            check = supabase.table(table_name).select(column).eq(column, str(college_id)).limit(1).execute()
+            if getattr(check, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (check {label} for college): {check.error}")
+            if check.data:
+                direct_blockers.append(label)
+
+        if direct_blockers:
+            formatted = ", ".join(direct_blockers)
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot delete college because related data exists: {formatted}. Remove or reassign those records first.",
+            )
 
     deg_res = (
         supabase.table("degrees")
@@ -11271,6 +11310,95 @@ def delete_college(college_id: uuid.UUID):
     )
     if getattr(deg_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (list degrees for college): {deg_res.error}")
+
+    # When force=true, proactively detach/delete dependent rows that would block FK constraints.
+    force_stats: Dict[str, int] = {}
+    if force:
+        # Identify hierarchy ids first.
+        deg_ids = [r.get("id") for r in (deg_res.data or []) if isinstance(r, dict) and r.get("id")]
+        dept_q = supabase.table("departments").select("id").eq("college_id", str(college_id)).execute()
+        if getattr(dept_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (list departments for college): {dept_q.error}")
+        dept_ids = [r.get("id") for r in (dept_q.data or []) if isinstance(r, dict) and r.get("id")]
+
+        batch_q = supabase.table("batches").select("id").eq("college_id", str(college_id)).execute()
+        if getattr(batch_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (list batches for college): {batch_q.error}")
+        batch_ids = [r.get("id") for r in (batch_q.data or []) if isinstance(r, dict) and r.get("id")]
+
+        # Marketplace notes (delete reviews/purchases first to satisfy FKs)
+        note_q = supabase.table("marketplace_notes").select("id").eq("college_id", str(college_id)).execute()
+        if getattr(note_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (list marketplace notes for college): {note_q.error}")
+        note_ids = [r.get("id") for r in (note_q.data or []) if isinstance(r, dict) and r.get("id")]
+        if note_ids:
+            force_stats["marketplace_reviews_deleted"] = _try_delete_in("marketplace_reviews", "note_id", note_ids)
+            force_stats["marketplace_purchases_deleted"] = _try_delete_in("marketplace_purchases", "note_id", note_ids)
+            force_stats["marketplace_notes_deleted"] = _try_delete_in("marketplace_notes", "id", note_ids)
+
+        # Teacher applications and related HOD role applications (safe to delete)
+        del_apps = supabase.table("teacher_applications").delete().eq("college_id", str(college_id)).execute()
+        if getattr(del_apps, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete teacher applications for college): {del_apps.error}")
+        force_stats["teacher_applications_deleted"] = len(getattr(del_apps, "data", None) or [])
+        if dept_ids:
+            force_stats["teacher_applications_deleted"] += _try_delete_in("teacher_applications", "department_id", dept_ids)
+
+        hod_role_del = supabase.table("hod_role_applications").delete().eq("college_id", str(college_id)).execute()
+        if getattr(hod_role_del, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete hod role applications for college): {hod_role_del.error}")
+        force_stats["hod_role_applications_deleted"] = len(getattr(hod_role_del, "data", None) or [])
+        if dept_ids:
+            force_stats["hod_role_applications_deleted"] += _try_delete_in("hod_role_applications", "department_id", dept_ids)
+
+        # Teacher classes: delete (these are college-scoped operational rows)
+        del_cls = supabase.table("teacher_classes").delete().eq("college_id", str(college_id)).execute()
+        if getattr(del_cls, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete teacher classes for college): {del_cls.error}")
+        force_stats["teacher_classes_deleted"] = len(getattr(del_cls, "data", None) or [])
+        force_stats["teacher_classes_deleted"] += _try_delete_in("teacher_classes", "degree_id", deg_ids)
+        force_stats["teacher_classes_deleted"] += _try_delete_in("teacher_classes", "department_id", dept_ids)
+        force_stats["teacher_classes_deleted"] += _try_delete_in("teacher_classes", "batch_id", batch_ids)
+
+        # Teacher profiles: detach (avoid deleting user identity)
+        upd_tp = supabase.table("teacher_profiles").update({"college_id": None, "department_id": None}).eq("college_id", str(college_id)).execute()
+        if getattr(upd_tp, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (detach teacher profiles): {upd_tp.error}")
+        force_stats["teacher_profiles_detached"] = len(getattr(upd_tp, "data", None) or [])
+        if dept_ids:
+            force_stats["teacher_profiles_detached"] += _try_update_in("teacher_profiles", "department_id", dept_ids, {"department_id": None, "college_id": None})
+
+        # User education + profiles + experiences: detach FKs so batch/department/degree/college deletions won't fail.
+        edu_updates = {"college_id": None, "degree_id": None, "department_id": None, "batch_id": None}
+        upd_ue = supabase.table("user_education").update(edu_updates).eq("college_id", str(college_id)).execute()
+        if getattr(upd_ue, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (detach user education): {upd_ue.error}")
+        force_stats["user_education_detached"] = len(getattr(upd_ue, "data", None) or [])
+        force_stats["user_education_detached"] += _try_update_in("user_education", "degree_id", deg_ids, edu_updates)
+        force_stats["user_education_detached"] += _try_update_in("user_education", "department_id", dept_ids, edu_updates)
+        force_stats["user_education_detached"] += _try_update_in("user_education", "batch_id", batch_ids, edu_updates)
+
+        upd_up = supabase.table("user_profiles").update({"college_id": None}).eq("college_id", str(college_id)).execute()
+        if getattr(upd_up, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (detach user profiles college): {upd_up.error}")
+        force_stats["user_profiles_detached"] = len(getattr(upd_up, "data", None) or [])
+        force_stats["user_profiles_detached"] += _try_update_in("user_profiles", "department_id", dept_ids, {"department_id": None})
+        force_stats["user_profiles_detached"] += _try_update_in("user_profiles", "batch_id", batch_ids, {"batch_id": None})
+
+        upd_ux = supabase.table("user_experiences").update({"batch_id": None}).in_("batch_id", _as_id_list(batch_ids) or ["00000000-0000-0000-0000-000000000000"]).execute()
+        if getattr(upd_ux, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (detach user experiences batch): {upd_ux.error}")
+        force_stats["user_experiences_detached"] = len(getattr(upd_ux, "data", None) or [])
+
+        # HOD batch management references batches without ON DELETE SET NULL -> detach.
+        if dept_ids:
+            hb_updates = {
+                "first_year_batch_id": None,
+                "second_year_batch_id": None,
+                "third_year_batch_id": None,
+                "final_year_batch_id": None,
+            }
+            force_stats["hod_batch_management_detached"] = _try_update_in("hod_batch_management", "department_id", dept_ids, hb_updates)
 
     stats = {"degrees": 0, "departments": 0, "batches": 0, "courses": 0}
     for deg_row in deg_res.data or []:
@@ -11287,18 +11415,19 @@ def delete_college(college_id: uuid.UUID):
         if getattr(dept_res, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (list departments for degree): {dept_res.error}")
 
-        # Ensure no department blockers exist (defensive; should already be implied by direct blockers)
-        for drow in dept_res.data or []:
-            did = drow.get("id")
-            if not did:
-                continue
-            blockers = _check_department_delete_blockers(supabase, did)
-            if blockers:
-                formatted = ", ".join(blockers)
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Cannot delete college because related data exists under a department: {formatted}. Remove or reassign those records first.",
-                )
+        if not force:
+            # Ensure no department blockers exist (defensive; should already be implied by direct blockers)
+            for drow in dept_res.data or []:
+                did = drow.get("id")
+                if not did:
+                    continue
+                blockers = _check_department_delete_blockers(supabase, did)
+                if blockers:
+                    formatted = ", ".join(blockers)
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Cannot delete college because related data exists under a department: {formatted}. Remove or reassign those records first.",
+                    )
 
         for drow in dept_res.data or []:
             did = drow.get("id")
@@ -11324,6 +11453,8 @@ def delete_college(college_id: uuid.UUID):
 
     return {
         "ok": True,
+        "forced": bool(force),
+        "force_cleanup": force_stats,
         "deleted_college_id": str(college_id),
         "deleted_degrees": stats["degrees"],
         "deleted_departments": stats["departments"],
