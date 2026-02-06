@@ -1040,22 +1040,24 @@
 
             const colleges = await loadCollegesList().catch(() => []);
             const collegeOptions = (colleges || []).map(col => ({ value: col.id, label: col.name }));
-            fillSelectOptions(collegeSelect, collegeOptions, { placeholder: 'Select college', includeCustom: true });
+            fillSelectOptions(collegeSelect, collegeOptions, { placeholder: 'Select college', includeCustom: false });
 
             if (initialValues.collegeName) {
                 const match = findCollegeByName(initialValues.collegeName);
                 if (match) {
                     collegeSelect.value = match.id;
                 } else {
-                    collegeSelect.value = EDUCATION_CUSTOM_VALUE;
-                    if (collegeCustomInput) {
-                        collegeCustomInput.value = initialValues.collegeName;
-                        toggleCustomInput(collegeCustomInput, true);
-                    }
+                    // collegeSelect.value = EDUCATION_CUSTOM_VALUE;
+                    // if (collegeCustomInput) {
+                    //     collegeCustomInput.value = initialValues.collegeName;
+                    //     toggleCustomInput(collegeCustomInput, true);
+                    // }
+                    collegeSelect.value = '';
                 }
             } else if (!collegeOptions.length) {
-                collegeSelect.value = EDUCATION_CUSTOM_VALUE;
-                if (collegeCustomInput) toggleCustomInput(collegeCustomInput, true);
+                // collegeSelect.value = EDUCATION_CUSTOM_VALUE;
+                // if (collegeCustomInput) toggleCustomInput(collegeCustomInput, true);
+                collegeSelect.value = '';
             }
 
             let collegeRequestId = 0;
@@ -1065,44 +1067,44 @@
                 const isCustom = selected === EDUCATION_CUSTOM_VALUE;
 
                 if (isCustom) {
-                    if (collegeCustomInput) toggleCustomInput(collegeCustomInput, true);
-                    if (hiddenSchool) hiddenSchool.value = (collegeCustomInput?.value || '').trim();
-                    if (hiddenCollegeId) hiddenCollegeId.value = '';
+                    // if (collegeCustomInput) toggleCustomInput(collegeCustomInput, true);
+                    // if (hiddenSchool) hiddenSchool.value = (collegeCustomInput?.value || '').trim();
+                    // if (hiddenCollegeId) hiddenCollegeId.value = '';
 
-                    degreeSelect.disabled = false;
-                    state.degrees = [];
-                    fillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: true });
-                    degreeSelect.value = EDUCATION_CUSTOM_VALUE;
-                    if (isInitial && initialValues?.degreeName && degreeCustomInput) {
-                        degreeCustomInput.value = initialValues.degreeName;
-                    }
-                    if (degreeCustomInput) toggleCustomInput(degreeCustomInput, true);
-                    if (hiddenDegree) hiddenDegree.value = (degreeCustomInput?.value || '').trim();
+                    // degreeSelect.disabled = false;
+                    // state.degrees = [];
+                    // fillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: false });
+                    // degreeSelect.value = EDUCATION_CUSTOM_VALUE;
+                    // if (isInitial && initialValues?.degreeName && degreeCustomInput) {
+                    //     degreeCustomInput.value = initialValues.degreeName;
+                    // }
+                    // if (degreeCustomInput) toggleCustomInput(degreeCustomInput, true);
+                    // if (hiddenDegree) hiddenDegree.value = (degreeCustomInput?.value || '').trim();
 
-                    departmentSelect.disabled = false;
-                    fillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
-                    departmentSelect.value = EDUCATION_CUSTOM_VALUE;
-                    if (isInitial && initialValues?.departmentName && departmentCustomInput) {
-                        departmentCustomInput.value = initialValues.departmentName;
-                    }
-                    if (departmentCustomInput) toggleCustomInput(departmentCustomInput, true);
-                    if (hiddenDepartment) hiddenDepartment.value = (departmentCustomInput?.value || '').trim();
+                    // departmentSelect.disabled = false;
+                    // fillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
+                    // departmentSelect.value = EDUCATION_CUSTOM_VALUE;
+                    // if (isInitial && initialValues?.departmentName && departmentCustomInput) {
+                    //     departmentCustomInput.value = initialValues.departmentName;
+                    // }
+                    // if (departmentCustomInput) toggleCustomInput(departmentCustomInput, true);
+                    // if (hiddenDepartment) hiddenDepartment.value = (departmentCustomInput?.value || '').trim();
 
-                    batchSelect.disabled = false;
-                    fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
-                    if (isInitial && initialValues?.batchRange) {
-                        batchSelect.value = initialValues.batchRange;
-                        if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
-                        if (batchCustomInput) {
-                            toggleCustomInput(batchCustomInput, false);
-                            batchCustomInput.value = '';
-                        }
-                    } else {
-                        batchSelect.value = EDUCATION_CUSTOM_VALUE;
-                        if (batchCustomInput) toggleCustomInput(batchCustomInput, true);
-                        if (hiddenBatch) hiddenBatch.value = (batchCustomInput?.value || '').trim();
-                    }
-                    refreshAssociations();
+                    // batchSelect.disabled = false;
+                    // fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
+                    // if (isInitial && initialValues?.batchRange) {
+                    //     batchSelect.value = initialValues.batchRange;
+                    //     if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
+                    //     if (batchCustomInput) {
+                    //         toggleCustomInput(batchCustomInput, false);
+                    //         batchCustomInput.value = '';
+                    //     }
+                    // } else {
+                    //     batchSelect.value = EDUCATION_CUSTOM_VALUE;
+                    //     if (batchCustomInput) toggleCustomInput(batchCustomInput, true);
+                    //     if (hiddenBatch) hiddenBatch.value = (batchCustomInput?.value || '').trim();
+                    // }
+                    // refreshAssociations();
                     return;
                 }
 
@@ -1116,7 +1118,7 @@
                     if (hiddenCollegeId) hiddenCollegeId.value = '';
 
                     degreeSelect.disabled = true;
-                    fillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: true });
+                    fillSelectOptions(degreeSelect, [], { placeholder: 'Select degree', includeCustom: false });
                     degreeSelect.value = '';
                     if (degreeCustomInput) {
                         toggleCustomInput(degreeCustomInput, false);
@@ -1125,7 +1127,7 @@
                     if (hiddenDegree) hiddenDegree.value = '';
 
                     departmentSelect.disabled = true;
-                    fillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+                    fillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
                     departmentSelect.value = '';
                     if (departmentCustomInput) {
                         toggleCustomInput(departmentCustomInput, false);
@@ -1134,7 +1136,7 @@
                     if (hiddenDepartment) hiddenDepartment.value = '';
 
                     batchSelect.disabled = true;
-                    fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+                    fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
                     batchSelect.value = '';
                     if (batchCustomInput) {
                         toggleCustomInput(batchCustomInput, false);
@@ -1158,7 +1160,7 @@
 
                 state.degrees = Array.isArray(details?.degrees) ? details.degrees : [];
                 const degreeOptions = state.degrees.map(deg => ({ value: String(deg.id), label: deg.name }));
-                fillSelectOptions(degreeSelect, degreeOptions, { placeholder: 'Select degree', includeCustom: true });
+                fillSelectOptions(degreeSelect, degreeOptions, { placeholder: 'Select degree', includeCustom: false });
 
                 let desiredDegree = '';
                 if (isInitial && initialValues?.degreeName) {
@@ -1166,11 +1168,13 @@
                     if (match) {
                         desiredDegree = String(match.id);
                     } else {
-                        desiredDegree = EDUCATION_CUSTOM_VALUE;
-                        if (degreeCustomInput) degreeCustomInput.value = initialValues.degreeName;
+                        // desiredDegree = EDUCATION_CUSTOM_VALUE;
+                        // if (degreeCustomInput) degreeCustomInput.value = initialValues.degreeName;
+                        desiredDegree = '';
                     }
                 } else if (!degreeOptions.length) {
-                    desiredDegree = EDUCATION_CUSTOM_VALUE;
+                    // desiredDegree = EDUCATION_CUSTOM_VALUE;
+                    desiredDegree = '';
                 }
 
                 degreeSelect.value = desiredDegree;
@@ -1198,7 +1202,7 @@
                     if (hiddenDegreeId) hiddenDegreeId.value = '';
 
                     departmentSelect.disabled = false;
-                    fillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+                    fillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
                     departmentSelect.value = EDUCATION_CUSTOM_VALUE;
                     await handleDepartmentChange(isInitial);
                     return;
@@ -1214,7 +1218,7 @@
                     if (hiddenDegreeId) hiddenDegreeId.value = '';
 
                     departmentSelect.disabled = true;
-                    fillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: true });
+                    fillSelectOptions(departmentSelect, [], { placeholder: 'Select department', includeCustom: false });
                     departmentSelect.value = '';
                     if (departmentCustomInput) {
                         toggleCustomInput(departmentCustomInput, false);
@@ -1223,7 +1227,7 @@
                     if (hiddenDepartment) hiddenDepartment.value = '';
 
                     batchSelect.disabled = true;
-                    fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+                    fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
                     batchSelect.value = '';
                     if (batchCustomInput) {
                         toggleCustomInput(batchCustomInput, false);
@@ -1240,7 +1244,7 @@
                 const departments = Array.isArray(degree?.departments) ? degree.departments : [];
                 const departmentOptions = departments.map(dep => ({ value: String(dep.id), label: dep.name }));
                 departmentSelect.disabled = false;
-                fillSelectOptions(departmentSelect, departmentOptions, { placeholder: 'Select department', includeCustom: true });
+                fillSelectOptions(departmentSelect, departmentOptions, { placeholder: 'Select department', includeCustom: false });
 
                 let desiredDepartment = '';
                 if (isInitial && initialValues?.departmentName) {
@@ -1248,11 +1252,13 @@
                     if (match) {
                         desiredDepartment = String(match.id);
                     } else {
-                        desiredDepartment = EDUCATION_CUSTOM_VALUE;
-                        if (departmentCustomInput) departmentCustomInput.value = initialValues.departmentName;
+                        // desiredDepartment = EDUCATION_CUSTOM_VALUE;
+                        // if (departmentCustomInput) departmentCustomInput.value = initialValues.departmentName;
+                        desiredDepartment = '';
                     }
                 } else if (!departmentOptions.length) {
-                    desiredDepartment = EDUCATION_CUSTOM_VALUE;
+                    // desiredDepartment = EDUCATION_CUSTOM_VALUE;
+                    desiredDepartment = '';
                 }
 
                 departmentSelect.value = desiredDepartment;
@@ -1278,7 +1284,7 @@
                     if (hiddenDepartmentId) hiddenDepartmentId.value = '';
 
                     batchSelect.disabled = false;
-                    fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+                    fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
                     if (isInitial && initialValues?.batchRange) {
                         batchSelect.value = initialValues.batchRange;
                         if (hiddenBatch) hiddenBatch.value = initialValues.batchRange;
@@ -1304,7 +1310,7 @@
                     if (hiddenDepartmentId) hiddenDepartmentId.value = '';
 
                     batchSelect.disabled = true;
-                    fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: true });
+                    fillSelectOptions(batchSelect, [], { placeholder: 'Select batch', includeCustom: false });
                     batchSelect.value = '';
                     if (batchCustomInput) {
                         toggleCustomInput(batchCustomInput, false);
@@ -1329,15 +1335,16 @@
                     .filter(Boolean);
 
                 batchSelect.disabled = false;
-                fillSelectOptions(batchSelect, batchOptions, { placeholder: 'Select batch', includeCustom: true });
+                fillSelectOptions(batchSelect, batchOptions, { placeholder: 'Select batch', includeCustom: false });
 
                 let desiredBatch = '';
                 if (isInitial && initialValues?.batchRange) {
                     if (batchOptions.some(opt => opt.value === initialValues.batchRange)) {
                         desiredBatch = initialValues.batchRange;
                     } else {
-                        desiredBatch = EDUCATION_CUSTOM_VALUE;
-                        if (batchCustomInput) batchCustomInput.value = initialValues.batchRange;
+                        // desiredBatch = EDUCATION_CUSTOM_VALUE;
+                        // if (batchCustomInput) batchCustomInput.value = initialValues.batchRange;
+                        desiredBatch = '';
                     }
                 }
 

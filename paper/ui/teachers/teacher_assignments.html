@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assignments — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script src="../config.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script>
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' },
+                        ink: '#1E1E2F', plum: '#4C2A59', orchid: '#9E4B8A'
+                    },
+                    boxShadow: { glow: '0 8px 30px rgba(158,75,138,0.35)', card: '0 24px 60px rgba(30,30,47,0.35)' },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        [x-cloak] {
+            display: none !important;
+        }
+
+        .gradient-hero-text {
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: gradient-shift 4s ease-in-out infinite;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC);
+        }
+
+        @keyframes gradient-shift {
+
+            0%,
+            100% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+
+        .status-badge {
+            @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold;
+        }
+
+        .status-draft {
+            @apply bg-neutral-200 text-neutral-700 dark:bg-white/10 dark:text-white/60;
+        }
+
+        .status-published {
+            @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300;
+        }
+
+        .status-closed {
+            @apply bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300;
+        }
+
+        .status-archived {
+            @apply bg-neutral-300 text-neutral-600 dark:bg-white/5 dark:text-white/40;
+        }
+    </style>
+    <script>(() => { const s = localStorage.getItem('px_theme'); const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches; const dark = s ? s === 'dark' : prefers; if (dark) document.documentElement.classList.add('dark'); })();</script>
+</head>
+
+<body
+    class="font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark min-h-screen flex flex-col">
+    <!-- Header -->
+    <header
+        class="bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10 sticky top-0 z-40">
+        <div class="container flex items-center justify-between py-3">
+            <div class="flex items-center gap-3">
+                <a href="../index.html" class="flex items-center gap-2">
+                    <img src="../assets/img/logo-light.svg" class="h-8 dark:hidden" alt="Paper X" />
+                    <img src="../assets/img/logo-dark.svg" class="h-8 hidden dark:block" alt="Paper X" />
+                </a>
+                <h1 class="text-lg font-semibold tracking-tight hidden sm:block">Assignments</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="teacher_assignment_create.html"
+                    class="inline-flex items-center gap-2 rounded-full bg-brand-500 text-white font-semibold px-4 py-2 text-sm hover:shadow-glow transition">
+                    <span class="material-symbols-rounded text-base">add</span>
+                    Create Assignment
+                </a>
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded text-base">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1">
+        <div class="container py-8">
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="statsCards">
+                <div
+                    class="rounded-2xl bg-white/80 dark:bg-brand-900/50 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-brand-500/10 flex items-center justify-center">
+                            <span class="material-symbols-rounded text-brand-500">assignment</span>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-bold" id="statTotal">0</p>
+                            <p class="text-xs text-neutral-500 dark:text-white/50">Total</p>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="rounded-2xl bg-white/80 dark:bg-brand-900/50 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                            <span class="material-symbols-rounded text-emerald-500">check_circle</span>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-bold" id="statActive">0</p>
+                            <p class="text-xs text-neutral-500 dark:text-white/50">Active</p>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="rounded-2xl bg-white/80 dark:bg-brand-900/50 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+                            <span class="material-symbols-rounded text-amber-500">pending</span>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-bold" id="statPending">0</p>
+                            <p class="text-xs text-neutral-500 dark:text-white/50">Pending Review</p>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="rounded-2xl bg-white/80 dark:bg-brand-900/50 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                            <span class="material-symbols-rounded text-red-500">warning</span>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-bold" id="statDuplicates">0</p>
+                            <p class="text-xs text-neutral-500 dark:text-white/50">Duplicates Found</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="flex flex-wrap items-center gap-4 mb-6">
+                <div class="flex-1 min-w-[200px]">
+                    <input type="text" id="searchInput" placeholder="Search assignments..."
+                        class="w-full rounded-xl border-neutral-300 dark:border-white/15 bg-white/90 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500 text-sm">
+                </div>
+                <select id="filterStatus"
+                    class="rounded-xl border-neutral-300 dark:border-white/15 bg-white/90 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500 text-sm">
+                    <option value="">All Status</option>
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                    <option value="closed">Closed</option>
+                    <option value="archived">Archived</option>
+                </select>
+                <select id="filterClass"
+                    class="rounded-xl border-neutral-300 dark:border-white/15 bg-white/90 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500 text-sm">
+                    <option value="">All Classes</option>
+                </select>
+            </div>
+
+            <!-- Assignments Grid -->
+            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3" id="assignmentsGrid">
+                <!-- Assignment cards will be inserted here -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden text-center py-16">
+                <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-brand-500/10 flex items-center justify-center">
+                    <span class="material-symbols-rounded text-4xl text-brand-500">assignment</span>
+                </div>
+                <h3 class="text-lg font-semibold mb-2">No assignments yet</h3>
+                <p class="text-sm text-neutral-500 dark:text-white/50 mb-6">Create your first assignment to get started
+                </p>
+                <a href="teacher_assignment_create.html"
+                    class="inline-flex items-center gap-2 rounded-full bg-brand-500 text-white font-semibold px-6 py-3 text-sm hover:shadow-glow transition">
+                    <span class="material-symbols-rounded text-base">add</span>
+                    Create Assignment
+                </a>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="text-center py-16">
+                <div
+                    class="animate-spin w-8 h-8 mx-auto mb-4 border-4 border-brand-500 border-t-transparent rounded-full">
+                </div>
+                <p class="text-sm text-neutral-500 dark:text-white/50">Loading assignments...</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = (window.API_BASE || window.__API_BASE || location.origin);
+        const token = localStorage.getItem('teacherToken') || localStorage.getItem('px_auth_token');
+        if (!token) { alert('Login required'); location.href = 'teacher_login.html'; }
+
+        let allAssignments = [];
+        let classesCache = [];
+
+        async function fetchJSON(url, opts = {}) {
+            const res = await fetch(url, { ...opts, headers: { ...opts.headers, 'Authorization': 'Bearer ' + token } });
+            if (!res.ok) throw new Error('Request failed');
+            return res.json();
+        }
+
+        function formatDate(d) {
+            if (!d) return '-';
+            const date = new Date(d);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function formatDueDate(d) {
+            if (!d) return '-';
+            const date = new Date(d);
+            const now = new Date();
+            const diff = date - now;
+            const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+
+            if (days < 0) return `<span class="text-red-500">Overdue by ${Math.abs(days)}d</span>`;
+            if (days === 0) return '<span class="text-amber-500">Due today</span>';
+            if (days === 1) return '<span class="text-amber-500">Due tomorrow</span>';
+            if (days <= 3) return `<span class="text-amber-500">Due in ${days}d</span>`;
+            return formatDate(d);
+        }
+
+        function getStatusBadge(status) {
+            const map = {
+                draft: '<span class="status-badge status-draft"><span class="material-symbols-rounded text-xs">edit_note</span>Draft</span>',
+                published: '<span class="status-badge status-published"><span class="material-symbols-rounded text-xs">check_circle</span>Active</span>',
+                closed: '<span class="status-badge status-closed"><span class="material-symbols-rounded text-xs">lock</span>Closed</span>',
+                archived: '<span class="status-badge status-archived"><span class="material-symbols-rounded text-xs">archive</span>Archived</span>'
+            };
+            return map[status] || status;
+        }
+
+        function renderAssignments(assignments) {
+            const grid = document.getElementById('assignmentsGrid');
+            const empty = document.getElementById('emptyState');
+            const loading = document.getElementById('loadingState');
+
+            loading.classList.add('hidden');
+
+            if (!assignments.length) {
+                grid.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            empty.classList.add('hidden');
+            grid.innerHTML = assignments.map(a => `
+                <div class="rounded-2xl bg-white/80 dark:bg-brand-900/50 backdrop-blur ring-1 ring-black/10 dark:ring-white/10 p-5 hover:shadow-lg transition group">
+                    <div class="flex items-start justify-between mb-3">
+                        ${getStatusBadge(a.status)}
+                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                            <a href="teacher_assignment_create.html?id=${a.id}" class="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10" title="Edit">
+                                <span class="material-symbols-rounded text-base">edit</span>
+                            </a>
+                            <button onclick="deleteAssignment('${a.id}')" class="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500" title="Delete">
+                                <span class="material-symbols-rounded text-base">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                    <h3 class="text-lg font-semibold mb-2 line-clamp-2">${a.title}</h3>
+                    <p class="text-sm text-neutral-600 dark:text-white/60 line-clamp-2 mb-4">${a.description || 'No description'}</p>
+                    <div class="flex items-center gap-4 text-xs text-neutral-500 dark:text-white/50 mb-4">
+                        <span class="flex items-center gap-1">
+                            <span class="material-symbols-rounded text-sm">calendar_today</span>
+                            ${formatDueDate(a.due_date)}
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="material-symbols-rounded text-sm">grade</span>
+                            ${a.max_marks || 100} pts
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <a href="teacher_assignment_submissions.html?id=${a.id}" class="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-brand-500/10 text-brand-500 font-medium px-4 py-2.5 text-sm hover:bg-brand-500/20 transition">
+                            <span class="material-symbols-rounded text-base">visibility</span>
+                            View Submissions
+                        </a>
+                        ${a.status === 'draft' ? `
+                            <button onclick="publishAssignment('${a.id}')" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 text-white font-medium px-4 py-2.5 text-sm hover:bg-emerald-600 transition">
+                                <span class="material-symbols-rounded text-base">send</span>
+                                Publish
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateStats(assignments) {
+            document.getElementById('statTotal').textContent = assignments.length;
+            document.getElementById('statActive').textContent = assignments.filter(a => a.status === 'published').length;
+            // Count pending reviews and duplicates later via separate calls
+        }
+
+        async function loadAssignments() {
+            try {
+                const data = await fetchJSON(API_BASE + '/api/assignments');
+                allAssignments = data.assignments || [];
+                updateStats(allAssignments);
+                renderAssignments(allAssignments);
+            } catch (e) {
+                console.error('Failed to load assignments', e);
+                document.getElementById('loadingState').innerHTML = '<p class="text-red-500">Failed to load assignments</p>';
+            }
+        }
+
+        async function loadClasses() {
+            try {
+                const data = await fetchJSON(API_BASE + '/api/teacher/profile/me?strict=1');
+                classesCache = data.classes || [];
+                const select = document.getElementById('filterClass');
+                classesCache.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = `${c.subject || 'Class'} - Sem ${c.semester || '?'}`;
+                    select.appendChild(opt);
+                });
+            } catch (e) {
+                console.warn('Failed to load classes', e);
+            }
+        }
+
+        async function publishAssignment(id) {
+            if (!confirm('Publish this assignment? Students will be able to see it.')) return;
+            try {
+                await fetchJSON(API_BASE + `/api/assignments/${id}/publish`, { method: 'POST' });
+                loadAssignments();
+            } catch (e) {
+                alert('Failed to publish');
+            }
+        }
+
+        async function deleteAssignment(id) {
+            if (!confirm('Delete this assignment? This cannot be undone.')) return;
+            try {
+                await fetchJSON(API_BASE + `/api/assignments/${id}`, { method: 'DELETE' });
+                loadAssignments();
+            } catch (e) {
+                alert('Failed to delete');
+            }
+        }
+
+        function filterAssignments() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const status = document.getElementById('filterStatus').value;
+            const classId = document.getElementById('filterClass').value;
+
+            let filtered = allAssignments;
+
+            if (search) {
+                filtered = filtered.filter(a =>
+                    (a.title || '').toLowerCase().includes(search) ||
+                    (a.description || '').toLowerCase().includes(search)
+                );
+            }
+            if (status) {
+                filtered = filtered.filter(a => a.status === status);
+            }
+            if (classId) {
+                filtered = filtered.filter(a => a.class_id === classId);
+            }
+
+            renderAssignments(filtered);
+        }
+
+        document.getElementById('searchInput').addEventListener('input', filterAssignments);
+        document.getElementById('filterStatus').addEventListener('change', filterAssignments);
+        document.getElementById('filterClass').addEventListener('change', filterAssignments);
+
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('[data-theme-toggle]')) {
+                const dark = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('px_theme', dark ? 'dark' : 'light');
+            }
+        });
+
+        loadClasses();
+        loadAssignments();
+    </script>
+</body>
+
+</html>

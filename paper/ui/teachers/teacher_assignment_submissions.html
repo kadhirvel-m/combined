@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Submissions — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0..1,0&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script src="../config.js"></script>
+    <style>
+        :root {
+            --brand: #9E4B8A;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            min-height: 100vh;
+        }
+
+        .material-symbols-rounded {
+            vertical-align: -6px;
+            font-variation-settings: 'FILL' 0, 'wght' 500;
+        }
+
+        .filled {
+            font-variation-settings: 'FILL' 1, 'wght' 500;
+        }
+
+        .bg-gradient-light {
+            background: radial-gradient(ellipse 1200px 600px at 50% -100px, rgba(158, 75, 138, .12), transparent 60%), linear-gradient(180deg, #fff 0%, #FBF8FC 50%, #F5EEF7 100%);
+        }
+
+        .bg-gradient-dark {
+            background: radial-gradient(ellipse 1200px 600px at 50% -100px, rgba(158, 75, 138, .25), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 50%, #141321 100%);
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, .85);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 0, 0, .06);
+            border-radius: 1rem;
+        }
+
+        .dark .glass {
+            background: rgba(30, 30, 47, .75);
+            border-color: rgba(255, 255, 255, .08);
+        }
+
+        .stat-pill {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .5rem .875rem;
+            border-radius: 9999px;
+            font-size: .8125rem;
+            font-weight: 600;
+            background: rgba(255, 255, 255, .8);
+            border: 1px solid rgba(0, 0, 0, .06);
+        }
+
+        .dark .stat-pill {
+            background: rgba(255, 255, 255, .08);
+            border-color: rgba(255, 255, 255, .1);
+        }
+
+        .stat-pill .icon {
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tab-btn {
+            padding: .5rem 1rem;
+            border-radius: .5rem;
+            font-size: .8125rem;
+            font-weight: 500;
+            transition: all .15s;
+            color: rgba(0, 0, 0, .5);
+        }
+
+        .dark .tab-btn {
+            color: rgba(255, 255, 255, .5);
+        }
+
+        .tab-btn:hover {
+            background: rgba(0, 0, 0, .05);
+        }
+
+        .dark .tab-btn:hover {
+            background: rgba(255, 255, 255, .08);
+        }
+
+        .tab-btn.active {
+            background: var(--brand);
+            color: #fff;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th {
+            text-align: left;
+            font-size: .6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: rgba(0, 0, 0, .4);
+            padding: .75rem 1rem;
+            border-bottom: 1px solid rgba(0, 0, 0, .08);
+        }
+
+        .dark .data-table th {
+            color: rgba(255, 255, 255, .4);
+            border-color: rgba(255, 255, 255, .08);
+        }
+
+        .data-table td {
+            padding: .875rem 1rem;
+            border-bottom: 1px solid rgba(0, 0, 0, .04);
+            vertical-align: middle;
+        }
+
+        .dark .data-table td {
+            border-color: rgba(255, 255, 255, .04);
+        }
+
+        .data-table tbody tr {
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .data-table tbody tr:hover td {
+            background: rgba(158, 75, 138, .06);
+        }
+
+        .dark .data-table tbody tr:hover td {
+            background: rgba(158, 75, 138, .12);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            padding: .25rem .625rem;
+            border-radius: 9999px;
+            font-size: .6875rem;
+            font-weight: 600;
+        }
+
+        .badge-pending {
+            background: rgba(0, 0, 0, .06);
+            color: rgba(0, 0, 0, .5);
+        }
+
+        .dark .badge-pending {
+            background: rgba(255, 255, 255, .1);
+            color: rgba(255, 255, 255, .5);
+        }
+
+        .badge-submitted {
+            background: rgba(59, 130, 246, .12);
+            color: #2563EB;
+        }
+
+        .dark .badge-submitted {
+            background: rgba(59, 130, 246, .2);
+            color: #93C5FD;
+        }
+
+        .badge-graded {
+            background: rgba(16, 185, 129, .12);
+            color: #047857;
+        }
+
+        .dark .badge-graded {
+            background: rgba(16, 185, 129, .2);
+            color: #6EE7B7;
+        }
+
+        .badge-late {
+            background: rgba(239, 68, 68, .12);
+            color: #DC2626;
+        }
+
+        .dark .badge-late {
+            background: rgba(239, 68, 68, .2);
+            color: #FCA5A5;
+        }
+
+        .btn {
+            padding: .5rem 1rem;
+            border-radius: .625rem;
+            font-weight: 600;
+            font-size: .8125rem;
+            transition: all .2s;
+            display: inline-flex;
+            align-items: center;
+            gap: .375rem;
+        }
+
+        .btn-primary {
+            background: var(--brand);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 4px 14px rgba(158, 75, 138, .3);
+            transform: translateY(-1px);
+        }
+
+        .btn-ghost {
+            color: var(--brand);
+        }
+
+        .btn-ghost:hover {
+            background: rgba(158, 75, 138, .08);
+        }
+
+        .btn-success {
+            background: #10B981;
+            color: #fff;
+        }
+
+        .btn-danger {
+            background: #EF4444;
+            color: #fff;
+        }
+
+        .btn-sm {
+            padding: .375rem .75rem;
+            font-size: .75rem;
+        }
+
+        .btn-icon {
+            width: 2.25rem;
+            height: 2.25rem;
+            padding: 0;
+            border-radius: .5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .file-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            padding: .25rem .5rem;
+            border-radius: .375rem;
+            font-size: .6875rem;
+            background: rgba(158, 75, 138, .08);
+            color: var(--brand);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: .75rem 1rem;
+            border: 1.5px solid rgba(0, 0, 0, .1);
+            border-radius: .75rem;
+            font-size: .875rem;
+            transition: all .2s;
+            background: #fff;
+        }
+
+        .dark .form-input {
+            background: rgba(255, 255, 255, .05);
+            border-color: rgba(255, 255, 255, .12);
+            color: #fff;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--brand);
+            box-shadow: 0 0 0 3px rgba(158, 75, 138, .15);
+        }
+
+        .progress-circle {
+            position: relative;
+            width: 3.5rem;
+            height: 3.5rem;
+        }
+
+        .progress-circle svg {
+            transform: rotate(-90deg);
+        }
+
+        .progress-circle .bg {
+            stroke: rgba(0, 0, 0, .08);
+        }
+
+        .dark .progress-circle .bg {
+            stroke: rgba(255, 255, 255, .1);
+        }
+
+        .progress-circle .fg {
+            stroke: var(--brand);
+            transition: stroke-dashoffset .5s ease;
+        }
+
+        .progress-circle .text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .6875rem;
+            font-weight: 700;
+        }
+
+        /* File Preview */
+        .file-preview-card {
+            background: rgba(0, 0, 0, .02);
+            border: 1px solid rgba(0, 0, 0, .06);
+            border-radius: .75rem;
+            padding: .75rem;
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .dark .file-preview-card {
+            background: rgba(255, 255, 255, .03);
+            border-color: rgba(255, 255, 255, .08);
+        }
+
+        .file-preview-card:hover {
+            background: rgba(158, 75, 138, .06);
+            border-color: rgba(158, 75, 138, .2);
+        }
+
+        .file-icon {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: .5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Preview iframe */
+        .preview-frame {
+            width: 100%;
+            height: 400px;
+            border: none;
+            border-radius: .75rem;
+            background: #f5f5f5;
+        }
+
+        .dark .preview-frame {
+            background: #222;
+        }
+    </style>
+    <script>if (localStorage.getItem('px_theme') === 'dark' || (!localStorage.getItem('px_theme') && matchMedia('(prefers-color-scheme:dark)').matches)) document.documentElement.classList.add('dark');</script>
+</head>
+
+<body class="text-neutral-900 dark:text-white bg-gradient-light dark:bg-gradient-dark">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-50 glass border-b border-black/5 dark:border-white/10" style="border-radius:0">
+        <div class="max-w-6xl mx-auto px-4 flex items-center justify-between py-3">
+            <div class="flex items-center gap-4">
+                <a href="teacher_assignments.html"
+                    class="w-9 h-9 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-purple-500/10 flex items-center justify-center transition">
+                    <span class="material-symbols-rounded text-neutral-500">arrow_back</span>
+                </a>
+                <div>
+                    <h1 class="font-bold" id="assignmentTitle">Submissions</h1>
+                    <div class="flex items-center gap-3 text-xs text-neutral-500 dark:text-white/50">
+                        <span id="dueDate">Due: -</span>
+                        <span>•</span>
+                        <span id="maxMarksLabel">100 pts</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="" id="editLink" class="btn btn-ghost btn-sm"><span
+                        class="material-symbols-rounded text-sm">edit</span>Edit</a>
+                <button
+                    onclick="document.documentElement.classList.toggle('dark');localStorage.setItem('px_theme',document.documentElement.classList.contains('dark')?'dark':'light')"
+                    class="w-9 h-9 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center">
+                    <span class="material-symbols-rounded text-lg">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-6">
+
+        <!-- Stats Row -->
+        <div class="flex flex-wrap items-center gap-3 mb-6">
+            <div class="stat-pill">
+                <div class="icon bg-blue-500/15"><span
+                        class="material-symbols-rounded text-sm text-blue-500 filled">upload_file</span></div><span
+                    id="statSubmitted">0</span> <span class="text-neutral-400 font-normal">Submitted</span>
+            </div>
+            <div class="stat-pill">
+                <div class="icon bg-emerald-500/15"><span
+                        class="material-symbols-rounded text-sm text-emerald-500 filled">check_circle</span></div><span
+                    id="statGraded">0</span> <span class="text-neutral-400 font-normal">Graded</span>
+            </div>
+            <div class="stat-pill">
+                <div class="icon bg-amber-500/15"><span
+                        class="material-symbols-rounded text-sm text-amber-500 filled">schedule</span></div><span
+                    id="statPending">0</span> <span class="text-neutral-400 font-normal">Pending</span>
+            </div>
+            <div class="stat-pill">
+                <div class="icon bg-orange-500/15"><span
+                        class="material-symbols-rounded text-sm text-orange-500 filled">history</span></div><span
+                    id="statLate">0</span> <span class="text-neutral-400 font-normal">Late</span>
+            </div>
+            <div class="stat-pill cursor-pointer hover:border-red-300" id="duplicatesCard">
+                <div class="icon bg-red-500/15"><span
+                        class="material-symbols-rounded text-sm text-red-500 filled">content_copy</span></div><span
+                    class="text-red-500" id="statDuplicates">0</span> <span
+                    class="text-red-400 font-normal">Duplicates</span>
+            </div>
+            <div class="ml-auto flex items-center gap-3">
+                <div class="progress-circle">
+                    <svg width="56" height="56" viewBox="0 0 56 56">
+                        <circle class="bg" cx="28" cy="28" r="24" fill="none" stroke-width="4" />
+                        <circle class="fg" cx="28" cy="28" r="24" fill="none" stroke-width="4" stroke-linecap="round"
+                            stroke-dasharray="150.8" stroke-dashoffset="150.8" id="progressRing" />
+                    </svg>
+                    <span class="text" id="progressPct">0%</span>
+                </div>
+                <div class="text-xs">
+                    <p class="font-semibold">Grading Progress</p>
+                    <p class="text-neutral-400" id="progressText">0 of 0 graded</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex items-center gap-1 mb-5 bg-black/[.03] dark:bg-white/[.05] rounded-lg p-1 w-fit">
+            <button class="tab-btn active" data-tab="submissions">All Submissions</button>
+            <button class="tab-btn" data-tab="duplicates">Duplicates</button>
+            <button class="tab-btn" data-tab="extensions">Extensions</button>
+            <button class="tab-btn" data-tab="analytics">Analytics</button>
+        </div>
+
+        <!-- Submissions Tab -->
+        <div id="tab-submissions">
+            <div class="glass overflow-hidden">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Status</th>
+                            <th>Submitted</th>
+                            <th>Files</th>
+                            <th>Grade</th>
+                        </tr>
+                    </thead>
+                    <tbody id="submissionsTable"></tbody>
+                </table>
+                <div id="noSubmissions" class="hidden text-center py-12">
+                    <span
+                        class="material-symbols-rounded text-4xl text-neutral-300 dark:text-white/20 mb-2 block">inbox</span>
+                    <p class="text-neutral-500 dark:text-white/50">No submissions yet</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Duplicates Tab -->
+        <div id="tab-duplicates" class="hidden">
+            <div class="glass p-6">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center"><span
+                            class="material-symbols-rounded text-red-500">warning</span></div>
+                    <div>
+                        <h3 class="font-semibold">Duplicate Submissions</h3>
+                        <p class="text-xs text-neutral-500">Files with identical content</p>
+                    </div>
+                </div>
+                <div id="duplicatesList" class="space-y-3"></div>
+                <div id="noDuplicates" class="hidden text-center py-10"><span
+                        class="material-symbols-rounded text-4xl text-emerald-400 filled mb-2 block">verified</span>
+                    <p class="text-neutral-500">No duplicates</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Extensions Tab -->
+        <div id="tab-extensions" class="hidden">
+            <div class="glass p-6">
+                <div id="extensionsList" class="space-y-3"></div>
+                <div id="noExtensions" class="hidden text-center py-10"><span
+                        class="material-symbols-rounded text-4xl text-neutral-300 mb-2 block">event_busy</span>
+                    <p class="text-neutral-500">No extension requests</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="tab-analytics" class="hidden">
+            <div class="grid md:grid-cols-2 gap-5">
+                <div class="glass p-6">
+                    <h3 class="font-semibold mb-4 flex items-center gap-2"><span
+                            class="material-symbols-rounded text-purple-500">bar_chart</span>Grade Distribution</h3>
+                    <div id="gradeChart" class="space-y-2"></div>
+                </div>
+                <div class="glass p-6">
+                    <h3 class="font-semibold mb-4 flex items-center gap-2"><span
+                            class="material-symbols-rounded text-purple-500">analytics</span>Statistics</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="p-4 rounded-xl bg-purple-500/5">
+                            <p class="text-2xl font-bold" id="avgGrade">-</p>
+                            <p class="text-xs text-neutral-500">Average</p>
+                        </div>
+                        <div class="p-4 rounded-xl bg-emerald-500/5">
+                            <p class="text-2xl font-bold" id="maxGrade">-</p>
+                            <p class="text-xs text-neutral-500">Highest</p>
+                        </div>
+                        <div class="p-4 rounded-xl bg-amber-500/5">
+                            <p class="text-2xl font-bold" id="minGrade">-</p>
+                            <p class="text-xs text-neutral-500">Lowest</p>
+                        </div>
+                        <div class="p-4 rounded-xl bg-red-500/5">
+                            <p class="text-2xl font-bold" id="lateCount">-</p>
+                            <p class="text-xs text-neutral-500">Late</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Submission Detail Modal (File Preview + Grading) -->
+    <div id="detailModal"
+        class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="glass max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col" style="border-radius: 1.25rem;">
+            <!-- Header -->
+            <div class="flex items-center justify-between p-5 border-b border-black/5 dark:border-white/10">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-full bg-purple-500/15 flex items-center justify-center font-bold text-purple-600 text-lg"
+                        id="modalAvatar">K</div>
+                    <div>
+                        <h3 class="font-bold text-lg" id="modalStudentName">Student Name</h3>
+                        <div class="flex items-center gap-3 text-xs text-neutral-500">
+                            <span id="modalStatus"></span>
+                            <span>•</span>
+                            <span id="modalSubmittedAt">-</span>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="closeDetailModal()"
+                    class="w-9 h-9 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 overflow-auto p-5">
+                <div class="flex gap-5">
+                    <!-- Left: Preview (larger) -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-xs font-semibold uppercase tracking-wide text-neutral-400">Files</h4>
+                            <div id="modalFiles" class="flex flex-wrap gap-1"></div>
+                        </div>
+
+                        <!-- Preview Area (always visible) -->
+                        <div id="previewArea">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium" id="previewFileName">Select a file</span>
+                                <a id="previewOpenBtn" href="" target="_blank" class="btn btn-ghost btn-sm"><span
+                                        class="material-symbols-rounded text-sm">open_in_new</span>Open in new tab</a>
+                            </div>
+                            <iframe id="previewFrame" class="preview-frame" style="height:450px"></iframe>
+                        </div>
+
+                        <!-- Notes -->
+                        <div id="modalNotesSection" class="mt-5 hidden">
+                            <h4 class="text-xs font-semibold uppercase tracking-wide text-neutral-400 mb-2">Student
+                                Notes</h4>
+                            <p id="modalNotes" class="text-sm bg-black/[.02] dark:bg-white/[.03] rounded-lg p-3"></p>
+                        </div>
+                    </div>
+
+                    <!-- Right: Grading (modern design) -->
+                    <div class="w-52 flex-shrink-0">
+                        <div
+                            class="bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-2xl p-4 border border-purple-200/30 dark:border-purple-500/20">
+                            <p
+                                class="text-xs font-semibold uppercase tracking-wide text-purple-600 dark:text-purple-400 text-center mb-3">
+                                Score</p>
+
+                            <!-- Ring with percentage display -->
+                            <div class="flex justify-center mb-3">
+                                <div class="relative">
+                                    <svg width="90" height="90" viewBox="0 0 100 100" class="transform -rotate-90">
+                                        <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(158,75,138,0.15)"
+                                            stroke-width="8" />
+                                        <circle id="scoreRing" cx="50" cy="50" r="42" fill="none"
+                                            stroke="url(#scoreGrad)" stroke-width="8" stroke-linecap="round"
+                                            stroke-dasharray="264" stroke-dashoffset="264" />
+                                        <defs>
+                                            <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                                <stop offset="0%" stop-color="#9E4B8A" />
+                                                <stop offset="100%" stop-color="#E879F9" />
+                                            </linearGradient>
+                                        </defs>
+                                    </svg>
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <span id="scorePct"
+                                            class="text-lg font-bold text-purple-600 dark:text-purple-400">0%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Marks input below ring -->
+                            <div class="flex items-center justify-center gap-2 mb-3">
+                                <input type="number" id="modalMarks"
+                                    class="w-16 text-center text-xl font-bold bg-white dark:bg-white/10 border border-purple-200 dark:border-purple-500/30 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                    placeholder="0" oninput="updateScoreRing()">
+                                <span class="text-neutral-400">/</span>
+                                <span id="modalMaxMarks" class="text-lg font-semibold">100</span>
+                            </div>
+
+                            <!-- Quick score buttons -->
+                            <div class="grid grid-cols-4 gap-1">
+                                <button onclick="setQuickScore(100)"
+                                    class="py-1 text-xs font-medium rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 hover:scale-105 transition">100</button>
+                                <button onclick="setQuickScore(75)"
+                                    class="py-1 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300 hover:scale-105 transition">75</button>
+                                <button onclick="setQuickScore(50)"
+                                    class="py-1 text-xs font-medium rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 hover:scale-105 transition">50</button>
+                                <button onclick="setQuickScore(0)"
+                                    class="py-1 text-xs font-medium rounded-lg bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300 hover:scale-105 transition">0</button>
+                            </div>
+                        </div>
+
+                        <!-- Compact feedback -->
+                        <div class="mt-4">
+                            <label class="flex items-center gap-2 text-xs text-neutral-400 mb-1.5">
+                                <span class="material-symbols-rounded text-sm">chat</span>
+                                Feedback <span class="text-neutral-300 dark:text-neutral-600">(optional)</span>
+                            </label>
+                            <textarea id="modalFeedback" rows="3" class="form-input resize-none text-xs"
+                                style="padding:.5rem .75rem" placeholder="Add a note..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex justify-end gap-3 p-5 border-t border-black/5 dark:border-white/10">
+                <button onclick="closeDetailModal()" class="btn btn-ghost">Cancel</button>
+                <button onclick="saveGrade()" class="btn btn-primary"><span
+                        class="material-symbols-rounded text-sm filled">check</span>Save Grade</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = window.API_BASE || location.origin;
+        const token = localStorage.getItem('teacherToken') || localStorage.getItem('px_auth_token');
+        if (!token) location.href = 'teacher_login.html';
+
+        const assignmentId = new URLSearchParams(location.search).get('id');
+        if (!assignmentId) location.href = 'teacher_assignments.html';
+
+        let currentAssignment = null;
+        let currentSubmissions = [];
+        let currentSubmission = null;
+        const $ = id => document.getElementById(id);
+
+        function updateScoreRing() {
+            const max = currentAssignment?.max_marks || 100;
+            const val = parseInt($('modalMarks').value) || 0;
+            const pct = Math.min(Math.max(val / max, 0), 1);
+            const circumference = 264; // 2 * PI * 42
+            $('scoreRing').style.strokeDashoffset = circumference - (circumference * pct);
+            $('scorePct').textContent = Math.round(pct * 100) + '%';
+        }
+
+        function setQuickScore(pct) {
+            const max = currentAssignment?.max_marks || 100;
+            $('modalMarks').value = Math.round(max * pct / 100);
+            updateScoreRing();
+        }
+
+        async function api(url, opts = {}) {
+            const res = await fetch(url, { ...opts, headers: { ...opts.headers, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } });
+            if (!res.ok) throw new Error();
+            return res.json();
+        }
+
+        const fmtDate = d => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+        const badge = s => ({ pending: '<span class="badge badge-pending">Pending</span>', submitted: '<span class="badge badge-submitted">Submitted</span>', graded: '<span class="badge badge-graded">Graded</span>', draft: '<span class="badge badge-pending">Draft</span>' }[s] || s);
+
+        function getFileIcon(name) {
+            const ext = (name || '').split('.').pop().toLowerCase();
+            const icons = { pdf: { icon: 'picture_as_pdf', color: 'text-red-500', bg: 'bg-red-500/15' }, doc: { icon: 'description', color: 'text-blue-500', bg: 'bg-blue-500/15' }, docx: { icon: 'description', color: 'text-blue-500', bg: 'bg-blue-500/15' }, jpg: { icon: 'image', color: 'text-emerald-500', bg: 'bg-emerald-500/15' }, jpeg: { icon: 'image', color: 'text-emerald-500', bg: 'bg-emerald-500/15' }, png: { icon: 'image', color: 'text-emerald-500', bg: 'bg-emerald-500/15' }, zip: { icon: 'folder_zip', color: 'text-amber-500', bg: 'bg-amber-500/15' } };
+            return icons[ext] || { icon: 'draft', color: 'text-purple-500', bg: 'bg-purple-500/15' };
+        }
+
+        function renderSubmissions(subs) {
+            const tbody = $('submissionsTable'), empty = $('noSubmissions'), max = currentAssignment?.max_marks || 100;
+            if (!subs.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
+            empty.classList.add('hidden');
+
+            tbody.innerHTML = subs.map((s, idx) => {
+                const files = s.file_urls || [];
+                const grade = s.total_marks != null ? `<span class="font-semibold">${s.total_marks}</span><span class="text-neutral-400">/${max}</span>` : '<span class="text-neutral-400">-</span>';
+                return `<tr onclick="openDetailModal(${idx})">
+                    <td><div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-purple-500/15 flex items-center justify-center font-semibold text-purple-600 text-sm">${(s.student_name || 'U')[0].toUpperCase()}</div><span class="font-medium">${s.student_name || 'Unknown'}</span></div></td>
+                    <td>${badge(s.status)}</td>
+                    <td class="text-sm text-neutral-500">${fmtDate(s.submitted_at)}</td>
+                    <td>${files.slice(0, 2).map(f => `<span class="file-chip"><span class="material-symbols-rounded text-xs">attach_file</span>${(f.name || f.file_name || 'File').substring(0, 10)}</span>`).join(' ')}${files.length > 2 ? ' <span class="text-xs text-neutral-400">+' + (files.length - 2) + '</span>' : ''}</td>
+                    <td>${grade}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function openDetailModal(idx) {
+            currentSubmission = currentSubmissions[idx];
+            if (!currentSubmission) return;
+
+            const s = currentSubmission;
+            const files = s.file_urls || [];
+            const max = currentAssignment?.max_marks || 100;
+
+            $('modalAvatar').textContent = (s.student_name || 'U')[0].toUpperCase();
+            $('modalStudentName').textContent = s.student_name || 'Unknown';
+            $('modalStatus').innerHTML = badge(s.status);
+            $('modalSubmittedAt').textContent = 'Submitted: ' + fmtDate(s.submitted_at);
+            $('modalMaxMarks').textContent = max;
+            $('modalMarks').value = s.total_marks ?? '';
+            $('modalFeedback').value = s.feedback || '';
+            updateScoreRing();
+
+            // Files as compact pills
+            $('modalFiles').innerHTML = files.length ? files.map((f, i) => {
+                const url = f.url || f.file_url || f;
+                const name = f.name || f.file_name || 'File';
+                const ext = name.split('.').pop().toUpperCase();
+                return `<button onclick="event.stopPropagation();previewFile('${url}', '${name}')" class="file-chip" title="${name}">${ext}</button>`;
+            }).join('') : '<span class="text-xs text-neutral-400">No files</span>';
+
+            // Notes
+            if (s.text_content) {
+                $('modalNotesSection').classList.remove('hidden');
+                $('modalNotes').textContent = s.text_content;
+            } else {
+                $('modalNotesSection').classList.add('hidden');
+            }
+
+            // Auto-preview first file
+            if (files.length > 0) {
+                const f = files[0];
+                const url = f.url || f.file_url || f;
+                const name = f.name || f.file_name || 'File';
+                previewFile(url, name);
+            } else {
+                $('previewFileName').textContent = 'No files';
+                $('previewOpenBtn').classList.add('hidden');
+                $('previewFrame').srcdoc = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-family:Inter,sans-serif;color:#999;"><p>No files submitted</p></div>';
+            }
+
+            $('detailModal').classList.remove('hidden');
+        }
+
+        function previewFile(url, name) {
+            $('previewArea').classList.remove('hidden');
+            $('previewFileName').textContent = name;
+            $('previewOpenBtn').href = url;
+            $('previewOpenBtn').classList.remove('hidden');
+
+            // Check if previewable
+            const ext = name.split('.').pop().toLowerCase();
+            if (['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+                $('previewFrame').src = url;
+            } else {
+                $('previewFrame').srcdoc = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-family:Inter,sans-serif;color:#666;"><div style="text-align:center;"><div style="font-size:48px;margin-bottom:16px;">📄</div><p>Preview not available for .${ext} files</p><p style="margin-top:8px;font-size:13px;">Click "Open" to view in new tab</p></div></div>`;
+            }
+        }
+
+        function closeDetailModal() {
+            $('detailModal').classList.add('hidden');
+            $('previewFrame').src = '';
+            currentSubmission = null;
+        }
+
+        async function saveGrade() {
+            if (!currentSubmission) return;
+            const marks = parseInt($('modalMarks').value);
+            const feedback = $('modalFeedback').value;
+            if (isNaN(marks)) { alert('Enter valid marks'); return; }
+
+            try {
+                await api(`${API}/api/assignments/${assignmentId}/submissions/${currentSubmission.id}/grade`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ total_marks: marks, feedback })
+                });
+                closeDetailModal();
+                loadData();
+            } catch (e) { alert('Failed to save'); }
+        }
+
+        function renderDuplicates(dups) {
+            $('statDuplicates').textContent = dups.length;
+            if (!dups.length) { $('duplicatesList').innerHTML = ''; $('noDuplicates').classList.remove('hidden'); return; }
+            $('noDuplicates').classList.add('hidden');
+            $('duplicatesList').innerHTML = dups.map(d => `<div class="p-4 rounded-xl bg-red-500/5 border border-red-200 dark:border-red-500/20"><div class="flex items-center gap-2 mb-3"><span class="material-symbols-rounded text-red-500">content_copy</span><span class="font-semibold">${d.count} identical</span><span class="text-xs text-neutral-400">(${(d.file_size_bytes / 1024).toFixed(1)}KB)</span></div><div class="grid sm:grid-cols-2 gap-2">${d.submissions.map(s => `<div class="flex items-center gap-2 text-sm p-2 rounded-lg bg-white/50 dark:bg-white/5"><span class="material-symbols-rounded text-xs text-neutral-400">person</span>${s.student_name}<span class="text-neutral-300">—</span><span class="text-xs text-neutral-400 truncate">${s.file_name}</span></div>`).join('')}</div></div>`).join('');
+        }
+
+        function renderExtensions(exts) {
+            if (!exts.length) { $('extensionsList').innerHTML = ''; $('noExtensions').classList.remove('hidden'); return; }
+            $('noExtensions').classList.add('hidden');
+            $('extensionsList').innerHTML = exts.map(e => `<div class="flex items-center justify-between p-4 rounded-xl ${e.status === 'pending' ? 'bg-amber-500/5 border border-amber-200' : 'bg-black/[.02]'}"><div><p class="font-medium">${e.student_name || 'Student'}</p><p class="text-sm text-neutral-500">${e.reason || 'No reason'}</p><p class="text-xs text-neutral-400 mt-1">Requested: ${fmtDate(e.requested_date)}</p></div>${e.status === 'pending' ? `<div class="flex gap-2"><button onclick="respondExt('${e.id}','approved','${e.requested_date}')" class="btn btn-success btn-sm">Approve</button><button onclick="respondExt('${e.id}','denied')" class="btn btn-danger btn-sm">Deny</button></div>` : `<span class="badge ${e.status === 'approved' ? 'badge-graded' : 'badge-late'}">${e.status}</span>`}</div>`).join('');
+        }
+
+        function renderAnalytics(ana) {
+            if (!ana) return;
+            const dist = ana.grade_distribution || {};
+            const maxC = Math.max(...Object.values(dist), 1);
+            $('gradeChart').innerHTML = Object.entries(dist).map(([r, c]) => `<div class="flex items-center gap-3"><span class="text-xs w-12 text-neutral-500">${r}</span><div class="flex-1 h-5 bg-black/[.04] dark:bg-white/[.08] rounded-md overflow-hidden"><div class="h-full bg-gradient-to-r from-purple-500 to-purple-400 rounded-md" style="width:${(c / maxC) * 100}%"></div></div><span class="text-xs w-6 text-right font-medium">${c}</span></div>`).join('');
+            $('avgGrade').textContent = ana.average_grade ?? '-';
+            $('maxGrade').textContent = ana.max_grade ?? '-';
+            $('minGrade').textContent = ana.min_grade ?? '-';
+            $('lateCount').textContent = ana.late_submissions ?? 0;
+        }
+
+        function updateProgress() {
+            const submitted = currentSubmissions.filter(s => s.status !== 'pending' && s.status !== 'draft').length;
+            const graded = currentSubmissions.filter(s => s.status === 'graded').length;
+            const pct = submitted ? Math.round((graded / submitted) * 100) : 0;
+            $('statSubmitted').textContent = submitted;
+            $('statGraded').textContent = graded;
+            $('statPending').textContent = submitted - graded;
+            $('progressPct').textContent = pct + '%';
+            $('progressText').textContent = `${graded} of ${submitted} graded`;
+            $('progressRing').style.strokeDashoffset = 150.8 - (150.8 * pct / 100);
+        }
+
+        async function loadData() {
+            try {
+                const data = await api(`${API}/api/assignments/${assignmentId}/submissions`);
+                currentAssignment = data.assignment;
+                currentSubmissions = data.submissions || [];
+                $('assignmentTitle').textContent = currentAssignment?.title || 'Submissions';
+                $('dueDate').textContent = 'Due: ' + fmtDate(currentAssignment?.due_date);
+                $('maxMarksLabel').textContent = (currentAssignment?.max_marks || 100) + ' pts';
+                $('editLink').href = `teacher_assignment_create.html?id=${assignmentId}`;
+                updateProgress();
+                renderSubmissions(currentSubmissions);
+
+                const [dupData, extData, anaData] = await Promise.all([
+                    api(`${API}/api/assignments/${assignmentId}/duplicates`).catch(() => ({ duplicates: [] })),
+                    api(`${API}/api/assignments/${assignmentId}/extensions`).catch(() => ({ extensions: [] })),
+                    api(`${API}/api/assignments/${assignmentId}/analytics`).catch(() => ({ analytics: {} }))
+                ]);
+                renderDuplicates(dupData.duplicates || []);
+                renderExtensions(extData.extensions || []);
+                renderAnalytics(anaData.analytics || {});
+                $('statLate').textContent = anaData.analytics?.late_submissions || 0;
+            } catch (e) { console.error(e); }
+        }
+
+        async function respondExt(id, status, date) {
+            try { await api(`${API}/api/assignments/extensions/${id}`, { method: 'PUT', body: JSON.stringify({ status, new_due_date: date }) }); loadData(); } catch (e) { alert('Failed'); }
+        }
+
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                ['submissions', 'duplicates', 'extensions', 'analytics'].forEach(t => $('tab-' + t).classList.toggle('hidden', btn.dataset.tab !== t));
+            };
+        });
+
+        $('duplicatesCard').onclick = () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'duplicates'));
+            ['submissions', 'duplicates', 'extensions', 'analytics'].forEach(t => $('tab-' + t).classList.toggle('hidden', t !== 'duplicates'));
+        };
+
+        loadData();
+    </script>
+</body>
+
+</html>

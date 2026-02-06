@@ -362,6 +362,70 @@
         </div>
     </div>
 
+    <!-- Force Delete Confirmation Modal -->
+    <div id="forceDeleteModal"
+        class="fixed inset-0 z-[60] hidden px-4 py-12 sm:px-6 lg:px-8 flex items-center justify-center">
+        <div id="forceDeleteBackdrop" class="absolute inset-0 bg-gray-900/80 backdrop-blur-md"></div>
+        <div
+            class="relative w-full max-w-md rounded-3xl border border-red-200 dark:border-red-900/30 bg-white dark:bg-gray-900 shadow-[0_24px_60px_rgba(220,38,38,0.35)] overflow-hidden">
+            <div class="p-6">
+                <div class="flex items-center gap-4 mb-4">
+                    <div
+                        class="flex-shrink-0 size-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400">
+                        <span class="material-symbols-rounded text-2xl">warning</span>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">Force Delete Degree</h3>
+                        <p class="text-xs font-medium text-red-600 dark:text-red-400 uppercase tracking-wide">
+                            Destructive Action</p>
+                    </div>
+                </div>
+
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                    This action will <strong>permanently delete</strong> the degree <span id="forceDeleteNameDisplay"
+                        class="font-bold text-gray-900 dark:text-white"></span> and all related data:
+                </p>
+                <ul
+                    class="mb-5 space-y-1 text-sm text-gray-500 dark:text-gray-400 list-disc list-inside bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <li>All Departments & Batches</li>
+                    <li>Education Records (Student History)</li>
+                    <li>Classes & Syllabus</li>
+                    <li>Marketplace Notes dependencies</li>
+                </ul>
+
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                    Type details below to confirm
+                </label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span class="material-symbols-rounded text-gray-400 text-lg">edit</span>
+                    </div>
+                    <input type="text" id="forceDeleteInput"
+                        class="block w-full rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 pl-10 pr-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder-red-300 dark:placeholder-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none transition"
+                        placeholder="Type the degree name" autocomplete="off">
+                </div>
+
+                <div id="forceDeleteError"
+                    class="hidden mt-2 text-xs font-medium text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <span class="material-symbols-rounded text-sm">error</span>
+                    <span>Incorrect name. Please try again.</span>
+                </div>
+            </div>
+            <div
+                class="bg-gray-50 dark:bg-gray-800/50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-100 dark:border-gray-700">
+                <button type="button" id="forceDeleteCancel"
+                    class="px-4 py-2 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    Cancel
+                </button>
+                <button type="button" id="forceDeleteConfirmBtn" disabled
+                    class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-500 text-white border border-red-600 text-sm font-semibold shadow-lg shadow-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-600 transition">
+                    <span class="material-symbols-rounded text-base">delete_forever</span>
+                    Force Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
     <footer class="border-t border-black/5 dark:border-white/10 py-10">
         <div
             class="container flex flex-col gap-3 text-sm text-neutral-500 dark:text-white/60 sm:flex-row sm:items-center sm:justify-between">
@@ -491,6 +555,16 @@
         const degreeModalClose = document.getElementById('degreeModalClose');
         const degreeSubmitBtn = document.getElementById('degreeSubmitBtn');
         const degreeDeleteBtn = document.getElementById('degreeDeleteBtn');
+
+        // Force Delete Elements
+        const forceDeleteModal = document.getElementById('forceDeleteModal');
+        const forceDeleteBackdrop = document.getElementById('forceDeleteBackdrop');
+        const forceDeleteCancel = document.getElementById('forceDeleteCancel');
+        const forceDeleteConfirmBtn = document.getElementById('forceDeleteConfirmBtn');
+        const forceDeleteInput = document.getElementById('forceDeleteInput');
+        const forceDeleteError = document.getElementById('forceDeleteError');
+        const forceDeleteNameDisplay = document.getElementById('forceDeleteNameDisplay');
+
         const themeAccentPalette = [
             'from-brand-500/70 via-brandlt-300/60 to-brand-700/80',
             'from-[#FF7FD1]/55 via-[#B06AB3]/60 to-brand-700/80',
@@ -628,31 +702,88 @@
             }, 80);
         }
 
-        async function handleDegreeDelete() {
-            if (!editingDegreeId) return;
-            const degree = degreesCache.find(d => String(d.id) === String(editingDegreeId));
-            const label = degree?.name ? `"${degree.name}"` : 'this degree';
-            const ok = window.confirm(`Delete ${label} and all its departments/batches/subjects? This cannot be undone.`);
-            if (!ok) return;
+        // --- FORCE DELETE LOGIC ---
 
-            setDegreeDeleteLoading(true);
-            degreeModalMessage.classList.add('hidden');
+        function closeForceDeleteModal() {
+            forceDeleteModal.classList.add('hidden');
+            forceDeleteInput.value = '';
+            forceDeleteError.classList.add('hidden');
+            forceDeleteConfirmBtn.disabled = true;
+            document.body.classList.remove('overflow-hidden');
+            // If we came from the main modal, standard behavior is main modal stays open?
+            // User requested robust flow. Let's keep main modal open until delete succeeds.
+        }
+
+        function openForceDeleteModal(degree) {
+            if (!degree) return;
+            forceDeleteNameDisplay.textContent = degree.name || 'this degree';
+            forceDeleteInput.value = '';
+            forceDeleteError.classList.add('hidden');
+            forceDeleteConfirmBtn.disabled = true;
+            forceDeleteModal.classList.remove('hidden');
+            // Ensure z-index works on top of existing modal
+            setTimeout(() => forceDeleteInput.focus(), 100);
+        }
+
+        async function performForceDelete() {
+            if (!editingDegreeId) return;
+            // UI Loading state
+            forceDeleteConfirmBtn.disabled = true;
+            forceDeleteConfirmBtn.innerHTML = `<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> Deleting…`;
+
             try {
-                await Collage.fetchJson(`/api/degrees/${editingDegreeId}`, { method: 'DELETE', skipAuth: true });
-                closeDegreeModal();
+                // Must pass force=true
+                await Collage.fetchJson(`/api/degrees/${editingDegreeId}?force=true`, { method: 'DELETE', skipAuth: true });
+                closeForceDeleteModal();
+                closeDegreeModal(); // Close the parent modal too
                 await loadDegrees();
             } catch (error) {
                 let message = error?.message ?? 'Unable to delete degree. Please try again.';
-                if (typeof message !== 'string') {
-                    try { message = JSON.stringify(message); } catch (_) { message = 'Unable to delete degree. Please try again.'; }
-                }
-                if (message === '[object Object]') message = 'Unexpected response from server. Please try again.';
-                degreeModalMessage.textContent = message;
-                degreeModalMessage.classList.remove('hidden');
+                // Re-enable button
+                forceDeleteConfirmBtn.disabled = false;
+                forceDeleteConfirmBtn.innerHTML = `<span class="material-symbols-rounded text-base">delete_forever</span> Force Delete`;
+                alert(message); // Fallback alert for API errors
                 console.error(error);
-            } finally {
-                setDegreeDeleteLoading(false);
             }
+        }
+
+        function handleDegreeDelete() {
+            if (!editingDegreeId) return;
+            const degree = degreesCache.find(d => String(d.id) === String(editingDegreeId));
+            if (!degree) return;
+            openForceDeleteModal(degree);
+        }
+
+        function initForceDelete() {
+            // Verify name input
+            forceDeleteInput.addEventListener('input', () => {
+                const degree = degreesCache.find(d => String(d.id) === String(editingDegreeId));
+                if (!degree) return;
+                const typed = forceDeleteInput.value.trim();
+                const expected = (degree.name || '').trim();
+
+                if (typed === expected) {
+                    forceDeleteConfirmBtn.disabled = false;
+                    forceDeleteError.classList.add('hidden');
+                    forceDeleteInput.classList.remove('border-red-500', 'focus:border-red-500', 'ring-red-500/20');
+                    forceDeleteInput.classList.add('border-green-500', 'focus:border-green-500', 'ring-green-500/20');
+                } else {
+                    forceDeleteConfirmBtn.disabled = true;
+                    // Optional: show error state visually
+                    forceDeleteInput.classList.remove('border-green-500', 'focus:border-green-500', 'ring-green-500/20');
+                    // Only show error text if length is sufficient and wrong
+                    if (typed.length >= expected.length && typed !== expected) {
+                        forceDeleteError.classList.remove('hidden');
+                    } else {
+                        forceDeleteError.classList.add('hidden');
+                    }
+                }
+            });
+
+            // Action buttons
+            forceDeleteCancel.addEventListener('click', closeForceDeleteModal);
+            forceDeleteBackdrop.addEventListener('click', closeForceDeleteModal);
+            forceDeleteConfirmBtn.addEventListener('click', performForceDelete);
         }
 
         async function handleDegreeSubmit(event) {
@@ -737,10 +868,16 @@
             degreeForm?.addEventListener('submit', handleDegreeSubmit);
             degreeDeleteBtn?.addEventListener('click', handleDegreeDelete);
             document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && !degreeModal.classList.contains('hidden')) {
-                    closeDegreeModal();
+                if (event.key === 'Escape') {
+                    // Prioritize closing the top-most modal
+                    if (!forceDeleteModal.classList.contains('hidden')) {
+                        closeForceDeleteModal();
+                    } else if (!degreeModal.classList.contains('hidden')) {
+                        closeDegreeModal();
+                    }
                 }
             });
+            initForceDelete();
         }
 
         function attachDegreeEditHandlers() {
