@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Submit Feedback — Paper X</title>
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script src="config.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem', screens: { DEFAULT: '600px' } },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4' }
+                    },
+                    boxShadow: { glow: '0 8px 30px rgba(158,75,138,0.28)' },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        .filled {
+            font-variation-settings: 'FILL' 1;
+        }
+
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .66));
+            backdrop-filter: blur(28px);
+            box-shadow: 0 12px 42px -10px rgba(30, 30, 47, .18);
+        }
+
+        .dark .glass-panel {
+            background: linear-gradient(180deg, rgba(30, 30, 47, .78), rgba(30, 30, 47, .58));
+            box-shadow: 0 22px 60px -12px rgba(0, 0, 0, .55);
+        }
+
+        .star-rating input {
+            display: none;
+        }
+
+        .star-rating label {
+            cursor: pointer;
+            color: #d1d5db;
+            transition: color 0.2s;
+        }
+
+        .star-rating label:hover,
+        .star-rating label:hover~label,
+        .star-rating input:checked~label {
+            color: #f59e0b;
+        }
+
+        .star-rating {
+            direction: rtl;
+            display: flex;
+            gap: 4px;
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, rgba(0, 0, 0, .04), rgba(0, 0, 0, .08), rgba(0, 0, 0, .04));
+            background-size: 300% 100%;
+            animation: shimmer 2.3s linear infinite;
+        }
+
+        .dark .skeleton {
+            background: linear-gradient(90deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .12), rgba(255, 255, 255, .06));
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: 0 0
+            }
+
+            100% {
+                background-position: -300% 0
+            }
+        }
+    </style>
+    <script>
+            (() => {
+                const s = localStorage.getItem('px_theme');
+                const prefers = matchMedia('(prefers-color-scheme: dark)').matches;
+                if (s ? s === 'dark' : prefers) document.documentElement.classList.add('dark');
+            })();
+    </script>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+
+    <!-- Navbar -->
+    <header
+        class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="index.html" class="flex items-center gap-3 shrink-0">
+                <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <button data-theme-toggle
+                class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5">
+                <span class="material-symbols-rounded">dark_mode</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="container py-10">
+        <!-- Loading -->
+        <div id="loadingState">
+            <div class="skeleton h-32 rounded-2xl mb-4"></div>
+            <div class="skeleton h-48 rounded-2xl"></div>
+        </div>
+
+        <!-- Error -->
+        <div id="errorState" class="hidden glass-panel rounded-2xl p-10 text-center">
+            <span class="material-symbols-rounded text-5xl text-red-500 mb-4 block">error</span>
+            <h2 class="text-xl font-bold mb-2">Form Not Found</h2>
+            <p class="text-neutral-600 dark:text-white/60">The feedback form you're looking for doesn't exist or has
+                been closed.</p>
+        </div>
+
+        <!-- Already Submitted -->
+        <div id="submittedState" class="hidden glass-panel rounded-2xl p-10 text-center">
+            <span class="material-symbols-rounded text-5xl text-emerald-500 mb-4 block filled">check_circle</span>
+            <h2 class="text-xl font-bold mb-2">Already Submitted</h2>
+            <p class="text-neutral-600 dark:text-white/60">You have already submitted feedback for this form.</p>
+        </div>
+
+        <!-- Success -->
+        <div id="successState" class="hidden glass-panel rounded-2xl p-10 text-center">
+            <span class="material-symbols-rounded text-5xl text-emerald-500 mb-4 block filled">celebration</span>
+            <h2 class="text-xl font-bold mb-2">Thank You!</h2>
+            <p class="text-neutral-600 dark:text-white/60">Your feedback has been submitted successfully.</p>
+        </div>
+
+        <!-- Form -->
+        <div id="formContainer" class="hidden">
+            <!-- Header -->
+            <div class="glass-panel rounded-2xl p-6 mb-6">
+                <h1 id="formTitle" class="text-2xl font-bold mb-2">Loading...</h1>
+                <p id="formDesc" class="text-neutral-600 dark:text-white/60 mb-4"></p>
+                <p id="teacherName" class="text-sm text-neutral-500 dark:text-white/50">
+                    <span class="material-symbols-rounded text-base mr-1">person</span>
+                    From: <span id="teacherNameText">Teacher</span>
+                </p>
+                <div id="anonBadge"
+                    class="hidden mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium">
+                    <span class="material-symbols-rounded text-base">shield</span>
+                    Your response is anonymous
+                </div>
+            </div>
+
+            <!-- Questions -->
+            <form id="feedbackForm" class="space-y-4">
+                <!-- Questions will be inserted here -->
+            </form>
+
+            <!-- Submit Button -->
+            <div class="mt-6">
+                <button id="submitBtn" type="button"
+                    class="w-full inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 text-white text-sm font-semibold px-6 py-4 hover:shadow-glow transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span class="material-symbols-rounded text-lg">send</span>
+                    Submit Feedback
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <footer class="py-6 text-center text-xs text-neutral-500 dark:text-white/50">
+        Powered by Paper X
+    </footer>
+
+    <script>
+        document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                localStorage.setItem('px_theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+            });
+        });
+
+        const API = window.API_BASE || location.origin;
+        const token = localStorage.getItem('px_auth_token');
+        const params = new URLSearchParams(location.search);
+        const shareCode = params.get('code');
+
+        const $ = id => document.getElementById(id);
+        let formData = null;
+
+        async function load() {
+            if (!shareCode) {
+                showError();
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API}/api/feedback/f/${shareCode}`, {
+                    headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+                });
+
+                if (!res.ok) {
+                    showError();
+                    return;
+                }
+
+                formData = await res.json();
+
+                if (formData.already_submitted) {
+                    showSubmitted();
+                    return;
+                }
+
+                renderForm();
+            } catch (e) {
+                console.error(e);
+                showError();
+            }
+        }
+
+        function showError() {
+            $('loadingState').classList.add('hidden');
+            $('errorState').classList.remove('hidden');
+        }
+
+        function showSubmitted() {
+            $('loadingState').classList.add('hidden');
+            $('submittedState').classList.remove('hidden');
+        }
+
+        function showSuccess() {
+            $('formContainer').classList.add('hidden');
+            $('successState').classList.remove('hidden');
+        }
+
+        function renderForm() {
+            $('loadingState').classList.add('hidden');
+            $('formContainer').classList.remove('hidden');
+
+            $('formTitle').textContent = formData.title || 'Feedback Form';
+            $('formDesc').textContent = formData.description || '';
+            $('teacherNameText').textContent = formData.teacher_name || 'Teacher';
+
+            if (formData.is_anonymous_display) {
+                $('anonBadge').classList.remove('hidden');
+            }
+
+            const form = $('feedbackForm');
+            form.innerHTML = formData.questions.map((q, idx) => renderQuestion(q, idx)).join('');
+        }
+
+        function renderQuestion(q, idx) {
+            let inputHtml = '';
+
+            switch (q.question_type) {
+                case 'text':
+                    inputHtml = `<input type="text" name="q_${q.id}" placeholder="Your answer..." 
+                        class="w-full px-4 py-3 rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/50 dark:bg-white/5 focus:ring-2 focus:ring-brand-500 outline-none">`;
+                    break;
+
+                case 'textarea':
+                    inputHtml = `<textarea name="q_${q.id}" rows="4" placeholder="Your answer..." 
+                        class="w-full px-4 py-3 rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/50 dark:bg-white/5 focus:ring-2 focus:ring-brand-500 outline-none resize-none"></textarea>`;
+                    break;
+
+                case 'rating':
+                    inputHtml = `
+                        <div class="star-rating">
+                            ${[5, 4, 3, 2, 1].map(n => `
+                                <input type="radio" name="q_${q.id}" id="q_${q.id}_${n}" value="${n}">
+                                <label for="q_${q.id}_${n}"><span class="material-symbols-rounded text-3xl filled">star</span></label>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+
+                case 'scale':
+                    inputHtml = `
+                        <div class="flex items-center gap-1">
+                            ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `
+                                <label class="flex-1">
+                                    <input type="radio" name="q_${q.id}" value="${n}" class="sr-only peer">
+                                    <div class="text-center py-2 rounded-lg ring-1 ring-black/10 dark:ring-white/15 cursor-pointer 
+                                        peer-checked:bg-brand-500 peer-checked:text-white peer-checked:ring-brand-500 
+                                        hover:bg-brand-500/10 transition text-sm font-medium">${n}</div>
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+
+                case 'mcq_single':
+                    inputHtml = `
+                        <div class="space-y-2">
+                            ${(q.options || []).map((opt, i) => `
+                                <label class="flex items-center gap-3 p-3 rounded-xl ring-1 ring-black/10 dark:ring-white/15 cursor-pointer hover:bg-brand-500/10 transition">
+                                    <input type="radio" name="q_${q.id}" value="${i}" class="w-4 h-4 accent-brand-500">
+                                    <span class="text-sm">${opt}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+
+                case 'mcq_multiple':
+                    inputHtml = `
+                        <div class="space-y-2">
+                            ${(q.options || []).map((opt, i) => `
+                                <label class="flex items-center gap-3 p-3 rounded-xl ring-1 ring-black/10 dark:ring-white/15 cursor-pointer hover:bg-brand-500/10 transition">
+                                    <input type="checkbox" name="q_${q.id}" value="${i}" class="w-4 h-4 accent-brand-500 rounded">
+                                    <span class="text-sm">${opt}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+
+                case 'yes_no':
+                    inputHtml = `
+                        <div class="flex gap-3">
+                            <label class="flex-1">
+                                <input type="radio" name="q_${q.id}" value="0" class="sr-only peer">
+                                <div class="text-center py-3 rounded-xl ring-1 ring-black/10 dark:ring-white/15 cursor-pointer 
+                                    peer-checked:bg-emerald-500 peer-checked:text-white peer-checked:ring-emerald-500 
+                                    hover:bg-emerald-500/10 transition font-medium">
+                                    <span class="material-symbols-rounded mr-1">thumb_up</span> Yes
+                                </div>
+                            </label>
+                            <label class="flex-1">
+                                <input type="radio" name="q_${q.id}" value="1" class="sr-only peer">
+                                <div class="text-center py-3 rounded-xl ring-1 ring-black/10 dark:ring-white/15 cursor-pointer 
+                                    peer-checked:bg-red-500 peer-checked:text-white peer-checked:ring-red-500 
+                                    hover:bg-red-500/10 transition font-medium">
+                                    <span class="material-symbols-rounded mr-1">thumb_down</span> No
+                                </div>
+                            </label>
+                        </div>
+                    `;
+                    break;
+
+                case 'dropdown':
+                    inputHtml = `
+                        <select name="q_${q.id}" class="w-full px-4 py-3 rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/50 dark:bg-white/5 focus:ring-2 focus:ring-brand-500 outline-none">
+                            <option value="">Select an option...</option>
+                            ${(q.options || []).map((opt, i) => `<option value="${i}">${opt}</option>`).join('')}
+                        </select>
+                    `;
+                    break;
+            }
+
+            return `
+                <div class="glass-panel rounded-2xl p-5">
+                    <p class="font-medium mb-3">${idx + 1}. ${q.question_text}</p>
+                    ${q.description ? `<p class="text-xs text-neutral-500 dark:text-white/50 mb-3">${q.description}</p>` : ''}
+                    ${inputHtml}
+                </div>
+            `;
+        }
+
+        async function submit() {
+            const btn = $('submitBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-symbols-rounded animate-spin">refresh</span> Submitting...';
+
+            try {
+                const answers = formData.questions.map(q => {
+                    const answer = { question_id: q.id };
+
+                    if (['text', 'textarea'].includes(q.question_type)) {
+                        const input = document.querySelector(`[name="q_${q.id}"]`);
+                        answer.answer_text = input?.value || '';
+                    } else if (['rating', 'scale'].includes(q.question_type)) {
+                        const input = document.querySelector(`[name="q_${q.id}"]:checked`);
+                        answer.answer_rating = input ? parseInt(input.value) : null;
+                    } else if (q.question_type === 'mcq_multiple') {
+                        const inputs = document.querySelectorAll(`[name="q_${q.id}"]:checked`);
+                        answer.answer_options = Array.from(inputs).map(i => parseInt(i.value));
+                    } else if (['mcq_single', 'yes_no'].includes(q.question_type)) {
+                        const input = document.querySelector(`[name="q_${q.id}"]:checked`);
+                        answer.answer_options = input ? [parseInt(input.value)] : [];
+                    } else if (q.question_type === 'dropdown') {
+                        const input = document.querySelector(`[name="q_${q.id}"]`);
+                        answer.answer_options = input?.value ? [parseInt(input.value)] : [];
+                    }
+
+                    return answer;
+                });
+
+                const res = await fetch(`${API}/api/feedback/f/${shareCode}/submit`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+                    },
+                    body: JSON.stringify({ answers })
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.detail || 'Failed to submit');
+                }
+
+                showSuccess();
+            } catch (e) {
+                alert('Error: ' + e.message);
+                btn.disabled = false;
+                btn.innerHTML = '<span class="material-symbols-rounded text-lg">send</span> Submit Feedback';
+            }
+        }
+
+        $('submitBtn').addEventListener('click', submit);
+        load();
+    </script>
+</body>
+
+</html>
