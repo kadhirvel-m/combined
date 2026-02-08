@@ -20066,6 +20066,255 @@ async def analytics_dashboard_metrics():
         print(f"Dashboard Error: {e}")
         return {"error": str(e)}
 
+
+def _parse_iso_datetime_maybe(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        s = str(value)
+        # Supabase typically returns ISO8601 with Z.
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+@analytics_router.get("/active-users", summary="Active users in last 24h")
+async def analytics_active_users_last_24h(limit: int = Query(200, ge=1, le=2000)):
+    """
+    Returns users with at least one analytics event in the last 24 hours.
+    Sorted by most recent activity (descending).
+
+    For each user:
+    - last_active_24h: most recent event in last 24h
+    - first_active_today / last_active_today: min/max event time for UTC 'today'
+    - interactions_today: count of events for UTC 'today'
+    """
+    supabase = get_service_client()
+
+    # Use server-local timezone for "today" so the UI matches what you expect (morning vs now).
+    supabase = get_service_client()
+
+    local_now = datetime.now().astimezone()
+    local_tz = local_now.tzinfo or timezone.utc
+    now_utc = local_now.astimezone(timezone.utc)
+    since_24h_utc = now_utc - timedelta(hours=24)
+    since_24h = since_24h_utc.isoformat()
+
+    today_start_local_dt = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = today_start_local_dt.isoformat()
+    today_date_local = today_start_local_dt.date()
+
+    # Note: limit is on users; caps below are on rows (sessions/events).
+    sessions_cap = max(5000, min(50000, limit * 250))
+    events_cap = max(5000, min(50000, limit * 250))
+
+    # 1) Sessions: used for accurate first/last activity today
+    s_res = supabase.table("user_sessions").select("user_id,started_at,last_seen_at").gte("last_seen_at", since_24h).order("last_seen_at", desc=True).limit(sessions_cap).execute()
+    sessions = getattr(s_res, "data", []) or []
+
+    # 2) Events: used for interaction counts (and as fallback signal)
+    ev_res = supabase.table("analytics_events").select("user_id,created_at").gte("created_at", since_24h).order("created_at", desc=True).limit(events_cap).execute()
+    events = getattr(ev_res, "data", []) or []
+
+    users: Dict[str, Dict[str, Any]] = {}
+
+    def _ensure(uid: str) -> Dict[str, Any]:
+        st = users.get(uid)
+        if st is None:
+            st = {
+                "user_id": uid,
+                "last_active_24h": None,
+                "first_active_today": None,
+                "last_active_today": None,
+                "interactions_today": 0,
+            }
+            users[uid] = st
+        return st
+
+    # Aggregate sessions
+    for s in sessions:
+        uid = s.get("user_id")
+        if not uid:
+            continue
+        uid = str(uid)
+        started_dt = _parse_iso_datetime_maybe(s.get("started_at"))
+        last_seen_dt = _parse_iso_datetime_maybe(s.get("last_seen_at"))
+        if last_seen_dt is None and started_dt is None:
+            continue
+
+        stats = _ensure(uid)
+
+        # last_active_24h from last_seen
+        if last_seen_dt is not None:
+            last_seen_utc = last_seen_dt.astimezone(timezone.utc)
+            curr_last = stats.get("last_active_24h")
+            if curr_last is None or last_seen_utc > curr_last:
+                stats["last_active_24h"] = last_seen_utc
+
+        # today's first/last: use both started_at and last_seen_at if they fall on local 'today'
+        for dt in (started_dt, last_seen_dt):
+            if dt is None:
+                continue
+            dt_local = dt.astimezone(local_tz)
+            if dt_local.date() != today_date_local:
+                continue
+            dt_utc = dt.astimezone(timezone.utc)
+            fa = stats.get("first_active_today")
+            la = stats.get("last_active_today")
+            if fa is None or dt_utc < fa:
+                stats["first_active_today"] = dt_utc
+            if la is None or dt_utc > la:
+                stats["last_active_today"] = dt_utc
+
+    # Aggregate events (interactions + fallback timestamps)
+    for e in events:
+        uid = e.get("user_id")
+        if not uid:
+            continue
+        uid = str(uid)
+        created_dt = _parse_iso_datetime_maybe(e.get("created_at"))
+        if created_dt is None:
+            continue
+        created_utc = created_dt.astimezone(timezone.utc)
+        created_local = created_dt.astimezone(local_tz)
+
+        stats = _ensure(uid)
+
+        curr_last = stats.get("last_active_24h")
+        if curr_last is None or created_utc > curr_last:
+            stats["last_active_24h"] = created_utc
+
+        if created_local.date() == today_date_local:
+            stats["interactions_today"] += 1
+            fa = stats.get("first_active_today")
+            la = stats.get("last_active_today")
+            if fa is None or created_utc < fa:
+                stats["first_active_today"] = created_utc
+            if la is None or created_utc > la:
+                stats["last_active_today"] = created_utc
+
+    user_ids = list(users.keys())
+
+    # Enrich: profiles (name/email + ids for clg/dept + sem)
+    profiles_by_uid: Dict[str, Dict[str, Any]] = {}
+    profile_id_by_uid: Dict[str, str] = {}
+    if user_ids:
+        try:
+            prof_res = supabase.table("user_profiles").select(
+                "id,auth_user_id,name,email,semester,college_id,department_id,batch_id"
+            ).in_("auth_user_id", user_ids).execute()
+            profiles = getattr(prof_res, "data", []) or []
+            for p in profiles:
+                puid = p.get("auth_user_id")
+                pid = p.get("id")
+                if puid:
+                    profiles_by_uid[str(puid)] = p
+                    if pid:
+                        profile_id_by_uid[str(puid)] = str(pid)
+        except Exception:
+            profiles_by_uid = {}
+            profile_id_by_uid = {}
+
+    # Enrich: latest education row per profile (section + possible overrides)
+    edu_by_profile_id: Dict[str, Dict[str, Any]] = {}
+    profile_ids = [pid for pid in profile_id_by_uid.values() if pid]
+    if profile_ids:
+        try:
+            edu_limit = min(5000, max(500, len(profile_ids) * 10))
+            edu_res = supabase.table("user_education").select(
+                "user_profile_id,current_semester,section,college_id,department_id,updated_at"
+            ).in_("user_profile_id", profile_ids).order("updated_at", desc=True).limit(edu_limit).execute()
+            edu_rows = getattr(edu_res, "data", []) or []
+            for r in edu_rows:
+                upid = r.get("user_profile_id")
+                if not upid:
+                    continue
+                upid = str(upid)
+                if upid not in edu_by_profile_id:
+                    edu_by_profile_id[upid] = r
+        except Exception:
+            edu_by_profile_id = {}
+
+    # Resolve college/department names
+    college_ids: Set[str] = set()
+    dept_ids: Set[str] = set()
+    for uid in user_ids:
+        p = profiles_by_uid.get(uid) or {}
+        pid = profile_id_by_uid.get(uid)
+        edu = edu_by_profile_id.get(pid or "") if pid else None
+        cid = (edu.get("college_id") if edu else None) or p.get("college_id")
+        did = (edu.get("department_id") if edu else None) or p.get("department_id")
+        if cid:
+            college_ids.add(str(cid))
+        if did:
+            dept_ids.add(str(did))
+
+    colleges_map: Dict[str, str] = {}
+    if college_ids:
+        try:
+            c_res = supabase.table("colleges").select("id,name").in_("id", list(college_ids)).execute()
+            for c in (getattr(c_res, "data", []) or []):
+                if c.get("id"):
+                    colleges_map[str(c["id"])] = c.get("name")
+        except Exception:
+            colleges_map = {}
+
+    depts_map: Dict[str, str] = {}
+    if dept_ids:
+        try:
+            d_res = supabase.table("departments").select("id,name").in_("id", list(dept_ids)).execute()
+            for d in (getattr(d_res, "data", []) or []):
+                if d.get("id"):
+                    depts_map[str(d["id"])] = d.get("name")
+        except Exception:
+            depts_map = {}
+
+    rows: List[Dict[str, Any]] = []
+    for uid, stats in users.items():
+        prof = profiles_by_uid.get(uid) or {}
+        pid = profile_id_by_uid.get(uid)
+        edu = edu_by_profile_id.get(pid or "") if pid else None
+
+        sem = None
+        if edu and edu.get("current_semester") is not None:
+            sem = edu.get("current_semester")
+        else:
+            sem = prof.get("semester")
+
+        section_val = (edu.get("section") if edu else None)
+        cid = (edu.get("college_id") if edu else None) or prof.get("college_id")
+        did = (edu.get("department_id") if edu else None) or prof.get("department_id")
+
+        rows.append({
+            "user_id": uid,
+            "name": prof.get("name"),
+            "email": prof.get("email"),
+            "college": colleges_map.get(str(cid)) if cid else None,
+            "department": depts_map.get(str(did)) if did else None,
+            "semester": sem,
+            "section": section_val,
+            "last_active_24h": (stats.get("last_active_24h").isoformat() if stats.get("last_active_24h") else None),
+            "first_active_today": (stats.get("first_active_today").isoformat() if stats.get("first_active_today") else None),
+            "last_active_today": (stats.get("last_active_today").isoformat() if stats.get("last_active_today") else None),
+            "interactions_today": int(stats.get("interactions_today") or 0),
+        })
+
+    rows.sort(key=lambda r: (r.get("last_active_24h") or ""), reverse=True)
+    rows = rows[:limit]
+
+    return {
+        "count_24h": len(users),
+        "since_24h": since_24h,
+        "today_start": today_start,
+        "timezone": str(local_tz),
+        "users": rows,
+    }
+
 app.include_router(analytics_router)
 
 # -------------------- Lcoding Learning Tracks --------------------
