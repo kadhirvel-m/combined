@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth" data-theme="light">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StudyAI — Your Academic AI Assistant</title>
+  <meta name="description"
+    content="StudyAI - An advanced AI-powered academic assistant to help students learn, understand, and excel in their studies." />
+
+  <script>
+    (function () {
+      try {
+        var keys = ['cx-theme', 'theme', 'px-theme'];
+        var mode = null;
+        for (var i = 0; i < keys.length; i++) {
+          var v = localStorage.getItem(keys[i]);
+          if (v === 'dark' || v === 'light') { mode = v; break; }
+        }
+        if (!mode && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          mode = 'dark';
+        }
+        if (mode) {
+          document.documentElement.setAttribute('data-theme', mode);
+          document.documentElement.classList.toggle('dark', mode === 'dark');
+        }
+      } catch (e) { }
+    })();
+  </script>
+
+  <!-- Tailwind CSS -->
+  <link rel="stylesheet" href="assets/css/tailwind.css" />
+
+  <!-- Shared config + theme manager -->
+  <script src="./config.js"></script>
+  <script src="./auth.js" defer></script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" />
+
+  <!-- Markdown Rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+
+  <!-- Code Highlighting -->
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+  <!-- KaTeX for Math -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+  <style>
+    :root {
+      --surface: #ffffff;
+      --surface-dim: #FBF8FC;
+      --surface-contrast: #1E1E2F;
+      --outline: rgba(30, 30, 47, 0.10);
+      --muted: #5b6178;
+      --elev: 1;
+      --brand: #9E4B8A;
+      --brand-strong: #4C2A59;
+      --brand-soft: #F3E7F2;
+      --chip: #FAF5FB;
+      --kbd: #F3E7F2;
+      --ai-gradient: linear-gradient(135deg, #9E4B8A 0%, #6366f1 50%, #14b8a6 100%);
+      --user-gradient: linear-gradient(135deg, #4C2A59 0%, #1E1E2F 100%);
+    }
+
+    [data-theme="dark"] {
+      --surface: #0f0f1a;
+      --surface-dim: #1a1a2e;
+      --surface-contrast: #EAEAF2;
+      --outline: rgba(255, 255, 255, .12);
+      --muted: #9ca3af;
+      --elev: 0;
+      --brand: #c084fc;
+      --brand-strong: #CA6CB3;
+      --brand-soft: rgba(255, 255, 255, 0.06);
+      --chip: rgba(255, 255, 255, 0.08);
+      --kbd: rgba(255, 255, 255, 0.08);
+    }
+
+    html,
+    body {
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Futuristic background */
+    .bg-futuristic {
+      background: var(--surface);
+      background-image:
+        radial-gradient(ellipse at 20% 0%, rgba(158, 75, 138, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
+        radial-gradient(ellipse at 50% 100%, rgba(20, 184, 166, 0.1) 0%, transparent 40%);
+    }
+
+    [data-theme="dark"] .bg-futuristic {
+      background-image:
+        radial-gradient(ellipse at 20% 0%, rgba(158, 75, 138, 0.25) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 0%, rgba(99, 102, 241, 0.2) 0%, transparent 45%),
+        radial-gradient(ellipse at 50% 100%, rgba(20, 184, 166, 0.15) 0%, transparent 40%);
+    }
+
+    /* Glassmorphism */
+    .glass {
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      background: rgba(255, 255, 255, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    [data-theme="dark"] .glass {
+      background: rgba(15, 15, 26, 0.8);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .glass-sidebar {
+      backdrop-filter: blur(20px) saturate(180%);
+      background: rgba(255, 255, 255, 0.85);
+      border-right: 1px solid var(--outline);
+    }
+
+    [data-theme="dark"] .glass-sidebar {
+      background: rgba(15, 15, 26, 0.92);
+    }
+
+    /* Message bubbles */
+    .msg-user {
+      background: linear-gradient(135deg, #4C2A59 0%, #1E1E2F 100%);
+      color: white;
+      border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
+    }
+
+    .msg-ai {
+      background: var(--surface);
+      border: 1px solid var(--outline);
+      border-radius: 1.25rem 1.25rem 1.25rem 0.25rem;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+
+    [data-theme="dark"] .msg-ai {
+      background: rgba(30, 30, 47, 0.6);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    /* AI Avatar glow */
+    .ai-avatar {
+      background: var(--ai-gradient);
+      box-shadow: 0 0 20px rgba(158, 75, 138, 0.4), 0 0 40px rgba(99, 102, 241, 0.2);
+      animation: pulse-glow 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+
+      0%,
+      100% {
+        box-shadow: 0 0 20px rgba(158, 75, 138, 0.4), 0 0 40px rgba(99, 102, 241, 0.2);
+      }
+
+      50% {
+        box-shadow: 0 0 30px rgba(158, 75, 138, 0.6), 0 0 60px rgba(99, 102, 241, 0.3);
+      }
+    }
+
+    /* Typing indicator */
+    .typing-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--brand);
+      animation: typing 1.4s infinite ease-in-out;
+    }
+
+    .typing-dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .typing-dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes typing {
+
+      0%,
+      60%,
+      100% {
+        transform: translateY(0);
+        opacity: 0.4;
+      }
+
+      30% {
+        transform: translateY(-8px);
+        opacity: 1;
+      }
+    }
+
+    /* Study mode pills */
+    .study-pill {
+      background: var(--chip);
+      border: 1px solid var(--outline);
+      transition: all 0.2s ease;
+    }
+
+    .study-pill:hover {
+      background: var(--brand-soft);
+      border-color: var(--brand);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(158, 75, 138, 0.2);
+    }
+
+    .study-pill:active {
+      transform: translateY(0);
+    }
+
+    /* Input area glow */
+    .input-glow:focus-within {
+      box-shadow: 0 0 0 2px var(--brand), 0 0 20px rgba(158, 75, 138, 0.15);
+    }
+
+    /* Scrollbar styling */
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    .custom-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: var(--outline);
+      border-radius: 999px;
+    }
+
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+    }
+
+    /* Conversation item */
+    .conv-item {
+      transition: all 0.15s ease;
+    }
+
+    .conv-item:hover {
+      background: var(--brand-soft);
+    }
+
+    .conv-item.active {
+      background: var(--brand-soft);
+      border-left: 3px solid var(--brand);
+    }
+
+    /* Code blocks in messages */
+    .msg-content pre {
+      border-radius: 0.75rem;
+      margin: 0.75rem 0;
+      overflow-x: auto;
+    }
+
+    .msg-content code:not(pre code) {
+      background: var(--kbd);
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.35rem;
+      font-size: 0.9em;
+    }
+
+    .msg-user .msg-content code:not(pre code) {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Animated gradient border */
+    .gradient-border {
+      position: relative;
+      background: var(--surface);
+    }
+
+    .gradient-border::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      padding: 2px;
+      background: var(--ai-gradient);
+      border-radius: inherit;
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+    }
+
+    /* Floating action button */
+    .fab {
+      box-shadow: 0 4px 20px rgba(158, 75, 138, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    .fab:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 25px rgba(158, 75, 138, 0.4);
+    }
+
+    /* Sidebar toggle animation */
+    .sidebar-enter {
+      animation: slideIn 0.3s ease forwards;
+    }
+
+    .sidebar-exit {
+      animation: slideOut 0.3s ease forwards;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(-100%);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+
+      to {
+        transform: translateX(-100%);
+        opacity: 0;
+      }
+    }
+
+    /* Welcome animation */
+    .welcome-fade {
+      animation: welcomeFade 0.6s ease forwards;
+    }
+
+    @keyframes welcomeFade {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Material ripple */
+    .ripple {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ripple::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle, currentColor 10%, transparent 10.01%);
+      transform: scale(10);
+      opacity: 0;
+      transition: transform 0.5s, opacity 0.5s;
+    }
+
+    .ripple:active::after {
+      transform: scale(0);
+      opacity: 0.15;
+      transition: 0s;
+    }
+
+    /* Hide scrollbar on mobile sidebar */
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Empty state illustration */
+    .empty-illustration {
+      opacity: 0.7;
+    }
+
+    [data-theme="dark"] .empty-illustration {
+      opacity: 0.5;
+    }
+  </style>
+</head>
+
+<body class="bg-futuristic h-screen flex overflow-hidden">
+
+  <!-- Mobile Sidebar Overlay -->
+  <div id="sidebarOverlay" class="fixed inset-0 bg-black/40 z-40 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar"
+    class="glass-sidebar w-72 h-full flex flex-col z-50 fixed lg:relative -translate-x-full lg:translate-x-0 transition-transform duration-300">
+
+    <!-- Sidebar Header -->
+    <div class="p-4 border-b" style="border-color: var(--outline);">
+      <div class="flex items-center gap-3">
+        <div class="ai-avatar w-10 h-10 rounded-xl flex items-center justify-center">
+          <span class="material-symbols-rounded text-white text-xl">psychology</span>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg" style="color: var(--surface-contrast);">StudyAI</h1>
+          <p class="text-xs" style="color: var(--muted);">Your Academic Assistant</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Chat Button -->
+    <div class="p-3">
+      <button id="newChatBtn" onclick="createNewConversation()"
+        class="w-full flex items-center gap-2 px-4 py-3 rounded-xl font-medium transition-all ripple"
+        style="background: var(--ai-gradient); color: white;">
+        <span class="material-symbols-rounded text-xl">add</span>
+        New Chat
+      </button>
+    </div>
+
+    <!-- Search -->
+    <div class="px-3 pb-2">
+      <div class="relative">
+        <span class="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-lg"
+          style="color: var(--muted);">search</span>
+        <input type="text" id="searchInput" placeholder="Search conversations..."
+          class="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-transparent border focus:outline-none focus:border-[var(--brand)]"
+          style="border-color: var(--outline); color: var(--surface-contrast);">
+      </div>
+    </div>
+
+    <!-- Conversations List -->
+    <div id="conversationsList" class="flex-1 overflow-y-auto custom-scroll px-2 py-2 space-y-1">
+      <!-- Conversations will be loaded here -->
+      <div id="convLoading" class="flex items-center justify-center py-8">
+        <div class="flex gap-1">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="p-3 border-t space-y-2" style="border-color: var(--outline);">
+      <button onclick="toggleTheme()"
+        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-[var(--brand-soft)] transition ripple"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-xl" id="themeIcon">dark_mode</span>
+        <span id="themeLabel">Dark Mode</span>
+      </button>
+      <a href="home.html"
+        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-[var(--brand-soft)] transition ripple"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-xl">home</span>
+        Back to Home
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Chat Area -->
+  <main class="flex-1 flex flex-col h-full overflow-hidden">
+
+    <!-- Header -->
+    <header class="glass px-4 py-3 flex items-center gap-3 border-b z-30" style="border-color: var(--outline);">
+      <!-- Mobile menu toggle -->
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl hover:bg-[var(--brand-soft)] transition ripple">
+        <span class="material-symbols-rounded text-xl" style="color: var(--surface-contrast);">menu</span>
+      </button>
+
+      <!-- Conversation title -->
+      <div class="flex-1 min-w-0">
+        <h2 id="chatTitle" class="font-semibold truncate" style="color: var(--surface-contrast);">New Chat</h2>
+        <p class="text-xs truncate" style="color: var(--muted);">Powered by Gemini 2.5 Flash</p>
+      </div>
+
+      <!-- Header actions -->
+      <div class="flex items-center gap-2">
+        <button id="shareBtn" onclick="shareConversation()"
+          class="p-2.5 rounded-xl hover:bg-[var(--brand-soft)] transition ripple" title="Share">
+          <span class="material-symbols-rounded text-xl" style="color: var(--muted);">share</span>
+        </button>
+        <button id="exportBtn" onclick="exportConversation()"
+          class="p-2.5 rounded-xl hover:bg-[var(--brand-soft)] transition ripple" title="Export">
+          <span class="material-symbols-rounded text-xl" style="color: var(--muted);">download</span>
+        </button>
+        <button id="deleteBtn" onclick="deleteCurrentConversation()"
+          class="p-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950 transition ripple" title="Delete">
+          <span class="material-symbols-rounded text-xl text-red-500">delete</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Messages Container -->
+    <div id="messagesContainer" class="flex-1 overflow-y-auto custom-scroll px-4 py-6">
+
+      <!-- Welcome Screen (shown when no conversation) -->
+      <div id="welcomeScreen" class="h-full flex flex-col items-center justify-center text-center px-4 welcome-fade">
+        <div class="ai-avatar w-20 h-20 rounded-2xl flex items-center justify-center mb-6">
+          <span class="material-symbols-rounded text-white text-4xl">psychology</span>
+        </div>
+        <h2 class="text-2xl font-bold mb-2" style="color: var(--surface-contrast);">Welcome to StudyAI</h2>
+        <p class="text-base mb-8 max-w-md" style="color: var(--muted);">
+          Your intelligent academic companion. Ask me anything about your studies, and I'll help you understand, learn,
+          and succeed.
+        </p>
+
+        <!-- Quick suggestions -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl w-full">
+          <button onclick="quickPrompt('Explain the concept of photosynthesis with examples')"
+            class="text-left p-4 rounded-xl glass hover:shadow-lg transition group">
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-rounded text-2xl text-indigo-500">lightbulb</span>
+              <div>
+                <p class="font-medium text-sm" style="color: var(--surface-contrast);">Explain a concept</p>
+                <p class="text-xs mt-1" style="color: var(--muted);">Break down complex topics into simple terms</p>
+              </div>
+            </div>
+          </button>
+          <button
+            onclick="quickPrompt('Help me solve this calculus problem: find the derivative of x^3 + 2x^2 - 5x + 1')"
+            class="text-left p-4 rounded-xl glass hover:shadow-lg transition group">
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-rounded text-2xl text-emerald-500">calculate</span>
+              <div>
+                <p class="font-medium text-sm" style="color: var(--surface-contrast);">Solve a problem</p>
+                <p class="text-xs mt-1" style="color: var(--muted);">Step-by-step solutions with explanations</p>
+              </div>
+            </div>
+          </button>
+          <button onclick="quickPrompt('Create a quiz about World War II with 5 multiple choice questions')"
+            class="text-left p-4 rounded-xl glass hover:shadow-lg transition group">
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-rounded text-2xl text-amber-500">quiz</span>
+              <div>
+                <p class="font-medium text-sm" style="color: var(--surface-contrast);">Quiz me</p>
+                <p class="text-xs mt-1" style="color: var(--muted);">Test your knowledge with MCQs</p>
+              </div>
+            </div>
+          </button>
+          <button onclick="quickPrompt('Summarize the key points of Newton\\'s Laws of Motion')"
+            class="text-left p-4 rounded-xl glass hover:shadow-lg transition group">
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-rounded text-2xl text-rose-500">summarize</span>
+              <div>
+                <p class="font-medium text-sm" style="color: var(--surface-contrast);">Summarize</p>
+                <p class="text-xs mt-1" style="color: var(--muted);">Get key points and main ideas</p>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages will be rendered here -->
+      <div id="messagesList" class="max-w-3xl mx-auto space-y-6 hidden">
+        <!-- Messages inserted dynamically -->
+      </div>
+
+      <!-- Typing Indicator -->
+      <div id="typingIndicator" class="max-w-3xl mx-auto hidden">
+        <div class="flex gap-3 items-start">
+          <div class="ai-avatar w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-rounded text-white text-lg">psychology</span>
+          </div>
+          <div class="msg-ai px-4 py-3 flex items-center gap-2">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Study Mode Pills -->
+    <div id="studyModeBar" class="px-4 py-2 border-t overflow-x-auto hide-scrollbar flex gap-2"
+      style="border-color: var(--outline); background: var(--surface);">
+      <button onclick="setStudyMode('explain')"
+        class="study-pill px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex items-center gap-1.5"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-base text-indigo-500">lightbulb</span>
+        Explain
+      </button>
+      <button onclick="setStudyMode('summarize')"
+        class="study-pill px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex items-center gap-1.5"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-base text-rose-500">summarize</span>
+        Summarize
+      </button>
+      <button onclick="setStudyMode('quiz')"
+        class="study-pill px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex items-center gap-1.5"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-base text-amber-500">quiz</span>
+        Quiz Me
+      </button>
+      <button onclick="setStudyMode('solve')"
+        class="study-pill px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex items-center gap-1.5"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-base text-emerald-500">calculate</span>
+        Solve
+      </button>
+      <button onclick="setStudyMode('compare')"
+        class="study-pill px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex items-center gap-1.5"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-base text-cyan-500">compare_arrows</span>
+        Compare
+      </button>
+      <button onclick="setStudyMode('outline')"
+        class="study-pill px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex items-center gap-1.5"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-base text-purple-500">format_list_bulleted</span>
+        Outline
+      </button>
+      <button onclick="setStudyMode('flashcards')"
+        class="study-pill px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex items-center gap-1.5"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-base text-orange-500">style</span>
+        Flashcards
+      </button>
+      <button onclick="setStudyMode('cite')"
+        class="study-pill px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex items-center gap-1.5"
+        style="color: var(--surface-contrast);">
+        <span class="material-symbols-rounded text-base text-blue-500">format_quote</span>
+        Cite
+      </button>
+    </div>
+
+    <!-- Input Area -->
+    <div class="p-4 border-t" style="border-color: var(--outline); background: var(--surface);">
+      <div class="max-w-3xl mx-auto">
+        <!-- Active study mode indicator -->
+        <div id="studyModeIndicator" class="hidden mb-2 flex items-center gap-2">
+          <span class="text-xs font-medium px-2.5 py-1 rounded-full"
+            style="background: var(--brand-soft); color: var(--brand);">
+            <span id="studyModeLabel">Explain Mode</span>
+          </span>
+          <button onclick="clearStudyMode()" class="text-xs hover:underline" style="color: var(--muted);">Clear</button>
+        </div>
+
+        <div class="flex items-end gap-3">
+          <!-- Attachment button -->
+          <button id="attachBtn" class="p-3 rounded-xl hover:bg-[var(--brand-soft)] transition ripple flex-shrink-0"
+            title="Attach file">
+            <span class="material-symbols-rounded text-xl" style="color: var(--muted);">attach_file</span>
+          </button>
+
+          <!-- Input field -->
+          <div class="flex-1 glass rounded-2xl input-glow transition-shadow">
+            <textarea id="messageInput" placeholder="Ask me anything about your studies..." rows="1"
+              class="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-sm"
+              style="color: var(--surface-contrast); max-height: 150px;" oninput="autoResize(this)"
+              onkeydown="handleKeyDown(event)"></textarea>
+          </div>
+
+          <!-- Voice input button -->
+          <button id="voiceBtn" onclick="toggleVoiceInput()"
+            class="p-3 rounded-xl hover:bg-[var(--brand-soft)] transition ripple flex-shrink-0" title="Voice input">
+            <span class="material-symbols-rounded text-xl" style="color: var(--muted);">mic</span>
+          </button>
+
+          <!-- Send button -->
+          <button id="sendBtn" onclick="sendMessage()" class="p-3 rounded-xl fab flex-shrink-0"
+            style="background: var(--ai-gradient);">
+            <span class="material-symbols-rounded text-xl text-white">send</span>
+          </button>
+        </div>
+
+        <p class="text-xs text-center mt-3" style="color: var(--muted);">
+          StudyAI can make mistakes. Consider checking important information.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Share Modal -->
+  <div id="shareModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeShareModal()"></div>
+    <div class="glass rounded-2xl p-6 max-w-md w-full relative z-10" style="background: var(--surface);">
+      <h3 class="text-lg font-bold mb-4" style="color: var(--surface-contrast);">Share Conversation</h3>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-2" style="color: var(--surface-contrast);">Share Link</label>
+          <div class="flex gap-2">
+            <input type="text" id="shareLinkInput" readonly
+              class="flex-1 px-4 py-2.5 rounded-xl text-sm border bg-transparent"
+              style="border-color: var(--outline); color: var(--surface-contrast);">
+            <button onclick="copyShareLink()" class="px-4 py-2.5 rounded-xl font-medium"
+              style="background: var(--brand-soft); color: var(--brand);">
+              Copy
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="anonymousShare" class="w-4 h-4 rounded accent-[var(--brand)]">
+          <label for="anonymousShare" class="text-sm" style="color: var(--surface-contrast);">Share anonymously (hide
+            your name)</label>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 mt-6">
+        <button onclick="closeShareModal()" class="px-4 py-2.5 rounded-xl text-sm font-medium"
+          style="color: var(--muted);">
+          Cancel
+        </button>
+        <button onclick="confirmShare()" class="px-4 py-2.5 rounded-xl text-sm font-medium text-white"
+          style="background: var(--ai-gradient);">
+          Generate Link
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast"
+    class="fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium transition-all duration-300 opacity-0 translate-y-4 pointer-events-none z-50"
+    style="background: var(--surface-contrast); color: var(--surface);">
+    <span id="toastMessage">Copied to clipboard!</span>
+  </div>
+
+  <script>
+    // ============================================================================
+    // STUDYAI CHATBOT - CLIENT
+    // ============================================================================
+
+    const API_BASE = window.__API_BASE || 'http://127.0.0.1:8000';
+    const STUDYAI_API = `${API_BASE}/api/studyai`;
+
+    // State
+    let currentConversationId = null;
+    let currentStudyMode = null;
+    let conversations = [];
+    let isLoading = false;
+    let isRecording = false;
+
+    // DOM Elements
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const conversationsList = document.getElementById('conversationsList');
+    const messagesContainer = document.getElementById('messagesContainer');
+    const messagesList = document.getElementById('messagesList');
+    const welcomeScreen = document.getElementById('welcomeScreen');
+    const typingIndicator = document.getElementById('typingIndicator');
+    const messageInput = document.getElementById('messageInput');
+    const chatTitle = document.getElementById('chatTitle');
+    const studyModeIndicator = document.getElementById('studyModeIndicator');
+    const studyModeLabel = document.getElementById('studyModeLabel');
+
+    // ============================================================================
+    // INITIALIZATION
+    // ============================================================================
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      updateThemeUI();
+      await loadConversations();
+
+      // Setup search
+      document.getElementById('searchInput').addEventListener('input', filterConversations);
+
+      // Auto-resize textarea
+      messageInput.addEventListener('input', () => autoResize(messageInput));
+    });
+
+    // ============================================================================
+    // AUTH HELPERS
+    // ============================================================================
+
+    function getAuthToken() {
+      try {
+        // Try px_token first (main user token)
+        const pxToken = localStorage.getItem('px_token');
+        if (pxToken) return pxToken;
+
+        // Try teacher token
+        const teacherToken = localStorage.getItem('teacherToken');
+        if (teacherToken) return teacherToken;
+
+        // Fallback to Supabase session format
+        const storedSession = localStorage.getItem('supabase.auth.token') ||
+          localStorage.getItem('sb-uppzpkmpxgyipjzcskva-auth-token');
+        if (storedSession) {
+          const session = JSON.parse(storedSession);
+          return session?.currentSession?.access_token || session?.access_token;
+        }
+      } catch (e) {
+        console.error('Error getting auth token:', e);
+      }
+      return null;
+    }
+
+    function getAuthHeaders() {
+      const token = getAuthToken();
+      return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
+
+    // ============================================================================
+    // API CALLS
+    // ============================================================================
+
+    async function apiCall(endpoint, options = {}) {
+      const url = `${STUDYAI_API}${endpoint}`;
+      const headers = {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...options.headers
+      };
+
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.detail || `HTTP ${response.status}`);
+        }
+
+        return response.json();
+      } catch (error) {
+        console.error(`API Error:`, error);
+        throw error;
+      }
+    }
+
+    // ============================================================================
+    // CONVERSATIONS
+    // ============================================================================
+
+    async function loadConversations() {
+      try {
+        const data = await apiCall('/conversations');
+        conversations = data.conversations || [];
+        renderConversationsList();
+      } catch (error) {
+        console.error('Failed to load conversations:', error);
+        document.getElementById('convLoading').innerHTML = `
+          <p class="text-sm text-center" style="color: var(--muted);">
+            Sign in to save your chats
+          </p>
+        `;
+      }
+    }
+
+    function renderConversationsList() {
+      const container = document.getElementById('conversationsList');
+
+      if (!conversations.length) {
+        container.innerHTML = `
+          <div class="text-center py-8">
+            <span class="material-symbols-rounded text-4xl mb-2 block" style="color: var(--muted);">chat_bubble</span>
+            <p class="text-sm" style="color: var(--muted);">No conversations yet</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Group by date
+      const today = new Date().toDateString();
+      const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+      const grouped = { today: [], yesterday: [], older: [] };
+
+      conversations.forEach(conv => {
+        const convDate = new Date(conv.updated_at || conv.created_at).toDateString();
+        if (convDate === today) grouped.today.push(conv);
+        else if (convDate === yesterday) grouped.yesterday.push(conv);
+        else grouped.older.push(conv);
+      });
+
+      let html = '';
+
+      if (grouped.today.length) {
+        html += `<div class="px-2 py-2 text-xs font-semibold uppercase" style="color: var(--muted);">Today</div>`;
+        grouped.today.forEach(conv => html += renderConversationItem(conv));
+      }
+
+      if (grouped.yesterday.length) {
+        html += `<div class="px-2 py-2 mt-2 text-xs font-semibold uppercase" style="color: var(--muted);">Yesterday</div>`;
+        grouped.yesterday.forEach(conv => html += renderConversationItem(conv));
+      }
+
+      if (grouped.older.length) {
+        html += `<div class="px-2 py-2 mt-2 text-xs font-semibold uppercase" style="color: var(--muted);">Previous</div>`;
+        grouped.older.forEach(conv => html += renderConversationItem(conv));
+      }
+
+      container.innerHTML = html;
+    }
+
+    function renderConversationItem(conv) {
+      const isActive = conv.id === currentConversationId;
+      return `
+        <button onclick="loadConversation('${conv.id}')" 
+          class="conv-item w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-3 group ${isActive ? 'active' : ''}"
+          data-conv-id="${conv.id}">
+          <span class="material-symbols-rounded text-lg" style="color: var(--muted);">chat_bubble</span>
+          <span class="flex-1 truncate text-sm" style="color: var(--surface-contrast);">${escapeHtml(conv.title)}</span>
+          <span class="material-symbols-rounded text-lg opacity-0 group-hover:opacity-100 transition" 
+            style="color: var(--muted);" onclick="event.stopPropagation(); deleteConversation('${conv.id}')">delete</span>
+        </button>
+      `;
+    }
+
+    function filterConversations() {
+      const query = document.getElementById('searchInput').value.toLowerCase();
+      const items = document.querySelectorAll('.conv-item');
+
+      items.forEach(item => {
+        const title = item.querySelector('span:nth-child(2)').textContent.toLowerCase();
+        item.style.display = title.includes(query) ? 'flex' : 'none';
+      });
+    }
+
+    async function createNewConversation() {
+      currentConversationId = null;
+      currentStudyMode = null;
+
+      chatTitle.textContent = 'New Chat';
+      messagesList.innerHTML = '';
+      messagesList.classList.add('hidden');
+      welcomeScreen.classList.remove('hidden');
+      clearStudyMode();
+
+      // Update active state
+      document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+
+      // Close mobile sidebar
+      if (window.innerWidth < 1024) toggleSidebar();
+    }
+
+    async function loadConversation(conversationId) {
+      if (isLoading) return;
+      isLoading = true;
+
+      try {
+        const data = await apiCall(`/conversations/${conversationId}`);
+        currentConversationId = conversationId;
+
+        chatTitle.textContent = data.title || 'Chat';
+
+        // Clear and render messages
+        messagesList.innerHTML = '';
+        welcomeScreen.classList.add('hidden');
+        messagesList.classList.remove('hidden');
+
+        (data.messages || []).forEach(msg => {
+          appendMessage(msg.role, msg.content, msg.id);
+        });
+
+        // Update active state
+        document.querySelectorAll('.conv-item').forEach(el => {
+          el.classList.toggle('active', el.dataset.convId === conversationId);
+        });
+
+        // Scroll to bottom
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        // Close mobile sidebar
+        if (window.innerWidth < 1024) toggleSidebar();
+      } catch (error) {
+        showToast('Failed to load conversation');
+      } finally {
+        isLoading = false;
+      }
+    }
+
+    async function deleteConversation(conversationId) {
+      if (!confirm('Delete this conversation?')) return;
+
+      try {
+        await apiCall(`/conversations/${conversationId}`, { method: 'DELETE' });
+
+        if (currentConversationId === conversationId) {
+          createNewConversation();
+        }
+
+        await loadConversations();
+        showToast('Conversation deleted');
+      } catch (error) {
+        showToast('Failed to delete conversation');
+      }
+    }
+
+    function deleteCurrentConversation() {
+      if (currentConversationId) {
+        deleteConversation(currentConversationId);
+      }
+    }
+
+    // ============================================================================
+    // MESSAGES
+    // ============================================================================
+
+    async function sendMessage() {
+      const content = messageInput.value.trim();
+      if (!content || isLoading) return;
+
+      isLoading = true;
+      messageInput.value = '';
+      autoResize(messageInput);
+
+      // Create conversation if needed
+      if (!currentConversationId) {
+        try {
+          const conv = await apiCall('/conversations', {
+            method: 'POST',
+            body: JSON.stringify({ title: 'New Chat' })
+          });
+          currentConversationId = conv.id;
+          welcomeScreen.classList.add('hidden');
+          messagesList.classList.remove('hidden');
+        } catch (error) {
+          showToast('Failed to create conversation');
+          isLoading = false;
+          return;
+        }
+      }
+
+      // Add user message to UI
+      appendMessage('user', content);
+
+      // Show typing indicator
+      typingIndicator.classList.remove('hidden');
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+      try {
+        const data = await apiCall(`/conversations/${currentConversationId}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({
+            content,
+            study_mode: currentStudyMode
+          })
+        });
+
+        // Hide typing indicator
+        typingIndicator.classList.add('hidden');
+
+        // Add AI response
+        if (data.ai_message) {
+          appendMessage('assistant', data.ai_message.content, data.ai_message.id);
+        }
+
+        // Update title if changed
+        if (data.ai_message && chatTitle.textContent === 'New Chat') {
+          const newTitle = content.substring(0, 50) + (content.length > 50 ? '...' : '');
+          chatTitle.textContent = newTitle;
+        }
+
+        // Refresh conversations list
+        await loadConversations();
+
+        // Clear study mode after use
+        clearStudyMode();
+      } catch (error) {
+        typingIndicator.classList.add('hidden');
+        appendMessage('assistant', 'Sorry, I encountered an error. Please try again.');
+        showToast('Failed to send message');
+      } finally {
+        isLoading = false;
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    }
+
+    function appendMessage(role, content, messageId = null) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `flex ${role === 'user' ? 'justify-end' : 'gap-3 items-start'}`;
+      if (messageId) msgDiv.dataset.messageId = messageId;
+
+      const renderedContent = renderMarkdown(content);
+
+      if (role === 'user') {
+        msgDiv.innerHTML = `
+          <div class="msg-user px-4 py-3 max-w-[85%] sm:max-w-[75%]">
+            <div class="msg-content text-sm leading-relaxed">${renderedContent}</div>
+          </div>
+        `;
+      } else {
+        msgDiv.innerHTML = `
+          <div class="ai-avatar w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-rounded text-white text-lg">psychology</span>
+          </div>
+          <div class="msg-ai px-4 py-3 max-w-[85%] sm:max-w-[80%]">
+            <div class="msg-content prose prose-sm max-w-none" style="color: var(--surface-contrast);">${renderedContent}</div>
+            <div class="flex items-center gap-2 mt-3 pt-2 border-t" style="border-color: var(--outline);">
+              <button onclick="copyMessage(this)" class="p-1.5 rounded-lg hover:bg-[var(--brand-soft)] transition" title="Copy">
+                <span class="material-symbols-rounded text-base" style="color: var(--muted);">content_copy</span>
+              </button>
+              <button onclick="toggleBookmark(this, '${messageId}')" class="p-1.5 rounded-lg hover:bg-[var(--brand-soft)] transition" title="Bookmark">
+                <span class="material-symbols-rounded text-base" style="color: var(--muted);">bookmark</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      messagesList.appendChild(msgDiv);
+
+      // Render math
+      if (typeof renderMathInElement === 'function') {
+        renderMathInElement(msgDiv, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          throwOnError: false
+        });
+      }
+
+      // Highlight code
+      msgDiv.querySelectorAll('pre code').forEach(block => {
+        hljs.highlightElement(block);
+      });
+    }
+
+    function renderMarkdown(text) {
+      if (!text) return '';
+
+      // Configure marked
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+        headerIds: false,
+        mangle: false
+      });
+
+      const html = marked.parse(text);
+      return DOMPurify.sanitize(html);
+    }
+
+    // ============================================================================
+    // STUDY MODES
+    // ============================================================================
+
+    function setStudyMode(mode) {
+      currentStudyMode = mode;
+
+      const modeLabels = {
+        explain: 'Explain Mode',
+        summarize: 'Summarize Mode',
+        quiz: 'Quiz Mode',
+        solve: 'Solve Mode',
+        compare: 'Compare Mode',
+        outline: 'Outline Mode',
+        flashcards: 'Flashcards Mode',
+        cite: 'Citation Mode'
+      };
+
+      studyModeLabel.textContent = modeLabels[mode] || mode;
+      studyModeIndicator.classList.remove('hidden');
+
+      // Update placeholder based on mode
+      const placeholders = {
+        explain: 'Enter a concept to explain...',
+        summarize: 'Paste content to summarize...',
+        quiz: 'Enter a topic to quiz on...',
+        solve: 'Enter a problem to solve...',
+        compare: 'Enter concepts to compare...',
+        outline: 'Enter a topic for an outline...',
+        flashcards: 'Enter a topic for flashcards...',
+        cite: 'Enter source details for citation...'
+      };
+
+      messageInput.placeholder = placeholders[mode] || 'Ask me anything...';
+      messageInput.focus();
+    }
+
+    function clearStudyMode() {
+      currentStudyMode = null;
+      studyModeIndicator.classList.add('hidden');
+      messageInput.placeholder = 'Ask me anything about your studies...';
+    }
+
+    function quickPrompt(prompt) {
+      messageInput.value = prompt;
+      autoResize(messageInput);
+      sendMessage();
+    }
+
+    // ============================================================================
+    // SHARING
+    // ============================================================================
+
+    function shareConversation() {
+      if (!currentConversationId) {
+        showToast('No conversation to share');
+        return;
+      }
+      document.getElementById('shareModal').classList.remove('hidden');
+    }
+
+    function closeShareModal() {
+      document.getElementById('shareModal').classList.add('hidden');
+    }
+
+    async function confirmShare() {
+      try {
+        const isAnonymous = document.getElementById('anonymousShare').checked;
+
+        // First update anonymous setting
+        if (isAnonymous) {
+          await apiCall(`/conversations/${currentConversationId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ is_anonymous: true })
+          });
+        }
+
+        // Generate share link
+        const data = await apiCall(`/conversations/${currentConversationId}/share`, {
+          method: 'POST'
+        });
+
+        const shareUrl = `${window.location.origin}/ui/chatbot.html?share=${data.share_code}`;
+        document.getElementById('shareLinkInput').value = shareUrl;
+
+        showToast('Share link generated!');
+      } catch (error) {
+        showToast('Failed to generate share link');
+      }
+    }
+
+    function copyShareLink() {
+      const input = document.getElementById('shareLinkInput');
+      if (input.value) {
+        navigator.clipboard.writeText(input.value);
+        showToast('Link copied to clipboard!');
+      }
+    }
+
+    // ============================================================================
+    // EXPORT
+    // ============================================================================
+
+    async function exportConversation() {
+      if (!currentConversationId) {
+        showToast('No conversation to export');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${STUDYAI_API}/conversations/${currentConversationId}/export/md`, {
+          headers: getAuthHeaders()
+        });
+
+        if (!response.ok) throw new Error('Export failed');
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${chatTitle.textContent.substring(0, 40)}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showToast('Conversation exported!');
+      } catch (error) {
+        showToast('Failed to export conversation');
+      }
+    }
+
+    // ============================================================================
+    // UTILS
+    // ============================================================================
+
+    function toggleSidebar() {
+      const isOpen = !sidebar.classList.contains('-translate-x-full');
+      sidebar.classList.toggle('-translate-x-full', isOpen);
+      sidebarOverlay.classList.toggle('hidden', isOpen);
+    }
+
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+      html.setAttribute('data-theme', newTheme);
+      html.classList.toggle('dark', newTheme === 'dark');
+
+      localStorage.setItem('theme', newTheme);
+      localStorage.setItem('px-theme', newTheme);
+      localStorage.setItem('cx-theme', newTheme);
+
+      updateThemeUI();
+    }
+
+    function updateThemeUI() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      document.getElementById('themeIcon').textContent = isDark ? 'light_mode' : 'dark_mode';
+      document.getElementById('themeLabel').textContent = isDark ? 'Light Mode' : 'Dark Mode';
+    }
+
+    function autoResize(textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMessage').textContent = message;
+      toast.classList.remove('opacity-0', 'translate-y-4');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-4');
+        toast.classList.remove('opacity-100', 'translate-y-0');
+      }, 3000);
+    }
+
+    function copyMessage(btn) {
+      const msgContent = btn.closest('.msg-ai').querySelector('.msg-content').textContent;
+      navigator.clipboard.writeText(msgContent);
+      showToast('Copied to clipboard!');
+    }
+
+    async function toggleBookmark(btn, messageId) {
+      if (!messageId) return;
+
+      const icon = btn.querySelector('.material-symbols-rounded');
+      const isBookmarked = icon.textContent === 'bookmark_added';
+
+      try {
+        await apiCall(`/messages/${messageId}/bookmark`, {
+          method: 'PATCH',
+          body: JSON.stringify({ is_bookmarked: !isBookmarked })
+        });
+
+        icon.textContent = isBookmarked ? 'bookmark' : 'bookmark_added';
+        icon.style.color = isBookmarked ? 'var(--muted)' : 'var(--brand)';
+      } catch (error) {
+        showToast('Failed to update bookmark');
+      }
+    }
+
+    function toggleVoiceInput() {
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        showToast('Voice input not supported in this browser');
+        return;
+      }
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (isRecording) {
+        // Stop recording
+        isRecording = false;
+        document.getElementById('voiceBtn').querySelector('span').textContent = 'mic';
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        isRecording = true;
+        document.getElementById('voiceBtn').querySelector('span').textContent = 'mic_off';
+        showToast('Listening...');
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        messageInput.value += (messageInput.value ? ' ' : '') + transcript;
+        autoResize(messageInput);
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        showToast('Voice input failed');
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+        document.getElementById('voiceBtn').querySelector('span').textContent = 'mic';
+      };
+
+      recognition.start();
+    }
+
+    // ============================================================================
+    // SHARED CONVERSATION VIEW
+    // ============================================================================
+
+    async function checkForSharedConversation() {
+      const params = new URLSearchParams(window.location.search);
+      const shareCode = params.get('share');
+
+      if (shareCode) {
+        try {
+          const response = await fetch(`${STUDYAI_API}/shared/${shareCode}`);
+          if (!response.ok) throw new Error('Not found');
+
+          const data = await response.json();
+
+          // Render shared conversation in read-only mode
+          chatTitle.textContent = data.title + ' (Shared)';
+          welcomeScreen.classList.add('hidden');
+          messagesList.classList.remove('hidden');
+
+          // Disable input
+          messageInput.disabled = true;
+          messageInput.placeholder = 'This is a shared conversation (read-only)';
+          document.getElementById('sendBtn').disabled = true;
+          document.getElementById('studyModeBar').classList.add('hidden');
+
+          // Render messages
+          (data.messages || []).forEach(msg => {
+            appendMessage(msg.role, msg.content, msg.id);
+          });
+
+          // Show owner info
+          const ownerBadge = document.createElement('div');
+          ownerBadge.className = 'text-center py-3 text-sm';
+          ownerBadge.style.color = 'var(--muted)';
+          ownerBadge.innerHTML = `Shared by <strong>${escapeHtml(data.owner_name)}</strong>`;
+          messagesList.insertBefore(ownerBadge, messagesList.firstChild);
+
+        } catch (error) {
+          showToast('Shared conversation not found');
+        }
+      }
+    }
+
+    // Check for shared conversation on load
+    document.addEventListener('DOMContentLoaded', () => {
+      checkForSharedConversation();
+    });
+  </script>
+</body>
+
+</html>

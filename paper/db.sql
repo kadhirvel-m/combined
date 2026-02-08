@@ -1278,3 +1278,27 @@ CREATE TABLE public.youtube_ai_notes (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.ai_chat_conversations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL DEFAULT 'New Chat',
+  share_code text UNIQUE,
+  is_public boolean DEFAULT false,
+  is_anonymous boolean DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_chat_conversations_pkey PRIMARY KEY (id),
+  CONSTRAINT ai_chat_conversations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.ai_chat_messages (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  conversation_id uuid NOT NULL,
+  role text NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+  content text NOT NULL,
+  attachments jsonb DEFAULT '[]'::jsonb,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  is_bookmarked boolean DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_chat_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT ai_chat_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.ai_chat_conversations(id) ON DELETE CASCADE
+);
