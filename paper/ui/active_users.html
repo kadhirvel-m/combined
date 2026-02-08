@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Active Users — Paper X</title>
+  <meta name="description" content="Active users in last 24 hours with today first/last activity and interactions." />
+  <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0..1,0&display=swap"
+    rel="stylesheet" />
+
+  <link rel="stylesheet" href="assets/css/tailwind.css" />
+  <script src="config.js"></script>
+
+  <!-- Mirror PaperX Academics theme primitives -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        container: { center: true, padding: '1rem' },
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+          colors: {
+            brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+            brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
+          },
+          boxShadow: {
+            glow: '0 8px 30px rgba(158,75,138,0.28)',
+            soft: '0 6px 22px rgba(30,30,47,0.14)',
+            card: '0 24px 64px -20px rgba(30,30,47,0.45)',
+            ringed: '0 0 0 1px rgba(158,75,138,0.35), 0 6px 22px rgba(158,75,138,0.35)'
+          },
+          backgroundImage: {
+            'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+            'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)',
+            'mesh-dark': 'radial-gradient(40% 50% at 20% 0%, rgba(158,75,138,0.18), transparent 60%), radial-gradient(40% 60% at 100% 0%, rgba(76,42,89,0.35), transparent 60%)'
+          },
+          keyframes: {
+            fadeUp: { '0%': { opacity: 0, transform: 'translateY(14px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+            shimmer: { '0%': { backgroundPosition: '0 0' }, '100%': { backgroundPosition: '-300% 0' } }
+          },
+          animation: {
+            fadeUp: 'fadeUp .6s cubic-bezier(.4,.1,.2,1)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    .material-symbols-rounded { vertical-align: -6px; }
+
+    .glass-panel {
+      background: linear-gradient(180deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .66));
+      backdrop-filter: blur(28px);
+      box-shadow: 0 12px 42px -10px rgba(30, 30, 47, .18);
+    }
+
+    .dark .glass-panel {
+      background: linear-gradient(180deg, rgba(30, 30, 47, .78), rgba(30, 30, 47, .58));
+      box-shadow: 0 22px 60px -12px rgba(0, 0, 0, .55);
+    }
+
+    .skeleton {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(90deg, rgba(0, 0, 0, .04), rgba(0, 0, 0, .08), rgba(0, 0, 0, .04));
+      background-size: 300% 100%;
+      animation: shimmer 2.3s linear infinite;
+    }
+
+    .dark .skeleton {
+      background: linear-gradient(90deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .12), rgba(255, 255, 255, .06));
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 0 0 }
+      100% { background-position: -300% 0 }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+  <div class="pointer-events-none fixed inset-0 opacity-[.06] dark:opacity-[.12] bg-mesh-dark"></div>
+
+  <main class="relative container mx-auto py-8">
+    <header class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div class="animate-fadeUp">
+        <div class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold tracking-wide glass-panel">
+          <span class="material-symbols-rounded text-brand-500">bolt</span>
+          Live activity snapshot
+        </div>
+        <h1 class="mt-3 text-3xl md:text-4xl font-extrabold tracking-tight">
+          Active Users
+          <span class="text-brand-500">(last 24h)</span>
+        </h1>
+        <p class="mt-2 text-sm md:text-base text-neutral-700/80 dark:text-white/70 max-w-2xl">
+          Sorted by most recent activity. Shows today’s first/last activity and today’s interaction count.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2 animate-fadeUp">
+        <button id="refreshBtn"
+          class="glass-panel rounded-xl px-4 py-2 text-sm font-semibold hover:shadow-glow transition">
+          <span class="material-symbols-rounded">refresh</span>
+          Refresh
+        </button>
+        <button id="themeBtn"
+          class="glass-panel rounded-xl px-4 py-2 text-sm font-semibold hover:shadow-glow transition">
+          <span class="material-symbols-rounded">dark_mode</span>
+          Theme
+        </button>
+      </div>
+    </header>
+
+    <!-- Summary panels removed as requested -->
+
+    <section class="mt-6 glass-panel rounded-3xl px-5 py-4 animate-fadeUp">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-rounded text-brand-500">tune</span>
+            <div class="text-sm font-extrabold tracking-tight">Filters</div>
+          </div>
+          <div class="mt-1 text-xs text-neutral-600 dark:text-white/60">
+            Apply filters to narrow the list. The count updates instantly.
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="rounded-full px-3 py-1 text-xs font-semibold bg-white/45 dark:bg-white/10">
+            Showing <span id="filteredCount" class="tabular-nums">—</span> / <span id="totalCount" class="tabular-nums">—</span>
+          </div>
+          <button id="clearFiltersBtn" class="glass-panel rounded-xl px-4 py-2 text-sm font-semibold hover:shadow-glow transition">
+            <span class="material-symbols-rounded">filter_alt_off</span>
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <label class="block">
+          <div class="text-xs font-bold tracking-widest text-neutral-600 dark:text-white/70">COLLEGE</div>
+          <select id="filterCollege" class="mt-1 w-full glass-panel rounded-2xl px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-brand-500/40">
+            <option value="">All</option>
+          </select>
+        </label>
+
+        <label class="block">
+          <div class="text-xs font-bold tracking-widest text-neutral-600 dark:text-white/70">DEPARTMENT</div>
+          <select id="filterDept" class="mt-1 w-full glass-panel rounded-2xl px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-brand-500/40">
+            <option value="">All</option>
+          </select>
+        </label>
+
+        <label class="block">
+          <div class="text-xs font-bold tracking-widest text-neutral-600 dark:text-white/70">SEMESTER</div>
+          <select id="filterSem" class="mt-1 w-full glass-panel rounded-2xl px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-brand-500/40">
+            <option value="">All</option>
+          </select>
+        </label>
+
+        <label class="block">
+          <div class="text-xs font-bold tracking-widest text-neutral-600 dark:text-white/70">SECTION</div>
+          <select id="filterSection" class="mt-1 w-full glass-panel rounded-2xl px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-brand-500/40">
+            <option value="">All</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="mt-6 glass-panel rounded-3xl overflow-hidden animate-fadeUp">
+      <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-black/5 dark:border-white/10">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-rounded text-brand-500">group</span>
+          <div>
+            <div class="text-sm font-extrabold tracking-tight">Users</div>
+            <div class="text-xs text-neutral-600 dark:text-white/60">Most recent activity first</div>
+          </div>
+        </div>
+        <div class="text-xs text-neutral-600 dark:text-white/60">Auto-updates on refresh</div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-white/40 dark:bg-black/10 text-neutral-700 dark:text-white/70 sticky top-0">
+            <tr>
+              <th class="text-left px-5 py-3 font-bold">Student</th>
+              <th class="text-left px-5 py-3 font-bold">College</th>
+              <th class="text-left px-5 py-3 font-bold">Dept</th>
+              <th class="text-left px-5 py-3 font-bold">Sem</th>
+              <th class="text-left px-5 py-3 font-bold">Section</th>
+              <th class="text-left px-5 py-3 font-bold">Last active (24h)</th>
+              <th class="text-left px-5 py-3 font-bold">First active (today)</th>
+              <th class="text-left px-5 py-3 font-bold">Last active (today)</th>
+              <th class="text-right px-5 py-3 font-bold">Interactions (today)</th>
+            </tr>
+          </thead>
+          <tbody id="tbody" class="divide-y divide-black/5 dark:divide-white/10"></tbody>
+        </table>
+      </div>
+
+      <div id="empty" class="hidden px-6 py-12 text-center text-sm text-neutral-700 dark:text-white/70">
+        No active users found in the last 24 hours.
+      </div>
+
+      <div id="error" class="hidden px-6 py-4 text-sm text-red-700 bg-red-50/80 border-t border-red-200/70 dark:text-red-200 dark:bg-red-950/30 dark:border-red-900/50"></div>
+    </section>
+  </main>
+
+    <script>
+    let ALL_USERS = [];
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function fmt(iso) {
+      if (!iso) return '—';
+      try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return String(iso);
+        return d.toLocaleString();
+      } catch (_) {
+        return String(iso);
+      }
+    }
+
+    function skeletonRows(count) {
+      const rows = [];
+      for (let i = 0; i < count; i++) {
+        rows.push(`
+          <tr>
+            <td class="px-5 py-4"><div class="h-4 w-44 rounded-md skeleton"></div></td>
+            <td class="px-5 py-4"><div class="h-4 w-40 rounded-md skeleton"></div></td>
+            <td class="px-5 py-4"><div class="h-4 w-28 rounded-md skeleton"></div></td>
+            <td class="px-5 py-4"><div class="h-4 w-10 rounded-md skeleton"></div></td>
+            <td class="px-5 py-4"><div class="h-4 w-14 rounded-md skeleton"></div></td>
+            <td class="px-5 py-4"><div class="h-4 w-40 rounded-md skeleton"></div></td>
+            <td class="px-5 py-4"><div class="h-4 w-40 rounded-md skeleton"></div></td>
+            <td class="px-5 py-4"><div class="h-4 w-40 rounded-md skeleton"></div></td>
+            <td class="px-5 py-4 text-right"><div class="h-4 w-16 rounded-md skeleton ml-auto"></div></td>
+          </tr>
+        `);
+      }
+      return rows.join('');
+    }
+
+    function normalizeValue(v) {
+      if (v === null || v === undefined) return '';
+      const s = String(v).trim();
+      return s;
+    }
+
+    function uniqSorted(values) {
+      const set = new Set();
+      for (const v of values) {
+        const nv = normalizeValue(v);
+        if (nv) set.add(nv);
+      }
+      return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    }
+
+    function fillSelect(selectEl, values) {
+      const current = selectEl.value;
+      const options = [''].concat(values);
+      selectEl.innerHTML = options.map(v => {
+        const label = v ? v : 'All';
+        return `<option value="${esc(v)}">${esc(label)}</option>`;
+      }).join('');
+      // restore selection if still present
+      if (options.includes(current)) selectEl.value = current;
+      else selectEl.value = '';
+    }
+
+    function getFilters() {
+      return {
+        college: document.getElementById('filterCollege').value,
+        dept: document.getElementById('filterDept').value,
+        sem: document.getElementById('filterSem').value,
+        section: document.getElementById('filterSection').value,
+      };
+    }
+
+    function applyFilters(users) {
+      const f = getFilters();
+      return users.filter(u => {
+        if (f.college && normalizeValue(u.college) !== f.college) return false;
+        if (f.dept && normalizeValue(u.department) !== f.dept) return false;
+        if (f.section && normalizeValue(u.section) !== f.section) return false;
+        if (f.sem) {
+          const sem = normalizeValue(u.semester);
+          if (sem !== f.sem) return false;
+        }
+        return true;
+      });
+    }
+
+    function updateCounts(filtered, total) {
+      document.getElementById('filteredCount').textContent = String(filtered);
+      document.getElementById('totalCount').textContent = String(total);
+    }
+
+    function renderTable(users) {
+      const tbody = document.getElementById('tbody');
+      const emptyEl = document.getElementById('empty');
+
+      if (!users.length) {
+        tbody.innerHTML = '';
+        try {
+          const f = getFilters();
+          const hasFilter = !!(f.college || f.dept || f.sem || f.section);
+          emptyEl.textContent = (ALL_USERS.length && hasFilter)
+            ? 'No users match the current filters.'
+            : 'No active users found in the last 24 hours.';
+        } catch (_) { }
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+
+      emptyEl.classList.add('hidden');
+      const rowsHtml = users.map(u => {
+        const name = u.name || '—';
+        const email = u.email || '';
+        const student = email ? `${esc(name)}<div class="text-xs text-neutral-600 dark:text-white/60 mt-0.5">${esc(email)}</div>` : esc(name);
+
+        const college = u.college || '—';
+        const dept = u.department || '—';
+        const sem = (u.semester ?? '—');
+        const section = (u.section ?? '—');
+
+        const last24 = fmt(u.last_active_24h);
+        const firstToday = fmt(u.first_active_today);
+        const lastToday = fmt(u.last_active_today);
+        const interactions = Number(u.interactions_today || 0);
+
+        return `
+          <tr class="hover:bg-white/30 dark:hover:bg-white/5 transition">
+            <td class="px-5 py-4 font-semibold">${student}</td>
+            <td class="px-5 py-4">${esc(college)}</td>
+            <td class="px-5 py-4">${esc(dept)}</td>
+            <td class="px-5 py-4 tabular-nums">${esc(sem)}</td>
+            <td class="px-5 py-4">${esc(section)}</td>
+            <td class="px-5 py-4">${esc(last24)}</td>
+            <td class="px-5 py-4">${esc(firstToday)}</td>
+            <td class="px-5 py-4">${esc(lastToday)}</td>
+            <td class="px-5 py-4 text-right tabular-nums font-bold">${interactions}</td>
+          </tr>`;
+      }).join('');
+
+      tbody.innerHTML = rowsHtml;
+    }
+
+    function rebuildFilterOptions() {
+      const collegeVals = uniqSorted(ALL_USERS.map(u => u.college));
+      const deptVals = uniqSorted(ALL_USERS.map(u => u.department));
+      const semVals = uniqSorted(ALL_USERS.map(u => u.semester));
+      const sectionVals = uniqSorted(ALL_USERS.map(u => u.section));
+
+      fillSelect(document.getElementById('filterCollege'), collegeVals);
+      fillSelect(document.getElementById('filterDept'), deptVals);
+      fillSelect(document.getElementById('filterSem'), semVals);
+      fillSelect(document.getElementById('filterSection'), sectionVals);
+    }
+
+    function rerender() {
+      const filtered = applyFilters(ALL_USERS);
+      updateCounts(filtered.length, ALL_USERS.length);
+      renderTable(filtered);
+    }
+
+    async function load() {
+      const errEl = document.getElementById('error');
+      const emptyEl = document.getElementById('empty');
+      const tbody = document.getElementById('tbody');
+
+      errEl.classList.add('hidden');
+      emptyEl.classList.add('hidden');
+
+      tbody.innerHTML = skeletonRows(8);
+
+      try {
+        const base = (window.API_BASE || location.origin).replace(/\/$/, '');
+        const url = base + '/analytics/active-users?limit=200';
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (!res.ok) throw new Error((data && data.detail) ? data.detail : ('HTTP ' + res.status));
+
+        // Summary panels were removed — keep total count for filters
+        ALL_USERS = Array.isArray(data.users) ? data.users : [];
+        document.getElementById('totalCount').textContent = String(ALL_USERS.length);
+
+        if (!ALL_USERS.length) {
+          tbody.innerHTML = '';
+          emptyEl.classList.remove('hidden');
+          updateCounts(0, 0);
+          return;
+        }
+
+        rebuildFilterOptions();
+        rerender();
+      } catch (e) {
+        tbody.innerHTML = '';
+        errEl.textContent = (e && e.message) ? e.message : String(e);
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', load);
+    document.getElementById('themeBtn').addEventListener('click', function () {
+      try { if (window.Theme && Theme.toggle) Theme.toggle(); } catch (_) { }
+    });
+
+    document.getElementById('filterCollege').addEventListener('change', rerender);
+    document.getElementById('filterDept').addEventListener('change', rerender);
+    document.getElementById('filterSem').addEventListener('change', rerender);
+    document.getElementById('filterSection').addEventListener('change', rerender);
+    document.getElementById('clearFiltersBtn').addEventListener('click', function () {
+      document.getElementById('filterCollege').value = '';
+      document.getElementById('filterDept').value = '';
+      document.getElementById('filterSem').value = '';
+      document.getElementById('filterSection').value = '';
+      rerender();
+    });
+
+    load();
+  </script>
+</body>
+
+</html>
