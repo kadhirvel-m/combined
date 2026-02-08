@@ -265,12 +265,12 @@
                 }
             }
 
-            // Merge: for each topic, use image_url from syllabus_topics OR blink_link from ai_notes
+            // Merge: for each topic, use blink_link from ai_notes (preferred) OR image_url from syllabus_topics
             topics = rawTopics.map(t => {
                 const topicKey = (t.topic || '').toLowerCase();
                 const aiNotesBlink = aiNotesBlinkMap.get(topicKey);
-                // Prefer syllabus_topics.image_url, fallback to ai_notes.blink_link
-                const imageUrl = (t.image_url || '').trim() || aiNotesBlink || '';
+                // Prefer ai_notes.blink_link when present; otherwise fallback to syllabus_topics.image_url
+                const imageUrl = (aiNotesBlink || '').trim() || (t.image_url || '').trim() || '';
                 return {
                     ...t,
                     image_url: imageUrl

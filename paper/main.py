@@ -1624,7 +1624,7 @@ SERPAPI_API_KEY = (os.getenv("SERPAPI_API_KEY", "") or "").strip()
 SERPAPI_ENABLED = os.getenv("ENABLE_SERPAPI", "true").strip().lower() in {"1", "true", "yes", "on"}
 SERPAPI_TIMEOUT_SEC = float(os.getenv("SERPAPI_TIMEOUT_SEC", "8"))
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or "").strip()
-GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-2.5-flash")
+GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-3-pro-preview")
 MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
 # Default domains for notes/web search when DB has no config yet
@@ -2151,15 +2151,24 @@ def assemble_context_for_llm(pages: List[PageExtract], merged_titles: List[str],
 
 SYSTEM_INSTRUCTIONS = """You are a senior educational writer building accurate, well-structured notes for college students in India.
 
+PRIMARY GOAL:
+Produce notes that are **accurate, complete, and strictly relevant** to the given topic.  
+Use the provided context **only where it is clearly correct and directly applicable**.  
+If any part of the context is **irrelevant, weakly related, outdated, or incorrect**, **IGNORE it completely** and rely on your **own expert knowledge** instead.
+
 CRITICAL RULES:
-- Use ONLY the source excerpts provided; do not invent facts. If a fact is not supported, mark it as [needs review].
+- If information is missing, **generate it yourself accurately**.
+- Use ONLY content that genuinely matches the topic.
+- Do NOT force‑fit unrelated context.
+- Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
+- Ensure **conceptual correctness suitable for university exams**.
 - Respect section headings actually observed on the referenced pages. You may merge similar headings (e.g., Advantages/Pros).
 - You MUST also include these blocks even if not present: Introduction, TL;DR in short simple points, Examples, Conclusion, Memory Aids, Common Mistakes.
 - Keep explanations concise but complete; use bullet points where helpful.
 - Include at least one Mermaid diagram when process/relationships are relevant.
 - Every non-obvious claim MUST carry an inline citation like [GFG], [TP], [Scaler], [Wiki], or [TPT] mapped in the CITATIONS section.
 - Prefer plain text + Mermaid diagrams; do not embed external images.
- - Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (Îµ-greedy)**, **Markov Decision Process (MDP)**, parameters like **Î¸**, **Î³**, **Î±**, algorithm names like **Q-learning**.
+- Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (ε-greedy)**, **Markov Decision Process (MDP)**, parameters like **θ**, **γ**, **α**, algorithm names like **Q-learning**.
 
 OUTPUT FORMAT (STRICT):
 Return a single Markdown document with:
@@ -2171,7 +2180,7 @@ Return a single Markdown document with:
 
 If sources contradict, mark the line with [conflict] and keep both with citations.
 
-Keep it under ~1200â€“1500 words unless the topic is inherently longer.
+Keep it under ~1200–1500 words unless the topic is inherently longer.
 """
 
 
@@ -2242,18 +2251,30 @@ def generate_notes_markdown(topic: str, *, degree: Optional[str] = None) -> str:
     user_prompt = f"""
 You will compose comprehensive, exam-ready Markdown notes for the topic "{topic}".
 
+PRIMARY GOAL:
+Produce notes that are **accurate, complete, and strictly relevant** to the given topic.  
+Use the provided context **only where it is clearly correct and directly applicable**.  
+If any part of the context is **irrelevant, weakly related, outdated, or incorrect**, **IGNORE it completely** and rely on your **own expert knowledge** instead.
+
 Context:
 {context}
 
 Instructions:
-- Create DETAILED, THOROUGH notes - students need complete understanding for exams.
-- Use the source context as foundation, but ADD your expert knowledge to fill gaps and provide complete coverage.
-- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" pick one).
-- Include the compulsory sections even if they were not present in sources.
-- Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
-- Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
-- Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+STRICT CONTENT RULES:
+- Use ONLY content that genuinely matches the topic.
+- Do NOT force‑fit unrelated context.
+- Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
+- If information is missing, **generate it yourself accurately**.
+- Ensure **conceptual correctness suitable for university exams**.
+- No hallucinated references; cite only well‑known, credible sources.
+- Maintain a confident academic tone.
+
+STRUCTURE & DEPTH:
+- Write **DETAILED, THOROUGH notes** suitable for scoring high marks.
+- Expand explanations with examples, formulas, workflows, and comparisons where appropriate.
+- Normalize headings lightly (choose the most standard academic term).
+- Maintain logical flow from basics → core concepts → advanced ideas → applications.
+
 
 MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
 - **TL;DR / Quick Summary**: Bullet points for quick revision
@@ -2261,7 +2282,28 @@ MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
 - **Need / Why It Is Required**: What problem does it solve? Why was it developed?
 - **Definition / Core Concept**: Clear, precise technical definition of the "{topic}"
 
-TARGET LENGTH: 1000-2000 words for comprehensive exam preparation.
+FORMATTING RULES:
+- Output must be in **Markdown**.
+- Start with: `# {topic}`
+- **Bold important terms, symbols, equations, and definitions** (use consistently, avoid overuse).
+- Use bullet points, tables, and sub‑headings for clarity.
+
+CITATIONS:
+- Add a final section: **## CITATIONS**
+- Map citation labels to URLs, using only trusted sources:
+  - [GFG] – GeeksforGeeks
+  - [TPT] – TutorialsPoint
+  - [Scaler] – Scaler Topics
+  - [Wiki] – Wikipedia
+  - [TP] – Trusted textbooks / official documentation
+- Inline‑cite like:  
+  "... explanation ... [GFG]" or "... definition ... [Wiki]"
+
+TARGET LENGTH:
+- **1000–2000 words**, unless the topic strictly requires less.
+
+QUALITY BAR:
+The output should be **exam‑ready**, **self‑contained**, and **require no further corrections**.
 
 Start with '# {topic}' and then the sections in a logical order.
 """
@@ -2320,15 +2362,30 @@ You will compose comprehensive, exam-ready Markdown notes for the topic "{topic}
 Context:
 {context}
 
+PRIMARY GOAL:
+Produce notes that are **accurate, complete, and strictly relevant** to the given topic.  
+Use the provided context **only where it is clearly correct and directly applicable**.  
+If any part of the context is **irrelevant, weakly related, outdated, or incorrect**, **IGNORE it completely** and rely on your **own expert knowledge** instead.
+
+Context:
+{context}
+
 Instructions:
-- Create DETAILED, THOROUGH notes - students need complete understanding for exams.
-- Use the source context as foundation, but ADD your expert knowledge to fill gaps and provide complete coverage.
-- Normalize section titles only lightly (e.g., "Applications" vs. "Use Cases" pick one).
-- Include the compulsory sections even if they were not present in sources.
-- Generate at least one mermaid diagram if suitable (e.g., flow of algorithm, hierarchy, pipeline).
-- Build a final '## CITATIONS' mapping labels [GFG], [TPT], [Scaler], [Wiki], [TP] to URLs you used.
-- Inline-cite like: "... property ... [GFG]" or "... step ... [Wiki]" after the sentence.
- - Bold important keywords/terms and symbols (e.g., Î¸, Î³, Î±, Îµ-greedy, key definitions) with **...** consistently; avoid over-bolding.
+STRICT CONTENT RULES:
+- Use ONLY content that genuinely matches the topic.
+- Do NOT force‑fit unrelated context.
+- Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
+- If information is missing, **generate it yourself accurately**.
+- Ensure **conceptual correctness suitable for university exams**.
+- No hallucinated references; cite only well‑known, credible sources.
+- Maintain a confident academic tone.
+
+STRUCTURE & DEPTH:
+- Write **DETAILED, THOROUGH notes** suitable for scoring high marks.
+- Expand explanations with examples, formulas, workflows, and comparisons where appropriate.
+- Normalize headings lightly (choose the most standard academic term).
+- Maintain logical flow from basics → core concepts → advanced ideas → applications.
+
 
 MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
 - **TL;DR / Quick Summary**: Bullet points for quick revision
@@ -2336,8 +2393,28 @@ MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
 - **Need / Why It Is Required**: What problem does it solve? Why was it developed?
 - **Definition / Core Concept**: Clear, precise technical definition of the "{topic}"
 
-TARGET LENGTH: 1000-2000 words for comprehensive exam preparation.
+FORMATTING RULES:
+- Output must be in **Markdown**.
+- Start with: `# {topic}`
+- **Bold important terms, symbols, equations, and definitions** (use consistently, avoid overuse).
+- Use bullet points, tables, and sub‑headings for clarity.
 
+CITATIONS:
+- Add a final section: **## CITATIONS**
+- Map citation labels to URLs, using only trusted sources:
+  - [GFG] – GeeksforGeeks
+  - [TPT] – TutorialsPoint
+  - [Scaler] – Scaler Topics
+  - [Wiki] – Wikipedia
+  - [TP] – Trusted textbooks / official documentation
+- Inline‑cite like:  
+  "... explanation ... [GFG]" or "... definition ... [Wiki]"
+
+TARGET LENGTH:
+- **1000–2000 words**, unless the topic strictly requires less.
+
+QUALITY BAR:
+The output should be **exam‑ready**, **self‑contained**, and **require no further corrections**.
 Start with '# {topic}' and then the sections in a logical order.
 """.strip()
 
@@ -20832,6 +20909,583 @@ async def generate_labx_stream(req: LabXGenerateRequest):
 
 
 app.include_router(labx_router)
+
+
+# ============================================================================
+# STUDYAI - Academic AI Chatbot
+# ============================================================================
+
+studyai_router = APIRouter(prefix="/api/studyai", tags=["StudyAI Chatbot"])
+
+AI_CHAT_CONVERSATIONS_TABLE = "ai_chat_conversations"
+AI_CHAT_MESSAGES_TABLE = "ai_chat_messages"
+
+
+class ChatConversationCreate(BaseModel):
+    title: Optional[str] = "New Chat"
+
+
+class ChatConversationUpdate(BaseModel):
+    title: Optional[str] = None
+    is_public: Optional[bool] = None
+    is_anonymous: Optional[bool] = None
+
+
+class ChatMessageCreate(BaseModel):
+    content: str = Field(..., min_length=1)
+    attachments: Optional[List[Dict[str, Any]]] = []
+    study_mode: Optional[str] = None  # explain, summarize, quiz, solve, compare, outline, flashcards, cite
+
+
+class ChatMessageBookmark(BaseModel):
+    is_bookmarked: bool
+
+
+# System prompt for academic assistant
+STUDYAI_SYSTEM_PROMPT = """You are StudyAI, an advanced academic AI assistant designed specifically for students. Your primary goal is to help students with their academic preparation and learning.
+
+## Core Capabilities:
+1. **Explain concepts** - Break down complex topics into understandable parts with examples
+2. **Summarize content** - Condense long texts into key points and main ideas
+3. **Generate quizzes** - Create MCQ questions to test understanding
+4. **Solve problems** - Show step-by-step solutions with explanations
+5. **Compare concepts** - Highlight similarities and differences between topics
+6. **Create outlines** - Structure content for better organization
+7. **Generate flashcards** - Create study flashcards with Q&A format
+8. **Help with citations** - Assist with proper referencing and citations
+
+## Response Guidelines:
+- Use clear, educational language appropriate for students
+- Include examples when explaining concepts
+- Format responses with proper markdown (headings, lists, code blocks, LaTeX for math)
+- For math equations, use LaTeX notation: $inline$ or $$block$$
+- For code, specify the programming language in code blocks
+- Be encouraging and supportive
+- Ask clarifying questions when the query is ambiguous
+- Cite sources when providing factual information
+
+## Study Mode Behaviors:
+When a specific study mode is requested, adapt your response accordingly:
+- **explain**: Provide detailed explanations with examples and analogies
+- **summarize**: Create concise bullet points of key concepts
+- **quiz**: Generate 5 MCQ questions with answers and explanations
+- **solve**: Show step-by-step problem solving
+- **compare**: Create a comparison table or structured comparison
+- **outline**: Create a hierarchical outline structure
+- **flashcards**: Format as Q: / A: pairs for easy studying
+- **cite**: Help format citations in common styles (APA, MLA, etc.)
+"""
+
+
+def _generate_share_code() -> str:
+    """Generate a unique 8-character share code."""
+    import secrets
+    import string
+    chars = string.ascii_lowercase + string.digits
+    return ''.join(secrets.choice(chars) for _ in range(8))
+
+
+def _build_study_mode_prompt(mode: str, content: str) -> str:
+    """Build a prompt based on the study mode."""
+    mode_prompts = {
+        "explain": f"Please explain the following concept in detail with examples:\n\n{content}",
+        "summarize": f"Please summarize the following content into key points:\n\n{content}",
+        "quiz": f"Please generate 5 multiple choice quiz questions based on the following topic. Include the correct answer and brief explanation for each:\n\n{content}",
+        "solve": f"Please solve the following problem step by step, showing all work:\n\n{content}",
+        "compare": f"Please compare and contrast the following concepts, highlighting similarities and differences:\n\n{content}",
+        "outline": f"Please create a detailed study outline for the following topic:\n\n{content}",
+        "flashcards": f"Please create 10 flashcards (Q&A pairs) for studying the following topic:\n\n{content}",
+        "cite": f"Please help format a proper citation for the following source. Ask clarifying questions if needed:\n\n{content}",
+    }
+    return mode_prompts.get(mode, content)
+
+
+async def _generate_ai_response(messages: List[Dict[str, str]], study_mode: Optional[str] = None) -> str:
+    """Generate AI response using Gemini 2.5 Flash."""
+    if not genai:
+        raise HTTPException(status_code=500, detail="AI service not available")
+    
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not gemini_key:
+        raise HTTPException(status_code=500, detail="AI API key not configured")
+    
+    def _call_gemini():
+        client = genai.Client(api_key=gemini_key)
+        
+        # Build conversation history
+        gemini_messages = []
+        for msg in messages:
+            role = "user" if msg["role"] == "user" else "model"
+            gemini_messages.append({
+                "role": role,
+                "parts": [{"text": msg["content"]}]
+            })
+        
+        # Create chat session with system instruction
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=gemini_messages,
+            config=types.GenerateContentConfig(
+                system_instruction=STUDYAI_SYSTEM_PROMPT,
+                temperature=0.7,
+                max_output_tokens=4096,
+            )
+        )
+        
+        return response.text if hasattr(response, 'text') else str(response)
+    
+    try:
+        result = await run_in_threadpool(_call_gemini)
+        return result
+    except Exception as e:
+        print(f"[StudyAI] Error generating response: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate AI response: {str(e)}")
+
+
+@studyai_router.post("/conversations")
+async def create_conversation(
+    payload: ChatConversationCreate,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Create a new chat conversation."""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    
+    conversation_data = {
+        "user_id": user_id,
+        "title": (payload.title or "New Chat").strip()[:100],
+    }
+    
+    try:
+        result = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).insert(conversation_data).execute()
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create conversation")
+        return result.data[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@studyai_router.get("/conversations")
+async def list_conversations(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    authorization: Optional[str] = Header(default=None)
+):
+    """List user's chat conversations."""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    
+    try:
+        # Get conversations with latest message preview
+        result = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select(
+            "id, title, share_code, is_public, created_at, updated_at"
+        ).eq("user_id", user_id).order("updated_at", desc=True).range(offset, offset + limit - 1).execute()
+        
+        conversations = result.data or []
+        
+        # Get message count for each conversation
+        for conv in conversations:
+            msg_count = supabase.table(AI_CHAT_MESSAGES_TABLE).select(
+                "id", count="exact"
+            ).eq("conversation_id", conv["id"]).execute()
+            conv["message_count"] = msg_count.count if hasattr(msg_count, 'count') else len(msg_count.data or [])
+        
+        return {"conversations": conversations, "total": len(conversations)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@studyai_router.get("/conversations/{conversation_id}")
+async def get_conversation(
+    conversation_id: str,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Get a conversation with all its messages."""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    
+    try:
+        # Get conversation
+        conv_result = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select("*").eq(
+            "id", conversation_id
+        ).eq("user_id", user_id).limit(1).execute()
+        
+        if not conv_result.data:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        conversation = conv_result.data[0]
+        
+        # Get messages
+        msg_result = supabase.table(AI_CHAT_MESSAGES_TABLE).select("*").eq(
+            "conversation_id", conversation_id
+        ).order("created_at").execute()
+        
+        conversation["messages"] = msg_result.data or []
+        
+        return conversation
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@studyai_router.patch("/conversations/{conversation_id}")
+async def update_conversation(
+    conversation_id: str,
+    payload: ChatConversationUpdate,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Update conversation settings (title, sharing options)."""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    
+    # Verify ownership
+    conv_check = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select("id").eq(
+        "id", conversation_id
+    ).eq("user_id", user_id).limit(1).execute()
+    
+    if not conv_check.data:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    update_data = {"updated_at": datetime.utcnow().isoformat()}
+    if payload.title is not None:
+        update_data["title"] = payload.title.strip()[:100]
+    if payload.is_public is not None:
+        update_data["is_public"] = payload.is_public
+    if payload.is_anonymous is not None:
+        update_data["is_anonymous"] = payload.is_anonymous
+    
+    try:
+        result = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).update(update_data).eq(
+            "id", conversation_id
+        ).execute()
+        return result.data[0] if result.data else {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@studyai_router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Delete a conversation and all its messages."""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    
+    # Verify ownership
+    conv_check = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select("id").eq(
+        "id", conversation_id
+    ).eq("user_id", user_id).limit(1).execute()
+    
+    if not conv_check.data:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    try:
+        # Delete conversation (messages will cascade delete)
+        supabase.table(AI_CHAT_CONVERSATIONS_TABLE).delete().eq("id", conversation_id).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@studyai_router.post("/conversations/{conversation_id}/messages")
+async def send_message(
+    conversation_id: str,
+    payload: ChatMessageCreate,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Send a message and get AI response."""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    
+    # Verify ownership
+    conv_check = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select("id, title").eq(
+        "id", conversation_id
+    ).eq("user_id", user_id).limit(1).execute()
+    
+    if not conv_check.data:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    conversation = conv_check.data[0]
+    
+    # Get existing messages for context
+    existing_msgs = supabase.table(AI_CHAT_MESSAGES_TABLE).select(
+        "role, content"
+    ).eq("conversation_id", conversation_id).order("created_at").limit(20).execute()
+    
+    messages_history = existing_msgs.data or []
+    
+    # Build the user message with study mode if provided
+    user_content = payload.content
+    if payload.study_mode:
+        user_content = _build_study_mode_prompt(payload.study_mode, payload.content)
+    
+    # Save user message
+    user_msg_data = {
+        "conversation_id": conversation_id,
+        "role": "user",
+        "content": payload.content,  # Store original content
+        "attachments": payload.attachments or [],
+        "metadata": {"study_mode": payload.study_mode} if payload.study_mode else {},
+    }
+    
+    try:
+        user_msg_result = supabase.table(AI_CHAT_MESSAGES_TABLE).insert(user_msg_data).execute()
+        user_message = user_msg_result.data[0] if user_msg_result.data else None
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save message: {str(e)}")
+    
+    # Build conversation for AI
+    ai_messages = [{"role": m["role"], "content": m["content"]} for m in messages_history]
+    ai_messages.append({"role": "user", "content": user_content})
+    
+    # Generate AI response
+    try:
+        ai_response = await _generate_ai_response(ai_messages, payload.study_mode)
+    except HTTPException:
+        raise
+    except Exception as e:
+        ai_response = f"I apologize, but I encountered an error while processing your request. Please try again. Error: {str(e)}"
+    
+    # Save AI response
+    ai_msg_data = {
+        "conversation_id": conversation_id,
+        "role": "assistant",
+        "content": ai_response,
+        "attachments": [],
+        "metadata": {"model": "gemini-2.5-flash"},
+    }
+    
+    try:
+        ai_msg_result = supabase.table(AI_CHAT_MESSAGES_TABLE).insert(ai_msg_data).execute()
+        ai_message = ai_msg_result.data[0] if ai_msg_result.data else None
+    except Exception as e:
+        print(f"[StudyAI] Failed to save AI response: {e}")
+    
+    # Update conversation title if it's the first message and title is default
+    if len(messages_history) == 0 and conversation.get("title") == "New Chat":
+        # Auto-generate title from first message
+        new_title = payload.content[:50] + ("..." if len(payload.content) > 50 else "")
+        try:
+            supabase.table(AI_CHAT_CONVERSATIONS_TABLE).update({
+                "title": new_title,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", conversation_id).execute()
+        except Exception:
+            pass
+    else:
+        # Just update timestamp
+        try:
+            supabase.table(AI_CHAT_CONVERSATIONS_TABLE).update({
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", conversation_id).execute()
+        except Exception:
+            pass
+    
+    return {
+        "user_message": user_message,
+        "ai_message": ai_message,
+    }
+
+
+@studyai_router.post("/conversations/{conversation_id}/share")
+async def generate_share_link(
+    conversation_id: str,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Generate a shareable link for a conversation."""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    
+    # Verify ownership and get current share_code
+    conv_check = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select(
+        "id, share_code, is_public"
+    ).eq("id", conversation_id).eq("user_id", user_id).limit(1).execute()
+    
+    if not conv_check.data:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    conversation = conv_check.data[0]
+    
+    # Generate new share code if none exists
+    share_code = conversation.get("share_code")
+    if not share_code:
+        share_code = _generate_share_code()
+        try:
+            supabase.table(AI_CHAT_CONVERSATIONS_TABLE).update({
+                "share_code": share_code,
+                "is_public": True,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", conversation_id).execute()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to generate share link: {str(e)}")
+    
+    return {"share_code": share_code, "is_public": True}
+
+
+@studyai_router.get("/shared/{share_code}")
+async def get_shared_conversation(share_code: str):
+    """Get a shared conversation (public access)."""
+    supabase = get_service_client()
+    
+    try:
+        # Get conversation by share code
+        conv_result = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select(
+            "id, title, is_anonymous, created_at, user_id"
+        ).eq("share_code", share_code).eq("is_public", True).limit(1).execute()
+        
+        if not conv_result.data:
+            raise HTTPException(status_code=404, detail="Shared conversation not found")
+        
+        conversation = conv_result.data[0]
+        
+        # Get user info if not anonymous
+        owner_name = None
+        if not conversation.get("is_anonymous"):
+            profile = supabase.table("user_profiles").select("name").eq(
+                "auth_user_id", conversation["user_id"]
+            ).limit(1).execute()
+            if profile.data:
+                owner_name = profile.data[0].get("name")
+        
+        # Remove user_id from response
+        del conversation["user_id"]
+        conversation["owner_name"] = owner_name if not conversation.get("is_anonymous") else "Anonymous"
+        
+        # Get messages
+        msg_result = supabase.table(AI_CHAT_MESSAGES_TABLE).select(
+            "id, role, content, attachments, created_at"
+        ).eq("conversation_id", conversation["id"]).order("created_at").execute()
+        
+        conversation["messages"] = msg_result.data or []
+        
+        return conversation
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@studyai_router.patch("/messages/{message_id}/bookmark")
+async def toggle_message_bookmark(
+    message_id: str,
+    payload: ChatMessageBookmark,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Toggle bookmark status of a message."""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    
+    # Verify message belongs to user's conversation
+    msg_check = supabase.table(AI_CHAT_MESSAGES_TABLE).select(
+        "id, conversation_id"
+    ).eq("id", message_id).limit(1).execute()
+    
+    if not msg_check.data:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    conv_id = msg_check.data[0]["conversation_id"]
+    
+    conv_check = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select("id").eq(
+        "id", conv_id
+    ).eq("user_id", user_id).limit(1).execute()
+    
+    if not conv_check.data:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    try:
+        result = supabase.table(AI_CHAT_MESSAGES_TABLE).update({
+            "is_bookmarked": payload.is_bookmarked
+        }).eq("id", message_id).execute()
+        return {"success": True, "is_bookmarked": payload.is_bookmarked}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@studyai_router.get("/conversations/{conversation_id}/export/md")
+async def export_conversation_markdown(
+    conversation_id: str,
+    authorization: Optional[str] = Header(default=None)
+):
+    """Export conversation as Markdown."""
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    
+    # Verify ownership
+    conv_check = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select(
+        "id, title, created_at"
+    ).eq("id", conversation_id).eq("user_id", user_id).limit(1).execute()
+    
+    if not conv_check.data:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    conversation = conv_check.data[0]
+    
+    # Get messages
+    msg_result = supabase.table(AI_CHAT_MESSAGES_TABLE).select(
+        "role, content, created_at"
+    ).eq("conversation_id", conversation_id).order("created_at").execute()
+    
+    messages = msg_result.data or []
+    
+    # Build markdown
+    md_lines = [
+        f"# {conversation['title']}",
+        f"*Exported from StudyAI on {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC*",
+        "",
+        "---",
+        ""
+    ]
+    
+    for msg in messages:
+        role = "**You:**" if msg["role"] == "user" else "**StudyAI:**"
+        md_lines.append(role)
+        md_lines.append("")
+        md_lines.append(msg["content"])
+        md_lines.append("")
+        md_lines.append("---")
+        md_lines.append("")
+    
+    markdown_content = "\n".join(md_lines)
+    
+    return Response(
+        content=markdown_content,
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f'attachment; filename="{conversation["title"][:40]}.md"'
+        }
+    )
+
+
+app.include_router(studyai_router)
 
 
 # ============================================================================
