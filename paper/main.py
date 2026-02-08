@@ -7482,6 +7482,33 @@ def _require_admin(authorization: Optional[str]):
     return uid, em
 
 
+def _is_admin_or_employee(user_id: Optional[str], email: Optional[str]) -> bool:
+    """Check if user is admin or employee role."""
+    # First check if they are admin
+    if _is_admin_user(user_id, email):
+        return True
+    # Then check for employee role in database
+    try:
+        if user_id:
+            supabase = get_service_client()
+            if supabase:
+                resp = supabase.table("admin_roles").select("role").eq("auth_user_id", user_id).limit(1).execute()
+                data = getattr(resp, "data", []) or []
+                if data and (data[0].get("role") == "employee"):
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def _require_admin_or_employee(authorization: Optional[str]):
+    """Require user to be admin or employee role."""
+    uid, em = _get_auth_user(authorization)
+    if not _is_admin_or_employee(uid, em):
+        raise HTTPException(status_code=403, detail="Not an admin or employee user")
+    return uid, em
+
+
 def _count_admins(supabase) -> int:
     try:
         resp = supabase.table("admin_roles").select("role", count='exact').eq("role", "admin").execute()
@@ -8234,9 +8261,9 @@ def review_hod_role_application(application_id: str, payload: HodRoleApproveIn, 
     return {"ok": True, "application_id": application_id, "status": status}
 
 
-@teacher_router.get("/api/teacher/applications", summary="Admin: list teacher applications")
+@teacher_router.get("/api/teacher/applications", summary="Admin/Employee: list teacher applications")
 def list_teacher_applications(status: Optional[str] = Query(default=None), authorization: Optional[str] = Header(default=None)):
-    _require_admin(authorization)
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
     query = supabase.table("teacher_applications").select("*").order("created_at", desc=True)
     if status:
@@ -8247,9 +8274,9 @@ def list_teacher_applications(status: Optional[str] = Query(default=None), autho
     return {"applications": res.data or []}
 
 
-@teacher_router.post("/api/teacher/applications/{application_id}/review", summary="Admin: approve or reject a teacher application")
+@teacher_router.post("/api/teacher/applications/{application_id}/review", summary="Admin/Employee: approve or reject a teacher application")
 def review_teacher_application(application_id: str, payload: TeacherApproveIn, authorization: Optional[str] = Header(default=None)):
-    admin_uid, _ = _require_admin(authorization)
+    admin_uid, _ = _require_admin_or_employee(authorization)
     supabase = get_service_client()
     debug = bool(os.getenv("TEACHER_PROFILE_DEBUG"))
     if debug:
