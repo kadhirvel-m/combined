@@ -501,6 +501,24 @@
     let supabaseClient = null;
     const __scriptCache = new Map();
 
+    function getSafeNextPath() {
+      try {
+        const params = new URLSearchParams(location.search || '');
+        const raw = (params.get('next') || params.get('redirect') || '').trim();
+        if (!raw) return null;
+        // Block absolute / protocol-relative redirects.
+        if (/^https?:\/\//i.test(raw) || raw.startsWith('//')) return null;
+
+        // Resolve relative URLs safely to a same-origin path.
+        const baseDir = location.origin + location.pathname.replace(/[^/]*$/, '');
+        const url = new URL(raw, baseDir);
+        if (url.origin !== location.origin) return null;
+        return url.pathname + url.search + url.hash;
+      } catch {
+        return null;
+      }
+    }
+
     function loadScriptOnce(src, opts = {}) {
       if (__scriptCache.has(src)) return __scriptCache.get(src);
       const p = new Promise((resolve, reject) => {
@@ -570,7 +588,8 @@
           await fetch(`${apiBase}/api/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
         } catch {
         }
-        location.href = 'profile.html';
+        const nextPath = getSafeNextPath();
+        location.href = nextPath || 'profile.html';
       }
     }
 
@@ -612,7 +631,8 @@
           } catch { }
         }
         status.textContent = '✔ Signed in. Redirecting…';
-        setTimeout(() => { window.location.href = 'profile.html'; }, 400);
+        const nextPath = getSafeNextPath();
+        setTimeout(() => { window.location.href = nextPath || 'profile.html'; }, 400);
       } catch (err) {
         status.textContent = '❌ Network error. Please try again.';
         hideLoader();
@@ -627,7 +647,8 @@
       status.textContent = 'Redirecting to Google…';
       try {
         const sb = await ensureSupabase();
-        const redirectTo = `${location.origin}${location.pathname}`;
+        // Preserve ?next= so we can return to the original page after OAuth.
+        const redirectTo = `${location.origin}${location.pathname}${location.search || ''}`;
         const { error } = await sb.auth.signInWithOAuth({
           provider: 'google',
           options: { redirectTo }
