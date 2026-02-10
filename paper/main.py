@@ -2127,7 +2127,7 @@ def unify_section_titles(pages: List[PageExtract]) -> List[str]:
         merged.append(t)
 
     # Always ensure compulsory blocks exist as "virtual" targets
-    compulsory = ["Introduction", "TL;DR", "Examples", "Conclusion", "Memory Aids", "Common Mistakes"]
+    compulsory = ["Introduction", "Examples", "Conclusion"]
     for c in compulsory:
         if all(fuzz.token_set_ratio(c.lower(), m.lower()) < 85 for m in merged):
             merged.append(c)
@@ -2163,7 +2163,7 @@ CRITICAL RULES:
 - Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
 - Ensure **conceptual correctness suitable for university exams**.
 - Respect section headings actually observed on the referenced pages. You may merge similar headings (e.g., Advantages/Pros).
-- You MUST also include these blocks even if not present: Introduction, TL;DR in short simple points, Examples, Conclusion, Memory Aids, Common Mistakes.
+- You MUST also include these blocks even if not present: Introduction, Examples, Conclusion.
 - Keep explanations concise but complete; use bullet points where helpful.
 - Include at least one Mermaid diagram when process/relationships are relevant.
 - Every non-obvious claim MUST carry an inline citation like [GFG], [TP], [Scaler], [Wiki], or [TPT] mapped in the CITATIONS section.
@@ -2180,7 +2180,7 @@ Return a single Markdown document with:
 
 If sources contradict, mark the line with [conflict] and keep both with citations.
 
-Keep it under ~1200–1500 words unless the topic is inherently longer.
+Keep it under ~900–1200 words unless the topic is inherently longer.
 """
 
 
@@ -2277,7 +2277,6 @@ STRUCTURE & DEPTH:
 
 
 MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
-- **TL;DR / Quick Summary**: Bullet points for quick revision
 - **Introduction**: Comprehensive overview with context and importance
 - **Need / Why It Is Required**: What problem does it solve? Why was it developed?
 - **Definition / Core Concept**: Clear, precise technical definition of the "{topic}"
@@ -2300,7 +2299,7 @@ CITATIONS:
   "... explanation ... [GFG]" or "... definition ... [Wiki]"
 
 TARGET LENGTH:
-- **1000–2000 words**, unless the topic strictly requires less.
+- **900–1200 words**, unless the topic strictly requires less.
 
 QUALITY BAR:
 The output should be **exam‑ready**, **self‑contained**, and **require no further corrections**.
@@ -2326,13 +2325,13 @@ Context:
 {context}
 
 Output rules (STRICT):
-- Keep it ultra concise (â‰ˆ 250â€“400 words). Use bullets and tables.
-- Start with a single H1: '# {topic} â€” Cheat Sheet'.
+- Keep it ultra concise (≈ 250-400 words). Use bullets and tables.
+- Start with a single H1: '# {topic} — Cheat Sheet'.
 - Sections (H2):
-  1) Core Concepts (5â€“10 bullets, crisp one-liners)
+  1) Core Concepts (5–10 bullets, crisp one-liners)
   2) Key Definitions & Formulas (bullets; inline math where relevant)
   3) Quick Steps / Algorithms (bulleted steps)
-  4) Pitfalls / Gotchas (3â€“6 bullets)
+  4) Pitfalls / Gotchas (3–6 bullets)
   5) Keywords (comma-separated list)
 - Bold key terms and symbols with **...**. Prefer compact phrasing over full sentences.
 - If any fact is uncertain, mark [needs review].
@@ -2347,13 +2346,13 @@ Context:
 {context}
 
 Output rules (STRICT):
-- Target length: 600â€“900 words, plain language, short sentences.
-- Start with '# {topic} â€” Simple Notes'.
-- Structure with logical H2 sections, including: Introduction, Concepts, Examples, TL;DR, Common Mistakes, Conclusion.
+- Target length: 600–900 words, plain language, short sentences.
+- Start with '# {topic} — Simple Notes'.
+- Structure with logical H2 sections, including: Introduction, Concepts, Examples, Conclusion.
 - Explain in everyday words without dumbing down definitions.
 - Use bullets and small tables where helpful.
 - Bold important terms with **...**.
-- Include a final '## CITATIONS' section with labelâ†’URL list for the sources you used.
+- Include a final '## CITATIONS' section with label→URL list for the sources you used.
 """.strip()
     # default detailed prompt - comprehensive and thorough
     return f"""
@@ -2388,7 +2387,6 @@ STRUCTURE & DEPTH:
 
 
 MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
-- **TL;DR / Quick Summary**: Bullet points for quick revision
 - **Introduction**: Comprehensive overview with context and importance
 - **Need / Why It Is Required**: What problem does it solve? Why was it developed?
 - **Definition / Core Concept**: Clear, precise technical definition of the "{topic}"
@@ -2411,7 +2409,7 @@ CITATIONS:
   "... explanation ... [GFG]" or "... definition ... [Wiki]"
 
 TARGET LENGTH:
-- **1000–2000 words**, unless the topic strictly requires less.
+- **900–1200 words**, unless the topic strictly requires less.
 
 QUALITY BAR:
 The output should be **exam‑ready**, **self‑contained**, and **require no further corrections**.
@@ -4293,7 +4291,7 @@ def get_current_user_profile(token: Optional[str]):
                 # Deep query: courses -> units -> topics
                 syllabus_query = (
                     supabase.table("syllabus_courses")
-                    .select("id,course_code,title,semester, syllabus_units(id,unit_title,order_in_course, syllabus_topics(id,topic,order_in_unit,image_url,lab_url))")
+                    .select("id,course_code,title,semester,type, syllabus_units(id,unit_title,order_in_course, syllabus_topics(id,topic,order_in_unit,image_url,lab_url))")
                     .eq("batch_id", effective_batch_id)
                     .eq("semester", final_semester)
                     .execute()
@@ -4337,6 +4335,7 @@ def get_current_user_profile(token: Optional[str]):
                             "course_code": cr.get("course_code"),
                             "title": cr.get("title"),
                             "semester": cr.get("semester"),
+                            "type": cr.get("type"),
                             "units": clean_units
                         })
             except Exception as e:
@@ -16225,7 +16224,7 @@ async def generate(payload: dict):
                 custom = None
                 if variant == "cheatsheet":
                     custom = (
-                        "Rewrite as an ultra-concise exam cheat sheet: 250â€“400 words, bullets/tables, sections: Core Concepts; Key Definitions & Formulas; Quick Steps/Algorithms; Pitfalls; Keywords. Bold key terms. Do NOT include TL;DR, Common Mistakes, Memory Aids, or any CITATIONS section."
+                        "Rewrite as an ultra-concise exam cheat sheet: 250â€“400 words, bullets/tables, sections: Core Concepts; Key Definitions & Formulas; Quick Steps/Algorithms; Pitfalls; Keywords. Bold key terms. Do NOT include TL;DR, or any CITATIONS section."
                     )
                 prompt = _build_transform_prompt(mode, md_detailed, custom)
                 client = _openai_client()
@@ -16363,6 +16362,350 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
                 pass
 
         yield b"event: close\n\n"
+
+    headers = {
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(event_source(), media_type="text/event-stream", headers=headers)
+
+
+# --- Engineering Mathematics Notes (Gemini 3 Pro Preview only) ---
+
+MATHS_NOTES_MODEL = "gemini-3-pro-preview"
+
+MATHS_NOTES_SYSTEM_PROMPT = """You are a senior Engineering Mathematics educator teaching undergraduate students in India.
+
+PRIMARY GOAL
+
+Teach Engineering Mathematics concepts in the simplest possible way, focusing on problem-solving, intuition, and real-life understanding rather than long theory.
+
+Students should be able to:
+
+Understand the idea behind the concept
+
+Solve exam-oriented numerical problems
+
+Relate maths to real-world engineering scenarios
+
+CORE TEACHING PRINCIPLES
+
+Theory must be extremely short (maximum 2–4 lines per concept) for non-theorem topics.
+
+Focus mainly on:
+
+Solved numerical problems
+
+Step-by-step methods
+
+Patterns, shortcuts, and exam tricks
+
+Avoid unnecessary proofs, derivations, or abstract discussion UNLESS the topic itself is a theorem/lemma/proposition/result.
+
+Teach as if explaining to a first-time learner
+
+CONTENT RULES (STRICT)
+
+Explain what the concept is, why it is used, and how to solve problems
+
+Each topic MUST include:
+
+✔ Very short concept explanation
+
+✔ Formula(s) with meaning of symbols
+
+✔ Worked examples (easy → exam level)
+
+✔ At least one real-life or engineering application
+
+Prefer numbers, steps, and visuals in words over theory paragraphs
+
+Do NOT include long historical background or definitions
+
+STRUCTURE TO FOLLOW FOR EVERY TOPIC
+
+Use the exact structure below:
+
+1. Introduction
+
+2–3 lines explaining what the topic does and where it is used
+
+2. Key Idea (Very Short Theory)
+
+Maximum 2–4 bullet points
+
+Simple language only
+
+Highlight important symbols using bold
+
+3. Important Formulae
+
+List formulas clearly
+
+Explain symbols briefly (1 line max)
+
+4. Worked Examples (Main Focus)
+
+At least 3–6 solved problems
+
+Show each step clearly
+
+Explain why each step is done (in one short line)
+
+5. Real-Life / Engineering Example
+
+Explain how the concept appears in:
+
+Engineering
+
+Daily life
+
+Technology or data
+
+Keep it practical and intuitive
+
+6. Exam-Focused Tips & Shortcuts
+
+Common mistakes
+
+Faster methods
+
+Frequently asked patterns
+
+7. Practice Problems
+
+5–10 numerical questions (no solutions)
+
+8. Conclusion
+
+2–3 lines summarizing when and how to use the concept
+
+OUTPUT FORMATTING (MANDATORY)
+
+- The very first line MUST be a title using Markdown level-1 heading:
+    # <Topic Title>
+- Use Markdown level-2 headings (##) for the main numbered sections 1 to 8.
+    Example:
+    ## 1. Introduction
+    ## 2. Key Idea (Very Short Theory)
+    ...
+- Inside sections, use level-3 headings (###) only when needed for sub-parts (e.g., "Example 1", "Case 1", "Proof", "Derivation").
+
+THEOREM / PROOF-STYLE TOPICS (VERY IMPORTANT)
+
+If the topic is a theorem/lemma/proposition/result (or it contains words like "theorem", "lemma", "Cauchy", "Rolle", "Mean Value", "Green", "Stokes", "Divergence", etc.), you MUST write it like standard textbooks and Indian university exam answers:
+
+- State the theorem clearly (with conditions/assumptions).
+- Explain the meaning in simple words (2–4 lines max).
+- Provide a clean exam-style proof/derivation (step-by-step, no skipped steps). Use short lines and clearly justify key steps.
+- If there are standard variants/cases, mention them briefly.
+- THEN include worked numerical/examples that use the theorem (do not only give solved questions without stating/proving the theorem).
+
+DIFFICULTY & STYLE GUIDELINES
+
+Start from very basic
+
+Gradually move to university exam level
+
+Assume no strong maths background
+
+Use simple English, short sentences
+
+Avoid symbols without explanation
+
+VISUAL & FORMATTING RULES
+
+Use:
+
+Bullet points
+
+Numbered steps
+
+Tables (for formulas or comparisons)
+
+Highlight key terms using bold
+
+Include Mermaid diagrams ONLY when it helps understanding (graphs, flow of steps)
+
+WHAT TO AVOID (IMPORTANT)
+
+❌ Long theoretical explanations
+❌ Proof-based discussions
+❌ Complex mathematical jargon without explanation
+❌ Overloading with formulas
+❌ Irrelevant historical notes
+
+TARGET OUTCOME
+
+After reading the notes, a student should be able to:
+
+Understand the concept in 5–10 minutes
+
+Solve most exam questions confidently
+
+Remember formulas easily
+
+See why the math matters in real life"""
+
+
+def _generate_maths_notes_markdown(topic: str) -> str:
+    """Generate Engineering Mathematics notes in Markdown using Gemini 3 Pro Preview only."""
+    if not genai:
+        raise HTTPException(status_code=500, detail="AI service not available")
+
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not gemini_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+
+    clean_topic = (topic or "").strip()
+    if not clean_topic:
+        raise HTTPException(status_code=400, detail="Missing topic")
+
+    client = genai.Client(api_key=gemini_key)
+    user_prompt = textwrap.dedent(
+        f"""
+        Create Engineering Mathematics notes for the topic: "{clean_topic}".
+
+        Output format requirements:
+        - Return ONLY Markdown (no code fences, no extra commentary).
+        - First line must be: # {clean_topic}
+        - Use ## headings for the numbered sections 1 to 8 (e.g., "## 1. Introduction", ...).
+        - Use ### only for subheadings inside a section.
+        - Keep theory extremely short; focus on worked examples.
+        - If the topic is a theorem/result, include the theorem statement + exam-style proof/derivation before examples.
+        """
+    ).strip()
+
+    response = client.models.generate_content(
+        model=MATHS_NOTES_MODEL,
+        contents=[
+            {
+                "role": "user",
+                "parts": [{"text": user_prompt}],
+            }
+        ],
+        config=types.GenerateContentConfig(
+            system_instruction=MATHS_NOTES_SYSTEM_PROMPT,
+            temperature=0.45,
+            max_output_tokens=int(os.getenv("MATHS_NOTES_MAX_TOKENS", "8192") or "8192"),
+        ),
+    )
+
+    text = getattr(response, "text", "") or ""
+    text = (text or "").strip()
+    if not text:
+        raise HTTPException(status_code=502, detail="Empty response from Gemini")
+    return text
+
+
+@notes_router.post("/api/maths-notes/generate", summary="Generate Engineering Mathematics notes (Gemini 3 Pro Preview)")
+async def api_generate_maths_notes(payload: dict):
+    topic = (payload or {}).get("topic", "").strip()
+    force = bool((payload or {}).get("force", False))
+    variant = _normalize_variant((payload or {}).get("variant", "detailed"))
+    if not topic:
+        return JSONResponse({"error": "Missing 'topic'"}, status_code=400)
+
+    # DB-first: return cached ai_notes if available (unless force)
+    if not force:
+        row = db_get_ai_note_by_title_exact_variant(topic, variant=variant)
+        if row and (row.get("markdown") or "").strip():
+            return {
+                "id": row.get("id"),
+                "markdown": row.get("markdown", ""),
+                "cached": True,
+                "title": row.get("title"),
+                "variant": variant,
+                "image_urls": row.get("image_urls") or [],
+                "model": MATHS_NOTES_MODEL,
+            }
+
+    md = await run_in_threadpool(_generate_maths_notes_markdown, topic)
+    row = db_upsert_ai_note_by_title_variant(topic, md, variant=variant, image_urls=[])
+    return {
+        "id": row.get("id"),
+        "markdown": row.get("markdown", md),
+        "cached": False,
+        "title": row.get("title"),
+        "variant": variant,
+        "image_urls": row.get("image_urls") or [],
+        "model": MATHS_NOTES_MODEL,
+    }
+
+
+@notes_router.get("/api/maths-notes/generate/stream", summary="Stream Engineering Mathematics notes (Gemini 3 Pro Preview)")
+async def api_generate_maths_notes_stream(
+    topic: str,
+    force: bool = False,
+    variant: str = "detailed",
+    degree: Optional[str] = None,
+    course_type: Optional[str] = None,
+):
+    async def event_source() -> AsyncGenerator[bytes, None]:
+        yield b"event: open\n\n"
+
+        normalized_variant = _normalize_variant(variant)
+
+        # Early cache hit from ai_notes
+        if not force:
+            row = db_get_ai_note_by_title_exact_variant(topic, variant=normalized_variant)
+            if row and (row.get("markdown") or "").strip():
+                payload = {
+                    "id": row.get("id"),
+                    "markdown": row.get("markdown", ""),
+                    "cached": True,
+                    "title": row.get("title"),
+                    "variant": normalized_variant,
+                    "image_urls": row.get("image_urls") or [],
+                    "model": MATHS_NOTES_MODEL,
+                }
+                yield b"event: final\n"
+                yield ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+                yield b"event: close\n\n"
+                return
+
+        try:
+            start_payload = {
+                "topic": topic,
+                "model": MATHS_NOTES_MODEL,
+                "variant": normalized_variant,
+                "degree": degree,
+                "course_type": course_type,
+                "force": bool(force),
+            }
+            yield b"event: start\n"
+            yield ("data: " + json.dumps(start_payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+
+            yield b"event: llm_start\n"
+            yield ("data: " + json.dumps({"status": "generating"}, ensure_ascii=False) + "\n\n").encode("utf-8")
+
+            md = await run_in_threadpool(_generate_maths_notes_markdown, topic)
+
+            # Persist to ai_notes (same table used by notes_generator)
+            row = None
+            try:
+                row = db_upsert_ai_note_by_title_variant(topic, md, variant=normalized_variant, image_urls=[])
+            except Exception:
+                row = None
+
+            final_payload = {
+                "id": (row.get("id") if isinstance(row, dict) else None),
+                "markdown": (row.get("markdown") if isinstance(row, dict) and row.get("markdown") else md),
+                "cached": False,
+                "title": (row.get("title") if isinstance(row, dict) and row.get("title") else topic),
+                "variant": normalized_variant,
+                "image_urls": (row.get("image_urls") if isinstance(row, dict) else []) or [],
+                "model": MATHS_NOTES_MODEL,
+            }
+            yield b"event: final\n"
+            yield ("data: " + json.dumps(final_payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+        except Exception as exc:
+            err_payload = {"message": str(exc)}
+            yield b"event: error\n"
+            yield ("data: " + json.dumps(err_payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+        finally:
+            yield b"event: close\n\n"
 
     headers = {
         "Cache-Control": "no-cache, no-transform",
@@ -18273,18 +18616,13 @@ def _structured_notes_from_transcript(transcript: str, *, title: str, lang: Opti
         Output requirements:
         - Start with a single H1 title using the video name.
         - Include these H2 sections, even if you must acknowledge limited information:
-          1. TL;DR (3-6 terse bullet points)
           2. Key Takeaways (bullets)
           3. Detailed Notes (use subsections or numbered steps when flow suggests)
           4. Examples & Analogies (bullets; add [not mentioned] if absent)
           5. Frameworks / Processes (tables or lists; include Mermaid diagrams when explaining flows)
-          6. Glossary (term â€“ short definition table or list)
-          7. Reflection Questions
-          8. Action Items or Next Steps
-          9. Further Reading / References (recommend logical follow ups; mark [none] if unavailable)
+          6. Reflection Questions
         - Bold critical vocabulary and formulas.
         - Prefer Markdown tables where comparing items.
-        - If the transcript seems partial, state that in TL;DR and continue with available context.
         - Keep the tone clear, modern, and supportive for self-study.
         """
     ).strip()
@@ -20872,7 +21210,6 @@ Follow this exact narrative flow and sectioning:
 A. Kitchen Table Analogy (Hook) — plain-language, everyday metaphor with prominent editorial typography and a large SVG or Lucide icon.
 B. Toy Model (Interactive Core) — state-driven interactive simulator with controls (sliders, toggles, inputs), direct manipulation, and immediate animated feedback using GSAP.
 C. Technical Breakdown (Under the Hood) — real technical terms, formulas, and concrete mapping using a responsive Bento Grid (CSS Grid).
-D. TL;DR + Next Steps — short one-paragraph TL;DR and suggestions for further exploration.
 
 Use PaperX palette: primary #9E4B8A, secondary #4C2A59, deep #1E1E2F. Implement dark/light themes with toggle. Use Tailwind CSS CDN, GSAP for animations, state-driven architecture with visible JSON debug panel.
 
