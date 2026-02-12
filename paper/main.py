@@ -16715,6 +16715,120 @@ async def api_generate_maths_notes_stream(
     return StreamingResponse(event_source(), media_type="text/event-stream", headers=headers)
 
 
+MATHS_SOLVE_SYSTEM_PROMPT = """You are a senior Engineering Mathematics educator.
+
+A student has clicked on a practice problem and needs the FULL DETAILED SOLUTION.
+
+RULES:
+- Solve the given problem step-by-step.
+- Show EVERY intermediate step clearly (do NOT skip algebraic manipulations).
+- Explain WHY each step is done in one short line.
+- Use LaTeX math notation ($...$ for inline, $$...$$ for display).
+- Start with: # Solution
+- Then restate the problem under ## Problem
+- Then solve under ## Step-by-Step Solution
+- End with ## Final Answer (boxed or highlighted)
+- If there are multiple parts, solve each separately.
+- Keep language simple, as if explaining to a first-time learner.
+- Use Markdown formatting (bold key terms, numbered steps).
+"""
+
+
+def _generate_maths_solution_markdown(question: str) -> str:
+    """Generate a detailed step-by-step solution for one practice problem using Gemini 3 Pro Preview."""
+    if not genai:
+        raise HTTPException(status_code=500, detail="AI service not available")
+
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not gemini_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+
+    clean_q = (question or "").strip()
+    if not clean_q:
+        raise HTTPException(status_code=400, detail="Missing question")
+
+    client = genai.Client(api_key=gemini_key)
+    user_prompt = textwrap.dedent(
+        f"""
+        Solve the following Engineering Mathematics practice problem with a full, detailed, step-by-step solution.
+
+        Problem:
+        {clean_q}
+
+        Requirements:
+        - Return ONLY Markdown (no code fences, no extra commentary).
+        - First line must be: # Solution
+        - Use LaTeX math notation throughout.
+        - Show every intermediate step.
+        - Explain each step briefly.
+        """
+    ).strip()
+
+    response = client.models.generate_content(
+        model=MATHS_NOTES_MODEL,
+        contents=[
+            {
+                "role": "user",
+                "parts": [{"text": user_prompt}],
+            }
+        ],
+        config=types.GenerateContentConfig(
+            system_instruction=MATHS_SOLVE_SYSTEM_PROMPT,
+            temperature=0.3,
+            max_output_tokens=int(os.getenv("MATHS_NOTES_MAX_TOKENS", "8192") or "8192"),
+        ),
+    )
+
+    text = getattr(response, "text", "") or ""
+    text = (text or "").strip()
+    if not text:
+        raise HTTPException(status_code=502, detail="Empty response from Gemini")
+    return text
+
+
+@notes_router.post("/api/maths-notes/solve", summary="Solve a practice problem (Gemini 3 Pro Preview)")
+async def api_solve_maths_problem(payload: dict):
+    question = (payload or {}).get("question", "").strip()
+    if not question:
+        return JSONResponse({"error": "Missing 'question'"}, status_code=400)
+
+    # Use "Solution: <question>" as the title to store/retrieve from ai_notes
+    solution_title = f"Solution: {question}"
+    solution_variant = "solution"
+
+    try:
+        # DB-first: return cached solution if available
+        row = db_get_ai_note_by_title_exact_variant(solution_title, variant=solution_variant)
+        if row and (row.get("markdown") or "").strip():
+            return {
+                "id": row.get("id"),
+                "markdown": row.get("markdown", ""),
+                "question": question,
+                "cached": True,
+                "model": MATHS_NOTES_MODEL,
+            }
+
+        # Generate solution
+        md = await run_in_threadpool(_generate_maths_solution_markdown, question)
+
+        # Store in ai_notes table
+        row = None
+        try:
+            row = db_upsert_ai_note_by_title_variant(solution_title, md, variant=solution_variant, image_urls=[])
+        except Exception:
+            row = None
+
+        return {
+            "id": (row.get("id") if isinstance(row, dict) else None),
+            "markdown": (row.get("markdown") if isinstance(row, dict) and row.get("markdown") else md),
+            "question": question,
+            "cached": False,
+            "model": MATHS_NOTES_MODEL,
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 class FlashcardSection(BaseModel):
     icon: str = Field(..., min_length=1, max_length=8)
     heading: str = Field(..., min_length=1)
