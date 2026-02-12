@@ -16,6 +16,9 @@
 
     <!-- Tailwind (forms/typography/aspect-ratio) -->
     <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <!-- Tailwind CDN for full compatibility -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
     <script>
         // Tailwind config with your palette + light mode complements
         tailwind.config = {
@@ -512,6 +515,194 @@
         html:not(.dark) h5:not(.gradient-hero-text),
         html:not(.dark) h6:not(.gradient-hero-text) {
             color: #1E1E2F;
+        }
+
+        /* Leaderboard / Podium Styles - Premium Redesign */
+        @keyframes popIn {
+            0% {
+                transform: scale(0.5) translateY(20px);
+                opacity: 0;
+            }
+
+            60% {
+                transform: scale(1.05) translateY(-5px);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .podium-item {
+            opacity: 0;
+            animation: popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+            transition: transform 0.3s ease;
+        }
+
+        .podium-item:hover {
+            transform: translateY(-5px) scale(1.02);
+        }
+
+        .podium-1 {
+            animation-delay: 0.2s;
+            z-index: 10;
+        }
+
+        .podium-2 {
+            animation-delay: 0.4s;
+            z-index: 5;
+        }
+
+        .podium-3 {
+            animation-delay: 0.6s;
+            z-index: 5;
+        }
+
+        /* Glassmorphism Cards */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        }
+
+        .dark .glass-card {
+            background: rgba(30, 30, 47, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Rank Gradients & Effects */
+        .rank-gradient-1 {
+            background: linear-gradient(135deg, #FFD700 0%, #FDB931 50%, #FFD700 100%);
+            background-size: 200% 200%;
+            animation: shimmer 3s infinite linear;
+        }
+
+        .rank-gradient-2 {
+            background: linear-gradient(135deg, #E0E0E0 0%, #BDBDBD 50%, #E0E0E0 100%);
+            background-size: 200% 200%;
+            animation: shimmer 4s infinite linear;
+        }
+
+        .rank-gradient-3 {
+            background: linear-gradient(135deg, #CD7F32 0%, #A0522D 50%, #CD7F32 100%);
+            background-size: 200% 200%;
+            animation: shimmer 5s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            100% {
+                background-position: 100% 50%;
+            }
+        }
+
+        .glow-gold {
+            box-shadow: 0 0 40px rgba(255, 215, 0, 0.5);
+            animation: glow-pulse-gold 3s infinite alternate;
+        }
+
+        @keyframes glow-pulse-gold {
+            0% {
+                box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+            }
+
+            100% {
+                box-shadow: 0 0 60px rgba(255, 215, 0, 0.7);
+            }
+        }
+
+        .crown-icon {
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0) rotate(0deg);
+            }
+
+            50% {
+                transform: translateY(-8px) rotate(2deg);
+            }
+        }
+
+        /* Avatar Styling */
+        .avatar-ring {
+            position: relative;
+            z-index: 1;
+        }
+
+        .avatar-ring::before {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 9999px;
+            padding: 4px;
+            background: linear-gradient(to bottom right, var(--ring-color, #ccc), transparent);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        .profile-img-xl {
+            width: 96px;
+            height: 96px;
+        }
+
+        .profile-img-lg {
+            width: 80px;
+            height: 80px;
+        }
+
+        @media (max-width: 640px) {
+            .profile-img-xl {
+                width: 80px;
+                height: 80px;
+            }
+
+            .profile-img-lg {
+                width: 64px;
+                height: 64px;
+            }
+        }
+
+        /* Ambient Background Mesh */
+        .mesh-bg {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .mesh-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            animation: mesh-float 10s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes mesh-float {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            100% {
+                transform: translate(20px, -20px) scale(1.1);
+            }
         }
     </style>
 
@@ -1160,6 +1351,58 @@
             </div>
         </div>
     </section>
+
+    <!-- ================= Hall of Flame (Top Streaks) ================= -->
+    <section class="py-16 relative overflow-hidden bg-neutral-50 dark:bg-[#0f0f13]">
+        <!-- Ambient Mesh Background -->
+        <div class="mesh-bg">
+            <div class="mesh-orb bg-brand-500/5 dark:bg-brand-500/20 w-[400px] h-[400px] top-[-100px] left-[-100px]">
+            </div>
+            <div class="mesh-orb bg-orange-500/5 dark:bg-orange-500/15 w-[300px] h-[300px] bottom-[-50px] right-[-50px]"
+                style="animation-delay: -2s;"></div>
+        </div>
+
+        <div class="container max-w-6xl relative z-10">
+            <div class="text-center mb-12">
+                <span
+                    class="inline-block py-1 px-3 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-xs font-bold tracking-wider uppercase mb-4 border border-orange-200 dark:border-orange-700/50">
+                    Leaderboard
+                </span>
+                <h2 class="text-3xl md:text-5xl font-black tracking-tight mb-3 drop-shadow-sm">
+                    <span
+                        class="bg-clip-text text-transparent bg-gradient-to-r from-orange-600 via-amber-500 to-yellow-500"
+                        style="background-size: 200%; animation: shimmer 6s infinite linear;">
+                        Hall of Flame
+                    </span>
+                </h2>
+                <p
+                    class="text-neutral-700 dark:text-neutral-400 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed font-medium">
+                    Honoring the consistant learners who are burning bright and leading the revolution.
+                </p>
+            </div>
+
+            <div id="podiumContainer"
+                class="flex flex-col-reverse md:flex-row items-end justify-center gap-6 md:gap-12 min-h-[360px] pb-10">
+                <!-- Skeleton Loader -->
+                <div
+                    class="w-full max-w-2xl h-80 bg-white/50 dark:bg-white/5 backdrop-blur-sm rounded-3xl animate-pulse mx-auto border border-white/20">
+                </div>
+            </div>
+
+            <div class="text-center mt-10">
+                <a href="leaderboard.html"
+                    class="group inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white dark:bg-white/5 border border-neutral-200 dark:border-white/10 hover:border-brand-500 dark:hover:border-brand-400 transition-all hover:shadow-lg hover:-translate-y-0.5">
+                    <span
+                        class="font-bold text-neutral-700 dark:text-white group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">View
+                        Full Leaderboard</span>
+                    <span
+                        class="material-symbols-rounded text-lg text-neutral-400 group-hover:text-brand-500 transition-colors">arrow_forward</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+
 
     <!-- ================= Paper X • CTA Section ================= -->
     <section class="py-20 bg-neutral-50 dark:bg-gradient-to-b dark:from-[#1E1E2F] dark:via-[#221B38] dark:to-[#141321]">
@@ -2037,6 +2280,119 @@
             });
         })();
     </script>
+    <script>
+        // Hall of Flame Logic - Redesigned
+        (async function initHallOfFlame() {
+            const podiumEl = document.getElementById('podiumContainer');
+            if (!podiumEl) return;
+
+            function getAvatar(user, size = 'md', ringColor = '#ccc') {
+                const sizeClass = size === 'xl' ? 'profile-img-xl' : (size === 'lg' ? 'profile-img-lg' : 'profile-img-md');
+                // Ring wrapper
+                const content = user.profile_image_url
+                    ? `<img src="${user.profile_image_url}" class="w-full h-full rounded-full object-cover border-4 border-white dark:border-[#1E1E2F] shadow-lg relative z-10" alt="${user.name}">`
+                    : `<div class="w-full h-full rounded-full bg-gradient-to-br from-neutral-100 to-neutral-200 dark:from-white/10 dark:to-white/5 flex items-center justify-center text-xl md:text-3xl font-bold text-neutral-600 dark:text-white border-4 border-white dark:border-[#1E1E2F] shadow-lg relative z-10">
+                        ${(user.name || '?').charAt(0).toUpperCase()}
+                      </div>`;
+
+                return `<div class="${sizeClass} avatar-ring" style="--ring-color: ${ringColor}">${content}</div>`;
+            }
+
+            try {
+                const apiBase = (window.API_BASE || '').replace(/\/$/, '');
+                const res = await fetch(`${apiBase}/api/leaderboard?limit=3`);
+                if (!res.ok) throw new Error(`API Error: ${res.status}`);
+                const data = await res.json();
+                const top3 = (data.leaderboard || []).slice(0, 3);
+
+                if (top3.length === 0) {
+                    podiumEl.innerHTML = '<div class="glass-card px-8 py-6 rounded-2xl text-center"><p class="text-neutral-500 dark:text-neutral-400 font-medium">No active streaks yet. Be the first!</p></div>';
+                    return;
+                }
+
+                let podiumHTML = '';
+
+                // Rank 2 (Left - Silver)
+                if (top3[1]) {
+                    podiumHTML += `
+                        <div class="podium-item podium-2 flex flex-col items-center group">
+                            <div class="relative mb-4 transition-transform group-hover:-translate-y-2 duration-300">
+                                ${getAvatar(top3[1], 'lg', '#C0C0C0')}
+                                <div class="absolute -bottom-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full rank-gradient-2 flex items-center justify-center text-xs font-black text-neutral-800 border-2 border-white dark:border-[#1E1E2F] shadow-md z-20">#2</div>
+                            </div>
+                            <div class="text-center mb-3">
+                                <div class="font-bold text-neutral-800 dark:text-white truncate max-w-[140px] text-lg leading-tight">${top3[1].name}</div>
+                                <div class="text-sm font-bold text-neutral-500 dark:text-neutral-400 mt-1 flex items-center justify-center gap-1 bg-white/50 dark:bg-black/20 px-3 py-1 rounded-full backdrop-blur-sm">
+                                    <span class="text-orange-500 text-base">🔥</span> ${top3[1].current_streak}
+                                </div>
+                            </div>
+                            <div class="w-28 md:w-36 h-32 md:h-40 glass-card rounded-t-3xl border-b-0 relative overflow-hidden flex items-end justify-center pb-4 opacity-90 group-hover:opacity-100 transition-opacity">
+                                <div class="absolute inset-0 bg-gradient-to-t from-gray-200/50 to-transparent dark:from-gray-700/30"></div>
+                                <div class="relative text-gray-400/20 font-black text-6xl">2</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    podiumHTML += `<div class="hidden md:block w-32"></div>`;
+                }
+
+                // Rank 1 (Center - Gold)
+                if (top3[0]) {
+                    podiumHTML += `
+                        <div class="podium-item podium-1 flex flex-col items-center z-10 -mb-4 md:-mb-0 group">
+                            <div class="relative mb-6 glow-gold rounded-full transition-transform group-hover:-translate-y-2 duration-300">
+                                <span class="material-symbols-rounded absolute -top-10 left-1/2 -translate-x-1/2 text-5xl text-yellow-400 crown-icon drop-shadow-lg" style="filter: drop-shadow(0 0 10px rgba(255,215,0,0.5));">crown</span>
+                                ${getAvatar(top3[0], 'xl', '#FFD700')}
+                                <div class="absolute -bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full rank-gradient-1 flex items-center justify-center text-sm font-black text-yellow-900 border-2 border-white dark:border-[#1E1E2F] shadow-lg z-20">#1</div>
+                            </div>
+                            <div class="text-center mb-4">
+                                <div class="text-xl md:text-2xl font-black text-neutral-900 dark:text-white truncate max-w-[180px] leading-tight">${top3[0].name}</div>
+                                <div class="text-base font-bold text-orange-600 dark:text-orange-400 mt-1 flex items-center justify-center gap-1 bg-orange-100/80 dark:bg-orange-900/40 px-4 py-1.5 rounded-full backdrop-blur-sm border border-orange-200 dark:border-orange-500/30">
+                                    <span class="text-xl">🔥</span> ${top3[0].current_streak} days
+                                </div>
+                            </div>
+                            <div class="w-32 md:w-48 h-40 md:h-56 glass-card rounded-t-3xl border-b-0 relative overflow-hidden flex items-end justify-center pb-6 shadow-2xl shadow-orange-500/10 group-hover:shadow-orange-500/20 transition-all">
+                                <div class="absolute inset-0 bg-gradient-to-t from-amber-200/40 to-transparent dark:from-amber-600/20"></div>
+                                <div class="absolute bottom-0 w-full h-1 bg-gradient-to-r from-transparent via-yellow-400 to-transparent opacity-50"></div>
+                                <div class="relative text-yellow-900/20 dark:text-yellow-500/20 font-black text-8xl opacity-50">1</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Rank 3 (Right - Bronze)
+                if (top3[2]) {
+                    podiumHTML += `
+                        <div class="podium-item podium-3 flex flex-col items-center group">
+                            <div class="relative mb-4 transition-transform group-hover:-translate-y-2 duration-300">
+                                ${getAvatar(top3[2], 'lg', '#CD7F32')}
+                                <div class="absolute -bottom-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full rank-gradient-3 flex items-center justify-center text-xs font-black text-amber-900 border-2 border-white dark:border-[#1E1E2F] shadow-md z-20">#3</div>
+                            </div>
+                            <div class="text-center mb-3">
+                                <div class="font-bold text-neutral-800 dark:text-white truncate max-w-[140px] text-lg leading-tight">${top3[2].name}</div>
+                                <div class="text-sm font-bold text-neutral-500 dark:text-neutral-400 mt-1 flex items-center justify-center gap-1 bg-white/50 dark:bg-black/20 px-3 py-1 rounded-full backdrop-blur-sm">
+                                    <span class="text-orange-500 text-base">🔥</span> ${top3[2].current_streak}
+                                </div>
+                            </div>
+                            <div class="w-28 md:w-36 h-28 md:h-32 glass-card rounded-t-3xl border-b-0 relative overflow-hidden flex items-end justify-center pb-4 opacity-90 group-hover:opacity-100 transition-opacity">
+                                <div class="absolute inset-0 bg-gradient-to-t from-orange-200/40 to-transparent dark:from-orange-900/30"></div>
+                                <div class="relative text-amber-900/20 font-black text-6xl">3</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    podiumHTML += `<div class="hidden md:block w-32"></div>`;
+                }
+
+                podiumEl.innerHTML = podiumHTML;
+
+            } catch (err) {
+                console.error("Hall of Flame Error:", err);
+                podiumEl.innerHTML = `<div class="glass-card px-8 py-6 rounded-2xl text-center text-red-500 font-medium">Failed to load leaderboard</div>`;
+            }
+        })();
+    </script>
+
 </body>
 
 </html>
