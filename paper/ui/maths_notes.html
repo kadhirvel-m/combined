@@ -29,6 +29,8 @@
   <!-- Tailwind (local build) + plugins -->
   <link rel="stylesheet" href="assets/css/tailwind.css" />
   <script defer src="assets/js/analytics-tracker.js"></script>
+  <!-- html2pdf.js for client-side PDF generation (captures rendered KaTeX) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"></script>
   <script>
     // Use the same palette + mode behavior as other PaperX pages when CDN dev build is present
     if (window.tailwind) {
@@ -874,7 +876,8 @@
               <span class="material-symbols-rounded text-brand-500">feedback</span>
               <h3 class="text-lg font-semibold">Feedback</h3>
             </div>
-            <p class="text-xs text-black/60 dark:text-white/60 mt-1">Report anything wrong/unclear/missing in the notes.</p>
+            <p class="text-xs text-black/60 dark:text-white/60 mt-1">Report anything wrong/unclear/missing in the notes.
+            </p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <a id="feedbackInboxLink" href="./admin/notes_feedback.html"
@@ -890,7 +893,8 @@
 
         <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Category</label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Category</label>
             <select id="fbCategory"
               class="w-full px-3 py-2.5 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40">
               <option value="Wrong information">Wrong information</option>
@@ -904,40 +908,69 @@
           </div>
 
           <div>
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Rating <span class="font-normal">(optional)</span></label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Rating
+              <span class="font-normal">(optional)</span></label>
             <div id="fbRating" class="flex flex-wrap items-center gap-2">
-              <button type="button" data-rating="1" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">1</button>
-              <button type="button" data-rating="2" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">2</button>
-              <button type="button" data-rating="3" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">3</button>
-              <button type="button" data-rating="4" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">4</button>
-              <button type="button" data-rating="5" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">5</button>
+              <button type="button" data-rating="1"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">1</button>
+              <button type="button" data-rating="2"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">2</button>
+              <button type="button" data-rating="3"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">3</button>
+              <button type="button" data-rating="4"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">4</button>
+              <button type="button" data-rating="5"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">5</button>
             </div>
           </div>
 
           <div class="md:col-span-2">
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick tags</label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick
+              tags</label>
             <div id="fbTags" class="flex flex-wrap gap-2">
-              <button type="button" data-tag="Wrong" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong</button>
-              <button type="button" data-tag="Unclear" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Unclear</button>
-              <button type="button" data-tag="Too long" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too long</button>
-              <button type="button" data-tag="Too short" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too short</button>
-              <button type="button" data-tag="Example needed" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Example needed</button>
-              <button type="button" data-tag="Equation" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Equation</button>
+              <button type="button" data-tag="Wrong"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong</button>
+              <button type="button" data-tag="Unclear"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Unclear</button>
+              <button type="button" data-tag="Too long"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too
+                long</button>
+              <button type="button" data-tag="Too short"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too
+                short</button>
+              <button type="button" data-tag="Example needed"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Example
+                needed</button>
+              <button type="button" data-tag="Equation"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Equation</button>
             </div>
           </div>
 
           <div class="md:col-span-2">
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick templates</label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick
+              templates</label>
             <div id="fbTemplates" class="flex flex-wrap gap-2">
-              <button type="button" data-template="This section seems wrong: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong section</button>
-              <button type="button" data-template="Please add an example for: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Need example</button>
-              <button type="button" data-template="Please simplify this part: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too complex</button>
-              <button type="button" data-template="Spelling/grammar issue here: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Grammar</button>
+              <button type="button" data-template="This section seems wrong: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong
+                section</button>
+              <button type="button" data-template="Please add an example for: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Need
+                example</button>
+              <button type="button" data-template="Please simplify this part: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too
+                complex</button>
+              <button type="button" data-template="Spelling/grammar issue here: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Grammar</button>
             </div>
           </div>
 
           <div class="md:col-span-2">
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Your feedback</label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Your
+              feedback</label>
             <textarea id="fbMessage" rows="5" placeholder="Write what’s wrong / what to improve…"
               class="w-full px-4 py-3 rounded-3xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40"></textarea>
 
@@ -947,14 +980,16 @@
                 <span class="material-symbols-rounded text-[16px]">content_copy</span>
                 Use selected text
               </button>
-              <div id="fbSelPreview" class="text-xs text-black/60 dark:text-white/60 truncate max-w-[min(720px,90vw)]"></div>
+              <div id="fbSelPreview" class="text-xs text-black/60 dark:text-white/60 truncate max-w-[min(720px,90vw)]">
+              </div>
             </div>
           </div>
 
           <div class="md:col-span-2 flex items-center justify-between gap-3">
             <div class="min-w-0">
               <div id="fbStatus" class="text-xs text-black/60 dark:text-white/60"></div>
-              <div id="fbAuthHint" class="text-xs text-black/60 dark:text-white/60 hidden">Sign in required to send feedback.</div>
+              <div id="fbAuthHint" class="text-xs text-black/60 dark:text-white/60 hidden">Sign in required to send
+                feedback.</div>
             </div>
             <button id="fbSubmit" type="button"
               class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">
@@ -1097,11 +1132,29 @@
         if (opts.module) s.type = 'module';
         s.async = true;
         s.onload = () => resolve();
-        s.onerror = () => reject(new Error(`Failed to load ${src}`));
+        s.onerror = () => {
+          // Allow retries/fallbacks if a script was blocked or failed
+          try { __scriptCache.delete(src); } catch { }
+          reject(new Error(`Failed to load ${src}`));
+        };
         document.head.appendChild(s);
       });
       __scriptCache.set(src, p);
       return p;
+    }
+
+    async function loadScriptAny(srcList, opts = {}) {
+      const list = Array.isArray(srcList) ? srcList : [srcList];
+      let lastErr = null;
+      for (const src of list) {
+        try {
+          await loadScriptOnce(src, opts);
+          return src;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error('Failed to load script(s)');
     }
 
     function loadStyleOnce(href) {
@@ -1111,6 +1164,17 @@
       l.href = href;
       document.head.appendChild(l);
       __styleCache.add(href);
+    }
+
+    function loadStyleAny(hrefList) {
+      const list = Array.isArray(hrefList) ? hrefList : [hrefList];
+      for (const href of list) {
+        try {
+          loadStyleOnce(href);
+          return href;
+        } catch { }
+      }
+      return '';
     }
 
     const LOTTIE_SRC = 'https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.5/dist/dotlottie-wc.js';
@@ -1123,20 +1187,105 @@
     async function ensureMarkdownRuntime() {
       if (__mdRuntimePromise) return __mdRuntimePromise;
       __mdRuntimePromise = (async () => {
-        loadStyleOnce('https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css');
-        loadStyleOnce('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css');
-        await Promise.all([
-          loadScriptOnce('https://cdn.jsdelivr.net/npm/marked/marked.min.js'),
-          loadScriptOnce('https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js'),
-          loadScriptOnce('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js'),
-          loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js'),
+        // Styles are best-effort: don't fail runtime if a CDN blocks CSS.
+        loadStyleAny([
+          'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css',
+          'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css'
         ]);
-        await loadScriptOnce('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js');
-        await loadScriptOnce('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js');
-        try { mermaid.initialize({ startOnLoad: false, theme: 'default' }); } catch { }
-        try { marked.use({ gfm: true, breaks: true, mangle: false, headerIds: true }); } catch { }
+        // KaTeX CSS may be loaded here or via ensureMathRuntime(); best-effort.
+        loadStyleAny([
+          'assets/vendor/katex/katex.min.css',
+          'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css',
+          'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css',
+          'https://unpkg.com/katex@0.16.11/dist/katex.min.css'
+        ]);
+
+        // Core runtime (required): if this fails, rendering will fall back to plain text.
+        await loadScriptAny([
+          'https://cdn.jsdelivr.net/npm/marked/marked.min.js',
+          'https://unpkg.com/marked/marked.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js'
+        ]);
+        await loadScriptAny([
+          'https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js',
+          'https://unpkg.com/dompurify@3.1.6/dist/purify.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js'
+        ]);
+
+        // Optional enhancers: failure shouldn't block Markdown/Math rendering.
+        try {
+          await loadScriptAny([
+            'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js',
+            'https://unpkg.com/mermaid@10/dist/mermaid.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js'
+          ]);
+        } catch { }
+
+        try {
+          await loadScriptAny([
+            'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js',
+            'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js',
+            'https://unpkg.com/highlight.js@11.9.0/lib/highlight.min.js'
+          ]);
+        } catch { }
+
+        // Math (KaTeX + auto-render). Best-effort, but we try multiple CDNs.
+        try {
+          await loadScriptAny([
+            'assets/vendor/katex/katex.min.js',
+            'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js',
+            'https://unpkg.com/katex@0.16.11/dist/katex.min.js'
+          ]);
+          await loadScriptAny([
+            'assets/vendor/katex/contrib/auto-render.min.js',
+            'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js',
+            'https://unpkg.com/katex@0.16.11/dist/contrib/auto-render.min.js'
+          ]);
+        } catch { }
+
+        try { if (window.mermaid) mermaid.initialize({ startOnLoad: false, theme: 'default' }); } catch { }
+        try { if (window.marked) marked.use({ gfm: true, breaks: true, mangle: false, headerIds: true }); } catch { }
       })();
       return __mdRuntimePromise;
+    }
+
+    let __mathRuntimePromise = null;
+    async function ensureMathRuntime() {
+      // If the auto-render helper is already available, we're good.
+      if (typeof window.renderMathInElement === 'function') return;
+      if (__mathRuntimePromise) return __mathRuntimePromise;
+      __mathRuntimePromise = (async () => {
+        // CSS + fonts via local vendored KaTeX first (avoids ORB/CDN blocks).
+        loadStyleAny([
+          'assets/vendor/katex/katex.min.css',
+          'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css',
+          'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css',
+          'https://unpkg.com/katex@0.16.11/dist/katex.min.css'
+        ]);
+
+        await loadScriptAny([
+          'assets/vendor/katex/katex.min.js',
+          'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js',
+          'https://unpkg.com/katex@0.16.11/dist/katex.min.js'
+        ]);
+        await loadScriptAny([
+          'assets/vendor/katex/contrib/auto-render.min.js',
+          'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js',
+          'https://unpkg.com/katex@0.16.11/dist/contrib/auto-render.min.js'
+        ]);
+      })();
+
+      try {
+        await __mathRuntimePromise;
+      } catch (e) {
+        // Allow retry on the next render.
+        try { __mathRuntimePromise = null; } catch { }
+        throw e;
+      }
     }
 
     // Central API base (supports file:// open or custom API_BASE)
@@ -2891,9 +3040,140 @@
         $editor.value = lastMarkdown;
         return;
       }
-      const html = DOMPurify.sanitize(marked.parse(lastMarkdown));
+
+      // Ensure math renderer is present (prefer local vendored KaTeX)
+      try { await ensureMathRuntime(); } catch { }
+
+      function _fixMatrixRowSeparators(mathText) {
+        const envs = '(?:matrix|pmatrix|bmatrix|vmatrix|Vmatrix|cases|array)';
+        const envRe = new RegExp('\\\\begin\\{(' + envs + ')\\}([\\s\\S]*?)\\\\end\\{\\1\\}', 'g');
+        return String(mathText || '').replace(envRe, (full, env, body) => {
+          // Common LLM typo: uses "\ " instead of "\\" between rows/entries in matrices.
+          // Only apply inside matrix-like environments to avoid breaking normal TeX spacing.
+          const fixedBody = String(body || '').replace(/\\(?=\s)/g, '\\\\');
+          return `\\begin{${env}}${fixedBody}\\end{${env}}`;
+        });
+      }
+
+      function _normalizeMathBlocksForRender(mdText) {
+        // Normalize any $$...$$ block (even if $$ shares a line with content) into a single line.
+        // This prevents Marked (breaks=true) from inserting <br> elements inside the formula.
+        const lines = String(mdText || '').split(/\r?\n/);
+        const out = [];
+        let inBlock = false;
+        let buf = [];
+
+        function flushAsBlock() {
+          let content = buf.join(' ').replace(/\s+/g, ' ').trim();
+          content = _fixMatrixRowSeparators(content);
+          out.push('$$ ' + content + ' $$');
+          buf = [];
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+          let line = lines[i];
+
+          // process multiple $$ markers in the same line
+          while (true) {
+            const idx = line.indexOf('$$');
+            if (idx === -1) {
+              if (!inBlock) out.push(line);
+              else buf.push(line);
+              break;
+            }
+
+            const before = line.slice(0, idx);
+            const after = line.slice(idx + 2);
+
+            if (!inBlock) {
+              // push any leading text before $$ as normal text
+              if (before.trim()) out.push(before);
+              inBlock = true;
+              line = after;
+              // continue scanning remainder (might close on same line)
+              continue;
+            } else {
+              // close block at this $$
+              if (before) buf.push(before);
+              flushAsBlock();
+              inBlock = false;
+              line = after;
+              // continue scanning remainder (might open again)
+              continue;
+            }
+          }
+        }
+
+        // Unclosed block: emit original (better than dropping content)
+        if (inBlock) {
+          out.push('$$');
+          out.push(...buf);
+        }
+
+        return out.join('\n');
+      }
+
+      function _preserveRowBreaksInsideMath(mdText) {
+        // Marked treats \\ as an escape for a literal backslash in some contexts.
+        // Inside TeX math, \\ is a newline/row separator (matrices) and must be preserved.
+        // We expand "\\" -> "\\\\" inside math segments before marked.parse,
+        // so after markdown unescaping we still have "\\" for KaTeX.
+        const text = String(mdText || '');
+        const replaceRow = (s) => s.replace(/\\\\(?!\\)/g, '\\\\\\\\');
+
+        // First handle display blocks $$...$$ (single-line at this point)
+        let out = text.replace(/\$\$([\s\S]*?)\$\$/g, (m, body) => `$$${replaceRow(body)}$$`);
+
+        // Then handle inline $...$ (avoid $$)
+        out = out.replace(/(^|[^$])\$([^\n$]*?)\$(?!\$)/g, (m, lead, body) => `${lead}$${replaceRow(body)}$`);
+        return out;
+      }
+
+      function _fixBlockquotesWithMath(mdText) {
+        // AI sometimes wraps math results in blockquotes (> Since $2k^2 = 1$, ...)
+        // which causes the content to render as raw text instead of formatted math.
+        // Strip the blockquote marker from lines that contain LaTeX math.
+        const lines = String(mdText || '').split(/\r?\n/);
+        const out = [];
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          // Match lines starting with > that contain $ (LaTeX) or ** (bold)
+          const bqMatch = line.match(/^(\s*>\s*)(.*)/);
+          if (bqMatch) {
+            const content = bqMatch[2];
+            // If the line contains LaTeX math delimiters, strip the blockquote marker
+            if (/\$[^$]+\$/.test(content) || /\\\(/.test(content) || /\\\[/.test(content)) {
+              out.push(content);
+              continue;
+            }
+          }
+          out.push(line);
+        }
+        return out.join('\n');
+      }
+
+      const mdForRender = _preserveRowBreaksInsideMath(_normalizeMathBlocksForRender(_fixBlockquotesWithMath(lastMarkdown)));
+      const html = DOMPurify.sanitize(marked.parse(mdForRender));
       $output.innerHTML = html;
       $editor.value = lastMarkdown;
+
+      // Post-process: fix blockquotes that still contain unrendered LaTeX/markdown
+      try {
+        $output.querySelectorAll('blockquote').forEach(bq => {
+          const raw = bq.textContent || '';
+          // Check if it contains unrendered LaTeX ($...$) or markdown bold (**)
+          if (/\$[^$]+\$/.test(raw) || /\*\*[^*]+\*\*/.test(raw)) {
+            // Re-parse the blockquote content through marked
+            const innerMd = raw.trim();
+            const innerHtml = DOMPurify.sanitize(marked.parse(innerMd));
+            // Replace blockquote with a div containing the re-rendered content
+            const div = document.createElement('div');
+            div.className = 'math-result-block';
+            div.innerHTML = innerHtml;
+            bq.replaceWith(div);
+          }
+        });
+      } catch { }
 
       // Track note view if we have content
       if (lastMarkdown && lastMarkdown.length > 50 && window.Analytics) {
@@ -2946,8 +3226,78 @@
 
       postprocessLinks();
       buildTOC();
+      // Make practice problems clickable links
+      try { makePracticeProblemsClickable(); } catch { }
       // Update 'My note' visibility when content/title changes
       checkMyNoteVisibility();
+    }
+
+    // Turn Practice Problems list items into clickable links that open solutions in a new tab
+    function makePracticeProblemsClickable() {
+      const h2s = $output.querySelectorAll('h2');
+      let practiceH2 = null;
+      for (const h of h2s) {
+        const txt = (h.textContent || '').trim().toLowerCase();
+        if (txt.includes('practice problem')) { practiceH2 = h; break; }
+      }
+      if (!practiceH2) return;
+
+      // Collect all <li> or <p> elements until the next H2/H1
+      const items = [];
+      let cur = practiceH2.nextElementSibling;
+      while (cur) {
+        if (/^(H1|H2)$/i.test(cur.nodeName)) break;
+        if (cur.nodeName === 'OL' || cur.nodeName === 'UL') {
+          cur.querySelectorAll('li').forEach(li => items.push(li));
+        } else if (cur.nodeName === 'P') {
+          items.push(cur);
+        }
+        cur = cur.nextElementSibling;
+      }
+
+      items.forEach((el) => {
+        // Get the text (including rendered KaTeX) as question
+        const questionText = el.textContent.trim();
+        if (!questionText) return;
+        // Get the inner HTML (to preserve KaTeX rendered formulas for display)
+        const originalHTML = el.innerHTML;
+
+        // Style the element as a clickable link
+        el.style.cursor = 'pointer';
+        el.style.color = 'var(--brand-700, #6d28d9)';
+        el.style.textDecoration = 'underline';
+        el.style.textDecorationStyle = 'dashed';
+        el.style.textUnderlineOffset = '3px';
+        el.style.transition = 'color 0.2s ease, background 0.2s ease';
+        el.style.borderRadius = '6px';
+        el.style.padding = '4px 6px';
+        el.title = 'Click to view solution';
+
+        // Add a small icon hint
+        const badge = document.createElement('span');
+        badge.className = 'material-symbols-rounded';
+        badge.textContent = 'open_in_new';
+        badge.style.fontSize = '14px';
+        badge.style.marginLeft = '6px';
+        badge.style.verticalAlign = 'middle';
+        badge.style.opacity = '0.6';
+        el.appendChild(badge);
+
+        // Hover effects
+        el.addEventListener('mouseenter', () => {
+          el.style.background = 'var(--brand-soft, rgba(109,40,217,0.08))';
+        });
+        el.addEventListener('mouseleave', () => {
+          el.style.background = 'transparent';
+        });
+
+        // On click, open solution in a new tab
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          const solveUrl = `maths_notes.html?solve=${encodeURIComponent(questionText)}`;
+          window.open(solveUrl, '_blank');
+        });
+      });
     }
 
     function clearUI() {
@@ -3255,29 +3605,53 @@
 
     $download.addEventListener('click', async () => {
       try {
-        if (currentNoteId) {
-          const res = await fetch(`${apiBase}/notes/${encodeURIComponent(currentNoteId)}/pdf`);
-          if (!res.ok) throw new Error('PDF request failed');
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = `${currentNoteId}.pdf`;
-          document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-          return;
+        const outputEl = document.getElementById('output');
+        if (!outputEl || !outputEl.innerHTML.trim()) { snack('Generate notes first'); return; }
+
+        snack('Preparing PDF…');
+
+        const title = (outputEl.querySelector('h1')?.textContent || 'notes').trim();
+        const safeName = (currentNoteId || title || 'notes').toLowerCase().replace(/[^a-z0-9_.-]+/g, '_');
+
+        function stripCitations(clonedDoc) {
+          const clonedOutput = clonedDoc.getElementById('output');
+          if (!clonedOutput) return;
+
+          // Remove citations section (heading + content)
+          const h2s = clonedOutput.querySelectorAll('h2');
+          for (const h of h2s) {
+            if ((h.textContent || '').trim().toUpperCase() === 'CITATIONS') {
+              let cur = h.nextSibling;
+              while (cur) {
+                const next = cur.nextSibling;
+                if (cur.nodeType === 1 && /^(H1|H2)$/i.test(cur.nodeName)) break;
+                cur.parentNode.removeChild(cur);
+                cur = next;
+              }
+              h.parentNode.removeChild(h);
+              break;
+            }
+          }
+
+          // Remove elements marked as citations section
+          clonedOutput.querySelectorAll('[data-citations-section]').forEach(el => el.remove());
+          // Remove inline citation pills
+          clonedOutput.querySelectorAll('.citation-pill').forEach(el => el.remove());
+          // Remove citations-list wrapper
+          clonedOutput.querySelectorAll('.citations-list').forEach(el => el.remove());
         }
-        // No note id yet — ad-hoc PDF from current content
-        const title = (document.querySelector('#output h1')?.textContent || 'notes').trim();
-        const res = await fetch(`${apiBase}/pdf`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, markdown: lastMarkdown || '' })
-        });
-        if (!res.ok) throw new Error('PDF request failed');
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = `${(title || 'notes').toLowerCase().replace(/[^a-z0-9_.-]+/g, '_')}.pdf`;
-        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+
+        const opt = {
+          margin: [10, 10, 10, 10],
+          filename: `${safeName}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true, onclone: stripCitations },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        await html2pdf().set(opt).from(outputEl).save();
+        snack('PDF downloaded');
       } catch (e) {
         console.error(e);
         snack('PDF download failed');
@@ -3475,9 +3849,49 @@
       catch { return ''; }
     })();
 
+    // Check if opened with ?solve=... (practice problem solution)
+    const querySolve = (() => {
+      try { return new URLSearchParams(window.location.search).get('solve')?.trim() || ''; }
+      catch { return ''; }
+    })();
+
+    // If opened with ?solve=..., fetch and display the solution
+    (async function maybeAutoSolve() {
+      if (!querySolve) return;
+      // Show loading state
+      showOutputLoader();
+      setBusy(true);
+      $meta.textContent = 'Solving…';
+      $topic.value = querySolve;
+      try { history.replaceState(null, '', window.location.pathname + window.location.hash); } catch { }
+
+      try {
+        const res = await fetch(`${apiBase}/api/maths-notes/solve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: querySolve })
+        });
+        const data = await res.json();
+        if (res.ok && data?.markdown) {
+          renderMarkdown(data.markdown);
+          $meta.textContent = 'Solution loaded';
+          snack('Solution ready');
+        } else {
+          snack(data?.error || 'Failed to generate solution');
+        }
+      } catch (err) {
+        console.error('Solve error:', err);
+        snack('Failed to fetch solution');
+      } finally {
+        hideOutputLoader();
+        setBusy(false);
+        setTimeout(() => document.getElementById('output')?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
+    })();
+
     // Load last note on open (persistence)
     (async function loadLastNote() {
-      if (queryTopic) return;
+      if (queryTopic || querySolve) return;
       const id = (localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? localStorage.getItem('paperx:lastNoteId') : '')); if (!id) return;
       try {
         const res = await fetch(`${apiBase}/notes/${encodeURIComponent(id)}?variant=${encodeURIComponent(currentVariant)}`);

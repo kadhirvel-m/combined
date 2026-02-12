@@ -237,6 +237,11 @@
                                 <span class="material-symbols-rounded text-base">cloud_upload</span>
                                 Upload syllabus
                             </button>
+                            <button id="importSubjectsBtn" type="button"
+                                class="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-5 py-2.5 text-sm font-semibold text-neutral-800 dark:text-white/85 hover:border-brand-500/50 hover:text-brand-700 dark:hover:text-white transition">
+                                <span class="material-symbols-rounded text-base">input</span>
+                                Import from another class
+                            </button>
                         </div>
                     </div>
                     <div class="flex">
@@ -319,6 +324,81 @@
             </form>
         </div>
     </div>
+
+    <!-- Import Subjects Modal -->
+    <div id="importModal" class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8"
+        role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+        <div id="importModalBackdrop" class="fixed inset-0 bg-brand-900/70 dark:bg-black/70 backdrop-blur-sm"></div>
+        <div
+            class="relative w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)] max-h-[90vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-4 border-b border-black/5 dark:border-white/10 px-6 py-5">
+                <div>
+                    <h2 id="importModalTitle" class="text-xl font-semibold text-neutral-900 dark:text-white">Import from
+                        another class</h2>
+                    <p class="mt-1 text-sm text-neutral-600 dark:text-white/70">Select a source class and pick subjects
+                        to import into this batch.</p>
+                </div>
+                <button id="importModalClose" type="button"
+                    class="rounded-full border border-transparent p-2 text-neutral-500 hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"><span
+                        class="material-symbols-rounded text-lg">close</span></button>
+            </div>
+            <div class="space-y-4 px-6 py-6">
+                <!-- Cascading selects -->
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">College
+                        <select id="importCollege"
+                            class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40">
+                            <option value="">Loading…</option>
+                        </select>
+                    </label>
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Degree
+                        <select id="importDegree" disabled
+                            class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50">
+                            <option value="">Select college first</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="grid gap-4 sm:grid-cols-3">
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Department
+                        <select id="importDept" disabled
+                            class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50">
+                            <option value="">Select degree first</option>
+                        </select>
+                    </label>
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Batch (Year)
+                        <select id="importBatch" disabled
+                            class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50">
+                            <option value="">Select dept first</option>
+                        </select>
+                    </label>
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Semester
+                        <select id="importSemester" disabled
+                            class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50">
+                            <option value="">Select batch first</option>
+                        </select>
+                    </label>
+                </div>
+                <!-- Subjects list area -->
+                <div id="importSubjectsList"
+                    class="min-h-[80px] rounded-2xl border border-dashed border-black/10 dark:border-white/15 bg-white/50 dark:bg-white/[0.03] p-4">
+                    <p class="text-sm text-neutral-500 dark:text-white/50 text-center">Select college, degree,
+                        department, batch & semester above to view subjects.</p>
+                </div>
+                <p id="importModalMessage" class="hidden text-sm text-red-500"></p>
+                <div class="flex items-center justify-between gap-3">
+                    <span id="importSelectedCount" class="text-xs text-neutral-500 dark:text-white/50"></span>
+                    <div class="flex items-center gap-3">
+                        <button id="importModalCancel" type="button"
+                            class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">Cancel</button>
+                        <button id="importSubmitBtn" type="button" disabled
+                            class="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.45)] transition disabled:opacity-50 disabled:cursor-not-allowed"><span
+                                class="material-symbols-rounded text-base">input</span>Import selected</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Keep existing logic but adapt styling references -->
     <script>
         const params = (window.Collage && typeof window.Collage.parseQuery === 'function') ? window.Collage.parseQuery() : (() => {
@@ -673,6 +753,342 @@
             }
         }
 
+        // ─── Import Modal Logic ───────────────────────────────────────────
+        const importModal = document.getElementById('importModal');
+        const importModalBackdrop = document.getElementById('importModalBackdrop');
+        const importModalClose = document.getElementById('importModalClose');
+        const importModalCancel = document.getElementById('importModalCancel');
+        const importSubmitBtn = document.getElementById('importSubmitBtn');
+        const importModalMessage = document.getElementById('importModalMessage');
+        const importSelectedCount = document.getElementById('importSelectedCount');
+        const importSubjectsList = document.getElementById('importSubjectsList');
+        const importCollegeSel = document.getElementById('importCollege');
+        const importDegreeSel = document.getElementById('importDegree');
+        const importDeptSel = document.getElementById('importDept');
+        const importBatchSel = document.getElementById('importBatch');
+        const importSemSel = document.getElementById('importSemester');
+
+        let importCollegeCache = null; // cached response from GET /api/colleges/{id}
+        let importSubjectsPool = []; // subjects shown for selection
+
+        function resetImportModal() {
+            importCollegeCache = null;
+            importSubjectsPool = [];
+            importCollegeSel.innerHTML = '<option value="">Loading…</option>';
+            importDegreeSel.innerHTML = '<option value="">Select college first</option>';
+            importDegreeSel.disabled = true;
+            importDeptSel.innerHTML = '<option value="">Select degree first</option>';
+            importDeptSel.disabled = true;
+            importBatchSel.innerHTML = '<option value="">Select dept first</option>';
+            importBatchSel.disabled = true;
+            importSemSel.innerHTML = '<option value="">Select batch first</option>';
+            importSemSel.disabled = true;
+            importSubjectsList.innerHTML = '<p class="text-sm text-neutral-500 dark:text-white/50 text-center">Select college, degree, department, batch & semester above to view subjects.</p>';
+            importModalMessage.textContent = '';
+            importModalMessage.classList.add('hidden');
+            importSelectedCount.textContent = '';
+            importSubmitBtn.disabled = true;
+        }
+
+        async function openImportModal() {
+            resetImportModal();
+            importModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            // Load colleges
+            try {
+                const colleges = await Collage.fetchJson('/api/colleges', { skipAuth: true });
+                const list = Array.isArray(colleges) ? colleges : [];
+                importCollegeSel.innerHTML = '<option value="">— Select college —</option>' +
+                    list.map(c => `<option value="${c.id}">${Collage.escapeHtml(c.name || 'Unnamed')}</option>`).join('');
+            } catch (err) {
+                importCollegeSel.innerHTML = '<option value="">Failed to load colleges</option>';
+                console.error(err);
+            }
+        }
+
+        function closeImportModal() {
+            importModal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        async function onImportCollegeChange() {
+            const cId = importCollegeSel.value;
+            // Reset downstream
+            importDegreeSel.innerHTML = '<option value="">Loading…</option>';
+            importDegreeSel.disabled = true;
+            importDeptSel.innerHTML = '<option value="">Select degree first</option>';
+            importDeptSel.disabled = true;
+            importBatchSel.innerHTML = '<option value="">Select dept first</option>';
+            importBatchSel.disabled = true;
+            importSemSel.innerHTML = '<option value="">Select batch first</option>';
+            importSemSel.disabled = true;
+            importSubjectsList.innerHTML = '<p class="text-sm text-neutral-500 dark:text-white/50 text-center">Select all fields above to view subjects.</p>';
+            importSubmitBtn.disabled = true;
+            importSelectedCount.textContent = '';
+            importCollegeCache = null;
+            if (!cId) return;
+            try {
+                const data = await Collage.fetchJson(`/api/colleges/${cId}`, { skipAuth: true });
+                importCollegeCache = data;
+                const degrees = Array.isArray(data?.degrees) ? data.degrees : [];
+                importDegreeSel.innerHTML = '<option value="">— Select degree —</option>' +
+                    degrees.map(d => `<option value="${d.id}">${Collage.escapeHtml(d.name || 'Unnamed')}</option>`).join('');
+                importDegreeSel.disabled = false;
+            } catch (err) {
+                importDegreeSel.innerHTML = '<option value="">Failed to load</option>';
+                console.error(err);
+            }
+        }
+
+        function onImportDegreeChange() {
+            const dId = importDegreeSel.value;
+            importDeptSel.innerHTML = '<option value="">Loading…</option>';
+            importDeptSel.disabled = true;
+            importBatchSel.innerHTML = '<option value="">Select dept first</option>';
+            importBatchSel.disabled = true;
+            importSemSel.innerHTML = '<option value="">Select batch first</option>';
+            importSemSel.disabled = true;
+            importSubjectsList.innerHTML = '<p class="text-sm text-neutral-500 dark:text-white/50 text-center">Select all fields above to view subjects.</p>';
+            importSubmitBtn.disabled = true;
+            importSelectedCount.textContent = '';
+            if (!dId || !importCollegeCache) return;
+            const degrees = Array.isArray(importCollegeCache?.degrees) ? importCollegeCache.degrees : [];
+            const deg = degrees.find(d => String(d.id) === String(dId));
+            const depts = Array.isArray(deg?.departments) ? deg.departments : [];
+            importDeptSel.innerHTML = '<option value="">— Select department —</option>' +
+                depts.map(d => `<option value="${d.id}">${Collage.escapeHtml(d.name || 'Unnamed')}</option>`).join('');
+            importDeptSel.disabled = false;
+        }
+
+        async function onImportDeptChange() {
+            const dpId = importDeptSel.value;
+            importBatchSel.innerHTML = '<option value="">Loading…</option>';
+            importBatchSel.disabled = true;
+            importSemSel.innerHTML = '<option value="">Select batch first</option>';
+            importSemSel.disabled = true;
+            importSubjectsList.innerHTML = '<p class="text-sm text-neutral-500 dark:text-white/50 text-center">Select all fields above to view subjects.</p>';
+            importSubmitBtn.disabled = true;
+            importSelectedCount.textContent = '';
+            if (!dpId) return;
+            try {
+                const batches = await Collage.fetchJson(`/api/departments/${dpId}/batches/full`, { skipAuth: true });
+                const list = Array.isArray(batches) ? batches : [];
+                importBatchSel.innerHTML = '<option value="">— Select batch —</option>' +
+                    list.map(b => {
+                        const label = (b.from_year && b.to_year) ? `${b.from_year} – ${b.to_year}` : (b.name || b.id);
+                        return `<option value="${b.id}">${Collage.escapeHtml(String(label))}</option>`;
+                    }).join('');
+                importBatchSel.disabled = false;
+            } catch (err) {
+                importBatchSel.innerHTML = '<option value="">Failed to load</option>';
+                console.error(err);
+            }
+        }
+
+        function onImportBatchChange() {
+            importSemSel.innerHTML = '<option value="">— Select semester —</option>' +
+                semesterOptions.map(n => `<option value="${n}">Semester ${n}</option>`).join('');
+            importSemSel.disabled = !importBatchSel.value;
+            importSubjectsList.innerHTML = '<p class="text-sm text-neutral-500 dark:text-white/50 text-center">Select a semester to view subjects.</p>';
+            importSubmitBtn.disabled = true;
+            importSelectedCount.textContent = '';
+        }
+
+        async function onImportSemChange() {
+            const bId = importBatchSel.value;
+            const sem = importSemSel.value;
+            importSubjectsPool = [];
+            importSubmitBtn.disabled = true;
+            importSelectedCount.textContent = '';
+            if (!bId || !sem) {
+                importSubjectsList.innerHTML = '<p class="text-sm text-neutral-500 dark:text-white/50 text-center">Select batch & semester.</p>';
+                return;
+            }
+            importSubjectsList.innerHTML = '<div class="flex justify-center py-4"><div class="h-8 w-8 animate-spin rounded-full border-2 border-brand-500/30 border-t-transparent"></div></div>';
+            try {
+                const data = await Collage.fetchJson(`/api/batches/${bId}/courses`, { skipAuth: true });
+                const all = Array.isArray(data) ? data : [];
+                const filtered = all.filter(s => String(s.semester) === String(sem));
+                importSubjectsPool = filtered;
+                renderImportSubjects(filtered);
+            } catch (err) {
+                importSubjectsList.innerHTML = `<p class="text-sm text-red-500 text-center">${Collage.escapeHtml(err.message || 'Failed to load subjects')}</p>`;
+                console.error(err);
+            }
+        }
+
+        function renderImportSubjects(list) {
+            if (!list.length) {
+                importSubjectsList.innerHTML = '<p class="text-sm text-neutral-500 dark:text-white/50 text-center py-4">No subjects found for this semester.</p>';
+                importSubmitBtn.disabled = true;
+                importSelectedCount.textContent = '';
+                return;
+            }
+            // Check all by default
+            importSubjectsList.innerHTML = `
+                <div class="flex items-center justify-between mb-3">
+                    <label class="flex items-center gap-2 text-sm font-medium text-neutral-700 dark:text-white/85 cursor-pointer">
+                        <input type="checkbox" id="importSelectAll" checked class="rounded border-black/20 dark:border-white/20 text-brand-500 focus:ring-brand-500/40" />
+                        Select all
+                    </label>
+                    <span class="text-xs text-neutral-500 dark:text-white/50">${list.length} subject${list.length === 1 ? '' : 's'}</span>
+                </div>
+                <div class="space-y-2 max-h-60 overflow-y-auto">
+                    ${list.map((s, i) => `
+                        <label class="flex items-start gap-3 rounded-xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-white/[0.04] px-4 py-3 cursor-pointer hover:border-brand-500/40 transition" data-import-row>
+                            <input type="checkbox" checked class="mt-0.5 rounded border-black/20 dark:border-white/20 text-brand-500 focus:ring-brand-500/40" data-import-check data-import-idx="${i}" />
+                            <div class="min-w-0 flex-1">
+                                <div class="text-sm font-semibold text-neutral-900 dark:text-white">${Collage.escapeHtml(s.course_code || 'N/A')}</div>
+                                <div class="text-xs text-neutral-600 dark:text-white/60 mt-0.5">${Collage.escapeHtml(s.title || 'Untitled')}</div>
+                                <div class="flex flex-wrap gap-2 mt-1.5">
+                                    <span class="inline-flex items-center rounded-full border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 px-2 py-0.5 text-[10px] text-neutral-600 dark:text-white/60">Sem ${s.semester || '?'}</span>
+                                    ${s.type ? `<span class="inline-flex items-center rounded-full border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 px-2 py-0.5 text-[10px] text-neutral-600 dark:text-white/60">${Collage.escapeHtml(s.type)}</span>` : ''}
+                                    ${s.credits != null ? `<span class="inline-flex items-center rounded-full border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 px-2 py-0.5 text-[10px] text-neutral-600 dark:text-white/60">${s.credits} cr</span>` : ''}
+                                </div>
+                            </div>
+                        </label>
+                    `).join('')}
+                </div>
+            `;
+            updateImportCount();
+
+            // Select-all toggle
+            const selectAllCb = document.getElementById('importSelectAll');
+            selectAllCb?.addEventListener('change', () => {
+                importSubjectsList.querySelectorAll('[data-import-check]').forEach(cb => { cb.checked = selectAllCb.checked; });
+                updateImportCount();
+            });
+            // Individual checkboxes
+            importSubjectsList.querySelectorAll('[data-import-check]').forEach(cb => {
+                cb.addEventListener('change', updateImportCount);
+            });
+        }
+
+        function updateImportCount() {
+            const checked = importSubjectsList.querySelectorAll('[data-import-check]:checked');
+            const count = checked.length;
+            importSelectedCount.textContent = count ? `${count} subject${count === 1 ? '' : 's'} selected` : '';
+            importSubmitBtn.disabled = count === 0;
+        }
+
+        async function handleImportSubmit() {
+            const checked = importSubjectsList.querySelectorAll('[data-import-check]:checked');
+            if (!checked.length) return;
+            if (!batchId) {
+                importModalMessage.textContent = 'Missing current batch context.';
+                importModalMessage.classList.remove('hidden');
+                return;
+            }
+            importModalMessage.classList.add('hidden');
+            importSubmitBtn.disabled = true;
+            const total = checked.length;
+            let current = 0;
+
+            function updateProgress(msg) {
+                importSubmitBtn.innerHTML = `<span class="material-symbols-rounded animate-spin text-base">progress_activity</span> ${msg}`;
+            }
+
+            let successCount = 0;
+            let errors = [];
+            for (const cb of checked) {
+                const idx = parseInt(cb.getAttribute('data-import-idx'), 10);
+                const subj = importSubjectsPool[idx];
+                if (!subj) continue;
+                current++;
+                updateProgress(`Importing ${current}/${total}…`);
+
+                const payload = {
+                    course_code: subj.course_code || '',
+                    title: subj.title || '',
+                    semester: Number(subj.semester),
+                    type: subj.type || 'practical'
+                };
+                if (subj.credits != null) payload.credits = Number(subj.credits);
+
+                try {
+                    // 1. Create the subject in the current batch
+                    const newCourse = await Collage.fetchJson(`/api/batches/${batchId}/courses`, {
+                        method: 'POST',
+                        body: payload,
+                        skipAuth: true
+                    });
+                    const newCourseId = newCourse?.id;
+
+                    // 2. Fetch the full syllabus (units + topics) from the source subject
+                    if (newCourseId && subj.id) {
+                        try {
+                            updateProgress(`Copying syllabus ${current}/${total}…`);
+                            const sourceSyllabus = await Collage.fetchJson(`/api/syllabus/courses/${subj.id}`, { skipAuth: true });
+                            const units = Array.isArray(sourceSyllabus?.units) ? sourceSyllabus.units : [];
+
+                            // 3. Recreate each unit (with its topics) under the new course
+                            for (const unit of units) {
+                                const topics = Array.isArray(unit.topics) ? unit.topics : [];
+                                const unitPayload = {
+                                    unit_title: unit.unit_title || unit.title || 'Untitled Unit',
+                                    topics: topics.map(t => ({
+                                        topic: t.topic_title || t.topic || t.title || ''
+                                    })).filter(t => t.topic)
+                                };
+                                try {
+                                    await Collage.fetchJson(`/api/syllabus/courses/${newCourseId}/units`, {
+                                        method: 'POST',
+                                        body: unitPayload,
+                                        skipAuth: true
+                                    });
+                                } catch (unitErr) {
+                                    console.warn('Failed to import unit', unit.unit_title, unitErr);
+                                }
+                            }
+                        } catch (syllabusErr) {
+                            console.warn('Could not fetch syllabus for', subj.course_code, syllabusErr);
+                            // Subject was still created, just without syllabus — not a fatal error
+                        }
+                    }
+
+                    successCount++;
+                } catch (err) {
+                    errors.push(`${subj.course_code}: ${err.message || 'failed'}`);
+                    console.error('Import error for', subj.course_code, err);
+                }
+            }
+
+            importSubmitBtn.innerHTML = '<span class="material-symbols-rounded text-base">input</span>Import selected';
+            if (errors.length) {
+                importModalMessage.textContent = `Imported ${successCount}, ${errors.length} failed: ${errors.join('; ')}`;
+                importModalMessage.classList.remove('hidden');
+                importSubmitBtn.disabled = false;
+            } else {
+                closeImportModal();
+            }
+            // Refresh subjects list in background
+            await loadSubjects();
+        }
+
+        function initImportModal() {
+            const importBtn = document.getElementById('importSubjectsBtn');
+            if (!importBtn) return;
+            if (!batchId) {
+                importBtn.disabled = true;
+                importBtn.classList.add('opacity-60', 'cursor-not-allowed');
+            }
+            importBtn.addEventListener('click', openImportModal);
+            importModalClose?.addEventListener('click', closeImportModal);
+            importModalCancel?.addEventListener('click', closeImportModal);
+            importModalBackdrop?.addEventListener('click', closeImportModal);
+            importSubmitBtn?.addEventListener('click', handleImportSubmit);
+            importCollegeSel?.addEventListener('change', onImportCollegeChange);
+            importDegreeSel?.addEventListener('change', onImportDegreeChange);
+            importDeptSel?.addEventListener('change', onImportDeptChange);
+            importBatchSel?.addEventListener('change', onImportBatchChange);
+            importSemSel?.addEventListener('change', onImportSemChange);
+            document.addEventListener('keydown', e => {
+                if (e.key === 'Escape' && !importModal.classList.contains('hidden')) {
+                    closeImportModal();
+                }
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 currentRole = (window.Collage && window.Collage.requireAdminOrEmployee)
@@ -683,8 +1099,10 @@
                 if (!isAdmin) {
                     addSubjectBtn?.classList.add('hidden');
                     document.getElementById('uploadSyllabusBtn')?.classList.add('hidden');
+                    document.getElementById('importSubjectsBtn')?.classList.add('hidden');
                 } else {
                     initSubjectModal();
+                    initImportModal();
                 }
                 loadSubjects();
                 semesterFilter.addEventListener('change', filterAndRender);
