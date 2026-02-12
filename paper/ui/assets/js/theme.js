@@ -2,8 +2,8 @@
  * Theme Manager - Handles light/dark mode toggling with localStorage persistence
  */
 const Theme = {
-    STORAGE_KEY: 'theme',
-    
+    STORAGE_KEY: 'px_theme',
+
     /**
      * Initialize theme based on localStorage or system preference
      */
@@ -17,7 +17,7 @@ const Theme = {
             this.apply(prefersDark ? 'dark' : 'light');
         }
     },
-    
+
     /**
      * Apply the given theme
      * @param {string} theme - 'dark' or 'light'
@@ -33,7 +33,7 @@ const Theme = {
         }
         localStorage.setItem(this.STORAGE_KEY, theme);
     },
-    
+
     /**
      * Toggle between light and dark mode
      */
@@ -41,7 +41,7 @@ const Theme = {
         const isDark = document.documentElement.classList.contains('dark');
         this.apply(isDark ? 'light' : 'dark');
     },
-    
+
     /**
      * Get current theme
      * @returns {string} 'dark' or 'light'
