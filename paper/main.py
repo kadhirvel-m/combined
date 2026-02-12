@@ -20105,7 +20105,7 @@ def get_leaderboard(
             supabase.table("notex_streak")
             .select("user_profile_id,current_streak,longest_streak,last_activity_date")
             .order("current_streak", desc=True)
-            .limit(limit)
+            .limit(50)  # Fetch more to allow for filtering
             .execute()
         )
     except Exception as e:
@@ -20114,37 +20114,72 @@ def get_leaderboard(
     streak_rows: List[dict] = getattr(streak_res, "data", []) or []
     if not streak_rows:
         return {"leaderboard": [], "count": 0}
-
-    # Collect profile IDs and fetch names + avatars
     profile_ids = [r.get("user_profile_id") for r in streak_rows if r.get("user_profile_id")]
     profile_map: Dict[str, dict] = {}
+    
+    # Filter out admins and employees
+    excluded_profile_ids = set()
     if profile_ids:
         try:
+            # Get auth_user_ids for these profiles
             prof_res = (
                 supabase.table("user_profiles")
-                .select("id,name,profile_image_url")
+                .select("id,auth_user_id,name,profile_image_url")
                 .in_("id", profile_ids)
                 .execute()
             )
-            for p in (getattr(prof_res, "data", []) or []):
+            profiles_data = getattr(prof_res, "data", []) or []
+            
+            # Map profile_id -> auth_user_id
+            pid_to_uid = {}
+            for p in profiles_data:
                 if isinstance(p, dict) and p.get("id"):
                     profile_map[p["id"]] = p
+                    if p.get("auth_user_id"):
+                        pid_to_uid[p["id"]] = p["auth_user_id"]
+            
+            # Check admin_roles for these users
+            uids_to_check = list(pid_to_uid.values())
+            if uids_to_check:
+                role_res = (
+                    supabase.table("admin_roles")
+                    .select("auth_user_id,role")
+                    .in_("auth_user_id", uids_to_check)
+                    .execute()
+                )
+                for r in (getattr(role_res, "data", []) or []):
+                    role = r.get("role")
+                    if role in ("admin", "employee"):
+                        # Find profile_id for this auth_user_id
+                        for pid, uid in pid_to_uid.items():
+                            if uid == r.get("auth_user_id"):
+                                excluded_profile_ids.add(pid)
+                                break
         except Exception:
-            pass  # Gracefully degrade: names will show as "Anonymous"
+            pass  # Gracefully degrade
 
     # Build response
     leaderboard: List[dict] = []
-    for rank, row in enumerate(streak_rows, start=1):
+    current_rank = 1
+    
+    for row in streak_rows:
         pid = row.get("user_profile_id")
+        if pid in excluded_profile_ids:
+            continue
+            
         profile = profile_map.get(pid, {}) if pid else {}
         leaderboard.append({
-            "rank": rank,
+            "rank": current_rank,
             "name": profile.get("name") or "Anonymous",
             "profile_image_url": profile.get("profile_image_url"),
             "current_streak": int(row.get("current_streak") or 0),
             "longest_streak": int(row.get("longest_streak") or 0),
             "last_activity_date": row.get("last_activity_date"),
         })
+        current_rank += 1
+        
+        if len(leaderboard) >= limit:
+            break
 
     return {"leaderboard": leaderboard, "count": len(leaderboard)}
 
