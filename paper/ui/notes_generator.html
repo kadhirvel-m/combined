@@ -9,12 +9,8 @@
   <script>
     (function () {
       try {
-        var keys = ['cx-theme', 'theme', 'px-theme'];
-        var mode = null;
-        for (var i = 0; i < keys.length; i++) {
-          var v = localStorage.getItem(keys[i]);
-          if (v === 'dark' || v === 'light') { mode = v; break; }
-        }
+        var v = localStorage.getItem('px_theme');
+        var mode = (v === 'dark' || v === 'light') ? v : null;
         if (!mode && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
           mode = 'dark';
         }
@@ -874,7 +870,8 @@
               <span class="material-symbols-rounded text-brand-500">feedback</span>
               <h3 class="text-lg font-semibold">Feedback</h3>
             </div>
-            <p class="text-xs text-black/60 dark:text-white/60 mt-1">Report anything wrong/unclear/missing in the notes.</p>
+            <p class="text-xs text-black/60 dark:text-white/60 mt-1">Report anything wrong/unclear/missing in the notes.
+            </p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <a id="feedbackInboxLink" href="./admin/notes_feedback.html"
@@ -890,7 +887,8 @@
 
         <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Category</label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Category</label>
             <select id="fbCategory"
               class="w-full px-3 py-2.5 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40">
               <option value="Wrong information">Wrong information</option>
@@ -904,40 +902,69 @@
           </div>
 
           <div>
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Rating <span class="font-normal">(optional)</span></label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Rating
+              <span class="font-normal">(optional)</span></label>
             <div id="fbRating" class="flex flex-wrap items-center gap-2">
-              <button type="button" data-rating="1" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">1</button>
-              <button type="button" data-rating="2" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">2</button>
-              <button type="button" data-rating="3" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">3</button>
-              <button type="button" data-rating="4" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">4</button>
-              <button type="button" data-rating="5" class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">5</button>
+              <button type="button" data-rating="1"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">1</button>
+              <button type="button" data-rating="2"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">2</button>
+              <button type="button" data-rating="3"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">3</button>
+              <button type="button" data-rating="4"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">4</button>
+              <button type="button" data-rating="5"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">5</button>
             </div>
           </div>
 
           <div class="md:col-span-2">
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick tags</label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick
+              tags</label>
             <div id="fbTags" class="flex flex-wrap gap-2">
-              <button type="button" data-tag="Wrong" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong</button>
-              <button type="button" data-tag="Unclear" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Unclear</button>
-              <button type="button" data-tag="Too long" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too long</button>
-              <button type="button" data-tag="Too short" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too short</button>
-              <button type="button" data-tag="Example needed" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Example needed</button>
-              <button type="button" data-tag="Equation" class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Equation</button>
+              <button type="button" data-tag="Wrong"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong</button>
+              <button type="button" data-tag="Unclear"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Unclear</button>
+              <button type="button" data-tag="Too long"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too
+                long</button>
+              <button type="button" data-tag="Too short"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too
+                short</button>
+              <button type="button" data-tag="Example needed"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Example
+                needed</button>
+              <button type="button" data-tag="Equation"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Equation</button>
             </div>
           </div>
 
           <div class="md:col-span-2">
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick templates</label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick
+              templates</label>
             <div id="fbTemplates" class="flex flex-wrap gap-2">
-              <button type="button" data-template="This section seems wrong: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong section</button>
-              <button type="button" data-template="Please add an example for: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Need example</button>
-              <button type="button" data-template="Please simplify this part: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too complex</button>
-              <button type="button" data-template="Spelling/grammar issue here: " class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Grammar</button>
+              <button type="button" data-template="This section seems wrong: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong
+                section</button>
+              <button type="button" data-template="Please add an example for: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Need
+                example</button>
+              <button type="button" data-template="Please simplify this part: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too
+                complex</button>
+              <button type="button" data-template="Spelling/grammar issue here: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Grammar</button>
             </div>
           </div>
 
           <div class="md:col-span-2">
-            <label class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Your feedback</label>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Your
+              feedback</label>
             <textarea id="fbMessage" rows="5" placeholder="Write what’s wrong / what to improve…"
               class="w-full px-4 py-3 rounded-3xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40"></textarea>
 
@@ -947,14 +974,16 @@
                 <span class="material-symbols-rounded text-[16px]">content_copy</span>
                 Use selected text
               </button>
-              <div id="fbSelPreview" class="text-xs text-black/60 dark:text-white/60 truncate max-w-[min(720px,90vw)]"></div>
+              <div id="fbSelPreview" class="text-xs text-black/60 dark:text-white/60 truncate max-w-[min(720px,90vw)]">
+              </div>
             </div>
           </div>
 
           <div class="md:col-span-2 flex items-center justify-between gap-3">
             <div class="min-w-0">
               <div id="fbStatus" class="text-xs text-black/60 dark:text-white/60"></div>
-              <div id="fbAuthHint" class="text-xs text-black/60 dark:text-white/60 hidden">Sign in required to send feedback.</div>
+              <div id="fbAuthHint" class="text-xs text-black/60 dark:text-white/60 hidden">Sign in required to send
+                feedback.</div>
             </div>
             <button id="fbSubmit" type="button"
               class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">
@@ -2262,19 +2291,7 @@
       if ($relatedVideosSummary) {
         $relatedVideosSummary.textContent = `Showing for "${displayTopic}"`;
       }
-      try {
-        localStorage.setItem('paperx:lastVideos', JSON.stringify(videos));
-        if (baseTopic) {
-          localStorage.setItem('paperx:lastTopic', baseTopic);
-        } else {
-          localStorage.removeItem('paperx:lastTopic');
-        }
-        if (language) {
-          localStorage.setItem('paperx:lastVideoLanguage', language);
-        } else {
-          localStorage.removeItem('paperx:lastVideoLanguage');
-        }
-      } catch { }
+      // Video caching disabled — always fetch fresh results
     }
 
     async function loadRelatedVideos(topic, options = {}) {
@@ -2298,11 +2315,6 @@
           $relatedVideosEmpty.textContent = 'Videos will appear once a topic is generated.';
           $relatedVideosEmpty.classList.remove('hidden');
         }
-        try {
-          localStorage.removeItem('paperx:lastTopic');
-          localStorage.removeItem('paperx:lastVideos');
-          localStorage.removeItem('paperx:lastVideoLanguage');
-        } catch { }
         return;
       }
 
@@ -2317,12 +2329,7 @@
       if ($relatedVideosSummary) {
         $relatedVideosSummary.textContent = `Finding videos for "${searchQuery}"...`;
       }
-      try {
-        localStorage.setItem('paperx:lastTopic', baseQuery);
-        if (relatedVideosLanguage) {
-          localStorage.setItem('paperx:lastVideoLanguage', relatedVideosLanguage);
-        }
-      } catch { }
+
 
       if (relatedVideosAbort) {
         relatedVideosAbort.abort();
@@ -2636,52 +2643,22 @@
       updateDomainsHintDebounced();
     })();
 
-    const storedTopic = (() => {
-      try { return localStorage.getItem('paperx:lastTopic') || ''; } catch { return ''; }
-    })();
-    const storedVideos = (() => {
-      try {
-        const raw = localStorage.getItem('paperx:lastVideos');
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : null;
-      } catch {
-        return null;
-      }
-    })();
-    const storedVideoLanguage = (() => {
-      try { return localStorage.getItem('paperx:lastVideoLanguage') || ''; } catch { return ''; }
-    })();
+    // Clean up any leftover video cache from previous sessions
+    try {
+      localStorage.removeItem('paperx:lastVideos');
+      localStorage.removeItem('paperx:lastTopic');
+      localStorage.removeItem('paperx:lastVideoLanguage');
+    } catch { }
 
     if ($videoLanguage) {
-      if (storedVideoLanguage && $videoLanguage.querySelector(`option[value="${storedVideoLanguage}"]`)) {
-        $videoLanguage.value = storedVideoLanguage;
-        relatedVideosLanguage = storedVideoLanguage;
-      } else {
-        relatedVideosLanguage = $videoLanguage.value || storedVideoLanguage || relatedVideosLanguage;
-      }
-    } else if (storedVideoLanguage) {
-      relatedVideosLanguage = storedVideoLanguage;
+      relatedVideosLanguage = $videoLanguage.value || relatedVideosLanguage;
     }
 
-    if (storedTopic && storedVideos && storedVideos.length) {
-      if (!$topic.value) $topic.value = storedTopic;
-      if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
-      const appliedLanguage = storedVideoLanguage || relatedVideosLanguage;
-      const displayTopic = buildRelatedVideosQuery(storedTopic, appliedLanguage);
-      renderRelatedVideos(storedVideos, displayTopic, storedTopic, appliedLanguage);
-      relatedVideosLanguage = normalizeVideoLanguage(appliedLanguage) || 'English';
-      relatedVideosTopic = storedTopic;
-      relatedVideosFullQuery = displayTopic;
-    } else if ($relatedVideosSection) {
+    // No cached video restoration — always start fresh
+    if ($relatedVideosSection) {
       $relatedVideosSection.classList.remove('hidden');
       $relatedVideosSkeleton?.classList.remove('hidden');
       $relatedVideosWrap?.classList.add('hidden');
-    }
-
-    if (!$topic.value && storedTopic) {
-      $topic.value = storedTopic;
-      loadRelatedVideos(storedTopic, { force: true, language: relatedVideosLanguage });
     }
 
     // ===== Chips (suggested topics) =====
@@ -2707,7 +2684,6 @@
         const selected = normalizeVideoLanguage($videoLanguage.value) || 'English';
         if (selected.toLowerCase() === (relatedVideosLanguage || '').toLowerCase()) return;
         relatedVideosLanguage = selected;
-        try { localStorage.setItem('paperx:lastVideoLanguage', relatedVideosLanguage); } catch { }
         const current = ($topic.value || relatedVideosTopic || '').trim();
         if (current) {
           loadRelatedVideos(current, { force: true, language: relatedVideosLanguage });

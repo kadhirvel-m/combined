@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard - Paper X</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="index.css">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Premium Glassmorphism */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        }
+
+        .dark .glass-panel {
+            background: rgba(20, 20, 30, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Podium Animations */
+        @keyframes popIn {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+
+            70% {
+                transform: scale(1.05);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .podium-item {
+            opacity: 0;
+            animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        .podium-1 {
+            animation-delay: 0.2s;
+        }
+
+        .podium-2 {
+            animation-delay: 0.4s;
+        }
+
+        .podium-3 {
+            animation-delay: 0.6s;
+        }
+
+        /* Golden Glow for Rank 1 */
+        .glow-gold {
+            box-shadow: 0 0 25px rgba(255, 215, 0, 0.4);
+            animation: glow-pulse-gold 3s infinite;
+        }
+
+        @keyframes glow-pulse-gold {
+
+            0%,
+            100% {
+                box-shadow: 0 0 25px rgba(255, 215, 0, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 40px rgba(255, 215, 0, 0.7);
+            }
+        }
+
+        /* Rank Colors */
+        .rank-gradient-1 {
+            background: linear-gradient(135deg, #FFD700, #FDB931);
+        }
+
+        .rank-gradient-2 {
+            background: linear-gradient(135deg, #E0E0E0, #BDBDBD);
+        }
+
+        .rank-gradient-3 {
+            background: linear-gradient(135deg, #CD7F32, #A0522D);
+        }
+
+        /* List Items */
+        .list-item {
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+
+        .list-item:hover {
+            transform: scale(1.01);
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        .dark .list-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Layout utilities */
+        .profile-img-lg {
+            width: 80px;
+            height: 80px;
+        }
+
+        .profile-img-md {
+            width: 64px;
+            height: 64px;
+        }
+
+        @media (max-width: 640px) {
+            .profile-img-lg {
+                width: 64px;
+                height: 64px;
+            }
+
+            .profile-img-md {
+                width: 48px;
+                height: 48px;
+            }
+        }
+
+        /* Crown icon for rank 1 */
+        .crown-icon {
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-5px);
+            }
+        }
+
+        #pageLoader {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.4s ease, visibility 0.4s;
+        }
+
+        .dark #pageLoader {
+            background: rgba(15, 15, 20, 0.9);
+        }
+
+        .loaded #pageLoader {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+    </style>
+    <!-- Persist theme -->
+    <script>
+        (function () {
+            try {
+                const s = localStorage.getItem('px_theme');
+                const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const useDark = s ? s === 'dark' : prefers;
+                if (useDark) document.documentElement.classList.add('dark');
+            } catch (_) { }
+        })();
+    </script>
+    <script src="config.js"></script>
+    <script src="auth.js" defer></script>
+</head>
+
+<body
+    class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-neutral-50 dark:bg-[#0f0f13] overflow-x-hidden">
+
+    <!-- Loading Overlay -->
+    <div id="pageLoader">
+        <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
+            style="width: 200px;height: 200px" autoplay loop></dotlottie-wc>
+    </div>
+    <script type="module" src="https://unpkg.com/@dotlottie/player-component@1.0.0/dist/dotlottie-player.mjs"></script>
+
+    <!-- Navbar -->
+    <header
+        class="sticky top-0 z-50 bg-white/80 dark:bg-[#1a1a24]/80 backdrop-blur-md border-b border-black/5 dark:border-white/5">
+        <div class="container mx-auto flex items-center justify-between py-3 px-4">
+            <a href="index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="assets/img/logo-light.svg" class="h-8 w-auto dark:hidden" alt="Paper X" />
+                <img src="assets/img/logo-dark.svg" class="h-8 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                <a href="index.html" class="hover:text-neutral-900 dark:hover:text-white transition">Home</a>
+                <a href="wishlist.html" class="hover:text-neutral-900 dark:hover:text-white transition">Wishlist</a>
+                <a href="leaderboard.html" class="text-brand-600 dark:text-brand-400">Leaderboard</a>
+            </nav>
+            <div class="flex items-center gap-3">
+                <button data-theme-toggle
+                    class="inline-flex items-center justify-center size-9 rounded-full bg-neutral-100 dark:bg-white/5 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-white/10 transition">
+                    <span class="material-symbols-rounded text-lg">dark_mode</span>
+                </button>
+                <a id="navProfile" href="profile.html"
+                    class="hidden items-center justify-center size-9 rounded-full overflow-hidden border border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-white/5">
+                    <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+                    <span id="navProfileInitial"
+                        class="text-xs font-bold text-neutral-600 dark:text-neutral-300">ME</span>
+                </a>
+                <a href="login.html"
+                    class="px-4 py-2 text-sm font-medium text-neutral-700 dark:text-white hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition">Log
+                    in</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto py-8 md:py-12 relative px-4">
+        <!-- Ambient Background Mesh -->
+        <div
+            class="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-brand-500/10 dark:bg-brand-500/5 rounded-full blur-[120px] pointer-events-none -z-10">
+        </div>
+        <div
+            class="absolute top-40 right-0 w-[400px] h-[400px] bg-orange-500/10 dark:bg-orange-500/5 rounded-full blur-[100px] pointer-events-none -z-10">
+        </div>
+
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl md:text-6xl font-black tracking-tight mb-3">
+                <span
+                    class="bg-clip-text text-transparent bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500">Hall
+                    of Flame</span>
+            </h1>
+            <p class="text-neutral-500 dark:text-neutral-400 text-lg max-w-xl mx-auto">
+                Celebrating the most consistent learners burning bright.
+            </p>
+        </div>
+
+        <!-- Content Wrapper -->
+        <div class="max-w-4xl mx-auto">
+
+            <!-- Podium Section (Top 3) -->
+            <div id="podiumContainer"
+                class="flex flex-col-reverse md:flex-row items-end justify-center gap-4 md:gap-8 mb-12 min-h-[300px]">
+                <!-- Skeleton for Podium -->
+                <div class="w-full h-64 bg-neutral-100 dark:bg-white/5 rounded-3xl animate-pulse"></div>
+            </div>
+
+            <!-- List Section (4-10) -->
+            <div class="glass-panel rounded-3xl overflow-hidden p-2 md:p-6 min-h-[200px]">
+                <div class="flex items-center justify-between px-4 py-2 mb-2">
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-500">
+                        Honorable Mentions</h3>
+                    <div
+                        class="text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-1 rounded-full flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                        Live
+                    </div>
+                </div>
+
+                <div id="listContainer" class="space-y-1">
+                    <!-- Skeleton for List -->
+                    <div class="space-y-2">
+                        <div class="h-16 rounded-xl bg-neutral-100 dark:bg-white/5 animate-pulse"></div>
+                        <div class="h-16 rounded-xl bg-neutral-100 dark:bg-white/5 animate-pulse"></div>
+                        <div class="h-16 rounded-xl bg-neutral-100 dark:bg-white/5 animate-pulse"></div>
+                    </div>
+                </div>
+
+                <div id="emptyState" class="hidden py-12 text-center">
+                    <div
+                        class="w-16 h-16 bg-neutral-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span class="material-symbols-rounded text-neutral-400 text-3xl">sentiment_content</span>
+                    </div>
+                    <p class="text-neutral-500 dark:text-neutral-400">No streaks data found yet.</p>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = window.API_BASE || '';
+
+        // Theme toggle
+        document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isDark = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('px_theme', isDark ? 'dark' : 'light');
+            });
+        });
+
+        function getAvatar(user, size = 'md') {
+            const sizeClass = size === 'lg' ? 'profile-img-lg' : 'profile-img-md';
+            if (user.profile_image_url) {
+                return `<img src="${user.profile_image_url}" class="${sizeClass} rounded-full object-cover border-4 border-white dark:border-[#2a2a35] shadow-lg" alt="${user.name}">`;
+            }
+            const initial = (user.name || '?').charAt(0).toUpperCase();
+            return `
+                <div class="${sizeClass} rounded-full bg-gradient-to-br from-neutral-200 to-neutral-300 dark:from-white/10 dark:to-white/5 flex items-center justify-center text-xl md:text-2xl font-bold text-neutral-600 dark:text-white border-4 border-white dark:border-[#2a2a35] shadow-lg">
+                    ${initial}
+                </div>
+            `;
+        }
+
+        async function fetchLeaderboard() {
+            const podiumEl = document.getElementById('podiumContainer');
+            const listEl = document.getElementById('listContainer');
+            const emptyState = document.getElementById('emptyState');
+
+            try {
+                const res = await fetch(`${API_BASE}/api/leaderboard?limit=10`);
+                if (!res.ok) throw new Error('API Error');
+                const data = await res.json();
+                const users = data.leaderboard || [];
+
+                if (users.length === 0) {
+                    podiumEl.innerHTML = '';
+                    listEl.innerHTML = '';
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                // Split top 3 and rest
+                const top3 = users.slice(0, 3);
+                const rest = users.slice(3);
+
+                // Render Podium
+                let podiumHTML = '';
+
+                // Rank 2 (Left)
+                if (top3[1]) {
+                    podiumHTML += `
+                        <div class="podium-item podium-2 flex flex-col items-center">
+                            <div class="relative mb-3">
+                                ${getAvatar(top3[1], 'md')}
+                                <div class="absolute -bottom-2 -right-2 w-7 h-7 rounded-full rank-gradient-2 flex items-center justify-center text-xs font-bold text-neutral-800 border-2 border-white dark:border-[#1a1a24]">2</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="font-bold text-neutral-800 dark:text-white truncate max-w-[120px]">${top3[1].name}</div>
+                                <div class="text-sm font-semibold text-orange-500">${top3[1].current_streak} 🔥</div>
+                            </div>
+                            <div class="w-24 md:w-32 h-24 md:h-32 rank-gradient-2 rounded-t-xl mt-4 border-x border-t border-white/20 opacity-80 relative overflow-hidden flex items-end justify-center pb-2">
+                                <div class="absolute inset-0 bg-white/10"></div>
+                                <div class="relative text-neutral-800/20 font-black text-5xl">2</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    podiumHTML += `<div class="hidden md:block w-32"></div>`;
+                }
+
+                // Rank 1 (Center)
+                if (top3[0]) {
+                    podiumHTML += `
+                        <div class="podium-item podium-1 flex flex-col items-center z-10 -mb-2 md:-mb-0">
+                            <div class="relative mb-4 glow-gold rounded-full">
+                                <span class="material-symbols-rounded absolute -top-8 left-1/2 -translate-x-1/2 text-4xl text-yellow-400 crown-icon">crown</span>
+                                ${getAvatar(top3[0], 'lg')}
+                                <div class="absolute -bottom-3 -right-3 w-8 h-8 rounded-full rank-gradient-1 flex items-center justify-center text-sm font-black text-yellow-900 border-2 border-white dark:border-[#1a1a24]">1</div>
+                            </div>
+                            <div class="text-center mb-1">
+                                <div class="text-lg font-black text-neutral-900 dark:text-white truncate max-w-[150px]">${top3[0].name}</div>
+                                <div class="text-xl font-black text-orange-500 drop-shadow-sm">${top3[0].current_streak} 🔥</div>
+                            </div>
+                            <div class="w-28 md:w-40 h-32 md:h-44 rank-gradient-1 rounded-t-2xl mt-2 flex items-end justify-center pb-4 shadow-xl shadow-orange-500/10 relative overflow-hidden">
+                                <div class="absolute inset-0 bg-white/20"></div>
+                                <div class="relative text-yellow-900/40 font-black text-6xl opacity-50">1</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Rank 3 (Right)
+                if (top3[2]) {
+                    podiumHTML += `
+                        <div class="podium-item podium-3 flex flex-col items-center">
+                            <div class="relative mb-3">
+                                ${getAvatar(top3[2], 'md')}
+                                <div class="absolute -bottom-2 -right-2 w-7 h-7 rounded-full rank-gradient-3 flex items-center justify-center text-xs font-bold text-amber-900 border-2 border-white dark:border-[#1a1a24]">3</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="font-bold text-neutral-800 dark:text-white truncate max-w-[120px]">${top3[2].name}</div>
+                                <div class="text-sm font-semibold text-orange-500">${top3[2].current_streak} 🔥</div>
+                            </div>
+                            <div class="w-24 md:w-32 h-20 md:h-24 rank-gradient-3 rounded-t-xl mt-4 border-x border-t border-white/20 opacity-80 relative overflow-hidden flex items-end justify-center pb-2">
+                                <div class="absolute inset-0 bg-white/10"></div>
+                                <div class="relative text-amber-900/20 font-black text-5xl">3</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    podiumHTML += `<div class="hidden md:block w-32"></div>`;
+                }
+
+                podiumEl.innerHTML = podiumHTML;
+
+                // Render List
+                if (rest.length > 0) {
+                    listEl.innerHTML = rest.map(user => `
+                        <div class="glass-item flex items-center justify-between p-3 rounded-xl cursor-default group border border-transparent hover:border-black/5 dark:hover:border-white/5 transition-all bg-white/40 dark:bg-white/5 mb-2">
+                            <div class="flex items-center gap-4 min-w-0">
+                                <div class="w-8 font-bold text-neutral-400 dark:text-neutral-500 text-center font-mono shrink-0">#${user.rank}</div>
+                                
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div class="w-10 h-10 rounded-full overflow-hidden bg-neutral-200 dark:bg-white/10 shrink-0 relative border border-white/20">
+                                        ${user.profile_image_url
+                            ? `<img src="${user.profile_image_url}" class="w-full h-full object-cover">`
+                            : `<div class="w-full h-full flex items-center justify-center font-bold text-xs text-neutral-500">${(user.name || '?').charAt(0)}</div>`
+                        }
+                                    </div>
+                                    <div class="font-semibold text-neutral-800 dark:text-neutral-200 group-hover:text-brand-500 transition-colors truncate">
+                                        ${user.name}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="font-bold text-neutral-900 dark:text-white px-3 py-1 rounded-lg shrink-0 text-right">
+                                ${user.current_streak} <span class="text-orange-500 text-sm">🔥</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    listEl.innerHTML = '<div class="text-center py-8 text-neutral-400 dark:text-neutral-600 italic">No other runners yet.</div>';
+                }
+
+            } catch (err) {
+                console.error(err);
+                // Fallback / Error state
+            }
+        }
+
+        window.addEventListener('load', () => {
+            fetchLeaderboard();
+            setTimeout(() => document.body.classList.add('loaded'), 600);
+        });
+
+    </script>
+</body>
+
+</html>
