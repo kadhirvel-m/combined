@@ -20090,6 +20090,65 @@ def ping_streak(authorization: Optional[str] = Header(default=None)):
     return {"status": "ok", "date": today.isoformat()}
 
 
+@academics_router.get("/api/leaderboard", summary="Public leaderboard: top users by streak")
+def get_leaderboard(
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    """Return top users ranked by current_streak (no auth required)."""
+    supabase = get_service_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+
+    # Fetch top streaks
+    try:
+        streak_res = (
+            supabase.table("notex_streak")
+            .select("user_profile_id,current_streak,longest_streak,last_activity_date")
+            .order("current_streak", desc=True)
+            .limit(limit)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Streak query failed: {e}")
+
+    streak_rows: List[dict] = getattr(streak_res, "data", []) or []
+    if not streak_rows:
+        return {"leaderboard": [], "count": 0}
+
+    # Collect profile IDs and fetch names + avatars
+    profile_ids = [r.get("user_profile_id") for r in streak_rows if r.get("user_profile_id")]
+    profile_map: Dict[str, dict] = {}
+    if profile_ids:
+        try:
+            prof_res = (
+                supabase.table("user_profiles")
+                .select("id,name,profile_image_url")
+                .in_("id", profile_ids)
+                .execute()
+            )
+            for p in (getattr(prof_res, "data", []) or []):
+                if isinstance(p, dict) and p.get("id"):
+                    profile_map[p["id"]] = p
+        except Exception:
+            pass  # Gracefully degrade: names will show as "Anonymous"
+
+    # Build response
+    leaderboard: List[dict] = []
+    for rank, row in enumerate(streak_rows, start=1):
+        pid = row.get("user_profile_id")
+        profile = profile_map.get(pid, {}) if pid else {}
+        leaderboard.append({
+            "rank": rank,
+            "name": profile.get("name") or "Anonymous",
+            "profile_image_url": profile.get("profile_image_url"),
+            "current_streak": int(row.get("current_streak") or 0),
+            "longest_streak": int(row.get("longest_streak") or 0),
+            "last_activity_date": row.get("last_activity_date"),
+        })
+
+    return {"leaderboard": leaderboard, "count": len(leaderboard)}
+
+
 # --- FastAPI app ---
 
 def create_app() -> FastAPI:

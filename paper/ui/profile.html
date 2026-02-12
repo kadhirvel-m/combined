@@ -18,14 +18,7 @@
   <script>
     (() => {
       try {
-        const keys = ['cx-theme', 'px-theme', 'px_theme', 'theme'];
-        let stored = null;
-        for (const key of keys) {
-          try {
-            const value = localStorage.getItem(key);
-            if (value) { stored = value; break; }
-          } catch (_) { }
-        }
+        const stored = localStorage.getItem('px_theme');
         const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
         const useDark = stored ? stored === 'dark' : prefersDark;
         if (useDark) document.documentElement.classList.add('dark');
@@ -776,9 +769,7 @@
     const toggleThemeFallback = () => {
       const next = root.classList.contains('dark') ? 'light' : 'dark';
       if (next === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
-      ['px_theme', 'px-theme', 'cx-theme', 'theme'].forEach(key => {
-        try { localStorage.setItem(key, next); } catch (_) { }
-      });
+      try { localStorage.setItem('px_theme', next); } catch (_) { }
       return next;
     };
     const syncThemeToggles = () => setThemeToggleIcons(resolveTheme());
@@ -792,7 +783,7 @@
     });
     window.addEventListener('storage', (event) => {
       if (!event.key) return;
-      if (['cx-theme', 'theme', 'px-theme', 'px_theme'].includes(event.key)) {
+      if (event.key === 'px_theme') {
         syncThemeToggles();
       }
     });

@@ -3,7 +3,7 @@
 // 1) LocalStorage key 'API_BASE'
 // 2) If running on localhost/127.0.0.1, use FastAPI default http://127.0.0.1:8000
 // 3) Fallback to current origin
-(function(){
+(function () {
   try {
     var preset = (typeof window.API_BASE === 'string' && window.API_BASE.trim()) || null;
     var saved = !preset && localStorage.getItem('API_BASE');
@@ -12,7 +12,7 @@
       var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
       resolved = /localhost|127\.0\.0\.1/.test(origin) ? 'http://127.0.0.1:8000' : (origin || 'http://127.0.0.1:8000');
     }
-      resolved = resolved.replace(/\/$/, '');
+    resolved = resolved.replace(/\/$/, '');
     window.API_BASE = resolved;
     window.__API_BASE = resolved;
   } catch (_) {
@@ -23,57 +23,65 @@
 })();
 
 // Global Theme manager: keep theme consistent across pages
-(function(){
+// Uses a single localStorage key 'px_theme' for all pages.
+(function () {
   try {
-    var KEY_PRIMARY = 'cx-theme';
-    var ALT_KEYS = ['theme', 'px-theme'];
+    var KEY = 'px_theme';
+    var OLD_KEYS = ['cx-theme', 'theme', 'px-theme'];
     var root = document.documentElement;
 
-    function readStored(){
+    // One-time migration: copy value from any old key into px_theme, then delete old keys
+    function migrateOldKeys() {
       try {
-        var v = localStorage.getItem(KEY_PRIMARY);
-        if (v) return v;
-        for (var i=0;i<ALT_KEYS.length;i++){
-          v = localStorage.getItem(ALT_KEYS[i]);
-          if (v) return v;
+        var current = localStorage.getItem(KEY);
+        if (!current) {
+          for (var i = 0; i < OLD_KEYS.length; i++) {
+            var v = localStorage.getItem(OLD_KEYS[i]);
+            if (v === 'dark' || v === 'light') { localStorage.setItem(KEY, v); break; }
+          }
         }
-      } catch(_){}
+        for (var j = 0; j < OLD_KEYS.length; j++) {
+          try { localStorage.removeItem(OLD_KEYS[j]); } catch (_) { }
+        }
+      } catch (_) { }
+    }
+
+    function readStored() {
+      try { return localStorage.getItem(KEY); } catch (_) { }
       return null;
     }
 
-    function writeStored(val){
-      try { localStorage.setItem(KEY_PRIMARY, val); } catch(_){}
-      for (var i=0;i<ALT_KEYS.length;i++){
-        try { localStorage.setItem(ALT_KEYS[i], val); } catch(_){}
-      }
+    function writeStored(val) {
+      try { localStorage.setItem(KEY, val); } catch (_) { }
     }
 
-    function apply(val){
+    function apply(val) {
       var wantDark = (val === 'dark');
       root.classList.toggle('dark', wantDark);
-      try { root.setAttribute('data-theme', wantDark ? 'dark' : 'light'); } catch(_){ }
+      try { root.setAttribute('data-theme', wantDark ? 'dark' : 'light'); } catch (_) { }
       writeStored(wantDark ? 'dark' : 'light');
-      try { root.style.colorScheme = wantDark ? 'dark' : 'light'; } catch(_){}
+      try { root.style.colorScheme = wantDark ? 'dark' : 'light'; } catch (_) { }
       return wantDark ? 'dark' : 'light';
     }
 
-    function init(){
+    function init() {
+      migrateOldKeys();
       var stored = readStored();
-      if (!stored){
+      if (!stored) {
         var prefersDark = false;
-        try { prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch(_){}
+        try { prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (_) { }
         stored = prefersDark ? 'dark' : 'light';
       }
       apply(stored);
     }
 
-    function get(){ return (readStored() || (root.classList.contains('dark') ? 'dark' : 'light')); }
-    function set(val){ return apply(val === 'dark' ? 'dark' : 'light'); }
-    function toggle(){ return apply(get() === 'dark' ? 'light' : 'dark'); }
+    function get() { return (readStored() || (root.classList.contains('dark') ? 'dark' : 'light')); }
+    function set(val) { return apply(val === 'dark' ? 'dark' : 'light'); }
+    function toggle() { return apply(get() === 'dark' ? 'light' : 'dark'); }
 
     // Expose and initialize
-    window.Theme = { get:get, set:set, toggle:toggle, init:init };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once:true });
+    window.Theme = { get: get, set: set, toggle: toggle, init: init };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();
 
     // Back-compat for pages using onclick="toggleTheme()"
@@ -81,53 +89,53 @@
 
     // Sync on system preference changes
     try {
-      if (window.matchMedia){
+      if (window.matchMedia) {
         var mq = window.matchMedia('(prefers-color-scheme: dark)');
-        mq.addEventListener && mq.addEventListener('change', function(e){
+        mq.addEventListener && mq.addEventListener('change', function (e) {
           var stored = readStored();
           if (!stored) apply(e.matches ? 'dark' : 'light');
         });
       }
-    } catch(_){}
-  } catch(_){}
+    } catch (_) { }
+  } catch (_) { }
 })();
 
-(function(){
+(function () {
   window.__TUNE_AI_ENABLED = false;
   window.__CHAT_API_BASE = (window.__API_BASE || 'http://127.0.0.1:8000') + '/api/tune-ai';
 })();
 
-(function(){
-  function setupNavDropdown(btnId, menuId){
+(function () {
+  function setupNavDropdown(btnId, menuId) {
     var btn = document.getElementById(btnId);
     var menu = document.getElementById(menuId);
     if (!btn || !menu) return;
-    var hide = function(){ menu.classList.add('hidden'); };
-    btn.addEventListener('click', function(event){
+    var hide = function () { menu.classList.add('hidden'); };
+    btn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
       menu.classList.toggle('hidden');
     });
-    document.addEventListener('click', function(event){
+    document.addEventListener('click', function (event) {
       if (menu.classList.contains('hidden')) return;
       if (!menu.contains(event.target) && !btn.contains(event.target)) hide();
     });
     window.addEventListener('blur', hide);
   }
-  function setupMobileMenuReset(){
+  function setupMobileMenuReset() {
     var menuBtn = document.getElementById('menuBtn');
     if (!menuBtn) return;
-    menuBtn.addEventListener('click', function(){
+    menuBtn.addEventListener('click', function () {
       var mobileMenu = document.getElementById('navProjectsMenuMobile');
       if (mobileMenu) mobileMenu.classList.add('hidden');
     });
   }
-  var init = function(){
+  var init = function () {
     setupNavDropdown('navProjectsBtn', 'navProjectsMenu');
     setupNavDropdown('navProjectsBtnMobile', 'navProjectsMenuMobile');
     setupMobileMenuReset();
   };
-  if (document.readyState === 'loading'){
+  if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init, { once: true });
   } else {
     init();
@@ -135,17 +143,17 @@
 })();
 
 // TuNe AI Chat Widget (global)
-(function(){
+(function () {
   if (!('document' in window)) return;
   var enabled = typeof window.__TUNE_AI_ENABLED === 'undefined' ? true : !!window.__TUNE_AI_ENABLED;
   if (!enabled) return;
 
-  function ready(fn){
+  function ready(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
     else fn();
   }
 
-  ready(function initTuNeAI(){
+  ready(function initTuNeAI() {
     if (document.getElementById('tune-ai-panel')) return; // already injected
 
     var API = (window.__CHAT_API_BASE || ((window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '') + '/api/tune-ai')).replace(/\/$/, '');
@@ -163,7 +171,7 @@
 
     // Inject minimal styles (Material-inspired)
     var style = document.createElement('style');
-    style.setAttribute('data-tune-ai','1');
+    style.setAttribute('data-tune-ai', '1');
     style.textContent = `
       #tune-ai-fab{position:fixed;right:20px;bottom:20px;z-index:70;width:56px;height:56px;border-radius:9999px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#3f6fff,#628fff);color:#fff;border:none;box-shadow:0 12px 30px rgba(63,111,255,.35);cursor:pointer;transition:transform .15s ease,box-shadow .2s ease;}
       #tune-ai-fab:hover{transform:translateY(-2px);box-shadow:0 16px 36px rgba(63,111,255,.45)}
@@ -243,17 +251,17 @@
     // Build panel
     var panel = document.createElement('section');
     panel.id = 'tune-ai-panel';
-    panel.setAttribute('role','dialog');
-    panel.setAttribute('aria-label','TuNe AI Chat');
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'TuNe AI Chat');
     panel.innerHTML = [
       '<header id="taHead">',
-        '<div id="taTitle"><span id="taBadge">AI</span><span>TuNe AI</span></div>',
-        '<button id="taClose" aria-label="Close">✕</button>',
+      '<div id="taTitle"><span id="taBadge">AI</span><span>TuNe AI</span></div>',
+      '<button id="taClose" aria-label="Close">✕</button>',
       '</header>',
       '<div id="taMsgs" aria-live="polite"></div>',
       '<form id="taForm" class="ta-footer" autocomplete="off">',
-        '<textarea id="taInput" placeholder="Ask about projects, requests, or your profile…" rows="1"></textarea>',
-        '<button id="taSend" type="submit" aria-label="Send">Send</button>',
+      '<textarea id="taInput" placeholder="Ask about projects, requests, or your profile…" rows="1"></textarea>',
+      '<button id="taSend" type="submit" aria-label="Send">Send</button>',
       '</form>'
     ].join('');
 
@@ -261,39 +269,39 @@
     var fab = document.createElement('button');
     fab.id = 'tune-ai-fab';
     fab.type = 'button';
-    fab.setAttribute('aria-label','Open TuNe AI');
-    var geminiSVG = ''+
-      '<svg viewBox="0 0 48 48" class="ta-gemini-icon" aria-hidden="true" focusable="false">'+
-        '<defs>'+
-          '<radialGradient id="gg-blue" cx="30%" cy="30%" r="70%">'+
-            '<stop offset="0%" stop-color="#A8C7FA"/>'+
-            '<stop offset="60%" stop-color="#6EA8FE"/>'+
-            '<stop offset="100%" stop-color="#3D5AFE"/>'+
-          '</radialGradient>'+
-          '<radialGradient id="gg-cyan" cx="70%" cy="30%" r="70%">'+
-            '<stop offset="0%" stop-color="#9CF6F6"/>'+
-            '<stop offset="60%" stop-color="#56E1E1"/>'+
-            '<stop offset="100%" stop-color="#00B8D4"/>'+
-          '</radialGradient>'+
-          '<radialGradient id="gg-purple" cx="30%" cy="70%" r="70%">'+
-            '<stop offset="0%" stop-color="#E1C8FF"/>'+
-            '<stop offset="60%" stop-color="#B388FF"/>'+
-            '<stop offset="100%" stop-color="#7C4DFF"/>'+
-          '</radialGradient>'+
-          '<radialGradient id="gg-indigo" cx="70%" cy="70%" r="70%">'+
-            '<stop offset="0%" stop-color="#C7D2FF"/>'+
-            '<stop offset="60%" stop-color="#8AA9FF"/>'+
-            '<stop offset="100%" stop-color="#536DFE"/>'+
-          '</radialGradient>'+
-        '</defs>'+
-        '<g class="gg-bloom" opacity="0.97">'+
-          '<circle cx="24" cy="14" r="10" fill="url(#gg-blue)"/>'+
-          '<circle cx="24" cy="34" r="10" fill="url(#gg-purple)" opacity="0.96"/>'+
-          '<circle cx="14" cy="24" r="10" fill="url(#gg-indigo)" opacity="0.96"/>'+
-          '<circle cx="34" cy="24" r="10" fill="url(#gg-cyan)" opacity="0.96"/>'+
-        '</g>'+
+    fab.setAttribute('aria-label', 'Open TuNe AI');
+    var geminiSVG = '' +
+      '<svg viewBox="0 0 48 48" class="ta-gemini-icon" aria-hidden="true" focusable="false">' +
+      '<defs>' +
+      '<radialGradient id="gg-blue" cx="30%" cy="30%" r="70%">' +
+      '<stop offset="0%" stop-color="#A8C7FA"/>' +
+      '<stop offset="60%" stop-color="#6EA8FE"/>' +
+      '<stop offset="100%" stop-color="#3D5AFE"/>' +
+      '</radialGradient>' +
+      '<radialGradient id="gg-cyan" cx="70%" cy="30%" r="70%">' +
+      '<stop offset="0%" stop-color="#9CF6F6"/>' +
+      '<stop offset="60%" stop-color="#56E1E1"/>' +
+      '<stop offset="100%" stop-color="#00B8D4"/>' +
+      '</radialGradient>' +
+      '<radialGradient id="gg-purple" cx="30%" cy="70%" r="70%">' +
+      '<stop offset="0%" stop-color="#E1C8FF"/>' +
+      '<stop offset="60%" stop-color="#B388FF"/>' +
+      '<stop offset="100%" stop-color="#7C4DFF"/>' +
+      '</radialGradient>' +
+      '<radialGradient id="gg-indigo" cx="70%" cy="70%" r="70%">' +
+      '<stop offset="0%" stop-color="#C7D2FF"/>' +
+      '<stop offset="60%" stop-color="#8AA9FF"/>' +
+      '<stop offset="100%" stop-color="#536DFE"/>' +
+      '</radialGradient>' +
+      '</defs>' +
+      '<g class="gg-bloom" opacity="0.97">' +
+      '<circle cx="24" cy="14" r="10" fill="url(#gg-blue)"/>' +
+      '<circle cx="24" cy="34" r="10" fill="url(#gg-purple)" opacity="0.96"/>' +
+      '<circle cx="14" cy="24" r="10" fill="url(#gg-indigo)" opacity="0.96"/>' +
+      '<circle cx="34" cy="24" r="10" fill="url(#gg-cyan)" opacity="0.96"/>' +
+      '</g>' +
       '</svg>';
-    fab.innerHTML = '<span class="ta-gemini">'+ geminiSVG +'</span><span class="ta-close material-symbols-rounded">close_small</span><span class="ta-badge">AI</span>';
+    fab.innerHTML = '<span class="ta-gemini">' + geminiSVG + '</span><span class="ta-close material-symbols-rounded">close_small</span><span class="ta-badge">AI</span>';
 
     // Tooltip
     var tip = document.createElement('div');
@@ -305,122 +313,122 @@
     document.body.appendChild(tip);
 
     // Open state persistence
-    function syncFabIcon(){
+    function syncFabIcon() {
       if (panel.classList.contains('ta-open')) fab.classList.add('ta-open');
       else fab.classList.remove('ta-open');
     }
-    function setOpen(v){
-      if (v){ panel.classList.add('ta-open'); panel.setAttribute('aria-hidden','false'); }
-      else { panel.classList.remove('ta-open'); panel.setAttribute('aria-hidden','true'); }
-      try { localStorage.setItem(keyOpen, v ? '1' : '0'); } catch(_){ }
+    function setOpen(v) {
+      if (v) { panel.classList.add('ta-open'); panel.setAttribute('aria-hidden', 'false'); }
+      else { panel.classList.remove('ta-open'); panel.setAttribute('aria-hidden', 'true'); }
+      try { localStorage.setItem(keyOpen, v ? '1' : '0'); } catch (_) { }
       tip.classList.remove('ta-show');
       syncFabIcon();
     }
     var startOpen = false;
-    try { startOpen = localStorage.getItem(keyOpen) === '1'; } catch(_){}
+    try { startOpen = localStorage.getItem(keyOpen) === '1'; } catch (_) { }
     setOpen(startOpen);
 
     // Ripple on click
-    function ripple(e){
+    function ripple(e) {
       var r = document.createElement('span');
       r.className = 'ta-ripple';
       var rect = fab.getBoundingClientRect();
-      var x = (e && e.clientX ? e.clientX : rect.left + rect.width/2) - rect.left;
-      var y = (e && e.clientY ? e.clientY : rect.top + rect.height/2) - rect.top;
+      var x = (e && e.clientX ? e.clientX : rect.left + rect.width / 2) - rect.left;
+      var y = (e && e.clientY ? e.clientY : rect.top + rect.height / 2) - rect.top;
       r.style.left = x + 'px';
       r.style.top = y + 'px';
       var size = Math.max(rect.width, rect.height) * 2.2;
       r.style.width = r.style.height = size + 'px';
       fab.appendChild(r);
-      setTimeout(function(){ try{ fab.removeChild(r); } catch(_){} }, 650);
+      setTimeout(function () { try { fab.removeChild(r); } catch (_) { } }, 650);
     }
 
-    function showTip(){ if (!panel.classList.contains('ta-open')) tip.classList.add('ta-show'); }
-    function hideTip(){ tip.classList.remove('ta-show'); }
+    function showTip() { if (!panel.classList.contains('ta-open')) tip.classList.add('ta-show'); }
+    function hideTip() { tip.classList.remove('ta-show'); }
 
     fab.addEventListener('mouseenter', showTip);
     fab.addEventListener('focus', showTip);
     fab.addEventListener('mouseleave', hideTip);
     fab.addEventListener('blur', hideTip);
 
-    fab.addEventListener('click', function(e){ ripple(e); setOpen(!panel.classList.contains('ta-open')); });
-    panel.querySelector('#taClose').addEventListener('click', function(){ setOpen(false); });
-    document.addEventListener('keydown', function(e){ if (e.key === 'Escape') setOpen(false); });
+    fab.addEventListener('click', function (e) { ripple(e); setOpen(!panel.classList.contains('ta-open')); });
+    panel.querySelector('#taClose').addEventListener('click', function () { setOpen(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
 
     // Conversation state
     var convo = [];
-    try { var saved = sessionStorage.getItem(keyMsgs); if (saved) convo = JSON.parse(saved) || []; } catch(_){}
-    function saveConvo(){ try { sessionStorage.setItem(keyMsgs, JSON.stringify(convo.slice(-24))); } catch(_){} }
+    try { var saved = sessionStorage.getItem(keyMsgs); if (saved) convo = JSON.parse(saved) || []; } catch (_) { }
+    function saveConvo() { try { sessionStorage.setItem(keyMsgs, JSON.stringify(convo.slice(-24))); } catch (_) { } }
 
     var msgsEl = panel.querySelector('#taMsgs');
 
     // Markdown rendering (safe, minimal)
-    function escHTML(s){
-      return (s||'').replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]);});
+    function escHTML(s) {
+      return (s || '').replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[c]); });
     }
-    function sanitizeUrl(u){
-      try{ var url = String(u||'').trim(); if(!/^https?:\/\//i.test(url)) return '#'; return url; }catch(_){ return '#'; }
+    function sanitizeUrl(u) {
+      try { var url = String(u || '').trim(); if (!/^https?:\/\//i.test(url)) return '#'; return url; } catch (_) { return '#'; }
     }
-    function mdInline(txt){
+    function mdInline(txt) {
       var h = escHTML(txt);
       // links
-      h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,function(_,t,u){return '<a href="'+sanitizeUrl(u)+'" target="_blank" rel="noopener noreferrer">'+escHTML(t)+'</a>';});
+      h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, function (_, t, u) { return '<a href="' + sanitizeUrl(u) + '" target="_blank" rel="noopener noreferrer">' + escHTML(t) + '</a>'; });
       // bold
-      h = h.replace(/\*\*([^*]+)\*\*/g,'<strong>$1<\/strong>');
+      h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1<\/strong>');
       // italics (single *)
-      h = h.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g,function(m,p1,p2){return p1+'<em>'+p2+'<\/em>';});
+      h = h.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, function (m, p1, p2) { return p1 + '<em>' + p2 + '<\/em>'; });
       // inline code
-      h = h.replace(/`([^`]+)`/g,'<code>$1<\/code>');
+      h = h.replace(/`([^`]+)`/g, '<code>$1<\/code>');
       return h;
     }
-    function renderMarkdown(md){
-      var text = (md||'').toString().replace(/\r\n/g,'\n');
+    function renderMarkdown(md) {
+      var text = (md || '').toString().replace(/\r\n/g, '\n');
       var lines = text.split(/\n/);
       var out = [];
-      var i=0;
-      while(i<lines.length){
+      var i = 0;
+      while (i < lines.length) {
         // skip extra blank lines
-        if(/^\s*$/.test(lines[i])){ i++; continue; }
+        if (/^\s*$/.test(lines[i])) { i++; continue; }
         // ordered list
-        if(/^\s*\d+\.\s+/.test(lines[i])){
-          var items=[]; while(i<lines.length && /^\s*\d+\.\s+/.test(lines[i])){ items.push(lines[i].replace(/^\s*\d+\.\s+/,'').trim()); i++; }
-          out.push('<ol>'+items.map(function(it){return '<li>'+mdInline(it)+'</li>';}).join('')+'</ol>');
+        if (/^\s*\d+\.\s+/.test(lines[i])) {
+          var items = []; while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) { items.push(lines[i].replace(/^\s*\d+\.\s+/, '').trim()); i++; }
+          out.push('<ol>' + items.map(function (it) { return '<li>' + mdInline(it) + '</li>'; }).join('') + '</ol>');
           continue;
         }
         // unordered list
-        if(/^\s*[-*]\s+/.test(lines[i])){
-          var uitems=[]; while(i<lines.length && /^\s*[-*]\s+/.test(lines[i])){ uitems.push(lines[i].replace(/^\s*[-*]\s+/,'').trim()); i++; }
-          out.push('<ul>'+uitems.map(function(it){return '<li>'+mdInline(it)+'</li>';}).join('')+'</ul>');
+        if (/^\s*[-*]\s+/.test(lines[i])) {
+          var uitems = []; while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { uitems.push(lines[i].replace(/^\s*[-*]\s+/, '').trim()); i++; }
+          out.push('<ul>' + uitems.map(function (it) { return '<li>' + mdInline(it) + '</li>'; }).join('') + '</ul>');
           continue;
         }
         // paragraph: consume until blank line
-        var para=[]; while(i<lines.length && !/^\s*$/.test(lines[i])){ para.push(lines[i]); i++; }
+        var para = []; while (i < lines.length && !/^\s*$/.test(lines[i])) { para.push(lines[i]); i++; }
         var ptxt = para.join(' ').trim();
-        if(ptxt){ out.push('<p>'+mdInline(ptxt)+'</p>'); }
+        if (ptxt) { out.push('<p>' + mdInline(ptxt) + '</p>'); }
       }
       return out.join('');
     }
 
-    function bubbleHTML(role, content){
+    function bubbleHTML(role, content) {
       var cls = role === 'user' ? 'ta-bubble ta-mine' : 'ta-bubble ta-theirs';
       var html = renderMarkdown(content);
-      return '<div class="'+cls+'">'+ html +'</div>';
+      return '<div class="' + cls + '">' + html + '</div>';
     }
 
-    function render(){
+    function render() {
       var html = '';
-      for (var i=0;i<convo.length;i++) html += bubbleHTML(convo[i].role, convo[i].content);
+      for (var i = 0; i < convo.length; i++) html += bubbleHTML(convo[i].role, convo[i].content);
       msgsEl.innerHTML = html;
       msgsEl.scrollTop = msgsEl.scrollHeight;
     }
 
-    if (!convo.length){
+    if (!convo.length) {
       convo.push({ role: 'assistant', content: 'Hi! I’m TuNe AI. Ask me about projects, requests, or your profile.' });
       saveConvo();
     }
     render();
 
-    function showTyping(){
+    function showTyping() {
       var t = document.createElement('div');
       t.className = 'ta-bubble ta-theirs';
       t.innerHTML = '<span class="ta-typing"><span class="ta-dot"></span><span class="ta-dot"></span><span class="ta-dot"></span></span>';
@@ -433,18 +441,18 @@
     var input = panel.querySelector('#taInput');
     var sendBtn = panel.querySelector('#taSend');
 
-    function autosize(){
+    function autosize() {
       input.style.height = 'auto';
       var next = Math.min(120, Math.max(38, input.scrollHeight));
       input.style.height = next + 'px';
     }
     input.addEventListener('input', autosize);
-    input.addEventListener('keydown', function(e){
-      if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); form.requestSubmit(); }
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
     });
 
     var sending = false;
-    form.addEventListener('submit', function(e){
+    form.addEventListener('submit', function (e) {
       e.preventDefault();
       if (sending) return;
       var text = (input.value || '').trim();
@@ -456,25 +464,25 @@
 
       var typingNode = showTyping();
 
-      var payload = { messages: convo.map(function(m){ return { role:m.role, content:m.content }; }), context: { page: (location && location.pathname) || '', url: (location && location.href) || '' } };
+      var payload = { messages: convo.map(function (m) { return { role: m.role, content: m.content }; }), context: { page: (location && location.pathname) || '', url: (location && location.href) || '' } };
       fetch(API + '/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      }).then(function(r){ return r.json().then(function(j){ return { ok:r.ok, body:j }; }); })
-        .then(function(res){
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
           typingNode.remove();
-          if (!res.ok){ throw (res.body && (res.body.detail || res.body.message) || 'Error'); }
-          var msg = (res.body && res.body.message) || { role:'assistant', content:'Sorry, I could not respond.' };
+          if (!res.ok) { throw (res.body && (res.body.detail || res.body.message) || 'Error'); }
+          var msg = (res.body && res.body.message) || { role: 'assistant', content: 'Sorry, I could not respond.' };
           convo.push({ role: 'assistant', content: (msg && msg.content) || 'Okay.' });
           saveConvo(); render();
         })
-        .catch(function(){
-          try { typingNode.remove(); } catch(_){ }
+        .catch(function () {
+          try { typingNode.remove(); } catch (_) { }
           convo.push({ role: 'assistant', content: 'Sorry, something went wrong. Please try again.' });
           saveConvo(); render();
         })
-        .finally(function(){ sending = false; sendBtn.disabled = false; input.disabled = false; input.focus(); });
+        .finally(function () { sending = false; sendBtn.disabled = false; input.disabled = false; input.focus(); });
     });
   });
 })();
