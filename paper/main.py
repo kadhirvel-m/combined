@@ -4456,122 +4456,130 @@ def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
 
 def sync_units_and_topics(course_id: uuid.UUID, units: List[UnitIn]) -> List[UnitOut]:
     supabase = get_service_client()
-    ures = (
-        supabase.table("syllabus_units")
-        .select("id,unit_title")
-        .eq("course_id", str(course_id))
-        .execute()
+
+    def _retry_execute(builder, label: str):
+        # Helper to retry on network errors (e.g. RemoteProtocolError)
+        retries = 3
+        delay = 0.2
+        last_err = None
+        for attempt in range(retries):
+            try:
+                res = builder.execute()
+                # Check for Supabase-level error (returns valid object but with .error set)
+                if getattr(res, "error", None):
+                    raise ValueError(f"Supabase API error: {res.error}")
+                return res
+            except Exception as e:
+                last_err = e
+                # Retry on any exception (network, timeout, etc.)
+                if attempt < retries - 1:
+                    time.sleep(delay * (attempt + 1))
+                else:
+                    # On final failure, raise HTTP 503 if it's a network issue, or 500 otherwise
+                    # For simplicty, reuse existing error handling pattern or raise specific
+                    raise HTTPException(status_code=503, detail=f"Supabase error ({label}): {e}")
+
+    # 1. Fetch existing units
+    ures = _retry_execute(
+        supabase.table("syllabus_units").select("id,unit_title").eq("course_id", str(course_id)),
+        "list units"
     )
-    if getattr(ures, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (list units): {ures.error}")
     unit_map: Dict[str, uuid.UUID] = {row["unit_title"]: uuid.UUID(row["id"]) for row in (ures.data or [])}
 
     for order_idx, u in enumerate(units):
         uid = unit_map.get(u.unit_title)
         if uid is None:
-            ins = (
-                supabase.table("syllabus_units")
-                .insert(
-                    {
-                        "course_id": str(course_id),
-                        "unit_title": u.unit_title,
-                        "order_in_course": order_idx,
-                    }
-                )
-                .execute()
+            # Insert unit
+            ins = _retry_execute(
+                supabase.table("syllabus_units").insert({
+                    "course_id": str(course_id),
+                    "unit_title": u.unit_title,
+                    "order_in_course": order_idx,
+                }),
+                "insert unit"
             )
-            if getattr(ins, "error", None):
-                raise HTTPException(status_code=500, detail=f"Supabase error (insert unit): {ins.error}")
-            ref = (
-                supabase.table("syllabus_units")
-                .select("id")
-                .eq("course_id", str(course_id))
-                .eq("unit_title", u.unit_title)
-                .limit(1)
-                .execute()
-            )
-            if getattr(ref, "error", None) or not ref.data:
-                raise HTTPException(status_code=500, detail=f"Supabase error (refetch unit): {getattr(ref, 'error', None)}")
-            uid = uuid.UUID(ref.data[0]["id"])
+            # Refetch to get ID (sometimes insert returns it, but consistent pattern is refetch or use returned)
+            # The insert above .execute() usually returns data if we use .select() or by default?
+            # Existing code refetched. Let's try to use returned data if available, or refetch.
+            # Original code refetched. I'll prefer refetching with retry to be safe and consistent.
+            
+            # Optimization: Supabase insert returns data by default.
+            if ins.data:
+                 uid = uuid.UUID(ins.data[0]["id"])
+            else:
+                 # Fallback refetch
+                 ref = _retry_execute(
+                     supabase.table("syllabus_units").select("id").eq("course_id", str(course_id)).eq("unit_title", u.unit_title).limit(1),
+                     "refetch unit"
+                 )
+                 if not ref.data:
+                      raise HTTPException(status_code=500, detail="Failed to retrieve unit ID after insert")
+                 uid = uuid.UUID(ref.data[0]["id"])
+            
             unit_map[u.unit_title] = uid
         else:
-            upd = (
-                supabase.table("syllabus_units")
-                .update({"order_in_course": order_idx})
-                .eq("id", str(uid))
-                .execute()
+            # Update unit order
+            _retry_execute(
+                supabase.table("syllabus_units").update({"order_in_course": order_idx}).eq("id", str(uid)),
+                "update unit order"
             )
-            if getattr(upd, "error", None):
-                raise HTTPException(status_code=500, detail=f"Supabase error (update unit order): {upd.error}")
 
-        tres = (
-            supabase.table("syllabus_topics")
-            .select("id,topic")
-            .eq("unit_id", str(uid))
-            .execute()
+        # 2. Sync topics for this unit
+        tres = _retry_execute(
+            supabase.table("syllabus_topics").select("id,topic").eq("unit_id", str(uid)),
+            "list topics"
         )
-        if getattr(tres, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (list topics): {tres.error}")
         topic_map: Dict[str, uuid.UUID] = {row["topic"]: uuid.UUID(row["id"]) for row in (tres.data or [])}
+        
         for t_order, t in enumerate(u.topics or []):
             tid = topic_map.get(t.topic)
             if tid is None:
-                tins = (
-                    supabase.table("syllabus_topics")
-                    .insert(
-                        {
-                            "unit_id": str(uid),
-                            "topic": t.topic,
-                            "order_in_unit": t_order,
-                        }
+                # Insert topic
+                tins = _retry_execute(
+                    supabase.table("syllabus_topics").insert({
+                        "unit_id": str(uid),
+                        "topic": t.topic,
+                        "order_in_unit": t_order,
+                    }),
+                    "insert topic"
+                )
+                if tins.data:
+                    tid = uuid.UUID(tins.data[0]["id"])
+                else:
+                    tref = _retry_execute(
+                        supabase.table("syllabus_topics").select("id").eq("unit_id", str(uid)).eq("topic", t.topic).limit(1),
+                        "refetch topic"
                     )
-                    .execute()
-                )
-                if getattr(tins, "error", None):
-                    raise HTTPException(status_code=500, detail=f"Supabase error (insert topic): {tins.error}")
-                tref = (
-                    supabase.table("syllabus_topics")
-                    .select("id")
-                    .eq("unit_id", str(uid))
-                    .eq("topic", t.topic)
-                    .limit(1)
-                    .execute()
-                )
-                if getattr(tref, "error", None) or not tref.data:
-                    raise HTTPException(status_code=500, detail=f"Supabase error (refetch topic): {getattr(tref, 'error', None)}")
-                tid = uuid.UUID(tref.data[0]["id"])
+                    if not tref.data:
+                        raise HTTPException(status_code=500, detail="Failed to retrieve topic ID after insert")
+                    tid = uuid.UUID(tref.data[0]["id"])
                 topic_map[t.topic] = tid
             else:
-                tupd = (
-                    supabase.table("syllabus_topics")
-                    .update({"order_in_unit": t_order})
-                    .eq("id", str(tid))
-                    .execute()
+                # Update topic order
+                _retry_execute(
+                    supabase.table("syllabus_topics").update({"order_in_unit": t_order}).eq("id", str(tid)),
+                    "update topic order"
                 )
-                if getattr(tupd, "error", None):
-                    raise HTTPException(status_code=500, detail=f"Supabase error (update topic order): {tupd.error}")
 
-    units_rows = (
+    # 3. Final fetch of structured units
+    units_rows = _retry_execute(
         supabase.table("syllabus_units")
         .select("id,unit_title,order_in_course")
         .eq("course_id", str(course_id))
-        .order("order_in_course")
-        .execute()
+        .order("order_in_course"),
+        "get units"
     )
-    if getattr(units_rows, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get units): {units_rows.error}")
+    
     out_units: List[UnitOut] = []
     for ur in (units_rows.data or []):
         uid = uuid.UUID(ur["id"])
-        tops = (
+        tops = _retry_execute(
             supabase.table("syllabus_topics")
             .select("id,topic,order_in_unit,image_url,video_url,ppt_url,lab_url")
             .eq("unit_id", str(uid))
-            .order("order_in_unit")
-            .execute()
+            .order("order_in_unit"),
+            "get topics"
         )
-        if getattr(tops, "error", None):
-            raise HTTPException(status_code=500, detail=f"Supabase error (get topics): {tops.error}")
         out_units.append(
             UnitOut(
                 id=uid,
@@ -17633,7 +17641,55 @@ def api_generate_mcq(note_id: str, payload: Optional[Dict[str, Any]] = Body(defa
         topic_override = str(payload.get("topic") or "").strip()
 
     inferred_topic = topic_override or row.get("title") or _derive_topic_from_markdown(markdown, fallback="MCQ Test")
+
+    # --- caching start ---
+    supabase = get_service_client()
+    try:
+        # Check if we have a cached MCQ for this note+topic
+        cached_res = (
+            supabase.table("ai_notes_mcq")
+            .select("*")
+            .eq("note_id", note_id)
+            .eq("topic_ci", inferred_topic.lower().strip())
+            .order("generated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        cached_rows = getattr(cached_res, "data", []) or []
+        if cached_rows:
+            row = cached_rows[0]
+            return {
+                "note_id": note_id,
+                "topic": row.get("topic") or inferred_topic,
+                "questions": row.get("questions") or [],
+                "count": len(row.get("questions") or []),
+                "model": row.get("model") or "cached",
+                "truncated": False,
+                "generated_at": row.get("generated_at"),
+            }
+    except Exception:
+        # Ignore cache errors and proceed to generate
+        pass
+    # --- caching end ---
+
     questions, used_model, truncated = _generate_mcq_with_gemini(markdown, inferred_topic, requested)
+
+    # --- save to cache ---
+    # --- save to cache ---
+    try:
+        supabase.table("ai_notes_mcq").insert({
+            "note_id": note_id,
+            "topic": inferred_topic,
+            # topic_ci is generated by DB
+            "questions": questions,
+            "model": used_model,
+            "generated_at": datetime.utcnow().isoformat(),
+        }).execute()
+    except Exception:
+        # specific error handling or logging could go here
+        pass
+    # --- end save ---
+
     return {
         "note_id": note_id,
         "topic": inferred_topic,
@@ -25004,3 +25060,541 @@ def get_feedback_analytics(form_id: str, authorization: Optional[str] = Header(d
         analytics["questions"].append(q_analytics)
     
     return analytics
+
+
+# =====================================================================
+#  XO GAME — Tic-Tac-Toe Backend
+# =====================================================================
+
+XO_GAMES_TABLE = "xo_games"
+XO_MOVES_TABLE = "xo_moves"
+XO_PLAYER_STATS_TABLE = "xo_player_stats"
+
+EMPTY_BOARD = [[None, None, None], [None, None, None], [None, None, None]]
+
+# --- XO Game Logic Helpers ---
+
+def _xo_check_winner(board: list) -> Optional[str]:
+    """Check if X or O has won. Returns 'X', 'O', or None."""
+    lines = []
+    for i in range(3):
+        lines.append([board[i][0], board[i][1], board[i][2]])  # rows
+        lines.append([board[0][i], board[1][i], board[2][i]])  # cols
+    lines.append([board[0][0], board[1][1], board[2][2]])  # diag
+    lines.append([board[0][2], board[1][1], board[2][0]])  # anti-diag
+    for line in lines:
+        if line[0] and line[0] == line[1] == line[2]:
+            return line[0]
+    return None
+
+
+def _xo_is_draw(board: list) -> bool:
+    """Check if the board is full with no winner."""
+    if _xo_check_winner(board):
+        return False
+    for row in board:
+        for cell in row:
+            if cell is None:
+                return False
+    return True
+
+
+def _xo_get_empty_cells(board: list) -> list:
+    """Return list of (row, col) tuples for empty cells."""
+    cells = []
+    for r in range(3):
+        for c in range(3):
+            if board[r][c] is None:
+                cells.append((r, c))
+    return cells
+
+
+def _xo_minimax(board: list, is_maximizing: bool, alpha: float = -float('inf'), beta: float = float('inf')) -> int:
+    """Minimax with alpha-beta pruning. AI is 'O', player is 'X'."""
+    winner = _xo_check_winner(board)
+    if winner == 'O':
+        return 1
+    if winner == 'X':
+        return -1
+    if _xo_is_draw(board):
+        return 0
+
+    if is_maximizing:
+        best = -float('inf')
+        for r, c in _xo_get_empty_cells(board):
+            board[r][c] = 'O'
+            score = _xo_minimax(board, False, alpha, beta)
+            board[r][c] = None
+            best = max(best, score)
+            alpha = max(alpha, score)
+            if beta <= alpha:
+                break
+        return best
+    else:
+        best = float('inf')
+        for r, c in _xo_get_empty_cells(board):
+            board[r][c] = 'X'
+            score = _xo_minimax(board, True, alpha, beta)
+            board[r][c] = None
+            best = min(best, score)
+            beta = min(beta, score)
+            if beta <= alpha:
+                break
+        return best
+
+
+def _xo_ai_move(board: list, mode: str) -> Optional[tuple]:
+    """Compute AI move based on difficulty. AI plays 'O'."""
+    empty = _xo_get_empty_cells(board)
+    if not empty:
+        return None
+
+    if mode == 'ai_easy':
+        return random.choice(empty)
+
+    if mode == 'ai_medium':
+        if random.random() < 0.5:
+            return random.choice(empty)
+        # else fall through to optimal
+
+    # ai_hard or ai_medium optimal path
+    best_score = -float('inf')
+    best_move = empty[0]
+    for r, c in empty:
+        board[r][c] = 'O'
+        score = _xo_minimax(board, False)
+        board[r][c] = None
+        if score > best_score:
+            best_score = score
+            best_move = (r, c)
+    return best_move
+
+
+def _xo_get_winning_line(board: list) -> Optional[list]:
+    """Return the winning line coordinates if there's a winner."""
+    lines = []
+    for i in range(3):
+        lines.append([(i, 0), (i, 1), (i, 2)])  # rows
+        lines.append([(0, i), (1, i), (2, i)])  # cols
+    lines.append([(0, 0), (1, 1), (2, 2)])  # diag
+    lines.append([(0, 2), (1, 1), (2, 0)])  # anti-diag
+    for line in lines:
+        vals = [board[r][c] for r, c in line]
+        if vals[0] and vals[0] == vals[1] == vals[2]:
+            return [{"row": r, "col": c} for r, c in line]
+    return None
+
+
+def _xo_ensure_stats(supabase, user_id: str):
+    """Ensure a player stats row exists for this user."""
+    res = supabase.table(XO_PLAYER_STATS_TABLE).select("id").eq("user_id", user_id).limit(1).execute()
+    if not (res.data or []):
+        supabase.table(XO_PLAYER_STATS_TABLE).insert({"user_id": user_id}).execute()
+
+
+def _xo_update_stats(supabase, user_id: str, result: str):
+    """Update player stats after a game. result = 'win', 'loss', or 'draw'."""
+    _xo_ensure_stats(supabase, user_id)
+    res = supabase.table(XO_PLAYER_STATS_TABLE).select("*").eq("user_id", user_id).limit(1).execute()
+    stats = (res.data or [{}])[0]
+
+    wins = stats.get("wins", 0)
+    losses = stats.get("losses", 0)
+    draws = stats.get("draws", 0)
+    current_streak = stats.get("current_streak", 0)
+    best_streak = stats.get("best_streak", 0)
+    elo = stats.get("elo", 1000)
+    games_played = stats.get("games_played", 0)
+
+    games_played += 1
+    if result == 'win':
+        wins += 1
+        current_streak += 1
+        best_streak = max(best_streak, current_streak)
+        elo += 25
+    elif result == 'loss':
+        losses += 1
+        current_streak = 0
+        elo = max(100, elo - 15)
+    else:
+        draws += 1
+        elo += 5
+
+    supabase.table(XO_PLAYER_STATS_TABLE).update({
+        "wins": wins, "losses": losses, "draws": draws,
+        "current_streak": current_streak, "best_streak": best_streak,
+        "elo": elo, "games_played": games_played,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq("user_id", user_id).execute()
+
+
+# --- XO API Endpoints ---
+
+class XOCreateGame(BaseModel):
+    mode: str = "ai_easy"  # ai_easy, ai_medium, ai_hard, friend
+
+class XOMakeMove(BaseModel):
+    row: int
+    col: int
+
+
+@app.post("/api/xo/game")
+async def xo_create_game(body: XOCreateGame, authorization: Optional[str] = Header(None)):
+    """Create a new XO game."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    try:
+        user_resp = supabase.auth.get_user(token)
+        user_id = user_resp.user.id
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    valid_modes = ['ai_easy', 'ai_medium', 'ai_hard', 'friend']
+    mode = body.mode if body.mode in valid_modes else 'ai_easy'
+    
+    game_data = {
+        "player_x": str(user_id),
+        "player_o": None,
+        "mode": mode,
+        "board": json.dumps(EMPTY_BOARD),
+        "current_turn": "X",
+        "status": "in_progress",
+        "move_count": 0,
+    }
+    
+    res = supabase.table(XO_GAMES_TABLE).insert(game_data).execute()
+    game = (res.data or [{}])[0]
+    
+    _xo_ensure_stats(supabase, str(user_id))
+    
+    return {
+        "game": {
+            "id": game["id"],
+            "board": json.loads(game["board"]) if isinstance(game["board"], str) else game["board"],
+            "current_turn": game["current_turn"],
+            "status": game["status"],
+            "mode": game["mode"],
+            "move_count": game["move_count"],
+            "created_at": game["created_at"],
+        }
+    }
+
+
+@app.get("/api/xo/game/{game_id}")
+async def xo_get_game(game_id: str, authorization: Optional[str] = Header(None)):
+    """Get the current state of a game."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    res = supabase.table(XO_GAMES_TABLE).select("*").eq("id", game_id).limit(1).execute()
+    game = (res.data or [None])[0]
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    board = json.loads(game["board"]) if isinstance(game["board"], str) else game["board"]
+    winning_line = _xo_get_winning_line(board) if game["status"] in ("x_wins", "o_wins") else None
+    
+    return {
+        "game": {
+            "id": game["id"],
+            "board": board,
+            "current_turn": game["current_turn"],
+            "status": game["status"],
+            "mode": game["mode"],
+            "move_count": game["move_count"],
+            "winner": game.get("winner"),
+            "winning_line": winning_line,
+            "created_at": game["created_at"],
+        }
+    }
+
+
+@app.post("/api/xo/game/{game_id}/move")
+async def xo_make_move(game_id: str, body: XOMakeMove, authorization: Optional[str] = Header(None)):
+    """Make a move in an XO game. For AI modes, the AI responds automatically."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    try:
+        user_resp = supabase.auth.get_user(token)
+        user_id = str(user_resp.user.id)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    # Fetch game
+    res = supabase.table(XO_GAMES_TABLE).select("*").eq("id", game_id).limit(1).execute()
+    game = (res.data or [None])[0]
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if game["status"] != "in_progress":
+        raise HTTPException(status_code=400, detail="Game is already finished")
+    if game["player_x"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your game")
+    
+    board = json.loads(game["board"]) if isinstance(game["board"], str) else game["board"]
+    r, c = body.row, body.col
+    
+    if r < 0 or r > 2 or c < 0 or c > 2:
+        raise HTTPException(status_code=400, detail="Invalid position")
+    if board[r][c] is not None:
+        raise HTTPException(status_code=400, detail="Cell already occupied")
+    
+    is_ai_mode = game["mode"].startswith("ai_")
+    current_turn = game["current_turn"]
+    
+    # For AI games, player is always X
+    if is_ai_mode and current_turn != "X":
+        raise HTTPException(status_code=400, detail="Not your turn")
+    
+    # For friend mode, alternate turns
+    if not is_ai_mode:
+        pass  # both players use the same device (pass-and-play)
+    
+    # Place the player's move
+    marker = current_turn
+    board[r][c] = marker
+    move_count = game["move_count"] + 1
+    
+    # Record move
+    supabase.table(XO_MOVES_TABLE).insert({
+        "game_id": game_id,
+        "player_id": user_id,
+        "marker": marker,
+        "row_idx": r,
+        "col_idx": c,
+        "move_number": move_count,
+    }).execute()
+    
+    # Check win/draw after player move
+    winner = _xo_check_winner(board)
+    is_draw = _xo_is_draw(board) if not winner else False
+    ai_move_info = None
+    
+    if winner:
+        status = "x_wins" if winner == "X" else "o_wins"
+        supabase.table(XO_GAMES_TABLE).update({
+            "board": json.dumps(board),
+            "status": status,
+            "winner": user_id if winner == "X" else None,
+            "move_count": move_count,
+            "current_turn": "O" if marker == "X" else "X",
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", game_id).execute()
+        
+        if is_ai_mode:
+            _xo_update_stats(supabase, user_id, "win" if winner == "X" else "loss")
+        
+        return {
+            "game": {
+                "id": game_id,
+                "board": board,
+                "current_turn": None,
+                "status": status,
+                "mode": game["mode"],
+                "move_count": move_count,
+                "winner": user_id if winner == "X" else "ai",
+                "winning_line": _xo_get_winning_line(board),
+                "ai_move": None,
+            }
+        }
+    
+    if is_draw:
+        supabase.table(XO_GAMES_TABLE).update({
+            "board": json.dumps(board),
+            "status": "draw",
+            "move_count": move_count,
+            "current_turn": None,
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", game_id).execute()
+        
+        if is_ai_mode:
+            _xo_update_stats(supabase, user_id, "draw")
+        
+        return {
+            "game": {
+                "id": game_id,
+                "board": board,
+                "current_turn": None,
+                "status": "draw",
+                "mode": game["mode"],
+                "move_count": move_count,
+                "winner": None,
+                "winning_line": None,
+                "ai_move": None,
+            }
+        }
+    
+    # AI's turn
+    if is_ai_mode:
+        ai_pos = _xo_ai_move(board, game["mode"])
+        if ai_pos:
+            ai_r, ai_c = ai_pos
+            board[ai_r][ai_c] = 'O'
+            move_count += 1
+            ai_move_info = {"row": ai_r, "col": ai_c}
+            
+            # Record AI move
+            supabase.table(XO_MOVES_TABLE).insert({
+                "game_id": game_id,
+                "player_id": user_id,  # AI uses player's ID for FK
+                "marker": "O",
+                "row_idx": ai_r,
+                "col_idx": ai_c,
+                "move_number": move_count,
+            }).execute()
+            
+            # Check win/draw after AI move
+            ai_winner = _xo_check_winner(board)
+            ai_draw = _xo_is_draw(board) if not ai_winner else False
+            
+            if ai_winner:
+                status = "o_wins"
+                supabase.table(XO_GAMES_TABLE).update({
+                    "board": json.dumps(board),
+                    "status": status,
+                    "move_count": move_count,
+                    "current_turn": None,
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }).eq("id", game_id).execute()
+                _xo_update_stats(supabase, user_id, "loss")
+                
+                return {
+                    "game": {
+                        "id": game_id,
+                        "board": board,
+                        "current_turn": None,
+                        "status": status,
+                        "mode": game["mode"],
+                        "move_count": move_count,
+                        "winner": "ai",
+                        "winning_line": _xo_get_winning_line(board),
+                        "ai_move": ai_move_info,
+                    }
+                }
+            
+            if ai_draw:
+                supabase.table(XO_GAMES_TABLE).update({
+                    "board": json.dumps(board),
+                    "status": "draw",
+                    "move_count": move_count,
+                    "current_turn": None,
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }).eq("id", game_id).execute()
+                _xo_update_stats(supabase, user_id, "draw")
+                
+                return {
+                    "game": {
+                        "id": game_id,
+                        "board": board,
+                        "current_turn": None,
+                        "status": "draw",
+                        "mode": game["mode"],
+                        "move_count": move_count,
+                        "winner": None,
+                        "winning_line": None,
+                        "ai_move": ai_move_info,
+                    }
+                }
+    
+    # Game continues
+    next_turn = "O" if marker == "X" else "X"
+    supabase.table(XO_GAMES_TABLE).update({
+        "board": json.dumps(board),
+        "current_turn": next_turn,
+        "move_count": move_count,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", game_id).execute()
+    
+    return {
+        "game": {
+            "id": game_id,
+            "board": board,
+            "current_turn": "X" if is_ai_mode else next_turn,
+            "status": "in_progress",
+            "mode": game["mode"],
+            "move_count": move_count,
+            "winner": None,
+            "winning_line": None,
+            "ai_move": ai_move_info,
+        }
+    }
+
+
+@app.get("/api/xo/stats")
+async def xo_get_stats(authorization: Optional[str] = Header(None)):
+    """Get the authenticated player's XO stats."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    supabase = get_service_client()
+    try:
+        user_resp = supabase.auth.get_user(token)
+        user_id = str(user_resp.user.id)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    _xo_ensure_stats(supabase, user_id)
+    res = supabase.table(XO_PLAYER_STATS_TABLE).select("*").eq("user_id", user_id).limit(1).execute()
+    stats = (res.data or [{}])[0]
+    
+    return {
+        "stats": {
+            "wins": stats.get("wins", 0),
+            "losses": stats.get("losses", 0),
+            "draws": stats.get("draws", 0),
+            "games_played": stats.get("games_played", 0),
+            "current_streak": stats.get("current_streak", 0),
+            "best_streak": stats.get("best_streak", 0),
+            "elo": stats.get("elo", 1000),
+        }
+    }
+
+
+@app.get("/api/xo/leaderboard")
+async def xo_leaderboard():
+    """Get XO leaderboard — top 20 players by ELO."""
+    supabase = get_service_client()
+    res = (
+        supabase.table(XO_PLAYER_STATS_TABLE)
+        .select("user_id,wins,losses,draws,games_played,elo,best_streak")
+        .order("elo", desc=True)
+        .limit(20)
+        .execute()
+    )
+    players = res.data or []
+    
+    # Fetch user profiles for display names
+    enriched = []
+    for p in players:
+        uid = p["user_id"]
+        profile = None
+        try:
+            pr = supabase.table("user_profiles").select("name,profile_image_url").eq("auth_user_id", uid).limit(1).execute()
+            profile = (pr.data or [None])[0]
+        except Exception:
+            pass
+        enriched.append({
+            "user_id": uid,
+            "name": (profile or {}).get("name", "Player"),
+            "avatar": (profile or {}).get("profile_image_url"),
+            "wins": p["wins"],
+            "losses": p["losses"],
+            "draws": p["draws"],
+            "games_played": p["games_played"],
+            "elo": p["elo"],
+            "best_streak": p["best_streak"],
+        })
+    
+    return {"leaderboard": enriched}

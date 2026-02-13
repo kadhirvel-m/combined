@@ -1302,3 +1302,14 @@ CREATE TABLE public.ai_chat_messages (
   CONSTRAINT ai_chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT ai_chat_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.ai_chat_conversations(id) ON DELETE CASCADE
 );
+
+CREATE TABLE public.ai_notes_mcq (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  note_id uuid NOT NULL,
+  topic text NOT NULL,
+  topic_ci text GENERATED ALWAYS AS (lower(topic)) STORED,
+  questions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  model text,
+  generated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_mcq_pkey PRIMARY KEY (id)
+);
