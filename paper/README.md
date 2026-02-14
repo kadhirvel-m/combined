@@ -551,6 +551,38 @@ For a complete list, see the main.py source code.
 
 ---
 
+## Math Tower Defense (New)
+
+PaperX now includes a playable solo educational mini-game at:
+
+- **UI**: `/ui/math_td.html`
+- **Mode**: Solo (architecture is session-based for future multiplayer support)
+
+### Gameplay Loop
+
+1. Solve generated math MCQs to earn Elixir.
+2. Spend Elixir on troop cards (Swordsman, Knight, Archer, Mage).
+3. Units auto-walk in a single vertical lane, fight enemies, and attack castles.
+4. Match ends with **Victory** or **Defeat** when a castle reaches 0 HP.
+
+### Backend APIs
+
+- `GET /api/math-td/config`
+- `POST /api/math-td/session/new`
+- `GET /api/math-td/session/{session_id}`
+- `POST /api/math-td/question/generate`
+- `POST /api/math-td/question/answer`
+- `POST /api/math-td/deploy`
+- `POST /api/math-td/tick`
+- `GET /api/math-td/sessions/{session_id}/history`
+
+### Persistence
+
+- SQLite database file: `math_td_game.db`
+- Schema file: `scripts/math_td_schema.sql`
+
+---
+
 ## Future Enhancements
 
 1. Real-time collaboration (WebSockets)

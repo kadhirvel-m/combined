@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Math Tower Defense</title>
+  <style>
+    :root {
+      --bg: #edf8ff;
+      --panel: rgba(255, 255, 255, 0.94);
+      --text: #1f2937;
+      --muted: #64748b;
+      --ok: #16a34a;
+      --danger: #dc2626;
+      --elixir: #7c3aed;
+      --elixir-soft: #ddd6fe;
+      --border: #dbeafe;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #d7f3ff 0%, #f4fbff 100%);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 14px;
+    }
+
+    .app {
+      width: min(1220px, 100%);
+      display: grid;
+      grid-template-columns: 220px 1fr 220px;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .sidebar {
+      background: rgba(255, 255, 255, 0.52);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      backdrop-filter: blur(2px);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 760px;
+    }
+
+    .profile {
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      display: inline-grid;
+      place-items: center;
+      background: #e2e8f0;
+      font-size: 20px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    .hp {
+      margin-top: 8px;
+      font-weight: bold;
+    }
+
+    .center {
+      display: grid;
+      grid-template-rows: auto 210px;
+      gap: 10px;
+      min-width: 520px;
+    }
+
+    .battle-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      position: relative;
+    }
+
+    #battlefield {
+      width: 100%;
+      height: 540px;
+      border-radius: 8px;
+      border: 1px solid #bfdbfe;
+      display: block;
+      background: #b6f0a7;
+    }
+
+    .hud-row {
+      margin-top: 8px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .bottom {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 200px;
+    }
+
+    .title {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #334155;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+
+    .question {
+      min-height: 45px;
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .answers {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .answer-btn,
+    .action-btn,
+    .card {
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      background: white;
+      color: var(--text);
+      cursor: pointer;
+      transition: transform .08s ease;
+    }
+
+    .answer-btn {
+      min-height: 42px;
+      font-weight: bold;
+    }
+
+    .answer-btn:hover,
+    .action-btn:hover,
+    .card:hover {
+      transform: translateY(-1px);
+    }
+
+    .answer-btn.selected { border-color: #2563eb; background: #dbeafe; }
+
+    .status {
+      min-height: 30px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .status.ok { color: var(--ok); }
+    .status.bad { color: var(--danger); }
+
+    .action-btn {
+      width: 100%;
+      min-height: 42px;
+      font-weight: bold;
+      background: #dbeafe;
+    }
+
+    .elixir-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+
+    .elixir-bar {
+      height: 14px;
+      background: var(--elixir-soft);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid #c4b5fd;
+      margin-bottom: 10px;
+    }
+
+    .elixir-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+      transition: width .18s ease;
+    }
+
+    .deck {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .card {
+      min-height: 98px;
+      padding: 8px;
+      text-align: center;
+      background: #ffffff;
+    }
+
+    .card .icon { font-size: 22px; display: block; margin-bottom: 6px; }
+    .card .name { font-size: 12px; font-weight: bold; }
+    .card .cost { font-size: 12px; color: #4c1d95; margin-top: 4px; }
+
+    .card.disabled {
+      background: #e2e8f0;
+      color: #94a3b8;
+      border-color: #cbd5e1;
+      cursor: not-allowed;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background: rgba(2, 6, 23, 0.62);
+      color: white;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 10px;
+      text-align: center;
+      padding: 16px;
+    }
+
+    .overlay.show { display: flex; }
+
+    .menu-btn {
+      background: white;
+      border: none;
+      border-radius: 10px;
+      min-height: 40px;
+      min-width: 180px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { min-height: auto; }
+      .center { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="profile">
+        <div><span class="avatar">🧠</span><strong id="playerName">Player</strong></div>
+        <div class="hp">Castle HP: <span id="playerHp">2000</span></div>
+      </div>
+      <div style="opacity:.7;font-size:12px;line-height:1.4;">
+        Solo mode: solve math to earn elixir, deploy units, defend your castle.
+      </div>
+    </aside>
+
+    <main class="center">
+      <section class="battle-wrap">
+        <canvas id="battlefield" width="720" height="540"></canvas>
+        <div class="hud-row">
+          <span id="timer">Time: 0.0s</span>
+          <span id="unitCount">Units: 0</span>
+        </div>
+        <div id="resultOverlay" class="overlay">
+          <h2 id="resultTitle" style="margin:0;font-size:36px;">Victory</h2>
+          <p id="resultText" style="margin:0;font-size:16px;">Game finished</p>
+          <button class="menu-btn" onclick="location.href='/ui/index.html'">Back to Main Menu</button>
+        </div>
+      </section>
+
+      <section class="bottom">
+        <div class="panel">
+          <div class="title">Math / Educational Panel</div>
+          <div id="questionText" class="question">Loading question...</div>
+          <div id="answers" class="answers"></div>
+          <div id="answerStatus" class="status">Select the correct answer.</div>
+          <button id="submitAnswer" class="action-btn">Generate Elixir</button>
+        </div>
+
+        <div class="panel">
+          <div class="title">Deck & Resource Bar</div>
+          <div class="elixir-top">
+            <span>Elixir</span>
+            <span><span id="elixirValue">0.0</span> / 10</span>
+          </div>
+          <div class="elixir-bar"><div id="elixirFill" class="elixir-fill"></div></div>
+          <div id="deck" class="deck"></div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="sidebar">
+      <div class="profile">
+        <div><span class="avatar">🤖</span><strong id="enemyName">Enemy AI</strong></div>
+        <div class="hp">Castle HP: <span id="enemyHp">2000</span></div>
+      </div>
+      <div style="opacity:.7;font-size:12px;line-height:1.4;">
+        Enemy AI automatically deploys troops from the top lane.
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const API = {
+      config: '/api/math-td/config',
+      newSession: '/api/math-td/session/new',
+      session: (id) => `/api/math-td/session/${id}`,
+      question: '/api/math-td/question/generate',
+      answer: '/api/math-td/question/answer',
+      deploy: '/api/math-td/deploy',
+      tick: '/api/math-td/tick'
+    };
+
+    const DECK_ORDER = ['swordsman', 'knight', 'archer', 'mage'];
+    const UNIT_ICONS = { swordsman: '⚔️', knight: '🛡️', archer: '🏹', mage: '✨' };
+
+    const state = {
+      config: null,
+      session: null,
+      question: null,
+      selectedAnswer: null,
+      floatTexts: []
+    };
+
+    const battlefield = document.getElementById('battlefield');
+    const ctx = battlefield.getContext('2d');
+
+    async function api(method, url, body) {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.detail || 'Request failed');
+      return json;
+    }
+
+    function setStatus(text, kind = '') {
+      const el = document.getElementById('answerStatus');
+      el.className = `status ${kind}`.trim();
+      el.textContent = text;
+    }
+
+    function renderDeck() {
+      const deck = document.getElementById('deck');
+      deck.innerHTML = '';
+      const units = state.config.units;
+      const elixir = state.session.elixir || 0;
+
+      DECK_ORDER.forEach((unitType) => {
+        const cfg = units[unitType];
+        const cost = cfg.cost;
+        const canAfford = elixir >= cost;
+        const btn = document.createElement('button');
+        btn.className = `card ${canAfford ? '' : 'disabled'}`.trim();
+        btn.disabled = !canAfford || state.session.status !== 'active';
+        btn.innerHTML = `
+          <span class="icon">${UNIT_ICONS[unitType] || '•'}</span>
+          <div class="name">${cfg.name}</div>
+          <div class="cost">${cost} Elixir</div>
+        `;
+        btn.addEventListener('click', async () => {
+          try {
+            const out = await api('POST', API.deploy, {
+              session_id: state.session.id,
+              unit_type: unitType
+            });
+            state.session = out.session;
+            updateHud();
+          } catch (err) {
+            setStatus(err.message, 'bad');
+          }
+        });
+        deck.appendChild(btn);
+      });
+    }
+
+    function renderQuestion() {
+      const q = state.question;
+      const qText = document.getElementById('questionText');
+      const answers = document.getElementById('answers');
+      answers.innerHTML = '';
+      state.selectedAnswer = null;
+
+      if (!q) {
+        qText.textContent = 'Press Generate Elixir to fetch a new question.';
+        return;
+      }
+
+      qText.textContent = q.text;
+      q.options.forEach((value) => {
+        const btn = document.createElement('button');
+        btn.className = 'answer-btn';
+        btn.textContent = value;
+        btn.addEventListener('click', () => {
+          state.selectedAnswer = Number(value);
+          [...answers.children].forEach(el => el.classList.remove('selected'));
+          btn.classList.add('selected');
+        });
+        answers.appendChild(btn);
+      });
+    }
+
+    function updateHud() {
+      if (!state.session) return;
+      document.getElementById('playerName').textContent = state.session.player.name;
+      document.getElementById('enemyName').textContent = state.session.enemy.name;
+      document.getElementById('playerHp').textContent = state.session.player.castle_hp;
+      document.getElementById('enemyHp').textContent = state.session.enemy.castle_hp;
+      document.getElementById('timer').textContent = `Time: ${state.session.game_time.toFixed(1)}s`;
+      document.getElementById('unitCount').textContent = `Units: ${state.session.state.units.length}`;
+
+      const elixir = Number(state.session.elixir || 0);
+      document.getElementById('elixirValue').textContent = elixir.toFixed(1);
+      document.getElementById('elixirFill').style.width = `${Math.max(0, Math.min(100, (elixir / 10) * 100))}%`;
+
+      renderDeck();
+
+      if (state.session.status !== 'active') {
+        const overlay = document.getElementById('resultOverlay');
+        const title = document.getElementById('resultTitle');
+        const text = document.getElementById('resultText');
+        overlay.classList.add('show');
+        title.textContent = state.session.status === 'victory' ? 'Victory' : 'Defeat';
+        text.textContent = state.session.status === 'victory'
+          ? 'Enemy castle destroyed. Great work!'
+          : 'Your castle has fallen. Try again!';
+      }
+    }
+
+    function addFloatingText(x, y, value, color = '#dc2626') {
+      state.floatTexts.push({ x, y, value, color, ttl: 0.9 });
+    }
+
+    function yToCanvas(y) {
+      return (y / 100) * battlefield.height;
+    }
+
+    function drawArena() {
+      const w = battlefield.width;
+      const h = battlefield.height;
+
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.fillStyle = '#78d16b';
+      ctx.fillRect(0, 0, w, h);
+
+      const riverY = h / 2 - 32;
+      ctx.fillStyle = '#5db7ff';
+      ctx.fillRect(0, riverY, w, 64);
+
+      ctx.fillStyle = '#8b5a2b';
+      ctx.fillRect(w / 2 - 48, riverY + 10, 96, 44);
+
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(w / 2, 0);
+      ctx.lineTo(w / 2, h);
+      ctx.stroke();
+
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(w / 2 - 80, 0, 160, 42);
+      ctx.fillRect(w / 2 - 80, h - 42, 160, 42);
+
+      ctx.fillStyle = 'white';
+      ctx.font = '14px Arial';
+      ctx.fillText('Enemy Castle', w / 2 - 45, 25);
+      ctx.fillText('Player Castle', w / 2 - 45, h - 15);
+    }
+
+    function drawUnits() {
+      const units = state.session?.state?.units || [];
+      for (const unit of units) {
+        const isPlayer = unit.owner === 'player';
+        const x = isPlayer ? battlefield.width * 0.43 : battlefield.width * 0.57;
+        const y = yToCanvas(unit.y);
+        const unitType = unit.unit_type;
+
+        ctx.beginPath();
+        ctx.fillStyle = isPlayer ? '#2563eb' : '#ef4444';
+        ctx.arc(x, y, 13, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText((UNIT_ICONS[unitType] || '?').slice(0, 2), x, y + 4);
+
+        ctx.fillStyle = '#111827';
+        ctx.font = '10px Arial';
+        ctx.fillText(Math.max(0, unit.hp), x, y - 16);
+      }
+      ctx.textAlign = 'start';
+    }
+
+    function drawFloating(delta) {
+      const next = [];
+      for (const item of state.floatTexts) {
+        const y = item.y - (26 * (1 - item.ttl));
+        ctx.fillStyle = item.color;
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText(`-${item.value}`, item.x, y);
+        item.ttl -= delta;
+        if (item.ttl > 0) next.push(item);
+      }
+      state.floatTexts = next;
+    }
+
+    function renderCanvas(delta = 0.016) {
+      drawArena();
+      drawUnits();
+      drawFloating(delta);
+    }
+
+    async function getNewQuestion() {
+      const out = await api('POST', API.question, { session_id: state.session.id });
+      state.question = out.question;
+      state.session = out.session;
+      renderQuestion();
+      updateHud();
+      setStatus('Choose an answer then press Generate Elixir.');
+    }
+
+    async function submitAnswerOrFetch() {
+      if (!state.question) {
+        await getNewQuestion();
+        return;
+      }
+      if (state.selectedAnswer === null) {
+        setStatus('Select an option first.', 'bad');
+        return;
+      }
+
+      const out = await api('POST', API.answer, {
+        session_id: state.session.id,
+        question_id: state.question.id,
+        selected_answer: state.selectedAnswer
+      });
+
+      state.session = out.session;
+      if (out.result.is_correct) {
+        setStatus('✅ Correct!', 'ok');
+      } else {
+        setStatus('❌ Try again.', 'bad');
+      }
+      state.question = null;
+      renderQuestion();
+      updateHud();
+    }
+
+    async function tickLoop() {
+      if (!state.session || state.session.status !== 'active') return;
+      try {
+        const out = await api('POST', API.tick, {
+          session_id: state.session.id,
+          delta_seconds: 0.25
+        });
+        state.session = out.session;
+
+        for (const ev of out.events || []) {
+          if (ev.type === 'damage' && ev.target_type === 'unit') {
+            const target = state.session.state.units.find(u => u.id === ev.target_id);
+            if (target) {
+              const x = target.owner === 'player' ? battlefield.width * 0.43 : battlefield.width * 0.57;
+              const y = yToCanvas(target.y);
+              addFloatingText(x + 10, y, ev.value);
+            }
+          }
+          if (ev.type === 'damage' && ev.target_type === 'castle') {
+            const x = battlefield.width / 2 + (ev.target_owner === 'enemy' ? 50 : -55);
+            const y = ev.target_owner === 'enemy' ? 30 : battlefield.height - 20;
+            addFloatingText(x, y, ev.value, '#b91c1c');
+          }
+        }
+
+        updateHud();
+      } catch (err) {
+        setStatus(err.message, 'bad');
+      } finally {
+        renderCanvas(0.25);
+        setTimeout(tickLoop, 250);
+      }
+    }
+
+    async function init() {
+      try {
+        state.config = await api('GET', API.config);
+        const created = await api('POST', API.newSession, { mode: 'solo', player_name: 'Player' });
+        state.session = created.session;
+        renderQuestion();
+        updateHud();
+        renderCanvas();
+        setStatus('Press Generate Elixir to get your first question.');
+        setTimeout(tickLoop, 300);
+      } catch (err) {
+        setStatus(err.message, 'bad');
+      }
+    }
+
+    document.getElementById('submitAnswer').addEventListener('click', async () => {
+      try {
+        await submitAnswerOrFetch();
+      } catch (err) {
+        setStatus(err.message, 'bad');
+      }
+    });
+
+    let lastFrame = performance.now();
+    function raf(now) {
+      const delta = Math.min(0.05, (now - lastFrame) / 1000);
+      lastFrame = now;
+      renderCanvas(delta);
+      requestAnimationFrame(raf);
+    }
+
+    init();
+    requestAnimationFrame(raf);
+  </script>
+</body>
+</html>
