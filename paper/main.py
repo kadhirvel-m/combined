@@ -16,6 +16,7 @@ import textwrap
 import time
 import uuid
 import math
+import sqlite3
 import ast
 from dataclasses import dataclass, field
 from datetime import datetime, date, timezone
@@ -20334,6 +20335,7 @@ def create_app() -> FastAPI:
             "notes_ui": "/ui/notes_generator.html",
             "transcripts_ui": "/ui/youtube-transcript.html",
             "youtube_videos_ui": "/ui/youtube_videos.html",
+            "game_ui": "/ui/math_td.html",
         }
 
     @app.get("/health", tags=["system"])
@@ -25411,7 +25413,7 @@ async def xo_make_move(game_id: str, body: XOMakeMove, authorization: Optional[s
             "board": json.dumps(board),
             "status": "draw",
             "move_count": move_count,
-            "current_turn": None,
+            "current_turn": marker,
             "finished_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", game_id).execute()
@@ -25462,7 +25464,7 @@ async def xo_make_move(game_id: str, body: XOMakeMove, authorization: Optional[s
                     "board": json.dumps(board),
                     "status": status,
                     "move_count": move_count,
-                    "current_turn": None,
+                    "current_turn": "O",
                     "finished_at": datetime.now(timezone.utc).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }).eq("id", game_id).execute()
@@ -25487,7 +25489,7 @@ async def xo_make_move(game_id: str, body: XOMakeMove, authorization: Optional[s
                     "board": json.dumps(board),
                     "status": "draw",
                     "move_count": move_count,
-                    "current_turn": None,
+                    "current_turn": "O",
                     "finished_at": datetime.now(timezone.utc).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }).eq("id", game_id).execute()
@@ -25509,12 +25511,15 @@ async def xo_make_move(game_id: str, body: XOMakeMove, authorization: Optional[s
     
     # Game continues
     next_turn = "O" if marker == "X" else "X"
+    # For AI modes, AI already played its turn above, so it's the player's (X) turn again
+    db_turn = "X" if is_ai_mode else next_turn
     supabase.table(XO_GAMES_TABLE).update({
         "board": json.dumps(board),
-        "current_turn": next_turn,
+        "current_turn": db_turn,
         "move_count": move_count,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", game_id).execute()
+
     
     return {
         "game": {
@@ -25598,3 +25603,1005 @@ async def xo_leaderboard():
         })
     
     return {"leaderboard": enriched}
+
+
+# ==========================================
+# MATH TOWER DEFENSE (Solo MVP)
+# ==========================================
+
+MATH_TD_DB_PATH = Path(__file__).resolve().parent / "math_td_game.db"
+MATH_TD_SCHEMA_PATH = Path(__file__).resolve().parent / "scripts" / "math_td_schema.sql"
+_math_td_db_lock = Lock()
+_math_td_schema_ready = False
+
+MATH_TD_MAX_ELIXIR = 10.0
+MATH_TD_CASTLE_HP = 2000
+MATH_TD_PLAYER_CASTLE_Y = 100.0
+MATH_TD_ENEMY_CASTLE_Y = 0.0
+MATH_TD_PLAYER_SPAWN_Y = 92.0
+MATH_TD_ENEMY_SPAWN_Y = 8.0
+
+MATH_TD_UNITS: Dict[str, Dict[str, Any]] = {
+    "swordsman": {
+        "name": "Swordsman",
+        "cost": 1,
+        "max_hp": 95,
+        "move_speed": 18.0,
+        "attack_damage": 22,
+        "attack_range": 3.0,
+        "attack_interval": 0.85,
+        "aggro_radius": 9.0,
+        "splash_radius": 0.0,
+    },
+    "knight": {
+        "name": "Knight",
+        "cost": 2,
+        "max_hp": 210,
+        "move_speed": 11.0,
+        "attack_damage": 28,
+        "attack_range": 3.0,
+        "attack_interval": 1.05,
+        "aggro_radius": 10.0,
+        "splash_radius": 0.0,
+    },
+    "archer": {
+        "name": "Archer",
+        "cost": 4,
+        "max_hp": 85,
+        "move_speed": 12.0,
+        "attack_damage": 32,
+        "attack_range": 15.0,
+        "attack_interval": 1.0,
+        "aggro_radius": 18.0,
+        "splash_radius": 0.0,
+    },
+    "mage": {
+        "name": "Mage",
+        "cost": 5,
+        "max_hp": 75,
+        "move_speed": 10.0,
+        "attack_damage": 45,
+        "attack_range": 14.0,
+        "attack_interval": 1.25,
+        "aggro_radius": 17.0,
+        "splash_radius": 3.0,
+    },
+}
+
+
+class MathTDSessionCreateRequest(BaseModel):
+    mode: Literal["solo", "multiplayer"] = "solo"
+    player_name: str = "Player"
+
+
+class MathTDQuestionGenerateRequest(BaseModel):
+    session_id: str
+    difficulty: Optional[int] = None
+
+
+class MathTDQuestionAnswerRequest(BaseModel):
+    session_id: str
+    question_id: str
+    selected_answer: int
+
+
+class MathTDDeployRequest(BaseModel):
+    session_id: str
+    unit_type: Literal["swordsman", "knight", "archer", "mage"]
+
+
+class MathTDTickRequest(BaseModel):
+    session_id: str
+    delta_seconds: float = 0.25
+
+
+def _math_td_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _ensure_math_td_schema() -> None:
+    global _math_td_schema_ready
+    if _math_td_schema_ready:
+        return
+    with _math_td_db_lock:
+        if _math_td_schema_ready:
+            return
+        MATH_TD_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(MATH_TD_DB_PATH), check_same_thread=False)
+        try:
+            if MATH_TD_SCHEMA_PATH.exists():
+                script = MATH_TD_SCHEMA_PATH.read_text(encoding="utf-8")
+            else:
+                script = """
+                CREATE TABLE IF NOT EXISTS math_td_sessions (
+                    id TEXT PRIMARY KEY,
+                    mode TEXT NOT NULL DEFAULT 'solo',
+                    status TEXT NOT NULL DEFAULT 'active',
+                    player_name TEXT NOT NULL DEFAULT 'Player',
+                    enemy_name TEXT NOT NULL DEFAULT 'Enemy AI',
+                    player_castle_hp INTEGER NOT NULL,
+                    enemy_castle_hp INTEGER NOT NULL,
+                    elixir REAL NOT NULL,
+                    ai_elixir REAL NOT NULL,
+                    game_time REAL NOT NULL,
+                    state_json TEXT NOT NULL,
+                    active_question_id TEXT,
+                    active_question_answer INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    ended_at TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS math_td_question_history (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    question_text TEXT NOT NULL,
+                    options_json TEXT NOT NULL,
+                    correct_answer INTEGER NOT NULL,
+                    selected_answer INTEGER,
+                    is_correct INTEGER,
+                    reward_elixir REAL NOT NULL DEFAULT 0,
+                    difficulty INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    answered_at TEXT,
+                    FOREIGN KEY(session_id) REFERENCES math_td_sessions(id)
+                );
+                """
+            conn.executescript(script)
+            conn.commit()
+            _math_td_schema_ready = True
+        finally:
+            conn.close()
+
+
+def _math_td_fetch_session_row(session_id: str) -> Optional[Dict[str, Any]]:
+    _ensure_math_td_schema()
+    conn = sqlite3.connect(str(MATH_TD_DB_PATH), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute("SELECT * FROM math_td_sessions WHERE id = ?", (session_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def _math_td_default_state() -> Dict[str, Any]:
+    return {
+        "units": [],
+        "unit_seq": 0,
+        "next_enemy_spawn_at": 3.0,
+        "last_tick_at": None,
+    }
+
+
+def _math_td_row_to_snapshot(row: Dict[str, Any]) -> Dict[str, Any]:
+    state = json.loads(row.get("state_json") or "{}")
+    if not isinstance(state, dict):
+        state = {}
+    units = state.get("units")
+    if not isinstance(units, list):
+        state["units"] = []
+
+    return {
+        "id": row["id"],
+        "mode": row["mode"],
+        "status": row["status"],
+        "player": {
+            "name": row.get("player_name") or "Player",
+            "castle_hp": int(row.get("player_castle_hp") or 0),
+        },
+        "enemy": {
+            "name": row.get("enemy_name") or "Enemy AI",
+            "castle_hp": int(row.get("enemy_castle_hp") or 0),
+        },
+        "game_time": float(row.get("game_time") or 0.0),
+        "elixir": round(float(row.get("elixir") or 0.0), 2),
+        "ai_elixir": round(float(row.get("ai_elixir") or 0.0), 2),
+        "active_question_id": row.get("active_question_id"),
+        "state": state,
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+        "ended_at": row.get("ended_at"),
+    }
+
+
+def _math_td_save_snapshot(snapshot: Dict[str, Any], *, active_question_answer: Optional[int] = None) -> None:
+    _ensure_math_td_schema()
+    conn = sqlite3.connect(str(MATH_TD_DB_PATH), check_same_thread=False)
+    try:
+        now = _math_td_now_iso()
+        conn.execute(
+            """
+            UPDATE math_td_sessions
+            SET status = ?,
+                player_castle_hp = ?,
+                enemy_castle_hp = ?,
+                elixir = ?,
+                ai_elixir = ?,
+                game_time = ?,
+                state_json = ?,
+                active_question_id = ?,
+                active_question_answer = ?,
+                updated_at = ?,
+                ended_at = ?
+            WHERE id = ?
+            """,
+            (
+                snapshot["status"],
+                int(snapshot["player"]["castle_hp"]),
+                int(snapshot["enemy"]["castle_hp"]),
+                float(snapshot["elixir"]),
+                float(snapshot["ai_elixir"]),
+                float(snapshot["game_time"]),
+                json.dumps(snapshot["state"]),
+                snapshot.get("active_question_id"),
+                active_question_answer,
+                now,
+                _math_td_now_iso() if snapshot["status"] in ("victory", "defeat") else None,
+                snapshot["id"],
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _math_td_make_unit(owner: str, unit_type: str, y: float, state: Dict[str, Any]) -> Dict[str, Any]:
+    stats = MATH_TD_UNITS[unit_type]
+    unit_seq = int(state.get("unit_seq") or 0) + 1
+    state["unit_seq"] = unit_seq
+    return {
+        "id": f"u_{unit_seq}",
+        "owner": owner,
+        "unit_type": unit_type,
+        "hp": int(stats["max_hp"]),
+        "y": float(y),
+        "cooldown": 0.0,
+    }
+
+
+def _math_td_enemy_spawn_interval(game_time: float) -> float:
+    return max(2.25, 4.8 - min(2.0, game_time / 70.0))
+
+
+def _math_td_auto_spawn_enemy(snapshot: Dict[str, Any], events: List[Dict[str, Any]]) -> None:
+    state = snapshot["state"]
+    game_time = float(snapshot["game_time"])
+    next_enemy_spawn_at = float(state.get("next_enemy_spawn_at") or 0.0)
+    if game_time < next_enemy_spawn_at:
+        return
+
+    affordable = [
+        (k, cfg)
+        for k, cfg in MATH_TD_UNITS.items()
+        if int(cfg["cost"]) <= int(math.floor(float(snapshot["ai_elixir"])))
+    ]
+    if not affordable:
+        state["next_enemy_spawn_at"] = game_time + 0.9
+        return
+
+    weighted_types = []
+    for unit_type, cfg in affordable:
+        weight = 1
+        if unit_type == "swordsman":
+            weight = 4
+        elif unit_type == "knight":
+            weight = 3
+        elif unit_type == "archer":
+            weight = 2
+        elif unit_type == "mage":
+            weight = 1
+        weighted_types.extend([unit_type] * weight)
+
+    chosen = random.choice(weighted_types)
+    cost = int(MATH_TD_UNITS[chosen]["cost"])
+    if snapshot["ai_elixir"] < cost:
+        state["next_enemy_spawn_at"] = game_time + 0.8
+        return
+
+    snapshot["ai_elixir"] = round(max(0.0, snapshot["ai_elixir"] - cost), 2)
+    unit = _math_td_make_unit("enemy", chosen, MATH_TD_ENEMY_SPAWN_Y, state)
+    state["units"].append(unit)
+    events.append({"type": "spawn", "owner": "enemy", "unit": unit})
+    state["next_enemy_spawn_at"] = game_time + _math_td_enemy_spawn_interval(game_time)
+
+
+def _math_td_generate_question(difficulty: int) -> Dict[str, Any]:
+    difficulty = max(1, min(3, int(difficulty)))
+    pattern = random.choice(["half", "groups", "square", "addition", "subtraction"])
+
+    if difficulty == 1:
+        if pattern == "half":
+            n = random.choice(list(range(20, 202, 2)))
+            correct = n // 2
+            text = f"What is half of {n}?"
+        elif pattern == "groups":
+            a = random.randint(2, 6)
+            b = random.randint(2, 6)
+            correct = a * b
+            text = f"How much is {a} groups of {b}?"
+        elif pattern == "square":
+            n = random.randint(4, 12)
+            correct = n * n
+            text = f"What is the perfect square of {n}?"
+        elif pattern == "addition":
+            a = random.randint(10, 70)
+            b = random.randint(5, 35)
+            correct = a + b
+            text = f"Solve: {a} + {b}"
+        else:
+            a = random.randint(20, 90)
+            b = random.randint(4, 18)
+            correct = a - b
+            text = f"Solve: {a} - {b}"
+    elif difficulty == 2:
+        if pattern in ("half", "groups"):
+            a = random.randint(4, 11)
+            b = random.randint(5, 12)
+            correct = a * b
+            text = f"Find the product: {a} × {b}"
+        elif pattern == "square":
+            n = random.randint(8, 18)
+            correct = n * n
+            text = f"What is {n}²?"
+        elif pattern == "addition":
+            a = random.randint(50, 180)
+            b = random.randint(30, 120)
+            correct = a + b
+            text = f"Compute: {a} + {b}"
+        else:
+            a = random.randint(80, 250)
+            b = random.randint(20, 90)
+            correct = a - b
+            text = f"Compute: {a} - {b}"
+    else:
+        mode = random.choice(["mix1", "mix2", "mix3"])
+        if mode == "mix1":
+            a = random.randint(10, 24)
+            b = random.randint(2, 6)
+            c = random.randint(5, 20)
+            correct = a * b + c
+            text = f"Solve: ({a} × {b}) + {c}"
+        elif mode == "mix2":
+            n = random.randint(12, 25)
+            correct = n * n
+            text = f"Perfect square of {n}?"
+        else:
+            a = random.randint(120, 320)
+            b = random.randint(4, 11)
+            correct = a // b
+            a = correct * b
+            text = f"What is {a} ÷ {b}?"
+
+    option_count = random.choice([2, 3, 4])
+    options = {int(correct)}
+    span = max(3, int(abs(correct) * 0.25))
+    while len(options) < option_count:
+        delta = random.randint(-span, span)
+        candidate = correct + delta
+        if candidate == correct:
+            continue
+        options.add(int(candidate))
+
+    options_list = list(options)
+    random.shuffle(options_list)
+    return {
+        "question_text": text,
+        "correct_answer": int(correct),
+        "options": options_list,
+        "difficulty": difficulty,
+    }
+
+
+def _math_td_apply_damage_to_unit(
+    target: Dict[str, Any],
+    amount: int,
+    events: List[Dict[str, Any]],
+    source_id: str,
+) -> None:
+    target["hp"] = int(target.get("hp", 0)) - int(amount)
+    events.append({
+        "type": "damage",
+        "target_type": "unit",
+        "target_id": target["id"],
+        "value": int(amount),
+        "source_id": source_id,
+    })
+
+
+def _math_td_simulate_tick(snapshot: Dict[str, Any], dt: float) -> Dict[str, Any]:
+    dt = max(0.05, min(1.0, float(dt)))
+    events: List[Dict[str, Any]] = []
+
+    if snapshot["status"] != "active":
+        return {"events": events, "state": snapshot}
+
+    snapshot["game_time"] = round(float(snapshot["game_time"]) + dt, 3)
+    snapshot["ai_elixir"] = round(min(MATH_TD_MAX_ELIXIR, float(snapshot["ai_elixir"]) + (0.95 * dt)), 2)
+
+    state = snapshot["state"]
+    units = state.get("units", [])
+    alive_units = [u for u in units if int(u.get("hp", 0)) > 0]
+    state["units"] = alive_units
+
+    for unit in alive_units:
+        unit["cooldown"] = max(0.0, float(unit.get("cooldown") or 0.0) - dt)
+
+    _math_td_auto_spawn_enemy(snapshot, events)
+    alive_units = state.get("units", [])
+
+    for unit in alive_units:
+        owner = unit["owner"]
+        unit_type = unit["unit_type"]
+        cfg = MATH_TD_UNITS[unit_type]
+        enemies = [
+            other for other in alive_units
+            if other["owner"] != owner and int(other.get("hp", 0)) > 0
+        ]
+        enemies.sort(key=lambda other: abs(float(other["y"]) - float(unit["y"])))
+
+        engaged = False
+        if enemies:
+            nearest = enemies[0]
+            dist = abs(float(nearest["y"]) - float(unit["y"]))
+            if dist <= float(cfg["attack_range"]):
+                engaged = True
+                if float(unit.get("cooldown", 0.0)) <= 0:
+                    damage = int(cfg["attack_damage"])
+                    splash = float(cfg.get("splash_radius") or 0.0)
+                    if splash > 0:
+                        target_y = float(nearest["y"])
+                        for candidate in enemies:
+                            if abs(float(candidate["y"]) - target_y) <= splash:
+                                _math_td_apply_damage_to_unit(candidate, damage, events, unit["id"])
+                    else:
+                        _math_td_apply_damage_to_unit(nearest, damage, events, unit["id"])
+                    unit["cooldown"] = float(cfg["attack_interval"])
+
+        if engaged:
+            continue
+
+        if owner == "player":
+            castle_dist = abs(float(unit["y"]) - MATH_TD_ENEMY_CASTLE_Y)
+            direction = -1.0
+            castle_key = "enemy"
+        else:
+            castle_dist = abs(float(unit["y"]) - MATH_TD_PLAYER_CASTLE_Y)
+            direction = 1.0
+            castle_key = "player"
+
+        if castle_dist <= float(cfg["attack_range"]):
+            if float(unit.get("cooldown", 0.0)) <= 0:
+                dmg = int(cfg["attack_damage"])
+                snapshot[castle_key]["castle_hp"] = max(0, int(snapshot[castle_key]["castle_hp"]) - dmg)
+                events.append({
+                    "type": "damage",
+                    "target_type": "castle",
+                    "target_owner": castle_key,
+                    "value": dmg,
+                    "source_id": unit["id"],
+                })
+                unit["cooldown"] = float(cfg["attack_interval"])
+            continue
+
+        unit["y"] = min(100.0, max(0.0, float(unit["y"]) + (direction * float(cfg["move_speed"]) * dt)))
+
+    survivors = []
+    for unit in state.get("units", []):
+        if int(unit.get("hp", 0)) > 0:
+            survivors.append(unit)
+        else:
+            events.append({"type": "death", "unit_id": unit["id"], "owner": unit["owner"]})
+    state["units"] = survivors
+
+    if int(snapshot["enemy"]["castle_hp"]) <= 0:
+        snapshot["status"] = "victory"
+    elif int(snapshot["player"]["castle_hp"]) <= 0:
+        snapshot["status"] = "defeat"
+
+    return {"events": events, "state": snapshot}
+
+
+@app.get("/api/math-td/config")
+async def math_td_get_config():
+    return {
+        "arena": {
+            "orientation": "vertical",
+            "single_lane": True,
+            "bridge_y": 50,
+            "player_castle_y": MATH_TD_PLAYER_CASTLE_Y,
+            "enemy_castle_y": MATH_TD_ENEMY_CASTLE_Y,
+        },
+        "economy": {
+            "elixir_min": 0,
+            "elixir_max": MATH_TD_MAX_ELIXIR,
+            "correct_answer_rewards": {
+                "difficulty_1": 1.5,
+                "difficulty_2": 2.0,
+                "difficulty_3": 2.5,
+            },
+        },
+        "units": MATH_TD_UNITS,
+        "castles": {
+            "max_hp": MATH_TD_CASTLE_HP,
+            "shoot_back": False,
+        },
+        "game_modes": {
+            "available": ["solo", "multiplayer"],
+            "implemented": ["solo"],
+            "notes": "Architecture is state/session based for future server-authoritative multiplayer.",
+        },
+    }
+
+
+@app.post("/api/math-td/session/new")
+async def math_td_create_session(payload: MathTDSessionCreateRequest):
+    _ensure_math_td_schema()
+    session_id = str(uuid.uuid4())
+    now = _math_td_now_iso()
+    state = _math_td_default_state()
+
+    conn = sqlite3.connect(str(MATH_TD_DB_PATH), check_same_thread=False)
+    try:
+        conn.execute(
+            """
+            INSERT INTO math_td_sessions (
+                id, mode, status, player_name, enemy_name,
+                player_castle_hp, enemy_castle_hp,
+                elixir, ai_elixir, game_time,
+                state_json, active_question_id, active_question_answer,
+                created_at, updated_at, ended_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                payload.mode,
+                "active",
+                (payload.player_name or "Player").strip() or "Player",
+                "Enemy AI",
+                MATH_TD_CASTLE_HP,
+                MATH_TD_CASTLE_HP,
+                0.0,
+                2.0,
+                0.0,
+                json.dumps(state),
+                None,
+                None,
+                now,
+                now,
+                None,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    row = _math_td_fetch_session_row(session_id)
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to create game session")
+    snapshot = _math_td_row_to_snapshot(row)
+    return {
+        "session": snapshot,
+        "deck": ["swordsman", "knight", "archer", "mage"],
+        "message": "Session created",
+    }
+
+
+@app.get("/api/math-td/session/{session_id}")
+async def math_td_get_session(session_id: str):
+    row = _math_td_fetch_session_row(session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"session": _math_td_row_to_snapshot(row)}
+
+
+@app.post("/api/math-td/question/generate")
+async def math_td_generate_question(payload: MathTDQuestionGenerateRequest):
+    row = _math_td_fetch_session_row(payload.session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    snapshot = _math_td_row_to_snapshot(row)
+    if snapshot["status"] != "active":
+        raise HTTPException(status_code=400, detail="Game already ended")
+
+    difficulty = payload.difficulty
+    if difficulty is None:
+        game_time = float(snapshot["game_time"])
+        if game_time < 60:
+            difficulty = 1
+        elif game_time < 150:
+            difficulty = 2
+        else:
+            difficulty = 3
+
+    question = _math_td_generate_question(int(difficulty))
+    question_id = str(uuid.uuid4())
+
+    _ensure_math_td_schema()
+    conn = sqlite3.connect(str(MATH_TD_DB_PATH), check_same_thread=False)
+    try:
+        conn.execute(
+            """
+            INSERT INTO math_td_question_history (
+                id, session_id, question_text, options_json, correct_answer,
+                selected_answer, is_correct, reward_elixir, difficulty,
+                created_at, answered_at
+            )
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?, NULL)
+            """,
+            (
+                question_id,
+                payload.session_id,
+                question["question_text"],
+                json.dumps(question["options"]),
+                int(question["correct_answer"]),
+                int(question["difficulty"]),
+                _math_td_now_iso(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    snapshot["active_question_id"] = question_id
+    _math_td_save_snapshot(snapshot, active_question_answer=int(question["correct_answer"]))
+
+    return {
+        "question": {
+            "id": question_id,
+            "text": question["question_text"],
+            "options": question["options"],
+            "difficulty": question["difficulty"],
+        },
+        "session": snapshot,
+    }
+
+
+@app.post("/api/math-td/question/answer")
+async def math_td_answer_question(payload: MathTDQuestionAnswerRequest):
+    row = _math_td_fetch_session_row(payload.session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    snapshot = _math_td_row_to_snapshot(row)
+    if snapshot["status"] != "active":
+        raise HTTPException(status_code=400, detail="Game already ended")
+
+    active_question_id = row.get("active_question_id")
+    active_answer = row.get("active_question_answer")
+    if not active_question_id or active_question_id != payload.question_id:
+        raise HTTPException(status_code=400, detail="Question is not active for this session")
+
+    is_correct = int(payload.selected_answer) == int(active_answer)
+    reward = 0.0
+
+    _ensure_math_td_schema()
+    conn = sqlite3.connect(str(MATH_TD_DB_PATH), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    try:
+        question_row = conn.execute(
+            "SELECT difficulty FROM math_td_question_history WHERE id = ? AND session_id = ?",
+            (payload.question_id, payload.session_id),
+        ).fetchone()
+        difficulty = int((dict(question_row).get("difficulty") if question_row else 1) or 1)
+
+        if is_correct:
+            reward = {1: 1.5, 2: 2.0, 3: 2.5}.get(difficulty, 1.5)
+            snapshot["elixir"] = round(min(MATH_TD_MAX_ELIXIR, float(snapshot["elixir"]) + reward), 2)
+
+        conn.execute(
+            """
+            UPDATE math_td_question_history
+            SET selected_answer = ?,
+                is_correct = ?,
+                reward_elixir = ?,
+                answered_at = ?
+            WHERE id = ? AND session_id = ?
+            """,
+            (
+                int(payload.selected_answer),
+                1 if is_correct else 0,
+                float(reward),
+                _math_td_now_iso(),
+                payload.question_id,
+                payload.session_id,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    snapshot["active_question_id"] = None
+    _math_td_save_snapshot(snapshot, active_question_answer=None)
+
+    return {
+        "result": {
+            "is_correct": bool(is_correct),
+            "reward_elixir": reward,
+            "status_text": "Correct!" if is_correct else "Try again",
+        },
+        "session": snapshot,
+    }
+
+
+@app.post("/api/math-td/deploy")
+async def math_td_deploy_unit(payload: MathTDDeployRequest):
+    row = _math_td_fetch_session_row(payload.session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    snapshot = _math_td_row_to_snapshot(row)
+    if snapshot["status"] != "active":
+        raise HTTPException(status_code=400, detail="Game already ended")
+
+    unit_cfg = MATH_TD_UNITS.get(payload.unit_type)
+    if not unit_cfg:
+        raise HTTPException(status_code=400, detail="Unknown unit type")
+
+    cost = int(unit_cfg["cost"])
+    if float(snapshot["elixir"]) < cost:
+        raise HTTPException(status_code=400, detail="Not enough elixir")
+
+    snapshot["elixir"] = round(max(0.0, float(snapshot["elixir"]) - cost), 2)
+    unit = _math_td_make_unit("player", payload.unit_type, MATH_TD_PLAYER_SPAWN_Y, snapshot["state"])
+    snapshot["state"]["units"].append(unit)
+    _math_td_save_snapshot(snapshot, active_question_answer=row.get("active_question_answer"))
+
+    return {
+        "spawned": unit,
+        "session": snapshot,
+    }
+
+
+@app.post("/api/math-td/tick")
+async def math_td_tick(payload: MathTDTickRequest):
+    row = _math_td_fetch_session_row(payload.session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    snapshot = _math_td_row_to_snapshot(row)
+    result = _math_td_simulate_tick(snapshot, payload.delta_seconds)
+    _math_td_save_snapshot(result["state"], active_question_answer=row.get("active_question_answer"))
+
+    verdict = None
+    if result["state"]["status"] == "victory":
+        verdict = "Victory"
+    elif result["state"]["status"] == "defeat":
+        verdict = "Defeat"
+
+    return {
+        "events": result["events"],
+        "session": result["state"],
+        "verdict": verdict,
+    }
+
+
+@app.get("/api/math-td/sessions/{session_id}/history")
+async def math_td_question_history(session_id: str):
+    row = _math_td_fetch_session_row(session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    _ensure_math_td_schema()
+    conn = sqlite3.connect(str(MATH_TD_DB_PATH), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, question_text, options_json, correct_answer, selected_answer,
+                   is_correct, reward_elixir, difficulty, created_at, answered_at
+            FROM math_td_question_history
+            WHERE session_id = ?
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            (session_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    history = []
+    for item in rows:
+        data = dict(item)
+        history.append({
+            "id": data["id"],
+            "question_text": data["question_text"],
+            "options": json.loads(data.get("options_json") or "[]"),
+            "correct_answer": data["correct_answer"],
+            "selected_answer": data["selected_answer"],
+            "is_correct": bool(data["is_correct"]) if data["is_correct"] is not None else None,
+            "reward_elixir": data["reward_elixir"],
+            "difficulty": data["difficulty"],
+            "created_at": data["created_at"],
+            "answered_at": data["answered_at"],
+        })
+
+    return {
+        "session_id": session_id,
+        "history": history,
+    }
+
+
+# ==========================================
+# InnovateX — Smart Idea Engine
+# ==========================================
+
+INNOVATEX_MODEL = "gemini-3-pro-preview"
+
+class InnovateXIdeaRequest(BaseModel):
+    skills: List[str] = Field(..., min_length=1, description="Skills the student knows")
+    interests: List[str] = Field(..., min_length=1, description="Areas of interest")
+    team_size: int = Field(default=1, ge=1, le=6, description="Number of team members")
+    additional_context: Optional[str] = Field(None, max_length=2000, description="Optional extra context including project preferences")
+
+
+def _innovatex_generate_ideas(department: str, college: str, skills: List[str], interests: List[str], team_size: int, additional_context: Optional[str] = None) -> List[dict]:
+    """Generate project ideas using Gemini AI."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API key not configured")
+
+    try:
+        import google.generativeai as genai_lib
+    except ImportError:
+        raise HTTPException(status_code=500, detail="google-generativeai package not installed")
+
+    genai_lib.configure(api_key=GEMINI_API_KEY)
+    model = genai_lib.GenerativeModel(INNOVATEX_MODEL)
+
+    context_line = f"\nAdditional context from the student: {additional_context}" if additional_context else ""
+
+    prompt = f"""You are InnovateX — an elite academic project idea generator for college students in India.
+
+STUDENT PROFILE:
+- Department: {department}
+- College: {college}
+- Skills: {', '.join(skills)}
+- Interest Areas: {', '.join(interests)}
+- Team Size: {team_size} member(s)
+{context_line}
+
+YOUR TASK:
+Generate exactly 5 innovative, feasible, and academically impressive project ideas that:
+1. Match the student's department, skills, and interests
+2. Are achievable by a team of {team_size} in 3-6 months
+3. Solve REAL-WORLD problems (not toy projects)
+4. Would impress faculty evaluators and potential employers
+5. Have clear scope for innovation and contribution
+6. Use at least 2-3 of the student's known skills
+
+For each idea, provide:
+- title: A catchy, professional project name (max 8 words)
+- problem: A clear one-line problem statement
+- solution: A 2-3 sentence proposed solution
+- tech_stack: Array of specific technologies/frameworks needed (use what the student knows + 1-2 new ones)
+- difficulty: Integer 1-5 (1=Beginner, 2=Intermediate, 3=Advanced, 4=Expert, 5=Research-Grade)
+- innovation_score: Integer 1-5 (how novel/unique the idea is)
+- use_case: One specific real-world application/scenario
+- timeline_weeks: Estimated weeks to complete (8-24)
+- learning_outcomes: Array of 3-4 specific skills/concepts the student will learn
+- milestones: Array of 4-5 key project milestones as short strings
+- category: One of [AI/ML, Web, Mobile, IoT, Robotics, Data Science, Cybersecurity, Social Impact, Core Engineering, Research]
+
+IMPORTANT RULES:
+- Make ideas diverse: mix difficulties (at least one easy, one hard), mix categories
+- Be SPECIFIC — no vague ideas like "AI chatbot" or "website". Include domain specificity.
+- Tech stack must be realistic and specific (e.g., "FastAPI" not just "Python")
+- Milestones should be actionable ("Build REST API for sensor data ingestion" not "Backend development")
+- At least 2 ideas should leverage the student's department specialization
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON array of 5 objects. No markdown, no explanations, no code blocks. Just the raw JSON array.
+"""
+
+    try:
+        resp = model.generate_content(prompt)
+        raw = getattr(resp, "text", None)
+        if not raw:
+            try:
+                raw = resp.candidates[0].content.parts[0].text
+            except Exception:
+                raw = None
+
+        if not raw:
+            raise HTTPException(status_code=500, detail="AI returned empty response")
+
+        # Extract JSON from response (might be wrapped in markdown code blocks)
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+        jtxt = m.group(1).strip() if m else raw.strip()
+
+        ideas = json.loads(jtxt)
+
+        if not isinstance(ideas, list):
+            raise ValueError("Expected a JSON array")
+
+        # Validate and normalize each idea
+        validated = []
+        for idx, idea in enumerate(ideas[:6]):
+            validated.append({
+                "id": idx + 1,
+                "title": str(idea.get("title", f"Project Idea {idx+1}"))[:100],
+                "problem": str(idea.get("problem", ""))[:300],
+                "solution": str(idea.get("solution", ""))[:500],
+                "tech_stack": idea.get("tech_stack", [])[:10] if isinstance(idea.get("tech_stack"), list) else [],
+                "difficulty": max(1, min(5, int(idea.get("difficulty", 3)))),
+                "innovation_score": max(1, min(5, int(idea.get("innovation_score", 3)))),
+                "use_case": str(idea.get("use_case", ""))[:300],
+                "timeline_weeks": max(4, min(30, int(idea.get("timeline_weeks", 12)))),
+                "learning_outcomes": idea.get("learning_outcomes", [])[:5] if isinstance(idea.get("learning_outcomes"), list) else [],
+                "milestones": idea.get("milestones", [])[:6] if isinstance(idea.get("milestones"), list) else [],
+                "category": str(idea.get("category", "General"))[:30],
+            })
+
+        return validated
+
+    except json.JSONDecodeError as e:
+        logging.error(f"[InnovateX] JSON parse error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to parse AI response as JSON")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"[InnovateX] Generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
+@app.post("/api/innovatex/generate-ideas")
+async def innovatex_generate_ideas(
+    body: InnovateXIdeaRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Generate AI-powered project ideas for InnovateX."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    # Fetch user profile to get department and college
+    department = "General Engineering"
+    college = "Unknown"
+    try:
+        user_id = _get_user_id_with_retry(token)
+        supabase = get_service_client()
+        prof_q = _supabase_retry(
+            lambda: (
+                supabase.table("user_profiles")
+                .select("*, colleges(id,name), departments(id,name)")
+                .eq("auth_user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+        )
+        if prof_q and prof_q.data:
+            prof = prof_q.data[0]
+            dept_data = prof.get("departments")
+            if isinstance(dept_data, dict):
+                department = dept_data.get("name", department)
+            elif isinstance(dept_data, list) and dept_data:
+                department = dept_data[0].get("name", department)
+
+            college_data = prof.get("colleges")
+            if isinstance(college_data, dict):
+                college = college_data.get("name", college)
+            elif isinstance(college_data, list) and college_data:
+                college = college_data[0].get("name", college)
+    except Exception as e:
+        logging.warning(f"[InnovateX] Could not fetch user profile: {e}")
+
+    # Run AI generation in thread pool to avoid blocking
+    ideas = await run_in_threadpool(
+        _innovatex_generate_ideas,
+        department=department,
+        college=college,
+        skills=body.skills,
+        interests=body.interests,
+        team_size=body.team_size,
+        additional_context=body.additional_context,
+    )
+
+    return {
+        "ideas": ideas,
+        "department": department,
+        "college": college,
+        "model": INNOVATEX_MODEL,
+        "count": len(ideas),
+    }

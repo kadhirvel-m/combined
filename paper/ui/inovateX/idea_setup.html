@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Project Setup — Smart Idea Engine | InnovateX</title>
+    <meta name="description"
+        content="Configure your project preferences and let AI generate tailored project ideas for you." />
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="../config.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' },
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+    <script>
+            (() => {
+                const stored = localStorage.getItem('px_theme');
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (stored ? stored === 'dark' : prefersDark) document.documentElement.classList.add('dark');
+            })();
+    </script>
+    <script>
+        (() => {
+            const token = localStorage.getItem('px_token');
+            const refresh = localStorage.getItem('px_refresh_token');
+            if (!token && !refresh) {
+                location.replace('../login.html?next=' + encodeURIComponent(location.pathname));
+            }
+        })();
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] {
+            display: none !important
+        }
+
+        .material-symbols-rounded {
+            vertical-align: -6px
+        }
+
+        /* ── Gradient text ── */
+        .gradient-hero-text {
+            display: inline-block;
+            background-image: linear-gradient(90deg, #1E1E2F, #4C2A59, #9E4B8A, #4C2A59, #1E1E2F);
+            background-size: 200% 200%;
+            animation: grad-shift 4s ease-in-out infinite;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .dark .gradient-hero-text {
+            background-image: linear-gradient(90deg, #EFA3DC, #CA6CB3, #FFFFFF, #CA6CB3, #EFA3DC)
+        }
+
+        @keyframes grad-shift {
+            0% {
+                background-position: 0% 50%
+            }
+
+            50% {
+                background-position: 100% 50%
+            }
+
+            100% {
+                background-position: 0% 50%
+            }
+        }
+
+        /* ── Aurora ── */
+        .hero-aurora {
+            position: relative;
+            overflow: hidden
+        }
+
+        .hero-aurora::before {
+            content: "";
+            position: absolute;
+            inset: -30% -5% auto -30%;
+            height: 480px;
+            background: radial-gradient(circle at top, rgba(158, 75, 138, 0.45), transparent 60%);
+            filter: blur(70px);
+            opacity: 0.6;
+            pointer-events: none
+        }
+
+        .hero-aurora::after {
+            content: "";
+            position: absolute;
+            inset: auto -25% -35% 30%;
+            height: 400px;
+            background: radial-gradient(circle at bottom, rgba(76, 42, 89, 0.45), transparent 60%);
+            filter: blur(70px);
+            opacity: 0.5;
+            pointer-events: none
+        }
+
+        .dark .hero-aurora::before {
+            opacity: 0.8
+        }
+
+        .dark .hero-aurora::after {
+            opacity: 0.75
+        }
+
+        /* ── Dark body gradient ── */
+        .dark body {
+            background-image: linear-gradient(to left top, #1e1e2f, #242138, #2b2440, #332649, #3d2850, #3f254a, #402244, #401f3e, #34182d, #26131e, #190b11, #000);
+            background-repeat: no-repeat;
+            background-size: cover
+        }
+
+        /* ── Glass card ── */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+            transition: transform .35s ease, box-shadow .35s ease
+        }
+
+        .dark .glass-card {
+            background: rgba(30, 30, 47, 0.55);
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3)
+        }
+
+        /* ── Orbs ── */
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            animation: orb-float 12s infinite alternate ease-in-out;
+            pointer-events: none
+        }
+
+        @keyframes orb-float {
+            0% {
+                transform: translate(0, 0) scale(1)
+            }
+
+            100% {
+                transform: translate(30px, -30px) scale(1.15)
+            }
+        }
+
+        /* ── Reveal ── */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity .7s ease, transform .7s ease
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0)
+        }
+
+        /* ── Pill tag ── */
+        .pill-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            background: linear-gradient(90deg, rgba(158, 75, 138, 0.15), rgba(76, 42, 89, 0.1));
+            color: #9E4B8A
+        }
+
+        .dark .pill-tag {
+            background: linear-gradient(90deg, rgba(158, 75, 138, 0.25), rgba(76, 42, 89, 0.2));
+            color: #EFA3DC
+        }
+
+        /* ── Skill/Interest chips ── */
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            border: 2px solid rgba(0, 0, 0, 0.06);
+            background: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            transition: all .25s ease;
+            user-select: none
+        }
+
+        .dark .chip {
+            border-color: rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.04);
+            color: rgba(255, 255, 255, 0.7)
+        }
+
+        .chip:hover {
+            border-color: #9E4B8A;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(158, 75, 138, 0.15)
+        }
+
+        .chip.selected {
+            background: linear-gradient(135deg, #9E4B8A, #4C2A59);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 4px 16px rgba(158, 75, 138, 0.35);
+            transform: translateY(-2px)
+        }
+
+        .chip .chip-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            background: rgba(158, 75, 138, 0.12)
+        }
+
+        .chip.selected .chip-icon {
+            background: rgba(255, 255, 255, 0.2)
+        }
+
+        /* ── Show more button ── */
+        .show-more-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 14px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #9E4B8A;
+            background: rgba(158, 75, 138, 0.08);
+            border: 1.5px dashed rgba(158, 75, 138, 0.25);
+            cursor: pointer;
+            transition: all .25s ease
+        }
+
+        .dark .show-more-btn {
+            color: #EFA3DC;
+            background: rgba(158, 75, 138, 0.1);
+            border-color: rgba(158, 75, 138, 0.3)
+        }
+
+        .show-more-btn:hover {
+            background: rgba(158, 75, 138, 0.15);
+            border-color: rgba(158, 75, 138, 0.4);
+            transform: translateY(-1px)
+        }
+
+        /* ── Section label ── */
+        .section-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px
+        }
+
+        .section-label .label-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(158, 75, 138, 0.15), rgba(76, 42, 89, 0.1));
+            color: #9E4B8A;
+            flex-shrink: 0
+        }
+
+        .dark .section-label .label-icon {
+            background: linear-gradient(135deg, rgba(158, 75, 138, 0.25), rgba(76, 42, 89, 0.2));
+            color: #EFA3DC
+        }
+
+        .section-label h3 {
+            font-size: 16px;
+            font-weight: 700
+        }
+
+        .section-label .badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 99px;
+            background: rgba(158, 75, 138, 0.12);
+            color: #9E4B8A
+        }
+
+        .dark .section-label .badge {
+            background: rgba(158, 75, 138, 0.25);
+            color: #EFA3DC
+        }
+
+        /* ── Category group ── */
+        .category-group {
+            margin-bottom: 20px
+        }
+
+        .category-group .cat-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(0, 0, 0, 0.35);
+            margin-bottom: 8px;
+            padding-left: 4px
+        }
+
+        .dark .category-group .cat-title {
+            color: rgba(255, 255, 255, 0.3)
+        }
+
+        /* ── Team size ── */
+        .team-opt {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.15rem;
+            border: 2.5px solid rgba(0, 0, 0, 0.07);
+            background: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            transition: all .25s ease
+        }
+
+        .dark .team-opt {
+            border-color: rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.04)
+        }
+
+        .team-opt:hover {
+            border-color: #9E4B8A;
+            transform: scale(1.08)
+        }
+
+        .team-opt.selected {
+            background: linear-gradient(135deg, #9E4B8A, #4C2A59);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 6px 20px rgba(158, 75, 138, 0.35);
+            transform: scale(1.08)
+        }
+
+        /* ── Preference card ── */
+        .pref-card {
+            padding: 16px 20px;
+            border-radius: 16px;
+            border: 2px solid rgba(0, 0, 0, 0.06);
+            background: rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            transition: all .25s ease;
+            position: relative
+        }
+
+        .dark .pref-card {
+            border-color: rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.03)
+        }
+
+        .pref-card:hover {
+            border-color: #9E4B8A;
+            transform: translateY(-2px)
+        }
+
+        .pref-card.selected {
+            border-color: #9E4B8A;
+            background: linear-gradient(135deg, rgba(158, 75, 138, 0.08), rgba(76, 42, 89, 0.05));
+            box-shadow: 0 4px 16px rgba(158, 75, 138, 0.15)
+        }
+
+        .dark .pref-card.selected {
+            background: linear-gradient(135deg, rgba(158, 75, 138, 0.15), rgba(76, 42, 89, 0.1))
+        }
+
+        .pref-card .check-mark {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            transition: all .25s ease
+        }
+
+        .dark .pref-card .check-mark {
+            border-color: rgba(255, 255, 255, 0.1)
+        }
+
+        .pref-card.selected .check-mark {
+            background: linear-gradient(135deg, #9E4B8A, #4C2A59);
+            border-color: transparent;
+            color: white
+        }
+
+        /* ── Hardware section slide ── */
+        .hw-section {
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height .5s ease, opacity .4s ease, margin .4s ease;
+            margin-top: 0
+        }
+
+        .hw-section.open {
+            max-height: 600px;
+            opacity: 1;
+            margin-top: 20px
+        }
+
+        /* ── Footer ── */
+        .app-footer {
+            position: relative;
+            overflow: hidden;
+            color: #1E1E2F;
+            background: linear-gradient(135deg, rgba(250, 245, 251, 0.98) 0%, rgba(231, 208, 228, 0.96) 45%, rgba(201, 141, 186, 0.94) 100%)
+        }
+
+        .app-footer::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.45;
+            background: radial-gradient(circle at 15% 20%, rgba(76, 42, 89, 0.25), transparent 55%), radial-gradient(circle at 85% 75%, rgba(158, 75, 138, 0.2), transparent 60%)
+        }
+
+        .dark .app-footer {
+            color: rgba(248, 243, 255, 0.92);
+            background: linear-gradient(135deg, rgba(30, 30, 47, 0.98) 0%, rgba(40, 22, 52, 0.96) 35%, rgba(76, 42, 89, 0.94) 70%, rgba(158, 75, 138, 0.92) 100%)
+        }
+
+        .dark .app-footer::before {
+            opacity: 0.65
+        }
+    </style>
+</head>
+
+<body
+    class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark transition-colors">
+
+    <!-- ═══════════════ NAVBAR ═══════════════ -->
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-4 max-w-6xl mx-auto px-4">
+            <a href="../index.html" class="flex items-center gap-3" aria-label="PaperX Home">
+                <img src="../assets/img/logo-light.svg" alt="PaperX" class="h-9 w-auto dark:hidden">
+                <img src="../assets/img/logo-dark.svg" alt="PaperX" class="h-9 w-auto hidden dark:block">
+                <span
+                    class="hidden sm:inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-gradient-to-r from-brand-500 to-brand-700 text-white">InnovateX</span>
+            </a>
+            <nav class="hidden md:flex items-center gap-1 text-sm text-neutral-700 dark:text-white/85">
+                <a class="rounded-full px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    href="./index.html">Home</a>
+                <a class="rounded-full px-3 py-2 bg-brand-500/10 text-brand-700 dark:text-brandlt-200 font-semibold"
+                    href="#">Idea Engine</a>
+            </nav>
+            <div class="flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded text-[20px]" id="themeIcon">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ═══════════════ HERO STRIP ═══════════════ -->
+    <section class="hero-aurora border-b border-black/5 dark:border-white/10">
+        <div class="orb w-72 h-72 bg-brand-500/30 -top-20 right-10"></div>
+        <div class="orb w-56 h-56 bg-brandlt-400/20 bottom-10 left-1/4" style="animation-delay:5s"></div>
+        <div class="relative container max-w-5xl mx-auto px-4 py-12 md:py-16 text-center">
+            <div class="inline-flex items-center gap-2 pill-tag mb-5">
+                <span class="material-symbols-rounded text-sm">auto_awesome</span>
+                Smart Idea Engine
+            </div>
+            <h1 class="text-3xl sm:text-4xl md:text-5xl font-black leading-tight mb-3">
+                <span class="gradient-hero-text">Tell Us About You</span>
+            </h1>
+            <p class="text-neutral-500 dark:text-white/60 text-base md:text-lg max-w-xl mx-auto">
+                Configure your skills, interests, and preferences. Our AI will craft <strong>personalized project
+                    ideas</strong> matched to your unique profile.
+            </p>
+        </div>
+    </section>
+
+    <!-- ═══════════════ MAIN FORM ═══════════════ -->
+    <main class="max-w-5xl mx-auto px-4 py-10 relative">
+        <div class="orb w-80 h-80 bg-brand-500/15 top-20 -right-20" style="animation-delay:2s"></div>
+        <div class="orb w-64 h-64 bg-brand-700/15 bottom-32 -left-20" style="animation-delay:6s"></div>
+
+        <div class="relative space-y-8">
+
+            <!-- ═══ SECTION 1: PROFILE ═══ -->
+            <section class="glass-card rounded-3xl p-6 md:p-8 reveal" id="sec-profile">
+                <div class="section-label">
+                    <div class="label-icon"><span class="material-symbols-rounded text-lg">person</span></div>
+                    <h3>Your Academic Profile</h3>
+                    <span class="badge">AUTO-DETECTED</span>
+                </div>
+                <p class="text-sm text-neutral-500 dark:text-white/50 mb-5 ml-11">We've fetched your details from your
+                    PaperX account.</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ml-0 sm:ml-11">
+                    <div class="p-4 rounded-2xl border border-black/5 dark:border-white/8 bg-white/40 dark:bg-white/3">
+                        <p
+                            class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-white/30 mb-1">
+                            Department</p>
+                        <p class="font-bold text-sm" id="profDept">—</p>
+                    </div>
+                    <div class="p-4 rounded-2xl border border-black/5 dark:border-white/8 bg-white/40 dark:bg-white/3">
+                        <p
+                            class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-white/30 mb-1">
+                            College</p>
+                        <p class="font-bold text-sm" id="profCollege">—</p>
+                    </div>
+                    <div class="p-4 rounded-2xl border border-black/5 dark:border-white/8 bg-white/40 dark:bg-white/3">
+                        <p
+                            class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-white/30 mb-1">
+                            Year / Semester</p>
+                        <p class="font-bold text-sm" id="profYear">—</p>
+                    </div>
+                    <div class="p-4 rounded-2xl border border-black/5 dark:border-white/8 bg-white/40 dark:bg-white/3">
+                        <p
+                            class="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-white/30 mb-1">
+                            Degree</p>
+                        <p class="font-bold text-sm" id="profDegree">—</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ SECTION 2: PROJECT TYPE ═══ -->
+            <section class="glass-card rounded-3xl p-6 md:p-8 reveal" id="sec-type">
+                <div class="section-label">
+                    <div class="label-icon"><span class="material-symbols-rounded text-lg">category</span></div>
+                    <h3>Project Type</h3>
+                </div>
+                <p class="text-sm text-neutral-500 dark:text-white/50 mb-5 ml-11">What kind of project are you looking
+                    for?</p>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 ml-0 sm:ml-11" id="typeContainer"></div>
+
+                <!-- Hardware & IoT — conditionally shown -->
+                <div class="hw-section ml-0 sm:ml-11" id="hwSection">
+                    <div class="category-group">
+                        <p class="cat-title">🔧 Hardware & IoT Skills</p>
+                        <p class="text-xs text-neutral-400 dark:text-white/35 mb-3 pl-1">Select the hardware platforms
+                            and components you can work with.</p>
+                        <div class="flex flex-wrap gap-2" id="cat-hardware"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ SECTION 3: TECHNICAL SKILLS ═══ -->
+            <section class="glass-card rounded-3xl p-6 md:p-8 reveal" id="sec-skills">
+                <div class="section-label">
+                    <div class="label-icon"><span class="material-symbols-rounded text-lg">terminal</span></div>
+                    <h3>Technical Skills</h3>
+                    <span class="badge" id="skillBadge">0 SELECTED</span>
+                </div>
+                <p class="text-sm text-neutral-500 dark:text-white/50 mb-5 ml-11">Select all technologies and tools
+                    you're comfortable with.</p>
+
+                <!-- Programming Languages -->
+                <div class="category-group ml-0 sm:ml-11">
+                    <p class="cat-title">💻 Programming Languages</p>
+                    <div class="flex flex-wrap gap-2" id="cat-languages"></div>
+                    <div class="flex flex-wrap gap-2 mt-2" id="cat-languages-more" style="display:none"></div>
+                    <button class="show-more-btn mt-2" id="langShowMore" onclick="toggleMoreLangs()">
+                        <span class="material-symbols-rounded text-sm">expand_more</span>
+                        <span id="langShowMoreText">Show More</span>
+                    </button>
+                </div>
+
+                <!-- Web & Mobile Frameworks -->
+                <div class="category-group ml-0 sm:ml-11">
+                    <p class="cat-title">🌐 Web & Mobile Frameworks</p>
+                    <div class="flex flex-wrap gap-2" id="cat-frameworks"></div>
+                </div>
+
+                <!-- AI / ML / Data -->
+                <div class="category-group ml-0 sm:ml-11">
+                    <p class="cat-title">🧠 AI / ML & Data Science</p>
+                    <div class="flex flex-wrap gap-2" id="cat-aiml"></div>
+                </div>
+
+                <!-- Databases -->
+                <div class="category-group ml-0 sm:ml-11">
+                    <p class="cat-title">🗄️ Databases</p>
+                    <div class="flex flex-wrap gap-2" id="cat-db"></div>
+                </div>
+
+                <!-- Custom skill input -->
+                <div class="mt-4 ml-0 sm:ml-11">
+                    <div class="flex gap-2">
+                        <input type="text" id="customSkillInput" placeholder="Add a custom skill…" maxlength="40"
+                            class="flex-1 px-4 py-2.5 rounded-xl border border-black/8 dark:border-white/10 bg-white/50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 text-sm" />
+                        <button onclick="addCustomSkill()"
+                            class="px-4 py-2.5 rounded-xl bg-brand-500/10 text-brand-700 dark:text-brandlt-200 font-semibold text-sm hover:bg-brand-500/20 transition">
+                            <span class="material-symbols-rounded text-base">add</span> Add
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ SECTION 4: INTEREST AREAS ═══ -->
+            <section class="glass-card rounded-3xl p-6 md:p-8 reveal" id="sec-interests">
+                <div class="section-label">
+                    <div class="label-icon"><span class="material-symbols-rounded text-lg">favorite</span></div>
+                    <h3>Interest Areas & Domains</h3>
+                    <span class="badge" id="interestBadge">0 SELECTED</span>
+                </div>
+                <p class="text-sm text-neutral-500 dark:text-white/50 mb-5 ml-11">Choose domains that excite you — the
+                    AI will prioritize ideas in these areas.</p>
+
+                <!-- Tech Domains -->
+                <div class="category-group ml-0 sm:ml-11">
+                    <p class="cat-title">🚀 Technology Domains</p>
+                    <div class="flex flex-wrap gap-2" id="cat-tech-domains"></div>
+                </div>
+                <!-- Industry Verticals -->
+                <div class="category-group ml-0 sm:ml-11">
+                    <p class="cat-title">🏭 Industry & Verticals</p>
+                    <div class="flex flex-wrap gap-2" id="cat-industry"></div>
+                </div>
+                <!-- Impact Areas -->
+                <div class="category-group ml-0 sm:ml-11">
+                    <p class="cat-title">🌍 Social & Impact Areas</p>
+                    <div class="flex flex-wrap gap-2" id="cat-impact"></div>
+                </div>
+            </section>
+
+            <!-- ═══ SECTION 5: TEAM SIZE + DIFFICULTY ═══ -->
+            <section class="glass-card rounded-3xl p-6 md:p-8 reveal" id="sec-prefs">
+                <div class="section-label">
+                    <div class="label-icon"><span class="material-symbols-rounded text-lg">tune</span></div>
+                    <h3>Project Preferences</h3>
+                </div>
+                <p class="text-sm text-neutral-500 dark:text-white/50 mb-6 ml-11">Fine-tune what kind of project best
+                    suits your needs.</p>
+
+                <div class="space-y-8 ml-0 sm:ml-11">
+
+                    <!-- Team size -->
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-wider text-neutral-400 dark:text-white/30 mb-3">
+                            <span class="material-symbols-rounded text-sm mr-1">group</span> Team Size
+                        </p>
+                        <div class="flex gap-3 flex-wrap" id="teamContainer"></div>
+                    </div>
+
+                    <!-- Difficulty preference -->
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-wider text-neutral-400 dark:text-white/30 mb-3">
+                            <span class="material-symbols-rounded text-sm mr-1">speed</span> Preferred Difficulty
+                        </p>
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" id="diffContainer"></div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- ═══ SECTION 6: ADDITIONAL CONTEXT ═══ -->
+            <section class="glass-card rounded-3xl p-6 md:p-8 reveal" id="sec-context">
+                <div class="section-label">
+                    <div class="label-icon"><span class="material-symbols-rounded text-lg">edit_note</span></div>
+                    <h3>Additional Context</h3>
+                    <span class="badge">OPTIONAL</span>
+                </div>
+                <p class="text-sm text-neutral-500 dark:text-white/50 mb-4 ml-11">Any special requirements, constraints,
+                    or inspirations?</p>
+                <div class="ml-0 sm:ml-11">
+                    <textarea id="additionalContext" maxlength="800" rows="4"
+                        class="w-full px-5 py-4 rounded-2xl border border-black/8 dark:border-white/10 bg-white/50 dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 resize-none text-sm leading-relaxed"
+                        placeholder="Examples:
+• I want a project related to agriculture + IoT
+• Must include a hardware component with Arduino
+• Interested in solving a problem for my college campus
+• Need beginner-friendly project for final year submission
+• Want something that can be published as a research paper"></textarea>
+                    <p class="text-right text-[11px] text-neutral-400 dark:text-white/25 mt-1"><span
+                            id="charCount">0</span>/800</p>
+                </div>
+            </section>
+
+            <!-- ═══ GENERATE BUTTON ═══ -->
+            <div class="text-center py-6 reveal">
+                <button id="generateBtn" onclick="submitForm()"
+                    class="inline-flex items-center justify-center gap-3 px-10 py-5 rounded-2xl bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] text-white font-bold text-lg shadow-[0_12px_30px_rgba(158,75,138,0.35)] hover:shadow-[0_20px_40px_rgba(158,75,138,0.5)] hover:-translate-y-1 active:translate-y-0 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-[0_12px_30px_rgba(158,75,138,0.35)]">
+                    <span class="material-symbols-rounded text-2xl">rocket_launch</span>
+                    Generate My Project Ideas
+                </button>
+                <p class="text-xs text-neutral-400 dark:text-white/40 mt-4 flex items-center justify-center gap-2">
+                    <span class="material-symbols-rounded text-sm">auto_awesome</span>
+                    Powered by Gemini AI • Generates 5 tailored ideas in ~15 seconds
+                </p>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- ═══════════════ FOOTER ═══════════════ -->
+    <footer class="app-footer py-8 text-center text-sm relative">
+        <p class="font-semibold relative z-10">PaperX × InnovateX</p>
+        <p class="opacity-60 mt-1 relative z-10">© 2025 PaperX. Smart Idea Engine powered by Gemini AI.</p>
+    </footer>
+
+    <!-- ═══════════════ SCRIPTS ═══════════════ -->
+    <script>
+        const apiBase = (window.API_BASE || window.location.origin).replace(/\/$/, '');
+
+        // ══════════════════════════════════════════
+        // DATA
+        // ══════════════════════════════════════════
+
+        // Programming Languages — initial 4 shown, rest behind "Show More"
+        const LANG_INITIAL = ['Python', 'Java', 'C++', 'C#'];
+        const LANG_MORE = ['JavaScript', 'TypeScript', 'C', 'Kotlin', 'Swift', 'Go', 'Rust', 'R', 'PHP', 'Ruby', 'Dart', 'MATLAB', 'Scala', 'Perl'];
+
+        // Web & Mobile Frameworks (removed SwiftUI, Laravel, Electron, .NET, Rails, Svelte)
+        const FRAMEWORKS = ['React', 'Next.js', 'Vue.js', 'Angular', 'Node.js', 'Express.js', 'Django', 'FastAPI', 'Flask', 'Spring Boot', 'Flutter', 'React Native'];
+
+        // AI / ML & Data Science (removed NLTK, Matplotlib, MediaPipe, Keras, Jupyter, Stable Diffusion, YOLO, spaCy; added LlamaIndex, Haystack, Ollama, autogen, vLLM)
+        const AIML = ['TensorFlow', 'PyTorch', 'Scikit-learn', 'OpenCV', 'Hugging Face', 'LangChain', 'LlamaIndex', 'Haystack', 'Ollama', 'autogen', 'vLLM', 'Pandas', 'NumPy'];
+
+        // Databases only (removed cloud providers)
+        const DATABASES = ['Supabase', 'MySQL', 'PostgreSQL', 'MongoDB', 'Redis'];
+
+        // Hardware & IoT
+        const HARDWARE = ['Arduino', 'Raspberry Pi', 'ESP32', 'ESP8266', 'STM32', 'Sensors (DHT, MPU)', 'Motor Drivers', '3D Printing', 'PCB Design', 'Soldering', 'LoRa', 'Bluetooth (BLE)', 'RFID/NFC', 'GPS Module'];
+
+        const INTEREST_CATEGORIES = {
+            'cat-tech-domains': [
+                { name: 'Artificial Intelligence', icon: 'psychology' },
+                { name: 'Machine Learning', icon: 'model_training' },
+                { name: 'Deep Learning / Neural Nets', icon: 'neurology' },
+                { name: 'Natural Language Processing', icon: 'translate' },
+                { name: 'Computer Vision', icon: 'visibility' },
+                { name: 'Web Development', icon: 'language' },
+                { name: 'Mobile App Development', icon: 'smartphone' },
+                { name: 'Cloud Computing', icon: 'cloud' },
+                { name: 'DevOps & CI/CD', icon: 'deployed_code' },
+                { name: 'Blockchain & Web3', icon: 'token' },
+                { name: 'Cybersecurity', icon: 'security' },
+                { name: 'Data Science & Analytics', icon: 'analytics' },
+                { name: 'AR / VR / XR', icon: 'view_in_ar' },
+                { name: 'Game Development', icon: 'sports_esports' },
+                { name: 'IoT & Smart Systems', icon: 'sensors' },
+                { name: 'Robotics & Automation', icon: 'precision_manufacturing' },
+            ],
+            'cat-industry': [
+                { name: 'Healthcare & MedTech', icon: 'health_and_safety' },
+                { name: 'EdTech & E-Learning', icon: 'school' },
+                { name: 'FinTech & Banking', icon: 'account_balance' },
+                { name: 'E-Commerce & Retail', icon: 'shopping_cart' },
+                { name: 'AgriTech & Farming', icon: 'agriculture' },
+                { name: 'Transportation & Logistics', icon: 'local_shipping' },
+                { name: 'Real Estate & PropTech', icon: 'home_work' },
+                { name: 'Manufacturing & Industry 4.0', icon: 'factory' },
+                { name: 'Media & Entertainment', icon: 'movie' },
+                { name: 'Food & Hospitality', icon: 'restaurant' },
+            ],
+            'cat-impact': [
+                { name: 'Social Impact & NGO', icon: 'volunteer_activism' },
+                { name: 'Environmental & Green Tech', icon: 'eco' },
+                { name: 'Accessibility & Inclusion', icon: 'accessible' },
+                { name: 'Women Safety', icon: 'shield_person' },
+                { name: 'Rural Development', icon: 'landscape' },
+                { name: 'Disaster Management', icon: 'emergency' },
+                { name: 'Smart Cities & Urban Planning', icon: 'location_city' },
+                { name: 'Renewable Energy', icon: 'solar_power' },
+            ],
+        };
+
+        const PROJECT_TYPES = [
+            { name: 'Software Only', icon: 'code', desc: 'Pure software project' },
+            { name: 'Hardware + Software', icon: 'memory', desc: 'IoT / Embedded hybrid' },
+            { name: 'Research / Thesis', icon: 'science', desc: 'Academic research focus' },
+            { name: 'Any / Mixed', icon: 'shuffle', desc: 'Open to anything' },
+        ];
+
+        const DIFFICULTY_OPTIONS = [
+            { name: 'Beginner', icon: 'sentiment_satisfied', color: '#10B981' },
+            { name: 'Intermediate', icon: 'trending_up', color: '#3B82F6' },
+            { name: 'Advanced', icon: 'rocket', color: '#F59E0B' },
+            { name: 'Expert', icon: 'workspace_premium', color: '#EF4444' },
+            { name: 'Any Level', icon: 'shuffle', color: '#9E4B8A' },
+        ];
+
+        // ══════════════════════════════════════════
+        // STATE
+        // ══════════════════════════════════════════
+        let selectedSkills = new Set();
+        let selectedInterests = new Set();
+        let selectedHardware = new Set();
+        let selectedTeamSize = 2;
+        let selectedProjectType = 'Any / Mixed';
+        let selectedDifficulty = 'Any Level';
+        let langsExpanded = false;
+
+        // ══════════════════════════════════════════
+        // INIT
+        // ══════════════════════════════════════════
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            renderProjectTypes();
+            renderSkillChips();
+            renderHardwareChips();
+            renderInterestChips();
+            renderTeamButtons();
+            renderDifficultyOptions();
+            fetchProfile();
+            initReveal();
+            // Char counter
+            const ta = document.getElementById('additionalContext');
+            ta.addEventListener('input', () => {
+                document.getElementById('charCount').textContent = ta.value.length;
+            });
+        });
+
+        // ══════════════════════════════════════════
+        // THEME
+        // ══════════════════════════════════════════
+        function initTheme() {
+            const btn = document.querySelector('[data-theme-toggle]');
+            const icon = document.getElementById('themeIcon');
+            icon.textContent = document.documentElement.classList.contains('dark') ? 'light_mode' : 'dark_mode';
+            btn.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                const d = document.documentElement.classList.contains('dark');
+                icon.textContent = d ? 'light_mode' : 'dark_mode';
+                localStorage.setItem('px_theme', d ? 'dark' : 'light');
+            });
+        }
+
+        // ══════════════════════════════════════════
+        // RENDER FUNCTIONS
+        // ══════════════════════════════════════════
+
+        function renderProjectTypes() {
+            document.getElementById('typeContainer').innerHTML = PROJECT_TYPES.map(t =>
+                `<div class="pref-card ${t.name === selectedProjectType ? 'selected' : ''}" onclick="selectType('${esc(t.name)}',this)">
+            <div class="check-mark"><span class="material-symbols-rounded text-xs">check</span></div>
+            <span class="material-symbols-rounded text-2xl text-brand-500 dark:text-brandlt-200 mb-2 block">${t.icon}</span>
+            <p class="font-bold text-sm">${esc(t.name)}</p>
+            <p class="text-[11px] text-neutral-400 dark:text-white/40 mt-0.5">${esc(t.desc)}</p>
+        </div>`
+            ).join('');
+        }
+
+        function renderSkillChips() {
+            // Initial languages (4 shown)
+            document.getElementById('cat-languages').innerHTML = LANG_INITIAL.map(s =>
+                `<button type="button" class="chip" onclick="toggleSkill(this,'${esc(s)}')">${esc(s)}</button>`
+            ).join('');
+
+            // More languages (hidden initially)
+            document.getElementById('cat-languages-more').innerHTML = LANG_MORE.map(s =>
+                `<button type="button" class="chip" onclick="toggleSkill(this,'${esc(s)}')">${esc(s)}</button>`
+            ).join('');
+
+            // Frameworks
+            document.getElementById('cat-frameworks').innerHTML = FRAMEWORKS.map(s =>
+                `<button type="button" class="chip" onclick="toggleSkill(this,'${esc(s)}')">${esc(s)}</button>`
+            ).join('');
+
+            // AI/ML
+            document.getElementById('cat-aiml').innerHTML = AIML.map(s =>
+                `<button type="button" class="chip" onclick="toggleSkill(this,'${esc(s)}')">${esc(s)}</button>`
+            ).join('');
+
+            // Databases
+            document.getElementById('cat-db').innerHTML = DATABASES.map(s =>
+                `<button type="button" class="chip" onclick="toggleSkill(this,'${esc(s)}')">${esc(s)}</button>`
+            ).join('');
+        }
+
+        function renderHardwareChips() {
+            document.getElementById('cat-hardware').innerHTML = HARDWARE.map(s =>
+                `<button type="button" class="chip" onclick="toggleHardware(this,'${esc(s)}')">${esc(s)}</button>`
+            ).join('');
+        }
+
+        function renderInterestChips() {
+            for (const [containerId, items] of Object.entries(INTEREST_CATEGORIES)) {
+                const el = document.getElementById(containerId);
+                if (!el) continue;
+                el.innerHTML = items.map(i =>
+                    `<button type="button" class="chip" onclick="toggleInterest(this,'${esc(i.name)}')">
+                <span class="chip-icon"><span class="material-symbols-rounded text-xs">${i.icon}</span></span>
+                ${esc(i.name)}
+            </button>`
+                ).join('');
+            }
+        }
+
+        function renderTeamButtons() {
+            document.getElementById('teamContainer').innerHTML = [1, 2, 3, 4, 5, 6].map(n =>
+                `<button type="button" class="team-opt ${n === selectedTeamSize ? 'selected' : ''}" onclick="selectTeam(${n},this)">
+            <div class="text-center"><span class="text-lg">${n}</span><br><span class="text-[9px] font-semibold opacity-50">${n === 1 ? 'Solo' : 'Members'}</span></div>
+        </button>`
+            ).join('');
+        }
+
+        function renderDifficultyOptions() {
+            document.getElementById('diffContainer').innerHTML = DIFFICULTY_OPTIONS.map(d =>
+                `<div class="pref-card ${d.name === selectedDifficulty ? 'selected' : ''}" onclick="selectDiff('${esc(d.name)}',this)">
+            <div class="check-mark"><span class="material-symbols-rounded text-xs">check</span></div>
+            <span class="material-symbols-rounded text-2xl mb-1 block" style="color:${d.color}">${d.icon}</span>
+            <p class="font-bold text-xs">${esc(d.name)}</p>
+        </div>`
+            ).join('');
+        }
+
+        // ══════════════════════════════════════════
+        // TOGGLE / SELECT HANDLERS
+        // ══════════════════════════════════════════
+        function toggleSkill(el, skill) {
+            if (selectedSkills.has(skill)) { selectedSkills.delete(skill); el.classList.remove('selected'); }
+            else { selectedSkills.add(skill); el.classList.add('selected'); }
+            document.getElementById('skillBadge').textContent = selectedSkills.size + ' SELECTED';
+        }
+
+        function toggleHardware(el, hw) {
+            if (selectedHardware.has(hw)) { selectedHardware.delete(hw); el.classList.remove('selected'); }
+            else { selectedHardware.add(hw); el.classList.add('selected'); }
+        }
+
+        function toggleInterest(el, interest) {
+            if (selectedInterests.has(interest)) { selectedInterests.delete(interest); el.classList.remove('selected'); }
+            else { selectedInterests.add(interest); el.classList.add('selected'); }
+            document.getElementById('interestBadge').textContent = selectedInterests.size + ' SELECTED';
+        }
+
+        function selectTeam(n, el) {
+            selectedTeamSize = n;
+            document.querySelectorAll('.team-opt').forEach(b => b.classList.remove('selected'));
+            el.classList.add('selected');
+        }
+
+        function selectType(name, el) {
+            selectedProjectType = name;
+            document.querySelectorAll('#typeContainer .pref-card').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+
+            // Show/hide hardware section
+            const hwSec = document.getElementById('hwSection');
+            if (name === 'Hardware + Software' || name === 'Any / Mixed') {
+                hwSec.classList.add('open');
+            } else {
+                hwSec.classList.remove('open');
+            }
+        }
+
+        function selectDiff(name, el) {
+            selectedDifficulty = name;
+            document.querySelectorAll('#diffContainer .pref-card').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+        }
+
+        function toggleMoreLangs() {
+            langsExpanded = !langsExpanded;
+            document.getElementById('cat-languages-more').style.display = langsExpanded ? 'flex' : 'none';
+            document.getElementById('langShowMoreText').textContent = langsExpanded ? 'Show Less' : 'Show More';
+            const icon = document.querySelector('#langShowMore .material-symbols-rounded');
+            icon.textContent = langsExpanded ? 'expand_less' : 'expand_more';
+        }
+
+        function addCustomSkill() {
+            const input = document.getElementById('customSkillInput');
+            const skill = input.value.trim();
+            if (!skill) return;
+            if (selectedSkills.has(skill)) { input.value = ''; return; }
+            selectedSkills.add(skill);
+            const cont = document.getElementById('cat-languages');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'chip selected';
+            btn.onclick = function () { toggleSkill(this, skill); };
+            btn.textContent = skill;
+            cont.appendChild(btn);
+            input.value = '';
+            document.getElementById('skillBadge').textContent = selectedSkills.size + ' SELECTED';
+        }
+
+        // ══════════════════════════════════════════
+        // FETCH PROFILE
+        // ══════════════════════════════════════════
+        async function fetchProfile() {
+            const token = localStorage.getItem('px_token');
+            if (!token) return;
+            try {
+                const res = await fetch(`${apiBase}/api/me`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) return;
+                const d = await res.json();
+                document.getElementById('profDept').textContent = d?.department?.name || d?.department || '—';
+                document.getElementById('profCollege').textContent = d?.college?.name || d?.college || '—';
+                document.getElementById('profYear').textContent = d?.semester ? `Sem ${d.semester}` : (d?.batch ? `${d.batch.from}-${d.batch.to}` : '—');
+                document.getElementById('profDegree').textContent = d?.degree?.name || d?.degree || '—';
+            } catch (e) { console.warn('Profile fetch error:', e); }
+        }
+
+        // ══════════════════════════════════════════
+        // SUBMIT
+        // ══════════════════════════════════════════
+        function submitForm() {
+            if (selectedSkills.size === 0) { alert('Please select at least one skill.'); return; }
+            if (selectedInterests.size === 0) { alert('Please select at least one interest area.'); return; }
+
+            // Merge hardware skills into skills if any selected
+            const allSkills = [...selectedSkills];
+            if (selectedHardware.size > 0) {
+                selectedHardware.forEach(h => { if (!allSkills.includes(h)) allSkills.push(h); });
+            }
+
+            const payload = {
+                skills: allSkills,
+                interests: [...selectedInterests],
+                team_size: selectedTeamSize,
+                project_type: selectedProjectType,
+                difficulty: selectedDifficulty,
+                additional_context: document.getElementById('additionalContext').value.trim() || null,
+            };
+
+            // Store in sessionStorage and navigate to results page
+            sessionStorage.setItem('innovatex_setup', JSON.stringify(payload));
+            window.location.href = './idea_engine.html';
+        }
+
+        // ══════════════════════════════════════════
+        // SCROLL REVEAL
+        // ══════════════════════════════════════════
+        function initReveal() {
+            const observer = new IntersectionObserver(entries => {
+                entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+            }, { threshold: 0.08 });
+            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+        }
+
+        function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+        // Enter key on custom skill
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && document.activeElement === document.getElementById('customSkillInput')) {
+                e.preventDefault(); addCustomSkill();
+            }
+        });
+    </script>
+</body>
+
+</html>
