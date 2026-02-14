@@ -26431,8 +26431,8 @@ async def math_td_question_history(session_id: str):
 INNOVATEX_MODEL = "gemini-3-pro-preview"
 
 class InnovateXIdeaRequest(BaseModel):
-    skills: List[str] = Field(..., min_length=1, description="Skills the student knows")
-    interests: List[str] = Field(..., min_length=1, description="Areas of interest")
+    skills: List[str] = Field(default=[], description="Optional skills the student knows")
+    interests: List[str] = Field(..., min_length=1, description="Domains and areas of interest")
     team_size: int = Field(default=1, ge=1, le=6, description="Number of team members")
     additional_context: Optional[str] = Field(None, max_length=2000, description="Optional extra context including project preferences")
 
@@ -26451,48 +26451,74 @@ def _innovatex_generate_ideas(department: str, college: str, skills: List[str], 
     model = genai_lib.GenerativeModel(INNOVATEX_MODEL)
 
     context_line = f"\nAdditional context from the student: {additional_context}" if additional_context else ""
+    skills_line = f"\n- Known Skills/Technologies: {', '.join(skills)}" if skills else ""
 
-    prompt = f"""You are InnovateX — an elite academic project idea generator for college students in India.
+    prompt = f"""You are InnovateX — a world-class research advisor and startup mentor combined.
+You generate project ideas that could win hackathons, get published in conferences, or become real startups.
+You are deeply aware of the latest tech landscape as of February 2025.
 
 STUDENT PROFILE:
 - Department: {department}
 - College: {college}
-- Skills: {', '.join(skills)}
-- Interest Areas: {', '.join(interests)}
-- Team Size: {team_size} member(s)
+- Domains & Interests: {', '.join(interests)}
+- Team Size: {team_size} member(s){skills_line}
 {context_line}
 
-YOUR TASK:
-Generate exactly 5 innovative, feasible, and academically impressive project ideas that:
-1. Match the student's department, skills, and interests
-2. Are achievable by a team of {team_size} in 3-6 months
-3. Solve REAL-WORLD problems (not toy projects)
-4. Would impress faculty evaluators and potential employers
-5. Have clear scope for innovation and contribution
-6. Use at least 2-3 of the student's known skills
+GENERATE exactly 9 project ideas. Each must pass this bar:
 
-For each idea, provide:
-- title: A catchy, professional project name (max 8 words)
-- problem: A clear one-line problem statement
-- solution: A 2-3 sentence proposed solution
-- tech_stack: Array of specific technologies/frameworks needed (use what the student knows + 1-2 new ones)
-- difficulty: Integer 1-5 (1=Beginner, 2=Intermediate, 3=Advanced, 4=Expert, 5=Research-Grade)
-- innovation_score: Integer 1-5 (how novel/unique the idea is)
-- use_case: One specific real-world application/scenario
-- timeline_weeks: Estimated weeks to complete (8-24)
-- learning_outcomes: Array of 3-4 specific skills/concepts the student will learn
-- milestones: Array of 4-5 key project milestones as short strings
+━━━ NOVELTY TEST (every idea must pass at least one) ━━━
+✅ Solves a problem NO existing product handles well
+✅ Applies a proven technique to a domain where nobody has used it yet
+✅ Combines two technologies in a way that creates something new
+✅ Could be turned into a research paper or a startup pitch
+❌ REJECT: Just wiring existing APIs together (e.g., "use LangChain + Pinecone to make a chatbot")
+❌ REJECT: Ideas that already have 100 open-source repos doing the same thing
+❌ REJECT: Generic dashboards, attendance systems, expense trackers, weather apps, to-do apps
+
+━━━ WHAT MAKES AN IDEA GREAT ━━━
+- It identifies a GAP — something broken, missing, or inefficient in the real world
+- The solution has a UNIQUE ANGLE — not just "use AI on X" but a specific clever approach
+- It's DEFENSIBLE — someone can't clone it in a weekend because the value is in the pipeline, data, or method
+- A professor would say "This is interesting, tell me more" — not "I've seen this 50 times"
+
+━━━ CUTTING-EDGE TECH (use ONLY where genuinely needed) ━━━
+When the idea naturally benefits from advanced tech, consider:
+- Agentic AI: multi-agent orchestration, tool-calling agents, autonomous decision loops
+- RAG pipelines: domain-specific retrieval over private/niche knowledge bases
+- MCP (Model Context Protocol): connecting LLMs to real-world tools and APIs
+- On-device / Edge AI: running inference locally on ESP32, Raspberry Pi, or mobile
+- Multimodal AI: combining vision + language + audio for richer understanding
+- Vector search: semantic retrieval over embeddings (ChromaDB, Weaviate)
+- Fine-tuning: adapting open-source LLMs for domain-specific tasks
+- Federated learning: training across distributed data without centralizing it
+DO NOT stuff these into every idea. A well-designed web app or a clever hardware hack with no AI is equally valid if the idea itself is novel.
+
+━━━ TITLE RULES ━━━
+Max 5 words. Crystal clear. No buzzwords.
+✅ "Campus Lost Item Finder" / "Smart Crop Doctor" / "Student Burnout Detector"
+❌ "AI-Powered Multimodal Agentic EdTech Platform"
+
+━━━ OUTPUT FIELDS (per idea) ━━━
+- title: max 5 words, instantly understandable
+- problem: 1-2 sentences describing a REAL, SPECIFIC pain point
+- solution: 2-3 sentences — the clever approach, not just "build an app that..."
+- tech_stack: Array of specific tools/frameworks. NEVER include AI model names (no "GPT-4o", "Gemini Flash", "Claude"). Use framework names: "LangChain", "Ollama", "Hugging Face Transformers", etc.
+- difficulty: 1-5 (1=Beginner, 5=Research-Grade)
+- innovation_score: 1-5 (1=exists everywhere, 5=genuinely novel)
+- use_case: One specific real-world deployment scenario
+- timeline_weeks: 8-24 weeks
+- learning_outcomes: Array of 3-4 skills the student will master
+- milestones: Array of 4-5 actionable steps (specific, not vague)
 - category: One of [AI/ML, Web, Mobile, IoT, Robotics, Data Science, Cybersecurity, Social Impact, Core Engineering, Research]
 
-IMPORTANT RULES:
-- Make ideas diverse: mix difficulties (at least one easy, one hard), mix categories
-- Be SPECIFIC — no vague ideas like "AI chatbot" or "website". Include domain specificity.
-- Tech stack must be realistic and specific (e.g., "FastAPI" not just "Python")
-- Milestones should be actionable ("Build REST API for sensor data ingestion" not "Backend development")
-- At least 2 ideas should leverage the student's department specialization
+━━━ DISTRIBUTION ━━━
+- At least 3 ideas with innovation_score >= 4
+- At least 2 ideas with difficulty <= 2 (accessible to beginners)
+- At least 2 ideas leveraging the student's department
+- No two ideas in the same category unless the student only picked one domain
+- Each idea must feel COMPLETELY DIFFERENT from the others
 
-OUTPUT FORMAT:
-Return ONLY a valid JSON array of 5 objects. No markdown, no explanations, no code blocks. Just the raw JSON array.
+OUTPUT: Return ONLY a valid JSON array of 9 objects. No markdown, no explanations, no code blocks.
 """
 
     try:
