@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Slide Viewer — PaperX</title>
+    <meta name="description" content="Preview and export your AI-generated presentation slides." />
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="../config.js"></script>
+    <!-- Export libs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 800: '#2A2040', 700: '#4C2A59', 600: '#6B3A72', 500: '#9E4B8A', 400: '#C88DBA', 300: '#D9B4D3' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' },
+                        ink: '#1E1E2F', plum: '#4C2A59', orchid: '#9E4B8A',
+                        surface: { light: '#FAFBFC', dark: '#13111C' }
+                    },
+                }
+            }
+        }
+    </script>
+    <script>
+            (() => {
+                const stored = localStorage.getItem('px_theme');
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (stored ? stored === 'dark' : prefersDark) document.documentElement.classList.add('dark');
+            })();
+    </script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        /* ── Mesh BG ── */
+        .mesh-bg {
+            background:
+                radial-gradient(ellipse at 20% 0%, rgba(158, 75, 138, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 100%, rgba(76, 42, 89, 0.04) 0%, transparent 50%);
+        }
+
+        .dark .mesh-bg {
+            background:
+                radial-gradient(ellipse at 20% 0%, rgba(158, 75, 138, 0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 100%, rgba(76, 42, 89, 0.08) 0%, transparent 50%);
+        }
+
+        /* ── Glass ── */
+        .glass {
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+        }
+
+        .dark .glass {
+            background: rgba(30, 30, 47, 0.5);
+            border-color: rgba(255, 255, 255, 0.06);
+        }
+
+        /* ── Slide Card ── */
+        .slide-card {
+            aspect-ratio: 16/9;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            border: 3px solid transparent;
+        }
+
+        .slide-card.active {
+            border-color: #9E4B8A;
+            box-shadow: 0 8px 24px rgba(158, 75, 138, 0.25);
+        }
+
+        .slide-card:hover:not(.active) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .dark .slide-card:hover:not(.active) {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .slide-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* ── Slide number badge ── */
+        .slide-num {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 28px;
+            height: 28px;
+            border-radius: 10px;
+            background: rgba(158, 75, 138, 0.85);
+            backdrop-filter: blur(8px);
+            color: #fff;
+            font-weight: 800;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+        }
+
+        /* ── Skeleton ── */
+        .skeleton-shimmer {
+            background: linear-gradient(90deg, rgba(0, 0, 0, 0.04) 25%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.04) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 16px;
+        }
+
+        .dark .skeleton-shimmer {
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.07) 50%, rgba(255, 255, 255, 0.03) 75%);
+            background-size: 200% 100%;
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: 200% 0
+            }
+
+            100% {
+                background-position: -200% 0
+            }
+        }
+
+        /* ── Spinner ── */
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(158, 75, 138, 0.2);
+            border-top-color: #9E4B8A;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ── Progress ── */
+        .progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #9E4B8A, #D174C0);
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ── Slide-in anim ── */
+        @keyframes slide-in {
+            0% {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+
+            100% {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .slide-in {
+            animation: slide-in 0.4s ease-out forwards;
+        }
+
+        /* ── Download dropdown ── */
+        .dl-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            min-width: 220px;
+            border-radius: 16px;
+            padding: 6px;
+            opacity: 0;
+            transform: translateY(-8px) scale(0.95);
+            pointer-events: none;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 50;
+        }
+
+        .dl-menu.open {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+
+        .dl-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .dl-item:hover {
+            background: rgba(158, 75, 138, 0.06);
+        }
+
+        .dark .dl-item:hover {
+            background: rgba(158, 75, 138, 0.12);
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            height: calc(100vh - 64px);
+            overflow-y: auto;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(158, 75, 138, 0.2);
+            border-radius: 999px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(158, 75, 138, 0.4);
+        }
+
+        /* ── Main Preview ── */
+        .preview-container {
+            height: calc(100vh - 64px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Floating orbs ── */
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Toolbar Btn ── */
+        .tb-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1.5px solid transparent;
+        }
+
+        .tb-btn:hover {
+            background: rgba(0, 0, 0, 0.03);
+            border-color: rgba(0, 0, 0, 0.06);
+            transform: translateY(-1px);
+        }
+
+        .dark .tb-btn:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .tb-btn-primary {
+            background: linear-gradient(135deg, #9E4B8A, #D174C0);
+            color: white !important;
+            box-shadow: 0 4px 16px rgba(158, 75, 138, 0.3);
+        }
+
+        .tb-btn-primary:hover {
+            background: linear-gradient(135deg, #8B3D79, #C065B0);
+            box-shadow: 0 8px 24px rgba(158, 75, 138, 0.4);
+            transform: translateY(-2px);
+        }
+
+        /* ── Generating pulse ── */
+        .gen-pulse {
+            animation: gpulse 2s infinite ease-in-out;
+        }
+
+        @keyframes gpulse {
+
+            0%,
+            100% {
+                opacity: 0.5;
+                transform: scale(0.97)
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1)
+            }
+        }
+
+        /* ── Toast ── */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            padding: 12px 24px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 100;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
+</head>
+
+<body
+    class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-surface-light dark:bg-surface-dark mesh-bg overflow-hidden">
+
+    <!-- Orbs -->
+    <div class="orb w-72 h-72 bg-brand-500/15 dark:bg-brand-500/10 -top-20 right-[5%]"></div>
+    <div class="orb w-56 h-56 bg-brand-700/10 dark:bg-brand-700/8 bottom-[10%] -left-16"></div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast glass text-brand-500 shadow-lg">
+        <span id="toastText"></span>
+    </div>
+
+    <!-- ═══ NAVBAR ═══ -->
+    <header
+        class="sticky top-0 z-40 bg-white/60 dark:bg-surface-dark/60 backdrop-blur-xl border-b border-black/[0.04] dark:border-white/[0.06] h-16">
+        <div class="flex items-center justify-between h-full px-4 md:px-6">
+            <!-- Left -->
+            <div class="flex items-center gap-3">
+                <a href="index.html" class="tb-btn text-sm" data-tooltip="Back to generator">
+                    <span class="material-symbols-rounded text-lg">arrow_back</span>
+                    <span class="hidden sm:inline">Back</span>
+                </a>
+                <div class="w-px h-6 bg-black/[0.06] dark:bg-white/[0.08] mx-1"></div>
+                <div class="min-w-0">
+                    <h1 id="viewerTitle" class="text-sm font-bold truncate max-w-[200px] md:max-w-[400px]">Presentation
+                    </h1>
+                    <p id="viewerSubtitle"
+                        class="text-[10px] text-neutral-400 dark:text-white/30 truncate max-w-[200px] md:max-w-[400px]">
+                        Generating slides...</p>
+                </div>
+            </div>
+
+            <!-- Center: progress -->
+            <div id="genProgress" class="hidden items-center gap-3 flex-shrink-0">
+                <div class="spinner"></div>
+                <span id="genProgressText"
+                    class="text-xs font-bold text-neutral-500 dark:text-white/50 hidden sm:block">Generating...</span>
+                <div class="w-24 md:w-40 h-1.5 rounded-full bg-neutral-100 dark:bg-white/[0.06] overflow-hidden">
+                    <div id="genProgressBar" class="progress-fill" style="width:0%"></div>
+                </div>
+                <span id="genProgressCount" class="text-[10px] font-mono text-neutral-400">0/0</span>
+            </div>
+
+            <!-- Right -->
+            <div class="flex items-center gap-2">
+                <button data-theme-toggle class="tb-btn" aria-label="Toggle theme">
+                    <span id="themeIcon" class="material-symbols-rounded text-lg">dark_mode</span>
+                </button>
+
+                <!-- Download Button -->
+                <div class="relative" id="dlBtnWrap" style="display:none">
+                    <button id="dlBtn" onclick="toggleDlMenu()" class="tb-btn tb-btn-primary">
+                        <span class="material-symbols-rounded text-lg">download</span>
+                        <span class="hidden sm:inline">Export</span>
+                    </button>
+                    <div id="dlMenu" class="dl-menu glass shadow-lg dark:shadow-2xl">
+                        <div class="dl-item" onclick="exportZip()">
+                            <span class="material-symbols-rounded text-brand-500">folder_zip</span>
+                            <div>
+                                <div class="text-sm">Download as ZIP</div>
+                                <div class="text-[10px] text-neutral-400 dark:text-white/30 font-normal">All slides as
+                                    PNG images</div>
+                            </div>
+                        </div>
+                        <div class="dl-item" onclick="exportPdf()">
+                            <span class="material-symbols-rounded text-red-500">picture_as_pdf</span>
+                            <div>
+                                <div class="text-sm">Download as PDF</div>
+                                <div class="text-[10px] text-neutral-400 dark:text-white/30 font-normal">Single PDF
+                                    document</div>
+                            </div>
+                        </div>
+                        <div class="dl-item" onclick="exportPptx()">
+                            <span class="material-symbols-rounded text-orange-500">slideshow</span>
+                            <div>
+                                <div class="text-sm">Download as PPTX</div>
+                                <div class="text-[10px] text-neutral-400 dark:text-white/30 font-normal">PowerPoint
+                                    presentation</div>
+                            </div>
+                        </div>
+                        <div class="border-t border-black/[0.04] dark:border-white/[0.06] my-1"></div>
+                        <div class="dl-item" onclick="downloadSingleSlide()">
+                            <span class="material-symbols-rounded text-brand-400">image</span>
+                            <div>
+                                <div class="text-sm">Download Current Slide</div>
+                                <div class="text-[10px] text-neutral-400 dark:text-white/30 font-normal">Save as PNG
+                                    image</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ═══ MAIN LAYOUT: Sidebar + Preview ═══ -->
+    <div class="flex h-[calc(100vh-64px)] relative z-10">
+
+        <!-- ══ LEFT: Slide Sidebar ══ -->
+        <aside id="slideSidebar"
+            class="sidebar w-56 md:w-64 flex-shrink-0 border-r border-black/[0.04] dark:border-white/[0.06] p-3 space-y-2.5 bg-white/40 dark:bg-surface-dark/40 backdrop-blur-sm">
+            <!-- Slide thumbnails will be injected here -->
+        </aside>
+
+        <!-- ══ RIGHT: Main Preview ══ -->
+        <div class="flex-1 preview-container">
+            <!-- Preview area -->
+            <div class="flex-1 flex items-center justify-center p-4 md:p-8 overflow-hidden">
+                <div id="previewArea" class="w-full max-w-5xl">
+                    <div class="aspect-[16/9] rounded-2xl glass flex items-center justify-center shadow-lg">
+                        <div class="text-center gen-pulse">
+                            <div class="spinner mx-auto mb-4"></div>
+                            <p class="text-sm font-bold text-neutral-400 dark:text-white/30">Preparing your slides...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom toolbar -->
+            <div id="bottomBar"
+                class="flex-shrink-0 border-t border-black/[0.04] dark:border-white/[0.06] px-4 md:px-6 py-3 bg-white/60 dark:bg-surface-dark/60 backdrop-blur-xl">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <button onclick="prevSlide()" class="tb-btn" id="prevBtn" disabled>
+                            <span class="material-symbols-rounded text-lg">chevron_left</span>
+                        </button>
+                        <span id="slideCounter" class="text-sm font-bold tabular-nums min-w-[60px] text-center">0 /
+                            0</span>
+                        <button onclick="nextSlide()" class="tb-btn" id="nextBtn" disabled>
+                            <span class="material-symbols-rounded text-lg">chevron_right</span>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-1">
+                        <span id="currentSlideTitle"
+                            class="text-xs text-neutral-400 dark:text-white/35 font-medium truncate max-w-[200px] md:max-w-[400px]"></span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button onclick="toggleFullscreen()" class="tb-btn" data-tooltip="Fullscreen">
+                            <span class="material-symbols-rounded text-lg">fullscreen</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const apiBase = (window.API_BASE || window.location.origin).replace(/\/$/, '');
+        const token = localStorage.getItem('px_token');
+
+        let pptData = null; // { title, description, slides }
+        let generatedSlides = []; // { slide_number, title, image_data }
+        let activeSlideIndex = 0;
+        let allGenerated = false;
+
+        // ═══ THEME ═══
+        const themeBtn = document.querySelector('[data-theme-toggle]');
+        const themeIcon = document.getElementById('themeIcon');
+        themeIcon.textContent = document.documentElement.classList.contains('dark') ? 'light_mode' : 'dark_mode';
+        themeBtn.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+            const d = document.documentElement.classList.contains('dark');
+            themeIcon.textContent = d ? 'light_mode' : 'dark_mode';
+            localStorage.setItem('px_theme', d ? 'dark' : 'light');
+        });
+
+        // ═══ INIT ═══
+        (async function init() {
+            const raw = sessionStorage.getItem('ppt_data');
+            if (!raw) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            pptData = JSON.parse(raw);
+            document.getElementById('viewerTitle').textContent = pptData.title;
+            document.getElementById('viewerSubtitle').textContent = `${pptData.slides.length} slides • Generating...`;
+
+            // Init sidebar with skeletons
+            const sidebar = document.getElementById('slideSidebar');
+            sidebar.innerHTML = pptData.slides.map((s, i) => `
+                <div id="thumb-${i}" class="slide-card skeleton-shimmer cursor-pointer" onclick="selectSlide(${i})">
+                    <span class="slide-num">${s.slide_number}</span>
+                    <div class="w-full h-full flex items-center justify-center gen-pulse">
+                        <div class="text-center px-2">
+                            <div class="spinner mx-auto mb-2 w-4 h-4 border-2"></div>
+                            <p class="text-[9px] font-semibold text-neutral-400 dark:text-white/25 truncate">${esc(s.title)}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Show generation progress
+            const genProg = document.getElementById('genProgress');
+            genProg.classList.remove('hidden');
+            genProg.classList.add('flex');
+
+            generatedSlides = new Array(pptData.slides.length).fill(null);
+
+            // Generate all slides in parallel
+            let completed = 0;
+            const total = pptData.slides.length;
+
+            const promises = pptData.slides.map((slide, i) => {
+                return apiPost('/api/ppt/generate-slide', {
+                    ppt_title: pptData.title,
+                    slide: slide,
+                    total_slides: total,
+                    ppt_description: pptData.description
+                }).then(res => {
+                    completed++;
+                    updateGenProgress(completed, total);
+
+                    if (res.image_data) {
+                        generatedSlides[i] = {
+                            slide_number: slide.slide_number,
+                            title: slide.title,
+                            image_data: res.image_data
+                        };
+                        updateThumbnail(i, res.image_data, slide);
+                        // If this is the currently viewed slide, update preview
+                        if (i === activeSlideIndex) {
+                            showPreview(i);
+                        }
+                        // Auto-show first slide as soon as it's ready
+                        if (i === 0 && activeSlideIndex === 0) {
+                            showPreview(0);
+                            selectSlide(0);
+                        }
+                    } else {
+                        markThumbError(i);
+                    }
+                }).catch(err => {
+                    completed++;
+                    updateGenProgress(completed, total);
+                    console.error(`Slide ${i + 1} error:`, err);
+                    markThumbError(i);
+                });
+            });
+
+            await Promise.all(promises);
+
+            // All done
+            allGenerated = true;
+            genProg.classList.add('hidden');
+            document.getElementById('viewerSubtitle').textContent = `${pptData.slides.length} slides • Ready`;
+            document.getElementById('dlBtnWrap').style.display = 'block';
+
+            // Enable nav buttons
+            updateNavButtons();
+
+            // Select first if not already
+            if (generatedSlides[0]) {
+                selectSlide(0);
+            }
+
+            showToast(`All ${total} slides generated!`);
+        })();
+
+        // ═══ GENERATION PROGRESS ═══
+        function updateGenProgress(done, total) {
+            const pct = (done / total) * 100;
+            document.getElementById('genProgressBar').style.width = pct + '%';
+            document.getElementById('genProgressCount').textContent = `${done}/${total}`;
+            document.getElementById('genProgressText').textContent = done === total ? 'Complete!' : `Generating...`;
+        }
+
+        // ═══ UPDATE THUMBNAIL ═══
+        function updateThumbnail(i, imageData, slide) {
+            const thumb = document.getElementById(`thumb-${i}`);
+            if (!thumb) return;
+            thumb.classList.remove('skeleton-shimmer');
+            thumb.innerHTML = `
+                <span class="slide-num">${slide.slide_number}</span>
+                <img src="data:image/png;base64,${imageData}" alt="Slide ${slide.slide_number}">
+            `;
+            thumb.style.animation = 'slide-in 0.4s ease-out';
+        }
+
+        function markThumbError(i) {
+            const thumb = document.getElementById(`thumb-${i}`);
+            if (!thumb) return;
+            thumb.classList.remove('skeleton-shimmer');
+            thumb.innerHTML = `
+                <span class="slide-num">${i + 1}</span>
+                <div class="w-full h-full flex items-center justify-center bg-red-500/5">
+                    <div class="text-center">
+                        <span class="material-symbols-rounded text-red-400 text-xl">error</span>
+                        <p class="text-[9px] text-red-400 font-bold mt-1">Failed</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ═══ SLIDE NAVIGATION ═══
+        function selectSlide(i) {
+            activeSlideIndex = i;
+
+            // Update active states
+            document.querySelectorAll('.slide-card').forEach((c, idx) => {
+                c.classList.toggle('active', idx === i);
+            });
+
+            // Scroll thumb into view
+            const thumb = document.getElementById(`thumb-${i}`);
+            if (thumb) thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            showPreview(i);
+            updateNavButtons();
+        }
+
+        function showPreview(i) {
+            const area = document.getElementById('previewArea');
+            const slide = generatedSlides[i];
+            const slideInfo = pptData.slides[i];
+
+            if (slide && slide.image_data) {
+                area.innerHTML = `
+                    <div class="aspect-[16/9] rounded-2xl overflow-hidden shadow-xl ring-1 ring-black/[0.04] dark:ring-white/[0.06] slide-in">
+                        <img src="data:image/png;base64,${slide.image_data}" alt="Slide ${slide.slide_number}: ${esc(slide.title)}"
+                            class="w-full h-full object-cover">
+                    </div>
+                `;
+            } else {
+                area.innerHTML = `
+                    <div class="aspect-[16/9] rounded-2xl glass flex items-center justify-center shadow-lg">
+                        <div class="text-center gen-pulse">
+                            <div class="spinner mx-auto mb-4"></div>
+                            <p class="text-sm font-bold text-neutral-400 dark:text-white/30">Generating "${esc(slideInfo ? slideInfo.title : '')}"...</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Update counter & title
+            document.getElementById('slideCounter').textContent = `${i + 1} / ${pptData.slides.length}`;
+            document.getElementById('currentSlideTitle').textContent = slideInfo ? slideInfo.title : '';
+        }
+
+        function prevSlide() {
+            if (activeSlideIndex > 0) selectSlide(activeSlideIndex - 1);
+        }
+        function nextSlide() {
+            if (activeSlideIndex < pptData.slides.length - 1) selectSlide(activeSlideIndex + 1);
+        }
+
+        function updateNavButtons() {
+            document.getElementById('prevBtn').disabled = activeSlideIndex <= 0;
+            document.getElementById('nextBtn').disabled = activeSlideIndex >= pptData.slides.length - 1;
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft') prevSlide();
+            else if (e.key === 'ArrowRight') nextSlide();
+            else if (e.key === 'Escape') closeDlMenu();
+        });
+
+        // ═══ FULLSCREEN ═══
+        function toggleFullscreen() {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.documentElement.requestFullscreen();
+            }
+        }
+
+        // ═══ DOWNLOAD MENU ═══
+        function toggleDlMenu() {
+            document.getElementById('dlMenu').classList.toggle('open');
+        }
+        function closeDlMenu() {
+            document.getElementById('dlMenu').classList.remove('open');
+        }
+        document.addEventListener('click', e => {
+            if (!e.target.closest('#dlBtnWrap')) closeDlMenu();
+        });
+
+        // ═══ EXPORT: ZIP ═══
+        async function exportZip() {
+            closeDlMenu();
+            showToast('Creating ZIP...');
+            const zip = new JSZip();
+            const validSlides = generatedSlides.filter(Boolean);
+
+            validSlides.forEach(s => {
+                const binary = atob(s.image_data);
+                const array = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+                zip.file(`slide_${s.slide_number}_${sanitize(s.title)}.png`, array);
+            });
+
+            const blob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob(blob, `${sanitize(pptData.title)}_slides.zip`);
+            showToast('ZIP downloaded!');
+        }
+
+        // ═══ EXPORT: PDF ═══
+        async function exportPdf() {
+            closeDlMenu();
+            showToast('Creating PDF...');
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1280, 720] });
+            const validSlides = generatedSlides.filter(Boolean);
+
+            for (let i = 0; i < validSlides.length; i++) {
+                if (i > 0) doc.addPage([1280, 720], 'landscape');
+                const imgData = 'data:image/png;base64,' + validSlides[i].image_data;
+                doc.addImage(imgData, 'PNG', 0, 0, 1280, 720);
+            }
+
+            doc.save(`${sanitize(pptData.title)}_presentation.pdf`);
+            showToast('PDF downloaded!');
+        }
+
+        // ═══ EXPORT: PPTX ═══
+        async function exportPptx() {
+            closeDlMenu();
+            showToast('Creating PPTX...');
+
+            const pptx = new PptxGenJS();
+            pptx.defineLayout({ name: 'CUSTOM', width: 13.33, height: 7.5 });
+            pptx.layout = 'CUSTOM';
+
+            const validSlides = generatedSlides.filter(Boolean);
+
+            validSlides.forEach(s => {
+                const slide = pptx.addSlide();
+                slide.addImage({
+                    data: 'data:image/png;base64,' + s.image_data,
+                    x: 0, y: 0,
+                    w: '100%', h: '100%',
+                });
+            });
+
+            await pptx.writeFile({ fileName: `${sanitize(pptData.title)}_presentation.pptx` });
+            showToast('PPTX downloaded!');
+        }
+
+        // ═══ DOWNLOAD SINGLE ═══
+        function downloadSingleSlide() {
+            closeDlMenu();
+            const slide = generatedSlides[activeSlideIndex];
+            if (!slide) return showToast('Slide not ready yet');
+
+            const a = document.createElement('a');
+            a.href = 'data:image/png;base64,' + slide.image_data;
+            a.download = `slide_${slide.slide_number}_${sanitize(slide.title)}.png`;
+            a.click();
+            showToast('Slide downloaded!');
+        }
+
+        // ═══ TOAST ═══
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            document.getElementById('toastText').textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        // ═══ UTILS ═══
+        async function apiPost(url, body) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            const r = await fetch(apiBase + url, { method: 'POST', headers, body: JSON.stringify(body) });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({ detail: r.statusText }));
+                throw new Error(err.detail || 'Request failed');
+            }
+            return r.json();
+        }
+
+        function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        function sanitize(s) { return String(s || 'untitled').replace(/[^a-zA-Z0-9 _-]/g, '').substring(0, 40).trim().replace(/\s+/g, '_'); }
+
+        function downloadBlob(blob, name) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+
+</html>
