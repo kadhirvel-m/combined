@@ -27916,6 +27916,62 @@ No markdown, no code blocks, just JSON.
         raise HTTPException(status_code=500, detail=f"Failed to generate outline: {str(e)}")
 
 
+class PPTRefineOutlineRequest(BaseModel):
+    title: str = Field(..., max_length=200)
+    description: Optional[str] = Field(None, max_length=5000)
+    instruction: str = Field(..., max_length=2000)
+    current_slides: list = Field(...)
+
+
+@app.post("/api/ppt/refine-outline")
+async def ppt_refine_outline(body: PPTRefineOutlineRequest):
+    """Refine an existing PPT outline based on a user instruction (copilot)."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API key not configured")
+
+    slides_json = json.dumps(body.current_slides, indent=2)
+    desc_part = f"\nPresentation description: {body.description}" if body.description else ""
+
+    prompt = f"""You are a presentation outline editor AI copilot.
+
+PRESENTATION TITLE: "{body.title}"
+{desc_part}
+
+CURRENT OUTLINE (JSON):
+{slides_json}
+
+USER INSTRUCTION: "{body.instruction}"
+
+Apply the user's instruction to modify the outline. You can:
+- Add new slides (insert at the right position, renumber all slides)
+- Remove slides (renumber remaining slides)
+- Edit slide titles or bullet points
+- Reorder slides
+- Add or remove bullet points
+- Change the depth or complexity of content
+- Any other modification the user requests
+
+RULES:
+1. Apply ONLY the changes the user asked for — preserve everything else as-is
+2. Always renumber slide_number sequentially starting from 1
+3. Keep the same JSON structure: each slide has slide_number (int), title (string), bullets (array of strings)
+4. Titles max 8 words, bullets max 15 words each
+5. Maintain professional quality
+
+Return ONLY a valid JSON object: {{"slides": [...]}}
+No markdown, no code blocks, no explanations — just JSON.
+"""
+
+    try:
+        ai_response = await run_in_threadpool(_run_refinement_ai, prompt)
+        slides = ai_response.get("slides", [])
+        if not slides and isinstance(ai_response, list):
+            slides = ai_response
+        return {"slides": slides}
+    except Exception as e:
+        logging.error(f"[PPT Refine Outline] Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to refine outline: {str(e)}")
+
 @app.post("/api/ppt/generate-slide")
 async def ppt_generate_slide(body: PPTSlideRequest):
     """Generate a single PPT slide image using gemini-3-pro-image-preview with reference designs."""
