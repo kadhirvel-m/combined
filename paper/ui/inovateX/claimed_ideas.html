@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Claimed Ideas — InnovateX</title>
+    <meta name="description" content="View all your claimed project ideas." />
+    <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/tailwind.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="../config.js"></script>
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' }, brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 500: '#9E4B8A' } } } } }
+    </script>
+    <script>(() => { const s = localStorage.getItem('px_theme'); const d = window.matchMedia('(prefers-color-scheme:dark)').matches; if (s ? s === 'dark' : d) document.documentElement.classList.add('dark') })()</script>
+    <script>(() => { const t = localStorage.getItem('px_token'); if (!t) location.replace('../login.html?next=' + encodeURIComponent(location.pathname)) })()</script>
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -3px
+        }
+
+        body {
+            background: #FAFAFF;
+        }
+
+        .dark body {
+            background: #141321;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.05);
+        }
+
+        .dark .glass {
+            background: rgba(30, 30, 47, 0.6);
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .project-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+
+        .project-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(158, 75, 138, 0.15);
+            border-color: #9E4B8A;
+        }
+
+        .dark .project-card:hover {
+            box-shadow: 0 12px 32px rgba(239, 163, 220, 0.1);
+            border-color: #EFA3DC;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white transition-colors">
+
+    <!-- NAVBAR -->
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-[#1E1E2F]/70 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="flex items-center justify-between py-3 max-w-7xl mx-auto px-4">
+            <a href="../index.html" class="flex items-center gap-3">
+                <img src="../assets/img/logo-light.svg" alt="PaperX" class="h-8 w-auto dark:hidden">
+                <img src="../assets/img/logo-dark.svg" alt="PaperX" class="h-8 w-auto hidden dark:block">
+                <span
+                    class="hidden sm:inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-gradient-to-r from-brand-500 to-brand-700 text-white">InnovateX</span>
+            </a>
+            <div class="flex items-center gap-2">
+                <a href="./idea_setup.html"
+                    class="text-sm font-semibold px-3 py-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition">New
+                    Idea</a>
+                <button data-theme-toggle
+                    class="rounded-full px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded text-[20px]" id="themeIcon">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+            <div>
+                <h1 class="text-3xl font-black mb-1">My Claimed Ideas</h1>
+                <p class="text-neutral-500 dark:text-white/50">Manage and refine your project portfolio.</p>
+            </div>
+            <a href="./idea_setup.html"
+                class="px-5 py-2.5 rounded-xl bg-brand-500 text-white font-bold text-sm hover:bg-brand-600 transition shadow-lg shadow-brand-500/20 flex items-center gap-2">
+                <span class="material-symbols-rounded">add</span>Generate New
+            </a>
+        </div>
+
+        <div id="loading" class="text-center py-20">
+            <div
+                class="inline-block w-8 h-8 border-4 border-brand-500/20 border-t-brand-500 rounded-full animate-spin mb-3">
+            </div>
+            <p class="font-semibold text-neutral-400">Loading projects...</p>
+        </div>
+
+        <div id="grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" style="display:none"></div>
+
+        <div id="empty" class="text-center py-20 hidden">
+            <div
+                class="w-16 h-16 rounded-full bg-neutral-100 dark:bg-white/5 flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-rounded text-3xl text-neutral-400">lightbulb</span>
+            </div>
+            <h3 class="text-lg font-bold mb-2">No claimed ideas yet</h3>
+            <p class="text-neutral-500 mb-6 max-w-sm mx-auto">Start by generating some project ideas based on your
+                interests.</p>
+            <a href="./idea_setup.html" class="text-brand-500 font-bold hover:underline">Go to Idea Generator →</a>
+        </div>
+    </main>
+
+    <footer
+        class="py-8 text-center text-xs text-neutral-400 dark:text-white/30 border-t border-black/5 dark:border-white/5 mt-12">
+        PaperX × InnovateX • Project Portfolio
+    </footer>
+
+    <script>
+        const apiBase = (window.API_BASE || window.location.origin).replace(/\/$/, '');
+        const token = localStorage.getItem('px_token');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            loadProjects();
+        });
+
+        function initTheme() {
+            const btn = document.querySelector('[data-theme-toggle]'), icon = document.getElementById('themeIcon');
+            icon.textContent = document.documentElement.classList.contains('dark') ? 'light_mode' : 'dark_mode';
+            btn.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                const d = document.documentElement.classList.contains('dark');
+                icon.textContent = d ? 'light_mode' : 'dark_mode';
+                localStorage.setItem('px_theme', d ? 'dark' : 'light');
+            });
+        }
+
+        async function loadProjects() {
+            try {
+                const res = await fetch(apiBase + '/api/innovatex/my-projects', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                const projects = data.projects || [];
+
+                document.getElementById('loading').style.display = 'none';
+
+                if (projects.length === 0) {
+                    document.getElementById('empty').classList.remove('hidden');
+                } else {
+                    const grid = document.getElementById('grid');
+                    grid.style.display = 'grid';
+                    grid.innerHTML = projects.map(p => `
+                        <div class="glass project-card rounded-2xl p-6 relative group" onclick="location.href='./my_project.html?id=${p.id}'">
+                            <div class="absolute top-4 right-4 text-xs font-bold px-2 py-1 rounded-full ${p.status === 'refined' ? 'bg-green-100 text-green-600 dark:bg-green-500/10 dark:text-green-400' : 'bg-neutral-100 text-neutral-500 dark:bg-white/10 dark:text-white/50'}">
+                                ${p.status === 'refined' ? 'Refined' : 'Claimed'}
+                            </div>
+                            <div class="text-[10px] font-bold uppercase tracking-wider text-brand-500 mb-3">${esc(p.category || 'General')}</div>
+                            <h3 class="text-xl font-bold mb-3 group-hover:text-brand-500 transition-colors line-clamp-2">${esc(p.title)}</h3>
+                            <p class="text-sm text-neutral-500 dark:text-white/60 line-clamp-3 mb-5">${esc(p.problem)}</p>
+                            
+                            <div class="flex items-center gap-4 text-xs font-semibold text-neutral-400 dark:text-white/40 mt-auto pt-4 border-t border-black/5 dark:border-white/5">
+                                <div class="flex items-center gap-1"><span class="material-symbols-rounded text-sm">calendar_today</span> ${p.timeline_weeks || '?'} wks</div>
+                                <div class="flex items-center gap-1"><span class="material-symbols-rounded text-sm">signal_cellular_alt</span> ${['Easy', 'Med', 'Hard', 'Hard', 'Expert'][p.difficulty - 1] || 'Med'}</div>
+                                <div class="flex items-center gap-1 ml-auto text-brand-500 group-hover:translate-x-1 transition-transform">View <span class="material-symbols-rounded text-sm">arrow_forward</span></div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                document.getElementById('loading').innerHTML = `<p class="text-red-500">Error loading projects: ${e.message}</p>`;
+            }
+        }
+
+        function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+    </script>
+</body>
+
+</html>

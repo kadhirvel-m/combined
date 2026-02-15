@@ -20150,19 +20150,24 @@ def ping_streak(authorization: Optional[str] = Header(default=None)):
 @academics_router.get("/api/leaderboard", summary="Public leaderboard: top users by streak")
 def get_leaderboard(
     limit: int = Query(default=10, ge=1, le=50),
+    mode: str = Query(default="students", description="'students' excludes admins/employees, 'overall' includes everyone"),
 ):
-    """Return top users ranked by current_streak (no auth required)."""
+    """Return top users ranked by current_streak (no auth required).
+    Streaks are recalculated in real-time based on last_activity_date so
+    inactive users correctly show 0 instead of a stale stored value."""
     supabase = get_service_client()
     if not supabase:
         raise HTTPException(status_code=500, detail="Database unavailable")
 
-    # Fetch top streaks
+    today = date.today()
+
+    # Fetch top streaks (grab more than needed to allow for filtering + re-sorting)
     try:
         streak_res = (
             supabase.table("notex_streak")
             .select("user_profile_id,current_streak,longest_streak,last_activity_date")
             .order("current_streak", desc=True)
-            .limit(50)  # Fetch more to allow for filtering
+            .limit(100)
             .execute()
         )
     except Exception as e:
@@ -20171,10 +20176,31 @@ def get_leaderboard(
     streak_rows: List[dict] = getattr(streak_res, "data", []) or []
     if not streak_rows:
         return {"leaderboard": [], "count": 0}
+
+    # --- Real-time streak correction ---
+    # We allow a gap of up to 2 days to account for timezone differences (server vs user).
+    # e.g., Server is on 16th, User is on 15th (UTC-12), Last Active 14th.
+    # Diff = 2. This should NOT break the streak yet as the user is still on their "next day".
+    for row in streak_rows:
+        last_date_str = row.get("last_activity_date")
+        if last_date_str:
+            try:
+                last_date = date.fromisoformat(str(last_date_str))
+                days_since = (today - last_date).days
+                if days_since > 2:
+                    row["current_streak"] = 0
+            except Exception:
+                row["current_streak"] = 0
+        else:
+            row["current_streak"] = 0
+
+    # Re-sort by corrected streak (descending), then by last_activity_date (most recent first)
+    streak_rows.sort(key=lambda r: (int(r.get("current_streak") or 0), r.get("last_activity_date") or ""), reverse=True)
+
     profile_ids = [r.get("user_profile_id") for r in streak_rows if r.get("user_profile_id")]
     profile_map: Dict[str, dict] = {}
     
-    # Filter out admins and employees
+    # Filter out admins and employees (only in "students" mode)
     excluded_profile_ids = set()
     if profile_ids:
         try:
@@ -20195,23 +20221,23 @@ def get_leaderboard(
                     if p.get("auth_user_id"):
                         pid_to_uid[p["id"]] = p["auth_user_id"]
             
-            # Check admin_roles for these users
-            uids_to_check = list(pid_to_uid.values())
-            if uids_to_check:
-                role_res = (
-                    supabase.table("admin_roles")
-                    .select("auth_user_id,role")
-                    .in_("auth_user_id", uids_to_check)
-                    .execute()
-                )
-                for r in (getattr(role_res, "data", []) or []):
-                    role = r.get("role")
-                    if role in ("admin", "employee"):
-                        # Find profile_id for this auth_user_id
-                        for pid, uid in pid_to_uid.items():
-                            if uid == r.get("auth_user_id"):
-                                excluded_profile_ids.add(pid)
-                                break
+            # Only filter roles when mode is "students"
+            if mode != "overall":
+                uids_to_check = list(pid_to_uid.values())
+                if uids_to_check:
+                    role_res = (
+                        supabase.table("admin_roles")
+                        .select("auth_user_id,role")
+                        .in_("auth_user_id", uids_to_check)
+                        .execute()
+                    )
+                    for r in (getattr(role_res, "data", []) or []):
+                        role = r.get("role")
+                        if role in ("admin", "employee"):
+                            for pid, uid in pid_to_uid.items():
+                                if uid == r.get("auth_user_id"):
+                                    excluded_profile_ids.add(pid)
+                                    break
         except Exception:
             pass  # Gracefully degrade
 
@@ -21377,7 +21403,7 @@ async def generate_blink_endpoint(
                 config=types.GenerateContentConfig(
                     image_config=types.ImageConfig(
                         aspect_ratio="16:9",
-                        image_size="2K"
+                        image_size="1K"
                     ),
             ))
             
@@ -26453,9 +26479,9 @@ def _innovatex_generate_ideas(department: str, college: str, skills: List[str], 
     context_line = f"\nAdditional context from the student: {additional_context}" if additional_context else ""
     skills_line = f"\n- Known Skills/Technologies: {', '.join(skills)}" if skills else ""
 
-    prompt = f"""You are InnovateX — a world-class research advisor and startup mentor combined.
-You generate project ideas that could win hackathons, get published in conferences, or become real startups.
-You are deeply aware of the latest tech landscape as of February 2025.
+    prompt = f"""You are InnovateX — a practical project idea generator for engineering students.
+Your goal is to suggest ideas that are REAL PROBLEMS students can actually build and demo.
+Think like a startup founder or a research student picking a final-year project.
 
 STUDENT PROFILE:
 - Department: {department}
@@ -26464,59 +26490,74 @@ STUDENT PROFILE:
 - Team Size: {team_size} member(s){skills_line}
 {context_line}
 
-GENERATE exactly 9 project ideas. Each must pass this bar:
+GENERATE exactly 9 project ideas. Follow these rules strictly:
 
-━━━ NOVELTY TEST (every idea must pass at least one) ━━━
-✅ Solves a problem NO existing product handles well
-✅ Applies a proven technique to a domain where nobody has used it yet
-✅ Combines two technologies in a way that creates something new
-✅ Could be turned into a research paper or a startup pitch
-❌ REJECT: Just wiring existing APIs together (e.g., "use LangChain + Pinecone to make a chatbot")
-❌ REJECT: Ideas that already have 100 open-source repos doing the same thing
-❌ REJECT: Generic dashboards, attendance systems, expense trackers, weather apps, to-do apps
+━━━ WHAT KIND OF IDEAS TO GENERATE ━━━
+Every idea MUST start from a CLEAR, RELATABLE PROBLEM that anyone can understand.
+The problem should be something the student, their friends, or their community actually faces.
 
-━━━ WHAT MAKES AN IDEA GREAT ━━━
-- It identifies a GAP — something broken, missing, or inefficient in the real world
-- The solution has a UNIQUE ANGLE — not just "use AI on X" but a specific clever approach
-- It's DEFENSIBLE — someone can't clone it in a weekend because the value is in the pipeline, data, or method
-- A professor would say "This is interesting, tell me more" — not "I've seen this 50 times"
+GOOD examples of problem-focused ideas:
+• "Students waste hours searching for study notes scattered across WhatsApp groups" → Build a RAG-based syllabus notes generator where students upload their syllabus PDF and it auto-generates structured notes, mind maps, and flashcards
+• "College canteen has long queues and no way to pre-order food" → Build a campus food pre-ordering app with real-time queue tracking
+• "Students forget assignment deadlines across 6 different subjects" → Build a smart deadline aggregator that scrapes university portals and sends intelligent reminders
+• "Rural farmers can't identify crop diseases and lose 30% of yield" → Build a mobile app that uses phone camera + on-device ML to detect crop diseases and suggest treatments in local language
 
-━━━ CUTTING-EDGE TECH (use ONLY where genuinely needed) ━━━
-When the idea naturally benefits from advanced tech, consider:
-- Agentic AI: multi-agent orchestration, tool-calling agents, autonomous decision loops
-- RAG pipelines: domain-specific retrieval over private/niche knowledge bases
-- MCP (Model Context Protocol): connecting LLMs to real-world tools and APIs
-- On-device / Edge AI: running inference locally on ESP32, Raspberry Pi, or mobile
-- Multimodal AI: combining vision + language + audio for richer understanding
-- Vector search: semantic retrieval over embeddings (ChromaDB, Weaviate)
-- Fine-tuning: adapting open-source LLMs for domain-specific tasks
-- Federated learning: training across distributed data without centralizing it
-DO NOT stuff these into every idea. A well-designed web app or a clever hardware hack with no AI is equally valid if the idea itself is novel.
+BAD ideas (DO NOT generate these):
+❌ Abstract platform ideas with no clear user ("AI-Powered Learning Ecosystem")
+❌ Ideas that need massive data/infrastructure students don't have
+❌ Generic CRUD apps (attendance tracker, expense logger, to-do list)
+❌ Ideas that are just "use ChatGPT API to do X"
+
+━━━ DIFFICULTY MIX (IMPORTANT) ━━━
+Generate ideas across these 3 tiers:
+🟢 EASY / STARTUP LEVEL (3 ideas, difficulty 1-2):
+   - Can be built in 8-10 weeks by beginners
+   - Uses common frameworks (React, Django, Flask, Firebase)
+   - Focus on clean UI, good UX, and solving one problem well
+   - Example: "Campus Lost & Found Portal", "Hostel Complaint Tracker"
+
+🟡 INTERMEDIATE (3 ideas, difficulty 3):
+   - Involves some AI/ML, APIs, or complex backend logic
+   - Uses tools like LangChain, RAG pipelines, LlamaIndex, AutoGen, or MCP
+   - Good for students who know basics and want to impress
+   - Example: "RAG Syllabus Notes Generator", "Smart Resume Scorer"
+
+🔴 ADVANCED / RESEARCH-GRADE (3 ideas, difficulty 4-5):
+   - Could become a research paper or conference submission
+   - Involves novel methodology, custom models, or complex systems
+   - Uses advanced tech: federated learning, multi-agent systems, edge AI, etc.
+   - Example: "Federated Disease Prediction", "Multi-Agent Code Review System"
+
+━━━ TECH STACK GUIDELINES ━━━
+- Use SPECIFIC framework/tool names: "LangChain", "LlamaIndex", "AutoGen", "CrewAI", "FastAPI", "React", "Flutter", "Firebase", "Supabase", "ChromaDB", "Pinecone", "OpenCV", "TensorFlow Lite", "Streamlit"
+- For AI ideas, mention the APPROACH not model names. Use "Hugging Face Transformers", "Ollama", "LangChain" — NOT "GPT-4", "Gemini", "Claude"
+- For RAG ideas: mention vector DBs (ChromaDB, Pinecone, Weaviate) and frameworks (LangChain, LlamaIndex)
+- For Agentic AI: mention AutoGen, CrewAI, LangGraph, or MCP (Model Context Protocol)
+- 4-6 technologies per idea is ideal
 
 ━━━ TITLE RULES ━━━
-Max 5 words. Crystal clear. No buzzwords.
-✅ "Campus Lost Item Finder" / "Smart Crop Doctor" / "Student Burnout Detector"
-❌ "AI-Powered Multimodal Agentic EdTech Platform"
+Max 5 words. Instantly tells you what it does.
+✅ "RAG Syllabus Notes Generator" / "Campus Food Pre-Order" / "Smart Crop Disease Detector"
+❌ "AI-Powered Multimodal Learning Platform"
 
 ━━━ OUTPUT FIELDS (per idea) ━━━
 - title: max 5 words, instantly understandable
-- problem: 1-2 sentences describing a REAL, SPECIFIC pain point
-- solution: 2-3 sentences — the clever approach, not just "build an app that..."
-- tech_stack: Array of specific tools/frameworks. NEVER include AI model names (no "GPT-4o", "Gemini Flash", "Claude"). Use framework names: "LangChain", "Ollama", "Hugging Face Transformers", etc.
+- problem: 1-2 sentences describing a SPECIFIC real pain point that is easy to understand
+- solution: 2-3 sentences explaining the practical approach and what makes it useful
+- tech_stack: Array of 4-6 specific tools/frameworks
 - difficulty: 1-5 (1=Beginner, 5=Research-Grade)
-- innovation_score: 1-5 (1=exists everywhere, 5=genuinely novel)
-- use_case: One specific real-world deployment scenario
-- timeline_weeks: 8-24 weeks
-- learning_outcomes: Array of 3-4 skills the student will master
-- milestones: Array of 4-5 actionable steps (specific, not vague)
+- innovation_score: 1-5 (how fresh/unique this idea feels)
+- use_case: One specific real-world scenario where this gets used
+- timeline_weeks: realistic weeks to build (8-24)
+- learning_outcomes: Array of 3-4 skills the student will learn
+- milestones: Array of 4-5 concrete, actionable steps (Week 1-2: Set up..., Week 3-4: Build...)
 - category: One of [AI/ML, Web, Mobile, IoT, Robotics, Data Science, Cybersecurity, Social Impact, Core Engineering, Research]
 
 ━━━ DISTRIBUTION ━━━
-- At least 3 ideas with innovation_score >= 4
-- At least 2 ideas with difficulty <= 2 (accessible to beginners)
-- At least 2 ideas leveraging the student's department
-- No two ideas in the same category unless the student only picked one domain
-- Each idea must feel COMPLETELY DIFFERENT from the others
+- Exactly 3 easy (difficulty 1-2), 3 intermediate (difficulty 3), 3 advanced (difficulty 4-5)
+- At least 2 ideas must leverage the student's specific department
+- Each idea must be clearly different from every other idea
+- Mix categories: do not repeat the same category more than twice
 
 OUTPUT: Return ONLY a valid JSON array of 9 objects. No markdown, no explanations, no code blocks.
 """
@@ -26544,7 +26585,7 @@ OUTPUT: Return ONLY a valid JSON array of 9 objects. No markdown, no explanation
 
         # Validate and normalize each idea
         validated = []
-        for idx, idea in enumerate(ideas[:6]):
+        for idx, idea in enumerate(ideas[:9]):
             validated.append({
                 "id": idx + 1,
                 "title": str(idea.get("title", f"Project Idea {idx+1}"))[:100],
@@ -26631,3 +26672,1341 @@ async def innovatex_generate_ideas(
         "model": INNOVATEX_MODEL,
         "count": len(ideas),
     }
+
+
+# ── InnovateX: Claim a project ──────────────────────────────────────
+
+class InnovateXClaimRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    problem: str = Field(..., min_length=1, max_length=1000)
+    solution: str = Field(..., min_length=1, max_length=2000)
+    tech_stack: List[str] = Field(default=[])
+    difficulty: int = Field(default=3, ge=1, le=5)
+    innovation_score: int = Field(default=3, ge=1, le=5)
+    category: Optional[str] = None
+    use_case: Optional[str] = None
+    timeline_weeks: Optional[int] = None
+    milestones: List[str] = Field(default=[])
+    learning_outcomes: List[str] = Field(default=[])
+    team_size: int = Field(default=1, ge=1, le=6)
+
+
+@app.post("/api/innovatex/claim-project")
+async def innovatex_claim_project(
+    body: InnovateXClaimRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Save a selected project idea to the database for the current user."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    row = {
+        "user_id": user_id,
+        "title": body.title,
+        "problem": body.problem,
+        "solution": body.solution,
+        "tech_stack": body.tech_stack,
+        "difficulty": body.difficulty,
+        "innovation_score": body.innovation_score,
+        "category": body.category,
+        "use_case": body.use_case,
+        "timeline_weeks": body.timeline_weeks,
+        "milestones": body.milestones,
+        "learning_outcomes": body.learning_outcomes,
+        "team_size": body.team_size,
+        "status": "claimed",
+    }
+
+    try:
+        result = _supabase_retry(
+            lambda: supabase.table("innovatex_projects").insert(row).execute()
+        )
+        if not result or not result.data:
+            raise HTTPException(status_code=500, detail="Failed to save project")
+
+        project = result.data[0]
+        return {
+            "project_id": project["id"],
+            "status": "claimed",
+            "title": project["title"],
+            "created_at": project.get("created_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"[InnovateX] Claim project error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save project: {str(e)}")
+
+
+@app.get("/api/innovatex/my-projects")
+async def innovatex_get_all_projects(
+    authorization: Optional[str] = Header(None),
+):
+    """Fetch all claimed projects for the current user."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    try:
+        result = _supabase_retry(
+            lambda: supabase.table("innovatex_projects")
+                .select("*")
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .execute()
+        )
+        return {"projects": result.data if result and result.data else []}
+    except Exception as e:
+        logging.error(f"[InnovateX] Get all projects error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch projects: {str(e)}")
+
+
+@app.get("/api/innovatex/my-project/{project_id}")
+async def innovatex_get_project(
+    project_id: str,
+    authorization: Optional[str] = Header(None),
+):
+    """Fetch a claimed project by ID (must belong to the current user)."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    try:
+        result = _supabase_retry(
+            lambda: (
+                supabase.table("innovatex_projects")
+                .select("*")
+                .eq("id", project_id)
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+        )
+        if not result or not result.data:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        return {"project": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"[InnovateX] Get project error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch project: {str(e)}")
+
+
+# ── InnovateX: AI Refinement Mentor ──────────────────────────────────
+
+REFINEMENT_PHASES = ['stack_selection', 'features', 'feasibility', 'customization', 'architecture', 'blueprint']
+
+class InnovateXRefineRequest(BaseModel):
+    project_id: str
+    phase: str
+    user_responses: dict = Field(default={})
+
+class InnovateXToolRequest(BaseModel):
+    project_id: str
+    extra: Optional[dict] = None
+
+def _refinement_prompt(phase: str, project: dict, user_responses: dict, history: dict, session_data: dict = {}) -> str:
+    """Build phase-specific prompt for the refinement mentor."""
+    
+    # Extract session specifics
+    chosen_frontend = session_data.get('chosen_frontend', 'Not selected')
+    chosen_backend = session_data.get('chosen_backend', 'Not selected')
+    selected_features = session_data.get('selected_features', [])
+    features_text = ", ".join([f.get('name', 'feature') for f in selected_features]) if selected_features else "None"
+
+    project_summary = f"""
+PROJECT:
+- Title: {project.get('title', 'Untitled')}
+- Problem: {project.get('problem', '')}
+- Solution: {project.get('solution', '')}
+- Tech Stack (Initial): {', '.join(project.get('tech_stack', []))}
+- Selected Stack: Frontend={chosen_frontend}, Backend={chosen_backend}
+- Selected Features: {features_text}
+- Difficulty: {project.get('difficulty', 3)}/5
+- Timeline: {project.get('timeline_weeks', '?')} weeks
+- Team Size: {project.get('team_size', 1)}
+- Category: {project.get('category', 'General')}
+"""
+    prev_phases = ""
+    for p in REFINEMENT_PHASES:
+        if p == phase:
+            break
+        if p in history:
+            prev_phases += f"\nPhase '{p}' responses: {history[p]}"
+
+    common = f"""You are InnovateX Mentor — a world-class project advisor for college students.
+You speak directly, clearly, and supportively. No fluff.
+You are in the '{phase}' phase of project refinement.
+{project_summary}
+{f'Previous phase data:{prev_phases}' if prev_phases else ''}
+Student responses for this phase: {user_responses}
+"""
+
+    if phase == 'stack_selection':
+        return common + """
+TASK: Confirm the student's tech stack choice.
+
+Provide (be CONCISE):
+1. "confirmation": 1 sentence confirming the stack choice is good
+2. "implications": 1 sentence on what this stack means for development
+3. "alternatives": If the choice is unusual for the project goal, 1 sentence suggesting an alternative (otherwise null)
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    elif phase == 'features':
+        return common + """
+TASK: Confirm the selected additional features.
+
+Provide (be CONCISE):
+1. "confirmation": 1 sentence praising the selected features
+2. "integration_tip": 1 sentence on how to integrate the most complex feature selected
+3. "synergy": 1 sentence on how these features work together
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    elif phase == 'feasibility':
+        return common + """
+TASK: Quick feasibility check based on the student's skill level and availability.
+
+Provide (be CONCISE — max 2 sentences per field):
+1. "assessment": 1-2 sentence honest assessment
+2. "adjusted_difficulty": Integer 1-5
+3. "adjusted_timeline_weeks": Integer
+4. "simplified_version": If beginner, suggest a simpler MVP in 1-2 sentences. If experienced, set to null.
+5. "recommendations": Array of 2-3 short, actionable tips (1 sentence each)
+6. "confidence_score": Integer 1-10
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    elif phase == 'customization':
+        return common + """
+TASK: Customize the project based on the student's focus preference and goals.
+
+Provide (be CONCISE):
+1. "focus_description": 1 sentence describing the adjusted focus
+2. "evaluation_metrics": Array of 3 short metrics (just the metric name and target)
+3. "suggested_datasets": Array of 2 dataset names with source
+4. "deployment_plan": 1 sentence on deployment or demo strategy
+5. "modified_solution": Updated solution in 2 sentences max
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    elif phase == 'architecture':
+        return common + f"""
+TASK: Provide architecture guidance based on the chosen stack ({chosen_frontend} + {chosen_backend}).
+
+Provide (be CONCISE):
+1. "architecture_explanation": 2-3 sentence explanation of how {chosen_frontend} connects to {chosen_backend} in this specific project
+2. "components": Array of objects with "name", "purpose", "tech" (must include {chosen_frontend} and {chosen_backend} components)
+3. "data_flow": Array of 5 short strings describing data flow
+4. "learning_resources": Array of 2-3 specific resources for {chosen_frontend} and {chosen_backend}
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    elif phase == 'blueprint':
+        return common + f"""
+TASK: Generate the FINAL tailored blueprint.
+
+Provide:
+1. "final_title": Refined title
+2. "final_problem": 1-2 sentence updated problem
+3. "final_solution": 2 sentence updated solution (incorporating {features_text})
+4. "final_tech_stack": Array of technologies (Must include {chosen_frontend}, {chosen_backend}, and feature-specific tech)
+5. "final_difficulty": Integer 1-5
+6. "final_timeline_weeks": Integer
+7. "final_milestones": Array of 4-5 milestones
+8. "final_learning_outcomes": Array of 3-4 skills
+9. "viva_defense_tips": Array of 3 tips
+10. "uniqueness_statement": 1-2 sentences
+11. "first_week_tasks": Array of 3-4 concrete tasks
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    return common + "\nReturn a helpful JSON response."
+
+
+def _run_refinement_ai(prompt: str) -> dict:
+    """Run the refinement AI and parse JSON response."""
+    try:
+        import google.generativeai as genai_lib
+    except ImportError:
+        raise HTTPException(status_code=500, detail="google-generativeai package not installed")
+
+    genai_lib.configure(api_key=GEMINI_API_KEY)
+    model = genai_lib.GenerativeModel(INNOVATEX_MODEL)
+
+    resp = model.generate_content(prompt)
+    raw = getattr(resp, "text", None)
+    if not raw:
+        try:
+            raw = resp.candidates[0].content.parts[0].text
+        except Exception:
+            raw = None
+
+    if not raw:
+        raise HTTPException(status_code=500, detail="AI returned empty response")
+
+    # Clean and parse JSON
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        cleaned = "\n".join(lines)
+
+    import json
+    return json.loads(cleaned)
+
+
+@app.post("/api/innovatex/refine")
+async def innovatex_refine(
+    body: InnovateXRefineRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Phase-based AI refinement mentor interaction."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    # Fetch project
+    proj_result = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("*").eq("id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if not proj_result or not proj_result.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = proj_result.data[0]
+
+    # Get or create refinement session
+    session_result = _supabase_retry(
+        lambda: supabase.table("innovatex_refinement_sessions").select("*").eq("project_id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+
+    if session_result and session_result.data:
+        session = session_result.data[0]
+    else:
+        # Create new session
+        new_session = _supabase_retry(
+            lambda: supabase.table("innovatex_refinement_sessions").insert({
+                "project_id": body.project_id,
+                "user_id": user_id,
+                "current_phase": "feasibility",
+                "phase_data": {},
+                "refined_project": {},
+            }).execute()
+        )
+        session = new_session.data[0] if new_session and new_session.data else None
+        if not session:
+            raise HTTPException(status_code=500, detail="Failed to create refinement session")
+
+    phase = body.phase
+    phase_data = session.get("phase_data", {}) or {}
+    refined_project = session.get("refined_project", {}) or {}
+
+    # Handle special phases that update session columns
+    update_session_cols = {}
+    if phase == 'stack_selection':
+        chosen_frontend = body.user_responses.get('frontend')
+        chosen_backend = body.user_responses.get('backend')
+        if chosen_frontend: update_session_cols['chosen_frontend'] = chosen_frontend
+        if chosen_backend: update_session_cols['chosen_backend'] = chosen_backend
+        # Update local session object for prompt context
+        session['chosen_frontend'] = chosen_frontend
+        session['chosen_backend'] = chosen_backend
+
+    elif phase == 'features':
+        selected_features = body.user_responses.get('selected_features', [])
+        update_session_cols['selected_features'] = selected_features
+        # Update local session object
+        session['selected_features'] = selected_features
+
+    # Build prompt and run AI
+    # Pass current session data (including just updated stack/features)
+    prompt = _refinement_prompt(phase, project, body.user_responses, phase_data, session)
+
+    try:
+        ai_response = await run_in_threadpool(_run_refinement_ai, prompt)
+    except Exception as e:
+        logging.error(f"[InnovateX Refine] AI error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI refinement failed: {str(e)}")
+
+    # Store phase data
+    phase_data[phase] = {
+        "user_responses": body.user_responses,
+        "ai_response": ai_response,
+    }
+
+    # If blueprint phase, store refined project
+    if phase == 'blueprint' and isinstance(ai_response, dict):
+        refined_project = ai_response
+
+    # Determine next phase
+    current_idx = REFINEMENT_PHASES.index(phase) if phase in REFINEMENT_PHASES else 0
+    next_phase = REFINEMENT_PHASES[min(current_idx + 1, len(REFINEMENT_PHASES) - 1)]
+
+    # Update session in DB
+    session_update = {
+        "current_phase": next_phase,
+        "phase_data": phase_data,
+        "refined_project": refined_project,
+        "updated_at": "now()",
+    }
+    session_update.update(update_session_cols)
+
+    _supabase_retry(
+        lambda: supabase.table("innovatex_refinement_sessions").update(session_update).eq("id", session["id"]).execute()
+    )
+
+    # If blueprint completed, also update the project itself
+    if phase == 'blueprint' and isinstance(ai_response, dict):
+        update_fields = {}
+        if ai_response.get("final_title"):
+            update_fields["title"] = ai_response["final_title"]
+        if ai_response.get("final_problem"):
+            update_fields["problem"] = ai_response["final_problem"]
+        if ai_response.get("final_solution"):
+            update_fields["solution"] = ai_response["final_solution"]
+        if ai_response.get("final_tech_stack"):
+            update_fields["tech_stack"] = ai_response["final_tech_stack"]
+        if ai_response.get("final_difficulty"):
+            update_fields["difficulty"] = ai_response["final_difficulty"]
+        if ai_response.get("final_timeline_weeks"):
+            update_fields["timeline_weeks"] = ai_response["final_timeline_weeks"]
+        if ai_response.get("final_milestones"):
+            update_fields["milestones"] = ai_response["final_milestones"]
+        if ai_response.get("final_learning_outcomes"):
+            update_fields["learning_outcomes"] = ai_response["final_learning_outcomes"]
+        if update_fields:
+            update_fields["status"] = "refined"
+            _supabase_retry(
+                lambda: supabase.table("innovatex_projects").update(update_fields).eq("id", body.project_id).execute()
+            )
+
+    return {
+        "phase": phase,
+        "next_phase": next_phase,
+        "ai_response": ai_response,
+        "refined_project": refined_project,
+    }
+
+
+@app.get("/api/innovatex/refine/{project_id}/state")
+async def innovatex_refine_state(
+    project_id: str,
+    authorization: Optional[str] = Header(None),
+):
+    """Get current refinement session state."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    result = _supabase_retry(
+        lambda: supabase.table("innovatex_refinement_sessions").select("*").eq("project_id", project_id).eq("user_id", user_id).limit(1).execute()
+    )
+
+    if result and result.data:
+        return {"session": result.data[0]}
+    return {"session": None}
+
+
+class InnovateXBulkRefineRequest(BaseModel):
+    project_id: str
+    stack: dict = Field(default={})
+    feasibility: dict = Field(default={})
+    customization: dict = Field(default={})
+    architecture: dict = Field(default={})
+
+
+def _bulk_refinement_prompt(project: dict, stack: dict, feasibility: dict, customization: dict, architecture: dict, session_data: dict = {}) -> str:
+    """Build a single comprehensive prompt for all phases + blueprint."""
+    chosen_frontend = stack.get('frontend', session_data.get('chosen_frontend', 'Not selected'))
+    chosen_backend = stack.get('backend', session_data.get('chosen_backend', 'Not selected'))
+    selected_features = session_data.get('selected_features', [])
+    features_text = ", ".join([f.get('name', 'feature') for f in selected_features]) if selected_features else "None"
+
+    return f"""You are InnovateX Mentor — a world-class project advisor for college students.
+You speak directly, clearly, and supportively. No fluff.
+
+PROJECT:
+- Title: {project.get('title', 'Untitled')}
+- Problem: {project.get('problem', '')}
+- Solution: {project.get('solution', '')}
+- Initial Tech Stack: {', '.join(project.get('tech_stack', []))}
+- Selected Stack: Frontend={chosen_frontend}, Backend={chosen_backend}
+- Selected Features: {features_text}
+- Difficulty: {project.get('difficulty', 3)}/5
+- Timeline: {project.get('timeline_weeks', '?')} weeks
+- Team Size: {project.get('team_size', 1)}
+- Category: {project.get('category', 'General')}
+
+STUDENT INPUTS:
+- Skill Level: {feasibility.get('skill', 'Not specified')}
+- Hours/Week Available: {feasibility.get('hours', 'Not specified')}
+- Desired Timeline: {feasibility.get('timeline', 'Not specified')}
+- Focus Preference: {customization.get('focus', 'Not specified')}
+- Main Goal: {customization.get('goal', 'Not specified')}
+- Tech Experience: {architecture.get('tech', 'Not specified')}
+- Desired Complexity: {architecture.get('complexity', 'Not specified')}
+
+TASK: Analyze ALL the above inputs at once and generate a comprehensive response covering feasibility, customization, architecture, AND the final blueprint.
+
+Provide ALL of the following in a single JSON response:
+
+=== STACK CONFIRMATION ===
+1. "stack_confirmation": 1 sentence confirming the stack ({chosen_frontend} + {chosen_backend}) is good for this project
+
+=== FEASIBILITY ===
+2. "assessment": 1-2 sentence honest feasibility assessment considering their skill, hours, and desired timeline
+3. "adjusted_difficulty": Integer 1-5
+4. "adjusted_timeline_weeks": Integer (consider their desired timeline: {feasibility.get('timeline', 'Not specified')})
+5. "simplified_version": If beginner, suggest a simpler MVP in 1-2 sentences. If experienced, set to null.
+6. "recommendations": Array of 2-3 short, actionable tips (1 sentence each)
+7. "confidence_score": Integer 1-10
+
+=== CUSTOMIZATION ===
+8. "focus_description": 1 sentence describing the adjusted focus
+9. "evaluation_metrics": Array of 3 short metrics (just the metric name and target)
+10. "suggested_datasets": Array of 2 dataset names with source
+11. "deployment_plan": 1 sentence on deployment or demo strategy
+12. "modified_solution": Updated solution in 2 sentences max
+
+=== ARCHITECTURE ===
+13. "architecture_explanation": 2-3 sentence explanation of how {chosen_frontend} connects to {chosen_backend} in this project
+14. "components": Array of objects with "name", "purpose", "tech" (must include {chosen_frontend} and {chosen_backend} components)
+15. "data_flow": Array of 5 short strings describing data flow
+16. "learning_resources": Array of 2-3 specific resources for {chosen_frontend} and {chosen_backend}
+
+=== FINAL BLUEPRINT ===
+17. "final_title": Refined title
+18. "final_problem": 1-2 sentence updated problem
+19. "final_solution": 2 sentence updated solution (incorporating {features_text})
+20. "final_tech_stack": Array of technologies (Must include {chosen_frontend}, {chosen_backend}, and feature-specific tech)
+21. "final_difficulty": Integer 1-5
+22. "final_timeline_weeks": Integer
+23. "final_milestones": Array of 4-5 milestones
+24. "final_learning_outcomes": Array of 3-4 skills
+25. "viva_defense_tips": Array of 3 tips
+26. "uniqueness_statement": 1-2 sentences
+27. "first_week_tasks": Array of 3-4 concrete tasks
+
+Return ONLY valid JSON. No markdown, no code blocks.
+"""
+
+
+@app.post("/api/innovatex/refine-bulk")
+async def innovatex_refine_bulk(
+    body: InnovateXBulkRefineRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Bulk AI refinement — processes stack, feasibility, customization, architecture, and blueprint in one AI call."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    # Fetch project
+    proj_result = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("*").eq("id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if not proj_result or not proj_result.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = proj_result.data[0]
+
+    # Get or create refinement session
+    session_result = _supabase_retry(
+        lambda: supabase.table("innovatex_refinement_sessions").select("*").eq("project_id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+
+    if session_result and session_result.data:
+        session = session_result.data[0]
+    else:
+        new_session = _supabase_retry(
+            lambda: supabase.table("innovatex_refinement_sessions").insert({
+                "project_id": body.project_id,
+                "user_id": user_id,
+                "current_phase": "feasibility",
+                "phase_data": {},
+                "refined_project": {},
+            }).execute()
+        )
+        session = new_session.data[0] if new_session and new_session.data else None
+        if not session:
+            raise HTTPException(status_code=500, detail="Failed to create refinement session")
+
+    phase_data = session.get("phase_data", {}) or {}
+
+    # Build and run the single bulk AI prompt
+    prompt = _bulk_refinement_prompt(project, body.stack, body.feasibility, body.customization, body.architecture, session)
+
+    try:
+        ai_response = await run_in_threadpool(_run_refinement_ai, prompt)
+    except Exception as e:
+        logging.error(f"[InnovateX Bulk Refine] AI error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI refinement failed: {str(e)}")
+
+    # Split AI response into per-phase data
+    phase_data['stack_selection'] = {
+        "user_responses": body.stack,
+        "ai_response": {"confirmation": ai_response.get("stack_confirmation", "")}
+    }
+    phase_data['feasibility'] = {
+        "user_responses": body.feasibility,
+        "ai_response": {
+            "assessment": ai_response.get("assessment", ""),
+            "adjusted_difficulty": ai_response.get("adjusted_difficulty"),
+            "adjusted_timeline_weeks": ai_response.get("adjusted_timeline_weeks"),
+            "simplified_version": ai_response.get("simplified_version"),
+            "recommendations": ai_response.get("recommendations", []),
+            "confidence_score": ai_response.get("confidence_score"),
+        }
+    }
+    phase_data['customization'] = {
+        "user_responses": body.customization,
+        "ai_response": {
+            "focus_description": ai_response.get("focus_description", ""),
+            "evaluation_metrics": ai_response.get("evaluation_metrics", []),
+            "suggested_datasets": ai_response.get("suggested_datasets", []),
+            "deployment_plan": ai_response.get("deployment_plan", ""),
+            "modified_solution": ai_response.get("modified_solution", ""),
+        }
+    }
+    phase_data['architecture'] = {
+        "user_responses": body.architecture,
+        "ai_response": {
+            "architecture_explanation": ai_response.get("architecture_explanation", ""),
+            "components": ai_response.get("components", []),
+            "data_flow": ai_response.get("data_flow", []),
+            "learning_resources": ai_response.get("learning_resources", []),
+        }
+    }
+
+    # Blueprint data
+    refined_project = {
+        "final_title": ai_response.get("final_title", project.get("title")),
+        "final_problem": ai_response.get("final_problem", project.get("problem")),
+        "final_solution": ai_response.get("final_solution", project.get("solution")),
+        "final_tech_stack": ai_response.get("final_tech_stack", []),
+        "final_difficulty": ai_response.get("final_difficulty", 3),
+        "final_timeline_weeks": ai_response.get("final_timeline_weeks"),
+        "final_milestones": ai_response.get("final_milestones", []),
+        "final_learning_outcomes": ai_response.get("final_learning_outcomes", []),
+        "viva_defense_tips": ai_response.get("viva_defense_tips", []),
+        "uniqueness_statement": ai_response.get("uniqueness_statement", ""),
+        "first_week_tasks": ai_response.get("first_week_tasks", []),
+    }
+
+    phase_data['blueprint'] = {
+        "user_responses": {},
+        "ai_response": refined_project,
+    }
+
+    # Update session in DB
+    session_update = {
+        "current_phase": "complete",
+        "phase_data": phase_data,
+        "refined_project": refined_project,
+        "chosen_frontend": body.stack.get("frontend", session.get("chosen_frontend")),
+        "chosen_backend": body.stack.get("backend", session.get("chosen_backend")),
+        "updated_at": "now()",
+    }
+
+    _supabase_retry(
+        lambda: supabase.table("innovatex_refinement_sessions").update(session_update).eq("id", session["id"]).execute()
+    )
+
+    # Also update the project itself with the refined data
+    update_fields = {}
+    if refined_project.get("final_title"):
+        update_fields["title"] = refined_project["final_title"]
+    if refined_project.get("final_problem"):
+        update_fields["problem"] = refined_project["final_problem"]
+    if refined_project.get("final_solution"):
+        update_fields["solution"] = refined_project["final_solution"]
+    if refined_project.get("final_tech_stack"):
+        update_fields["tech_stack"] = refined_project["final_tech_stack"]
+    if refined_project.get("final_difficulty"):
+        update_fields["difficulty"] = refined_project["final_difficulty"]
+    if refined_project.get("final_timeline_weeks"):
+        update_fields["timeline_weeks"] = refined_project["final_timeline_weeks"]
+    if refined_project.get("final_milestones"):
+        update_fields["milestones"] = refined_project["final_milestones"]
+    if refined_project.get("final_learning_outcomes"):
+        update_fields["learning_outcomes"] = refined_project["final_learning_outcomes"]
+    if update_fields:
+        update_fields["status"] = "refined"
+        _supabase_retry(
+            lambda: supabase.table("innovatex_projects").update(update_fields).eq("id", body.project_id).execute()
+        )
+
+    return {
+        "phase": "bulk",
+        "next_phase": "complete",
+        "ai_response": ai_response,
+        "refined_project": refined_project,
+        "phase_data": phase_data,
+    }
+
+
+@app.post("/api/innovatex/make-unique")
+async def innovatex_make_unique(
+    body: InnovateXToolRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Analyze project uniqueness and suggest improvements."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    proj = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("*").eq("id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if not proj or not proj.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = proj.data[0]
+
+    prompt = f"""You are an expert project uniqueness analyzer.
+
+PROJECT:
+- Title: {project['title']}
+- Problem: {project['problem']}
+- Solution: {project['solution']}
+- Tech Stack: {', '.join(project.get('tech_stack', []))}
+- Category: {project.get('category', 'General')}
+
+Analyze this project for uniqueness and suggest improvements.
+
+Provide:
+1. "commonality_score": Integer 1-10 (1=very unique, 10=very common/overused)
+2. "similar_projects": Array of 2-3 well-known similar projects/repos that exist
+3. "overused_elements": Array of 2-3 overused patterns or buzzwords in this idea
+4. "unique_twists": Array of 3 specific, creative twists to make it stand out. Each twist should be an object with "twist" (short title) and "description" (2-3 sentences explaining the twist and why it's unique)
+5. "domain_dataset": Suggest a specific, niche dataset or local problem that would make this more unique. Object with "name", "source", "why_unique"
+6. "modified_title": A more unique title suggestion
+7. "elevator_pitch": A 2-sentence pitch that highlights what makes this project different
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    try:
+        result = await run_in_threadpool(_run_refinement_ai, prompt)
+        return {"analysis": result}
+    except Exception as e:
+        logging.error(f"[InnovateX] Make unique error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/innovatex/eval-metrics")
+async def innovatex_eval_metrics(
+    body: InnovateXToolRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Generate evaluation methodology for the project."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    proj = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("*").eq("id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if not proj or not proj.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = proj.data[0]
+
+    prompt = f"""You are an expert academic project evaluator.
+
+PROJECT:
+- Title: {project['title']}
+- Problem: {project['problem']}
+- Solution: {project['solution']}
+- Tech Stack: {', '.join(project.get('tech_stack', []))}
+- Category: {project.get('category', 'General')}
+
+Generate a comprehensive evaluation methodology that would impress faculty.
+
+Provide:
+1. "quantitative_metrics": Array of 4-5 objects, each with "metric" (name), "how_to_measure" (1-2 sentences), "target_value" (expected good result)
+2. "qualitative_metrics": Array of 2-3 objects with "metric" and "evaluation_method"
+3. "testing_methodology": Object with "approach" (2-3 sentences), "test_cases" (array of 3 specific test scenarios), "tools" (array of testing tools to use)
+4. "comparison_baselines": Array of 2-3 existing systems/methods to compare against, each with "name" and "comparison_points"
+5. "presentation_tips": Array of 3 tips for presenting evaluation results effectively
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    try:
+        result = await run_in_threadpool(_run_refinement_ai, prompt)
+        return {"metrics": result}
+    except Exception as e:
+        logging.error(f"[InnovateX] Eval metrics error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/innovatex/viva-sim")
+async def innovatex_viva_sim(
+    body: InnovateXToolRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Generate viva simulation questions and evaluate answers."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    proj = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("*").eq("id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if not proj or not proj.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = proj.data[0]
+
+    student_answers = (body.extra or {}).get("answers", None)
+
+    if not student_answers:
+        # Generate questions
+        prompt = f"""You are a tough but fair faculty examiner conducting a viva voce for a student project.
+
+PROJECT:
+- Title: {project['title']}
+- Problem: {project['problem']}
+- Solution: {project['solution']}
+- Tech Stack: {', '.join(project.get('tech_stack', []))}
+
+Generate 5 challenging viva questions that a professor would ask. Mix difficulty levels.
+
+Provide:
+1. "questions": Array of 5 objects, each with:
+   - "question": The question text
+   - "difficulty": "easy", "medium", or "hard"
+   - "topic": What aspect it tests (e.g., "Architecture", "Scalability", "Innovation")
+   - "hint": A subtle hint to help the student think (1 sentence)
+
+Return ONLY valid JSON. No markdown.
+"""
+    else:
+        # Evaluate answers
+        qa_pairs = ""
+        for i, ans in enumerate(student_answers):
+            qa_pairs += f"\nQ{i+1}: {ans.get('question', '?')}\nStudent Answer: {ans.get('answer', 'No answer')}\n"
+
+        prompt = f"""You are a fair faculty examiner evaluating viva answers.
+
+PROJECT:
+- Title: {project['title']}
+- Solution: {project['solution']}
+
+STUDENT'S ANSWERS:
+{qa_pairs}
+
+Evaluate each answer honestly.
+
+Provide:
+1. "evaluations": Array of objects (one per question), each with:
+   - "question_num": Integer (1-based)
+   - "score": Integer 1-10
+   - "feedback": 1-2 sentences of constructive feedback
+   - "ideal_answer": What a strong answer would cover (2-3 sentences)
+2. "overall_score": Integer 1-10
+3. "overall_feedback": 2-3 sentences of overall assessment
+4. "improvement_tips": Array of 3 specific tips to improve their viva performance
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    try:
+        result = await run_in_threadpool(_run_refinement_ai, prompt)
+        return {"viva": result}
+    except Exception as e:
+        logging.error(f"[InnovateX] Viva sim error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/innovatex/explore-features")
+async def innovatex_explore_features(
+    body: InnovateXToolRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Generate unique feature suggestions for the project."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    proj = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("*").eq("id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if not proj or not proj.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = proj.data[0]
+
+    prompt = f"""You are a creative product strategist helping a student enhance their project with unique features.
+
+PROJECT:
+- Title: {project['title']}
+- Problem: {project['problem']}
+- Solution: {project['solution']}
+- Tech Stack: {', '.join(project.get('tech_stack', []))}
+- Category: {project.get('category', 'General')}
+- Difficulty: {project.get('difficulty', 3)}/5
+
+Generate 12 unique, creative feature ideas that would make this project stand out. Mix practical features with innovative ones.
+
+Rules:
+- Each feature should be SPECIFIC to THIS project (not generic like "add dark mode" or "add login")
+- Mix of effort levels: 4 low-effort, 4 medium-effort, 4 high-effort
+- Features should span categories: UI/UX, AI/ML, Data, Integration, Analytics, Gamification
+- Each feature name should be max 4 words, catchy and clear
+- Description should be exactly 1 sentence explaining what it does and why it's cool
+
+Return a JSON object with:
+"features": Array of 12 objects, each with:
+  - "name": string (max 4 words, catchy)
+  - "description": string (1 sentence)
+  - "category": one of ["UI/UX", "AI/ML", "Data", "Integration", "Analytics", "Gamification"]
+  - "effort": one of ["low", "medium", "high"]
+  - "tech_needed": string (1 specific tool/framework needed, e.g. "Chart.js", "Redis", "WebSockets")
+
+Return ONLY valid JSON. No markdown.
+"""
+
+    try:
+        result = await run_in_threadpool(_run_refinement_ai, prompt)
+        return {"features": result.get("features", []) if isinstance(result, dict) else result}
+    except Exception as e:
+        logging.error(f"[InnovateX] Explore features error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class InnovateXAddFeaturesRequest(BaseModel):
+    project_id: str
+    features: List[dict]
+
+
+@app.post("/api/innovatex/add-features")
+async def innovatex_add_features(
+    body: InnovateXAddFeaturesRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Add selected features to the project."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    proj = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("*").eq("id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if not proj or not proj.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = proj.data[0]
+
+    # Collect new feature names and tech
+    feature_names = [f.get("name", "") for f in body.features if f.get("name")]
+    feature_techs = [f.get("tech_needed", "") for f in body.features if f.get("tech_needed")]
+
+    # Update solution to mention new features
+    features_text = ", ".join(feature_names)
+    updated_solution = project.get("solution", "")
+    if features_text:
+        updated_solution += f" Enhanced with: {features_text}."
+
+    # Add new technologies to tech_stack (avoid duplicates)
+    current_stack = project.get("tech_stack", []) or []
+    for tech in feature_techs:
+        if tech and tech not in current_stack:
+            current_stack.append(tech)
+
+    # Store added features in milestones-style format
+    current_milestones = project.get("milestones", []) or []
+    for f in body.features:
+        current_milestones.append(f"Feature: {f.get('name', '')} — {f.get('description', '')}")
+
+    update_data = {
+        "solution": updated_solution,
+        "tech_stack": current_stack,
+        "milestones": current_milestones,
+    }
+
+    _supabase_retry(
+        lambda: supabase.table("innovatex_projects").update(update_data).eq("id", body.project_id).execute()
+    )
+
+    # Return the updated project
+    updated_proj = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("*").eq("id", body.project_id).limit(1).execute()
+    )
+
+    return {"project": updated_proj.data[0] if updated_proj and updated_proj.data else project}
+
+
+class InnovateXChatRequest(BaseModel):
+    project_id: str
+    message: str
+
+
+@app.post("/api/innovatex/mentor-chat")
+async def innovatex_mentor_chat(
+    body: InnovateXChatRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Interactive chatbot for the final project phase."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    # 1. Fetch Project
+    proj = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("*").eq("id", body.project_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if not proj or not proj.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = proj.data[0]
+
+    # 2. Fetch Refinement Session (for phases, stack, features)
+    session_res = _supabase_retry(
+        lambda: supabase.table("innovatex_refinement_sessions").select("*").eq("project_id", body.project_id).limit(1).execute()
+    )
+    session = session_res.data[0] if session_res and session_res.data else {}
+    
+    # 3. Store User Message
+    _supabase_retry(
+        lambda: supabase.table("innovatex_mentor_chats").insert({
+            "project_id": body.project_id,
+            "user_id": user_id,
+            "role": "user",
+            "content": body.message
+        }).execute()
+    )
+
+    # 4. Fetch Chat History (last 20 messages)
+    chats_res = _supabase_retry(
+        lambda: supabase.table("innovatex_mentor_chats")
+        .select("*")
+        .eq("project_id", body.project_id)
+        .order("created_at", desc=True)
+        .limit(20)
+        .execute()
+    )
+    # Reverse to chronological order
+    history = (chats_res.data or [])[::-1] if chats_res else []
+    
+    # 5. Build Context-Rich Prompt
+    chosen_frontend = session.get('chosen_frontend', 'Not selected')
+    chosen_backend = session.get('chosen_backend', 'Not selected')
+    selected_features = session.get('selected_features', [])
+    features_text = ", ".join([f.get('name', '') for f in selected_features])
+    refined_project = session.get('refined_project', {})
+    
+    blueprint_context = ""
+    if refined_project:
+        blueprint_context = f"""
+BLUEPRINT:
+- Final Title: {refined_project.get('final_title', project.get('title'))}
+- Final Tech Stack: {', '.join(refined_project.get('final_tech_stack', []))}
+- Milestones: {', '.join(refined_project.get('final_milestones', []))}
+- Risks: {', '.join(refined_project.get('risk_mitigation_plan', []))}
+"""
+
+    system_prompt = f"""You are InnovateX Mentor, an expert project advisor.
+You are chatting with a student about their project.
+Current project phase: Final Implementation / Chat.
+
+PROJECT CONTEXT:
+- Title: {project.get('title')}
+- Problem: {project.get('problem')}
+- Solution: {project.get('solution')}
+- Chosen Stack: Frontend={chosen_frontend}, Backend={chosen_backend}
+- Selected Features: {features_text}
+{blueprint_context}
+
+Your goal: Help the student build this specific project.
+- Answer technical questions based on their chosen stack ({chosen_frontend}, {chosen_backend}).
+- Provide code snippets, debugging tips, or architectural advice.
+- Be encouraging but realistic.
+- Keep responses concise and practical.
+
+CHAT HISTORY:
+"""
+    for msg in history:
+        role = "Student" if msg['role'] == 'user' else "Mentor"
+        system_prompt += f"{role}: {msg['content']}\n"
+    
+    system_prompt += "Mentor:"
+
+    # 6. Generate AI Response
+    try:
+        import google.generativeai as genai_lib
+        genai_lib.configure(api_key=GEMINI_API_KEY)
+        model = genai_lib.GenerativeModel(INNOVATEX_MODEL)
+        resp = model.generate_content(system_prompt)
+        ai_text = resp.text if resp.text else "I couldn't generate a response."
+    except Exception as e:
+        logging.error(f"[InnovateX Chat] Error: {e}")
+        ai_text = "Sorry, I encountered an error answering that."
+
+    # 7. Store AI Response
+    _supabase_retry(
+        lambda: supabase.table("innovatex_mentor_chats").insert({
+            "project_id": body.project_id,
+            "user_id": user_id,
+            "role": "assistant",
+            "content": ai_text
+        }).execute()
+    )
+
+    return {"message": ai_text}
+
+
+@app.get("/api/innovatex/mentor-chat/{project_id}")
+async def innovatex_get_mentor_chat(
+    project_id: str,
+    authorization: Optional[str] = Header(None),
+):
+    """Get chat history for a project."""
+    token = _bearer_token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    user_id = _get_user_id_with_retry(token)
+    supabase = get_service_client()
+
+    # Verify project access
+    proj = _supabase_retry(
+        lambda: supabase.table("innovatex_projects").select("id").eq("id", project_id).eq("user_id", user_id).limit(1).execute()
+    )
+    if not proj or not proj.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    chats_res = _supabase_retry(
+        lambda: supabase.table("innovatex_mentor_chats")
+        .select("*")
+        .eq("project_id", project_id)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    
+    return {"history": chats_res.data if chats_res else []}
+
+
+# ==========================================
+# PPT Slide Generator — AI Image Generation
+# ==========================================
+
+class PPTOutlineRequest(BaseModel):
+    title: str = Field(..., max_length=200)
+    description: Optional[str] = Field(None, max_length=5000)
+    slide_count: int = Field(default=6, ge=1, le=12)
+
+
+class PPTSlideRequest(BaseModel):
+    ppt_title: str
+    slide: dict  # { slide_number, title, bullets }
+    total_slides: int
+    ppt_description: Optional[str] = None
+
+
+@app.post("/api/ppt/generate-outline")
+async def ppt_generate_outline(body: PPTOutlineRequest):
+    """Generate a content outline for a PPT using gemini-3-pro-preview."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API key not configured")
+
+    desc_part = f"\nAdditional context/description:\n{body.description}" if body.description else ""
+
+    prompt = f"""You are a professional presentation designer and content strategist.
+
+Create a structured slide outline for a presentation with EXACTLY {body.slide_count} slides.
+
+PRESENTATION TITLE: "{body.title}"
+{desc_part}
+
+For each slide, provide:
+- slide_number: Integer (1 to {body.slide_count})
+- title: A clear, concise slide title (max 8 words)
+- bullets: Array of 3-5 key points to cover on this slide (each bullet max 15 words)
+
+RULES:
+- Slide 1 should be the title/intro slide
+- Last slide should be a summary/conclusion/thank-you slide
+- Content should flow logically from introduction to conclusion
+- Each slide should cover one distinct aspect/topic
+- Bullets should be concise, visual-friendly (not paragraphs)
+- Make it professional and academic-quality
+
+Return ONLY a valid JSON object with key "slides" containing an array of slide objects.
+Example format: {{"slides": [{{"slide_number": 1, "title": "...", "bullets": ["...", "..."]}}]}}
+No markdown, no code blocks, just JSON.
+"""
+
+    try:
+        ai_response = await run_in_threadpool(_run_refinement_ai, prompt)
+        slides = ai_response.get("slides", [])
+        if not slides and isinstance(ai_response, list):
+            slides = ai_response
+        return {"slides": slides}
+    except Exception as e:
+        logging.error(f"[PPT Outline] Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate outline: {str(e)}")
+
+
+@app.post("/api/ppt/generate-slide")
+async def ppt_generate_slide(body: PPTSlideRequest):
+    """Generate a single PPT slide image using gemini-3-pro-image-preview with reference designs."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API key not configured")
+    if not genai:
+        raise HTTPException(status_code=500, detail="google-genai library not available")
+
+    slide = body.slide
+    slide_number = slide.get("slide_number", 1)
+    slide_title = slide.get("title", "Slide")
+    bullets = slide.get("bullets", [])
+    bullets_text = "\n".join([f"• {b}" for b in bullets])
+
+    desc_context = f"\nPresentation description: {body.ppt_description}" if body.ppt_description else ""
+
+    prompt = f"""Generate a SINGLE professional presentation slide as an IMAGE.
+
+This is slide {slide_number} of {body.total_slides} in a presentation titled "{body.ppt_title}".
+{desc_context}
+
+SLIDE CONTENT:
+Title: {slide_title}
+Key Points:
+{bullets_text}
+
+═══ CRITICAL DESIGN RULES ═══
+
+1. STUDY THE REFERENCE SLIDES I PROVIDED CAREFULLY — match their exact visual style, layout patterns, and design quality.
+
+2. VISUAL-FIRST DESIGN (MOST IMPORTANT):
+   - The slide MUST be dominated by VISUAL ELEMENTS — diagrams, flowcharts, process flows, mind maps, comparison tables, infographics, icons, pie charts, bar graphs, timeline diagrams, architectural diagrams, or conceptual illustrations.
+   - DO NOT make a slide that is just "text on the left, image on the right" — that is BORING and NOT what I want.
+   - Every key point should be represented VISUALLY with icons, numbered steps, connected nodes, or graphical elements — NOT as a plain bullet list.
+   - Think like an infographic designer — convert the bullet points into VISUAL representations.
+
+3. LAYOUT PATTERNS TO USE (pick the best one for this slide's content):
+   - Process flow with arrows connecting steps
+   - Central hub with radiating branches (mind map style)
+   - Numbered steps with icons and short labels
+   - Comparison columns or grid layout
+   - Timeline with milestones
+   - Layered architecture diagram
+   - Circular or hexagonal arrangement of concepts
+   - Dashboard-style with multiple small visual panels
+
+4. COLOR & STYLE:
+   - CLEAN WHITE background
+   - Use a consistent accent color palette (blues, teals, or the colors from reference slides)
+   - Professional, modern typography — large bold title, smaller supporting text
+   - Subtle shadows and rounded shapes for a polished look
+   - Generous spacing — don't overcrowd
+
+5. TEXT RULES:
+   - Minimal text — convert information into visuals wherever possible
+   - Title at the top, clear and bold
+   - Any remaining text should be SHORT labels or captions inside visual elements
+   - ALL text must be READABLE at presentation size
+
+6. TECHNICAL:
+   - 16:9 landscape aspect ratio
+   - NO watermarks, NO external logos, NO borders around the slide
+   - High quality, crisp rendering
+
+Generate this slide image now. Make it VISUALLY STUNNING with diagrams and infographic elements — not a boring text slide.
+"""
+
+
+    try:
+        def _generate_slide_sync():
+            from PIL import Image as PILImage
+
+            client_g = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+            # Load reference design images
+            ref_dir = os.path.join(os.path.dirname(__file__), "ui", "assets", "ppt")
+            ref_images = []
+            for fname in sorted(os.listdir(ref_dir)):
+                if fname.endswith(".png"):
+                    ref_images.append(PILImage.open(os.path.join(ref_dir, fname)))
+
+            # Build content list: prompt + reference images
+            contents = [prompt] + ref_images
+
+            response = client_g.models.generate_content(
+                model="gemini-3-pro-image-preview",
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_modalities=['TEXT', 'IMAGE'],
+                    image_config=types.ImageConfig(
+                        aspect_ratio="16:9",
+                        image_size="1K"
+                    ),
+                )
+            )
+
+            # Extract image from response
+            for part in response.parts:
+                img = part.as_image()
+                if img:
+                    return img.image_bytes
+                elif part.text:
+                    logging.info(f"[PPT Slide] Model returned text: {part.text}")
+
+            raise RuntimeError("No image part in AI response")
+
+        image_bytes = await run_in_threadpool(_generate_slide_sync)
+
+        # Convert to base64
+        import base64
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        return {
+            "slide_number": slide_number,
+            "title": slide_title,
+            "image_data": image_b64
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logging.error(f"[PPT Slide] Error generating slide {slide_number}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate slide {slide_number}: {str(e)}")
+
