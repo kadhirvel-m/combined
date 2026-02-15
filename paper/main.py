@@ -27833,6 +27833,7 @@ class PPTOutlineRequest(BaseModel):
     title: str = Field(..., max_length=200)
     description: Optional[str] = Field(None, max_length=5000)
     slide_count: int = Field(default=6, ge=1, le=12)
+    complexity: Optional[str] = Field(default="simple", description="simple, medium, or advanced")
 
 
 class PPTSlideRequest(BaseModel):
@@ -27850,12 +27851,40 @@ async def ppt_generate_outline(body: PPTOutlineRequest):
 
     desc_part = f"\nAdditional context/description:\n{body.description}" if body.description else ""
 
+    complexity = (body.complexity or "simple").lower().strip()
+    if complexity == "simple":
+        complexity_instruction = """COMPLEXITY: SIMPLE (Beginner-Friendly)
+- Explain every concept from the very basics, assume the audience has NO prior knowledge
+- Use real-world analogies, relatable examples, and simple language throughout
+- Include practical examples and visual demonstrations on most slides
+- Gradually introduce any technical terms with clear definitions
+- Keep bullet points short, clear, and easy to understand
+- First few slides should build foundational understanding before any complexity"""
+    elif complexity == "advanced":
+        complexity_instruction = """COMPLEXITY: ADVANCED (Expert-Level)
+- Assume the audience already knows the fundamentals — skip basic introductions
+- Dive directly into advanced concepts, technical depth, and nuanced details
+- Include technical terminology, formulas, algorithms, or architectural details where relevant
+- Focus on edge cases, trade-offs, best practices, and expert insights
+- Use industry-standard jargon and professional-grade content
+- Cover cutting-edge developments, research findings, or advanced applications"""
+    else:  # medium
+        complexity_instruction = """COMPLEXITY: MEDIUM (Balanced)
+- Start with 1-2 slides explaining the concept simply and clearly with examples
+- Then progressively move into more technical content and deeper explanations
+- Balance between accessibility for newcomers and depth for knowledgeable audience
+- Include both simple examples AND technical details across the presentation
+- Use some technical terms but always with brief context
+- Build a bridge from basics to advanced concepts naturally"""
+
     prompt = f"""You are a professional presentation designer and content strategist.
 
 Create a structured slide outline for a presentation with EXACTLY {body.slide_count} slides.
 
 PRESENTATION TITLE: "{body.title}"
 {desc_part}
+
+{complexity_instruction}
 
 For each slide, provide:
 - slide_number: Integer (1 to {body.slide_count})
@@ -27869,6 +27898,7 @@ RULES:
 - Each slide should cover one distinct aspect/topic
 - Bullets should be concise, visual-friendly (not paragraphs)
 - Make it professional and academic-quality
+- Follow the complexity level instructions STRICTLY
 
 Return ONLY a valid JSON object with key "slides" containing an array of slide objects.
 Example format: {{"slides": [{{"slide_number": 1, "title": "...", "bullets": ["...", "..."]}}]}}
