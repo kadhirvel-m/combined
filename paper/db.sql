@@ -17,6 +17,30 @@ CREATE TABLE public.admin_roles (
   CONSTRAINT admin_roles_pkey PRIMARY KEY (auth_user_id),
   CONSTRAINT admin_roles_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.ai_chat_conversations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL DEFAULT 'New Chat'::text,
+  share_code text UNIQUE,
+  is_public boolean DEFAULT false,
+  is_anonymous boolean DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_chat_conversations_pkey PRIMARY KEY (id),
+  CONSTRAINT ai_chat_conversations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.ai_chat_messages (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  conversation_id uuid NOT NULL,
+  role text NOT NULL CHECK (role = ANY (ARRAY['user'::text, 'assistant'::text, 'system'::text])),
+  content text NOT NULL,
+  attachments jsonb DEFAULT '[]'::jsonb,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  is_bookmarked boolean DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_chat_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT ai_chat_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.ai_chat_conversations(id)
+);
 CREATE TABLE public.ai_notes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   title text NOT NULL,
@@ -38,6 +62,16 @@ CREATE TABLE public.ai_notes_cheatsheet (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   image_urls ARRAY DEFAULT '{}'::text[],
   CONSTRAINT ai_notes_cheatsheet_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ai_notes_mcq (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  note_id uuid NOT NULL,
+  topic text NOT NULL,
+  topic_ci text DEFAULT lower(topic),
+  questions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  model text,
+  generated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_mcq_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.ai_notes_simple (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -417,6 +451,53 @@ CREATE TABLE public.hod_role_applications (
   CONSTRAINT hod_role_applications_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id),
   CONSTRAINT hod_role_applications_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES auth.users(id)
 );
+CREATE TABLE public.innovatex_mentor_chats (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  project_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  role text NOT NULL CHECK (role = ANY (ARRAY['user'::text, 'assistant'::text])),
+  content text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT innovatex_mentor_chats_pkey PRIMARY KEY (id),
+  CONSTRAINT innovatex_mentor_chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.innovatex_projects(id),
+  CONSTRAINT innovatex_mentor_chats_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.innovatex_projects (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  problem text NOT NULL,
+  solution text NOT NULL,
+  tech_stack jsonb NOT NULL DEFAULT '[]'::jsonb,
+  difficulty integer NOT NULL DEFAULT 3 CHECK (difficulty >= 1 AND difficulty <= 5),
+  innovation_score integer NOT NULL DEFAULT 3 CHECK (innovation_score >= 1 AND innovation_score <= 5),
+  category text,
+  use_case text,
+  timeline_weeks integer,
+  milestones jsonb DEFAULT '[]'::jsonb,
+  learning_outcomes jsonb DEFAULT '[]'::jsonb,
+  team_size integer DEFAULT 1,
+  status text NOT NULL DEFAULT 'claimed'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT innovatex_projects_pkey PRIMARY KEY (id),
+  CONSTRAINT innovatex_projects_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.innovatex_refinement_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  project_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  current_phase text NOT NULL DEFAULT 'feasibility'::text CHECK (current_phase = ANY (ARRAY['stack_selection'::text, 'features'::text, 'feasibility'::text, 'customization'::text, 'architecture'::text, 'blueprint'::text, 'chatbot'::text, 'complete'::text])),
+  phase_data jsonb NOT NULL DEFAULT '{}'::jsonb,
+  refined_project jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  chosen_frontend text,
+  chosen_backend text,
+  selected_features jsonb DEFAULT '[]'::jsonb,
+  CONSTRAINT innovatex_refinement_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT innovatex_refinement_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.innovatex_projects(id),
+  CONSTRAINT innovatex_refinement_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.labx_explanations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   topic text NOT NULL,
@@ -618,6 +699,40 @@ CREATE TABLE public.marketplace_reviews (
   CONSTRAINT marketplace_reviews_pkey PRIMARY KEY (id),
   CONSTRAINT marketplace_reviews_note_id_fkey FOREIGN KEY (note_id) REFERENCES public.marketplace_notes(id),
   CONSTRAINT marketplace_reviews_reviewer_user_id_fkey FOREIGN KEY (reviewer_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.math_td_question_history (
+  id text NOT NULL,
+  session_id text NOT NULL,
+  question_text text NOT NULL,
+  options_json text NOT NULL,
+  correct_answer integer NOT NULL,
+  selected_answer integer,
+  is_correct integer,
+  reward_elixir real NOT NULL DEFAULT 0,
+  difficulty integer NOT NULL,
+  created_at text NOT NULL,
+  answered_at text,
+  CONSTRAINT math_td_question_history_pkey PRIMARY KEY (id),
+  CONSTRAINT math_td_question_history_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.math_td_sessions(id)
+);
+CREATE TABLE public.math_td_sessions (
+  id text NOT NULL,
+  mode text NOT NULL DEFAULT 'solo'::text,
+  status text NOT NULL DEFAULT 'active'::text,
+  player_name text NOT NULL DEFAULT 'Player'::text,
+  enemy_name text NOT NULL DEFAULT 'Enemy AI'::text,
+  player_castle_hp integer NOT NULL,
+  enemy_castle_hp integer NOT NULL,
+  elixir real NOT NULL,
+  ai_elixir real NOT NULL,
+  game_time real NOT NULL,
+  state_json text NOT NULL,
+  active_question_id text,
+  active_question_answer integer,
+  created_at text NOT NULL,
+  updated_at text NOT NULL,
+  ended_at text,
+  CONSTRAINT math_td_sessions_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.notes_feedback (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1267,6 +1382,52 @@ CREATE TABLE public.user_topic_wishlist (
   CONSTRAINT user_topic_wishlist_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT user_topic_wishlist_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
 );
+CREATE TABLE public.xo_games (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  player_x uuid NOT NULL,
+  player_o uuid,
+  mode text NOT NULL DEFAULT 'ai_easy'::text CHECK (mode = ANY (ARRAY['ai_easy'::text, 'ai_medium'::text, 'ai_hard'::text, 'friend'::text])),
+  board jsonb NOT NULL DEFAULT '[[null, null, null], [null, null, null], [null, null, null]]'::jsonb,
+  current_turn text NOT NULL DEFAULT 'X'::text CHECK (current_turn = ANY (ARRAY['X'::text, 'O'::text])),
+  status text NOT NULL DEFAULT 'in_progress'::text CHECK (status = ANY (ARRAY['in_progress'::text, 'x_wins'::text, 'o_wins'::text, 'draw'::text])),
+  winner uuid,
+  move_count integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  finished_at timestamp with time zone,
+  CONSTRAINT xo_games_pkey PRIMARY KEY (id),
+  CONSTRAINT xo_games_player_x_fkey FOREIGN KEY (player_x) REFERENCES auth.users(id),
+  CONSTRAINT xo_games_player_o_fkey FOREIGN KEY (player_o) REFERENCES auth.users(id),
+  CONSTRAINT xo_games_winner_fkey FOREIGN KEY (winner) REFERENCES auth.users(id)
+);
+CREATE TABLE public.xo_moves (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  game_id uuid NOT NULL,
+  player_id uuid NOT NULL,
+  marker text NOT NULL CHECK (marker = ANY (ARRAY['X'::text, 'O'::text])),
+  row_idx integer NOT NULL CHECK (row_idx >= 0 AND row_idx <= 2),
+  col_idx integer NOT NULL CHECK (col_idx >= 0 AND col_idx <= 2),
+  move_number integer NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT xo_moves_pkey PRIMARY KEY (id),
+  CONSTRAINT xo_moves_game_id_fkey FOREIGN KEY (game_id) REFERENCES public.xo_games(id),
+  CONSTRAINT xo_moves_player_id_fkey FOREIGN KEY (player_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.xo_player_stats (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  wins integer NOT NULL DEFAULT 0,
+  losses integer NOT NULL DEFAULT 0,
+  draws integer NOT NULL DEFAULT 0,
+  current_streak integer NOT NULL DEFAULT 0,
+  best_streak integer NOT NULL DEFAULT 0,
+  elo integer NOT NULL DEFAULT 1000,
+  games_played integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT xo_player_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT xo_player_stats_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.youtube_ai_notes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   video_id text,
@@ -1277,39 +1438,4 @@ CREATE TABLE public.youtube_ai_notes (
   transcript_chars integer,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.ai_chat_conversations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  title text NOT NULL DEFAULT 'New Chat',
-  share_code text UNIQUE,
-  is_public boolean DEFAULT false,
-  is_anonymous boolean DEFAULT false,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT ai_chat_conversations_pkey PRIMARY KEY (id),
-  CONSTRAINT ai_chat_conversations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
-);
-CREATE TABLE public.ai_chat_messages (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  conversation_id uuid NOT NULL,
-  role text NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
-  content text NOT NULL,
-  attachments jsonb DEFAULT '[]'::jsonb,
-  metadata jsonb DEFAULT '{}'::jsonb,
-  is_bookmarked boolean DEFAULT false,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT ai_chat_messages_pkey PRIMARY KEY (id),
-  CONSTRAINT ai_chat_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.ai_chat_conversations(id) ON DELETE CASCADE
-);
-
-CREATE TABLE public.ai_notes_mcq (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  note_id uuid NOT NULL,
-  topic text NOT NULL,
-  topic_ci text GENERATED ALWAYS AS (lower(topic)) STORED,
-  questions jsonb NOT NULL DEFAULT '[]'::jsonb,
-  model text,
-  generated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT ai_notes_mcq_pkey PRIMARY KEY (id)
 );

@@ -590,18 +590,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="ideasGrid">
             </div>
 
-            <!-- Bottom actions -->
-            <div class="text-center mt-12 py-4" id="bottomActions" style="display:none">
-                <div class="glass-card rounded-2xl p-6 inline-block">
-                    <p class="font-bold mb-1">🎉 You've selected an idea!</p>
-                    <p class="text-sm text-neutral-500 dark:text-white/50 mb-4" id="selectedIdeaName"></p>
-                    <button
-                        class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#10B981] to-[#059669] text-white font-bold shadow-lg hover:-translate-y-0.5 transition-all"
-                        disabled>
-                        <span class="material-symbols-rounded text-lg">flag</span> Start Project (Coming Soon)
-                    </button>
-                </div>
-            </div>
+
         </div>
     </main>
 
@@ -613,6 +602,52 @@
                 <span class="material-symbols-rounded text-lg">close</span>
             </button>
             <div id="modalInner"></div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ CLAIM CONFIRMATION MODAL ═══════════════ -->
+    <div class="modal-overlay" id="claimModal" onclick="if(event.target===this)closeClaimModal()">
+        <div class="modal-body relative" style="max-width:520px">
+            <button onclick="closeClaimModal()"
+                class="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center hover:bg-black/10 dark:hover:bg-white/20 transition z-10">
+                <span class="material-symbols-rounded text-lg">close</span>
+            </button>
+
+            <!-- Default state -->
+            <div id="claimDefault">
+                <div class="text-center mb-6">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-[#FF7FD1] mx-auto mb-4 flex items-center justify-center">
+                        <span class="material-symbols-rounded text-3xl text-white">rocket_launch</span>
+                    </div>
+                    <h2 class="text-xl font-black mb-1">Claim This Project?</h2>
+                    <p class="text-sm text-neutral-500 dark:text-white/50">This will save it to your profile and become
+                        <strong>your project</strong>.</p>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-white/50 dark:bg-white/5 border border-black/5 dark:border-white/8 mb-6">
+                    <p class="text-xs font-bold uppercase tracking-wider text-neutral-400 dark:text-white/30 mb-2">
+                        Selected Idea</p>
+                    <h3 class="font-bold text-lg" id="claimTitle"></h3>
+                    <p class="text-sm text-neutral-500 dark:text-white/50 mt-1" id="claimCategory"></p>
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="closeClaimModal()"
+                        class="flex-1 py-3 rounded-xl font-semibold ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition text-sm">Cancel</button>
+                    <button onclick="confirmClaim()" id="claimConfirmBtn"
+                        class="flex-1 py-3 rounded-xl font-bold bg-gradient-to-r from-[#10B981] to-[#059669] text-white shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 text-sm">
+                        <span class="material-symbols-rounded text-lg">check_circle</span> Yes, Claim It!
+                    </button>
+                </div>
+            </div>
+
+            <!-- Saving state -->
+            <div id="claimSaving" style="display:none" class="text-center py-8">
+                <div class="gen-spinner mb-4" style="width:48px;height:48px;border-width:4px;margin:0 auto"></div>
+                <p class="font-bold text-lg mb-1">Claiming your project…</p>
+                <p class="text-sm text-neutral-400 dark:text-white/40">Saving to your profile</p>
+            </div>
         </div>
     </div>
 
@@ -992,9 +1027,65 @@
                 else c.style.border = '';
             });
             const idea = currentIdeas[idx];
-            document.getElementById('selectedIdeaName').textContent = `"${idea.title}" selected`;
-            document.getElementById('bottomActions').style.display = 'block';
-            document.getElementById('bottomActions').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Open claim confirmation modal
+            document.getElementById('claimTitle').textContent = idea.title;
+            document.getElementById('claimCategory').textContent = (idea.category || 'General') + ' • Difficulty ' + (idea.difficulty || 3) + '/5';
+            document.getElementById('claimDefault').style.display = 'block';
+            document.getElementById('claimSaving').style.display = 'none';
+            document.getElementById('claimModal').classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeClaimModal() {
+            document.getElementById('claimModal').classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
+        async function confirmClaim() {
+            const idea = currentIdeas[selectedIdx];
+            if (!idea) return;
+
+            // Show saving state
+            document.getElementById('claimDefault').style.display = 'none';
+            document.getElementById('claimSaving').style.display = 'block';
+
+            const token = localStorage.getItem('px_token');
+            try {
+                const resp = await fetch(apiBase + '/api/innovatex/claim-project', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token,
+                    },
+                    body: JSON.stringify({
+                        title: idea.title,
+                        problem: idea.problem,
+                        solution: idea.solution,
+                        tech_stack: idea.tech_stack || [],
+                        difficulty: idea.difficulty || 3,
+                        innovation_score: idea.innovation_score || 3,
+                        category: idea.category || null,
+                        use_case: idea.use_case || null,
+                        timeline_weeks: idea.timeline_weeks || null,
+                        milestones: idea.milestones || [],
+                        learning_outcomes: idea.learning_outcomes || [],
+                        team_size: setupData?.team_size || 1,
+                    }),
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Failed to claim project');
+                }
+
+                const data = await resp.json();
+                // Redirect to project detail page
+                window.location.href = './my_project.html?id=' + data.project_id;
+            } catch (e) {
+                alert('Error claiming project: ' + e.message);
+                document.getElementById('claimDefault').style.display = 'block';
+                document.getElementById('claimSaving').style.display = 'none';
+            }
         }
 
         // ══════════════════════════════════════════
