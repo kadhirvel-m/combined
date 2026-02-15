@@ -667,6 +667,10 @@
                 </button>
             </div>
             <div class="md:hidden flex items-center gap-2">
+                <button id="mobileSearchBtn" type="button" aria-label="Search"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">search</span>
+                </button>
                 <button id="navEduEditBtn" type="button" aria-label="Edit education"
                     class="hidden inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
                     <span class="material-symbols-rounded">edit</span>
@@ -916,7 +920,8 @@
                             <span
                                 class="material-symbols-rounded pointer-events-none select-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-base">search</span>
                             <input id="syllabusSearchInput" type="text" placeholder="Search topics & notes…"
-                                class="pl-9 pr-3 py-2 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-brand-900/40 focus:outline-none focus:ring-2 focus:ring-brand-500 w-full md:w-64 transition shadow-sm">
+                                style="padding-left: 4rem !important;"
+                                class="pl-16 pr-3 py-2 text-sm rounded-full ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-brand-900/40 focus:outline-none focus:ring-2 focus:ring-brand-500 w-full md:w-64 transition shadow-sm">
                         </div>
                         <!-- Suggestions dropdown -->
                         <div id="syllabusSuggestionsWrap"
@@ -955,7 +960,8 @@
                 <span
                     class="material-symbols-rounded pointer-events-none select-none absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-neutral-500 dark:text-white/55">search</span>
                 <input id="sheetSearchInput" type="text" placeholder="Search topics & notes…"
-                    class="w-full rounded-2xl pl-12 pr-4 py-3.5 outline-none ring-1 ring-black/10 dark:ring-white/15 bg-neutral-50 dark:bg-white/5 text-neutral-900 dark:text-white placeholder:text-neutral-500 dark:placeholder:text-white/50 focus:ring-2 focus:ring-brand-500 transition text-base" />
+                    style="padding-left: 4rem !important;"
+                    class="w-full rounded-2xl pl-16 pr-4 py-3.5 outline-none ring-1 ring-black/10 dark:ring-white/15 bg-neutral-50 dark:bg-white/5 text-neutral-900 dark:text-white placeholder:text-neutral-500 dark:placeholder:text-white/50 focus:ring-2 focus:ring-brand-500 transition text-base" />
             </div>
             <div id="sheetSuggestionsWrap"
                 class="hidden mt-2 rounded-xl overflow-hidden ring-1 ring-black/10 dark:ring-white/15 bg-white/95 dark:bg-[#1E1E2F]/95 shadow-lg">
@@ -1087,7 +1093,8 @@
                         var data = await res.json();
                         return (data && data.items) ? data.items : [];
                     } catch (e) {
-                        if (e.name !== 'AbortError') console.error(e);
+                        if (e.name === 'AbortError') return null;
+                        console.error(e);
                         return [];
                     }
                 }
@@ -1099,8 +1106,9 @@
                         return;
                     }
                     var items = await fetchSuggestions(q);
+                    if (items === null) return;
                     renderSuggestions(items);
-                }, 150);
+                }, 500);
 
                 $input.addEventListener('input', onInput);
 
@@ -1139,12 +1147,13 @@
                     }
                 });
 
-                $input.addEventListener('blur', function () {
-                    setTimeout(function () { hideSuggestions(); }, 150);
-                });
+
 
                 // Close on click outside
                 document.addEventListener('click', function (e) {
+                    // Disable click-outside on mobile for sheet search to prevent conflicts
+                    if (window.innerWidth < 768 && $input.id === 'sheetSearchInput') return;
+
                     if (!$wrap.contains(e.target) && e.target !== $input) {
                         hideSuggestions();
                     }
@@ -1178,6 +1187,29 @@
                     }
                 });
             }
+
+            // Mobile Search Sheet Logic
+            var mobileSearchBtn = document.getElementById('mobileSearchBtn');
+            var mobileSearchSheet = document.getElementById('mobileSearchSheet');
+            var sheetBackdrop = document.getElementById('sheetBackdrop');
+            var sheetInput = document.getElementById('sheetSearchInput');
+
+            function openMobileSearch() {
+                if (mobileSearchSheet) mobileSearchSheet.classList.add('open');
+                if (sheetBackdrop) sheetBackdrop.classList.add('active');
+                setTimeout(function () { if (sheetInput) sheetInput.focus(); }, 100);
+            }
+
+            function closeMobileSearch() {
+                if (mobileSearchSheet) mobileSearchSheet.classList.remove('open');
+                if (sheetBackdrop) sheetBackdrop.classList.remove('active');
+            }
+
+            if (mobileSearchBtn) mobileSearchBtn.addEventListener('click', openMobileSearch);
+            if (sheetBackdrop) sheetBackdrop.addEventListener('click', closeMobileSearch);
+
+            // Initialize mobile search
+            setupSearch('sheetSearchInput', 'sheetSuggestionsWrap', 'sheetSuggestionsList');
         })();
     </script>
 

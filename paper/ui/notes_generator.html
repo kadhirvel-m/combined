@@ -773,75 +773,21 @@
 
           <!-- Fullscreen overlay controls -->
           <div id="fsControls" class="hidden fixed top-4 right-4 z-[60] flex items-center gap-2">
+            <button id="fsThemeBtn"
+              class="ripple inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm bg-[var(--surface)] hover:bg-brandlt-100 dark:hover:bg-white/10 transition shadow-lg"
+              style="border-color: var(--outline)" title="Toggle theme">
+              <span class="material-symbols-rounded text-base">dark_mode</span>
+              <span class="hidden sm:inline">Theme</span>
+            </button>
             <button id="fsExitBtn"
-              class="ripple px-3 py-1.5 rounded-lg border text-sm bg-[var(--surface)]/90 hover:bg-[var(--brand-soft)]"
+              class="ripple px-3 py-2 rounded-lg border text-sm bg-[var(--surface)] hover:bg-[var(--brand-soft)] shadow-lg"
               style="border-color: var(--outline)">Exit Fullscreen</button>
-            <button id="fsHomeBtn"
-              class="ripple px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm">Home</button>
           </div>
         </div>
       </div>
 
       <!-- Floating AI Assistant FAB -->
-      <button id="aiFab" title="AI Assistant"
-        class="ripple fixed bottom-6 right-10 w-14 h-14 rounded-full shadow-neon bg-gradient-to-tr from-fuchsia-500 via-brand-500 to-indigo-500 text-white flex items-center justify-center text-2xl font-semibold hover:scale-105 active:scale-95 transition-transform">
-        <span class="material-symbols-outlined">robot_2</span>
-      </button>
 
-      <!-- AI Assistant Panel -->
-      <div id="aiPanel"
-        class="fixed bottom-28 right-6 w-[min(420px,90vw)] max-h-[70vh] flex flex-col rounded-2xl glass border shadow-neon overflow-hidden opacity-0 pointer-events-none translate-y-4 transition-all duration-300"
-        style="border-color: var(--outline); backdrop-filter: blur(14px);">
-        <div class="flex items-center gap-2 px-4 py-3 border-b" style="border-color: var(--outline);">
-          <span class="material-symbols-outlined text-brand-500">robot_2</span>
-          <h2 class="text-sm font-semibold">Tune AI</h2>
-          <span id="aiAdjustStatus" class="ml-auto text-[11px] text-[var(--muted)] hidden">Processing...</span>
-          <button id="aiClosePanel" class="ripple ml-2 px-2 py-1 rounded-md border text-xs hover:bg-[var(--brand-soft)]"
-            style="border-color: var(--outline);">
-            <span class="material-symbols-outlined text-sm">close</span>
-          </button>
-        </div>
-        <div class="p-4 space-y-3 text-sm overflow-auto custom-scroll">
-          <div class="flex flex-wrap gap-2">
-            <button id="aiSummarize" class="ripple px-3 py-2 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
-              style="border-color: var(--outline)"><span
-                class="material-symbols-outlined text-xs align-middle mr-1">compress</span>Summarize</button>
-            <button id="aiExpand" class="ripple px-3 py-2 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
-              style="border-color: var(--outline)"><span
-                class="material-symbols-outlined text-xs align-middle mr-1">unfold_more</span>Expand</button>
-            <button id="aiSimplify" class="ripple px-3 py-2 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
-              style="border-color: var(--outline)"><span
-                class="material-symbols-outlined text-xs align-middle mr-1">lightbulb</span>Simplify</button>
-            <button id="aiRevert" class="ripple px-3 py-2 rounded-lg border text-xs bg-[var(--chip)] hidden"
-              style="border-color: var(--outline)"><span
-                class="material-symbols-outlined text-xs align-middle mr-1">undo</span>Revert</button>
-          </div>
-          <div>
-            <label for="aiCustomPrompt"
-              class="block text-[11px] tracking-wide uppercase font-medium mb-1 text-[var(--muted)]">Custom
-              Instruction</label>
-            <textarea id="aiCustomPrompt" rows="3" placeholder="e.g. Add intuitive analogies without altering equations"
-              class="w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-              style="border-color: var(--outline); background: var(--surface); color: var(--surface-contrast);"></textarea>
-          </div>
-          <div class="flex items-center gap-2">
-            <button id="aiCustomApply"
-              class="ripple px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium tracking-wide">Run</button>
-            <button id="aiClearPrompt" class="ripple px-3 py-2 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
-              style="border-color: var(--outline)">Clear</button>
-            <div class="ml-auto text-[10px] text-[var(--muted)]">Transforms are temporary until saved.</div>
-          </div>
-          <div class="rounded-lg border p-3 text-[11px] leading-relaxed bg-[var(--chip)]/60"
-            style="border-color: var(--outline)">
-            <p class="mb-1 font-semibold text-[12px]">Hints</p>
-            <ul class="list-disc list-inside space-y-0.5">
-              <li>Chain prompts (e.g. "shorten section 2 then add table").</li>
-              <li>Use Revert to restore original when first transform began.</li>
-              <li>Edits here do not auto-save — click Save in editor.</li>
-            </ul>
-          </div>
-        </div>
-      </div>
 
     </section>
   </main>
@@ -3255,15 +3201,68 @@
     });
 
     function setFullscreen(on) {
-      const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'p-6'];
+      // You can adjust the padding here: 
+      // 'px-8 md:px-48' sets left/right padding (larger on desktop)
+      // 'pt-16' sets top padding
+      // 'pb-8' sets bottom padding
+      const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'px-8', 'md:px-48', 'pt-16', 'pb-8'];
       classes.forEach(c => $wrap.classList.toggle(c, on));
       $expand.textContent = on ? 'Exit' : 'Fullscreen';
       if ($fsCtrl) $fsCtrl.classList.toggle('hidden', !on);
+
+      // Browser Fullscreen API - Use element requestFullscreen for strict isolation
+      try {
+        if (on) {
+          if (!document.fullscreenElement) {
+            // Request fullscreen on the wrapper element itself
+            $wrap.requestFullscreen().catch(err => {
+              console.warn(`Error attempting to enable fullscreen: ${err.message}`);
+            });
+          }
+        } else {
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(err => {
+              console.warn(`Error attempting to exit fullscreen: ${err.message}`);
+            });
+          }
+        }
+      } catch (e) { console.error(e); }
     }
-    $expand.addEventListener('click', () => { setFullscreen(!$wrap.classList.contains('fixed')); });
+
+    $expand.addEventListener('click', () => {
+      // Toggle logic based on current state
+      const isCurrentlyFullscreen = $wrap.classList.contains('fixed');
+      setFullscreen(!isCurrentlyFullscreen);
+    });
+
     $fsExit?.addEventListener('click', () => setFullscreen(false));
-    $fsHome?.addEventListener('click', () => { window.location.href = 'index.html'; });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $wrap.classList.contains('fixed')) setFullscreen(false); });
+
+    // Sync with browser fullscreen changes (e.g. user presses Esc)
+    document.addEventListener('fullscreenchange', () => {
+      const isBrowserFullscreen = !!document.fullscreenElement;
+      // If browser exited fullscreen but UI is still in fullscreen mode, we need to exit UI mode too
+      if (!isBrowserFullscreen && $wrap.classList.contains('fixed')) {
+        // We only want to update UI, not call exitFullscreen again (it would fail)
+        const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'p-6'];
+        classes.forEach(c => $wrap.classList.toggle(c, false));
+        $expand.textContent = 'Fullscreen';
+        if ($fsCtrl) $fsCtrl.classList.add('hidden');
+      }
+    });
+
+    // Theme toggle in fullscreen
+    const $fsThemeBtn = document.getElementById('fsThemeBtn');
+    if ($fsThemeBtn && $themeBtn) {
+      $fsThemeBtn.addEventListener('click', () => {
+        $themeBtn.click();
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $wrap.classList.contains('fixed')) {
+        setFullscreen(false);
+      }
+    });
 
     // Emphasis toggle
     setEmphasis(emphasis);
@@ -3555,94 +3554,7 @@
       } else { logEvent('Save failed'); snack('Save failed'); }
     });
 
-    // ===== AI Adjust (ephemeral) =====
-    (function () {
-      const btnSummarize = document.getElementById('aiSummarize');
-      const btnExpand = document.getElementById('aiExpand');
-      const btnSimplify = document.getElementById('aiSimplify');
-      const btnCustom = document.getElementById('aiCustomApply');
-      const btnClear = document.getElementById('aiClearPrompt');
-      const btnRevert = document.getElementById('aiRevert');
-      const promptBox = document.getElementById('aiCustomPrompt');
-      const statusEl = document.getElementById('aiAdjustStatus');
-      const endpoint = `${apiBase}/api/notes/transform`;
-      let originalSnapshot = null; // first markdown before any transform
 
-      function currentMarkdown() {
-        return isEditing ? ($editor.value || '') : (lastMarkdown || '');
-      }
-      function applyMarkdown(md) {
-        if (isEditing) { $editor.value = md; }
-        renderMarkdown(md);
-      }
-      function setBusy(b) {
-        const btns = [btnSummarize, btnExpand, btnSimplify, btnCustom, btnClear, btnRevert];
-        btns.forEach(bt => bt && (bt.disabled = b));
-        statusEl.classList.toggle('hidden', !b);
-        if (b) statusEl.textContent = 'Processing...';
-      }
-      async function run(mode, custom) {
-        const md = currentMarkdown().trim();
-        if (!md) { snack('Nothing to transform'); return; }
-        if (!originalSnapshot) originalSnapshot = md; // capture once
-        setBusy(true);
-        try {
-          const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, markdown: md, prompt: custom }) });
-          if (!res.ok) { throw new Error(await res.text() || 'Transform failed'); }
-          const data = await res.json();
-          if (data.markdown) {
-            applyMarkdown(data.markdown);
-            btnRevert.classList.remove('hidden');
-            snack(`${mode[0].toUpperCase() + mode.slice(1)} done`);
-          }
-        } catch (e) {
-          console.error(e); snack('AI error');
-          if (!originalSnapshot) originalSnapshot = null;
-        } finally { setBusy(false); }
-      }
-      btnSummarize?.addEventListener('click', () => run('summarize'));
-      btnExpand?.addEventListener('click', () => run('expand'));
-      btnSimplify?.addEventListener('click', () => run('simplify'));
-      btnCustom?.addEventListener('click', () => {
-        const instr = (promptBox.value || '').trim();
-        if (!instr) { snack('Enter instruction'); promptBox.focus(); return; }
-        run('custom', instr);
-      });
-      btnClear?.addEventListener('click', () => { promptBox.value = ''; promptBox.focus(); });
-      btnRevert?.addEventListener('click', () => {
-        if (originalSnapshot) { applyMarkdown(originalSnapshot); originalSnapshot = null; btnRevert.classList.add('hidden'); snack('Reverted'); }
-      });
-    })();
-  </script>
-
-  <script>
-    // Floating AI Assistant toggle
-    (function () {
-      const fab = document.getElementById('aiFab');
-      const panel = document.getElementById('aiPanel');
-      const closeBtn = document.getElementById('aiClosePanel');
-      if (!fab || !panel) return;
-      function toggle(open) {
-        if (open === undefined) open = !panel.classList.contains('open');
-        panel.classList.toggle('open', open);
-        if (open) {
-          panel.classList.remove('pointer-events-none');
-          panel.querySelector('#aiCustomPrompt')?.focus();
-        } else {
-          panel.classList.add('pointer-events-none');
-        }
-      }
-      // Toggle on each click now
-      fab.addEventListener('click', () => toggle());
-      closeBtn?.addEventListener('click', () => toggle(false));
-      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggle(false); });
-      document.addEventListener('click', (e) => {
-        if (!panel.classList.contains('open')) return;
-        if (panel.contains(e.target) || e.target === fab) return;
-        const rect = panel.getBoundingClientRect();
-        if (e.clientX < rect.left - 20 || e.clientY < rect.top - 20) toggle(false);
-      });
-    })();
   </script>
 
   <script>
