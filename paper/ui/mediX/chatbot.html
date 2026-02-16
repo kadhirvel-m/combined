@@ -8,7 +8,9 @@
   <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
+    rel="stylesheet">
   <link rel="stylesheet" href="../assets/css/tailwind.css" />
   <script src="../config.js"></script>
   <style>
@@ -41,6 +43,350 @@
       transform: translateY(0);
       pointer-events: auto;
     }
+
+    /* ── Chat UI Styles ── */
+    #chatContainer {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 72px);
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    #messages::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #messages::-webkit-scrollbar-thumb {
+      background: rgba(150, 150, 150, 0.25);
+      border-radius: 999px;
+    }
+
+    .msg-row {
+      display: flex;
+      gap: 12px;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 20px 24px;
+      animation: msgFadeIn 0.3s ease;
+    }
+
+    @keyframes msgFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .msg-avatar {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .msg-avatar.user-avatar {
+      background: linear-gradient(135deg, #9E4B8A, #B06AB3);
+      color: #fff;
+    }
+
+    .msg-avatar.bot-avatar {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+    }
+
+    .msg-body {
+      flex: 1;
+      min-width: 0;
+      font-size: 15px;
+      line-height: 1.7;
+      color: inherit;
+    }
+
+    .msg-body .msg-name {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .msg-body .msg-text {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .msg-body .msg-text p {
+      margin-bottom: 0.5em;
+    }
+
+    .msg-body .msg-text p:last-child {
+      margin-bottom: 0;
+    }
+
+    .msg-body .msg-text ul,
+    .msg-body .msg-text ol {
+      padding-left: 1.3em;
+      margin: 0.4em 0;
+    }
+
+    .msg-body .msg-text li {
+      margin-bottom: 0.25em;
+    }
+
+    .msg-body .msg-text strong {
+      font-weight: 600;
+    }
+
+    .msg-body .msg-text code {
+      background: rgba(0, 0, 0, 0.06);
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .dark .msg-body .msg-text code {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .msg-citations {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .citation-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      background: rgba(0, 0, 0, 0.03);
+      color: inherit;
+      opacity: 0.7;
+    }
+
+    .dark .citation-chip {
+      border-color: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    /* Typing indicator */
+    .typing-dots {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+      padding: 4px 0;
+    }
+
+    .typing-dots span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.4;
+      animation: typingBounce 1.2s infinite ease-in-out;
+    }
+
+    .typing-dots span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .typing-dots span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes typingBounce {
+
+      0%,
+      80%,
+      100% {
+        transform: translateY(0);
+        opacity: 0.3;
+      }
+
+      40% {
+        transform: translateY(-5px);
+        opacity: 0.8;
+      }
+    }
+
+    /* Welcome screen */
+    #welcomeScreen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      text-align: center;
+      padding: 40px 24px;
+      animation: msgFadeIn 0.5s ease;
+    }
+
+    #welcomeScreen .welcome-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.25);
+    }
+
+    .suggestion-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      max-width: 560px;
+      margin-top: 24px;
+    }
+
+    .suggestion-chip {
+      padding: 10px 18px;
+      border-radius: 16px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      background: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+      max-width: 240px;
+    }
+
+    .suggestion-chip:hover {
+      border-color: rgba(99, 102, 241, 0.3);
+      background: rgba(99, 102, 241, 0.05);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+    }
+
+    .dark .suggestion-chip {
+      border-color: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .dark .suggestion-chip:hover {
+      border-color: rgba(167, 139, 250, 0.3);
+      background: rgba(167, 139, 250, 0.08);
+    }
+
+    /* Input area */
+    #inputArea {
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      padding: 16px 24px 24px;
+    }
+
+    .dark #inputArea {
+      border-top-color: rgba(255, 255, 255, 0.06);
+    }
+
+    .input-wrapper {
+      max-width: 760px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .input-box {
+      display: flex;
+      align-items: flex-end;
+      gap: 0;
+      border-radius: 24px;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      background: rgba(255, 255, 255, 0.8);
+      padding: 8px 8px 8px 20px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .input-box:focus-within {
+      border-color: rgba(99, 102, 241, 0.4);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
+    }
+
+    .dark .input-box {
+      border-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .dark .input-box:focus-within {
+      border-color: rgba(167, 139, 250, 0.35);
+      box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.08);
+    }
+
+    .input-box textarea {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      resize: none;
+      font-size: 15px;
+      line-height: 1.5;
+      padding: 8px 0;
+      max-height: 200px;
+      min-height: 24px;
+      color: inherit;
+      font-family: inherit;
+    }
+
+    .input-box textarea::placeholder {
+      color: rgba(0, 0, 0, 0.35);
+    }
+
+    .dark .input-box textarea::placeholder {
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .send-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+
+    .send-btn:hover {
+      transform: scale(1.05);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .input-footer {
+      text-align: center;
+      margin-top: 8px;
+      font-size: 11px;
+      opacity: 0.4;
+    }
   </style>
   <script>
     (() => {
@@ -52,8 +398,10 @@
   </script>
 </head>
 
-<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-gradient-to-b from-white via-fuchsia-50/30 to-violet-100/40 dark:from-[#161525] dark:via-[#1d1930] dark:to-[#171124] transition-colors overflow-x-hidden">
-  <header class="fixed top-0 left-0 right-0 z-40 w-full bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+<body
+  class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-gradient-to-b from-white via-fuchsia-50/30 to-violet-100/40 dark:from-[#161525] dark:via-[#1d1930] dark:to-[#171124] transition-colors overflow-x-hidden">
+  <header
+    class="fixed top-0 left-0 right-0 z-40 w-full bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
     <div class="container flex items-center justify-between py-4">
       <a href="../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
         <img src="../assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
@@ -62,35 +410,49 @@
       <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
         <a class="hover:text-brandlt-900 dark:hover:text-white" href="../index.html">Home</a>
         <a class="hover:text-brandlt-900 dark:hover:text-white" href="../about.html">About</a>
-        <button class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">Products
-          <span class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span></button>
-        <button class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">Solutions
-          <span class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span></button>
+        <button
+          class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">Products
+          <span
+            class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span></button>
+        <button
+          class="group inline-flex items-center gap-1 hover:text-brandlt-900 dark:hover:text-white transition">Solutions
+          <span
+            class="material-symbols-rounded text-base opacity-70 group-hover:opacity-100">expand_more</span></button>
         <a class="hover:text-brandlt-900 dark:hover:text-white" href="../contact.html">Contact</a>
         <a class="hover:text-brandlt-900 dark:hover:text-white" href="../help.html">Help</a>
         <a class="hover:text-brandlt-900 dark:hover:text-white" href="../index.html#pricing">Pricing</a>
       </nav>
       <div class="hidden md:flex items-center gap-2">
-        <button id="themeToggle" data-theme-toggle class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5" aria-label="Toggle theme">
+        <button id="themeToggle" data-theme-toggle
+          class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+          aria-label="Toggle theme">
           <span class="material-symbols-rounded">dark_mode</span>
           <span class="hidden sm:block">Theme</span>
         </button>
-        <a href="../login.html" class="text-sm text-neutral-700 dark:text-white/85 hover:text-brandlt-900 dark:hover:text-white px-3 py-2 rounded-full">Log in</a>
-        <a href="../signup.html" class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign up</a>
-        <a id="navProfile" href="../profile.html" title="Profile" class="hidden items-center justify-center w-10 h-10 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60">
+        <a href="../login.html"
+          class="text-sm text-neutral-700 dark:text-white/85 hover:text-brandlt-900 dark:hover:text-white px-3 py-2 rounded-full">Log
+          in</a>
+        <a href="../signup.html"
+          class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+          up</a>
+        <a id="navProfile" href="../profile.html" title="Profile"
+          class="hidden items-center justify-center w-10 h-10 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60">
           <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
           <span id="navProfileInitial" class="text-xs font-semibold">ME</span>
         </a>
-        <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out" class="hidden items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
+        <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out"
+          class="hidden items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
           <span class="material-symbols-rounded text-base">logout</span>
           <span>Sign out</span>
         </button>
       </div>
       <div class="md:hidden flex items-center gap-2">
-        <button type="button" data-theme-toggle aria-label="Toggle theme" class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+        <button type="button" data-theme-toggle aria-label="Toggle theme"
+          class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
           <span class="material-symbols-rounded">dark_mode</span>
         </button>
-        <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel" class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+        <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
+          class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
           <span class="sr-only">Toggle navigation</span>
           <span class="material-symbols-rounded" data-icon>menu</span>
         </button>
@@ -98,85 +460,92 @@
     </div>
   </header>
 
-  <div id="mobileNavBackdrop" aria-hidden="true" class="hidden md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
-  <nav id="mobileNavPanel" aria-hidden="true" class="hidden md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+  <div id="mobileNavBackdrop" aria-hidden="true"
+    class="hidden md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+  <nav id="mobileNavPanel" aria-hidden="true"
+    class="hidden md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
     <div class="flex flex-col gap-2 text-sm text-neutral-700 dark:text-white/80">
-      <a href="../index.html" data-close-mobile-nav class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Home</a>
-      <a href="../about.html#values" data-close-mobile-nav class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Values</a>
-      <a href="../about.html#journey" data-close-mobile-nav class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Journey</a>
-      <a href="../about.html#team" data-close-mobile-nav class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Team</a>
-      <a href="../contact.html" data-close-mobile-nav class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Contact</a>
-      <a href="../help.html" data-close-mobile-nav class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Help</a>
-      <a href="../index.html#pricing" data-close-mobile-nav class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Pricing</a>
+      <a href="../index.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Home</a>
+      <a href="../about.html#values" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Values</a>
+      <a href="../about.html#journey" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Journey</a>
+      <a href="../about.html#team" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Team</a>
+      <a href="../contact.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Contact</a>
+      <a href="../help.html" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Help</a>
+      <a href="../index.html#pricing" data-close-mobile-nav
+        class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Pricing</a>
     </div>
     <div class="flex flex-col gap-3 border-t border-black/5 dark:border-white/10 pt-4">
-      <a href="../login.html" data-close-mobile-nav class="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">Log in</a>
-      <a href="../signup.html" data-close-mobile-nav class="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)] transition">Sign up</a>
-      <a id="navProfileMobile" href="../profile.html" data-close-mobile-nav class="hidden inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/15 px-4 py-2 text-sm text-neutral-700 dark:text-white/80 bg-white/70 dark:bg-brand-900/60">
+      <a href="../login.html" data-close-mobile-nav
+        class="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium ring-1 ring-black/10 dark:ring-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">Log
+        in</a>
+      <a href="../signup.html" data-close-mobile-nav
+        class="inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] shadow-[0_4px_18px_-6px_rgba(158,75,138,0.6)] hover:shadow-[0_6px_24px_-8px_rgba(158,75,138,0.7)] transition">Sign
+        up</a>
+      <a id="navProfileMobile" href="../profile.html" data-close-mobile-nav
+        class="hidden inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/15 px-4 py-2 text-sm text-neutral-700 dark:text-white/80 bg-white/70 dark:bg-brand-900/60">
         <span class="material-symbols-rounded text-base">account_circle</span>
         <span data-profile-name>My profile</span>
       </a>
-      <button id="signOutBtnMobile" type="button" class="hidden inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">
+      <button id="signOutBtnMobile" type="button"
+        class="hidden inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 transition">
         <span class="material-symbols-rounded text-base">logout</span>
         <span>Sign out</span>
       </button>
     </div>
   </nav>
 
-  <main class="container pt-28 pb-12 md:pt-32">
-    <section class="rounded-3xl border border-black/10 dark:border-white/10 bg-white/85 dark:bg-brand-900/55 backdrop-blur p-6 md:p-8 shadow-soft mb-6">
-      <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Medix RAG Chat</h1>
-      <p class="mt-2 text-sm md:text-base text-neutral-700 dark:text-white/75">Ask questions across your uploaded sources with tuned retrieval controls and citation-aware answers.</p>
-    </section>
+  <!-- ── Chat Container ── -->
+  <div id="chatContainer" style="padding-top: 72px;">
+    <!-- Welcome Screen (shown initially, hidden after first message) -->
+    <div id="welcomeScreen">
+      <div class="welcome-icon">
+        <span class="material-symbols-rounded" style="font-size:32px;color:#fff;">smart_toy</span>
+      </div>
+      <h1 style="font-size:28px;font-weight:800;letter-spacing:-0.5px;margin:0;">Medix AI</h1>
+      <p style="margin-top:8px;font-size:15px;opacity:0.5;max-width:400px;">Your intelligent medical assistant. Ask
+        questions about your uploaded documents.</p>
+      <div class="suggestion-chips">
+        <button class="suggestion-chip" onclick="useSuggestion(this)">📋 Summarize the key findings from my uploaded
+          PDF</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">💊 What medications are mentioned in the
+          documents?</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">🔬 Explain the diagnosis in simple terms</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">📊 Compare the test results across
+          reports</button>
+      </div>
+    </div>
 
-    <section class="grid grid-cols-1 xl:grid-cols-12 gap-6">
-      <aside class="xl:col-span-4 rounded-3xl border border-black/10 dark:border-white/10 bg-white/88 dark:bg-brand-900/60 backdrop-blur p-6 shadow-soft">
-        <h2 class="text-lg font-bold mb-4">Retrieval Controls</h2>
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-semibold mb-2" for="sessionId">Session ID (optional)</label>
-            <input id="sessionId" type="text" placeholder="Auto-created if empty" class="w-full rounded-xl border border-black/10 dark:border-white/15 px-4 py-3 bg-white/75 dark:bg-white/5" />
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-1 gap-4">
-            <div>
-              <label class="block text-sm font-semibold mb-2" for="topK">Top K</label>
-              <input id="topK" type="number" min="2" max="40" value="12" class="w-full rounded-xl border border-black/10 dark:border-white/15 px-4 py-3 bg-white/75 dark:bg-white/5" />
-            </div>
-            <div>
-              <label class="block text-sm font-semibold mb-2" for="minScore">Min Score</label>
-              <input id="minScore" type="number" step="0.01" min="0" max="1" value="0.55" class="w-full rounded-xl border border-black/10 dark:border-white/15 px-4 py-3 bg-white/75 dark:bg-white/5" />
-            </div>
-            <div>
-              <label class="block text-sm font-semibold mb-2" for="temp">Temperature</label>
-              <input id="temp" type="number" step="0.05" min="0" max="1" value="0.2" class="w-full rounded-xl border border-black/10 dark:border-white/15 px-4 py-3 bg-white/75 dark:bg-white/5" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-semibold mb-2" for="sourceIds">Filter Sources (Ctrl/Cmd + click)</label>
-            <select id="sourceIds" multiple size="10" class="w-full rounded-xl border border-black/10 dark:border-white/15 px-3 py-3 bg-white/75 dark:bg-white/5"></select>
-          </div>
-          <button id="reloadSources" type="button" class="inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition">
-            <span class="material-symbols-rounded text-base mr-1">refresh</span>
-            Reload Sources
-          </button>
-        </div>
-      </aside>
+    <!-- Messages area (hidden initially, shown after first message) -->
+    <div id="messages" style="display:none;"></div>
 
-      <section class="xl:col-span-8 rounded-3xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/62 backdrop-blur shadow-soft flex flex-col min-h-[68vh]">
-        <div class="px-5 py-4 border-b border-black/10 dark:border-white/10 text-sm text-neutral-700 dark:text-white/75">
-          Model: gemini-3-pro-preview · Embeddings: gemini-embedding-001 · Retrieval: pgvector cosine
-        </div>
-        <div id="messages" class="flex-1 p-5 space-y-3 overflow-auto"></div>
-        <form id="chatForm" class="p-4 border-t border-black/10 dark:border-white/10 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
-          <textarea id="prompt" placeholder="Ask from your uploaded PDFs..." class="w-full min-h-[60px] max-h-[220px] rounded-xl border border-black/10 dark:border-white/15 px-4 py-3 bg-white/75 dark:bg-white/5"></textarea>
-          <button id="sendBtn" type="submit" class="inline-flex items-center justify-center rounded-xl bg-brand-500 text-white text-sm font-semibold px-5 py-3 hover:shadow-glow transition">
-            <span class="material-symbols-rounded text-base mr-1">send</span>
-            Send
-          </button>
+    <!-- Input area -->
+    <div id="inputArea">
+      <div class="input-wrapper">
+        <form id="chatForm" autocomplete="off">
+          <div class="input-box">
+            <textarea id="prompt" rows="1" placeholder="Message Medix AI..." oninput="autoGrow(this)"></textarea>
+            <button id="sendBtn" type="submit" class="send-btn" aria-label="Send message">
+              <span class="material-symbols-rounded" style="font-size:20px;vertical-align:0;">arrow_upward</span>
+            </button>
+          </div>
         </form>
-      </section>
-    </section>
-  </main>
+        <div class="input-footer">Medix AI can make mistakes. Verify important medical information.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden inputs for retrieval params (defaults hardcoded, no UI shown) -->
+  <input type="hidden" id="sessionId" value="" />
+  <input type="hidden" id="topK" value="20" />
+  <input type="hidden" id="minScore" value="0.35" />
+  <input type="hidden" id="temp" value="0.2" />
+  <select id="sourceIds" multiple style="display:none;"></select>
 
   <script>
     const root = document.documentElement;
@@ -248,7 +617,129 @@
     const promptEl = document.getElementById('prompt');
     const sourceSelect = document.getElementById('sourceIds');
     const sessionEl = document.getElementById('sessionId');
+    const welcomeScreen = document.getElementById('welcomeScreen');
     let currentUserId = '';
+    let hasMessages = false;
+
+    function autoGrow(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    }
+
+    function useSuggestion(btn) {
+      const text = btn.textContent.replace(/^[^\s]+\s/, '').trim();
+      promptEl.value = text;
+      autoGrow(promptEl);
+      promptEl.focus();
+      chatForm.dispatchEvent(new Event('submit', { cancelable: true }));
+    }
+
+    function showChatArea() {
+      if (!hasMessages) {
+        hasMessages = true;
+        welcomeScreen.style.display = 'none';
+        messages.style.display = 'block';
+      }
+    }
+
+    function getUserInitial() {
+      try {
+        const name = localStorage.getItem('px_user_name') || localStorage.getItem('userName') || '';
+        return name.charAt(0).toUpperCase() || 'U';
+      } catch (_) { return 'U'; }
+    }
+
+    function formatMarkdown(text) {
+      // Very lightweight markdown: bold, inline code, line breaks
+      let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
+      return html;
+    }
+
+    function bubble(role, text, citations = []) {
+      showChatArea();
+      const row = document.createElement('div');
+      row.className = 'msg-row';
+
+      const avatar = document.createElement('div');
+      avatar.className = role === 'user' ? 'msg-avatar user-avatar' : 'msg-avatar bot-avatar';
+      avatar.textContent = role === 'user' ? getUserInitial() : 'M';
+
+      const body = document.createElement('div');
+      body.className = 'msg-body';
+
+      const name = document.createElement('div');
+      name.className = 'msg-name';
+      name.textContent = role === 'user' ? 'You' : 'Medix AI';
+
+      const content = document.createElement('div');
+      content.className = 'msg-text';
+      if (role === 'bot') {
+        content.innerHTML = formatMarkdown(text);
+      } else {
+        content.textContent = text;
+      }
+
+      body.appendChild(name);
+      body.appendChild(content);
+
+      if (citations.length > 0) {
+        const citDiv = document.createElement('div');
+        citDiv.className = 'msg-citations';
+        citations.slice(0, 5).forEach((c) => {
+          const chip = document.createElement('span');
+          chip.className = 'citation-chip';
+          chip.innerHTML = `<span class="material-symbols-rounded" style="font-size:12px;vertical-align:-2px;">description</span> ${c.source_name}#${c.chunk_index}`;
+          citDiv.appendChild(chip);
+        });
+        body.appendChild(citDiv);
+      }
+
+      row.appendChild(avatar);
+      row.appendChild(body);
+      messages.appendChild(row);
+      messages.scrollTop = messages.scrollHeight;
+      return row;
+    }
+
+    function showTyping() {
+      showChatArea();
+      const row = document.createElement('div');
+      row.className = 'msg-row';
+      row.id = 'typingIndicator';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'msg-avatar bot-avatar';
+      avatar.textContent = 'M';
+
+      const body = document.createElement('div');
+      body.className = 'msg-body';
+
+      const name = document.createElement('div');
+      name.className = 'msg-name';
+      name.textContent = 'Medix AI';
+
+      const dots = document.createElement('div');
+      dots.className = 'typing-dots';
+      dots.innerHTML = '<span></span><span></span><span></span>';
+
+      body.appendChild(name);
+      body.appendChild(dots);
+      row.appendChild(avatar);
+      row.appendChild(body);
+      messages.appendChild(row);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function removeTyping() {
+      const el = document.getElementById('typingIndicator');
+      if (el) el.remove();
+    }
 
     function getStoredToken() {
       const keys = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
@@ -293,22 +784,6 @@
       if (sub) currentUserId = sub;
     }
 
-    function bubble(role, text, meta = '') {
-      const node = document.createElement('article');
-      node.className = role === 'user'
-        ? 'ml-auto max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-brand-500 text-white'
-        : 'mr-auto max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-fuchsia-50 dark:bg-white/10 border border-black/10 dark:border-white/10';
-      node.textContent = text;
-      if (meta) {
-        const metaNode = document.createElement('div');
-        metaNode.className = 'mt-2 text-[11px] opacity-80';
-        metaNode.textContent = meta;
-        node.appendChild(metaNode);
-      }
-      messages.appendChild(node);
-      messages.scrollTop = messages.scrollHeight;
-    }
-
     async function loadSources() {
       sourceSelect.innerHTML = '';
       try {
@@ -322,7 +797,7 @@
           sourceSelect.appendChild(option);
         }
       } catch (error) {
-        bubble('bot', `Failed to load sources: ${error.message || error}`);
+        console.error('Failed to load sources:', error);
       }
     }
 
@@ -331,6 +806,15 @@
     }
 
     async function sendMessage(message) {
+      const debugRetrieval = new URLSearchParams(location.search).get('debugRetrieval') === '1'
+        || localStorage.getItem('medix_debug_retrieval') === '1';
+      const statelessMode = new URLSearchParams(location.search).get('stateless') !== '0'
+        && localStorage.getItem('medix_stateless_mode') !== '0';
+      const strictCitationMode = new URLSearchParams(location.search).get('strictCitations') !== '0'
+        && localStorage.getItem('medix_strict_citations') !== '0';
+      const verifyResponse = new URLSearchParams(location.search).get('verifyResponse') !== '0'
+        && localStorage.getItem('medix_verify_response') !== '0';
+
       const body = {
         message,
         session_id: sessionEl.value.trim() || null,
@@ -339,6 +823,10 @@
         top_k: Number(document.getElementById('topK').value || 12),
         min_score: Number(document.getElementById('minScore').value || 0.55),
         temperature: Number(document.getElementById('temp').value || 0.2),
+        stateless_mode: statelessMode,
+        strict_citation_mode: strictCitationMode,
+        verify_response: verifyResponse,
+        debug_retrieval: debugRetrieval,
       };
 
       const res = await fetch(`${API}/api/medix/rag/chat`, {
@@ -359,36 +847,60 @@
 
       bubble('user', message);
       promptEl.value = '';
+      promptEl.style.height = 'auto';
 
       const sendBtn = document.getElementById('sendBtn');
       sendBtn.disabled = true;
-      bubble('bot', 'Thinking...');
+      showTyping();
 
       try {
         const data = await sendMessage(message);
         if (!sessionEl.value && data.session_id) sessionEl.value = data.session_id;
 
-        const last = messages.lastElementChild;
-        if (last && last.textContent.includes('Thinking...')) last.remove();
+        if (data && data.retrieval_debug) {
+          console.groupCollapsed('[Medix RAG] Retrieval debug');
+          console.log('Summary:', {
+            reasoning_mode: data.retrieval_debug.reasoning_mode,
+            stateless_mode: data.retrieval_debug.stateless_mode,
+            strict_citation_mode: data.retrieval_debug.strict_citation_mode,
+            verify_response: data.retrieval_debug.verify_response,
+            requested_top_k: data.retrieval_debug.requested_top_k,
+            effective_top_k: data.retrieval_debug.effective_top_k,
+            effective_min_score: data.retrieval_debug.effective_min_score,
+            vector_candidates: data.retrieval_debug.vector_candidates,
+            keyword_candidates: data.retrieval_debug.keyword_candidates,
+            context_selected: data.retrieval_debug.context_selected,
+            low_evidence_fallback_used: data.retrieval_debug.low_evidence_fallback_used,
+            query_variants: data.retrieval_debug.query_variants,
+            anchor_terms: data.retrieval_debug.anchor_terms,
+            graph_terms: data.retrieval_debug.graph_terms,
+            verification: data.retrieval_debug.verification,
+          });
+          console.table(data.retrieval_debug.preview || []);
+          console.groupEnd();
+        }
 
-        const citations = (data.citations || []).slice(0, 5)
-          .map((item) => `${item.source_name}#${item.chunk_index} (${(item.similarity || 0).toFixed(3)})`)
-          .join(' | ');
-
-        bubble('bot', data.answer || '(empty answer)', `session=${data.session_id} · retrieved=${data.retrieval_count}${citations ? ` · ${citations}` : ''}`);
+        removeTyping();
+        bubble('bot', data.answer || '(empty answer)', data.citations || []);
       } catch (error) {
-        const last = messages.lastElementChild;
-        if (last && last.textContent.includes('Thinking...')) last.remove();
-        bubble('bot', `Error: ${error.message || error}`);
+        removeTyping();
+        bubble('bot', `Sorry, something went wrong: ${error.message || error}`);
       } finally {
         sendBtn.disabled = false;
+        promptEl.focus();
       }
     });
 
-    document.getElementById('reloadSources').addEventListener('click', loadSources);
+    // Enter to send, Shift+Enter for new line
+    promptEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        chatForm.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    });
+
     resolveCurrentUserId();
     loadSources();
-    bubble('bot', 'Ready. Use Upload to index PDFs, then ask focused queries with source filters.');
   </script>
   <script src="../auth.js"></script>
 </body>

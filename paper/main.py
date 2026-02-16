@@ -250,23 +250,23 @@ def get_default_channel_logo() -> str:
 def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = False) -> List[Dict[str, str]]:
     """
     Search YouTube videos using yt-dlp.
-    
+
     Args:
         query: Search query string
         num: Number of results to return (default 8, max 20)
-    
+
     Returns:
         List of video dictionaries with title, link, channel, views, duration, thumbnail
     """
     if not YoutubeDL:
         raise ImportError("yt-dlp is not installed. Install it with: pip install yt-dlp")
-    
+
     if not query or not query.strip():
         return []
-    
+
     # Limit results
     num = max(1, min(num, 20))
-    
+
     # yt-dlp options for searching
     ydl_opts = {
         'quiet': True,
@@ -279,18 +279,18 @@ def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = Fa
         'playlistend': num,
         'cachedir': False,
     }
-    
+
     videos: List[Dict[str, str]] = []
-    
+
     try:
         with YoutubeDL(ydl_opts) as ydl:
             # Search for videos (ytsearch{num}:{query})
             search_query = f"ytsearch{num}:{query}"
             result = ydl.extract_info(search_query, download=False)
-            
+
             if not result or 'entries' not in result:
                 return []
-            
+
             entries = result.get('entries', [])
             limited_entries = entries[:num]
 
@@ -319,36 +319,36 @@ def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = Fa
             for entry in limited_entries:
                 if not entry:
                     continue
-                
+
                 # Extract video information
                 video_id = entry.get('id', '')
                 title = entry.get('title', '').strip()
                 channel = entry.get('channel') or entry.get('uploader') or 'YouTube'
-                
+
                 # Duration
                 duration_sec = entry.get('duration')
                 duration = _format_duration(duration_sec)
-                
+
                 # Views
                 view_count = entry.get('view_count')
                 views = _format_views(view_count)
-                
+
                 # Thumbnail - prefer maxresdefault, then hq720
                 thumbnail = entry.get('thumbnail', '')
                 if not thumbnail and video_id:
                     # Fallback to standard YouTube thumbnail URLs
                     thumbnail = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
-                
+
                 # Video URL
                 video_url = entry.get('url', '')
                 if not video_url and video_id:
                     video_url = f"https://www.youtube.com/watch?v={video_id}"
-                
+
                 # Channel thumbnail/logo (scraped from channel page metadata)
                 channel_page = (entry.get('channel_url') or entry.get('uploader_url') or "").strip()
                 channel_logo = get_channel_logo(channel_page) if prefetch_logos else ""
                 final_logo = channel_logo or _DEFAULT_CHANNEL_LOGO
-                
+
                 # Only add if we have essential data
                 if title and video_url and thumbnail:
                     videos.append({
@@ -362,12 +362,12 @@ def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = Fa
                         "channel_logo_is_default": final_logo == _DEFAULT_CHANNEL_LOGO,
                         "channel_page": channel_page,
                     })
-    
+
     except Exception as e:
         # Log error but return empty list instead of raising
         print(f"Error searching YouTube videos: {e}")
         return []
-    
+
     return videos
 
 # --- yt_transcript.py content ---
@@ -28325,6 +28325,17 @@ MEDIX_DEFAULT_TOP_K = int(os.getenv("MEDIX_RAG_DEFAULT_TOP_K", "12"))
 MEDIX_MAX_CONTEXT_CHARS = int(os.getenv("MEDIX_RAG_MAX_CONTEXT_CHARS", "26000"))
 MEDIX_CHUNK_TARGET_CHARS = int(os.getenv("MEDIX_RAG_CHUNK_TARGET_CHARS", "1400"))
 MEDIX_CHUNK_OVERLAP_CHARS = int(os.getenv("MEDIX_RAG_CHUNK_OVERLAP_CHARS", "240"))
+MEDIX_VECTOR_EXPAND_MULTIPLIER = max(2, int(os.getenv("MEDIX_RAG_VECTOR_EXPAND_MULTIPLIER", "4")))
+MEDIX_KEYWORD_MAX_TERMS = max(3, int(os.getenv("MEDIX_RAG_KEYWORD_MAX_TERMS", "10")))
+MEDIX_KEYWORD_PER_TERM_LIMIT = max(5, int(os.getenv("MEDIX_RAG_KEYWORD_PER_TERM_LIMIT", "18")))
+MEDIX_NEIGHBOR_WINDOW = max(0, int(os.getenv("MEDIX_RAG_NEIGHBOR_WINDOW", "1")))
+MEDIX_ANCHOR_MIN_SCORE = max(0.0, min(1.0, float(os.getenv("MEDIX_RAG_ANCHOR_MIN_SCORE", "0.18"))))
+MEDIX_STATELESS_DEFAULT = os.getenv("MEDIX_RAG_STATELESS_DEFAULT", "true").strip().lower() in {"1", "true", "yes", "on"}
+MEDIX_STRICT_CITATION_DEFAULT = os.getenv("MEDIX_RAG_STRICT_CITATION_DEFAULT", "true").strip().lower() in {"1", "true", "yes", "on"}
+MEDIX_VERIFY_DEFAULT = os.getenv("MEDIX_RAG_VERIFY_DEFAULT", "true").strip().lower() in {"1", "true", "yes", "on"}
+MEDIX_SECTION_DIVERSITY_MIN = max(1, int(os.getenv("MEDIX_RAG_SECTION_DIVERSITY_MIN", "3")))
+MEDIX_MULTI_HOP_SECOND_PASS = os.getenv("MEDIX_RAG_MULTI_HOP_SECOND_PASS", "true").strip().lower() in {"1", "true", "yes", "on"}
+MEDIX_MULTI_HOP_TERM_BONUS = max(0.0, min(0.4, float(os.getenv("MEDIX_RAG_MULTI_HOP_TERM_BONUS", "0.08"))))
 MEDIX_SECTION_PARALLELISM = max(1, int(os.getenv("MEDIX_RAG_SECTION_PARALLELISM", "4")))
 MEDIX_UPLOAD_PARALLELISM = max(1, int(os.getenv("MEDIX_RAG_UPLOAD_PARALLELISM", "3")))
 MEDIX_EMBED_PARALLELISM = max(1, int(os.getenv("MEDIX_RAG_EMBED_PARALLELISM", "2")))
@@ -28338,11 +28349,47 @@ def _medix_progress(message: str) -> None:
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"[MEDIX RAG] {ts} {message}", flush=True)
 
-MEDIX_SECTION_PATTERNS = [
-    re.compile(r"^#{1,6}\s+(.+)$", re.IGNORECASE),
-    re.compile(r"^(chapter|unit|module|lesson|section)\s+[\w\divxIVX\-\.]+\s*[:\.-]?\s+(.+)$", re.IGNORECASE),
-    re.compile(r"^(part|appendix)\s+[\w\divxIVX\-\.]+\s*[:\.-]?\s+(.+)$", re.IGNORECASE),
-]
+def _medix_parse_env_term_set(name: str) -> Set[str]:
+    raw = (os.getenv(name, "") or "").strip()
+    if not raw:
+        return set()
+    try:
+        val = json.loads(raw)
+        if isinstance(val, list):
+            return {str(x).strip().lower() for x in val if str(x).strip()}
+    except Exception:
+        pass
+    return {x.strip().lower() for x in raw.split(",") if x.strip()}
+
+
+_section_patterns_raw = (os.getenv("MEDIX_RAG_SECTION_PATTERNS_JSON", "") or "").strip()
+if _section_patterns_raw:
+    try:
+        _section_patterns = json.loads(_section_patterns_raw)
+        MEDIX_SECTION_PATTERNS = [re.compile(str(p), re.IGNORECASE) for p in _section_patterns if str(p).strip()]
+    except Exception:
+        MEDIX_SECTION_PATTERNS = []
+else:
+    MEDIX_SECTION_PATTERNS = []
+
+# Optional seed lexicons (configurable; empty by default)
+MEDIX_SEED_ORGANS = _medix_parse_env_term_set("MEDIX_RAG_SEED_ORGANS")
+MEDIX_SEED_DRUG_CLASSES = _medix_parse_env_term_set("MEDIX_RAG_SEED_DRUG_CLASSES")
+MEDIX_SEED_DRUGS = _medix_parse_env_term_set("MEDIX_RAG_SEED_DRUGS")
+MEDIX_SEED_METABOLITES = _medix_parse_env_term_set("MEDIX_RAG_SEED_METABOLITES")
+
+# Generic linkage cues (not entity-specific)
+MEDIX_SPECIAL_POPULATION_TERMS = {
+    "pregnancy", "pregnant", "lactation", "breastfeeding", "pediatric", "children", "elderly", "geriatrics",
+    "impairment", "dialysis", "special population",
+}
+MEDIX_MONITORING_TERMS = {
+    "monitoring", "therapeutic drug monitoring", "inr", "aptt", "anti-xa", "creatinine", "lfts", "dose adjustment",
+}
+MEDIX_PHARMA_LINK_TERMS = {
+    "metabolism", "metabolite", "active metabolite", "prodrug", "clearance", "elimination", "excretion",
+    "accumulation", "toxicity", "contraindication", "interaction", "special population",
+}
 
 
 class MedixRagChatRequest(BaseModel):
@@ -28353,6 +28400,11 @@ class MedixRagChatRequest(BaseModel):
     top_k: int = 12
     min_score: float = 0.55
     temperature: float = 0.2
+    stateless_mode: bool = MEDIX_STATELESS_DEFAULT
+    strict_citation_mode: bool = MEDIX_STRICT_CITATION_DEFAULT
+    verify_response: bool = MEDIX_VERIFY_DEFAULT
+    anchor_terms: Optional[List[str]] = None
+    debug_retrieval: bool = False
 
 
 class MedixRagCitation(BaseModel):
@@ -28370,6 +28422,7 @@ class MedixRagChatResponse(BaseModel):
     citations: List[MedixRagCitation]
     retrieval_count: int
     model: str
+    retrieval_debug: Optional[Dict[str, Any]] = None
 
 
 def _medix_norm_embed_model(model: str) -> str:
@@ -28479,11 +28532,23 @@ def _medix_detect_sections(text: str) -> List[Dict[str, Any]]:
             continue
 
         found_title: Optional[str] = None
-        for pattern in MEDIX_SECTION_PATTERNS:
-            m = pattern.match(raw)
-            if m:
-                found_title = (m.group(1) if pattern.pattern.startswith("^#{") else raw).strip(" #\t")
-                break
+        if MEDIX_SECTION_PATTERNS:
+            for pattern in MEDIX_SECTION_PATTERNS:
+                m = pattern.match(raw)
+                if m:
+                    found_title = (m.group(1) if pattern.pattern.startswith("^#{") else raw).strip(" #\t")
+                    break
+
+        # generic structural heading cues (topic-agnostic)
+        if not found_title:
+            if raw.startswith("#"):
+                found_title = raw.lstrip("#").strip()
+            elif re.match(r"^\d+(?:\.\d+){0,3}\s+", raw):
+                found_title = raw
+            elif re.match(r"^[IVXLCM]+[\.)]\s+", raw, flags=re.IGNORECASE):
+                found_title = raw
+            elif raw.endswith(":") and len(raw.split()) <= 12:
+                found_title = raw[:-1].strip()
 
         if not found_title:
             if raw.isupper() and len(raw.split()) <= 16:
@@ -28875,6 +28940,7 @@ def _medix_index_pdf_source(
         }
 
     chunk_texts = [str(c.get("chunk_text") or "") for c in chunk_items]
+    source_pharma_tags = _medix_extract_pharma_tags(text)
     embeddings = _medix_embed_documents(chunk_texts)
     if len(embeddings) != len(chunk_items):
         raise HTTPException(status_code=500, detail="Embedding count mismatch while indexing chunks")
@@ -28888,6 +28954,7 @@ def _medix_index_pdf_source(
         "metadata": {
             "tags": tags_value,
             "chars": len(text),
+            "pharma_tags": source_pharma_tags,
             "semantic_chunking": True,
             "overlap_windows": True,
             "section_based_chunking": True,
@@ -28937,6 +29004,7 @@ def _medix_index_pdf_source(
             "base_index_in_section": chunk_info.get("base_index_in_section"),
             "used_overlap_chars": chunk_info.get("used_overlap_chars"),
             "overlap_window": True,
+            "pharma_tags": _medix_extract_pharma_tags(chunk_text, str(chunk_info.get("section_title") or "")),
         }
 
         token_count = max(1, len(chunk_text.split()))
@@ -28999,6 +29067,9 @@ def _medix_llm_answer_with_langchain(
     history: List[Dict[str, Any]],
     context_blocks: List[Dict[str, Any]],
     temperature: float,
+    anchor_terms: Optional[List[str]] = None,
+    strict_citation_mode: bool = True,
+    stateless_mode: bool = False,
 ) -> str:
     context_text = []
     for item in context_blocks:
@@ -29011,6 +29082,22 @@ def _medix_llm_answer_with_langchain(
         role = (h.get("role") or "user").strip().lower()
         prefix = "User" if role == "user" else "Assistant"
         history_lines.append(f"{prefix}: {h.get('content', '')}")
+
+    strict_instr = (
+        "Use only the provided context blocks for factual claims. "
+        "If a claim is not present in the context, explicitly mark it as uncertain instead of asserting it."
+        if strict_citation_mode
+        else "Prefer provided context for factual claims and clearly mark uncertainty where evidence is partial."
+    )
+
+    anchor_instr = (
+        f"Anchor the answer to these focus terms: {', '.join(anchor_terms or [])}. "
+        "Do not drift to other organ systems or unrelated drugs unless context explicitly connects them."
+        if anchor_terms
+        else ""
+    )
+
+    history_text = "(stateless mode: ignore previous turns)" if stateless_mode else ("\n".join(history_lines) if history_lines else "(none)")
 
     try:
         from langchain_core.prompts import ChatPromptTemplate
@@ -29028,8 +29115,12 @@ def _medix_llm_answer_with_langchain(
                 (
                     "system",
                     "You are Medix, an advanced academic RAG assistant. "
-                    "Use only the provided context for factual claims. "
-                    "If context is insufficient, explicitly say what is missing. "
+                    "Synthesize across multiple context blocks and connect partial evidence into one coherent explanation. "
+                    f"{strict_instr} "
+                    "Do not stop at 'no information' if partial evidence exists. "
+                    "When data is incomplete, provide a best-effort answer, clearly label uncertainty, and state exactly what is missing. "
+                    "For mechanism or reasoning questions, explain the chain step-by-step. "
+                    f"{anchor_instr} "
                     "At the end, include a concise 'Citations' line listing source ids used.",
                 ),
                 (
@@ -29044,7 +29135,7 @@ def _medix_llm_answer_with_langchain(
         chain = prompt | llm | StrOutputParser()
         return chain.invoke(
             {
-                "history": "\n".join(history_lines) if history_lines else "(none)",
+                "history": history_text,
                 "context": "\n\n".join(context_text) if context_text else "(no context)",
                 "question": question,
             }
@@ -29059,8 +29150,11 @@ def _medix_llm_answer_with_langchain(
         client = genai.Client(api_key=GEMINI_API_KEY)
         prompt = (
             "You are Medix, an advanced academic RAG assistant. "
-            "Use only provided context for facts. If missing, say so.\n\n"
-            f"Conversation:\n{chr(10).join(history_lines) if history_lines else '(none)'}\n\n"
+            "Synthesize across multiple context blocks, connect partial evidence, and answer step-by-step when reasoning is needed. "
+            f"{strict_instr} "
+            f"{anchor_instr} "
+            "If incomplete, still give a best-effort answer and clearly mark uncertainty.\n\n"
+            f"Conversation:\n{history_text}\n\n"
             f"Context:\n{chr(10).join(context_text) if context_text else '(none)'}\n\n"
             f"Question:\n{question}\n\n"
             "Return a concise but complete answer and include a final line 'Citations: ...'."
@@ -29084,6 +29178,19 @@ def _medix_generate_query_variants(message: str) -> List[str]:
         return []
 
     variants = [base]
+
+    lowered = base.lower()
+    for sep in (" and ", ";", "?", " vs ", " versus ", " then "):
+        if sep in lowered:
+            parts = [p.strip(" .,:;\n\t") for p in re.split(r"\band\b|\bthen\b|[;?]", base, flags=re.IGNORECASE)]
+            parts = [p for p in parts if len(p) >= 16]
+            variants.extend(parts[:3])
+            break
+
+    if any(k in lowered for k in ["mechanism", "pathway", "how", "why", "process", "reason", "cause"]):
+        variants.append(f"step by step explanation {base}")
+        variants.append(f"mechanism overview {base}")
+
     try:
         from langchain_core.prompts import ChatPromptTemplate
         from langchain_core.output_parsers import StrOutputParser
@@ -29096,8 +29203,8 @@ def _medix_generate_query_variants(message: str) -> List[str]:
         )
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", "Generate exactly 2 short alternative search queries for RAG retrieval."),
-                ("human", "Question: {q}\nReturn 2 lines only."),
+                ("system", "Generate exactly 3 short retrieval queries that capture complementary concepts in the question."),
+                ("human", "Question: {q}\nReturn 3 lines only, no numbering."),
             ]
         )
         text = (prompt | llm | StrOutputParser()).invoke({"q": base})
@@ -29105,7 +29212,7 @@ def _medix_generate_query_variants(message: str) -> List[str]:
             line = line.strip(" -•\t")
             if line and line.lower() != base.lower():
                 variants.append(line)
-            if len(variants) >= 3:
+            if len(variants) >= 8:
                 break
     except Exception:
         pass
@@ -29117,7 +29224,7 @@ def _medix_generate_query_variants(message: str) -> List[str]:
         if key and key not in seen:
             seen.add(key)
             deduped.append(q)
-    return deduped[:3]
+    return deduped[:8]
 
 
 def _medix_save_chat_message(session_id: str, role: str, content: str, citations: Optional[List[Dict[str, Any]]] = None) -> None:
@@ -29173,6 +29280,479 @@ def _medix_parse_source_ids(source_ids: Optional[List[str]]) -> Optional[List[st
         except Exception:
             continue
     return valid or None
+
+
+def _medix_is_reasoning_query(question: str) -> bool:
+    q = (question or "").lower()
+    if not q:
+        return False
+    reasoning_markers = [
+        "how",
+        "why",
+        "mechanism",
+        "pathway",
+        "process",
+        "explain",
+        "difference",
+        "compare",
+        "versus",
+        "cause",
+        "reason",
+    ]
+    multi_concept_markers = [" and ", " then ", " vs ", " versus ", ",", ";"]
+    return any(m in q for m in reasoning_markers) or sum(1 for m in multi_concept_markers if m in q) >= 2
+
+
+def _medix_query_terms(question: str, *, max_terms: int = 10) -> List[str]:
+    raw = re.findall(r"[a-zA-Z][a-zA-Z0-9\-]{2,}", (question or "").lower())
+    stop = {
+        "what", "which", "when", "where", "while", "with", "without", "from", "into", "onto", "about",
+        "there", "their", "this", "that", "those", "these", "have", "has", "had", "were", "was", "are",
+        "will", "would", "could", "should", "can", "may", "might", "than", "then", "also", "very", "more",
+        "most", "less", "much", "many", "your", "you", "our", "the", "and", "for", "not", "but", "how",
+        "why", "who", "whom", "does", "did", "done", "is", "of", "in", "to", "on", "by", "or", "as",
+        "it", "its", "at", "be", "an", "a",
+    }
+    uniq: List[str] = []
+    seen: Set[str] = set()
+    for t in raw:
+        if t in stop:
+            continue
+        if len(t) <= 2:
+            continue
+        if t in seen:
+            continue
+        seen.add(t)
+        uniq.append(t)
+        if len(uniq) >= max_terms:
+            break
+    return uniq
+
+
+def _medix_collect_matches(text: str, vocabulary: Set[str]) -> List[str]:
+    low = (text or "").lower()
+    out: List[str] = []
+    for item in vocabulary:
+        if item in low:
+            out.append(item)
+    return sorted(set(out))
+
+
+def _medix_extract_pharma_tags(text: str, section_title: Optional[str] = None) -> Dict[str, Any]:
+    merged_text = f"{section_title or ''}\n{text or ''}".lower()
+
+    tokens = re.findall(r"\b[a-z][a-z0-9\-]{2,}\b", merged_text)
+    freq: Dict[str, int] = {}
+    for t in tokens:
+        freq[t] = freq.get(t, 0) + 1
+
+    # dynamic candidates: frequent non-stop tokens + biomedical morphology
+    stop = {
+        "the", "and", "for", "with", "from", "that", "this", "into", "without", "about", "there",
+        "their", "have", "has", "were", "was", "are", "will", "would", "could", "should", "than",
+        "then", "also", "very", "more", "most", "less", "much", "many", "your", "you", "our", "not",
+        "but", "how", "why", "who", "whom", "does", "did", "done", "is", "of", "in", "to", "on",
+        "by", "or", "as", "it", "its", "at", "be", "an", "a", "patient", "patients", "drug", "drugs",
+    }
+    candidate_terms = [
+        t for t, c in sorted(freq.items(), key=lambda kv: (-kv[1], kv[0]))
+        if c >= 2 and t not in stop and len(t) >= 4
+    ][:120]
+
+    drug_like_suffixes = (
+        "mab", "nib", "vir", "azole", "cycline", "mycin", "pril", "sartan", "olol", "dipine", "xaban", "parin", "statin"
+    )
+    class_like_suffixes = ("inhibitor", "blocker", "agonist", "antagonist", "steroid", "antibiotic", "anticoagulant")
+
+    drugs = sorted(set(
+        _medix_collect_matches(merged_text, MEDIX_SEED_DRUGS)
+        + [t for t in candidate_terms if t.endswith(drug_like_suffixes)]
+    ))
+
+    classes = sorted(set(
+        _medix_collect_matches(merged_text, MEDIX_SEED_DRUG_CLASSES)
+        + [t for t in candidate_terms if t.endswith(class_like_suffixes)]
+    ))
+
+    # derive organ-like terms from context such as "X impairment/failure/disease"
+    organs = sorted(set(
+        _medix_collect_matches(merged_text, MEDIX_SEED_ORGANS)
+        + [m.group(1) for m in re.finditer(r"\b([a-z][a-z\-]{2,})\s+(?:impairment|failure|disease)\b", merged_text)]
+    ))
+
+    metabolites = sorted(set(
+        _medix_collect_matches(merged_text, MEDIX_SEED_METABOLITES)
+        + [m.group(0).lower() for m in re.finditer(r"\b[a-z]{1,5}\d{1,3}[a-z]{0,4}\b", merged_text)]
+        + [m.group(0).lower() for m in re.finditer(r"\b[a-z\-]{3,30}(?:metabolite|glucuronide)\b", merged_text)]
+    ))
+
+    moa_terms = sorted(set(_medix_collect_matches(merged_text, MEDIX_PHARMA_LINK_TERMS)))
+    adr_terms = sorted(set(_medix_collect_matches(merged_text, {"toxicity", "contraindication", "interaction", "adverse", "warning"})))
+
+    return {
+        "drugs": drugs,
+        "drug_classes": classes,
+        "organs": organs,
+        "moa_terms": moa_terms,
+        "adr_terms": adr_terms,
+        "metabolites": metabolites,
+        "has_pharma_signal": bool(drugs or classes or organs or moa_terms or adr_terms or metabolites),
+    }
+
+
+def _medix_anchor_terms(question: str, explicit_terms: Optional[List[str]] = None) -> List[str]:
+    explicit = [str(t).strip().lower() for t in (explicit_terms or []) if str(t).strip()]
+    pharma = _medix_extract_pharma_tags(question)
+    inferred = [
+        *pharma.get("drugs", []),
+        *pharma.get("drug_classes", []),
+        *pharma.get("organs", []),
+        *pharma.get("metabolites", []),
+    ]
+    key_terms = _medix_query_terms(question, max_terms=6)
+    anchors = [*explicit, *inferred, *key_terms]
+
+    deduped: List[str] = []
+    seen: Set[str] = set()
+    for a in anchors:
+        k = a.strip().lower()
+        if len(k) < 3 or k in seen:
+            continue
+        seen.add(k)
+        deduped.append(k)
+    return deduped[:16]
+
+
+def _medix_graph_expand_terms(
+    *,
+    question: str,
+    anchors: List[str],
+    candidate_rows: Optional[List[Dict[str, Any]]] = None,
+) -> List[str]:
+    low_q = (question or "").lower()
+    expanded: List[str] = []
+
+    pharma_q = _medix_extract_pharma_tags(low_q)
+    expanded.extend(pharma_q.get("metabolites", []))
+    expanded.extend(pharma_q.get("moa_terms", []))
+    expanded.extend(pharma_q.get("adr_terms", []))
+    expanded.extend(pharma_q.get("organs", []))
+
+    expanded.extend(_medix_query_terms(question, max_terms=10))
+    expanded.extend(anchors)
+
+    if any(t in low_q for t in MEDIX_SPECIAL_POPULATION_TERMS):
+        expanded.extend(list(MEDIX_SPECIAL_POPULATION_TERMS))
+        expanded.extend(list(MEDIX_MONITORING_TERMS))
+
+    if any(t in low_q for t in {"metabol", "metabolism", "clearance", "excretion", "organ", "impairment"}):
+        expanded.extend(list(MEDIX_PHARMA_LINK_TERMS))
+
+    # mine additional non-hardcoded cues from first-pass candidate chunks
+    if candidate_rows:
+        sample_text = "\n".join(str(r.get("chunk_text") or "")[:1600] for r in candidate_rows[:20]).lower()
+        if sample_text:
+            sample_tags = _medix_extract_pharma_tags(sample_text)
+            expanded.extend(sample_tags.get("drugs", []))
+            expanded.extend(sample_tags.get("drug_classes", []))
+            expanded.extend(sample_tags.get("organs", []))
+            expanded.extend(sample_tags.get("metabolites", []))
+            expanded.extend(sample_tags.get("moa_terms", []))
+            expanded.extend(sample_tags.get("adr_terms", []))
+            expanded.extend(_medix_collect_matches(sample_text, MEDIX_SPECIAL_POPULATION_TERMS))
+            expanded.extend(_medix_collect_matches(sample_text, MEDIX_MONITORING_TERMS))
+            expanded.extend(_medix_collect_matches(sample_text, MEDIX_PHARMA_LINK_TERMS))
+
+            # extract short uppercase/alnum markers like M3G/M6G without hardcoding
+            marker_terms = re.findall(r"\b[a-z]{1,4}\d{1,3}[a-z]{0,3}\b", sample_text, flags=re.IGNORECASE)
+            expanded.extend(marker_terms)
+
+    seen: Set[str] = set()
+    deduped: List[str] = []
+    for t in expanded:
+        key = str(t or "").strip().lower()
+        if len(key) < 3 or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(key)
+    return deduped[:40]
+
+
+def _medix_relation_signal(text: str, related_terms: List[str]) -> float:
+    if not related_terms:
+        return 0.0
+    low = (text or "").lower()
+    hits = sum(1 for t in related_terms if t in low)
+    return hits / max(1, len(related_terms))
+
+
+def _medix_select_diverse_context(
+    ranked_rows: List[Dict[str, Any]],
+    *,
+    context_cap: int,
+    max_chars: int,
+    min_sections: int,
+) -> List[Dict[str, Any]]:
+    selected: List[Dict[str, Any]] = []
+    selected_ids: Set[int] = set()
+    selected_sections: Set[str] = set()
+    total_chars = 0
+
+    # pass-1: encourage section diversity
+    for row in ranked_rows:
+        if len(selected) >= context_cap:
+            break
+        cid = int(row.get("chunk_id") or 0)
+        text = str(row.get("chunk_text") or "").strip()
+        section_key = str(row.get("section_title") or f"sec-{int(row.get('section_index') or 0)}")
+        if cid <= 0 or not text or cid in selected_ids:
+            continue
+        if total_chars + len(text) > max_chars:
+            continue
+        if len(selected_sections) < min_sections and section_key in selected_sections:
+            continue
+
+        selected.append(row)
+        selected_ids.add(cid)
+        selected_sections.add(section_key)
+        total_chars += len(text)
+
+    # pass-2: fill remaining by best score
+    for row in ranked_rows:
+        if len(selected) >= context_cap:
+            break
+        cid = int(row.get("chunk_id") or 0)
+        text = str(row.get("chunk_text") or "").strip()
+        if cid <= 0 or not text or cid in selected_ids:
+            continue
+        if total_chars + len(text) > max_chars:
+            continue
+        selected.append(row)
+        selected_ids.add(cid)
+        total_chars += len(text)
+
+    selected.sort(
+        key=lambda r: (
+            str(r.get("source_name") or ""),
+            int(r.get("section_index") or 0),
+            int(r.get("chunk_index") or 0),
+        )
+    )
+    return selected
+
+
+def _medix_anchor_score(text: str, anchors: List[str]) -> float:
+    if not anchors:
+        return 0.0
+    low = (text or "").lower()
+    if not low:
+        return 0.0
+    hits = 0
+    for a in anchors:
+        if a in low:
+            hits += 1
+    return hits / max(1, len(anchors))
+
+
+def _medix_enforce_citations(answer: str, citations: List[Dict[str, Any]], strict_mode: bool) -> str:
+    text = (answer or "").strip()
+    if not text:
+        return text
+
+    has_citations_line = "citations:" in text.lower()
+    if not strict_mode and has_citations_line:
+        return text
+
+    refs = []
+    for c in citations[:6]:
+        refs.append(f"{c.get('source_name', 'Source')}#{int(c.get('chunk_index') or 0)}")
+    refs_line = "Citations: " + (", ".join(refs) if refs else "(none)")
+
+    if has_citations_line:
+        return text
+    return f"{text}\n\n{refs_line}".strip()
+
+
+def _medix_verify_answer(
+    *,
+    question: str,
+    answer: str,
+    context_rows: List[Dict[str, Any]],
+    anchors: List[str],
+) -> Dict[str, Any]:
+    ans = (answer or "").lower()
+    q = (question or "").lower()
+
+    context_blob = "\n".join(str(r.get("chunk_text") or "") for r in context_rows).lower()
+    context_contains_renal = any(k in context_blob for k in ["renal", "kidney"])
+    context_contains_hepatic = any(k in context_blob for k in ["hepatic", "liver"])
+    answer_contains_renal = any(k in ans for k in ["renal", "kidney"])
+    answer_contains_hepatic = any(k in ans for k in ["hepatic", "liver"])
+
+    anchor_hits = sum(1 for a in anchors if a in ans)
+    anchor_coverage = anchor_hits / max(1, len(anchors)) if anchors else 1.0
+
+    drift_flags: List[str] = []
+    if ("renal" in q or "kidney" in q) and answer_contains_hepatic and not answer_contains_renal:
+        drift_flags.append("organ_drift_renal_to_hepatic")
+    if ("hepatic" in q or "liver" in q) and answer_contains_renal and not answer_contains_hepatic:
+        drift_flags.append("organ_drift_hepatic_to_renal")
+    if answer_contains_hepatic and not context_contains_hepatic and context_contains_renal:
+        drift_flags.append("unsupported_hepatic_claim")
+    if answer_contains_renal and not context_contains_renal and context_contains_hepatic:
+        drift_flags.append("unsupported_renal_claim")
+
+    unsupported = anchor_coverage < MEDIX_ANCHOR_MIN_SCORE
+
+    return {
+        "anchor_terms": anchors,
+        "anchor_hits": anchor_hits,
+        "anchor_coverage": round(anchor_coverage, 4),
+        "drift_flags": drift_flags,
+        "unsupported": unsupported,
+        "context_count": len(context_rows),
+        "verdict": "ok" if not drift_flags and not unsupported else "review",
+    }
+
+
+def _medix_fetch_source_names(supabase: Client, source_ids: Set[str]) -> Dict[str, str]:
+    if not source_ids:
+        return {}
+    out: Dict[str, str] = {}
+    try:
+        res = (
+            supabase.table(MEDIX_RAG_SOURCES_TABLE)
+            .select("id, source_name")
+            .in_("id", list(source_ids))
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        for row in rows:
+            sid = str(row.get("id") or "")
+            if sid:
+                out[sid] = str(row.get("source_name") or "Untitled")
+    except Exception:
+        return out
+    return out
+
+
+def _medix_keyword_retrieve_chunks(
+    *,
+    supabase: Client,
+    question: str,
+    extra_terms: Optional[List[str]],
+    source_ids: Optional[List[str]],
+    per_term_limit: int,
+    max_terms: int,
+) -> Tuple[Dict[int, Dict[str, Any]], Dict[int, Set[str]], List[str]]:
+    terms = _medix_query_terms(question, max_terms=max_terms)
+    if extra_terms:
+        merged = [*terms, *[str(t).strip().lower() for t in extra_terms if str(t).strip()]]
+        dedup: List[str] = []
+        seen: Set[str] = set()
+        for t in merged:
+            if len(t) < 3 or t in seen:
+                continue
+            seen.add(t)
+            dedup.append(t)
+        terms = dedup[: max(max_terms, 24)]
+    if not terms:
+        return {}, {}, []
+
+    rows_by_chunk_id: Dict[int, Dict[str, Any]] = {}
+    matched_terms_by_chunk: Dict[int, Set[str]] = {}
+
+    for term in terms:
+        safe_term = term.replace("%", "").replace("_", "").strip()
+        if len(safe_term) < 3:
+            continue
+        try:
+            q = (
+                supabase.table(MEDIX_RAG_CHUNKS_TABLE)
+                .select("id, source_id, chunk_index, chunk_text, section_title, section_index")
+                .ilike("chunk_text", f"%{safe_term}%")
+                .limit(per_term_limit)
+            )
+            if source_ids:
+                q = q.in_("source_id", source_ids)
+            res = q.execute()
+            if getattr(res, "error", None):
+                continue
+            for row in (getattr(res, "data", None) or []):
+                cid = int(row.get("id") or 0)
+                if cid <= 0:
+                    continue
+                rows_by_chunk_id[cid] = {
+                    "chunk_id": cid,
+                    "source_id": str(row.get("source_id") or ""),
+                    "chunk_index": int(row.get("chunk_index") or 0),
+                    "chunk_text": str(row.get("chunk_text") or ""),
+                    "section_title": row.get("section_title"),
+                    "section_index": int(row.get("section_index") or 0),
+                    "similarity": 0.0,
+                }
+                matched_terms_by_chunk.setdefault(cid, set()).add(safe_term)
+        except Exception:
+            continue
+
+    return rows_by_chunk_id, matched_terms_by_chunk, terms
+
+
+def _medix_fetch_neighbor_chunks(
+    *,
+    supabase: Client,
+    seeds: List[Dict[str, Any]],
+    source_ids: Optional[List[str]],
+    window: int,
+) -> Dict[int, Dict[str, Any]]:
+    if window <= 0 or not seeds:
+        return {}
+
+    wanted: Dict[str, Set[int]] = {}
+    for row in seeds:
+        sid = str(row.get("source_id") or "").strip()
+        idx = int(row.get("chunk_index") or 0)
+        if not sid:
+            continue
+        wanted.setdefault(sid, set())
+        for off in range(-window, window + 1):
+            if off == 0:
+                continue
+            wanted[sid].add(max(0, idx + off))
+
+    neighbors: Dict[int, Dict[str, Any]] = {}
+    for sid, indices in wanted.items():
+        if not indices:
+            continue
+        try:
+            q = (
+                supabase.table(MEDIX_RAG_CHUNKS_TABLE)
+                .select("id, source_id, chunk_index, chunk_text, section_title, section_index")
+                .eq("source_id", sid)
+                .in_("chunk_index", sorted(indices))
+            )
+            if source_ids:
+                q = q.in_("source_id", source_ids)
+            res = q.execute()
+            if getattr(res, "error", None):
+                continue
+            for row in (getattr(res, "data", None) or []):
+                cid = int(row.get("id") or 0)
+                if cid <= 0:
+                    continue
+                neighbors[cid] = {
+                    "chunk_id": cid,
+                    "source_id": str(row.get("source_id") or ""),
+                    "chunk_index": int(row.get("chunk_index") or 0),
+                    "chunk_text": str(row.get("chunk_text") or ""),
+                    "section_title": row.get("section_title"),
+                    "section_index": int(row.get("section_index") or 0),
+                    "similarity": float(row.get("similarity") or 0.0),
+                }
+        except Exception:
+            continue
+
+    return neighbors
 
 
 @app.get("/api/medix/rag/sources")
@@ -29346,24 +29926,41 @@ def medix_rag_chat(req: MedixRagChatRequest):
     if getattr(history_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (history): {history_res.error}")
     history_rows = getattr(history_res, "data", None) or []
+    effective_history = [] if req.stateless_mode else history_rows
+    anchors = _medix_anchor_terms(question, req.anchor_terms)
+    graph_terms: List[str] = []
+
+    requested_top_k = max(4, min(60, int(req.top_k) if req.top_k else MEDIX_DEFAULT_TOP_K))
+    requested_min_score = max(0.0, min(1.0, float(req.min_score)))
+    reasoning_mode = _medix_is_reasoning_query(question)
+
+    adaptive_top_k = requested_top_k
+    adaptive_min_score = requested_min_score
+    if reasoning_mode:
+        adaptive_top_k = min(60, max(requested_top_k + 8, int(requested_top_k * 1.8)))
+        adaptive_min_score = max(0.2, requested_min_score - 0.12)
+
+    vector_match_count = max(12, min(120, adaptive_top_k * MEDIX_VECTOR_EXPAND_MULTIPLIER))
 
     variants = _medix_generate_query_variants(question)
     merged_rows: Dict[int, Dict[str, Any]] = {}
+    vector_rank: Dict[int, int] = {}
+    vector_best_variant: Dict[int, str] = {}
 
     for variant in variants:
         query_embedding = _medix_embed_query(variant)
         rpc_payload = {
             "query_embedding": query_embedding,
-            "match_count": max(4, min(40, int(req.top_k) if req.top_k else MEDIX_DEFAULT_TOP_K)),
+            "match_count": vector_match_count,
             "source_ids": source_ids,
-            "min_score": max(0.0, min(1.0, float(req.min_score))),
+            "min_score": adaptive_min_score,
         }
         rpc = supabase.rpc("medix_match_chunks", rpc_payload).execute()
         if getattr(rpc, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (vector retrieval): {rpc.error}")
 
         rows = getattr(rpc, "data", None) or []
-        for row in rows:
+        for pos, row in enumerate(rows):
             cid = int(row.get("chunk_id") or 0)
             score = float(row.get("similarity") or 0.0)
             if cid <= 0:
@@ -29371,20 +29968,187 @@ def medix_rag_chat(req: MedixRagChatRequest):
             existing = merged_rows.get(cid)
             if existing is None or score > float(existing.get("similarity") or 0.0):
                 merged_rows[cid] = row
+                vector_best_variant[cid] = variant
+            current_rank = vector_rank.get(cid)
+            if current_rank is None or pos < current_rank:
+                vector_rank[cid] = pos
 
-    ranked = sorted(merged_rows.values(), key=lambda r: float(r.get("similarity") or 0.0), reverse=True)
-    ranked = ranked[: max(4, min(50, int(req.top_k) if req.top_k else MEDIX_DEFAULT_TOP_K))]
+    graph_terms = _medix_graph_expand_terms(
+        question=question,
+        anchors=anchors,
+        candidate_rows=list(merged_rows.values()),
+    )
 
-    context_rows: List[Dict[str, Any]] = []
-    total_chars = 0
-    for row in ranked:
-        text = str(row.get("chunk_text") or "").strip()
-        if not text:
+    if MEDIX_MULTI_HOP_SECOND_PASS and (reasoning_mode or graph_terms):
+        hop_query = f"{question} {' '.join(graph_terms[:10])}".strip()
+        query_embedding = _medix_embed_query(hop_query)
+        hop_rpc = supabase.rpc(
+            "medix_match_chunks",
+            {
+                "query_embedding": query_embedding,
+                "match_count": max(20, min(140, vector_match_count + 20)),
+                "source_ids": source_ids,
+                "min_score": max(0.12, adaptive_min_score - 0.1),
+            },
+        ).execute()
+        if not getattr(hop_rpc, "error", None):
+            hop_rows = getattr(hop_rpc, "data", None) or []
+            for pos, row in enumerate(hop_rows):
+                cid = int(row.get("chunk_id") or 0)
+                score = float(row.get("similarity") or 0.0)
+                if cid <= 0:
+                    continue
+                existing = merged_rows.get(cid)
+                if existing is None or score > float(existing.get("similarity") or 0.0):
+                    merged_rows[cid] = row
+                    vector_best_variant[cid] = "__multi_hop_pass__"
+                current_rank = vector_rank.get(cid)
+                if current_rank is None or pos < current_rank:
+                    vector_rank[cid] = pos
+
+    keyword_rows, keyword_terms_by_chunk, query_terms = _medix_keyword_retrieve_chunks(
+        supabase=supabase,
+        question=question,
+        extra_terms=graph_terms,
+        source_ids=source_ids,
+        per_term_limit=MEDIX_KEYWORD_PER_TERM_LIMIT,
+        max_terms=MEDIX_KEYWORD_MAX_TERMS,
+    )
+
+    source_name_map = _medix_fetch_source_names(
+        supabase,
+        {
+            *(str(r.get("source_id") or "") for r in merged_rows.values()),
+            *(str(r.get("source_id") or "") for r in keyword_rows.values()),
+        },
+    )
+
+    combined: Dict[int, Dict[str, Any]] = {}
+    for cid, row in merged_rows.items():
+        source_id = str(row.get("source_id") or "")
+        combined[cid] = {
+            "chunk_id": cid,
+            "source_id": source_id,
+            "source_name": str(row.get("source_name") or source_name_map.get(source_id) or "Untitled"),
+            "chunk_index": int(row.get("chunk_index") or 0),
+            "chunk_text": str(row.get("chunk_text") or ""),
+            "section_title": row.get("section_title"),
+            "section_index": int(row.get("section_index") or 0),
+            "similarity": float(row.get("similarity") or 0.0),
+            "vector_similarity": float(row.get("similarity") or 0.0),
+            "keyword_hits": 0,
+            "keyword_coverage": 0.0,
+            "combined_score": 0.0,
+            "best_variant": vector_best_variant.get(cid),
+        }
+
+    for cid, row in keyword_rows.items():
+        item = combined.get(cid)
+        source_id = str(row.get("source_id") or "")
+        if item is None:
+            item = {
+                "chunk_id": cid,
+                "source_id": source_id,
+                "source_name": source_name_map.get(source_id) or "Untitled",
+                "chunk_index": int(row.get("chunk_index") or 0),
+                "chunk_text": str(row.get("chunk_text") or ""),
+                "section_title": row.get("section_title"),
+                "section_index": int(row.get("section_index") or 0),
+                "similarity": 0.0,
+                "vector_similarity": 0.0,
+                "keyword_hits": 0,
+                "keyword_coverage": 0.0,
+                "combined_score": 0.0,
+                "best_variant": None,
+            }
+            combined[cid] = item
+        hits = len(keyword_terms_by_chunk.get(cid) or set())
+        item["keyword_hits"] = hits
+        item["keyword_coverage"] = (hits / max(1, len(query_terms))) if query_terms else 0.0
+
+    for cid, item in combined.items():
+        vec = float(item.get("vector_similarity") or 0.0)
+        cov = float(item.get("keyword_coverage") or 0.0)
+        hits = float(item.get("keyword_hits") or 0.0)
+        anchor = _medix_anchor_score(
+            f"{str(item.get('section_title') or '')}\n{str(item.get('chunk_text') or '')}",
+            anchors,
+        )
+        relation = _medix_relation_signal(str(item.get("chunk_text") or ""), graph_terms)
+        rank_bonus = 0.0
+        if cid in vector_rank:
+            rank_bonus = 1.0 / (8.0 + float(vector_rank[cid]))
+        item["anchor_score"] = anchor
+        item["relation_score"] = relation
+        item["combined_score"] = (
+            (0.56 * vec)
+            + (0.16 * cov)
+            + (0.16 * anchor)
+            + min(0.08, hits * 0.015)
+            + rank_bonus
+            + min(MEDIX_MULTI_HOP_TERM_BONUS, relation * MEDIX_MULTI_HOP_TERM_BONUS)
+        )
+
+    ranked_final = sorted(combined.values(), key=lambda r: float(r.get("combined_score") or 0.0), reverse=True)
+    seed_limit = min(len(ranked_final), max(adaptive_top_k, 8))
+    seeds = ranked_final[:seed_limit]
+
+    neighbors = _medix_fetch_neighbor_chunks(
+        supabase=supabase,
+        seeds=seeds,
+        source_ids=source_ids,
+        window=MEDIX_NEIGHBOR_WINDOW,
+    )
+    for cid, row in neighbors.items():
+        if cid in combined:
             continue
-        if total_chars + len(text) > MEDIX_MAX_CONTEXT_CHARS:
-            break
-        context_rows.append(row)
-        total_chars += len(text)
+        source_id = str(row.get("source_id") or "")
+        combined[cid] = {
+            "chunk_id": cid,
+            "source_id": source_id,
+            "source_name": source_name_map.get(source_id) or "Untitled",
+            "chunk_index": int(row.get("chunk_index") or 0),
+            "chunk_text": str(row.get("chunk_text") or ""),
+            "section_title": row.get("section_title"),
+            "section_index": int(row.get("section_index") or 0),
+            "similarity": float(row.get("similarity") or 0.0),
+            "vector_similarity": 0.0,
+            "keyword_hits": 0,
+            "keyword_coverage": 0.0,
+            "combined_score": 0.035,
+            "best_variant": None,
+            "neighbor_of_seed": True,
+        }
+
+    ranked_final = sorted(combined.values(), key=lambda r: float(r.get("combined_score") or 0.0), reverse=True)
+
+    context_cap = min(120, max(adaptive_top_k * 3, 16))
+    prefiltered_rows: List[Dict[str, Any]] = []
+    for row in ranked_final:
+        if anchors and float(row.get("anchor_score") or 0.0) < MEDIX_ANCHOR_MIN_SCORE and len(prefiltered_rows) >= max(10, adaptive_top_k):
+            continue
+        prefiltered_rows.append(row)
+
+    context_rows = _medix_select_diverse_context(
+        prefiltered_rows,
+        context_cap=context_cap,
+        max_chars=MEDIX_MAX_CONTEXT_CHARS,
+        min_sections=MEDIX_SECTION_DIVERSITY_MIN,
+    )
+
+    low_evidence_fallback_used = False
+    if not context_rows and ranked_final:
+        # If strict anchor filtering removed everything, keep best available evidence instead of failing early.
+        fallback_pool = ranked_final[: min(len(ranked_final), max(8, adaptive_top_k))]
+        context_rows = _medix_select_diverse_context(
+            fallback_pool,
+            context_cap=min(18, max(8, adaptive_top_k)),
+            max_chars=min(MEDIX_MAX_CONTEXT_CHARS, 12000),
+            min_sections=max(1, min(2, MEDIX_SECTION_DIVERSITY_MIN)),
+        )
+        low_evidence_fallback_used = bool(context_rows)
+        if low_evidence_fallback_used:
+            _medix_progress("Evidence fallback activated: using lower-anchor but relevant chunks for synthesis")
 
     citations: List[Dict[str, Any]] = []
     for row in context_rows:
@@ -29399,14 +30163,96 @@ def medix_rag_chat(req: MedixRagChatRequest):
             }
         )
 
+    debug_preview = [
+        {
+            "chunk_id": int(r.get("chunk_id") or 0),
+            "source": str(r.get("source_name") or "Untitled"),
+            "chunk_index": int(r.get("chunk_index") or 0),
+            "section": r.get("section_title"),
+            "vector_similarity": round(float(r.get("vector_similarity") or 0.0), 4),
+            "anchor_score": round(float(r.get("anchor_score") or 0.0), 4),
+            "relation_score": round(float(r.get("relation_score") or 0.0), 4),
+            "keyword_hits": int(r.get("keyword_hits") or 0),
+            "combined_score": round(float(r.get("combined_score") or 0.0), 4),
+            "best_variant": r.get("best_variant"),
+            "neighbor": bool(r.get("neighbor_of_seed") or False),
+            "text_preview": str(r.get("chunk_text") or "")[:220],
+        }
+        for r in ranked_final[: min(20, len(ranked_final))]
+    ]
+
+    _medix_progress(
+        "Retrieval summary: "
+        f"reasoning={reasoning_mode}, variants={len(variants)}, "
+        f"vector_candidates={len(merged_rows)}, keyword_candidates={len(keyword_rows)}, "
+        f"context_used={len(context_rows)}, anchors={len(anchors)}, top_k={adaptive_top_k}, min_score={adaptive_min_score:.2f}"
+    )
+
     _medix_save_chat_message(session_id, "user", question)
+
+    if req.strict_citation_mode and not context_rows:
+        no_ctx_answer = "I could not find source-backed evidence for this query in the indexed documents. Please refine the question or upload a more relevant source."
+        no_ctx_answer = _medix_enforce_citations(no_ctx_answer, citations, True)
+        _medix_save_chat_message(session_id, "assistant", no_ctx_answer, citations)
+        return MedixRagChatResponse(
+            session_id=session_id,
+            answer=no_ctx_answer,
+            citations=[MedixRagCitation(**c) for c in citations],
+            retrieval_count=len(context_rows),
+            model=MEDIX_CHAT_MODEL,
+            retrieval_debug={
+                "reasoning_mode": reasoning_mode,
+                "stateless_mode": req.stateless_mode,
+                "strict_citation_mode": req.strict_citation_mode,
+                "verify_response": req.verify_response,
+                "query_variants": variants,
+                "query_terms": query_terms,
+                "anchor_terms": anchors,
+                "graph_terms": graph_terms,
+                "requested_top_k": requested_top_k,
+                "effective_top_k": adaptive_top_k,
+                "effective_min_score": round(adaptive_min_score, 4),
+                "vector_candidates": len(merged_rows),
+                "keyword_candidates": len(keyword_rows),
+                "combined_candidates": len(ranked_final),
+                "context_selected": len(context_rows),
+                "low_evidence_fallback_used": low_evidence_fallback_used,
+                "preview": debug_preview,
+            } if req.debug_retrieval else None,
+        )
 
     answer = _medix_llm_answer_with_langchain(
         question=question,
-        history=history_rows,
+        history=effective_history,
         context_blocks=context_rows,
         temperature=req.temperature,
+        anchor_terms=anchors,
+        strict_citation_mode=req.strict_citation_mode,
+        stateless_mode=req.stateless_mode,
     )
+
+    answer = _medix_enforce_citations(answer, citations, req.strict_citation_mode)
+
+    verification = _medix_verify_answer(
+        question=question,
+        answer=answer,
+        context_rows=context_rows,
+        anchors=anchors,
+    ) if req.verify_response else {
+        "verdict": "skipped",
+        "anchor_terms": anchors,
+        "anchor_hits": None,
+        "anchor_coverage": None,
+        "drift_flags": [],
+        "unsupported": False,
+        "context_count": len(context_rows),
+    }
+
+    if req.verify_response and verification.get("verdict") == "review":
+        answer = (
+            "Verification note: some claims may need review due to possible context drift or low anchor coverage.\n\n"
+            + answer
+        ).strip()
 
     _medix_save_chat_message(session_id, "assistant", answer, citations)
 
@@ -29416,6 +30262,26 @@ def medix_rag_chat(req: MedixRagChatRequest):
         citations=[MedixRagCitation(**c) for c in citations],
         retrieval_count=len(context_rows),
         model=MEDIX_CHAT_MODEL,
+        retrieval_debug={
+            "reasoning_mode": reasoning_mode,
+            "stateless_mode": req.stateless_mode,
+            "strict_citation_mode": req.strict_citation_mode,
+            "verify_response": req.verify_response,
+            "query_variants": variants,
+            "query_terms": query_terms,
+            "anchor_terms": anchors,
+            "graph_terms": graph_terms,
+            "requested_top_k": requested_top_k,
+            "effective_top_k": adaptive_top_k,
+            "effective_min_score": round(adaptive_min_score, 4),
+            "vector_candidates": len(merged_rows),
+            "keyword_candidates": len(keyword_rows),
+            "combined_candidates": len(ranked_final),
+            "context_selected": len(context_rows),
+            "low_evidence_fallback_used": low_evidence_fallback_used,
+            "verification": verification,
+            "preview": debug_preview,
+        } if req.debug_retrieval else None,
     )
 
 
