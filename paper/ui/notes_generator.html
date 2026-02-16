@@ -731,8 +731,6 @@
               class="ripple px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--brand-soft)] transition">Detailed</button>
             <button id="variantCheatsheet" data-variant="cheatsheet"
               class="ripple px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--brand-soft)] transition">Cheat Sheet</button>
-            <button id="variantSimple" data-variant="simple"
-              class="ripple px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--brand-soft)] transition">Simple</button>
           </div>
 
           <!-- removed Edit & Copy MD buttons per request -->
@@ -1168,7 +1166,6 @@
     const mcqDefaultLabel = $mcqBtn ? ($mcqBtn.textContent || 'MCQ') : 'MCQ';
     const $variantDetailed = document.getElementById('variantDetailed');
     const $variantCheatsheet = document.getElementById('variantCheatsheet');
-    const $variantSimple = document.getElementById('variantSimple');
     // inline panel action buttons are wired inside the inline IIFE
 
     const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
@@ -2431,7 +2428,7 @@
     let es = null;
     let lastMarkdown = '';
     let lastImageUrls = [];
-    const VARIANTS = ['detailed', 'cheatsheet', 'simple'];
+    const VARIANTS = ['detailed', 'cheatsheet'];
     let currentVariant = 'detailed';
     let currentCourseType = '';
     try { localStorage.setItem('paperx:lastVariant', currentVariant); } catch { }
@@ -2439,7 +2436,7 @@
     let currentNoteId = localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? (localStorage.getItem('paperx:lastNoteId') || '') : '');
     function setVariantUI() {
       const act = currentVariant;
-      [$variantDetailed, $variantCheatsheet, $variantSimple].forEach(btn => {
+      [$variantDetailed, $variantCheatsheet].forEach(btn => {
         if (!btn) return;
         const v = btn.dataset.variant;
         const on = v === act;
@@ -2458,7 +2455,7 @@
       return fromInput || fromHeading || '';
     }
 
-    [$variantDetailed, $variantCheatsheet, $variantSimple].forEach(btn => {
+    [$variantDetailed, $variantCheatsheet].forEach(btn => {
       if (!btn) return;
       btn.addEventListener('click', async () => {
         const v = btn.dataset.variant;

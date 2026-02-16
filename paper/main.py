@@ -2766,6 +2766,7 @@ class DegreeOut(BaseModel):
     name: str
     level: Optional[str] = None
     duration_years: Optional[int] = None
+    stream: Optional[str] = "Engineering"
     departments: List[DepartmentWithBatchesOut]
 
 
@@ -2773,6 +2774,7 @@ class DegreeSimpleCreateIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=256)
     level: Optional[str] = Field(None, max_length=64)
     duration_years: Optional[int] = Field(None, ge=1, le=10)
+    stream: Optional[str] = Field("Engineering", max_length=64)
 
     @validator("name")
     def trim_name(cls, v: str):
@@ -2787,6 +2789,16 @@ class DegreeSimpleCreateIn(BaseModel):
             return None
         value = v.strip()
         return value or None
+
+    @validator("stream", pre=True, always=True)
+    def normalize_stream(cls, v: Optional[str]):
+        allowed = {"Medical", "Nursing", "Engineering", "Arts", "Law"}
+        if v is None:
+            return "Engineering"
+        value = v.strip()
+        if value not in allowed:
+            return "Engineering"
+        return value
 
 
 class CollegeFullOut(BaseModel):
@@ -3073,7 +3085,7 @@ def sync_degree_hierarchy(college_id: uuid.UUID, degrees: List[DegreeCreateIn]) 
 
     degree_res = (
         supabase.table("degrees")
-        .select("id,name,level,duration_years")
+        .select("id,name,level,duration_years,stream")
         .eq("college_id", str(college_id))
         .execute()
     )
@@ -3149,7 +3161,7 @@ def sync_degree_hierarchy(college_id: uuid.UUID, degrees: List[DegreeCreateIn]) 
             else:
                 refetch = (
                     supabase.table("degrees")
-                    .select("id,name,level,duration_years")
+                    .select("id,name,level,duration_years,stream")
                     .eq("college_id", str(college_id))
                     .eq("name", degree.name)
                     .limit(1)
@@ -3243,7 +3255,7 @@ def get_college_full(college_id: uuid.UUID):
 
     degree_rows = (
         supabase.table("degrees")
-        .select("id,name,level,duration_years")
+        .select("id,name,level,duration_years,stream")
         .eq("college_id", str(college_id))
         .order("name")
         .execute()
@@ -3330,6 +3342,7 @@ def get_college_full(college_id: uuid.UUID):
                 name=row.get("name"),
                 level=row.get("level"),
                 duration_years=row.get("duration_years"),
+                stream=row.get("stream") or "Engineering",
                 departments=departments_out,
             )
         )
@@ -10899,7 +10912,7 @@ def create_degree_simple(college_id: uuid.UUID, payload: DegreeSimpleCreateIn):
 
     existing = (
         supabase.table("degrees")
-        .select("id,name,level,duration_years")
+        .select("id,name,level,duration_years,stream")
         .eq("college_id", str(college_id))
         .eq("name", payload.name)
         .limit(1)
@@ -10919,6 +10932,7 @@ def create_degree_simple(college_id: uuid.UUID, payload: DegreeSimpleCreateIn):
             insert_payload["level"] = payload.level
         if payload.duration_years is not None:
             insert_payload["duration_years"] = payload.duration_years
+        insert_payload["stream"] = payload.stream or "Engineering"
 
         ins = supabase.table("degrees").insert(insert_payload).execute()
         if getattr(ins, "error", None):
@@ -10928,7 +10942,7 @@ def create_degree_simple(college_id: uuid.UUID, payload: DegreeSimpleCreateIn):
         else:
             refetch = (
                 supabase.table("degrees")
-                .select("id,name,level,duration_years")
+                .select("id,name,level,duration_years,stream")
                 .eq("college_id", str(college_id))
                 .eq("name", payload.name)
                 .limit(1)
@@ -10976,6 +10990,7 @@ def update_degree(degree_id: uuid.UUID, payload: DegreeSimpleCreateIn):
         "name": payload.name,
         "level": payload.level,
         "duration_years": payload.duration_years,
+        "stream": payload.stream or "Engineering",
     }
 
     upd = (
@@ -15938,6 +15953,120 @@ def _build_transform_prompt(mode: str, content: str, custom: str | None) -> str:
     )
 
 
+def _extract_markdown_image_tags(markdown: str) -> List[str]:
+    text = markdown or ""
+    if not text:
+        return []
+    found: List[str] = []
+    seen: Set[str] = set()
+    patterns = [
+        r"!\[[^\]]*\]\([^\)]+\)",
+        r"<img\b[^>]*>",
+    ]
+    for pattern in patterns:
+        for match in re.findall(pattern, text, flags=re.IGNORECASE):
+            tag = (match or "").strip()
+            if not tag or tag in seen:
+                continue
+            seen.add(tag)
+            found.append(tag)
+    return found
+
+
+def _generate_variant_from_detailed_markdown(topic: str, detailed_markdown: str, variant: str) -> str:
+    v = _normalize_variant(variant)
+    if v not in {"cheatsheet", "simple"}:
+        return detailed_markdown or ""
+
+    source_md = (detailed_markdown or "").strip()
+    if not source_md:
+        return ""
+
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured.")
+
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(
+            status_code=501,
+            detail=f"Gemini client library missing: {exc}. Install google-generativeai to enable this feature.",
+        ) from exc
+
+    image_tags = _extract_markdown_image_tags(source_md)
+    prompt_instruction = textwrap.dedent(
+        f"""
+        You are a study-notes compressor.
+        Convert the provided detailed markdown into a very short, simple {v} version.
+
+        Hard rules:
+        - Use model output as markdown only (no code fences, no extra commentary).
+        - Keep ALL main topic headings and important subheadings from the original.
+        - Keep section order the same as the original markdown.
+        - Rewrite content into very short, easy language (1-3 bullets/sentences per subtopic).
+        - Keep key formulas/definitions/keywords but make them concise.
+        - Preserve any markdown image tags or HTML <img> tags from the original exactly as-is.
+        - Do not add CITATIONS section.
+        - Do not remove core topics even if content is shortened.
+        - Target concise exam-revision style output.
+
+        Topic: {topic}
+        """
+    ).strip()
+
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+
+    response = model.generate_content(
+        [{"text": prompt_instruction}, {"text": source_md}],
+        generation_config={"temperature": 0.2, "max_output_tokens": 4096},
+    )
+
+    output_text = ""
+    try:
+        quick = getattr(response, "text", None)
+        if isinstance(quick, str) and quick.strip():
+            output_text = quick.strip()
+    except Exception:
+        output_text = ""
+
+    if not output_text:
+        candidates = getattr(response, "candidates", None) or []
+        if isinstance(candidates, dict):
+            candidates = [candidates]
+        for cand in candidates:
+            content = getattr(cand, "content", None)
+            parts = None
+            if content is not None:
+                parts = getattr(content, "parts", None)
+                if parts is None and isinstance(content, dict):
+                    parts = content.get("parts")
+            if parts is None and isinstance(cand, dict):
+                ccontent = cand.get("content")
+                if isinstance(ccontent, dict):
+                    parts = ccontent.get("parts")
+            texts: List[str] = []
+            if parts:
+                for part in parts:
+                    tval = getattr(part, "text", None)
+                    if tval is None and isinstance(part, dict):
+                        tval = part.get("text")
+                    if tval:
+                        texts.append(str(tval))
+            if texts:
+                output_text = "\n".join(texts).strip()
+                break
+
+    output_text = (output_text or "").strip() or source_md
+
+    if image_tags:
+        missing = [tag for tag in image_tags if tag not in output_text]
+        if missing:
+            output_text = output_text.rstrip() + "\n\n" + "\n".join(missing) + "\n"
+
+    return output_text
+
+
 @notes_router.post("/api/notes/transform")
 def api_transform_note(payload: dict):
     """Ephemeral transform of markdown (summarize / expand / custom) using Gemini only."""
@@ -16223,36 +16352,38 @@ async def generate(payload: dict):
                     "variant": variant,
                     "image_urls": row.get("image_urls") or [],
                 }
+        if variant in {"cheatsheet", "simple"}:
+            detailed_row = db_get_ai_note_by_title_exact_variant(topic, variant="detailed")
+            if detailed_row and (detailed_row.get("markdown") or "").strip():
+                try:
+                    transformed_md = _generate_variant_from_detailed_markdown(
+                        topic,
+                        detailed_row.get("markdown", ""),
+                        variant,
+                    )
+                except Exception:
+                    transformed_md = detailed_row.get("markdown", "")
+                inherited_images = detailed_row.get("image_urls") or []
+                row = db_upsert_ai_note_by_title_variant(
+                    topic,
+                    transformed_md,
+                    variant=variant,
+                    image_urls=inherited_images,
+                )
+                return {
+                    "id": row.get("id"),
+                    "markdown": row.get("markdown", transformed_md),
+                    "cached": False,
+                    "title": row.get("title"),
+                    "variant": variant,
+                    "image_urls": row.get("image_urls") or inherited_images,
+                }
         # Non-streaming generation: use detailed pipeline for detailed, or transform detailed into variant
         md_detailed = generate_notes_markdown(topic, degree=degree)
         md = md_detailed
         if variant == "cheatsheet" or variant == "simple":
             try:
-                # Use transform endpoint logic locally to adjust style
-                mode = "simplify" if variant == "simple" else "custom"
-                custom = None
-                if variant == "cheatsheet":
-                    custom = (
-                        "Rewrite as an ultra-concise exam cheat sheet: 250â€“400 words, bullets/tables, sections: Core Concepts; Key Definitions & Formulas; Quick Steps/Algorithms; Pitfalls; Keywords. Bold key terms. Do NOT include TL;DR, or any CITATIONS section."
-                    )
-                prompt = _build_transform_prompt(mode, md_detailed, custom)
-                client = _openai_client()
-                model = os.getenv("LLM_MODEL", "gpt-4o-mini")
-                messages = [
-                    {"role": "system", "content": "You are an assistant that edits markdown content precisely as instructed."},
-                    {"role": "user", "content": prompt},
-                ]
-                create_fn = None
-                try:
-                    create_fn = client.chat.completions.create  # type: ignore[attr-defined]
-                except AttributeError:
-                    create_fn = None
-                if create_fn:
-                    resp = create_fn(model=model, messages=messages, temperature=0.4, max_tokens=4096)
-                    md = resp.choices[0].message.content if resp.choices else md_detailed
-                else:
-                    resp = client.ChatCompletion.create(model=model, messages=messages, temperature=0.4, max_tokens=4096)  # type: ignore[attr-defined]
-                    md = resp.choices[0].message["content"] if resp.choices else md_detailed
+                md = _generate_variant_from_detailed_markdown(topic, md_detailed, variant)
             except Exception:
                 md = md_detailed
         image_urls: List[str] = []
@@ -16279,17 +16410,18 @@ async def generate(payload: dict):
 @notes_router.get("/api/notes/generate/stream")
 async def generate_stream(topic: str, force: bool = False, variant: str = "detailed", degree: Optional[str] = None):
     async def event_source() -> AsyncGenerator[bytes, None]:
+        normalized_variant = _normalize_variant(variant)
         yield b"event: open\n\n"
         # Early cache hit: exact-title lookup in DB
         if not force:
-            row = db_get_ai_note_by_title_exact_variant(topic, variant=_normalize_variant(variant))
+            row = db_get_ai_note_by_title_exact_variant(topic, variant=normalized_variant)
             if row and (row.get("markdown") or "").strip():
                 payload = {
                     "id": row.get("id"),
                     "markdown": row.get("markdown", ""),
                     "cached": True,
                     "title": row.get("title"),
-                    "variant": _normalize_variant(variant),
+                    "variant": normalized_variant,
                     "image_urls": row.get("image_urls") or [],
                 }
                 line = f"event: final\n".encode("utf-8")
@@ -16299,6 +16431,85 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
                 yield data_b
                 yield b"event: close\n\n"
                 return
+
+        if normalized_variant in {"cheatsheet", "simple"}:
+            detailed_row = db_get_ai_note_by_title_exact_variant(topic, variant="detailed")
+            if detailed_row and (detailed_row.get("markdown") or "").strip():
+                try:
+                    yield b"event: start\n"
+                    yield (
+                        "data: "
+                        + json.dumps(
+                            {
+                                "topic": topic,
+                                "variant": normalized_variant,
+                                "source_variant": "detailed",
+                                "source": "ai_notes",
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n\n"
+                    ).encode("utf-8")
+
+                    yield b"event: llm_start\n"
+                    yield ("data: " + json.dumps({"status": "compressing"}, ensure_ascii=False) + "\n\n").encode("utf-8")
+
+                    transformed_md = await run_in_threadpool(
+                        _generate_variant_from_detailed_markdown,
+                        topic,
+                        detailed_row.get("markdown", ""),
+                        normalized_variant,
+                    )
+
+                    yield b"event: llm_done\n"
+                    yield (
+                        "data: "
+                        + json.dumps({"md_chars": len(transformed_md or "")}, ensure_ascii=False)
+                        + "\n\n"
+                    ).encode("utf-8")
+
+                    inherited_images = detailed_row.get("image_urls") or []
+                    saved_row = db_upsert_ai_note_by_title_variant(
+                        topic,
+                        transformed_md,
+                        variant=normalized_variant,
+                        image_urls=inherited_images,
+                    )
+                    payload = {
+                        "id": saved_row.get("id"),
+                        "markdown": saved_row.get("markdown", transformed_md),
+                        "cached": False,
+                        "title": saved_row.get("title") or topic,
+                        "variant": normalized_variant,
+                        "image_urls": saved_row.get("image_urls") or inherited_images,
+                    }
+                    yield b"event: final\n"
+                    yield ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+                    yield b"event: close\n\n"
+                    return
+                except Exception as exc:
+                    fallback_md = detailed_row.get("markdown", "")
+                    inherited_images = detailed_row.get("image_urls") or []
+                    saved_row = db_upsert_ai_note_by_title_variant(
+                        topic,
+                        fallback_md,
+                        variant=normalized_variant,
+                        image_urls=inherited_images,
+                    )
+                    payload = {
+                        "id": saved_row.get("id"),
+                        "markdown": saved_row.get("markdown", fallback_md),
+                        "cached": False,
+                        "title": saved_row.get("title") or topic,
+                        "variant": normalized_variant,
+                        "image_urls": saved_row.get("image_urls") or inherited_images,
+                        "warning": f"Variant transform fallback: {exc}",
+                    }
+                    yield b"event: final\n"
+                    yield ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+                    yield b"event: close\n\n"
+                    return
+
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[Tuple[str, Optional[str], Optional[Dict[str, Any]]]] = asyncio.Queue()
         stop_event = threading.Event()
@@ -16308,7 +16519,7 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
 
         def worker() -> None:
             try:
-                for name, payload in generate_notes_events(topic, stop_event=stop_event, variant=_normalize_variant(variant), degree=degree):
+                for name, payload in generate_notes_events(topic, stop_event=stop_event, variant=normalized_variant, degree=degree):
                     if stop_event.is_set():
                         break
                     dispatch(("event", name, payload))
@@ -16333,13 +16544,13 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
                                 row = db_upsert_ai_note_by_title_variant(
                                     topic,
                                     payload.get("markdown", ""),
-                                    variant=_normalize_variant(variant),
+                                    variant=normalized_variant,
                                     image_urls=images_input,
                                 )
                                 payload["id"] = row.get("id")
                                 payload["title"] = row.get("title")
                                 payload["cached"] = False
-                                payload["variant"] = _normalize_variant(variant)
+                                payload["variant"] = normalized_variant
                                 payload["image_urls"] = row.get("image_urls") or (images_input or [])
                             except Exception:
                                 pass
@@ -28095,4 +28306,1140 @@ Generate this slide image now. Make it VISUALLY STUNNING with diagrams and infog
         traceback.print_exc()
         logging.error(f"[PPT Slide] Error generating slide {slide_number}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate slide {slide_number}: {str(e)}")
+
+
+# ==========================================
+# MEDIX AGENTIC RAG (Supabase pgvector)
+# ==========================================
+
+MEDIX_RAG_SOURCES_TABLE = os.getenv("MEDIX_RAG_SOURCES_TABLE", "medix_rag_sources")
+MEDIX_RAG_CHUNKS_TABLE = os.getenv("MEDIX_RAG_CHUNKS_TABLE", "medix_rag_chunks")
+MEDIX_RAG_SESSIONS_TABLE = os.getenv("MEDIX_RAG_SESSIONS_TABLE", "medix_rag_sessions")
+MEDIX_RAG_MESSAGES_TABLE = os.getenv("MEDIX_RAG_MESSAGES_TABLE", "medix_rag_messages")
+
+MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-3-pro-preview")
+MEDIX_EMBED_MODEL = "gemini-embedding-001"
+MEDIX_EMBED_DIM = int(os.getenv("MEDIX_RAG_EMBED_DIM", "768"))
+MEDIX_MAX_UPLOAD_MB = int(os.getenv("MEDIX_RAG_MAX_UPLOAD_MB", "50"))
+MEDIX_DEFAULT_TOP_K = int(os.getenv("MEDIX_RAG_DEFAULT_TOP_K", "12"))
+MEDIX_MAX_CONTEXT_CHARS = int(os.getenv("MEDIX_RAG_MAX_CONTEXT_CHARS", "26000"))
+MEDIX_CHUNK_TARGET_CHARS = int(os.getenv("MEDIX_RAG_CHUNK_TARGET_CHARS", "1400"))
+MEDIX_CHUNK_OVERLAP_CHARS = int(os.getenv("MEDIX_RAG_CHUNK_OVERLAP_CHARS", "240"))
+MEDIX_SECTION_PARALLELISM = max(1, int(os.getenv("MEDIX_RAG_SECTION_PARALLELISM", "4")))
+MEDIX_UPLOAD_PARALLELISM = max(1, int(os.getenv("MEDIX_RAG_UPLOAD_PARALLELISM", "3")))
+MEDIX_EMBED_PARALLELISM = max(1, int(os.getenv("MEDIX_RAG_EMBED_PARALLELISM", "2")))
+MEDIX_EMBED_BATCH_SIZE = max(1, int(os.getenv("MEDIX_RAG_EMBED_BATCH_SIZE", "16")))
+
+_MEDIX_SEMANTIC_ENABLED = True
+_MEDIX_SEMANTIC_DISABLED_REASON: Optional[str] = None
+
+
+def _medix_progress(message: str) -> None:
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[MEDIX RAG] {ts} {message}", flush=True)
+
+MEDIX_SECTION_PATTERNS = [
+    re.compile(r"^#{1,6}\s+(.+)$", re.IGNORECASE),
+    re.compile(r"^(chapter|unit|module|lesson|section)\s+[\w\divxIVX\-\.]+\s*[:\.-]?\s+(.+)$", re.IGNORECASE),
+    re.compile(r"^(part|appendix)\s+[\w\divxIVX\-\.]+\s*[:\.-]?\s+(.+)$", re.IGNORECASE),
+]
+
+
+class MedixRagChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    source_ids: Optional[List[str]] = None
+    top_k: int = 12
+    min_score: float = 0.55
+    temperature: float = 0.2
+
+
+class MedixRagCitation(BaseModel):
+    chunk_id: int
+    source_id: str
+    source_name: str
+    chunk_index: int
+    similarity: float
+    section_title: Optional[str] = None
+
+
+class MedixRagChatResponse(BaseModel):
+    session_id: str
+    answer: str
+    citations: List[MedixRagCitation]
+    retrieval_count: int
+    model: str
+
+
+def _medix_norm_embed_model(model: str) -> str:
+    return "gemini-embedding-001"
+
+
+def _medix_normalize_vector(values: List[float]) -> List[float]:
+    if not values:
+        return values
+    norm = math.sqrt(sum((float(v) * float(v)) for v in values))
+    if norm <= 0:
+        return [float(v) for v in values]
+    return [float(v) / norm for v in values]
+
+
+def _medix_extract_pdf_text(pdf_bytes: bytes) -> str:
+    if not pdf_bytes:
+        return ""
+
+    text_parts: List[str] = []
+
+    if fitz is not None:
+        try:
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:  # type: ignore[arg-type]
+                for page in doc:
+                    page_text = (page.get_text("text") or "").strip()
+                    if page_text:
+                        text_parts.append(page_text)
+        except Exception:
+            text_parts = []
+
+    if not text_parts and PyPDF2 is not None:
+        try:
+            reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+            for page in reader.pages:
+                page_text = (page.extract_text() or "").strip()
+                if page_text:
+                    text_parts.append(page_text)
+        except Exception:
+            text_parts = []
+
+    text = "\n\n".join(text_parts).strip()
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text
+
+
+def _medix_fallback_chunk_text(text: str, *, target_chars: int = 1300, overlap_chars: int = 220) -> List[str]:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return []
+
+    safe_target_chars = max(300, int(target_chars or 1300))
+    safe_overlap_chars = max(0, min(int(overlap_chars or 0), safe_target_chars - 40))
+
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", cleaned) if p.strip()]
+    if not paragraphs:
+        paragraphs = [cleaned]
+
+    chunks: List[str] = []
+    buffer = ""
+
+    for para in paragraphs:
+        candidate = f"{buffer}\n\n{para}".strip() if buffer else para
+        if len(candidate) <= safe_target_chars:
+            buffer = candidate
+            continue
+
+        if buffer:
+            chunks.append(buffer)
+
+        if len(para) <= safe_target_chars:
+            buffer = para
+            continue
+
+        start = 0
+        while start < len(para):
+            end = min(len(para), start + safe_target_chars)
+            piece = para[start:end].strip()
+            if piece:
+                chunks.append(piece)
+            if end >= len(para):
+                break
+            next_start = max(0, end - safe_overlap_chars)
+            if next_start <= start:
+                next_start = end
+            start = next_start
+        buffer = ""
+
+    if buffer:
+        chunks.append(buffer)
+
+    final_chunks = [c.strip() for c in chunks if len(c.strip()) >= 80]
+    return final_chunks
+
+
+def _medix_detect_sections(text: str) -> List[Dict[str, Any]]:
+    cleaned = (text or "").replace("\r\n", "\n")
+    if not cleaned.strip():
+        return []
+
+    lines = cleaned.split("\n")
+    headings: List[Tuple[int, str]] = []
+
+    for idx, line in enumerate(lines):
+        raw = (line or "").strip()
+        if len(raw) < 4 or len(raw) > 180:
+            continue
+
+        found_title: Optional[str] = None
+        for pattern in MEDIX_SECTION_PATTERNS:
+            m = pattern.match(raw)
+            if m:
+                found_title = (m.group(1) if pattern.pattern.startswith("^#{") else raw).strip(" #\t")
+                break
+
+        if not found_title:
+            if raw.isupper() and len(raw.split()) <= 16:
+                found_title = raw.title()
+
+        if found_title:
+            headings.append((idx, found_title[:180]))
+
+    if not headings:
+        return [{"section_index": 0, "section_title": "Full Document", "section_text": cleaned}]
+
+    sections: List[Dict[str, Any]] = []
+    for pos, (line_idx, title) in enumerate(headings):
+        next_line_idx = headings[pos + 1][0] if pos + 1 < len(headings) else len(lines)
+        slice_text = "\n".join(lines[line_idx:next_line_idx]).strip()
+        if len(slice_text) < 60:
+            continue
+        sections.append(
+            {
+                "section_index": len(sections),
+                "section_title": title or f"Section {len(sections) + 1}",
+                "section_text": slice_text,
+            }
+        )
+
+    if not sections:
+        return [{"section_index": 0, "section_title": "Full Document", "section_text": cleaned}]
+
+    return sections
+
+
+def _medix_semantic_chunk_text(text: str) -> List[str]:
+    global _MEDIX_SEMANTIC_ENABLED, _MEDIX_SEMANTIC_DISABLED_REASON
+
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return []
+
+    if not _MEDIX_SEMANTIC_ENABLED:
+        return _medix_fallback_chunk_text(cleaned)
+
+    if GEMINI_API_KEY:
+        try:
+            from llama_index.core import Document
+            from llama_index.core.node_parser import SemanticSplitterNodeParser
+            from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
+
+            embed_model = GoogleGenAIEmbedding(
+                model_name=_medix_norm_embed_model(MEDIX_EMBED_MODEL),
+                api_key=GEMINI_API_KEY,
+            )
+            parser = SemanticSplitterNodeParser(
+                buffer_size=max(1, int(os.getenv("MEDIX_RAG_SEMANTIC_BUFFER_SIZE", "1"))),
+                breakpoint_percentile_threshold=max(60, min(98, int(os.getenv("MEDIX_RAG_BREAKPOINT_PERCENTILE", "92")))),
+                embed_model=embed_model,
+            )
+            docs = [Document(text=cleaned)]
+            nodes = parser.get_nodes_from_documents(docs)
+            chunks = [str(node.get_content() or "").strip() for node in nodes]
+            chunks = [c for c in chunks if len(c) >= 80]
+            if chunks:
+                return chunks
+        except Exception as exc:
+            _MEDIX_SEMANTIC_ENABLED = False
+            _MEDIX_SEMANTIC_DISABLED_REASON = str(exc)
+            logging.warning(f"[MEDIX RAG] Semantic chunking disabled for process due to: {exc}")
+            _medix_progress(f"Semantic splitter disabled, using fallback chunking only. reason={exc}")
+
+    return _medix_fallback_chunk_text(cleaned)
+
+
+def _medix_chunk_section_with_overlap(
+    section: Dict[str, Any],
+    *,
+    target_chars: int,
+    overlap_chars: int,
+) -> List[Dict[str, Any]]:
+    section_text = str(section.get("section_text") or "").strip()
+    if not section_text:
+        return []
+
+    section_title = str(section.get("section_title") or "Untitled Section")
+    section_index = int(section.get("section_index") or 0)
+
+    base_chunks = _medix_semantic_chunk_text(section_text)
+    if not base_chunks:
+        base_chunks = _medix_fallback_chunk_text(section_text, target_chars=target_chars, overlap_chars=overlap_chars)
+
+    out: List[Dict[str, Any]] = []
+    prev = ""
+    local_char_cursor = 0
+
+    for idx, base in enumerate(base_chunks):
+        body = (base or "").strip()
+        if not body:
+            continue
+
+        overlap_prefix = ""
+        if prev and overlap_chars > 0:
+            overlap_prefix = prev[-overlap_chars:].strip()
+
+        if overlap_prefix:
+            text = f"{overlap_prefix}\n\n{body}".strip()
+        else:
+            text = body
+
+        start_char = local_char_cursor
+        end_char = local_char_cursor + len(body)
+        local_char_cursor = end_char + 2
+
+        out.append(
+            {
+                "chunk_text": text,
+                "section_title": section_title,
+                "section_index": section_index,
+                "window_start_char": max(0, start_char - (len(overlap_prefix) if overlap_prefix else 0)),
+                "window_end_char": end_char,
+                "base_index_in_section": idx,
+                "used_overlap_chars": len(overlap_prefix),
+            }
+        )
+        prev = body
+
+    return out
+
+
+def _medix_build_section_aware_chunks(text: str) -> List[Dict[str, Any]]:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return []
+
+    sections = _medix_detect_sections(cleaned)
+    if not sections:
+        return []
+
+    _medix_progress(f"Chunking started: sections={len(sections)}")
+
+    target_chars = max(900, MEDIX_CHUNK_TARGET_CHARS)
+    overlap_chars = max(80, MEDIX_CHUNK_OVERLAP_CHARS)
+
+    all_chunks: List[Dict[str, Any]] = []
+
+    if len(sections) == 1:
+        all_chunks.extend(
+            _medix_chunk_section_with_overlap(
+                sections[0],
+                target_chars=target_chars,
+                overlap_chars=overlap_chars,
+            )
+        )
+        _medix_progress(f"Chunking progress: 1/1 sections complete, chunks={len(all_chunks)}")
+    else:
+        worker_count = min(MEDIX_SECTION_PARALLELISM, max(1, len(sections)))
+        _medix_progress(f"Chunking workers={worker_count}")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+            futures = [
+                executor.submit(
+                    _medix_chunk_section_with_overlap,
+                    section,
+                    target_chars=target_chars,
+                    overlap_chars=overlap_chars,
+                )
+                for section in sections
+            ]
+            completed = 0
+            total = len(futures)
+            for fut in concurrent.futures.as_completed(futures):
+                try:
+                    items = fut.result() or []
+                    all_chunks.extend(items)
+                except Exception as exc:
+                    logging.warning(f"[MEDIX RAG] Section chunk worker failed: {exc}")
+                finally:
+                    completed += 1
+                    if completed == total or completed % 10 == 0:
+                        _medix_progress(f"Chunking progress: {completed}/{total} sections complete, chunks_so_far={len(all_chunks)}")
+
+        all_chunks.sort(key=lambda x: (int(x.get("section_index") or 0), int(x.get("base_index_in_section") or 0)))
+
+    # Re-index as global chunk sequence
+    for global_idx, chunk in enumerate(all_chunks):
+        chunk["chunk_index"] = global_idx
+
+    _medix_progress(f"Chunking finished: total_chunks={len(all_chunks)}")
+
+    return all_chunks
+
+
+def _medix_embedding_via_google_genai(texts: List[str], *, task_type: str) -> List[List[float]]:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+    if not texts:
+        return []
+
+    embeddings: List[List[float]] = []
+    model_name = _medix_norm_embed_model(MEDIX_EMBED_MODEL)
+
+    if genai is not None:
+        try:
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            embed_config = {
+                "task_type": task_type,
+                "output_dimensionality": MEDIX_EMBED_DIM,
+            }
+
+            if types is not None:
+                try:
+                    embed_config = types.EmbedContentConfig(  # type: ignore[assignment]
+                        task_type=task_type,
+                        output_dimensionality=MEDIX_EMBED_DIM,
+                    )
+                except Exception:
+                    pass
+
+            resp = client.models.embed_content(
+                model=model_name,
+                contents=texts if len(texts) > 1 else texts[0],
+                config=embed_config,
+            )
+
+            embeddings_list = getattr(resp, "embeddings", None)
+            if embeddings_list:
+                for emb_obj in embeddings_list:
+                    values = getattr(emb_obj, "values", None)
+                    if values is None:
+                        raise ValueError("Embedding response did not contain values")
+                    embeddings.append(_medix_normalize_vector([float(v) for v in values]))
+            else:
+                values: Optional[List[float]] = None
+                emb_obj = getattr(resp, "embedding", None)
+                if emb_obj is not None:
+                    values = getattr(emb_obj, "values", None)
+                if values is None:
+                    raise ValueError("Embedding response did not contain values")
+                embeddings.append(_medix_normalize_vector([float(v) for v in values]))
+
+            if embeddings:
+                return embeddings
+        except Exception as exc:
+            logging.warning(f"[MEDIX RAG] google.genai embedding path failed: {exc}")
+
+    try:
+        import google.generativeai as legacy_genai  # type: ignore
+
+        legacy_genai.configure(api_key=GEMINI_API_KEY)
+        for model_variant in (model_name, f"models/{model_name}"):
+            try:
+                embeddings = []
+                for text in texts:
+                    resp = legacy_genai.embed_content(  # type: ignore[attr-defined]
+                        model=model_variant,
+                        content=text,
+                        task_type=task_type,
+                        output_dimensionality=MEDIX_EMBED_DIM,
+                    )
+                    vector = resp.get("embedding") if isinstance(resp, dict) else getattr(resp, "embedding", None)
+                    if not vector:
+                        raise ValueError("Legacy embedding response empty")
+                    embeddings.append(_medix_normalize_vector([float(v) for v in vector]))
+
+                if embeddings:
+                    return embeddings
+            except Exception:
+                continue
+
+        raise RuntimeError(f"Model not available for embedding: {model_name}")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Embedding failed: {exc}. Required model: {model_name}",
+        ) from exc
+
+
+def _medix_embed_documents(texts: List[str]) -> List[List[float]]:
+    if not texts:
+        return []
+
+    indexed_batches: List[Tuple[int, List[str]]] = []
+    for start in range(0, len(texts), MEDIX_EMBED_BATCH_SIZE):
+        indexed_batches.append((start, texts[start:start + MEDIX_EMBED_BATCH_SIZE]))
+
+    _medix_progress(f"Embedding started: chunks={len(texts)}, batches={len(indexed_batches)}, batch_size={MEDIX_EMBED_BATCH_SIZE}")
+
+    out: List[Optional[List[float]]] = [None] * len(texts)
+
+    def _embed_batch(batch_start: int, batch_texts: List[str]) -> Tuple[int, List[List[float]]]:
+        vectors = _medix_embedding_via_google_genai(batch_texts, task_type="RETRIEVAL_DOCUMENT")
+        if len(vectors) != len(batch_texts):
+            raise ValueError("Embedding batch mismatch")
+        return batch_start, vectors
+
+    if len(indexed_batches) == 1:
+        batch_start, vectors = _embed_batch(indexed_batches[0][0], indexed_batches[0][1])
+        for i, vec in enumerate(vectors):
+            out[batch_start + i] = vec
+        _medix_progress(f"Embedding progress: 1/1 batches complete ({len(vectors)} vectors)")
+    else:
+        worker_count = min(MEDIX_EMBED_PARALLELISM, len(indexed_batches))
+        _medix_progress(f"Embedding workers={worker_count}")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+            futures = [executor.submit(_embed_batch, start, batch) for start, batch in indexed_batches]
+            completed = 0
+            total = len(futures)
+            for fut in concurrent.futures.as_completed(futures):
+                batch_start, vectors = fut.result()
+                for i, vec in enumerate(vectors):
+                    out[batch_start + i] = vec
+                completed += 1
+                if completed == total or completed % 5 == 0:
+                    _medix_progress(f"Embedding progress: {completed}/{total} batches complete")
+
+    if any(v is None for v in out):
+        raise HTTPException(status_code=500, detail="Some chunk embeddings failed")
+
+    _medix_progress(f"Embedding finished: vectors={len(out)}")
+
+    return [v for v in out if v is not None]
+
+
+def _medix_index_pdf_source(
+    *,
+    file_name: str,
+    raw: bytes,
+    source_name: Optional[str],
+    user_id: Optional[str],
+    parsed_tags: Optional[List[str]],
+    force_reindex: bool = True,
+) -> Dict[str, Any]:
+    started_at = time.perf_counter()
+
+    if not file_name.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail=f"Only PDF files are supported: {file_name}")
+    if not raw:
+        raise HTTPException(status_code=400, detail=f"Uploaded file is empty: {file_name}")
+
+    max_size = MEDIX_MAX_UPLOAD_MB * 1024 * 1024
+    if len(raw) > max_size:
+        raise HTTPException(status_code=413, detail=f"File too large ({file_name}). Max {MEDIX_MAX_UPLOAD_MB} MB")
+
+    _medix_progress(f"Indexing started: file={file_name}, size_mb={len(raw) / (1024 * 1024):.2f}")
+
+    text = _medix_extract_pdf_text(raw)
+    if not text:
+        raise HTTPException(status_code=422, detail=f"Could not extract text from PDF: {file_name}")
+
+    _medix_progress(f"Text extraction complete: chars={len(text)}")
+
+    chunk_items = _medix_build_section_aware_chunks(text)
+    if not chunk_items:
+        raise HTTPException(status_code=422, detail=f"Could not create chunks from extracted text: {file_name}")
+
+    _medix_progress(
+        f"Chunk build complete: total_chunks={len(chunk_items)}, sections={len({int(c.get('section_index') or 0) for c in chunk_items})}"
+    )
+
+    source_id = str(uuid.uuid4())
+    digest = hashlib.sha256(raw).hexdigest()
+    safe_source_name = (source_name or os.path.splitext(file_name)[0]).strip()[:180] or "Untitled Source"
+    tags_value = parsed_tags or []
+
+    supabase = get_service_client()
+
+    check_hash = (
+        supabase.table(MEDIX_RAG_SOURCES_TABLE)
+        .select("id, source_name, chunk_count")
+        .eq("file_hash", digest)
+        .limit(1)
+        .execute()
+    )
+    if getattr(check_hash, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (check duplicate): {check_hash.error}")
+    existing = (getattr(check_hash, "data", None) or [])
+    existing_row = existing[0] if existing else None
+    existing_source_id = str(existing_row.get("id")) if existing_row and existing_row.get("id") else None
+    existing_chunk_count = int(existing_row.get("chunk_count") or 0) if existing_row else 0
+
+    if existing_row and not force_reindex:
+        _medix_progress(
+            f"Duplicate detected: source_id={existing_source_id}, existing_chunks={existing_chunk_count}, skipping reindex"
+        )
+        return {
+            "ok": True,
+            "duplicate": True,
+            "source": existing_row,
+            "detail": "This PDF content already exists in Medix RAG store",
+            "file_name": file_name,
+            "existing_chunk_count": existing_chunk_count,
+            "incoming_chunk_count": len(chunk_items),
+        }
+
+    chunk_texts = [str(c.get("chunk_text") or "") for c in chunk_items]
+    embeddings = _medix_embed_documents(chunk_texts)
+    if len(embeddings) != len(chunk_items):
+        raise HTTPException(status_code=500, detail="Embedding count mismatch while indexing chunks")
+
+    source_payload = {
+        "source_name": safe_source_name,
+        "file_name": file_name,
+        "file_hash": digest,
+        "uploaded_by": (user_id or "").strip() or None,
+        "chunk_count": len(chunk_items),
+        "metadata": {
+            "tags": tags_value,
+            "chars": len(text),
+            "semantic_chunking": True,
+            "overlap_windows": True,
+            "section_based_chunking": True,
+            "section_count": len({int(c.get("section_index") or 0) for c in chunk_items}),
+            "chunk_target_chars": MEDIX_CHUNK_TARGET_CHARS,
+            "chunk_overlap_chars": MEDIX_CHUNK_OVERLAP_CHARS,
+            "embedding_model": _medix_norm_embed_model(MEDIX_EMBED_MODEL),
+        },
+    }
+
+    reindexed_existing = False
+    previous_chunk_count: Optional[int] = None
+
+    if existing_row and existing_source_id:
+        source_id = existing_source_id
+        reindexed_existing = True
+        previous_chunk_count = existing_chunk_count
+        _medix_progress(
+            f"Duplicate detected: source_id={source_id}, existing_chunks={existing_chunk_count}. Reindexing with latest chunking."
+        )
+
+        del_chunks = supabase.table(MEDIX_RAG_CHUNKS_TABLE).delete().eq("source_id", source_id).execute()
+        if getattr(del_chunks, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (delete old chunks): {del_chunks.error}")
+
+        upd_source = supabase.table(MEDIX_RAG_SOURCES_TABLE).update(source_payload).eq("id", source_id).execute()
+        if getattr(upd_source, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (update source): {upd_source.error}")
+    else:
+        source_payload_with_id = {"id": source_id, **source_payload}
+        ins_source = supabase.table(MEDIX_RAG_SOURCES_TABLE).insert(source_payload_with_id).execute()
+        if getattr(ins_source, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert source): {ins_source.error}")
+
+    _medix_progress(f"DB indexing started: chunks_to_insert={len(chunk_items)}")
+
+    inserted_count = 0
+    for idx, (chunk_info, vector) in enumerate(zip(chunk_items, embeddings)):
+        chunk_text = str(chunk_info.get("chunk_text") or "").strip()
+        if not chunk_text:
+            continue
+
+        chunk_metadata = {
+            "source_name": safe_source_name,
+            "section_title": chunk_info.get("section_title"),
+            "section_index": chunk_info.get("section_index"),
+            "base_index_in_section": chunk_info.get("base_index_in_section"),
+            "used_overlap_chars": chunk_info.get("used_overlap_chars"),
+            "overlap_window": True,
+        }
+
+        token_count = max(1, len(chunk_text.split()))
+        rpc_res = supabase.rpc(
+            "medix_insert_chunk",
+            {
+                "p_source_id": source_id,
+                "p_chunk_index": idx,
+                "p_chunk_text": chunk_text,
+                "p_token_count": token_count,
+                "p_metadata": chunk_metadata,
+                "p_embedding": vector,
+                "p_section_title": chunk_info.get("section_title"),
+                "p_section_index": int(chunk_info.get("section_index") or 0),
+                "p_window_start_char": int(chunk_info.get("window_start_char") or 0),
+                "p_window_end_char": int(chunk_info.get("window_end_char") or 0),
+            },
+        ).execute()
+        if getattr(rpc_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (insert chunk rpc): {rpc_res.error}")
+        inserted_count += 1
+        if inserted_count % 25 == 0 or inserted_count == len(chunk_items):
+            _medix_progress(f"DB indexing progress: {inserted_count}/{len(chunk_items)} chunks")
+
+    supabase.table(MEDIX_RAG_SOURCES_TABLE).update({"chunk_count": inserted_count}).eq("id", source_id).execute()
+
+    elapsed = time.perf_counter() - started_at
+    _medix_progress(f"Indexing completed: file={file_name}, chunks={inserted_count}, elapsed_sec={elapsed:.1f}")
+
+    return {
+        "ok": True,
+        "source_id": source_id,
+        "source_name": safe_source_name,
+        "file_name": file_name,
+        "chunks_indexed": inserted_count,
+        "reindexed_existing": reindexed_existing,
+        "previous_chunk_count": previous_chunk_count,
+        "section_count": len({int(c.get("section_index") or 0) for c in chunk_items}),
+        "chunking": {
+            "semantic": True,
+            "section_based": True,
+            "overlap_windows": True,
+            "target_chars": MEDIX_CHUNK_TARGET_CHARS,
+            "overlap_chars": MEDIX_CHUNK_OVERLAP_CHARS,
+        },
+        "model": _medix_norm_embed_model(MEDIX_EMBED_MODEL),
+    }
+
+
+def _medix_embed_query(text: str) -> List[float]:
+    vectors = _medix_embedding_via_google_genai([text], task_type="RETRIEVAL_QUERY")
+    if not vectors:
+        raise HTTPException(status_code=500, detail="Failed to embed query")
+    return vectors[0]
+
+
+def _medix_llm_answer_with_langchain(
+    *,
+    question: str,
+    history: List[Dict[str, Any]],
+    context_blocks: List[Dict[str, Any]],
+    temperature: float,
+) -> str:
+    context_text = []
+    for item in context_blocks:
+        context_text.append(
+            f"[SOURCE {item['source_name']} | id={item['source_id']} | chunk={item['chunk_index']}]\n{item['chunk_text']}"
+        )
+
+    history_lines = []
+    for h in history[-8:]:
+        role = (h.get("role") or "user").strip().lower()
+        prefix = "User" if role == "user" else "Assistant"
+        history_lines.append(f"{prefix}: {h.get('content', '')}")
+
+    try:
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        llm = ChatGoogleGenerativeAI(
+            model=MEDIX_CHAT_MODEL,
+            google_api_key=GEMINI_API_KEY,
+            temperature=max(0.0, min(1.0, float(temperature))),
+        )
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "You are Medix, an advanced academic RAG assistant. "
+                    "Use only the provided context for factual claims. "
+                    "If context is insufficient, explicitly say what is missing. "
+                    "At the end, include a concise 'Citations' line listing source ids used.",
+                ),
+                (
+                    "human",
+                    "Conversation so far:\n{history}\n\n"
+                    "Context blocks:\n{context}\n\n"
+                    "User question:\n{question}\n\n"
+                    "Answer with clear structure and practical detail.",
+                ),
+            ]
+        )
+        chain = prompt | llm | StrOutputParser()
+        return chain.invoke(
+            {
+                "history": "\n".join(history_lines) if history_lines else "(none)",
+                "context": "\n\n".join(context_text) if context_text else "(no context)",
+                "question": question,
+            }
+        ).strip()
+    except Exception as exc:
+        logging.warning(f"[MEDIX RAG] LangChain path failed: {exc}; falling back to google.genai")
+
+    if genai is None:
+        raise HTTPException(status_code=500, detail="No LLM client available. Install langchain-google-genai or google-genai")
+
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        prompt = (
+            "You are Medix, an advanced academic RAG assistant. "
+            "Use only provided context for facts. If missing, say so.\n\n"
+            f"Conversation:\n{chr(10).join(history_lines) if history_lines else '(none)'}\n\n"
+            f"Context:\n{chr(10).join(context_text) if context_text else '(none)'}\n\n"
+            f"Question:\n{question}\n\n"
+            "Return a concise but complete answer and include a final line 'Citations: ...'."
+        )
+        resp = client.models.generate_content(
+            model=MEDIX_CHAT_MODEL,
+            contents=prompt,
+            config={"temperature": max(0.0, min(1.0, float(temperature)))}
+        )
+        out = getattr(resp, "text", None)
+        if out and out.strip():
+            return out.strip()
+        raise ValueError("Empty model output")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LLM generation failed: {exc}") from exc
+
+
+def _medix_generate_query_variants(message: str) -> List[str]:
+    base = (message or "").strip()
+    if not base:
+        return []
+
+    variants = [base]
+    try:
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        llm = ChatGoogleGenerativeAI(
+            model=MEDIX_CHAT_MODEL,
+            google_api_key=GEMINI_API_KEY,
+            temperature=0.1,
+        )
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", "Generate exactly 2 short alternative search queries for RAG retrieval."),
+                ("human", "Question: {q}\nReturn 2 lines only."),
+            ]
+        )
+        text = (prompt | llm | StrOutputParser()).invoke({"q": base})
+        for line in str(text).splitlines():
+            line = line.strip(" -•\t")
+            if line and line.lower() != base.lower():
+                variants.append(line)
+            if len(variants) >= 3:
+                break
+    except Exception:
+        pass
+
+    seen: Set[str] = set()
+    deduped: List[str] = []
+    for q in variants:
+        key = q.lower().strip()
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(q)
+    return deduped[:3]
+
+
+def _medix_save_chat_message(session_id: str, role: str, content: str, citations: Optional[List[Dict[str, Any]]] = None) -> None:
+    supabase = get_service_client()
+    payload = {
+        "session_id": session_id,
+        "role": role,
+        "content": content,
+        "citations": citations or [],
+    }
+    res = supabase.table(MEDIX_RAG_MESSAGES_TABLE).insert(payload).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (save message): {res.error}")
+
+    supabase.table(MEDIX_RAG_SESSIONS_TABLE).update({"updated_at": datetime.utcnow().isoformat()}).eq("id", session_id).execute()
+
+
+def _medix_ensure_session(session_id: Optional[str], user_id: Optional[str], first_message: Optional[str]) -> str:
+    supabase = get_service_client()
+
+    if session_id:
+        existing = supabase.table(MEDIX_RAG_SESSIONS_TABLE).select("id").eq("id", session_id).limit(1).execute()
+        if getattr(existing, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (read session): {existing.error}")
+        if getattr(existing, "data", None):
+            return session_id
+
+    new_id = str(uuid.uuid4())
+    title = (first_message or "New Medix Chat").strip()[:120] or "New Medix Chat"
+    payload = {
+        "id": new_id,
+        "user_id": (user_id or "").strip() or None,
+        "title": title,
+        "metadata": {},
+    }
+    inserted = supabase.table(MEDIX_RAG_SESSIONS_TABLE).insert(payload).execute()
+    if getattr(inserted, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (create session): {inserted.error}")
+    return new_id
+
+
+def _medix_parse_source_ids(source_ids: Optional[List[str]]) -> Optional[List[str]]:
+    if not source_ids:
+        return None
+    valid: List[str] = []
+    for s in source_ids:
+        value = (s or "").strip()
+        if not value:
+            continue
+        try:
+            _ = uuid.UUID(value)
+            valid.append(value)
+        except Exception:
+            continue
+    return valid or None
+
+
+@app.get("/api/medix/rag/sources")
+def medix_rag_sources(limit: int = Query(default=100, ge=1, le=500)):
+    supabase = get_service_client()
+    res = (
+        supabase.table(MEDIX_RAG_SOURCES_TABLE)
+        .select("id, source_name, file_name, chunk_count, uploaded_by, created_at, metadata")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list sources): {res.error}")
+    return {"items": getattr(res, "data", None) or []}
+
+
+@app.delete("/api/medix/rag/sources/{source_id}")
+def medix_rag_delete_source(source_id: str):
+    supabase = get_service_client()
+
+    try:
+        _ = uuid.UUID(source_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid source_id")
+
+    del_chunks = supabase.table(MEDIX_RAG_CHUNKS_TABLE).delete().eq("source_id", source_id).execute()
+    if getattr(del_chunks, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete chunks): {del_chunks.error}")
+
+    del_source = supabase.table(MEDIX_RAG_SOURCES_TABLE).delete().eq("id", source_id).execute()
+    if getattr(del_source, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete source): {del_source.error}")
+
+    return {"ok": True, "source_id": source_id}
+
+
+@app.post("/api/medix/rag/upload")
+async def medix_rag_upload_pdf(
+    file: UploadFile = File(...),
+    source_name: Optional[str] = Form(default=None),
+    user_id: Optional[str] = Form(default=None),
+    tags: Optional[str] = Form(default=None),
+    force_reindex: bool = Form(default=True),
+):
+    file_name = (file.filename or "document.pdf").strip()
+    raw = await file.read()
+
+    parsed_tags: List[str] = []
+    if tags:
+        try:
+            maybe = json.loads(tags)
+            if isinstance(maybe, list):
+                parsed_tags = [str(t).strip() for t in maybe if str(t).strip()]
+            elif isinstance(maybe, str) and maybe.strip():
+                parsed_tags = [maybe.strip()]
+        except Exception:
+            parsed_tags = [t.strip() for t in tags.split(",") if t.strip()]
+
+    return await run_in_threadpool(
+        _medix_index_pdf_source,
+        file_name=file_name,
+        raw=raw,
+        source_name=source_name,
+        user_id=user_id,
+        parsed_tags=parsed_tags,
+        force_reindex=force_reindex,
+    )
+
+
+@app.post("/api/medix/rag/upload/bulk")
+async def medix_rag_upload_bulk_pdf(
+    files: List[UploadFile] = File(...),
+    source_prefix: Optional[str] = Form(default=None),
+    user_id: Optional[str] = Form(default=None),
+    tags: Optional[str] = Form(default=None),
+    force_reindex: bool = Form(default=True),
+):
+    if not files:
+        raise HTTPException(status_code=400, detail="At least one PDF is required")
+
+    parsed_tags: List[str] = []
+    if tags:
+        try:
+            maybe = json.loads(tags)
+            if isinstance(maybe, list):
+                parsed_tags = [str(t).strip() for t in maybe if str(t).strip()]
+            elif isinstance(maybe, str) and maybe.strip():
+                parsed_tags = [maybe.strip()]
+        except Exception:
+            parsed_tags = [t.strip() for t in tags.split(",") if t.strip()]
+
+    prepared: List[Dict[str, Any]] = []
+    for idx, file in enumerate(files):
+        file_name = (file.filename or f"document_{idx + 1}.pdf").strip()
+        raw = await file.read()
+        each_source_name = f"{source_prefix.strip()} - {os.path.splitext(file_name)[0]}" if source_prefix and source_prefix.strip() else os.path.splitext(file_name)[0]
+        prepared.append(
+            {
+                "file_name": file_name,
+                "raw": raw,
+                "source_name": each_source_name,
+            }
+        )
+
+    semaphore = asyncio.Semaphore(min(MEDIX_UPLOAD_PARALLELISM, max(1, len(prepared))))
+
+    async def _worker(item: Dict[str, Any]) -> Dict[str, Any]:
+        async with semaphore:
+            try:
+                result = await run_in_threadpool(
+                    _medix_index_pdf_source,
+                    file_name=item["file_name"],
+                    raw=item["raw"],
+                    source_name=item.get("source_name"),
+                    user_id=user_id,
+                    parsed_tags=parsed_tags,
+                    force_reindex=force_reindex,
+                )
+                return {
+                    "file_name": item["file_name"],
+                    "ok": True,
+                    "result": result,
+                }
+            except HTTPException as exc:
+                return {
+                    "file_name": item["file_name"],
+                    "ok": False,
+                    "status_code": exc.status_code,
+                    "error": exc.detail,
+                }
+            except Exception as exc:
+                return {
+                    "file_name": item["file_name"],
+                    "ok": False,
+                    "status_code": 500,
+                    "error": str(exc),
+                }
+
+    results = await asyncio.gather(*[_worker(it) for it in prepared])
+    success_count = len([r for r in results if r.get("ok")])
+
+    return {
+        "ok": success_count > 0,
+        "total": len(results),
+        "success": success_count,
+        "failed": len(results) - success_count,
+        "parallelism": min(MEDIX_UPLOAD_PARALLELISM, max(1, len(prepared))),
+        "results": results,
+    }
+
+
+@app.post("/api/medix/rag/chat", response_model=MedixRagChatResponse)
+def medix_rag_chat(req: MedixRagChatRequest):
+    question = (req.message or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    source_ids = _medix_parse_source_ids(req.source_ids)
+    session_id = _medix_ensure_session(req.session_id, req.user_id, question)
+    supabase = get_service_client()
+
+    history_res = (
+        supabase.table(MEDIX_RAG_MESSAGES_TABLE)
+        .select("role, content, created_at")
+        .eq("session_id", session_id)
+        .order("created_at", desc=False)
+        .limit(24)
+        .execute()
+    )
+    if getattr(history_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (history): {history_res.error}")
+    history_rows = getattr(history_res, "data", None) or []
+
+    variants = _medix_generate_query_variants(question)
+    merged_rows: Dict[int, Dict[str, Any]] = {}
+
+    for variant in variants:
+        query_embedding = _medix_embed_query(variant)
+        rpc_payload = {
+            "query_embedding": query_embedding,
+            "match_count": max(4, min(40, int(req.top_k) if req.top_k else MEDIX_DEFAULT_TOP_K)),
+            "source_ids": source_ids,
+            "min_score": max(0.0, min(1.0, float(req.min_score))),
+        }
+        rpc = supabase.rpc("medix_match_chunks", rpc_payload).execute()
+        if getattr(rpc, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (vector retrieval): {rpc.error}")
+
+        rows = getattr(rpc, "data", None) or []
+        for row in rows:
+            cid = int(row.get("chunk_id") or 0)
+            score = float(row.get("similarity") or 0.0)
+            if cid <= 0:
+                continue
+            existing = merged_rows.get(cid)
+            if existing is None or score > float(existing.get("similarity") or 0.0):
+                merged_rows[cid] = row
+
+    ranked = sorted(merged_rows.values(), key=lambda r: float(r.get("similarity") or 0.0), reverse=True)
+    ranked = ranked[: max(4, min(50, int(req.top_k) if req.top_k else MEDIX_DEFAULT_TOP_K))]
+
+    context_rows: List[Dict[str, Any]] = []
+    total_chars = 0
+    for row in ranked:
+        text = str(row.get("chunk_text") or "").strip()
+        if not text:
+            continue
+        if total_chars + len(text) > MEDIX_MAX_CONTEXT_CHARS:
+            break
+        context_rows.append(row)
+        total_chars += len(text)
+
+    citations: List[Dict[str, Any]] = []
+    for row in context_rows:
+        citations.append(
+            {
+                "chunk_id": int(row.get("chunk_id") or 0),
+                "source_id": str(row.get("source_id") or ""),
+                "source_name": str(row.get("source_name") or "Untitled"),
+                "chunk_index": int(row.get("chunk_index") or 0),
+                "similarity": float(row.get("similarity") or 0.0),
+                "section_title": row.get("section_title"),
+            }
+        )
+
+    _medix_save_chat_message(session_id, "user", question)
+
+    answer = _medix_llm_answer_with_langchain(
+        question=question,
+        history=history_rows,
+        context_blocks=context_rows,
+        temperature=req.temperature,
+    )
+
+    _medix_save_chat_message(session_id, "assistant", answer, citations)
+
+    return MedixRagChatResponse(
+        session_id=session_id,
+        answer=answer,
+        citations=[MedixRagCitation(**c) for c in citations],
+        retrieval_count=len(context_rows),
+        model=MEDIX_CHAT_MODEL,
+    )
+
+
+@app.get("/api/medix/rag/sessions/{session_id}/messages")
+def medix_rag_session_messages(session_id: str, limit: int = Query(default=120, ge=1, le=500)):
+    try:
+        _ = uuid.UUID(session_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+
+    supabase = get_service_client()
+    res = (
+        supabase.table(MEDIX_RAG_MESSAGES_TABLE)
+        .select("id, session_id, role, content, citations, created_at")
+        .eq("session_id", session_id)
+        .order("created_at", desc=False)
+        .limit(limit)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (session messages): {res.error}")
+
+    return {
+        "session_id": session_id,
+        "items": getattr(res, "data", None) or [],
+    }
 

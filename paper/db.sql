@@ -259,6 +259,7 @@ CREATE TABLE public.degrees (
   name text NOT NULL,
   level text,
   duration_years integer CHECK (duration_years >= 1 AND duration_years <= 10),
+  stream text DEFAULT 'Engineering'::text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT degrees_pkey PRIMARY KEY (id),
   CONSTRAINT degrees_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id)
