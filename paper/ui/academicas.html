@@ -1018,8 +1018,10 @@
                 }
 
                 function openNotesGenerator(topic) {
-                    // Navigate to notes generator
-                    window.location.href = 'notes_generator.html?topic=' + encodeURIComponent(topic);
+                    // Navigate to notes generator (medical stream → medical_notes.html)
+                    const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
+                    const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                    window.location.href = page + '?topic=' + encodeURIComponent(topic);
                 }
 
                 function renderSuggestions(items) {
@@ -1178,7 +1180,9 @@
                 heroGenBtn.addEventListener('click', function () {
                     var val = (heroInput.value || '').trim();
                     if (val) {
-                        window.location.href = 'notes_generator.html?topic=' + encodeURIComponent(val);
+                        const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
+                        const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                        window.location.href = page + '?topic=' + encodeURIComponent(val);
                     } else {
                         heroInput.focus();
                         // Optional: shake animation or visual cue
@@ -1414,6 +1418,7 @@
 
                 const profile = meOut.data.profile;
                 window.__PX_PROFILE_SNAPSHOT = profile;
+                window.__PX_DEGREE_STREAM = (profile.degree_stream || '').trim().toLowerCase();
                 __pxEduMaybeRequire(profile).catch(err => console.error('Education modal failed', err));
                 if (typeof window.__PX_NAV_APPLY === 'function') { window.__PX_NAV_APPLY(profile); }
                 renderProfile(profile);
@@ -1779,7 +1784,8 @@
 
                         const courseType = String(c.type || c.course_type || c.subject_type || '').trim().toLowerCase();
                         const isMathsCourse = (courseType === 'maths') || (courseType === 'math') || (courseType === 'mathematics') || (courseType.includes('math'));
-                        const notesPage = isMathsCourse ? 'maths_notes.html' : 'notes_generator.html';
+                        const isMedicalStream = (window.__PX_DEGREE_STREAM || '') === 'medical';
+                        const notesPage = isMathsCourse ? 'maths_notes.html' : (isMedicalStream ? 'medical_notes.html' : 'notes_generator.html');
 
                         const a = document.createElement('a');
                         a.href = notesPage + '?topic=' + encodeURIComponent(t.topic);
@@ -3171,7 +3177,9 @@
                             li.className = 'px-4 py-2.5 cursor-pointer hover:bg-brand-500/10 text-sm text-neutral-800 dark:text-white/90 transition';
                             li.textContent = name;
                             li.addEventListener('click', () => {
-                                window.location.href = 'notes_generator.html?topic=' + encodeURIComponent(name);
+                                const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
+                                const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                                window.location.href = page + '?topic=' + encodeURIComponent(name);
                             });
                             sheetList.appendChild(li);
                         });
@@ -3246,7 +3254,9 @@
                         const topicLink = inner.querySelector('a');
                         if (topicLink) {
                             const topicName = topicLink.textContent.trim();
-                            window.open('notes_generator.html?topic=' + encodeURIComponent(topicName), '_blank');
+                            const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
+                            const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                            window.open(page + '?topic=' + encodeURIComponent(topicName), '_blank');
                         }
                         if (navigator.vibrate) navigator.vibrate(20);
                     }

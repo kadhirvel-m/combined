@@ -4155,7 +4155,7 @@ def get_current_user_profile(token: Optional[str]):
             prof_q = _supabase_retry(
                 lambda: (
                     supabase.table("user_profiles")
-                    .select("*, colleges(id,name), departments(id,name), batches(id,from_year,to_year)")
+                    .select("*, colleges(id,name), departments(id,name,degree_id), batches(id,from_year,to_year)")
                     .eq("auth_user_id", user_id)
                     .limit(1)
                     .execute()
@@ -4181,6 +4181,18 @@ def get_current_user_profile(token: Optional[str]):
         # Normalize potentially scalar or list return from join
         college = college_data if isinstance(college_data, dict) else (college_data[0] if isinstance(college_data, list) and college_data else None)
         department = department_data if isinstance(department_data, dict) else (department_data[0] if isinstance(department_data, list) and department_data else None)
+
+        # Resolve degree stream from department -> degree
+        degree_stream = None
+        dept_degree_id = department.get("degree_id") if department else None
+        if dept_degree_id:
+            try:
+                deg_q = supabase.table("degrees").select("stream").eq("id", str(dept_degree_id)).limit(1).execute()
+                if not getattr(deg_q, "error", None) and deg_q.data:
+                    degree_stream = deg_q.data[0].get("stream")
+            except Exception:
+                pass
+
         batch = None
         if batch_data:
             raw_batch = batch_data if isinstance(batch_data, dict) else (batch_data[0] if isinstance(batch_data, list) else None)
@@ -4397,6 +4409,7 @@ def get_current_user_profile(token: Optional[str]):
                 "college": college,
                 "department": department,
                 "batch": batch,
+                "degree_stream": degree_stream,
             },
             "syllabus": syllabus,
         }
