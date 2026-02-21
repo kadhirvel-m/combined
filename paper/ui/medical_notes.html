@@ -148,6 +148,11 @@
       border-color: rgba(255, 255, 255, 0.08);
     }
 
+    /* Hide Related Videos tools when section is closed */
+    details#ytDetails:not([open]) #ytTools {
+      display: none !important;
+    }
+
     /* Prose tweaks */
     .prose :where(h1, h2, h3, h4) {
       scroll-margin-top: 6rem;
@@ -305,19 +310,20 @@
     }
 
     .yt-card {
+      position: relative;
       flex: 0 0 260px;
       scroll-snap-align: start;
-      border: 1px solid var(--outline);
+      min-width: 0;
       border-radius: 1rem;
-      overflow: hidden;
+      border: 1px solid var(--outline);
       background: var(--surface);
+      overflow: hidden;
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
       box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
       display: flex;
       flex-direction: column;
       text-decoration: none;
       color: inherit;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-      position: relative;
     }
 
     .yt-card:hover {
@@ -487,17 +493,40 @@
         display: none !important;
       }
 
-      .yt-card {
-        flex: 0 0 200px;
+      /* Override for mobile */
+      .yt-carousel {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        padding-bottom: 0.5rem;
+        gap: 1rem;
       }
 
-      .yt-thumb {
-        padding-top: 45%;
+      .yt-card {
+        flex: 0 0 auto;
+        min-width: 85vw;
+        max-width: 85vw;
+        scroll-snap-align: center;
       }
 
       .yt-skeleton-card {
-        flex: 0 0 200px;
+        flex: 0 0 auto;
+        min-width: 85vw;
+        max-width: 85vw;
+        height: 200px;
+      }
+
+      .yt-thumb-wrap {
         height: 130px;
+      }
+
+      .yt-body {
+        padding: 0.65rem 0.75rem;
+        gap: 0.4rem;
+      }
+
+      .yt-title {
+        font-size: 0.85rem;
       }
 
       .yt-skeleton-grid {
@@ -513,6 +542,230 @@
     /* Ensure the output area reserves space while loading */
     #outputWrap.loading {
       min-height: 360px;
+    }
+
+    /* ── Left Toolbar (Study Tools) ── */
+    .study-tools-panel {
+      position: sticky;
+      top: 5.5rem;
+    }
+
+    .study-tools-header {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      padding: 1rem 1.15rem .65rem;
+    }
+
+    .study-tools-header .st-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: .65rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+      color: #fff;
+      font-size: 18px;
+      box-shadow: 0 4px 12px rgba(158, 75, 138, .35);
+    }
+
+    .study-tools-header h3 {
+      font-size: .8rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .study-tools-list {
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+      padding: .5rem .75rem 1rem;
+    }
+
+    .st-btn {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      width: 100%;
+      padding: .7rem .85rem;
+      border: 1px solid var(--outline);
+      border-radius: .85rem;
+      background: var(--surface);
+      color: var(--surface-contrast);
+      cursor: pointer;
+      transition: all .22s cubic-bezier(.4, 0, .2, 1);
+      position: relative;
+      overflow: hidden;
+      text-align: left;
+    }
+
+    .st-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      opacity: 0;
+      background: linear-gradient(135deg, rgba(158, 75, 138, .08), rgba(76, 42, 89, .06));
+      transition: opacity .22s ease;
+    }
+
+    .st-btn:hover {
+      border-color: var(--brand);
+      transform: translateX(3px);
+      box-shadow: 0 4px 18px rgba(158, 75, 138, .18);
+    }
+
+    .st-btn:hover::before {
+      opacity: 1;
+    }
+
+    .st-btn:active {
+      transform: translateX(1px) scale(.985);
+    }
+
+    .st-btn .st-btn-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: .6rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 19px;
+      color: #fff;
+      position: relative;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, .15);
+      transition: transform .22s ease, box-shadow .22s ease;
+    }
+
+    .st-btn:hover .st-btn-icon {
+      transform: scale(1.08);
+      box-shadow: 0 5px 16px rgba(0, 0, 0, .2);
+    }
+
+    .st-btn .st-btn-text {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .st-btn .st-btn-label {
+      font-size: .82rem;
+      font-weight: 650;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .st-btn .st-btn-desc {
+      font-size: .65rem;
+      color: var(--muted);
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .st-btn .st-btn-arrow {
+      margin-left: auto;
+      font-size: 16px;
+      color: var(--muted);
+      opacity: 0;
+      transform: translateX(-4px);
+      transition: opacity .22s ease, transform .22s ease;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .st-btn:hover .st-btn-arrow {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    /* Icon gradients — PaperX brand palette */
+    .st-icon-mathfoll {
+      background: linear-gradient(135deg, #9E4B8A, #CA6CB3);
+    }
+
+    .st-icon-chain {
+      background: linear-gradient(135deg, #7B3F70, #B06AB3);
+    }
+
+    .st-icon-clinq {
+      background: linear-gradient(135deg, #4C2A59, #9E4B8A);
+    }
+
+    .st-icon-caseflow {
+      background: linear-gradient(135deg, #6A2D6A, #D88ACF);
+    }
+
+    .st-icon-echo {
+      background: linear-gradient(135deg, #8B4A80, #C88DBA);
+    }
+
+    .st-icon-medmap {
+      background: linear-gradient(135deg, #5C2E5C, #B778AA);
+    }
+
+    .st-icon-blink {
+      background: linear-gradient(135deg, #9E4B8A, #B06AB3, #FF7FD1);
+    }
+
+    /* Pulse dot for active / new */
+    .st-btn .st-pulse {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, .6);
+      animation: st-pulse-ring 2s infinite;
+    }
+
+    @keyframes st-pulse-ring {
+      0% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, .55);
+      }
+
+      70% {
+        box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+      }
+    }
+
+    /* Mobile: collapse into horizontal scroll row */
+    @media (max-width: 1023px) {
+      .study-tools-panel {
+        position: static;
+      }
+
+      .study-tools-list {
+        flex-direction: row;
+        overflow-x: auto;
+        gap: .5rem;
+        padding-bottom: .75rem;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: thin;
+      }
+
+      .st-btn {
+        flex: 0 0 auto;
+        min-width: 150px;
+        scroll-snap-align: start;
+      }
     }
   </style>
   <style>
@@ -553,12 +806,10 @@
             <span class="material-symbols-rounded text-[18px] leading-none">feedback</span>
             Feedback
           </button>
-          <button id="mcqBtn"
-            class="ripple hidden px-3 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
-            disabled aria-disabled="true">MCQ</button>
-          <button id="densityBtn"
-            class="ripple hidden sm:inline-flex px-3 py-2 rounded-full border text-sm hover:bg-brandlt-100 dark:hover:bg-white/10 transition"
-            style="border-color: var(--outline)" title="Toggle density">Density</button>
+          <button id="adminRegenBtn"
+            class="ripple inline-flex items-center gap-1 px-3 py-2 rounded-full bg-brand-500 hover:opacity-90 text-white text-sm font-semibold shadow-glow transition"
+            title="Force Regenerate Note (Admin Only)"><span
+              class="material-symbols-rounded text-[16px] leading-none">refresh</span> Regenerate</button>
           <button id="themeBtn"
             class="ripple inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm hover:bg-brandlt-100 dark:hover:bg-white/10 transition"
             style="border-color: var(--outline)" title="Toggle theme">
@@ -570,19 +821,28 @@
     </div>
   </header>
 
+
+
+
   <!-- Related Videos -->
   <section id="relatedVideosSection" class="max-w-7xl mx-auto px-4 sm:px-6 mt-6 hidden">
-    <div class="rounded-2xl glass border shadow-glow"
-      style="border-color: var(--outline); background: color-mix(in oklab, var(--surface) 78%, transparent);">
-      <div class="flex items-center justify-between gap-3 px-6 py-4 border-b flex-nowrap"
+    <details id="ytDetails"
+      style="border-color: var(--outline); background: color-mix(in oklab, var(--surface) 78%, transparent);"
+      class="group rounded-2xl glass border shadow-glow [&_summary::-webkit-details-marker]:hidden">
+      <summary
+        class="flex items-center justify-between gap-3 px-6 py-4 border-b flex-nowrap cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition"
         style="border-color: var(--outline)">
-        <div class="min-w-0">
-          <h2 class="text-base sm:text-lg font-semibold tracking-tight">Related Video</h2>
-          <p id="relatedVideosSummary" class="hidden sm:block text-xs sm:text-sm text-[var(--muted)]">Enter a topic to
-            discover
-            supporting videos.</p>
+        <div class="min-w-0 flex items-center gap-2">
+          <span
+            class="material-symbols-rounded text-[var(--muted)] group-open:rotate-90 transition-transform">chevron_right</span>
+          <div>
+            <h2 class="text-base sm:text-lg font-semibold tracking-tight">Related Video</h2>
+            <p id="relatedVideosSummary" class="hidden sm:block text-xs sm:text-sm text-[var(--muted)]">Click to view
+              supporting videos.</p>
+          </div>
         </div>
-        <div class="flex items-center gap-3 shrink-0">
+        <div id="ytTools" class="flex items-center gap-3 shrink-0 transition-opacity duration-300"
+          onclick="event.stopPropagation()">
           <select id="videoLanguageSelect"
             class="rounded-xl border px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm font-medium bg-transparent text-current focus:outline-none focus:ring-2 focus:ring-[var(--brand-soft)] transition"
             style="border-color: var(--outline)" aria-label="Select video language">
@@ -592,14 +852,8 @@
             <option value="Telugu">Telugu</option>
             <option value="Malayalam">Malayalam</option>
           </select>
-          <button id="refreshVideosBtn"
-            class="ripple inline-flex items-center gap-1.5 rounded-xl border px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm font-medium hover:bg-[var(--brand-soft)] transition shrink-0"
-            style="border-color: var(--outline)">
-            <span class="material-symbols-outlined text-sm sm:text-base">refresh</span>
-            Refresh
-          </button>
         </div>
-      </div>
+      </summary>
       <div id="relatedVideosSkeleton" class="px-6 py-5">
         <div class="yt-skeleton-grid">
           <div class="yt-skeleton-card skeleton"></div>
@@ -613,109 +867,14 @@
       <div id="relatedVideosEmpty" class="px-6 pb-6 text-sm text-[var(--muted)] hidden">
         Videos will appear once a topic is generated.
       </div>
-    </div>
+    </details>
   </section>
-
 
   <!-- Main layout -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-    <!-- Left column -->
-    <aside class="space-y-4 lg:col-span-3">
-
-      <!-- Input Card -->
-      <section class="hidden sm:block rounded-2xl glass p-4 sm:p-5 border shadow-glow animate-in"
-        style="border-color: var(--outline); background: color-mix(in oklab, var(--surface) 75%, transparent)">
-        <div class="">
-          <label class="block text-sm font-medium mb-2 hidden sm:block">Topic</label>
-          <div class="flex gap-2 items-center">
-            <input id="topic" type="text" placeholder="e.g., Support Vector Machine"
-              class="w-full px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500"
-              style="border-color: var(--outline); background: var(--surface); color: var(--surface-contrast)" />
-            <button id="generateBtn"
-              class="ripple px-3 py-2 sm:px-4 sm:py-3 rounded-xl hover:opacity-95 text-white font-medium text-sm sm:text-base shadow-neon transition disabled:opacity-50 disabled:cursor-not-allowed"
-              style="background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-strong) 100%); box-shadow: 0 12px 32px rgba(158,75,138,0.35);">
-              Generate
-            </button>
-            <button id="regenBtnMobile"
-              class="ripple sm:hidden px-3 py-2 rounded-xl border text-sm hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
-              style="border-color: var(--outline)">Regenerate</button>
-          </div>
-          <!-- Degree selector -->
-          <div id="degreeRow" class="hidden mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
-            <div class="flex items-center gap-2">
-              <label for="degreeSelect" class="text-xs font-medium shrink-0">Degree</label>
-              <select id="degreeSelect"
-                class="w-full px-3 py-2 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-                style="border-color: var(--outline)">
-                <option value="">Select degree…</option>
-                <option value="custom">Other…</option>
-              </select>
-            </div>
-            <div id="degreeCustomRow" class="hidden sm:col-span-1">
-              <input id="degreeCustom" type="text" placeholder="Type your degree (e.g., B.Tech)"
-                class="w-full px-3 py-2 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-                style="border-color: var(--outline); background: var(--surface); color: var(--surface-contrast)" />
-            </div>
-          </div>
-          <div class="hidden sm:flex items-center gap-2 mt-3">
-            <button id="regenBtn"
-              class="ripple px-3 py-2 rounded-xl border hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
-              style="border-color: var(--outline)">Regenerate</button>
-            <button id="cancelBtn"
-              class="ripple px-3 py-2 rounded-xl border hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
-              style="border-color: var(--outline)" disabled>Cancel</button>
-            <div class="text-xs text-[var(--muted)] ml-auto"><span id="domainsHint">Sources: auto</span></div>
-          </div>
-        </div>
-
-        <!-- Stepper / progress -->
-        <div class="pt-4 hidden sm:block">
-          <ol class="grid grid-cols-5 gap-2 text-[11px] text-center text-[var(--muted)]">
-            <li class="step" data-step="start">Start</li>
-            <li class="step" data-step="search_results">Search</li>
-            <li class="step" data-step="fetch_done">Parse</li>
-            <li class="step" data-step="llm_done">Generate</li>
-            <li class="step" data-step="final">Done</li>
-          </ol>
-          <div class="h-1.5 mt-2 bg-[var(--brand-soft)] rounded-full overflow-hidden">
-            <div id="progressBar" class="h-full bg-brand-500 w-0 transition-all"></div>
-          </div>
-        </div>
-      </section>
-
-
-
-      <!-- Related Images -->
-      <section class="hidden" style="border-color: var(--outline);">
-        <div class="p-4 sm:p-5">
-          <h3 class="text-sm font-semibold mb-3">Related Images</h3>
-          <div id="images" class="grid grid-cols-3 gap-2">
-            <!-- skeletons -->
-            <div class="h-24 rounded-lg skeleton"></div>
-            <div class="h-24 rounded-lg skeleton"></div>
-            <div class="h-24 rounded-lg skeleton"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Contents (sticky) -->
-      <section class="rounded-2xl glass border shadow-glow sticky top-24 hidden sm:block"
-        style="border-color: var(--outline);">
-        <div class="p-4 sm:p-5">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-sm font-semibold">Contents</h3>
-            <div class="text-xs text-[var(--muted)] hidden" id="noteMeta"></div>
-          </div>
-          <nav id="toc" class="text-sm space-y-1 max-h-72 overflow-auto pr-1 scrollbar-thin">
-            <!-- TOC items injected -->
-          </nav>
-        </div>
-      </section>
-    </aside>
-
-    <!-- Right column (Output) -->
-    <section class="lg:col-span-9 space-y-4">
+    <!-- Left column (Output) -->
+    <section class="lg:col-span-9 space-y-4 order-first lg:order-last">
 
       <div class="rounded-2xl glass border shadow-glow" style="border-color: var(--outline);">
         <!-- Toolbar -->
@@ -744,9 +903,6 @@
           <button id="downloadBtn"
             class="ripple hidden sm:inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
             style="border-color: var(--outline)">Download</button>
-          <button id="emphBtn"
-            class="ripple hidden sm:inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
-            style="border-color: var(--outline)">Emphasis</button>
           <button id="expandBtn"
             class="ripple hidden sm:inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
             style="border-color: var(--outline)">Fullscreen</button>
@@ -788,6 +944,98 @@
 
 
     </section>
+
+    <!-- Left column (Sidebar) -->
+    <aside class="space-y-4 lg:col-span-3 order-last lg:order-first">
+
+      <!-- ═══ Study Tools Toolbar ═══ -->
+      <div class="study-tools-panel rounded-2xl glass border shadow-glow" style="border-color: var(--outline);">
+        <div class="study-tools-header">
+          <span class="st-icon material-symbols-rounded">dashboard</span>
+          <h3>Study Tools</h3>
+        </div>
+        <div class="study-tools-list">
+          <!-- Math & Foll -->
+          <button class="st-btn" data-tool="mathfoll" title="Math formulas & follow-up deep dives">
+            <span class="st-btn-icon st-icon-mathfoll material-symbols-rounded">calculate</span>
+            <span class="st-btn-text">
+              <span class="st-btn-label">Math & Foll</span>
+              <span class="st-btn-desc">Formulas & follow-up deep dives</span>
+            </span>
+            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
+          </button>
+          <!-- Chain (Assessment & Reasoning) -->
+          <button class="st-btn" data-tool="chain" title="Chain — Assessment & Reasoning">
+            <span class="st-btn-icon st-icon-chain material-symbols-rounded">psychology</span>
+            <span class="st-btn-text">
+              <span class="st-btn-label">Chain</span>
+              <span class="st-btn-desc">Assessment & reasoning drills</span>
+            </span>
+            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
+          </button>
+          <!-- ClinQ (MCQ) -->
+          <button class="st-btn" id="clinqBtn" data-tool="clinq" title="ClinQ — Clinical Questions">
+            <span class="st-btn-icon st-icon-clinq material-symbols-rounded">quiz</span>
+            <span class="st-btn-text">
+              <span class="st-btn-label">ClinQ</span>
+              <span class="st-btn-desc">Clinical practice questions</span>
+            </span>
+            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
+          </button>
+          <!-- CaseFlow -->
+          <button class="st-btn" data-tool="caseflow" title="Clinical CaseFlow">
+            <span class="st-btn-icon st-icon-caseflow material-symbols-rounded">account_tree</span>
+            <span class="st-btn-text">
+              <span class="st-btn-label">CaseFlow</span>
+              <span class="st-btn-desc">Clinical case scenarios</span>
+            </span>
+            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
+          </button>
+          <!-- Echo (Labx) -->
+          <button class="st-btn" data-tool="echo" title="Echo — Lab Explorer">
+            <span class="st-btn-icon st-icon-echo material-symbols-rounded">biotech</span>
+            <span class="st-btn-text">
+              <span class="st-btn-label">Echo</span>
+              <span class="st-btn-desc">Lab values & diagnostics</span>
+            </span>
+            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
+          </button>
+          <!-- MedMap (PPT) -->
+          <button class="st-btn" data-tool="medmap" title="MedMap — Medical Presentations">
+            <span class="st-btn-icon st-icon-medmap material-symbols-rounded">slideshow</span>
+            <span class="st-btn-text">
+              <span class="st-btn-label">MedMap</span>
+              <span class="st-btn-desc">Generate medical presentations</span>
+            </span>
+            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
+          </button>
+          <!-- Blink (visual summary image) -->
+          <button class="st-btn" id="blinkBtn" data-tool="blink" title="Blink — Visual summary image">
+            <span class="st-btn-icon st-icon-blink material-symbols-rounded">bolt</span>
+            <span class="st-btn-text">
+              <span class="st-btn-label">Blink</span>
+              <span class="st-btn-desc">Visual summary image</span>
+            </span>
+            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Related Images -->
+      <section class="hidden" style="border-color: var(--outline);">
+        <div class="p-4 sm:p-5">
+          <h3 class="text-sm font-semibold mb-3">Related Images</h3>
+          <div id="images" class="grid grid-cols-3 gap-2">
+            <!-- skeletons -->
+            <div class="h-24 rounded-lg skeleton"></div>
+            <div class="h-24 rounded-lg skeleton"></div>
+            <div class="h-24 rounded-lg skeleton"></div>
+          </div>
+        </div>
+      </section>
+
+
+    </aside>
   </main>
 
   <!-- Snackbar -->
@@ -1128,10 +1376,6 @@
     const $refreshVideos = document.getElementById('refreshVideosBtn');
     const $videoLanguage = document.getElementById('videoLanguageSelect');
     const $topic = document.getElementById('topic');
-    const $degree = document.getElementById('degreeSelect');
-    const $degreeCustom = document.getElementById('degreeCustom');
-    const $degreeCustomRow = document.getElementById('degreeCustomRow');
-    const $degreeRow = document.getElementById('degreeRow');
     const $generate = document.getElementById('generateBtn');
     const $regen = document.getElementById('regenBtn');
     const $regenMobile = document.getElementById('regenBtnMobile');
@@ -1150,20 +1394,18 @@
     const $save = document.getElementById('saveBtn');
     const $myNoteBtn = document.getElementById('myNoteBtn');
     const $editor = document.getElementById('editor');
-    const $meta = document.getElementById('noteMeta');
-    const $domainsHint = document.getElementById('domainsHint');
     const $snack = document.getElementById('snack');
     const $themeBtn = document.getElementById('themeBtn');
     const $themeIcon = document.getElementById('themeIcon');
     const $themeText = document.getElementById('themeText');
     const $densityBtn = document.getElementById('densityBtn');
     const $fsCtrl = document.getElementById('fsControls');
+    const $fsTheme = document.getElementById('fsThemeBtn');
     const $fsExit = document.getElementById('fsExitBtn');
     const $fsHome = document.getElementById('fsHomeBtn');
     const $flashcardBtn = document.getElementById('flashcardBtn');
-    const $mcqBtn = document.getElementById('mcqBtn');
+    const $mcqBtn = document.getElementById('clinqBtn');
     const flashcardDefaultLabel = $flashcardBtn ? ($flashcardBtn.textContent || 'Flashcards') : 'Flashcards';
-    const mcqDefaultLabel = $mcqBtn ? ($mcqBtn.textContent || 'MCQ') : 'MCQ';
     const $variantDetailed = document.getElementById('variantDetailed');
     const $variantCheatsheet = document.getElementById('variantCheatsheet');
     // inline panel action buttons are wired inside the inline IIFE
@@ -1176,7 +1418,7 @@
     let relatedVideosLanguage = ($videoLanguage?.value || 'English');
     let relatedVideosDebounce = null;
 
-    // ===== Degree handling =====
+    // ===== Degree handling (exactly mirrors notes_generator.html) =====
     const DEGREE_KEY = 'paperx:degree';
     function getStoredDegree() {
       try { return localStorage.getItem(DEGREE_KEY) || ''; } catch { return ''; }
@@ -1185,129 +1427,36 @@
       try { if (v) localStorage.setItem(DEGREE_KEY, v); else localStorage.removeItem(DEGREE_KEY); } catch { }
     }
     function getSelectedDegree() {
-      // Prefer hidden select/custom values; fall back to stored degree if UI not initialized yet.
-      const uiVal = (() => {
-        if (!$degree) return '';
-        const v = ($degree.value || '').trim();
-        if (v === 'custom') { return ($degreeCustom?.value || '').trim(); }
-        return v;
-      })();
-      if (uiVal) return uiVal;
-      const stored = getStoredDegree();
-      return (stored || '').trim();
-    }
-    async function loadDegreeOptions() {
-      if (!$degree) return;
-      // Preserve any existing non-default options except 'custom'
-      try {
-        const res = await fetch(`${apiBase}/api/notes/degrees`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const arr = await res.json();
-        const selected = getStoredDegree();
-        // Reset to default + custom
-        $degree.innerHTML = '';
-        const opt0 = document.createElement('option'); opt0.value = ''; opt0.textContent = 'Select degree…'; $degree.appendChild(opt0);
-        if (Array.isArray(arr)) {
-          arr.forEach(row => {
-            const lbl = (row && (row.degree_label || row.degree_key)) || '';
-            const key = (row && (row.degree_key || row.degree_label)) || '';
-            const val = (lbl || key || '').trim();
-            if (!val) return;
-            const opt = document.createElement('option');
-            opt.value = val; opt.textContent = lbl || key;
-            $degree.appendChild(opt);
-          });
-        }
-        const optC = document.createElement('option'); optC.value = 'custom'; optC.textContent = 'Other…'; $degree.appendChild(optC);
-        // Apply selection
-        if (selected) {
-          // If matches an option, select it; else select custom and fill input
-          const match = Array.from($degree.options).some(o => (o.value || '').toLowerCase() === selected.toLowerCase());
-          if (match) {
-            $degree.value = selected;
-            $degreeCustomRow?.classList.add('hidden');
-          } else {
-            $degree.value = 'custom';
-            if ($degreeCustom) $degreeCustom.value = selected;
-            $degreeCustomRow?.classList.remove('hidden');
-          }
-        }
-        updateDomainsHintDebounced();
-      } catch {
-        // ignore
-      }
-    }
-    function onDegreeChange() {
-      const val = ($degree?.value || '').trim();
-      if (val === 'custom') {
-        $degreeCustomRow?.classList.remove('hidden'); // keep row hidden globally; used only if we ever show
-        // don't store incomplete custom until user types
-      } else {
-        $degreeCustomRow?.classList.add('hidden');
-        setStoredDegree(val);
-        updateDomainsHintDebounced();
-      }
-    }
-    function onDegreeCustomInput() {
-      const v = ($degreeCustom?.value || '').trim();
-      setStoredDegree(v);
-      updateDomainsHintDebounced();
-    }
-    async function updateDomainsHint() {
-      if (!$domainsHint) return;
-      const degree = getSelectedDegree();
-      if (!degree) { $domainsHint.textContent = 'Sources: auto'; return; }
-      try {
-        const res = await fetch(`${apiBase}/api/notes/allowed-domains?degree=${encodeURIComponent(degree)}`);
-        if (!res.ok) { $domainsHint.textContent = `Degree: ${degree}`; return; }
-        const data = await res.json();
-        const list = (data && Array.isArray(data.domains)) ? data.domains : [];
-        if (!list || list.length === 0) { $domainsHint.textContent = `Degree: ${degree} • web (fallback)`; return; }
-        const preview = list.slice(0, 4).join(', ');
-        $domainsHint.textContent = `Degree: ${degree} • ${preview}${list.length > 4 ? '…' : ''}`;
-      } catch {
-        $domainsHint.textContent = `Degree: ${degree}`;
-      }
-    }
-    let domainsHintTimer = null;
-    function updateDomainsHintDebounced() {
-      if (domainsHintTimer) clearTimeout(domainsHintTimer);
-      domainsHintTimer = setTimeout(updateDomainsHint, 250);
+      return (getStoredDegree() || '').trim();
     }
 
-    // Auto-resolve degree from logged-in profile and hide UI controls
+    // Auto-resolve degree from logged-in profile (mirrors notes_generator.html)
     async function autoResolveDegreeFromProfile() {
       try {
         const token = getAuthToken();
-        if (!token) { return false; }
+        if (!token) return false;
         const meRes = await fetch(`${apiBase}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
-        if (!meRes.ok) { return false; }
+        if (!meRes.ok) return false;
         const me = await meRes.json();
         const deptId = me && me.profile && me.profile.department && me.profile.department.id;
-        if (!deptId) { return false; }
-        // fetch academic meta to map department -> degree
+        if (!deptId) return false;
         const metaRes = await fetch(`${apiBase}/api/public/academic-meta`);
-        if (!metaRes.ok) { return false; }
+        if (!metaRes.ok) return false;
         const meta = await metaRes.json();
         const depts = Array.isArray(meta && meta.departments) ? meta.departments : [];
         const degrees = Array.isArray(meta && meta.degrees) ? meta.degrees : [];
         const dept = depts.find(d => String(d.id) === String(deptId));
-        if (!dept || !dept.degree_id) { return false; }
+        if (!dept || !dept.degree_id) return false;
         const deg = degrees.find(g => String(g.id) === String(dept.degree_id));
         const label = (deg && deg.name) ? String(deg.name).trim() : '';
-        if (!label) { return false; }
-        // Store and set hidden inputs
+        if (!label) return false;
         setStoredDegree(label);
-        if ($degree) {
-          // Try to select matching option if present, else set custom value
-          const match = Array.from($degree.options || []).some(o => (o.value || '').toLowerCase() === label.toLowerCase());
-          if (match) { $degree.value = label; }
-          else { $degree.value = 'custom'; if ($degreeCustom) $degreeCustom.value = label; }
-        }
-        updateDomainsHintDebounced();
+        console.log('[MedicalNotes] Degree resolved from profile:', label);
         return true;
       } catch { return false; }
     }
+    // Fire and forget — best-effort resolve before first generation
+    autoResolveDegreeFromProfile();
 
     function normalizeVideoLanguage(language) {
       return (language || '').trim();
@@ -1341,15 +1490,8 @@
 
     function resetMCQAccess() {
       if (!$mcqBtn) return;
-      $mcqBtn.classList.add('hidden');
-      $mcqBtn.disabled = true;
-      $mcqBtn.setAttribute('aria-disabled', 'true');
       $mcqBtn.dataset.noteId = '';
       $mcqBtn.dataset.topic = '';
-      $mcqBtn.classList.remove('pointer-events-none', 'opacity-70');
-      if (mcqDefaultLabel) {
-        $mcqBtn.textContent = mcqDefaultLabel;
-      }
     }
 
     function enableFlashcardAccess(noteId, topic) {
@@ -1369,13 +1511,6 @@
       if (!$mcqBtn) return;
       $mcqBtn.dataset.noteId = noteId || '';
       $mcqBtn.dataset.topic = topic || '';
-      $mcqBtn.disabled = false;
-      $mcqBtn.removeAttribute('aria-disabled');
-      $mcqBtn.classList.remove('hidden');
-      $mcqBtn.classList.remove('pointer-events-none', 'opacity-70');
-      if (mcqDefaultLabel) {
-        $mcqBtn.textContent = mcqDefaultLabel;
-      }
     }
 
     function openFlashcards() {
@@ -1404,8 +1539,7 @@
     }
 
     function openMCQ() {
-      if (!$mcqBtn) return;
-      const noteId = ($mcqBtn.dataset.noteId || '').trim();
+      const noteId = ($mcqBtn ? ($mcqBtn.dataset.noteId || '') : '').trim();
       if (!noteId) {
         snack('Generate notes first');
         return;
@@ -1413,17 +1547,246 @@
       const inferredTopic = (
         ($mcqBtn.dataset.topic || '')
         || (document.querySelector('#output h1')?.textContent || '')
-        || ($topic.value || '')
+        || ($topic ? $topic.value : '')
       ).trim();
-      try {
-        sessionStorage.setItem('paperx:lastMCQSeed', JSON.stringify({ noteId, topic: inferredTopic, ts: Date.now() }));
-      } catch (e) { }
-      const search = new URLSearchParams({ noteId });
-      if (inferredTopic) search.set('topic', inferredTopic);
-      const target = `./mcq.html?${search.toString()}`;
-      $mcqBtn.classList.add('pointer-events-none', 'opacity-70');
-      $mcqBtn.textContent = 'Opening…';
-      setTimeout(() => { window.location.href = target; }, 120);
+
+      // ── Inline MCQ: render quiz inside #output ──
+      const savedHTML = $output.innerHTML;
+
+      // MCQ state
+      const mcqState = { questions: [], idx: 0, score: 0, touched: new Set(), selections: [] };
+
+      // Show loading
+      $output.innerHTML = `
+        <div style="text-align:center; padding:3rem 1rem;">
+          <div style="font-size:2rem; margin-bottom:.75rem;">⏳</div>
+          <h2 style="font-size:1.25rem; font-weight:700; margin:0 0 .5rem;">Generating MCQ…</h2>
+          <p style="color:var(--muted); font-size:.9rem;">Building questions from your notes. This may take a moment.</p>
+        </div>`;
+
+      // Fetch MCQ
+      (async () => {
+        try {
+          const url = `${apiBase}/notes/${encodeURIComponent(noteId)}/mcq`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic: inferredTopic || undefined, count: 10 })
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.detail || errData.error || `HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          mcqState.questions = Array.isArray(data.questions) ? data.questions : [];
+          if (!mcqState.questions.length) throw new Error('No questions generated.');
+          mcqState.selections = new Array(mcqState.questions.length).fill(null);
+
+          renderMCQShell(data.topic || inferredTopic || 'MCQ Test');
+          renderMCQQuestion();
+        } catch (err) {
+          console.error('[MCQ]', err);
+          $output.innerHTML = `
+            <div style="text-align:center; padding:2rem 1rem;">
+              <div style="font-size:2rem; margin-bottom:.5rem;">❌</div>
+              <h2 style="font-size:1.15rem; font-weight:700; margin:0 0 .5rem;">MCQ generation failed</h2>
+              <p style="color:var(--muted); font-size:.85rem;">${err.message || 'Try again later.'}</p>
+              <button id="mcqBackBtn" class="ripple inline-flex items-center gap-2 px-4 py-2 mt-4 rounded-full border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">
+                <span class="material-symbols-rounded text-[16px]">arrow_back</span> Back to Notes
+              </button>
+            </div>`;
+          document.getElementById('mcqBackBtn')?.addEventListener('click', () => { $output.innerHTML = savedHTML; });
+        }
+      })();
+
+      function renderMCQShell(title) {
+        $output.innerHTML = `
+          <div id="mcqContainer">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem;">
+              <div style="display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;">
+                <h2 style="margin:0; font-size:1.2rem; font-weight:700;">${title} — MCQ</h2>
+                <span id="mcqCountBadge" style="border:1px solid var(--outline); border-radius:999px; padding:.2rem .6rem; font-size:.75rem;">${mcqState.questions.length} Qs</span>
+              </div>
+              <button id="mcqBackBtn" class="ripple inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">
+                <span class="material-symbols-rounded text-[16px]">arrow_back</span> Back to Notes
+              </button>
+            </div>
+            <div style="height:8px; border-radius:999px; overflow:hidden; border:1px solid var(--outline); background:color-mix(in oklab, var(--surface) 70%, transparent); margin-bottom:1.25rem;">
+              <div id="mcqProgressBar" style="height:100%; width:0%; background:linear-gradient(90deg, #9E4B8A, #4C2A59); transition:width .25s ease;"></div>
+            </div>
+            <div id="mcqQuizBox"></div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem;">
+              <button id="mcqPrevBtn" class="ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">◀ Prev</button>
+              <span id="mcqCounter" style="font-size:.85rem;">1 / ${mcqState.questions.length}</span>
+              <button id="mcqNextBtn" class="ripple px-4 py-2 rounded-xl text-sm font-semibold text-white transition" style="background:linear-gradient(135deg, var(--brand), var(--brand-strong, #4C2A59)); box-shadow:0 8px 24px rgba(158,75,138,.3); border:none;">Next ▶</button>
+            </div>
+            <div id="mcqResultBox" style="display:none; margin-top:1.5rem;"></div>
+          </div>`;
+
+        document.getElementById('mcqBackBtn').addEventListener('click', () => { $output.innerHTML = savedHTML; });
+        document.getElementById('mcqPrevBtn').addEventListener('click', () => gotoMCQ(mcqState.idx - 1));
+        document.getElementById('mcqNextBtn').addEventListener('click', () => {
+          if (mcqState.idx >= mcqState.questions.length - 1) showMCQResult();
+          else gotoMCQ(mcqState.idx + 1);
+        });
+      }
+
+      function updateMCQProgress() {
+        const total = mcqState.questions.length || 1;
+        const pct = Math.max(0, Math.min(100, (mcqState.idx / total) * 100));
+        const bar = document.getElementById('mcqProgressBar');
+        const counter = document.getElementById('mcqCounter');
+        if (bar) bar.style.width = pct + '%';
+        if (counter) counter.textContent = `${Math.min(mcqState.idx + 1, total)} / ${total}`;
+      }
+
+      function renderMCQQuestion() {
+        const q = mcqState.questions[mcqState.idx];
+        if (!q) return;
+        const box = document.getElementById('mcqQuizBox');
+        if (!box) return;
+
+        box.innerHTML = `
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:1.25rem; background:color-mix(in oklab, var(--surface) 85%, transparent);">
+            <div style="display:flex; align-items:center; gap:.5rem; font-size:.75rem; color:var(--muted); margin-bottom:.5rem;">
+              <span style="border:1px solid var(--outline); border-radius:999px; padding:.15rem .5rem;">Q${mcqState.idx + 1}</span>
+            </div>
+            <h3 style="font-size:1.05rem; font-weight:600; margin:0 0 .75rem;">${q.question}</h3>
+            <div id="mcqOptions" style="display:grid; gap:.5rem;"></div>
+            <div id="mcqExplainBox" style="display:none; border:1px solid var(--outline); border-radius:.75rem; background:color-mix(in oklab, var(--surface) 88%, transparent); padding:.75rem; margin-top:.75rem; font-size:.85rem;"></div>
+          </div>`;
+
+        const optContainer = document.getElementById('mcqOptions');
+        q.options.forEach((opt, i) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.style.cssText = 'border:1px solid var(--outline); border-radius:.75rem; padding:.7rem .85rem; cursor:pointer; text-align:left; transition:background .15s ease, border-color .15s ease; background:transparent; color:inherit; font-size:.9rem;';
+          btn.innerHTML = `<span style="border:1px solid var(--outline); border-radius:999px; padding:.12rem .45rem; margin-right:.5rem; font-size:.75rem; font-weight:600;">${String.fromCharCode(65 + i)}</span>${opt}`;
+          btn.addEventListener('mouseenter', () => { if (!mcqState.touched.has(mcqState.idx)) btn.style.background = 'var(--brand-soft)'; });
+          btn.addEventListener('mouseleave', () => { if (!mcqState.touched.has(mcqState.idx)) btn.style.background = 'transparent'; });
+          btn.addEventListener('click', () => handleMCQAnswer(i, btn));
+          optContainer.appendChild(btn);
+        });
+
+        // Restore state if already answered
+        if (mcqState.touched.has(mcqState.idx)) {
+          const opts = optContainer.querySelectorAll('button');
+          opts.forEach(o => o.style.pointerEvents = 'none');
+          const sel = mcqState.selections[mcqState.idx];
+          if (typeof sel === 'number') {
+            if (sel === q.correct_index) {
+              opts[sel].style.borderColor = 'rgba(16,185,129,.65)';
+              opts[sel].style.background = 'rgba(16,185,129,.22)';
+            } else {
+              opts[sel].style.borderColor = 'rgba(239,68,68,.60)';
+              opts[sel].style.background = 'rgba(239,68,68,.18)';
+              opts[q.correct_index].style.borderColor = 'rgba(16,185,129,.65)';
+              opts[q.correct_index].style.background = 'rgba(16,185,129,.22)';
+              const explBox = document.getElementById('mcqExplainBox');
+              if (explBox) {
+                explBox.innerHTML = `<strong>Answer:</strong> ${q.options[q.correct_index]}<br/><span>${q.explanation || 'Based on the note content.'}</span>`;
+                explBox.style.display = 'block';
+              }
+            }
+          }
+        }
+
+        updateMCQProgress();
+      }
+
+      function handleMCQAnswer(idx, btn) {
+        if (mcqState.touched.has(mcqState.idx)) return;
+        mcqState.touched.add(mcqState.idx);
+        const q = mcqState.questions[mcqState.idx];
+        const opts = document.querySelectorAll('#mcqOptions button');
+        opts.forEach(o => o.style.pointerEvents = 'none');
+
+        if (idx === q.correct_index) {
+          btn.style.borderColor = 'rgba(16,185,129,.65)';
+          btn.style.background = 'rgba(16,185,129,.22)';
+          mcqState.score += 1;
+          snack('✓ Correct!');
+        } else {
+          btn.style.borderColor = 'rgba(239,68,68,.60)';
+          btn.style.background = 'rgba(239,68,68,.18)';
+          const correctBtn = opts[q.correct_index];
+          if (correctBtn) {
+            correctBtn.style.borderColor = 'rgba(16,185,129,.65)';
+            correctBtn.style.background = 'rgba(16,185,129,.22)';
+          }
+          const explBox = document.getElementById('mcqExplainBox');
+          if (explBox) {
+            explBox.innerHTML = `<strong>Answer:</strong> ${q.options[q.correct_index]}<br/><span>${q.explanation || 'Based on the note content.'}</span>`;
+            explBox.style.display = 'block';
+          }
+        }
+        mcqState.selections[mcqState.idx] = idx;
+      }
+
+      function gotoMCQ(i) {
+        const total = mcqState.questions.length;
+        if (!total) return;
+        mcqState.idx = Math.max(0, Math.min(i, total - 1));
+        renderMCQQuestion();
+      }
+
+      function showMCQResult() {
+        const resultBox = document.getElementById('mcqResultBox');
+        if (!resultBox) return;
+        resultBox.style.display = 'block';
+
+        const total = mcqState.questions.length;
+        const pct = Math.round((mcqState.score / total) * 100);
+        const emoji = pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '📚';
+
+        let reviewHTML = '';
+        mcqState.questions.forEach((q, i) => {
+          const sel = mcqState.selections[i];
+          const isCorrect = typeof sel === 'number' && sel === q.correct_index;
+          const borderColor = isCorrect ? 'rgba(16,185,129,.65)' : 'rgba(239,68,68,.60)';
+          const bgColor = isCorrect ? 'rgba(16,185,129,.08)' : 'rgba(239,68,68,.08)';
+          reviewHTML += `
+            <div style="border:1px solid var(--outline); border-radius:.75rem; padding:.85rem; border-left:3px solid ${borderColor}; background:${bgColor};">
+              <div style="font-size:.75rem; color:var(--muted); margin-bottom:.25rem;">Q${i + 1}</div>
+              <div style="font-weight:600; font-size:.9rem; margin-bottom:.35rem;">${q.question}</div>
+              <div style="font-size:.82rem;"><strong>Your answer:</strong> ${typeof sel === 'number' ? q.options[sel] : '—'}</div>
+              <div style="font-size:.82rem; color:rgba(16,185,129,.9);"><strong>Correct:</strong> ${q.options[q.correct_index]}</div>
+              ${q.explanation ? `<div style="font-size:.8rem; color:var(--muted); margin-top:.25rem;"><strong>Why:</strong> ${q.explanation}</div>` : ''}
+            </div>`;
+        });
+
+        resultBox.innerHTML = `
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:1.25rem; background:color-mix(in oklab, var(--surface) 85%, transparent);">
+            <h3 style="font-size:1.15rem; font-weight:700; margin:0 0 .25rem;">${emoji} Your Results</h3>
+            <p style="font-size:.9rem; margin:0 0 .75rem;">You scored <strong>${mcqState.score} / ${total}</strong> (${pct}%)</p>
+            <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+              <button id="mcqRetakeBtn" class="ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">🔄 Retake</button>
+              <button id="mcqShuffleBtn" class="ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">🔀 Shuffle</button>
+            </div>
+            <div style="display:grid; gap:.5rem;">${reviewHTML}</div>
+          </div>`;
+
+        document.getElementById('mcqRetakeBtn')?.addEventListener('click', () => {
+          mcqState.idx = 0; mcqState.score = 0; mcqState.touched.clear();
+          mcqState.selections = new Array(total).fill(null);
+          resultBox.style.display = 'none';
+          renderMCQQuestion();
+        });
+        document.getElementById('mcqShuffleBtn')?.addEventListener('click', () => {
+          for (let i = mcqState.questions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [mcqState.questions[i], mcqState.questions[j]] = [mcqState.questions[j], mcqState.questions[i]];
+          }
+          mcqState.idx = 0; mcqState.score = 0; mcqState.touched.clear();
+          mcqState.selections = new Array(total).fill(null);
+          resultBox.style.display = 'none';
+          renderMCQQuestion();
+        });
+
+        // Update progress bar to 100%
+        const bar = document.getElementById('mcqProgressBar');
+        if (bar) bar.style.width = '100%';
+      }
     }
 
     resetFlashcardAccess();
@@ -1449,7 +1812,8 @@
         (typeof $editToggle !== 'undefined' ? $editToggle : null),
         (typeof $download !== 'undefined' ? $download : null),
         document.getElementById('geminiSelectionEdit'),
-        document.getElementById('feedbackInboxLink')
+        document.getElementById('feedbackInboxLink'),
+        document.getElementById('adminRegenBtn')
       ].filter(Boolean);
 
       function setPrivilegedVisible(visible) {
@@ -1495,7 +1859,7 @@
       if (!$myNoteBtn) return;
       const token = getAuthToken();
       if (!token) { $myNoteBtn.classList.add('hidden'); return; }
-      const title = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+      const title = (document.querySelector('#output h1')?.textContent || ($topic ? $topic.value : '') || '').trim();
       if (!title) { $myNoteBtn.classList.add('hidden'); return; }
       try {
         const url = `${apiBase}/api/notes/edited/check?title=${encodeURIComponent(title)}&variant=${encodeURIComponent(currentVariant)}`;
@@ -2274,10 +2638,11 @@
       relatedVideosAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
 
       const hasExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
-      if (hasExisting) {
+      if (hasExisting && !force) {
         $relatedVideosSkeleton?.classList.add('hidden');
         $relatedVideosWrap?.classList.remove('hidden');
       } else {
+        if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = ''; // clear on fresh load
         $relatedVideosSkeleton?.classList.remove('hidden');
         $relatedVideosWrap?.classList.add('hidden');
       }
@@ -2451,8 +2816,11 @@
     setVariantUI();
     function currentTopicOrHeading() {
       const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
-      const fromInput = ($topic.value || '').trim();
-      return fromInput || fromHeading || '';
+      const fromUrl = (() => {
+        try { return new URLSearchParams(window.location.search).get('topic')?.trim() || ''; }
+        catch { return ''; }
+      })();
+      return fromUrl || fromHeading || '';
     }
 
     [$variantDetailed, $variantCheatsheet].forEach(btn => {
@@ -2467,8 +2835,8 @@
         console.log('[Variant] switch clicked:', v);
         checkMyNoteVisibility();
         // If a topic is present, auto-click Generate to regenerate for the new variant
-        const t0 = ($topic.value || '').trim();
-        if (t0) { $generate.click(); return; }
+        const t0 = ($topic?.value || '').trim();
+        if (t0) { $generate?.click(); return; }
         // load last note for this variant if available; else try DB resolve by topic/heading
         const lastId = localStorage.getItem(noteKey(currentVariant)) || '';
         const t = currentTopicOrHeading();
@@ -2476,7 +2844,6 @@
         async function tryRenderResolvedByTitle(title) {
           const clean = (title || '').trim();
           if (!clean) return { loaded: false, definitiveMissing: false };
-          $meta.textContent = `Checking DB • ${currentVariant}`;
           const url = `${apiBase}/api/notes/resolve?title=${encodeURIComponent(clean)}&variant=${encodeURIComponent(currentVariant)}`;
           const res = await fetchJsonWithRetry(url, { timeoutMs: 8000, attempts: 3 });
           if (res.status === 200 && res.data && res.data.markdown) {
@@ -2487,10 +2854,14 @@
               if (currentNoteId) localStorage.setItem(noteKey(currentVariant), currentNoteId);
             } catch { }
             const loadedTopic = (res.data.title || document.querySelector('#output h1')?.textContent || '').trim();
-            $meta.textContent = `Loaded • ${currentNoteId || '-'} • ${currentVariant}`;
+            const $meta = document.getElementById('noteMeta');
+            if ($meta) $meta.textContent = `Loaded • ${currentNoteId || '-'} • ${currentVariant}`;
             if (currentNoteId) {
               enableFlashcardAccess(currentNoteId, loadedTopic);
               enableMCQAccess(currentNoteId, loadedTopic);
+            }
+            if (loadedTopic) {
+              loadRelatedVideos(loadedTopic, { force: true });
             }
             return { loaded: true, definitiveMissing: false };
           }
@@ -2498,19 +2869,40 @@
           return { loaded: false, definitiveMissing: false };
         }
 
+        const urlTopic = (() => {
+          try { return new URLSearchParams(window.location.search).get('topic')?.trim() || ''; }
+          catch { return ''; }
+        })();
+
+        // 1. Explicit URL Topic requested - bypass cache
+        if (urlTopic) {
+          const resolved = await tryRenderResolvedByTitle(urlTopic);
+          if (resolved.loaded) return;
+          if (resolved.definitiveMissing) {
+            console.log('[Variant] auto-generate for URL topic:', urlTopic);
+            logEvent('Auto-generate', `${currentVariant} • ${urlTopic}`);
+            startGeneration(urlTopic, true); // Force generation to bypass 'resolve' double check error
+            return;
+          }
+          snack('Unable to confirm note right now');
+          return;
+        }
+
+        // 2. No URL topic requested - try to resume last viewed note
         if (lastId) {
-          $meta.textContent = `Loading • ${lastId} • ${currentVariant}`;
           const url = `${apiBase}/notes/${encodeURIComponent(lastId)}?variant=${encodeURIComponent(currentVariant)}`;
           const res = await fetchJsonWithRetry(url, { timeoutMs: 8000, attempts: 3 });
           if (res.status === 200 && res.data && res.data.markdown) {
             renderMarkdown(res.data.markdown);
             renderImageGallery(res.data.image_urls || []);
-            $meta.textContent = `Loaded • ${res.data.id || lastId} • ${currentVariant}`;
             currentNoteId = res.data.id || lastId;
-            const loadedTopic = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+            const loadedTopic = (res.data.title || document.querySelector('#output h1')?.textContent || '').trim();
             if (currentNoteId) {
               enableFlashcardAccess(currentNoteId, loadedTopic);
               enableMCQAccess(currentNoteId, loadedTopic);
+            }
+            if (loadedTopic) {
+              loadRelatedVideos(loadedTopic, { force: true });
             }
             return;
           }
@@ -2520,7 +2912,7 @@
             const resolved = await tryRenderResolvedByTitle(t);
             if (resolved.loaded) return;
             if (resolved.definitiveMissing) {
-              if (!t) { snack('Enter a topic'); return; }
+              if (!t) return;
               console.log('[Variant] auto-generate (definitive missing) for topic:', t, 'variant:', currentVariant);
               logEvent('Auto-generate', `${currentVariant} • ${t}`);
               startGeneration(t, false);
@@ -2536,11 +2928,11 @@
           return;
         }
 
-        // No lastId; try DB resolve by title, then (only if 404) auto-generate.
+        // 3. Complete fallback: try DB resolve by title, then (only if 404) auto-generate.
         const resolved = await tryRenderResolvedByTitle(t);
         if (resolved.loaded) return;
         if (resolved.definitiveMissing) {
-          if (!t) { snack('Enter a topic'); return; }
+          if (!t) return;
           console.log('[Variant] auto-generate (definitive missing) for topic:', t, 'variant:', currentVariant);
           logEvent('Auto-generate', `${currentVariant} • ${t}`);
           startGeneration(t, false);
@@ -2552,33 +2944,7 @@
     let dense = false;
     let emphasis = localStorage.getItem('paperx:emphasis') === '1';
 
-    // Initialize degree UI
-    if ($degree) {
-      $degree.addEventListener('change', onDegreeChange);
-      loadDegreeOptions();
-    }
-    if ($degreeCustom) {
-      $degreeCustom.addEventListener('input', onDegreeCustomInput);
-    }
-    // Always hide the entire degree selector field for automatic behavior
-    if ($degreeRow) { $degreeRow.classList.add('hidden'); }
-    // Resolve degree automatically from profile if possible; otherwise rely on stored degree or backend fallback
-    (async () => {
-      const ok = await autoResolveDegreeFromProfile();
-      if (!ok) {
-        // No profile/degree; if a stored degree exists, ensure hint shows it, else keep 'auto'
-        const stored = getStoredDegree();
-        if ($degree) {
-          if (stored) {
-            const match = Array.from($degree.options || []).some(o => (o.value || '').toLowerCase() === stored.toLowerCase());
-            if (match) $degree.value = stored; else { $degree.value = 'custom'; if ($degreeCustom) $degreeCustom.value = stored; }
-          } else {
-            $degree.value = '';
-          }
-        }
-      }
-      updateDomainsHintDebounced();
-    })();
+    // Initialize degree UI removed per user request
 
     // Clean up any leftover video cache from previous sessions
     try {
@@ -2604,14 +2970,14 @@
       ch.style.borderColor = "var(--outline)";
       ch.addEventListener('click', () => {
         const value = ch.dataset.val || ch.textContent || '';
-        $topic.value = value;
+        if ($topic) $topic.value = value;
         loadRelatedVideos(value, { force: true });
       });
     });
 
     if ($refreshVideos) {
       $refreshVideos.addEventListener('click', () => {
-        const current = ($topic.value || relatedVideosTopic || '').trim();
+        const current = ($topic?.value || relatedVideosTopic || '').trim();
         loadRelatedVideos(current || relatedVideosTopic, { force: true });
       });
     }
@@ -2621,7 +2987,7 @@
         const selected = normalizeVideoLanguage($videoLanguage.value) || 'English';
         if (selected.toLowerCase() === (relatedVideosLanguage || '').toLowerCase()) return;
         relatedVideosLanguage = selected;
-        const current = ($topic.value || relatedVideosTopic || '').trim();
+        const current = ($topic?.value || relatedVideosTopic || '').trim();
         if (current) {
           loadRelatedVideos(current, { force: true, language: relatedVideosLanguage });
         }
@@ -2647,7 +3013,7 @@
         event.preventDefault();
         const token = getAuthToken();
         if (!token) { snack('Sign in to use My note'); return; }
-        const title = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+        const title = (document.querySelector('#output h1')?.textContent || $topic?.value || '').trim();
         if (!title) { snack('No note loaded'); return; }
         try {
           const url = `${apiBase}/api/notes/edited?title=${encodeURIComponent(title)}&variant=${encodeURIComponent(currentVariant)}`;
@@ -2656,28 +3022,14 @@
           if (!res.ok) { throw new Error((data && (data.detail || data.error)) || 'Load failed'); }
           if (data && data.markdown) {
             renderMarkdown(data.markdown);
-            $meta.textContent = `My note • ${currentVariant}`;
             snack('Loaded My note');
           }
         } catch (e) { console.warn('My note error:', e); snack('Unable to load My note'); }
       });
     }
 
-    if ($topic) {
-      $topic.addEventListener('input', () => {
-        const query = ($topic.value || '').trim();
-        if (relatedVideosDebounce) {
-          clearTimeout(relatedVideosDebounce);
-        }
-        relatedVideosDebounce = setTimeout(() => {
-          if (!query) {
-            loadRelatedVideos('', { force: true });
-            return;
-          }
-          loadRelatedVideos(query);
-        }, 600);
-      });
-    }
+    // Removed the $topic "input" event listener as the Topic Input Box was deleted.
+    // Video loading relies on the explicit calls from generation/cache-loading logic.
 
     // ===== Ripple =====
     document.addEventListener('click', (e) => {
@@ -2736,7 +3088,9 @@
         el.classList.toggle('!py-3', !on);
       });
     }
-    $densityBtn.addEventListener('click', () => setDensity(!dense));
+    if ($densityBtn) {
+      $densityBtn.addEventListener('click', () => setDensity(!dense));
+    }
 
     // ===== Helpers =====
     function snack(msg) {
@@ -2747,11 +3101,13 @@
 
     function setEmphasis(on) {
       emphasis = on;
-      $wrap.classList.toggle('emph-strong', on);
+      if ($wrap) $wrap.classList.toggle('emph-strong', on);
       localStorage.setItem('paperx:emphasis', on ? '1' : '0');
       // visual state on button
-      $emphBtn.classList.toggle('bg-[var(--brand-soft)]', on);
-      $emphBtn.textContent = on ? 'Emphasis On' : 'Emphasis';
+      if ($emphBtn) {
+        $emphBtn.classList.toggle('bg-[var(--brand-soft)]', on);
+        $emphBtn.textContent = on ? 'Emphasis On' : 'Emphasis';
+      }
     }
 
     function logEvent(title, detail = '') {
@@ -2759,7 +3115,9 @@
     }
 
     function setBusy(b) {
-      $generate.disabled = b; $cancel.disabled = !b; $topic.disabled = b;
+      if ($generate) $generate.disabled = b;
+      if ($cancel) $cancel.disabled = !b;
+      if ($topic) $topic.disabled = b;
       if ($regen) $regen.disabled = b;
       if ($regenMobile) $regenMobile.disabled = b;
     }
@@ -2780,6 +3138,7 @@
     }
 
     function buildTOC() {
+      if (!$toc) return;
       $toc.innerHTML = '';
       const hs = $output.querySelectorAll('h1, h2, h3');
       hs.forEach(h => {
@@ -2864,11 +3223,10 @@
     }
 
     function clearUI() {
-      $images.innerHTML = '';
-      $output.innerHTML = '';
-      $toc.innerHTML = '';
-      $progress.style.width = '0%';
-      $meta.textContent = '';
+      if ($images) $images.innerHTML = '';
+      if ($output) $output.innerHTML = '';
+      if ($toc) $toc.innerHTML = '';
+      if ($progress) $progress.style.width = '0%';
       resetFlashcardAccess();
       resetMCQAccess();
       currentNoteId = '';
@@ -2909,7 +3267,7 @@
         context_ready: 66, llm_start: 72, llm_done: 88, images: 94, final: 100
       };
       const v = map[stage] ?? 0;
-      $progress.style.width = v + '%';
+      if ($progress) $progress.style.width = v + '%';
       document.querySelectorAll('.step').forEach(el => {
         el.classList.toggle('text-brand-700', el.dataset.step === stage);
       });
@@ -2954,7 +3312,8 @@
     }
 
     // ===== Streaming events =====
-    document.getElementById('cancelBtn').addEventListener('click', () => {
+    const _cancelBtn = document.getElementById('cancelBtn');
+    if (_cancelBtn) _cancelBtn.addEventListener('click', () => {
       if (es) { es.close(); es = null; logEvent('Cancelled'); }
       hideOutputLoader();
       setBusy(false);
@@ -3007,7 +3366,6 @@
       if (!force) {
         setBusy(true);
         showOutputLoader();
-        $meta.textContent = `Checking DB • ${currentVariant}`;
         const resolveUrl = `${apiBase}/api/notes/resolve?title=${encodeURIComponent(t)}&variant=${encodeURIComponent(currentVariant)}`;
         const check = await fetchJsonWithRetry(resolveUrl, { timeoutMs: 8000, attempts: 3 });
         if (check.status === 200 && check.data && check.data.markdown) {
@@ -3022,7 +3380,7 @@
               if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
             }
           } catch { }
-          $meta.textContent = `Loaded • ${currentNoteId || '-'} • ${currentVariant}`;
+
           if (currentNoteId) {
             enableFlashcardAccess(currentNoteId, (check.data.title || t).trim());
             enableMCQAccess(currentNoteId, (check.data.title || t).trim());
@@ -3051,39 +3409,40 @@
       } catch (err) {
         console.warn('Course type lookup error', err);
       }
+      // Pre-fetch allowed domains for degree (mirrors notes_generator.html)
+      const degree = getSelectedDegree();
+      let allowedDomains = [];
+      if (degree) {
+        try {
+          const domainsRes = await fetch(`${apiBase}/api/notes/allowed-domains?degree=${encodeURIComponent(degree)}`);
+          if (domainsRes.ok) {
+            const domainsData = await domainsRes.json();
+            allowedDomains = (domainsData && Array.isArray(domainsData.domains)) ? domainsData.domains : [];
+            console.log(`[MedicalNotes] Allowed domains for "${degree}":`, allowedDomains);
+          }
+        } catch (err) {
+          console.warn('[MedicalNotes] Allowed domains fetch failed:', err);
+        }
+      }
+
       const url = new URL(`${apiBase}/generate/stream`);
       url.searchParams.set('topic', t);
       if (force) url.searchParams.set('force', 'true');
       url.searchParams.set('variant', currentVariant);
-      const degree = getSelectedDegree();
       if (degree) url.searchParams.set('degree', degree);
       if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
+      if (allowedDomains.length) url.searchParams.set('allowed_urls', allowedDomains.join(','));
       es = new EventSource(url.toString());
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
-      es.addEventListener('error', () => { logEvent('Stream error'); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+      es.addEventListener('error', () => { logEvent('Stream error'); hideOutputLoader(); setBusy(false); snack('Generation failed – try again'); es && es.close(); es = null; });
       es.addEventListener('close', () => { hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
 
       const on = (name, fn) => es.addEventListener(name, (ev) => { try { fn(JSON.parse(ev.data)); setProgress(name); } catch { } });
 
       on('start', (d) => {
         const allowed = Array.isArray(d.allowed_domains) ? d.allowed_domains : [];
-        const deg = (d.degree || '').trim();
         logEvent('Start', `Allowed: ${allowed.join(', ')}`);
-        if ($domainsHint) {
-          if (deg && allowed.length) {
-            const preview = allowed.slice(0, 4).join(', ');
-            $domainsHint.textContent = `Degree: ${deg} • ${preview}${allowed.length > 4 ? '…' : ''}`;
-          } else if (deg && !allowed.length) {
-            $domainsHint.textContent = `Degree: ${deg} • web (fallback)`;
-          } else if (!deg && allowed.length) {
-            // No degree param, but backend allowed domains present (likely default)
-            const preview = allowed.slice(0, 4).join(', ');
-            $domainsHint.textContent = `Sources: ${preview}${allowed.length > 4 ? '…' : ''}`;
-          } else {
-            $domainsHint.textContent = 'Sources: auto';
-          }
-        }
       });
       on('search_results', (d) => logEvent('Searching', `${d.urls.length} results`));
       on('fetch_start', (d) => logEvent('Fetching', d.url));
@@ -3097,7 +3456,7 @@
         logEvent('Images', `${d.count} found`);
         renderImageGallery(d.image_urls || d.urls || []);
       });
-      on('error', (d) => { logEvent('Error', d.message); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+      on('error', (d) => { logEvent('Error', d.message); hideOutputLoader(); setBusy(false); snack(d.message || 'Generation failed'); es && es.close(); es = null; });
       on('final', (d) => {
         renderImageGallery(d.image_urls || d.urls || lastImageUrls);
         const workingTopic = (d.title || d.topic || t);
@@ -3111,14 +3470,13 @@
             localStorage.setItem(noteKey(currentVariant), currentNoteId);
             if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
           } catch { }
-          $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
         }
         const detectedTopic = (() => {
           const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
           if (fromHeading) return fromHeading;
           const fromPayload = (d.title || d.topic || '').trim();
           if (fromPayload) return fromPayload;
-          const fromInput = ($topic.value || '').trim();
+          const fromInput = ($topic ? $topic.value : '').trim();
           if (fromInput) return fromInput;
           return relatedVideosTopic || '';
         })();
@@ -3132,11 +3490,11 @@
     }
 
     // Regenerate from current topic or rendered H1 (force=true)
-    $regen.addEventListener('click', () => {
+    if ($regen) $regen.addEventListener('click', () => {
       const fromTitle = (document.querySelector('#output h1')?.textContent || '').trim();
-      const t = ($topic.value || fromTitle).trim();
-      if (!t) { alert('Enter a topic'); return; }
-      $topic.value = t;
+      const t = (($topic ? $topic.value : '') || fromTitle).trim();
+      if (!t) { snack('No topic to regenerate'); return; }
+      if ($topic) $topic.value = t;
       startGeneration(t, true);
     });
     if ($regenMobile) {
@@ -3154,8 +3512,9 @@
       });
     }
 
-    document.getElementById('generateBtn').addEventListener('click', () => {
-      const topic = ($topic.value || '').trim();
+    const _genBtn = document.getElementById('generateBtn');
+    if (_genBtn) _genBtn.addEventListener('click', () => {
+      const topic = ($topic ? $topic.value : '').trim();
       console.log('[Generate] clicked topic:', topic, 'variant:', currentVariant);
       startGeneration(topic, false);
     });
@@ -3166,7 +3525,7 @@
       catch { snack('Copy failed'); }
     });
 
-    $download.addEventListener('click', async () => {
+    if ($download) $download.addEventListener('click', async () => {
       try {
         if (currentNoteId) {
           const res = await fetch(`${apiBase}/notes/${encodeURIComponent(currentNoteId)}/pdf`);
@@ -3198,13 +3557,11 @@
     });
 
     function setFullscreen(on) {
-      // You can adjust the padding here: 
-      // 'px-8 md:px-48' sets left/right padding (larger on desktop)
-      // 'pt-16' sets top padding
-      // 'pb-8' sets bottom padding
+      if (!$wrap) return;
+
       const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'px-8', 'md:px-48', 'pt-16', 'pb-8'];
       classes.forEach(c => $wrap.classList.toggle(c, on));
-      $expand.textContent = on ? 'Exit' : 'Fullscreen';
+      if ($expand) $expand.textContent = on ? 'Exit' : 'Fullscreen';
       if ($fsCtrl) $fsCtrl.classList.toggle('hidden', !on);
 
       // Browser Fullscreen API - Use element requestFullscreen for strict isolation
@@ -3226,44 +3583,68 @@
       } catch (e) { console.error(e); }
     }
 
-    $expand.addEventListener('click', () => {
-      // Toggle logic based on current state
-      const isCurrentlyFullscreen = $wrap.classList.contains('fixed');
-      setFullscreen(!isCurrentlyFullscreen);
-    });
+    if ($expand) {
+      $expand.addEventListener('click', () => {
+        if (!$wrap) return;
+        const isCurrentlyFullscreen = $wrap.classList.contains('fixed');
+        setFullscreen(!isCurrentlyFullscreen);
+      });
+    }
 
-    $fsExit?.addEventListener('click', () => setFullscreen(false));
+    if ($fsExit) {
+      $fsExit.addEventListener('click', () => setFullscreen(false));
+    }
+
+    if ($fsTheme) {
+      $fsTheme.addEventListener('click', () => {
+        if ($themeBtn) $themeBtn.click();
+      });
+    }
 
     // Sync with browser fullscreen changes (e.g. user presses Esc)
     document.addEventListener('fullscreenchange', () => {
       const isBrowserFullscreen = !!document.fullscreenElement;
       // If browser exited fullscreen but UI is still in fullscreen mode, we need to exit UI mode too
-      if (!isBrowserFullscreen && $wrap.classList.contains('fixed')) {
+      if (!isBrowserFullscreen && $wrap && $wrap.classList.contains('fixed')) {
         // We only want to update UI, not call exitFullscreen again (it would fail)
-        const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'p-6'];
+        const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'px-8', 'md:px-48', 'pt-16', 'pb-8'];
         classes.forEach(c => $wrap.classList.toggle(c, false));
-        $expand.textContent = 'Fullscreen';
+        if ($expand) $expand.textContent = 'Fullscreen';
         if ($fsCtrl) $fsCtrl.classList.add('hidden');
-      }
-    });
-
-    // Theme toggle in fullscreen
-    const $fsThemeBtn = document.getElementById('fsThemeBtn');
-    if ($fsThemeBtn && $themeBtn) {
-      $fsThemeBtn.addEventListener('click', () => {
-        $themeBtn.click();
-      });
-    }
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && $wrap.classList.contains('fixed')) {
-        setFullscreen(false);
       }
     });
 
     // Emphasis toggle
     setEmphasis(emphasis);
-    $emphBtn.addEventListener('click', () => setEmphasis(!emphasis));
+    if ($emphBtn) {
+      $emphBtn.addEventListener('click', () => setEmphasis(!emphasis));
+    }
+
+    // Toggle ytTools visibility when Related Videos details is toggled
+    (function () {
+      const ytDetails = document.getElementById('ytDetails');
+      const ytTools = document.getElementById('ytTools');
+      if (ytDetails && ytTools) {
+        function syncToolsVisibility() {
+          ytTools.style.display = ytDetails.open ? 'flex' : 'none';
+        }
+        syncToolsVisibility();
+        ytDetails.addEventListener('toggle', syncToolsVisibility);
+      }
+    })();
+
+    // Admin Regenerate Button Click Logic
+    const $adminRegenBtn = document.getElementById('adminRegenBtn');
+    if ($adminRegenBtn) {
+      $adminRegenBtn.addEventListener('click', () => {
+        const t = currentTopicOrHeading();
+        if (!t) {
+          try { if (typeof snack === 'function') snack('No topic to regenerate'); } catch { }
+          return;
+        }
+        startGeneration(t, true);
+      });
+    }
 
     // ===== Citations: parser + transformer =====
     function parseCitationsFromMarkdown(mdText) {
@@ -3468,15 +3849,9 @@
       } catch { }
     })();
 
-    // If opened with ?topic=..., prefill and auto-generate
-    (function maybeAutoStartFromQuery() {
-      if (!queryTopic) return;
-      $topic.value = queryTopic;
-      startGeneration(queryTopic, false);
-      setTimeout(() => document.getElementById('output')?.scrollIntoView({ behavior: 'smooth' }), 50);
-      try { history.replaceState(null, '', window.location.pathname + window.location.hash); } catch { }
-      queryTopic = '';
-    })();
+    // URL topic (?topic=...) is handled by the variant switch handler
+    // which fires on DOMContentLoaded via $variantDetailed.click().
+    // It reads the URL, resolves/generates the topic, and loads videos.
 
     // Edit / Save
     function setEditMode(on) {
@@ -3803,6 +4178,133 @@
       }
 
       $submit?.addEventListener('click', submit);
+    })();
+
+    // Auto-load detailed notes on initial page load
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        if (typeof window.$variantDetailed !== 'undefined' && window.$variantDetailed) {
+          window.$variantDetailed.click();
+        } else {
+          const btn = document.getElementById('variantDetailed');
+          if (btn) btn.click();
+        }
+      }, 100);
+    });
+    // ===== Blink button handler =====
+    (function () {
+      const $blinkBtn = document.getElementById('blinkBtn');
+      if (!$blinkBtn) return;
+
+      let savedOutputHTML = null; // store original notes content
+
+      $blinkBtn.addEventListener('click', async () => {
+        // Determine current topic
+        const topic = (
+          (document.querySelector('#output h1')?.textContent || '')
+          || ($topic ? $topic.value : '')
+        ).trim();
+
+        if (!topic) {
+          snack('Generate notes first to view Blink');
+          return;
+        }
+
+        // If already showing blink, restore notes
+        if (savedOutputHTML !== null) {
+          $output.innerHTML = savedOutputHTML;
+          savedOutputHTML = null;
+          $blinkBtn.querySelector('.st-btn-label').textContent = 'Blink';
+          return;
+        }
+
+        // Show loading state
+        $blinkBtn.querySelector('.st-btn-label').textContent = 'Loading…';
+
+        try {
+          const topicParam = encodeURIComponent(topic.toLowerCase());
+          const token = getAuthToken();
+          const headers = {};
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const res = await fetch(`${apiBase}/api/blink/links?topics=${topicParam}`, { headers });
+          if (!res.ok) throw new Error('Failed to fetch blink');
+
+          const data = await res.json();
+          const linksMap = data.links || data || {};
+
+          // Find a matching blink link (case-insensitive key match)
+          let blinkUrl = null;
+          const topicLower = topic.toLowerCase();
+          for (const [key, url] of Object.entries(linksMap)) {
+            if (!url) continue;
+            const keyLower = key.toLowerCase();
+            if (keyLower === topicLower || topicLower.includes(keyLower) || keyLower.includes(topicLower)) {
+              blinkUrl = url;
+              break;
+            }
+          }
+
+          // Fallback: if only one link returned, just use it
+          if (!blinkUrl) {
+            const vals = Object.values(linksMap).filter(Boolean);
+            if (vals.length === 1) blinkUrl = vals[0];
+          }
+
+          if (!blinkUrl) {
+            snack('No Blink image available for this topic');
+            $blinkBtn.querySelector('.st-btn-label').textContent = 'Blink';
+            return;
+          }
+
+          // Save current output and show blink image
+          savedOutputHTML = $output.innerHTML;
+
+          $output.innerHTML = `
+            <div style="text-align:center; padding: 1rem 0;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+                <h2 style="margin:0; font-size:1.25rem; font-weight:700;">Blink — ${topic}</h2>
+                <button id="blinkBackBtn"
+                  class="ripple inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold hover:bg-[var(--brand-soft)] transition"
+                  style="border-color: var(--outline);">
+                  <span class="material-symbols-rounded text-[16px]">arrow_back</span>
+                  Back to Notes
+                </button>
+              </div>
+              <img src="${blinkUrl}" alt="Blink — ${topic}"
+                style="max-width:100%; border-radius:1rem; border:1px solid var(--outline); box-shadow: 0 8px 30px rgba(0,0,0,0.12);"
+                onerror="this.parentElement.innerHTML='<p style=\\'color:var(--muted); padding:2rem;\\'>Failed to load Blink image.</p>'" />
+            </div>`;
+
+          $blinkBtn.querySelector('.st-btn-label').textContent = 'Back';
+
+          // Wire back button
+          const $backBtn = document.getElementById('blinkBackBtn');
+          if ($backBtn) {
+            $backBtn.addEventListener('click', () => {
+              if (savedOutputHTML !== null) {
+                $output.innerHTML = savedOutputHTML;
+                savedOutputHTML = null;
+                $blinkBtn.querySelector('.st-btn-label').textContent = 'Blink';
+              }
+            });
+          }
+        } catch (err) {
+          console.error('[Blink]', err);
+          snack('Could not load Blink image');
+          $blinkBtn.querySelector('.st-btn-label').textContent = 'Blink';
+        }
+      });
+    })();
+
+    // ===== ClinQ button → inline MCQ =====
+    (function () {
+      const $clinqBtn = document.getElementById('clinqBtn');
+      if ($clinqBtn) {
+        $clinqBtn.addEventListener('click', () => {
+          if (typeof openMCQ === 'function') openMCQ();
+        });
+      }
     })();
   </script>
 </body>

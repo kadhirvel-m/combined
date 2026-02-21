@@ -4295,6 +4295,28 @@ def get_current_user_profile(token: Optional[str]):
                             except Exception:
                                 pass
 
+                # Fallback to look up degree stream from user's primary education entry
+                if not degree_stream:
+                    edu_degree_id = primary_edu.get("degree_id")
+                    if edu_degree_id:
+                        try:
+                            deg_q2 = supabase.table("degrees").select("stream").eq("id", str(edu_degree_id)).limit(1).execute()
+                            if not getattr(deg_q2, "error", None) and deg_q2.data:
+                                degree_stream = deg_q2.data[0].get("stream")
+                        except Exception:
+                            pass
+                    
+                    if not degree_stream:
+                        edu_degree_name = primary_edu.get("degree")
+                        if edu_degree_name:
+                            try:
+                                # Fallback by name using ilike
+                                deg_q3 = supabase.table("degrees").select("stream").ilike("name", f"%{edu_degree_name}%").limit(1).execute()
+                                if not getattr(deg_q3, "error", None) and deg_q3.data:
+                                    degree_stream = deg_q3.data[0].get("stream")
+                            except Exception:
+                                pass
+
         # 3. Optimized Syllabus Fetch (N+1 -> 1 query)
         # Fetch Courses -> embedded Units -> embedded Topics
         syllabus = []
@@ -28055,7 +28077,7 @@ async def innovatex_get_mentor_chat(
 
 class PPTOutlineRequest(BaseModel):
     title: str = Field(..., max_length=200)
-    description: Optional[str] = Field(None, max_length=5000)
+    description: Optional[str] = Field(None, max_length=50000)
     slide_count: int = Field(default=6, ge=1, le=12)
     complexity: Optional[str] = Field(default="simple", description="simple, medium, or advanced")
 
@@ -28142,7 +28164,7 @@ No markdown, no code blocks, just JSON.
 
 class PPTRefineOutlineRequest(BaseModel):
     title: str = Field(..., max_length=200)
-    description: Optional[str] = Field(None, max_length=5000)
+    description: Optional[str] = Field(None, max_length=50000)
     instruction: str = Field(..., max_length=2000)
     current_slides: list = Field(...)
 
