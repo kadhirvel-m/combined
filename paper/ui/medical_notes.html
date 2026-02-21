@@ -691,7 +691,7 @@
     }
 
     /* Icon gradients — PaperX brand palette */
-    .st-icon-mathfoll {
+    .st-icon-matchfoll {
       background: linear-gradient(135deg, #9E4B8A, #CA6CB3);
     }
 
@@ -707,6 +707,14 @@
       background: linear-gradient(135deg, #6A2D6A, #D88ACF);
     }
 
+    .st-icon-viva {
+      background: linear-gradient(135deg, #7A3B78, #C77AC2);
+    }
+
+    .st-icon-decision {
+      background: linear-gradient(135deg, #5E2E5E, #A560A1);
+    }
+
     .st-icon-echo {
       background: linear-gradient(135deg, #8B4A80, #C88DBA);
     }
@@ -717,6 +725,17 @@
 
     .st-icon-blink {
       background: linear-gradient(135deg, #9E4B8A, #B06AB3, #FF7FD1);
+    }
+
+    .decision-tree-canvas {
+      overflow: auto;
+      border: 1px dashed var(--outline);
+      border-radius: .8rem;
+      padding: .55rem;
+      min-height: 230px;
+      background-image: radial-gradient(rgba(124, 58, 99, .18) 1.1px, transparent 1.1px);
+      background-size: 16px 16px;
+      background-color: color-mix(in oklab, var(--surface) 95%, transparent);
     }
 
     /* Pulse dot for active / new */
@@ -837,7 +856,8 @@
             class="material-symbols-rounded text-[var(--muted)] group-open:rotate-90 transition-transform">chevron_right</span>
           <div>
             <h2 class="text-base sm:text-lg font-semibold tracking-tight">Related Video</h2>
-            <p id="relatedVideosSummary" class="hidden sm:block text-xs sm:text-sm text-[var(--muted)]">Click to view
+            <p id="relatedVideosSummary" class="hidden group-open:block text-xs sm:text-sm text-[var(--muted)]">Click to
+              view
               supporting videos.</p>
           </div>
         </div>
@@ -955,21 +975,13 @@
           <h3>Study Tools</h3>
         </div>
         <div class="study-tools-list">
-          <!-- Math & Foll -->
-          <button class="st-btn" data-tool="mathfoll" title="Math formulas & follow-up deep dives">
-            <span class="st-btn-icon st-icon-mathfoll material-symbols-rounded">calculate</span>
+          <!-- Match the Foll -->
+          <button class="st-btn" id="matchFollBtn" data-tool="matchfoll"
+            title="Match the Following — Interactive matching quiz">
+            <span class="st-btn-icon st-icon-matchfoll material-symbols-rounded">swap_horiz</span>
             <span class="st-btn-text">
-              <span class="st-btn-label">Math & Foll</span>
-              <span class="st-btn-desc">Formulas & follow-up deep dives</span>
-            </span>
-            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
-          </button>
-          <!-- Chain (Assessment & Reasoning) -->
-          <button class="st-btn" data-tool="chain" title="Chain — Assessment & Reasoning">
-            <span class="st-btn-icon st-icon-chain material-symbols-rounded">psychology</span>
-            <span class="st-btn-text">
-              <span class="st-btn-label">Chain</span>
-              <span class="st-btn-desc">Assessment & reasoning drills</span>
+              <span class="st-btn-label">Match the Foll</span>
+              <span class="st-btn-desc">Match the following quiz</span>
             </span>
             <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
           </button>
@@ -988,6 +1000,24 @@
             <span class="st-btn-text">
               <span class="st-btn-label">CaseFlow</span>
               <span class="st-btn-desc">Clinical case scenarios</span>
+            </span>
+            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
+          </button>
+          <!-- Viva Simulator -->
+          <button class="st-btn" data-tool="viva" title="Viva Simulator">
+            <span class="st-btn-icon st-icon-viva material-symbols-rounded">record_voice_over</span>
+            <span class="st-btn-text">
+              <span class="st-btn-label">Viva</span>
+              <span class="st-btn-desc">Why / How / What-if cross-questioning</span>
+            </span>
+            <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
+          </button>
+          <!-- Clinical Decision Trees -->
+          <button class="st-btn" data-tool="decision-tree" title="Clinical Decision Trees">
+            <span class="st-btn-icon st-icon-decision material-symbols-rounded">schema</span>
+            <span class="st-btn-text">
+              <span class="st-btn-label">Decision Trees</span>
+              <span class="st-btn-desc">Flowcharts & emergency protocols</span>
             </span>
             <span class="st-btn-arrow material-symbols-rounded">arrow_forward</span>
           </button>
@@ -1405,6 +1435,11 @@
     const $fsHome = document.getElementById('fsHomeBtn');
     const $flashcardBtn = document.getElementById('flashcardBtn');
     const $mcqBtn = document.getElementById('clinqBtn');
+    const $medmapBtn = document.querySelector('[data-tool="medmap"]');
+    const $caseflowBtn = document.querySelector('[data-tool="caseflow"]');
+    const $vivaBtn = document.querySelector('[data-tool="viva"]');
+    const $decisionTreeBtn = document.querySelector('[data-tool="decision-tree"]');
+    const $matchFollBtn = document.getElementById('matchFollBtn');
     const flashcardDefaultLabel = $flashcardBtn ? ($flashcardBtn.textContent || 'Flashcards') : 'Flashcards';
     const $variantDetailed = document.getElementById('variantDetailed');
     const $variantCheatsheet = document.getElementById('variantCheatsheet');
@@ -3028,6 +3063,1176 @@
       });
     }
 
+    // ===== MedMap (PPT Preview) =====
+    let medmapSavedMarkdown = '';
+    let medmapSavedImageUrls = [];
+    let medmapActive = false;
+
+    function buildEmbedUrl(url) {
+      const u = (url || '').trim();
+      // Google Drive / Slides / Docs links
+      if (/docs\.google\.com\/presentation/i.test(u)) {
+        // Google Slides: use /embed endpoint
+        return u.replace(/\/(edit|view)(#.*)?$/i, '/embed');
+      }
+      if (/drive\.google\.com\/file\/d\//i.test(u)) {
+        // Google Drive file: use preview
+        return u.replace(/\/view(\?.*)?$/i, '/preview');
+      }
+      if (/docs\.google\.com/i.test(u)) {
+        return u.replace(/\/(edit|view)(#.*)?$/i, '/preview');
+      }
+      // Direct PDF links
+      if (/\.pdf(\?|#|$)/i.test(u)) {
+        return u;
+      }
+      // Office Web Apps viewer for pptx/docx etc.
+      if (/\.(pptx?|docx?|xlsx?)$/i.test(u)) {
+        return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(u)}`;
+      }
+      // Google Viewer fallback for other URLs
+      return `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(u)}`;
+    }
+
+    function exitMedmapPreview() {
+      if (!medmapActive) return;
+      medmapActive = false;
+      if (medmapSavedMarkdown) {
+        renderMarkdown(medmapSavedMarkdown);
+        renderImageGallery(medmapSavedImageUrls);
+      }
+      medmapSavedMarkdown = '';
+      medmapSavedImageUrls = [];
+    }
+
+    if ($medmapBtn) {
+      $medmapBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        // If already in MedMap view, exit back to notes
+        if (medmapActive) {
+          exitMedmapPreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        // Show loading state
+        const origHTML = $medmapBtn.innerHTML;
+        $medmapBtn.innerHTML = '<span class="st-btn-icon material-symbols-rounded animate-spin">progress_activity</span><span class="st-btn-text"><span class="st-btn-label">Loading…</span></span>';
+        $medmapBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/ppt-link?topic=${encodeURIComponent(topic)}`);
+          const data = await res.json().catch(() => ({}));
+          const pptLink = (data && data.ppt_link) ? data.ppt_link.trim() : '';
+
+          if (!pptLink) {
+            snack('No PPT available for this topic');
+            return;
+          }
+
+          // Save current content for restoration
+          medmapSavedMarkdown = lastMarkdown || '';
+          medmapSavedImageUrls = [...lastImageUrls];
+          medmapActive = true;
+
+          const embedUrl = buildEmbedUrl(pptLink);
+
+          // Build preview UI in the output area
+          if ($output) {
+            $output.innerHTML = `
+              <div style="display:flex; flex-direction:column; gap:1rem;">
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem;">
+                  <h2 style="margin:0; font-size:1.15rem; font-weight:700; display:flex; align-items:center; gap:.5rem;">
+                    <span class="material-symbols-rounded" style="color:var(--brand-600); font-size:1.3rem;">slideshow</span>
+                    MedMap — ${topic}
+                  </h2>
+                  <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+                    <button id="medmapBackBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.4rem .9rem; font-size:.8rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:background .15s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+                      <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+                      Back to Notes
+                    </button>
+                    <a href="${pptLink}" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.4rem .9rem; font-size:.8rem; font-weight:600; text-decoration:none; color:inherit; transition:background .15s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+                      <span class="material-symbols-rounded" style="font-size:1rem;">open_in_new</span>
+                      Open
+                    </a>
+                  </div>
+                </div>
+                <div style="border:1px solid var(--outline); border-radius:1rem; overflow:hidden; background:var(--surface); min-height:500px;">
+                  <iframe src="${embedUrl}" style="width:100%; height:70vh; min-height:500px; border:none;" allowfullscreen loading="lazy"></iframe>
+                </div>
+              </div>`;
+
+            // Wire back button
+            const backBtn = document.getElementById('medmapBackBtn');
+            if (backBtn) {
+              backBtn.addEventListener('click', () => {
+                exitMedmapPreview();
+                snack('Returned to notes');
+              });
+            }
+          }
+
+          // Clear images while showing PPT
+          if ($images) $images.innerHTML = '';
+
+        } catch (err) {
+          console.error('[MedMap] Error:', err);
+          snack('Failed to load PPT preview');
+        } finally {
+          $medmapBtn.innerHTML = origHTML;
+          $medmapBtn.disabled = false;
+        }
+      });
+    }
+
+    // ===== CaseFlow (Clinical scenario + chatbot evaluation) =====
+    let caseflowSavedMarkdown = '';
+    let caseflowSavedImageUrls = [];
+    let caseflowActive = false;
+    let caseflowTopic = '';
+    let caseflowScenario = '';
+    let caseflowHistory = [];
+
+    function exitCaseFlowPreview() {
+      if (!caseflowActive) return;
+      caseflowActive = false;
+      caseflowTopic = '';
+      caseflowScenario = '';
+      caseflowHistory = [];
+      if (caseflowSavedMarkdown) {
+        renderMarkdown(caseflowSavedMarkdown);
+        renderImageGallery(caseflowSavedImageUrls);
+      }
+      caseflowSavedMarkdown = '';
+      caseflowSavedImageUrls = [];
+    }
+
+    function renderCaseFlowUI(topic, scenarioQuestion, isCached) {
+      if (!$output) return;
+      caseflowTopic = topic;
+      caseflowScenario = scenarioQuestion;
+      caseflowHistory = [];
+
+      caseflowSavedMarkdown = lastMarkdown || '';
+      caseflowSavedImageUrls = [...lastImageUrls];
+      caseflowActive = true;
+      if ($images) $images.innerHTML = '';
+
+      $output.innerHTML = `
+        <div id="caseflowRoot" style="max-width:860px; margin:0 auto; display:flex; flex-direction:column; gap:1rem;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem;">
+            <h2 style="margin:0; font-size:1.2rem; font-weight:800; display:flex; align-items:center; gap:.45rem;">
+              <span class="material-symbols-rounded" style="color:var(--brand); font-size:1.35rem;">account_tree</span>
+              CaseFlow Chat
+            </h2>
+            <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+              <span style="border:1px solid var(--outline); border-radius:999px; padding:.3rem .7rem; font-size:.72rem; background:var(--brand-soft); color:var(--brand); font-weight:700;">${topic}</span>
+              <button id="caseflowBackBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.45rem .95rem; font-size:.8rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+                Back to Notes
+              </button>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:.95rem 1rem; background:color-mix(in oklab, var(--surface) 84%, transparent);">
+            <div style="display:flex; align-items:center; gap:.45rem; font-size:.74rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; margin-bottom:.55rem;">
+              <span class="material-symbols-rounded" style="font-size:1rem; color:var(--brand);">clinical_notes</span>
+              Clinical Case Scenario
+              ${isCached ? '<span style="margin-left:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.15rem .45rem; font-size:.62rem; text-transform:none; letter-spacing:normal;">cached</span>' : ''}
+            </div>
+            <p style="margin:0; line-height:1.55; font-size:.93rem;">${scenarioQuestion}</p>
+          </div>
+
+          <div id="caseflowChatBox" style="border:1px solid var(--outline); border-radius:1rem; background:color-mix(in oklab, var(--surface) 90%, transparent); min-height:260px; max-height:460px; overflow:auto; padding:.95rem; display:flex; flex-direction:column; gap:.75rem;"></div>
+
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:.9rem; background:color-mix(in oklab, var(--surface) 92%, transparent); display:flex; flex-direction:column; gap:.65rem;">
+            <label for="caseflowAnswerInput" style="font-size:.74rem; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:var(--muted);">Justify yourself</label>
+            <textarea id="caseflowAnswerInput" rows="4" placeholder="Write your clinical justification based on this topic..." style="width:100%; border:1px solid var(--outline); border-radius:.8rem; background:var(--surface); color:var(--surface-contrast); padding:.75rem .85rem; font-size:.9rem; line-height:1.45; resize:vertical; min-height:110px;"></textarea>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:.6rem; flex-wrap:wrap;">
+              <span id="caseflowStatus" style="font-size:.78rem; color:var(--muted);"></span>
+              <button id="caseflowSendBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:none; border-radius:999px; padding:.55rem 1.05rem; background:linear-gradient(135deg, var(--brand), var(--brand-strong, #4C2A59)); color:#fff; font-size:.82rem; font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(158,75,138,.3); transition:transform .18s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">send</span>
+                Evaluate Answer
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const $chatBox = document.getElementById('caseflowChatBox');
+      const $status = document.getElementById('caseflowStatus');
+      const $input = document.getElementById('caseflowAnswerInput');
+      const $send = document.getElementById('caseflowSendBtn');
+      const $back = document.getElementById('caseflowBackBtn');
+
+      function pushBubble(role, html, meta = '') {
+        if (!$chatBox) return;
+        const wrap = document.createElement('div');
+        const isUser = role === 'user';
+        wrap.style.cssText = `display:flex; justify-content:${isUser ? 'flex-end' : 'flex-start'};`;
+        const card = document.createElement('div');
+        card.style.cssText = [
+          'max-width:86%;',
+          'border:1px solid var(--outline);',
+          'border-radius:.9rem;',
+          'padding:.7rem .8rem;',
+          `background:${isUser ? 'linear-gradient(135deg, rgba(158,75,138,.2), rgba(76,42,89,.12))' : 'color-mix(in oklab, var(--surface) 85%, transparent)'};`,
+          'font-size:.88rem;',
+          'line-height:1.45;'
+        ].join('');
+        card.innerHTML = `
+          <div style="font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:var(--muted); margin-bottom:.35rem;">${isUser ? 'You' : 'CaseFlow AI'}</div>
+          <div>${html}</div>
+          ${meta ? `<div style="margin-top:.45rem; font-size:.7rem; color:var(--muted);">${meta}</div>` : ''}
+        `;
+        wrap.appendChild(card);
+        $chatBox.appendChild(wrap);
+        $chatBox.scrollTop = $chatBox.scrollHeight;
+      }
+
+      pushBubble('assistant', 'Share your reasoning for the scenario above. I’ll evaluate it and coach your next improvement step.');
+
+      async function evaluateAnswer() {
+        const answer = ($input?.value || '').trim();
+        if (!answer) {
+          snack('Please write your justification first');
+          $input?.focus();
+          return;
+        }
+        if ($send) {
+          $send.disabled = true;
+          $send.style.opacity = '.65';
+        }
+        if ($status) $status.textContent = 'Evaluating your response…';
+
+        pushBubble('user', answer.replace(/\n/g, '<br/>'));
+        caseflowHistory.push({ role: 'user', content: answer });
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/caseflow/evaluate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topic,
+              variant: currentVariant,
+              scenario_question: scenarioQuestion,
+              answer,
+              history: caseflowHistory,
+            }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `Request failed (${res.status})`;
+            throw new Error(detail);
+          }
+
+          const evaluation = (data && data.evaluation) ? data.evaluation : {};
+          const score = Number.isFinite(Number(evaluation.score)) ? Number(evaluation.score) : 0;
+          const verdict = String(evaluation.verdict || 'Needs improvement');
+          const feedback = String(evaluation.feedback || '').trim();
+          const strengths = Array.isArray(evaluation.strengths) ? evaluation.strengths : [];
+          const improve = Array.isArray(evaluation.improve) ? evaluation.improve : [];
+          const followUp = String(evaluation.follow_up_question || '').trim();
+
+          const aiHtml = `
+            <div style="display:flex; gap:.4rem; align-items:center; margin-bottom:.35rem; flex-wrap:wrap;">
+              <span style="border:1px solid var(--outline); border-radius:999px; padding:.12rem .5rem; font-size:.68rem; font-weight:700;">Score: ${Math.max(0, Math.min(score, 10))}/10</span>
+              <span style="font-size:.74rem; font-weight:700; color:var(--brand);">${verdict}</span>
+            </div>
+            ${feedback ? `<div>${feedback}</div>` : ''}
+            ${strengths.length ? `<div style="margin-top:.5rem;"><strong style="font-size:.76rem;">Strengths</strong><ul style="margin:.25rem 0 0 1rem;">${strengths.slice(0, 4).map(s => `<li>${String(s)}</li>`).join('')}</ul></div>` : ''}
+            ${improve.length ? `<div style="margin-top:.45rem;"><strong style="font-size:.76rem;">Improve next</strong><ul style="margin:.25rem 0 0 1rem;">${improve.slice(0, 4).map(s => `<li>${String(s)}</li>`).join('')}</ul></div>` : ''}
+            ${followUp ? `<div style="margin-top:.55rem; border-top:1px dashed var(--outline); padding-top:.45rem;"><strong style="font-size:.76rem;">Follow-up</strong><div style="margin-top:.2rem;">${followUp}</div></div>` : ''}
+          `;
+
+          pushBubble('assistant', aiHtml);
+          caseflowHistory.push({ role: 'assistant', content: `${feedback}${followUp ? ` Follow-up: ${followUp}` : ''}`.trim() });
+          if ($status) $status.textContent = 'Evaluation ready. Reply again to continue the chat.';
+          if ($input) $input.value = '';
+        } catch (err) {
+          console.error('[CaseFlow] evaluate error:', err);
+          if ($status) $status.textContent = err?.message || 'Evaluation failed';
+          snack(err?.message || 'CaseFlow evaluation failed');
+        } finally {
+          if ($send) {
+            $send.disabled = false;
+            $send.style.opacity = '1';
+          }
+        }
+      }
+
+      $send?.addEventListener('click', evaluateAnswer);
+      $input?.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          evaluateAnswer();
+        }
+      });
+      $back?.addEventListener('click', () => {
+        exitCaseFlowPreview();
+        snack('Returned to notes');
+      });
+    }
+
+    if ($caseflowBtn) {
+      $caseflowBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (caseflowActive) {
+          exitCaseFlowPreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        const origHTML = $caseflowBtn.innerHTML;
+        $caseflowBtn.innerHTML = '<span class="st-btn-icon material-symbols-rounded animate-spin">progress_activity</span><span class="st-btn-text"><span class="st-btn-label">Loading…</span><span class="st-btn-desc">Preparing scenario</span></span>';
+        $caseflowBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/caseflow`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, variant: currentVariant }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `Request failed (${res.status})`;
+            throw new Error(detail);
+          }
+
+          const scenario = String((data && data.scenario_question) || '').trim();
+          if (!scenario) {
+            throw new Error('No scenario question returned');
+          }
+          renderCaseFlowUI(topic, scenario, !!data.cached);
+          if (data.cached) snack('Loaded cached CaseFlow scenario');
+        } catch (err) {
+          console.error('[CaseFlow] load error:', err);
+          snack(err?.message || 'Failed to open CaseFlow');
+        } finally {
+          $caseflowBtn.innerHTML = origHTML;
+          $caseflowBtn.disabled = false;
+        }
+      });
+    }
+
+    // ===== Viva Simulator (Examiner-style cross questioning) =====
+    let vivaSavedMarkdown = '';
+    let vivaSavedImageUrls = [];
+    let vivaActive = false;
+    let vivaHistory = [];
+    let vivaTopic = '';
+
+    function exitVivaPreview() {
+      if (!vivaActive) return;
+      vivaActive = false;
+      vivaHistory = [];
+      vivaTopic = '';
+      if (vivaSavedMarkdown) {
+        renderMarkdown(vivaSavedMarkdown);
+        renderImageGallery(vivaSavedImageUrls);
+      }
+      vivaSavedMarkdown = '';
+      vivaSavedImageUrls = [];
+    }
+
+    function renderVivaUI(topic) {
+      if (!$output) return;
+      vivaSavedMarkdown = lastMarkdown || '';
+      vivaSavedImageUrls = [...lastImageUrls];
+      vivaActive = true;
+      vivaHistory = [];
+      vivaTopic = topic;
+      if ($images) $images.innerHTML = '';
+
+      $output.innerHTML = `
+        <div id="vivaRoot" style="max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:1rem;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.7rem;">
+            <h2 style="margin:0; font-size:1.22rem; font-weight:800; display:flex; align-items:center; gap:.5rem;">
+              <span class="material-symbols-rounded" style="color:var(--brand); font-size:1.35rem;">record_voice_over</span>
+              Viva Simulator
+            </h2>
+            <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+              <span style="border:1px solid var(--outline); border-radius:999px; padding:.3rem .7rem; font-size:.72rem; background:var(--brand-soft); color:var(--brand); font-weight:700;">${topic}</span>
+              <button id="vivaBackBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.45rem .95rem; font-size:.8rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+                Back to Notes
+              </button>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:.85rem 1rem; background:color-mix(in oklab, var(--surface) 90%, transparent);">
+            <div style="font-size:.78rem; color:var(--muted); line-height:1.45;">
+              🧠 Viva mode: examiner asks <strong>Why</strong>, <strong>How</strong>, <strong>What if</strong>, and <strong>Differentiate</strong> questions.
+              Be concise and evidence-based.
+            </div>
+          </div>
+
+          <div id="vivaChatBox" style="border:1px solid var(--outline); border-radius:1rem; background:color-mix(in oklab, var(--surface) 90%, transparent); min-height:260px; max-height:470px; overflow:auto; padding:.95rem; display:flex; flex-direction:column; gap:.75rem;"></div>
+
+          <div style="border:1px solid var(--outline); border-radius:1rem; padding:.9rem; background:color-mix(in oklab, var(--surface) 92%, transparent); display:flex; flex-direction:column; gap:.65rem;">
+            <label for="vivaAnswerInput" style="font-size:.74rem; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:var(--muted);">Your viva answer</label>
+            <textarea id="vivaAnswerInput" rows="4" placeholder="Type your answer (exam style, concise)..." style="width:100%; border:1px solid var(--outline); border-radius:.8rem; background:var(--surface); color:var(--surface-contrast); padding:.75rem .85rem; font-size:.9rem; line-height:1.45; resize:vertical; min-height:110px;"></textarea>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:.6rem; flex-wrap:wrap;">
+              <span id="vivaStatus" style="font-size:.78rem; color:var(--muted);"></span>
+              <button id="vivaSendBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:none; border-radius:999px; padding:.55rem 1.05rem; background:linear-gradient(135deg, var(--brand), var(--brand-strong, #4C2A59)); color:#fff; font-size:.82rem; font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(158,75,138,.3); transition:transform .18s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">send</span>
+                Respond
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const $chatBox = document.getElementById('vivaChatBox');
+      const $status = document.getElementById('vivaStatus');
+      const $input = document.getElementById('vivaAnswerInput');
+      const $send = document.getElementById('vivaSendBtn');
+      const $back = document.getElementById('vivaBackBtn');
+
+      function pushBubble(role, html, meta = '') {
+        if (!$chatBox) return;
+        const wrap = document.createElement('div');
+        const isUser = role === 'user';
+        wrap.style.cssText = `display:flex; justify-content:${isUser ? 'flex-end' : 'flex-start'};`;
+        const card = document.createElement('div');
+        card.style.cssText = [
+          'max-width:88%;',
+          'border:1px solid var(--outline);',
+          'border-radius:.9rem;',
+          'padding:.72rem .82rem;',
+          `background:${isUser ? 'linear-gradient(135deg, rgba(158,75,138,.2), rgba(76,42,89,.12))' : 'color-mix(in oklab, var(--surface) 85%, transparent)'};`,
+          'font-size:.88rem;',
+          'line-height:1.45;'
+        ].join('');
+        card.innerHTML = `
+          <div style="font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:var(--muted); margin-bottom:.35rem;">${isUser ? 'You' : 'Viva Examiner'}</div>
+          <div>${html}</div>
+          ${meta ? `<div style="margin-top:.45rem; font-size:.7rem; color:var(--muted);">${meta}</div>` : ''}
+        `;
+        wrap.appendChild(card);
+        $chatBox.appendChild(wrap);
+        $chatBox.scrollTop = $chatBox.scrollHeight;
+      }
+
+      async function requestVivaTurn(answerText = '') {
+        if ($status) $status.textContent = 'Examiner is preparing next question…';
+        try {
+          const res = await fetch(`${apiBase}/api/notes/viva/respond`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topic,
+              variant: currentVariant,
+              answer: answerText,
+              history: vivaHistory,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `Request failed (${res.status})`;
+            throw new Error(detail);
+          }
+
+          const viva = (data && data.viva) ? data.viva : {};
+          const examinerReply = String(viva.examiner_reply || '').trim();
+          const crossQuestion = String(viva.cross_question || '').trim();
+          const qType = String(viva.question_type || '').trim();
+          const intensity = String(viva.intensity || '').trim();
+
+          const aiHtml = `
+            ${examinerReply ? `<div>${examinerReply}</div>` : ''}
+            ${crossQuestion ? `<div style="margin-top:.45rem; border-top:1px dashed var(--outline); padding-top:.45rem;"><strong style="font-size:.76rem;">${qType || 'Cross-question'}</strong><div style="margin-top:.2rem;">${crossQuestion}</div></div>` : ''}
+          `;
+          pushBubble('assistant', aiHtml, intensity ? `Mode: ${intensity}` : '');
+          vivaHistory.push({
+            role: 'assistant',
+            content: `${examinerReply}${crossQuestion ? ` Question: ${crossQuestion}` : ''}`.trim(),
+          });
+          if ($status) $status.textContent = 'Your turn. Answer concisely and clinically.';
+        } catch (err) {
+          console.error('[Viva] error:', err);
+          if ($status) $status.textContent = err?.message || 'Viva request failed';
+          snack(err?.message || 'Failed to continue Viva');
+        }
+      }
+
+      async function submitVivaAnswer() {
+        const ans = ($input?.value || '').trim();
+        if (!ans) {
+          snack('Type your viva answer first');
+          $input?.focus();
+          return;
+        }
+        if ($send) {
+          $send.disabled = true;
+          $send.style.opacity = '.65';
+        }
+
+        pushBubble('user', ans.replace(/\n/g, '<br/>'));
+        vivaHistory.push({ role: 'user', content: ans });
+
+        await requestVivaTurn(ans);
+        if ($input) $input.value = '';
+
+        if ($send) {
+          $send.disabled = false;
+          $send.style.opacity = '1';
+        }
+      }
+
+      $send?.addEventListener('click', submitVivaAnswer);
+      $input?.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          submitVivaAnswer();
+        }
+      });
+      $back?.addEventListener('click', () => {
+        exitVivaPreview();
+        snack('Returned to notes');
+      });
+
+      requestVivaTurn('');
+    }
+
+    if ($vivaBtn) {
+      $vivaBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (vivaActive) {
+          exitVivaPreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        renderVivaUI(topic);
+      });
+    }
+
+    // ===== Clinical Decision Trees =====
+    let decisionTreeSavedMarkdown = '';
+    let decisionTreeSavedImageUrls = [];
+    let decisionTreeActive = false;
+
+    function exitDecisionTreePreview() {
+      if (!decisionTreeActive) return;
+      decisionTreeActive = false;
+      if (decisionTreeSavedMarkdown) {
+        renderMarkdown(decisionTreeSavedMarkdown);
+        renderImageGallery(decisionTreeSavedImageUrls);
+      }
+      decisionTreeSavedMarkdown = '';
+      decisionTreeSavedImageUrls = [];
+    }
+
+    async function renderDecisionTreeUI(topic, payload) {
+      const tree = (payload && payload.decision_tree) ? payload.decision_tree : {};
+      const primaryFlow = String(tree.primary_flowchart_mermaid || tree.flowchart_mermaid || '').trim();
+      const emergencyFlow = String(tree.emergency_flowchart_mermaid || '').trim();
+      const differentialFlow = String(tree.differential_flowchart_mermaid || '').trim();
+
+      decisionTreeSavedMarkdown = lastMarkdown || '';
+      decisionTreeSavedImageUrls = [...lastImageUrls];
+      decisionTreeActive = true;
+      if ($images) $images.innerHTML = '';
+
+      await ensureMarkdownRuntime();
+      $output.innerHTML = `
+        <div id="decisionTreeRoot" style="max-width:980px; margin:0 auto; display:flex; flex-direction:column; gap:1rem;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; border:1px solid var(--outline); border-radius:1rem; padding:.6rem .8rem; background:color-mix(in oklab, var(--surface) 90%, transparent);">
+            <div style="display:flex; align-items:center; gap:.45rem; font-size:.84rem; font-weight:700; color:var(--brand);">
+              <span class="material-symbols-rounded" style="font-size:1.1rem;">schema</span>
+              Clinical Decision Trees — ${topic}
+            </div>
+            <button id="decisionTreeBackBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.42rem .9rem; font-size:.78rem; font-weight:600; cursor:pointer; background:transparent; color:inherit;">
+              <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+              Back to Notes
+            </button>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr; gap:.9rem;">
+            <section style="border:1px solid var(--outline); border-radius:1rem; padding:.8rem; background:color-mix(in oklab, var(--surface) 92%, transparent);">
+              <h3 style="margin:0 0 .55rem; font-size:.92rem; font-weight:700; color:var(--brand);">Primary Diagnostic Flow</h3>
+              <div id="dtPrimary" class="decision-tree-canvas"></div>
+            </section>
+            <section style="border:1px solid var(--outline); border-radius:1rem; padding:.8rem; background:color-mix(in oklab, var(--surface) 92%, transparent);">
+              <h3 style="margin:0 0 .55rem; font-size:.92rem; font-weight:700; color:var(--brand);">Emergency Protocol Flow</h3>
+              <div id="dtEmergency" class="decision-tree-canvas"></div>
+            </section>
+            <section style="border:1px solid var(--outline); border-radius:1rem; padding:.8rem; background:color-mix(in oklab, var(--surface) 92%, transparent);">
+              <h3 style="margin:0 0 .55rem; font-size:.92rem; font-weight:700; color:var(--brand);">Differential If–Else Flow</h3>
+              <div id="dtDifferential" class="decision-tree-canvas"></div>
+            </section>
+          </div>
+        </div>
+      `;
+
+      const defaultPrimary = `flowchart TD\nA[${topic}] --> B{Red flags?}\nB -->|Yes| C[Urgent escalation]\nB -->|No| D[Focused workup]\nD --> E{Most likely path?}\nE --> F[Primary diagnosis]\nE --> G[Alternative differential]`;
+      const defaultEmergency = `flowchart TD\nA[Initial triage] --> B{Instability?}\nB -->|Yes| C[Resuscitation pathway]\nB -->|No| D[Stabilized evaluation]\nD --> E{Critical warning signs?}\nE -->|Yes| F[Emergency referral]\nE -->|No| G[Monitored management]`;
+      const defaultDifferential = `flowchart TD\nA[Symptom cluster] --> B{Hallmark finding present?}\nB -->|Yes| C[Prioritize diagnosis A]\nB -->|No| D[Consider diagnosis B/C]\nC --> E{Response to treatment?}\nE -->|Improves| F[Continue plan]\nE -->|No| D`;
+
+      async function renderMermaidInto(containerId, chart, idx) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        try {
+          const chartText = (chart || '').trim();
+          if (!chartText) {
+            el.textContent = 'Flowchart unavailable';
+            return;
+          }
+          const rendered = await mermaid.render(`dt-${containerId}-${idx}-${Date.now()}`, chartText);
+          el.innerHTML = (rendered && rendered.svg) ? rendered.svg : 'Flowchart unavailable';
+        } catch (err) {
+          console.warn('[DecisionTree] Mermaid render failed:', err);
+          el.textContent = 'Flowchart render failed';
+        }
+      }
+
+      await renderMermaidInto('dtPrimary', primaryFlow || defaultPrimary, 1);
+      await renderMermaidInto('dtEmergency', emergencyFlow || defaultEmergency, 2);
+      await renderMermaidInto('dtDifferential', differentialFlow || defaultDifferential, 3);
+
+      document.getElementById('decisionTreeBackBtn')?.addEventListener('click', () => {
+        exitDecisionTreePreview();
+        snack('Returned to notes');
+      });
+    }
+
+    if ($decisionTreeBtn) {
+      $decisionTreeBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (decisionTreeActive) {
+          exitDecisionTreePreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        const origHTML = $decisionTreeBtn.innerHTML;
+        $decisionTreeBtn.innerHTML = '<span class="st-btn-icon material-symbols-rounded animate-spin">progress_activity</span><span class="st-btn-text"><span class="st-btn-label">Loading…</span><span class="st-btn-desc">Building pathways</span></span>';
+        $decisionTreeBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/clinical-decision-tree`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, variant: currentVariant }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `Request failed (${res.status})`;
+            throw new Error(detail);
+          }
+          await renderDecisionTreeUI(topic, data || {});
+        } catch (err) {
+          console.error('[DecisionTree] error:', err);
+          snack(err?.message || 'Failed to generate decision tree');
+        } finally {
+          $decisionTreeBtn.innerHTML = origHTML;
+          $decisionTreeBtn.disabled = false;
+        }
+      });
+    }
+
+    // ===== Match the Following (Interactive Quiz) =====
+    let matchFollSavedMarkdown = '';
+    let matchFollSavedImageUrls = [];
+    let matchFollActive = false;
+
+    function exitMatchFollPreview() {
+      if (!matchFollActive) return;
+      matchFollActive = false;
+      if (matchFollSavedMarkdown) {
+        renderMarkdown(matchFollSavedMarkdown);
+        renderImageGallery(matchFollSavedImageUrls);
+      }
+      matchFollSavedMarkdown = '';
+      matchFollSavedImageUrls = [];
+    }
+
+    function shuffleArray(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function renderMatchFollUI(pairs, topic) {
+      if (!$output) return;
+
+      // Save current content
+      matchFollSavedMarkdown = lastMarkdown || '';
+      matchFollSavedImageUrls = [...lastImageUrls];
+      matchFollActive = true;
+      if ($images) $images.innerHTML = '';
+
+      const shuffledDefs = shuffleArray(pairs.map((p, i) => ({ ...p, origIdx: i })));
+
+      // State
+      let selectedTermIdx = null;
+      let matches = []; // Maps termIdx -> defOrigIdx
+      let checked = false;
+
+      const brandColor = getComputedStyle(document.documentElement).getPropertyValue('--brand-600').trim() || '#9E4B8A';
+
+      $output.innerHTML = `
+        <div id="matchFollRoot" style="max-width:720px; margin:0 auto;">
+          <!-- Header -->
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem; margin-bottom:1.5rem;">
+            <h2 style="margin:0; font-size:1.2rem; font-weight:800; display:flex; align-items:center; gap:.5rem; letter-spacing:-.02em;">
+              <span class="material-symbols-rounded" style="color:var(--brand); font-size:1.4rem;">swap_horiz</span>
+              Match the Following
+            </h2>
+            <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+              <button id="mfBackBtn" type="button" style="display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--outline); border-radius:999px; padding:.45rem .9rem; font-size:.78rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)';this.style.borderColor='var(--brand)'" onmouseout="this.style.background='transparent';this.style.borderColor='var(--outline)'">
+                <span class="material-symbols-rounded" style="font-size:1rem;">arrow_back</span>
+                Back to Notes
+              </button>
+            </div>
+          </div>
+
+          <!-- Topic pill -->
+          <div style="margin-bottom:1.25rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+            <span style="background:var(--brand-soft); color:var(--brand); border:1px solid color-mix(in oklab, var(--brand) 30%, transparent); border-radius:999px; padding:.3rem .75rem; font-size:.72rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase;">
+              ${topic}
+            </span>
+            <span style="font-size:.75rem; color:var(--muted, #888);">Click a term, then click its definition</span>
+          </div>
+
+          <!-- Matching area -->
+          <div id="mfGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;"></div>
+
+          <!-- Actions -->
+          <div style="display:flex; justify-content:center; gap:.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+            <button id="mfCheckBtn" type="button" style="display:inline-flex; align-items:center; gap:.4rem; background:linear-gradient(135deg, var(--brand), color-mix(in oklab, var(--brand) 70%, #CA6CB3)); color:#fff; border:none; border-radius:999px; padding:.6rem 1.5rem; font-size:.85rem; font-weight:700; cursor:pointer; box-shadow:0 4px 20px color-mix(in oklab, var(--brand) 25%, transparent); transition:all .2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+              <span class="material-symbols-rounded" style="font-size:1.1rem;">check_circle</span>
+              Submit
+            </button>
+            <button id="mfShowAnsBtn" type="button" style="display:none; align-items:center; gap:.4rem; border:1px solid var(--outline); border-radius:999px; padding:.6rem 1.2rem; font-size:.85rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+              <span class="material-symbols-rounded" style="font-size:1.1rem;">visibility</span>
+              Show Correct Ans
+            </button>
+            <button id="mfResetBtn" type="button" style="display:inline-flex; align-items:center; gap:.4rem; border:1px solid var(--outline); border-radius:999px; padding:.6rem 1.2rem; font-size:.85rem; font-weight:600; cursor:pointer; background:transparent; color:inherit; transition:all .2s;" onmouseover="this.style.background='var(--brand-soft)'" onmouseout="this.style.background='transparent'">
+              <span class="material-symbols-rounded" style="font-size:1.1rem;">refresh</span>
+              Reset
+            </button>
+          </div>
+
+          <!-- Score area -->
+          <div id="mfScore" style="display:none;"></div>
+
+          <!-- Correct answers area -->
+          <div id="mfCorrectAns" style="display:none;"></div>
+        </div>
+      `;
+
+      const $grid = document.getElementById('mfGrid');
+      const $checkBtn = document.getElementById('mfCheckBtn');
+      const $resetBtn = document.getElementById('mfResetBtn');
+      const $showAnsBtn = document.getElementById('mfShowAnsBtn');
+      const $scoreArea = document.getElementById('mfScore');
+      const $correctAnsArea = document.getElementById('mfCorrectAns');
+      const $backBtn = document.getElementById('mfBackBtn');
+
+      function buildCards() {
+        matches = new Array(pairs.length).fill(-1);
+        $grid.innerHTML = '';
+        // Left column: terms
+        const leftCol = document.createElement('div');
+        leftCol.style.cssText = 'display:flex; flex-direction:column; gap:.75rem;';
+        const leftLabel = document.createElement('div');
+        leftLabel.style.cssText = 'font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted, #888); padding:0 .25rem .25rem;';
+        leftLabel.textContent = 'Terms';
+        leftCol.appendChild(leftLabel);
+
+        pairs.forEach((p, i) => {
+          const card = document.createElement('div');
+          card.dataset.termIdx = i;
+          card.className = 'mf-term-card';
+          card.style.cssText = `
+            border: 1.5px solid var(--outline);
+            border-radius: 1rem;
+            padding: .85rem 1rem;
+            cursor: pointer;
+            background: color-mix(in oklab, var(--surface) 80%, transparent);
+            backdrop-filter: blur(12px);
+            font-size: .88rem;
+            font-weight: 600;
+            transition: all .2s cubic-bezier(.4,0,.2,1);
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+          `;
+          const badge = document.createElement('span');
+          badge.style.cssText = 'position:absolute; top:.5rem; right:.6rem; font-size:.65rem; font-weight:700; color:var(--muted, #888); background:var(--brand-soft); border-radius:999px; padding:.12rem .4rem;';
+          badge.textContent = i + 1;
+          card.appendChild(badge);
+
+          const text = document.createElement('span');
+          text.textContent = p.term;
+          card.appendChild(text);
+
+          const conn = document.createElement('div');
+          conn.className = 'mf-conn-indicator';
+          conn.style.cssText = 'position:absolute; bottom:0; left:0; right:0; height:3px; background:transparent; transition:background .2s; border-radius:0 0 1rem 1rem;';
+          card.appendChild(conn);
+
+          card.addEventListener('mouseenter', () => {
+            if (checked) return;
+            if (selectedTermIdx !== i) card.style.background = 'color-mix(in oklab, var(--surface) 65%, transparent)';
+          });
+          card.addEventListener('mouseleave', () => {
+            if (checked) return;
+            if (selectedTermIdx !== i) card.style.background = 'color-mix(in oklab, var(--surface) 80%, transparent)';
+          });
+          card.addEventListener('click', () => {
+            if (checked) return;
+            selectTerm(i);
+          });
+
+          leftCol.appendChild(card);
+        });
+
+        // Right column: shuffled definitions
+        const rightCol = document.createElement('div');
+        rightCol.style.cssText = 'display:flex; flex-direction:column; gap:.75rem;';
+        const rightLabel = document.createElement('div');
+        rightLabel.style.cssText = 'font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted, #888); padding:0 .25rem .25rem;';
+        rightLabel.textContent = 'Definitions';
+        rightCol.appendChild(rightLabel);
+
+        shuffledDefs.forEach((d) => {
+          const card = document.createElement('div');
+          card.dataset.defOrigIdx = d.origIdx;
+          card.className = 'mf-def-card';
+          card.style.cssText = `
+            border: 1.5px solid var(--outline);
+            border-radius: 1rem;
+            padding: .85rem 1rem;
+            cursor: pointer;
+            background: color-mix(in oklab, var(--surface) 80%, transparent);
+            backdrop-filter: blur(12px);
+            font-size: .84rem;
+            line-height: 1.45;
+            transition: all .2s cubic-bezier(.4,0,.2,1);
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+          `;
+          const matchBadge = document.createElement('span');
+          matchBadge.className = 'mf-match-badge';
+          matchBadge.style.cssText = 'position:absolute; top:.5rem; right:.6rem; font-size:.65rem; font-weight:700; color:#fff; background:var(--brand); border-radius:999px; padding:.12rem .4rem; display:none; justify-content:center; align-items:center; min-width:1.25rem; text-align:center; z-index:10; box-shadow:0 2px 4px rgba(0,0,0,0.1);';
+          card.appendChild(matchBadge);
+
+          const text = document.createElement('span');
+          text.textContent = d.definition;
+          card.appendChild(text);
+
+          const conn = document.createElement('div');
+          conn.className = 'mf-conn-indicator';
+          conn.style.cssText = 'position:absolute; bottom:0; left:0; right:0; height:3px; background:transparent; transition:background .2s; border-radius:0 0 1rem 1rem;';
+          card.appendChild(conn);
+
+          card.addEventListener('mouseenter', () => {
+            if (checked) return;
+            if (selectedTermIdx !== null) card.style.borderColor = 'var(--brand)';
+          });
+          card.addEventListener('mouseleave', () => {
+            if (checked) return;
+            const isMatched = matches.includes(d.origIdx);
+            if (!isMatched) card.style.borderColor = 'var(--outline)';
+          });
+          card.addEventListener('click', () => {
+            if (checked) return;
+            if (selectedTermIdx === null) {
+              snack('Select a term first');
+              return;
+            }
+            matchDef(d.origIdx);
+          });
+
+          rightCol.appendChild(card);
+        });
+
+        $grid.appendChild(leftCol);
+        $grid.appendChild(rightCol);
+      }
+
+      function selectTerm(idx) {
+        selectedTermIdx = idx;
+        $grid.querySelectorAll('.mf-term-card').forEach(c => {
+          const ti = parseInt(c.dataset.termIdx);
+          const isSelected = ti === idx;
+          const isMatched = matches[ti] !== -1;
+
+          if (isSelected) {
+            c.style.borderColor = 'var(--brand)';
+            c.style.background = 'var(--brand-soft)';
+            c.querySelector('.mf-conn-indicator').style.background = 'var(--brand)';
+          } else if (isMatched) {
+            c.style.borderColor = 'color-mix(in oklab, var(--brand) 50%, transparent)';
+            c.style.background = 'var(--brand-soft)';
+            c.querySelector('.mf-conn-indicator').style.background = 'var(--brand)';
+          } else {
+            c.style.borderColor = 'var(--outline)';
+            c.style.background = 'color-mix(in oklab, var(--surface) 80%, transparent)';
+            c.querySelector('.mf-conn-indicator').style.background = 'transparent';
+          }
+        });
+      }
+
+      function matchDef(defOrigIdx) {
+        if (selectedTermIdx === null) return;
+
+        // Remove any previous mapping to this def
+        for (let i = 0; i < matches.length; i++) {
+          if (matches[i] === defOrigIdx) {
+            matches[i] = -1;
+          }
+        }
+
+        matches[selectedTermIdx] = defOrigIdx;
+        selectedTermIdx = null;
+
+        // Highlight terms
+        $grid.querySelectorAll('.mf-term-card').forEach(c => {
+          const ti = parseInt(c.dataset.termIdx);
+          const isMatched = matches[ti] !== -1;
+          if (isMatched) {
+            c.style.borderColor = 'color-mix(in oklab, var(--brand) 50%, transparent)';
+            c.style.background = 'var(--brand-soft)';
+            c.querySelector('.mf-conn-indicator').style.background = 'var(--brand)';
+          } else {
+            c.style.borderColor = 'var(--outline)';
+            c.style.background = 'color-mix(in oklab, var(--surface) 80%, transparent)';
+            c.querySelector('.mf-conn-indicator').style.background = 'transparent';
+          }
+        });
+
+        // Highlight definitions
+        $grid.querySelectorAll('.mf-def-card').forEach(c => {
+          const di = parseInt(c.dataset.defOrigIdx);
+          const matchedTermIdx = matches.indexOf(di);
+          const badge = c.querySelector('.mf-match-badge');
+          if (matchedTermIdx !== -1) {
+            badge.textContent = matchedTermIdx + 1;
+            badge.style.display = 'inline-flex';
+            c.style.borderColor = 'color-mix(in oklab, var(--brand) 50%, transparent)';
+            c.querySelector('.mf-conn-indicator').style.background = 'var(--brand)';
+          } else {
+            badge.style.display = 'none';
+            c.style.borderColor = 'var(--outline)';
+            c.querySelector('.mf-conn-indicator').style.background = 'transparent';
+          }
+        });
+
+        // Ensure Submit button is visible and scrolling helps if needed
+        $checkBtn.style.display = 'inline-flex';
+        $checkBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      function checkAnswers() {
+        const remaining = matches.filter(m => m === -1).length;
+        if (remaining > 0) {
+          snack(`Match ${remaining} more pair(s) first`);
+          return;
+        }
+        checked = true;
+        let correct = 0;
+
+        $grid.querySelectorAll('.mf-term-card').forEach(c => {
+          const ti = parseInt(c.dataset.termIdx);
+          const isCorrect = matches[ti] === ti;
+          if (isCorrect) correct++;
+          c.style.borderColor = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+          c.style.background = isCorrect ? 'rgba(16,185,129,.08)' : 'rgba(239,68,68,.08)';
+          c.querySelector('.mf-conn-indicator').style.background = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+          c.style.cursor = 'default';
+          const icon = document.createElement('span');
+          icon.className = 'material-symbols-rounded';
+          icon.style.cssText = `position:absolute; top:.45rem; left:.5rem; font-size:.9rem; color:${isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)'};`;
+          icon.textContent = isCorrect ? 'check_circle' : 'cancel';
+          c.appendChild(icon);
+        });
+
+        $grid.querySelectorAll('.mf-def-card').forEach(c => {
+          const di = parseInt(c.dataset.defOrigIdx);
+          const matchedTermIdx = matches.indexOf(di);
+          const isCorrect = matchedTermIdx !== -1 && matchedTermIdx === di;
+          c.style.borderColor = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+          c.style.background = isCorrect ? 'rgba(16,185,129,.08)' : 'rgba(239,68,68,.08)';
+          c.querySelector('.mf-conn-indicator').style.background = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+          c.style.cursor = 'default';
+          const badge = c.querySelector('.mf-match-badge');
+          if (badge) badge.style.background = isCorrect ? 'rgba(16,185,129,.85)' : 'rgba(239,68,68,.85)';
+        });
+
+        $checkBtn.disabled = true;
+        $checkBtn.style.opacity = '.5';
+
+        // Show the Show Correct Ans button after submit
+        $showAnsBtn.style.display = 'inline-flex';
+
+        const pct = Math.round((correct / pairs.length) * 100);
+        const isAllCorrect = correct === pairs.length;
+        $scoreArea.style.display = 'block';
+        $scoreArea.innerHTML = `
+          <div style="text-align:center; padding:1.5rem; border:1.5px solid var(--outline); border-radius:1.25rem; background:color-mix(in oklab, var(--surface) 80%, transparent); backdrop-filter:blur(12px);">
+            <div style="display:inline-flex; align-items:center; justify-content:center; width:80px; height:80px; border-radius:50%; background:${isAllCorrect ? 'linear-gradient(135deg, rgba(16,185,129,.15), rgba(16,185,129,.05))' : 'linear-gradient(135deg, var(--brand-soft), rgba(158,75,138,.03))'}; border:3px solid ${isAllCorrect ? 'rgba(16,185,129,.85)' : 'var(--brand-600)'}; margin-bottom:.75rem;">
+              <span style="font-size:1.5rem; font-weight:800; color:${isAllCorrect ? 'rgba(16,185,129,.85)' : 'var(--brand-600)'};">${pct}%</span>
+            </div>
+            <div style="font-size:1rem; font-weight:700; margin-bottom:.25rem;">${correct} / ${pairs.length} correct</div>
+            <div style="font-size:.8rem; color:var(--muted, #888);">${isAllCorrect ? '🎉 Perfect score! Great job!' : correct >= Math.ceil(pairs.length / 2) ? '👍 Good effort! Try again for a perfect score.' : '💪 Keep studying and try again!'}</div>
+          </div>
+        `;
+      }
+
+      function showCorrectAnswers() {
+        $correctAnsArea.style.display = 'block';
+        let rows = '';
+        pairs.forEach((p, i) => {
+          rows += `
+            <div style="display:flex; align-items:stretch; gap:.5rem; margin-bottom:.5rem;">
+              <div style="flex:1; border:1.5px solid rgba(16,185,129,.4); border-radius:.75rem; padding:.6rem .8rem; background:rgba(16,185,129,.06); font-size:.84rem; font-weight:600;">
+                <span style="display:inline-flex; align-items:center; justify-content:center; width:1.2rem; height:1.2rem; border-radius:50%; background:var(--brand-soft); color:var(--brand); font-size:.6rem; font-weight:800; margin-right:.4rem;">${i + 1}</span>
+                ${p.term}
+              </div>
+              <div style="display:flex; align-items:center; color:var(--brand);"><span class="material-symbols-rounded" style="font-size:1.1rem;">arrow_forward</span></div>
+              <div style="flex:1.3; border:1.5px solid rgba(16,185,129,.4); border-radius:.75rem; padding:.6rem .8rem; background:rgba(16,185,129,.06); font-size:.82rem; line-height:1.4;">
+                ${p.definition}
+              </div>
+            </div>`;
+        });
+        $correctAnsArea.innerHTML = `
+          <div style="border:1.5px solid var(--outline); border-radius:1.25rem; padding:1.25rem; background:color-mix(in oklab, var(--surface) 85%, transparent); margin-top:.75rem;">
+            <h3 style="margin:0 0 .75rem; font-size:.95rem; font-weight:700; display:flex; align-items:center; gap:.4rem;">
+              <span class="material-symbols-rounded" style="color:rgba(16,185,129,.85); font-size:1.15rem;">check_circle</span>
+              Correct Answers
+            </h3>
+            ${rows}
+          </div>
+        `;
+        $showAnsBtn.disabled = true;
+        $showAnsBtn.style.opacity = '.5';
+
+        setTimeout(() => {
+          $correctAnsArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 50);
+      }
+
+      function resetAll() {
+        selectedTermIdx = null;
+        matches = new Array(pairs.length).fill(-1);
+        checked = false;
+        $checkBtn.disabled = false;
+        $checkBtn.style.opacity = '1';
+        $showAnsBtn.style.display = 'none';
+        $showAnsBtn.disabled = false;
+        $showAnsBtn.style.opacity = '1';
+        $scoreArea.style.display = 'none';
+        $scoreArea.innerHTML = '';
+        $correctAnsArea.style.display = 'none';
+        $correctAnsArea.innerHTML = '';
+        buildCards();
+      }
+
+      // Wire events
+      $checkBtn?.addEventListener('click', checkAnswers);
+      $resetBtn?.addEventListener('click', resetAll);
+      $showAnsBtn?.addEventListener('click', showCorrectAnswers);
+      $backBtn?.addEventListener('click', () => {
+        exitMatchFollPreview();
+        snack('Returned to notes');
+      });
+
+      buildCards();
+    }
+
+    if ($matchFollBtn) {
+      $matchFollBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (matchFollActive) {
+          exitMatchFollPreview();
+          snack('Returned to notes');
+          return;
+        }
+
+        const topic = currentTopicOrHeading();
+        if (!topic) {
+          snack('No topic loaded — generate notes first');
+          return;
+        }
+
+        const origHTML = $matchFollBtn.innerHTML;
+        $matchFollBtn.innerHTML = '<span class="st-btn-icon material-symbols-rounded animate-spin">progress_activity</span><span class="st-btn-text"><span class="st-btn-label">Generating…</span><span class="st-btn-desc">Creating quiz pairs</span></span>';
+        $matchFollBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${apiBase}/api/notes/match-following`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic }),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error((err && err.detail) || `Request failed (${res.status})`);
+          }
+
+          const data = await res.json();
+          const pairs = data.pairs;
+          if (!Array.isArray(pairs) || pairs.length < 3) {
+            throw new Error('Not enough pairs returned');
+          }
+
+          renderMatchFollUI(pairs, topic);
+          if (data.cached) snack('Loaded cached quiz');
+
+        } catch (err) {
+          console.error('[MatchFoll] Error:', err);
+          snack(err.message || 'Failed to generate match quiz');
+        } finally {
+          $matchFollBtn.innerHTML = origHTML;
+          $matchFollBtn.disabled = false;
+        }
+      });
+    }
+
     // Removed the $topic "input" event listener as the Topic Input Box was deleted.
     // Video loading relies on the explicit calls from generation/cache-loading logic.
 
@@ -3179,17 +4384,19 @@
       }
 
       // Mermaid blocks
-      const mmd = $output.querySelectorAll('code.language-mermaid, pre code.language-mermaid');
-      mmd.forEach((codeEl, i) => {
+      const mmd = Array.from($output.querySelectorAll('code.language-mermaid, pre code.language-mermaid'));
+      for (let i = 0; i < mmd.length; i += 1) {
+        const codeEl = mmd[i];
         const txt = codeEl.textContent;
         const pre = codeEl.closest('pre');
         const container = document.createElement('div');
         container.className = 'my-4';
         (pre || codeEl).replaceWith(container);
         try {
-          mermaid.render('mmd-' + i + '-' + Date.now(), txt, (svg) => { container.innerHTML = svg; });
+          const rendered = await mermaid.render('mmd-' + i + '-' + Date.now(), txt || '');
+          container.innerHTML = (rendered && rendered.svg) ? rendered.svg : '';
         } catch { }
-      });
+      }
 
       // Syntax highlight
       try { hljs.highlightAll(); } catch { }
@@ -4198,12 +5405,15 @@
 
       let savedOutputHTML = null; // store original notes content
 
+      function normalizeTopicKey(value) {
+        return (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      }
+
       $blinkBtn.addEventListener('click', async () => {
         // Determine current topic
-        const topic = (
-          (document.querySelector('#output h1')?.textContent || '')
-          || ($topic ? $topic.value : '')
-        ).trim();
+        const headingTopic = (document.querySelector('#output h1')?.textContent || '').trim();
+        const inputTopic = ($topic ? $topic.value : '').trim();
+        const topic = (headingTopic || inputTopic).trim();
 
         if (!topic) {
           snack('Generate notes first to view Blink');
@@ -4222,7 +5432,12 @@
         $blinkBtn.querySelector('.st-btn-label').textContent = 'Loading…';
 
         try {
-          const topicParam = encodeURIComponent(topic.toLowerCase());
+          const topicCandidates = Array.from(new Set([
+            normalizeTopicKey(topic),
+            normalizeTopicKey(inputTopic),
+            normalizeTopicKey(headingTopic)
+          ].filter(Boolean)));
+          const topicParam = encodeURIComponent(topicCandidates.join(','));
           const token = getAuthToken();
           const headers = {};
           if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -4231,15 +5446,27 @@
           if (!res.ok) throw new Error('Failed to fetch blink');
 
           const data = await res.json();
-          const linksMap = data.links || data || {};
+          const linksMapRaw = data.links || data || {};
+          const linksMap = {};
+          for (const [key, url] of Object.entries(linksMapRaw)) {
+            const norm = normalizeTopicKey(key);
+            if (!norm || !url) continue;
+            linksMap[norm] = url;
+          }
 
           // Find a matching blink link (case-insensitive key match)
           let blinkUrl = null;
-          const topicLower = topic.toLowerCase();
+          const topicLower = normalizeTopicKey(topic);
+          for (const candidate of topicCandidates) {
+            if (linksMap[candidate]) {
+              blinkUrl = linksMap[candidate];
+              break;
+            }
+          }
+
           for (const [key, url] of Object.entries(linksMap)) {
-            if (!url) continue;
-            const keyLower = key.toLowerCase();
-            if (keyLower === topicLower || topicLower.includes(keyLower) || keyLower.includes(topicLower)) {
+            if (blinkUrl || !url) continue;
+            if (key === topicLower || topicLower.includes(key) || key.includes(topicLower)) {
               blinkUrl = url;
               break;
             }

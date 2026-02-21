@@ -51,8 +51,18 @@ CREATE TABLE public.ai_notes (
   image_urls ARRAY DEFAULT '{}'::text[],
   labs text,
   blink_link text CHECK (blink_link ~* '^https?://'::text),
+  ppt_link text CHECK (ppt_link ~* '^https?://'::text),
+  decision_tree_json jsonb,
+  decision_tree_generated_at timestamp with time zone,
   CONSTRAINT ai_notes_pkey PRIMARY KEY (id)
 );
+
+-- Decision Tree cache columns (safe re-run migration)
+ALTER TABLE IF EXISTS public.ai_notes
+  ADD COLUMN IF NOT EXISTS decision_tree_json jsonb;
+
+ALTER TABLE IF EXISTS public.ai_notes
+  ADD COLUMN IF NOT EXISTS decision_tree_generated_at timestamp with time zone;
 CREATE TABLE public.ai_notes_cheatsheet (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   title text NOT NULL,
@@ -72,6 +82,26 @@ CREATE TABLE public.ai_notes_mcq (
   model text,
   generated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT ai_notes_mcq_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ai_notes_match (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  topic text NOT NULL,
+  topic_ci text DEFAULT lower(topic),
+  pairs jsonb NOT NULL DEFAULT '[]'::jsonb,
+  model text,
+  generated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_match_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ai_notes_caseflow_scenarios (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  topic text NOT NULL,
+  topic_ci text DEFAULT lower(topic),
+  note_id uuid,
+  variant text NOT NULL DEFAULT 'detailed'::text,
+  scenario_question text NOT NULL,
+  model text,
+  generated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_caseflow_scenarios_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.ai_notes_simple (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

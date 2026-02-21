@@ -1,4 +1,4 @@
-﻿"""Single-file consolidated FastAPI app for PaperX."""
+"""Single-file consolidated FastAPI app for PaperX."""
 
 from __future__ import annotations
 
@@ -1012,6 +1012,7 @@ AI_NOTES_TABLE = os.getenv("AI_NOTES_TABLE", "ai_notes")
 AI_NOTES_CHEATSHEET_TABLE = os.getenv("AI_NOTES_CHEATSHEET_TABLE", "ai_notes_cheatsheet")
 AI_NOTES_SIMPLE_TABLE = os.getenv("AI_NOTES_SIMPLE_TABLE", "ai_notes_simple")
 AI_NOTES_USER_EDITS_TABLE = os.getenv("AI_NOTES_USER_EDITS_TABLE", "ai_notes_user_edits")
+AI_NOTES_CASEFLOW_SCENARIOS_TABLE = os.getenv("AI_NOTES_CASEFLOW_SCENARIOS_TABLE", "ai_notes_caseflow_scenarios")
 
 VALID_NOTE_VARIANTS = {"detailed", "cheatsheet", "simple"}
 
@@ -13008,6 +13009,7 @@ def set_topic_ppt_url(topic_id: uuid.UUID, payload: Dict[str, Any]):
 
     Expects JSON body: {"ppt_url": "https://..."}.
     Use the DELETE endpoint to clear.
+    Also mirrors the value into ai_notes.ppt_link for the MedMap feature.
     """
 
     if not isinstance(payload, dict):
@@ -13021,7 +13023,27 @@ def set_topic_ppt_url(topic_id: uuid.UUID, payload: Dict[str, Any]):
             raise HTTPException(status_code=400, detail="ppt_url must be a string or null")
         ppt_url = raw_url.strip() or None
 
-    return _update_topic_url_field(topic_id, "ppt_url", ppt_url)
+    result = _update_topic_url_field(topic_id, "ppt_url", ppt_url)
+
+    # Mirror ppt_link into ai_notes table
+    try:
+        supabase = get_service_client()
+        topic_q = (
+            supabase.table("syllabus_topics")
+            .select("topic")
+            .eq("id", str(topic_id))
+            .limit(1)
+            .execute()
+        )
+        if topic_q.data:
+            topic_name = (topic_q.data[0].get("topic") or "").strip()
+            if topic_name:
+                topic_ci = topic_name.lower()
+                supabase.table(AI_NOTES_TABLE).update({"ppt_link": ppt_url}).eq("title_ci", topic_ci).execute()
+    except Exception as e:
+        print(f"[set_topic_ppt_url] Warning: failed to mirror ppt_link to ai_notes: {e}")
+
+    return result
 
 
 @academics_router.delete(
@@ -13029,7 +13051,26 @@ def set_topic_ppt_url(topic_id: uuid.UUID, payload: Dict[str, Any]):
     summary="Clear PPT URL for a syllabus topic",
 )
 def clear_topic_ppt_url(topic_id: uuid.UUID):
-    """Clear (set to null) the ppt_url for a single topic."""
+    """Clear (set to null) the ppt_url for a single topic.
+    Also clears ppt_link from ai_notes."""
+
+    # Clear ppt_link from ai_notes table
+    try:
+        supabase = get_service_client()
+        topic_q = (
+            supabase.table("syllabus_topics")
+            .select("topic")
+            .eq("id", str(topic_id))
+            .limit(1)
+            .execute()
+        )
+        if topic_q.data:
+            topic_name = (topic_q.data[0].get("topic") or "").strip()
+            if topic_name:
+                topic_ci = topic_name.lower()
+                supabase.table(AI_NOTES_TABLE).update({"ppt_link": None}).eq("title_ci", topic_ci).execute()
+    except Exception as e:
+        print(f"[clear_topic_ppt_url] Warning: failed to clear ppt_link from ai_notes: {e}")
 
     return _update_topic_url_field(topic_id, "ppt_url", None)
 
@@ -17948,6 +17989,1109 @@ def api_generate_mcq(note_id: str, payload: Optional[Dict[str, Any]] = Body(defa
     }
 
 
+def _extract_caseflow_response_text(resp: Any) -> str:
+    try:
+        quick = getattr(resp, "text", None)
+        if isinstance(quick, str) and quick.strip():
+            return quick.strip()
+    except Exception:
+        pass
+
+    candidates = getattr(resp, "candidates", None) or []
+    if isinstance(candidates, dict):
+        candidates = [candidates]
+
+    for cand in candidates:
+        content = getattr(cand, "content", None)
+        parts = None
+        if content is not None:
+            parts = getattr(content, "parts", None)
+            if parts is None and isinstance(content, dict):
+                parts = content.get("parts")
+        if parts is None and isinstance(cand, dict):
+            ccontent = cand.get("content")
+            if isinstance(ccontent, dict):
+                parts = ccontent.get("parts")
+        texts: List[str] = []
+        if parts:
+            for part in parts:
+                tval = getattr(part, "text", None)
+                if tval is None and isinstance(part, dict):
+                    tval = part.get("text")
+                if tval:
+                    texts.append(str(tval))
+        if texts:
+            return "\n".join(texts).strip()
+    return ""
+
+
+def _extract_first_json_object_text(raw_text: str) -> Optional[str]:
+    txt = (raw_text or "").strip()
+    if not txt:
+        return None
+    if txt.startswith("```"):
+        txt = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", txt)
+        txt = re.sub(r"\s*```$", "", txt).strip()
+    start = txt.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for idx in range(start, len(txt)):
+        ch = txt[idx]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return txt[start:idx + 1]
+    return None
+
+
+def _generate_caseflow_scenario_question(markdown: str, topic: str) -> Tuple[str, str, bool]:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured.")
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
+
+    cleaned_md = (markdown or "").strip()
+    if not cleaned_md:
+        raise HTTPException(status_code=400, detail="Note is empty; generate notes first.")
+
+    limit_chars = int(os.getenv("CASEFLOW_MAX_CHARS", "8000") or "8000")
+    truncated = len(cleaned_md) > limit_chars
+    excerpt = cleaned_md[:limit_chars]
+
+    prompt = textwrap.dedent(
+        f"""
+        You are PaperX CaseFlow generator for medical students.
+        Create EXACTLY ONE realistic, exam-style clinical case scenario question based ONLY on the notes below.
+
+        Rules:
+        - Length must be 140-220 words.
+        - Scenario must be tightly tied to topic: "{topic}".
+        - Include concrete patient context: age/sex, symptom timeline, at least 2 findings, and one relevant lab or clinical clue when possible.
+        - End with one clear prompt asking the learner to justify their reasoning using topic concepts.
+        - Do NOT include answer, rubric, bullets, numbering, markdown, or heading.
+        - Return plain text only.
+
+        {"Note excerpt is truncated; stay within available context." if truncated else ""}
+
+        <<<NOTES>>>
+        {excerpt}
+        <<<END NOTES>>>
+        """
+    ).strip()
+
+    model_name = "gemini-2.5-pro"
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(model_name)
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+    ]
+
+    try:
+        response = model.generate_content(
+            [{"text": prompt}],
+            generation_config={"temperature": 0.45, "max_output_tokens": 900},
+            safety_settings=safety_settings,
+            request_options={"timeout": 30.0},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini CaseFlow request failed: {exc}") from exc
+
+    question = _extract_caseflow_response_text(response)
+    question = re.sub(r"\s+", " ", (question or "")).strip().strip('"')
+    if not question:
+        raise HTTPException(status_code=500, detail="Gemini returned no CaseFlow question.")
+    if len(question) > 2200:
+        question = question[:1400].rstrip() + "…"
+
+    # Retry once if Gemini returns something too short/truncated/non-useful.
+    if len(question) < 420:
+        expand_prompt = textwrap.dedent(
+            f"""
+            Rewrite into ONE fuller clinical case scenario question (140-220 words) for topic "{topic}".
+            Must include: patient context, symptom chronology, and at least one objective clue.
+            End with a single justification question.
+            Output plain text only.
+            """
+        ).strip()
+        try:
+            response2 = model.generate_content(
+                [{"text": expand_prompt}, {"text": excerpt}],
+                generation_config={"temperature": 0.45, "max_output_tokens": 900},
+                safety_settings=safety_settings,
+                request_options={"timeout": 30.0},
+            )
+            q2 = _extract_caseflow_response_text(response2)
+            q2 = re.sub(r"\s+", " ", (q2 or "")).strip().strip('"')
+            if q2 and len(q2) > len(question):
+                question = q2
+        except Exception:
+            pass
+
+    if len(question) < 220:
+        fallback_topic = topic or "this topic"
+        question = (
+            f"A 26-year-old patient presents with persistent symptoms related to {fallback_topic}, with worsening complaints over the last 3 weeks and reduced daily functioning. "
+            f"Clinical review reveals two key findings that are consistent with altered physiology in this pathway, and a targeted laboratory parameter is borderline abnormal rather than severely deranged. "
+            f"There is no immediate red-flag emergency sign, but symptom pattern, progression, and response to meals or routine activity suggest a specific mechanism from the topic. "
+            f"Based on the likely pathophysiology, justify your most probable explanation and briefly distinguish it from one close differential diagnosis using topic-specific terminology?"
+        )
+
+    if not question.endswith("?"):
+        question = question.rstrip(".!") + "?"
+    return question, model_name, truncated
+
+
+def _evaluate_caseflow_answer(
+    topic: str,
+    scenario_question: str,
+    learner_answer: str,
+    markdown_context: str,
+    chat_history: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured.")
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
+
+    history_lines: List[str] = []
+    for row in (chat_history or [])[:8]:
+        role = str((row or {}).get("role") or "").strip().lower()
+        text = str((row or {}).get("content") or "").strip()
+        if role not in {"user", "assistant"} or not text:
+            continue
+        history_lines.append(f"{role.upper()}: {text[:1200]}")
+    history_blob = "\n".join(history_lines)
+
+    excerpt = (markdown_context or "")[:7000]
+    prompt = textwrap.dedent(
+        f"""
+        You are PaperX CaseFlow evaluator and coaching chatbot.
+        Evaluate the learner answer strictly against topic context and give concise, helpful coaching.
+
+        Scoring rubric (0-10):
+        - 0-2: incorrect or irrelevant
+        - 3-4: partially relevant, weak reasoning
+        - 5-6: mostly correct, some missing logic/precision
+        - 7-8: strong reasoning with good terminology and differential clarity
+        - 9-10: excellent, precise, complete, clinically coherent
+
+        Return ONLY valid JSON with keys:
+        - score: integer from 0 to 10
+        - verdict: short string ("Excellent", "Good", "Needs improvement", etc.)
+        - feedback: 3-6 lines, supportive and specific
+        - strengths: array of 1-4 short points
+        - improve: array of 1-4 short points
+        - follow_up_question: one short follow-up question for continued chat
+
+        Topic: {topic}
+        Scenario question: {scenario_question}
+
+        Prior chat context (if any):
+        {history_blob if history_blob else "(none)"}
+
+        Learner answer:
+        {learner_answer}
+
+        Notes context:
+        <<<NOTES>>>
+        {excerpt}
+        <<<END NOTES>>>
+        """
+    ).strip()
+
+    model_name = "gemini-2.5-pro"
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(model_name)
+
+    try:
+        response = model.generate_content(
+            [{"text": prompt}],
+            generation_config={
+                "response_mime_type": "application/json",
+                "temperature": 0.25,
+                "max_output_tokens": 900,
+            },
+            safety_settings=[
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+            ],
+            request_options={"timeout": 35.0},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini CaseFlow evaluation failed: {exc}") from exc
+
+    raw = _extract_caseflow_response_text(response)
+    parsed: Dict[str, Any] = {}
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            block = _extract_first_json_object_text(raw)
+            if block:
+                try:
+                    parsed = json.loads(block)
+                except Exception:
+                    parsed = {}
+
+    feedback = str(parsed.get("feedback") or "").strip()
+    follow_up = str(parsed.get("follow_up_question") or "").strip()
+    verdict = str(parsed.get("verdict") or "Needs improvement").strip() or "Needs improvement"
+    parsed_ok = bool(parsed)
+
+    try:
+        score = int(parsed.get("score"))
+    except Exception:
+        score = 0
+    score = max(0, min(score, 10))
+
+    strengths = parsed.get("strengths") if isinstance(parsed.get("strengths"), list) else []
+    improve = parsed.get("improve") if isinstance(parsed.get("improve"), list) else []
+    strengths = [str(item).strip() for item in strengths if str(item).strip()][:4]
+    improve = [str(item).strip() for item in improve if str(item).strip()][:4]
+
+    # Deterministic fallback scoring when model output is empty/invalid.
+    ans = (learner_answer or "").strip()
+    ans_lower = ans.lower()
+    words = re.findall(r"\b\w+\b", ans_lower)
+    word_count = len(words)
+    keyword_hits = 0
+    for k in [
+        "pathophysiology", "differential", "diagnosis", "management", "mechanism", "absorption",
+        "metabolism", "enzyme", "symptom", "clinical", "laboratory", "finding", "chronic", "acute"
+    ]:
+        if k in ans_lower:
+            keyword_hits += 1
+    reasoning_hits = 0
+    for r in ["because", "therefore", "suggest", "likely", "due to", "consistent with", "whereas"]:
+        if r in ans_lower:
+            reasoning_hits += 1
+
+    fallback_score = 0
+    if word_count >= 25:
+        fallback_score += 3
+    if word_count >= 70:
+        fallback_score += 2
+    if keyword_hits >= 3:
+        fallback_score += 2
+    if keyword_hits >= 6:
+        fallback_score += 1
+    if reasoning_hits >= 1:
+        fallback_score += 1
+    if "differential" in ans_lower or "include" in ans_lower or "vs" in ans_lower:
+        fallback_score += 1
+    fallback_score = max(0, min(9, fallback_score))
+
+    if (not parsed_ok) or (score == 0 and word_count >= 50):
+        score = max(score, fallback_score)
+        if score >= 8:
+            verdict = "Excellent"
+        elif score >= 6:
+            verdict = "Good"
+        elif score >= 4:
+            verdict = "Fair"
+        else:
+            verdict = "Needs improvement"
+
+    # Dynamic coaching generation by AI (no hardcoded feedback/follow-up templates).
+    if (not feedback) or (not follow_up):
+        coaching_prompt = textwrap.dedent(
+            f"""
+            You are a medical viva coach.
+            Produce adaptive coaching for the learner based on the scenario and answer.
+
+            Return ONLY valid JSON with keys:
+            - feedback: 2-5 concise lines, specific to this answer
+            - follow_up_question: exactly one next question
+
+            Constraints:
+            - Do not reveal final diagnosis directly.
+            - Keep coaching supportive but clinically rigorous.
+            - Match difficulty to score and answer quality.
+            - Keep follow_up_question under 30 words.
+
+            Topic: {topic}
+            Scenario: {scenario_question}
+            Learner answer: {learner_answer}
+            Score: {score}/10
+            Verdict: {verdict}
+            Extracted strengths: {json.dumps(strengths, ensure_ascii=False)}
+            Extracted improve points: {json.dumps(improve, ensure_ascii=False)}
+            """
+        ).strip()
+        try:
+            coach_resp = model.generate_content(
+                [{"text": coaching_prompt}],
+                generation_config={
+                    "response_mime_type": "application/json",
+                    "temperature": 0.4,
+                    "max_output_tokens": 280,
+                },
+                request_options={"timeout": 20.0},
+            )
+            coach_raw = _extract_caseflow_response_text(coach_resp)
+            coach_data: Dict[str, Any] = {}
+            if coach_raw:
+                try:
+                    coach_data = json.loads(coach_raw)
+                except Exception:
+                    block = _extract_first_json_object_text(coach_raw)
+                    if block:
+                        try:
+                            coach_data = json.loads(block)
+                        except Exception:
+                            coach_data = {}
+
+            generated_feedback = str((coach_data or {}).get("feedback") or "").strip()
+            generated_follow_up = str((coach_data or {}).get("follow_up_question") or "").strip()
+            if not feedback:
+                feedback = generated_feedback
+            if not follow_up:
+                follow_up = generated_follow_up
+        except Exception:
+            pass
+
+    return {
+        "score": score,
+        "verdict": verdict,
+        "feedback": feedback,
+        "strengths": strengths,
+        "improve": improve,
+        "follow_up_question": follow_up,
+        "model": model_name,
+    }
+
+
+@notes_router.post("/api/notes/caseflow", summary="Generate or retrieve cached CaseFlow scenario question")
+def api_caseflow_scenario(payload: Dict[str, Any] = Body(...)):
+    topic = str((payload or {}).get("topic") or "").strip()
+    variant = _normalize_variant((payload or {}).get("variant") or "detailed")
+    if not topic:
+        raise HTTPException(status_code=400, detail="Missing topic")
+
+    topic_ci = topic.lower().strip()
+    supabase = get_service_client()
+
+    try:
+        cached = (
+            supabase.table(AI_NOTES_CASEFLOW_SCENARIOS_TABLE)
+            .select("*")
+            .eq("topic_ci", topic_ci)
+            .eq("variant", variant)
+            .order("generated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(cached, "data", []) or []
+        if rows:
+            row = rows[0]
+            return {
+                "topic": row.get("topic") or topic,
+                "variant": row.get("variant") or variant,
+                "scenario_question": row.get("scenario_question") or "",
+                "model": row.get("model") or "cached",
+                "cached": True,
+                "generated_at": row.get("generated_at"),
+            }
+    except Exception:
+        pass
+
+    note_row = db_get_ai_note_by_title_exact_variant(topic, variant=variant)
+    if not note_row:
+        try:
+            res = (
+                supabase.table(_table_for_variant(variant))
+                .select("id,title,markdown")
+                .eq("title_ci", topic_ci)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(res, "data", []) or []
+            note_row = rows[0] if rows else None
+        except Exception:
+            note_row = None
+
+    if not note_row:
+        raise HTTPException(status_code=404, detail="No notes found for this topic. Generate notes first.")
+
+    markdown = (note_row.get("markdown") or "").strip()
+    if not markdown:
+        raise HTTPException(status_code=400, detail="Note is empty; generate notes first.")
+
+    scenario_question, model_name, truncated = _generate_caseflow_scenario_question(markdown, topic)
+
+    try:
+        supabase.table(AI_NOTES_CASEFLOW_SCENARIOS_TABLE).insert({
+            "topic": topic,
+            "note_id": note_row.get("id"),
+            "variant": variant,
+            "scenario_question": scenario_question,
+            "model": model_name,
+            "generated_at": datetime.utcnow().isoformat(),
+        }).execute()
+    except Exception:
+        pass
+
+    return {
+        "topic": topic,
+        "variant": variant,
+        "scenario_question": scenario_question,
+        "model": model_name,
+        "cached": False,
+        "truncated": truncated,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@notes_router.post("/api/notes/caseflow/evaluate", summary="Evaluate CaseFlow learner answer with Gemini")
+def api_caseflow_evaluate(payload: Dict[str, Any] = Body(...)):
+    topic = str((payload or {}).get("topic") or "").strip()
+    variant = _normalize_variant((payload or {}).get("variant") or "detailed")
+    scenario_question = str((payload or {}).get("scenario_question") or "").strip()
+    learner_answer = str((payload or {}).get("answer") or (payload or {}).get("learner_answer") or "").strip()
+    history = (payload or {}).get("history")
+
+    if not topic:
+        raise HTTPException(status_code=400, detail="Missing topic")
+    if not scenario_question:
+        raise HTTPException(status_code=400, detail="Missing scenario question")
+    if not learner_answer:
+        raise HTTPException(status_code=400, detail="Please enter your justification first")
+
+    markdown_context = ""
+    note_row = db_get_ai_note_by_title_exact_variant(topic, variant=variant)
+    if not note_row:
+        try:
+            supabase = get_service_client()
+            res = (
+                supabase.table(_table_for_variant(variant))
+                .select("markdown")
+                .eq("title_ci", topic.lower().strip())
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(res, "data", []) or []
+            note_row = rows[0] if rows else None
+        except Exception:
+            note_row = None
+
+    if note_row:
+        markdown_context = str(note_row.get("markdown") or "")
+
+    result = _evaluate_caseflow_answer(
+        topic=topic,
+        scenario_question=scenario_question,
+        learner_answer=learner_answer,
+        markdown_context=markdown_context,
+        chat_history=history if isinstance(history, list) else None,
+    )
+
+    return {
+        "topic": topic,
+        "variant": variant,
+        "scenario_question": scenario_question,
+        "evaluation": result,
+    }
+
+
+def _fetch_note_markdown_for_topic(topic: str, variant: str) -> str:
+    clean_topic = (topic or "").strip()
+    if not clean_topic:
+        raise HTTPException(status_code=400, detail="Missing topic")
+
+    used_variant = _normalize_variant(variant)
+    note_row = db_get_ai_note_by_title_exact_variant(clean_topic, variant=used_variant)
+    if not note_row:
+        try:
+            supabase = get_service_client()
+            res = (
+                supabase.table(_table_for_variant(used_variant))
+                .select("markdown")
+                .eq("title_ci", clean_topic.lower().strip())
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(res, "data", []) or []
+            note_row = rows[0] if rows else None
+        except Exception:
+            note_row = None
+
+    if not note_row:
+        raise HTTPException(status_code=404, detail="No notes found for this topic. Generate notes first.")
+
+    markdown = str(note_row.get("markdown") or "").strip()
+    if not markdown:
+        raise HTTPException(status_code=400, detail="Note is empty; generate notes first.")
+    return markdown
+
+
+def _viva_probe_label(turn_count: int) -> str:
+    probes = ["Why", "How", "What if", "Differentiate"]
+    return probes[max(0, turn_count) % len(probes)]
+
+
+def _generate_viva_turn(
+    topic: str,
+    markdown: str,
+    answer: str,
+    history: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured.")
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
+
+    turns = history if isinstance(history, list) else []
+    turn_count = len(turns)
+    probe = _viva_probe_label(turn_count)
+    excerpt = (markdown or "")[:7000]
+    learner = (answer or "").strip()
+    learner_lower = learner.lower()
+    unsure_markers = [
+        "i dont know", "i don't know", "dont know", "don't know", "idk", "not sure", "no idea",
+        "i dont knew", "i don't knew", "i dont kne", "i don't kne",
+    ]
+    is_unsure = any(m in learner_lower for m in unsure_markers) or len(re.findall(r"\b\w+\b", learner_lower)) <= 3
+
+    # Initial opening turn without learner answer
+    if not learner:
+        opening_q = {
+            "Why": f"Why does the core mechanism of {topic} produce the key clinical presentation?",
+            "How": f"How will you justify the most likely diagnosis in {topic} using case clues step-by-step?",
+            "What if": f"What if one major symptom is absent in {topic}—how would your diagnostic plan change?",
+            "Differentiate": f"Differentiate the top diagnosis in {topic} from one close differential in three clear points.",
+        }
+        return {
+            "examiner_reply": "Welcome to Viva Simulator. I will cross-question like a real examiner—concise, evidence-based answers only.",
+            "cross_question": opening_q.get(probe) or opening_q["Why"],
+            "question_type": probe,
+            "intensity": "moderate",
+        }
+
+    if is_unsure:
+        soft_q = {
+            "Why": f"No problem. Start simple: why is your primary diagnosis most likely in {topic}?",
+            "How": f"Start with one line: how does one key mechanism in {topic} create the main symptom?",
+            "What if": f"If you are unsure, what if we change one clue in {topic}—which diagnosis would move up or down?",
+            "Differentiate": f"Differentiate just one feature between your top diagnosis and one differential in {topic}.",
+        }
+        return {
+            "examiner_reply": "Fair. In viva, uncertainty is okay if you recover with structure. Give diagnosis → mechanism → differential.",
+            "cross_question": soft_q.get(probe) or soft_q["Why"],
+            "question_type": probe,
+            "intensity": "guided",
+        }
+
+    history_lines: List[str] = []
+    for row in turns[-8:]:
+        role = str((row or {}).get("role") or "").strip().lower()
+        text = str((row or {}).get("content") or "").strip()
+        if role in {"user", "assistant"} and text:
+            history_lines.append(f"{role.upper()}: {text[:1000]}")
+    history_blob = "\n".join(history_lines) if history_lines else "(none)"
+
+    prompt = textwrap.dedent(
+        f"""
+        You are a strict MBBS viva examiner simulator.
+        Ask probing cross-questions in a realistic, examiner-like tone.
+
+        You must:
+        - Keep it topic-grounded and clinically coherent.
+        - Briefly evaluate learner's answer quality (1-2 lines).
+        - Then ask exactly ONE next cross-question.
+        - Rotate viva styles across turns: Why / How / What if / Differentiate.
+        - Current required style for next question: {probe}.
+        - If learner is partially correct, interrupt and demand precision.
+        - Never provide full final answer.
+
+        Return ONLY valid JSON with keys:
+        - examiner_reply: string (1-3 short lines)
+        - cross_question: string (single precise question)
+        - question_type: one of ["Why","How","What if","Differentiate"]
+        - intensity: one of ["guided","moderate","strict"]
+
+        Topic: {topic}
+        Prior viva context:
+        {history_blob}
+
+        Learner answer:
+        {learner}
+
+        Notes context:
+        <<<NOTES>>>
+        {excerpt}
+        <<<END NOTES>>>
+        """
+    ).strip()
+
+    model_name = "gemini-2.5-pro"
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(model_name)
+
+    try:
+        response = model.generate_content(
+            [{"text": prompt}],
+            generation_config={
+                "response_mime_type": "application/json",
+                "temperature": 0.35,
+                "max_output_tokens": 800,
+            },
+            request_options={"timeout": 35.0},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini Viva request failed: {exc}") from exc
+
+    raw = _extract_caseflow_response_text(response)
+    parsed: Dict[str, Any] = {}
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            block = _extract_first_json_object_text(raw)
+            if block:
+                try:
+                    parsed = json.loads(block)
+                except Exception:
+                    parsed = {}
+
+    examiner_reply = str(parsed.get("examiner_reply") or "").strip()
+    cross_question = str(parsed.get("cross_question") or "").strip()
+    question_type = str(parsed.get("question_type") or probe).strip() or probe
+    intensity = str(parsed.get("intensity") or "moderate").strip() or "moderate"
+
+    if not examiner_reply:
+        examiner_reply = "You are close, but be more precise and tie each claim to a clinical clue."
+    if not cross_question:
+        fallback_q = {
+            "Why": f"Why is your leading diagnosis the best fit for {topic} compared to alternatives?",
+            "How": f"How do the key findings in {topic} map to mechanism step-by-step?",
+            "What if": f"What if one major finding changes in {topic}; how does your diagnosis ranking change?",
+            "Differentiate": f"Differentiate your top diagnosis from the nearest differential in {topic} with three points.",
+        }
+        cross_question = fallback_q.get(probe) or fallback_q["Why"]
+
+    if question_type not in {"Why", "How", "What if", "Differentiate"}:
+        question_type = probe
+    if intensity not in {"guided", "moderate", "strict"}:
+        intensity = "moderate"
+
+    return {
+        "examiner_reply": examiner_reply,
+        "cross_question": cross_question,
+        "question_type": question_type,
+        "intensity": intensity,
+    }
+
+
+def _generate_clinical_decision_tree(topic: str, markdown: str) -> Dict[str, Any]:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured.")
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
+
+    excerpt = (markdown or "")[:9000]
+    prompt = textwrap.dedent(
+        f"""
+        You are a clinical reasoning assistant for MBBS revision.
+        Generate VISUAL clinical decision flowcharts for topic: "{topic}" using ONLY the provided notes.
+
+        Return ONLY valid JSON with keys:
+        - primary_flowchart_mermaid: string (valid Mermaid flowchart TD using nodes/shapes and decision diamonds)
+        - emergency_flowchart_mermaid: string (valid Mermaid flowchart TD)
+        - differential_flowchart_mermaid: string (valid Mermaid flowchart TD with if/else style branching)
+
+        Rules:
+        - No markdown fences.
+        - Use clear shapes: [] process nodes, {{}} decision nodes, and labeled arrows.
+        - Keep clinically safe wording ("suspect", "consider", "urgent referral when indicated").
+        - Avoid long prose; prioritize flowchart logic.
+        - If notes are limited, still return structurally valid flowcharts.
+
+        <<<NOTES>>>
+        {excerpt}
+        <<<END NOTES>>>
+        """
+    ).strip()
+
+    model_name = "gemini-2.5-pro"
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(model_name)
+
+    try:
+        resp = model.generate_content(
+            [{"text": prompt}],
+            generation_config={
+                "response_mime_type": "application/json",
+                "temperature": 0.25,
+                "max_output_tokens": 1400,
+            },
+            request_options={"timeout": 40.0},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini decision-tree request failed: {exc}") from exc
+
+    raw = _extract_caseflow_response_text(resp)
+    data: Dict[str, Any] = {}
+    if raw:
+        try:
+            data = json.loads(raw)
+        except Exception:
+            block = _extract_first_json_object_text(raw)
+            if block:
+                try:
+                    data = json.loads(block)
+                except Exception:
+                    data = {}
+
+    primary_flowchart = str(data.get("primary_flowchart_mermaid") or "").strip()
+    emergency_flowchart = str(data.get("emergency_flowchart_mermaid") or "").strip()
+    differential_flowchart = str(data.get("differential_flowchart_mermaid") or "").strip()
+
+    if not primary_flowchart:
+        safe_topic = re.sub(r"[^A-Za-z0-9 ]+", " ", topic).strip() or "Clinical Topic"
+        primary_flowchart = textwrap.dedent(
+            f"""
+            flowchart TD
+              A[{safe_topic}] --> B{{Red flags present?}}
+              B -->|Yes| C[Immediate stabilization and urgent escalation]
+              B -->|No| D[Focused history and clinical exam]
+              D --> E{{Pattern and risk stratification}}
+              E --> F[Most likely diagnosis pathway]
+              E --> G[Alternative diagnosis pathway]
+            """
+        ).strip()
+
+    if not emergency_flowchart:
+        emergency_flowchart = textwrap.dedent(
+            """
+            flowchart TD
+              A[Initial triage and vitals] --> B{Hemodynamic instability?}
+              B -->|Yes| C[Resuscitation protocol and urgent referral]
+              B -->|No| D[Focused emergency workup]
+              D --> E{Critical warning signs present?}
+              E -->|Yes| F[Escalate to emergency specialist care]
+              E -->|No| G[Proceed with monitored definitive pathway]
+            """
+        ).strip()
+
+    if not differential_flowchart:
+        differential_flowchart = textwrap.dedent(
+            """
+            flowchart TD
+              A[Presenting symptom cluster] --> B{Typical hallmark findings?}
+              B -->|Yes| C[Prioritize primary diagnosis]
+              B -->|No| D[Consider alternate differentials]
+              C --> E{Response to initial management?}
+              E -->|Improves| F[Continue planned management]
+              E -->|No improvement| D
+              D --> G[Order confirmatory investigations]
+              G --> H[Re-rank differential diagnoses]
+            """
+        ).strip()
+
+    return {
+        "primary_flowchart_mermaid": primary_flowchart,
+        "emergency_flowchart_mermaid": emergency_flowchart,
+        "differential_flowchart_mermaid": differential_flowchart,
+        "model": model_name,
+    }
+
+
+@notes_router.post("/api/notes/viva/respond", summary="Viva simulator examiner response for current topic")
+def api_viva_respond(payload: Dict[str, Any] = Body(...)):
+    topic = str((payload or {}).get("topic") or "").strip()
+    variant = _normalize_variant((payload or {}).get("variant") or "detailed")
+    answer = str((payload or {}).get("answer") or "").strip()
+    history = (payload or {}).get("history")
+
+    markdown = _fetch_note_markdown_for_topic(topic, variant)
+    viva = _generate_viva_turn(
+        topic=topic,
+        markdown=markdown,
+        answer=answer,
+        history=history if isinstance(history, list) else None,
+    )
+
+    return {
+        "topic": topic,
+        "variant": variant,
+        "viva": viva,
+    }
+
+
+@notes_router.post("/api/notes/clinical-decision-tree", summary="Generate clinical decision trees for current topic")
+def api_clinical_decision_tree(payload: Dict[str, Any] = Body(...)):
+    topic = str((payload or {}).get("topic") or "").strip()
+    variant = _normalize_variant((payload or {}).get("variant") or "detailed")
+    if not topic:
+        raise HTTPException(status_code=400, detail="Missing topic")
+
+    topic_ci = topic.lower().strip()
+    supabase = get_service_client()
+
+    # DB cache read from ai_notes columns by real topic row.
+    try:
+        cached_res = (
+            supabase.table(AI_NOTES_TABLE)
+            .select("title,decision_tree_json,decision_tree_generated_at")
+            .eq("title_ci", topic_ci)
+            .limit(1)
+            .execute()
+        )
+        cached_rows = getattr(cached_res, "data", []) or []
+        if cached_rows:
+            cached_row = cached_rows[0]
+            cached_tree = cached_row.get("decision_tree_json")
+            if isinstance(cached_tree, dict) and cached_tree:
+                return {
+                    "topic": cached_row.get("title") or topic,
+                    "variant": variant,
+                    "decision_tree": cached_tree,
+                    "cached": True,
+                    "generated_at": cached_row.get("decision_tree_generated_at") or datetime.utcnow().isoformat() + "Z",
+                }
+    except Exception:
+        pass
+
+    markdown = _fetch_note_markdown_for_topic(topic, variant)
+    generated = _generate_clinical_decision_tree(topic=topic, markdown=markdown)
+
+    generated_at = datetime.utcnow().isoformat() + "Z"
+
+    # DB cache write to ai_notes columns by topic.
+    try:
+        upsert_payload = {
+            "title": topic,
+            "markdown": markdown,
+            "decision_tree_json": generated,
+            "decision_tree_generated_at": generated_at,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        (
+            supabase.table(AI_NOTES_TABLE)
+            .upsert(upsert_payload, on_conflict="title_ci", returning="minimal")
+            .execute()
+        )
+    except Exception:
+        pass
+
+    return {
+        "topic": topic,
+        "variant": variant,
+        "decision_tree": generated,
+        "cached": False,
+        "generated_at": generated_at,
+    }
+
+
+# ── Match the Following ──────────────────────────────────────────────
+def _generate_match_following(markdown: str, topic: str) -> Tuple[List[Dict[str, str]], str]:
+    """Generate 5 match-the-following pairs from notes using Gemini 2.5 Flash.
+
+    Returns (pairs_list, model_name).
+    Each pair: {"term": "...", "definition": "..."}.
+    """
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=501, detail="Gemini API key not configured.")
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
+
+    cleaned = (markdown or "").strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Note is empty; generate notes first.")
+
+    limit_chars = int(os.getenv("MATCH_MAX_CHARS", "8000") or "8000")
+    excerpt = cleaned[:limit_chars]
+
+    prompt = textwrap.dedent(
+        f"""
+        You are PaperX's quiz designer. Create exactly 5 "Match the Following" pairs for the topic "{topic}" using ONLY the material provided below.
+
+        Rules:
+        - Each pair has a short "term" (1-5 words) and a concise "definition" (5-15 words).
+        - Terms should be key concepts, terms, names, or categories from the notes.
+        - Definitions should be their meanings, descriptions, or associated facts.
+        - Make all 5 pairs clearly distinct from each other — no ambiguous matches.
+        - Return ONLY valid JSON, no markdown fences, no commentary.
+        - Schema: {{"pairs": [{{"term": "...", "definition": "..."}}, ...]}}
+
+        <<<NOTES>>>
+        {excerpt}
+        <<<END NOTES>>>
+        """
+    ).strip()
+
+    model_name = "gemini-2.5-flash"
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(model_name)
+    generation_config = genai.GenerationConfig(
+        response_mime_type="application/json",
+        temperature=0.3,
+        top_p=0.85,
+        max_output_tokens=1500,
+        candidate_count=1,
+    )
+
+    try:
+        resp = model.generate_content(
+            [{"text": prompt}],
+            generation_config=generation_config,
+            request_options={"timeout": 30.0},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini request failed: {exc}") from exc
+
+    raw: Optional[str] = None
+    try:
+        raw = resp.text  # type: ignore[attr-defined]
+    except Exception:
+        raw = None
+    if not raw and getattr(resp, "candidates", None):
+        try:
+            for cand in resp.candidates:
+                content = getattr(cand, "content", None)
+                parts = getattr(content, "parts", None) if content is not None else None
+                if parts:
+                    s = "".join(getattr(p, "text", "") for p in parts if hasattr(p, "text"))
+                    if s and s.strip():
+                        raw = s
+                        break
+        except Exception:
+            raw = None
+
+    if not raw:
+        raise HTTPException(status_code=500, detail="Gemini returned no content for match-following.")
+
+    # Parse JSON
+    try:
+        data = json.loads(raw)
+    except Exception:
+        block = _extract_first_json_object(raw)
+        if block:
+            try:
+                data = json.loads(block)
+            except Exception:
+                raise HTTPException(status_code=500, detail="Failed to parse match-following JSON.")
+        else:
+            raise HTTPException(status_code=500, detail="Failed to parse match-following JSON.")
+
+    pairs_raw = data.get("pairs")
+    if not isinstance(pairs_raw, list) or len(pairs_raw) < 3:
+        raise HTTPException(status_code=500, detail="Gemini response missing valid 'pairs' list.")
+
+    pairs: List[Dict[str, str]] = []
+    for p in pairs_raw[:5]:
+        term = str(p.get("term", "")).strip()
+        defn = str(p.get("definition", "")).strip()
+        if term and defn:
+            pairs.append({"term": term, "definition": defn})
+
+    if len(pairs) < 3:
+        raise HTTPException(status_code=500, detail="Not enough valid pairs generated.")
+
+    return pairs, model_name
+
+
+@notes_router.post("/api/notes/match-following", summary="Generate or retrieve cached Match the Following pairs")
+def api_match_following(payload: Dict[str, Any] = Body(...)):
+    """Generate 5 match-the-following pairs for a topic.
+
+    Caches results in ai_notes_match keyed by topic_ci.
+    Uses gemini-2.5-flash only.
+    """
+    topic = str(payload.get("topic") or "").strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="Missing topic")
+
+    topic_ci = topic.lower().strip()
+    supabase = get_service_client()
+
+    # --- Check cache ---
+    try:
+        cached = (
+            supabase.table("ai_notes_match")
+            .select("*")
+            .eq("topic_ci", topic_ci)
+            .order("generated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(cached, "data", []) or []
+        if rows:
+            row = rows[0]
+            return {
+                "topic": row.get("topic") or topic,
+                "pairs": row.get("pairs") or [],
+                "model": row.get("model") or "cached",
+                "cached": True,
+                "generated_at": row.get("generated_at"),
+            }
+    except Exception:
+        pass
+
+    # --- Fetch note markdown ---
+    note_row = db_get_ai_note_by_title_exact_variant(topic, variant="detailed")
+    if not note_row:
+        try:
+            res = (
+                supabase.table(AI_NOTES_TABLE)
+                .select("markdown,title")
+                .eq("title_ci", topic_ci)
+                .limit(1)
+                .execute()
+            )
+            data_rows = getattr(res, "data", []) or []
+            note_row = data_rows[0] if data_rows else None
+        except Exception:
+            note_row = None
+
+    if not note_row:
+        raise HTTPException(status_code=404, detail="No notes found for this topic. Generate notes first.")
+
+    markdown = (note_row.get("markdown") or "").strip()
+    if not markdown:
+        raise HTTPException(status_code=400, detail="Note is empty; generate notes first.")
+
+    # --- Generate ---
+    pairs, used_model = _generate_match_following(markdown, topic)
+
+    # --- Save to cache ---
+    try:
+        supabase.table("ai_notes_match").insert({
+            "topic": topic,
+            "pairs": pairs,
+            "model": used_model,
+            "generated_at": datetime.utcnow().isoformat(),
+        }).execute()
+    except Exception:
+        pass
+
+    return {
+        "topic": topic,
+        "pairs": pairs,
+        "model": used_model,
+        "cached": False,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
 @notes_router.get("/notes")
 @notes_router.get("/api/notes")
 def api_list_notes(variant: str = Query("detailed")):
@@ -18052,10 +19196,15 @@ def api_resolve_note(
     supabase = get_service_client()
     table = _table_for_variant(used_variant)
 
+    # Include ppt_link only for the detailed-variant ai_notes table
+    select_cols = "id,title,markdown,updated_at,image_urls"
+    if table == AI_NOTES_TABLE:
+        select_cols += ",ppt_link"
+
     try:
         res = (
             supabase.table(table)
-            .select("id,title,markdown,updated_at,image_urls")
+            .select(select_cols)
             .eq("title", clean_title)
             .order("updated_at", desc=True)
             .limit(1)
@@ -18065,7 +19214,7 @@ def api_resolve_note(
         if not rows:
             return JSONResponse({"error": "Not found"}, status_code=404)
         row = rows[0] or {}
-        return {
+        result = {
             "id": row.get("id"),
             "title": row.get("title"),
             "markdown": row.get("markdown", ""),
@@ -18073,10 +19222,44 @@ def api_resolve_note(
             "image_urls": row.get("image_urls") or [],
             "variant": used_variant,
         }
+        if table == AI_NOTES_TABLE:
+            result["ppt_link"] = row.get("ppt_link") or None
+        return result
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to resolve note: {e}")
+
+
+@notes_router.get("/api/notes/ppt-link", summary="Get PPT link for a topic from ai_notes")
+def api_get_ppt_link(
+    topic: str = Query(..., min_length=1, max_length=200),
+):
+    """Return the ppt_link stored in ai_notes for a given topic title.
+
+    Used by the MedMap feature to show PPT preview on medical_notes page.
+    """
+    clean_topic = (topic or "").strip()
+    if not clean_topic:
+        raise HTTPException(status_code=400, detail="Missing topic")
+
+    topic_ci = clean_topic.lower()
+    supabase = get_service_client()
+
+    try:
+        res = (
+            supabase.table(AI_NOTES_TABLE)
+            .select("ppt_link")
+            .eq("title_ci", topic_ci)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        if not rows:
+            return {"ppt_link": None}
+        return {"ppt_link": rows[0].get("ppt_link") or None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get ppt link: {e}")
 
 
 @notes_router.post("/notes")
@@ -21552,22 +22735,77 @@ async def get_blink_links(topics: str = Query(..., description="Comma-separated 
     Returns a map of topic_name -> blink_link for topics that have blinks.
     """
     supabase = get_service_client()
-    topics_list = [t.strip().lower() for t in topics.split(",") if t.strip()]
-    
-    if not topics_list:
+
+    def _normalize_topic_key(value: str) -> str:
+        if not value:
+            return ""
+        return " ".join(value.strip().lower().split())
+
+    raw_topics = [t for t in topics.split(",") if t and t.strip()]
+    requested_topics = []
+    seen_requested = set()
+    for raw in raw_topics:
+        norm = _normalize_topic_key(raw)
+        if not norm or norm in seen_requested:
+            continue
+        seen_requested.add(norm)
+        requested_topics.append(norm)
+
+    if not requested_topics:
         return {"links": {}}
-    
+
     try:
-        res = supabase.table(AI_NOTES_TABLE).select("title, title_ci, blink_link").in_("title_ci", topics_list).execute()
-        data = getattr(res, 'data', []) or []
-        
         links = {}
+
+        # Fast path: exact title_ci matches.
+        res = supabase.table(AI_NOTES_TABLE).select("title, title_ci, blink_link").in_("title_ci", requested_topics).execute()
+        data = getattr(res, "data", []) or []
+
+        matched_requested = set()
         for row in data:
-            blink_link = row.get("blink_link")
-            if blink_link and blink_link.strip():
-                # Use original title as key for better matching
-                links[row.get("title_ci") or row.get("title", "").lower()] = blink_link
-        
+            blink_link = (row.get("blink_link") or "").strip()
+            if not blink_link:
+                continue
+            row_key = _normalize_topic_key(row.get("title_ci") or row.get("title") or "")
+            if not row_key:
+                continue
+
+            links[row_key] = blink_link
+            if row_key in seen_requested:
+                matched_requested.add(row_key)
+
+        # Fallback path: for unresolved topics, try looser ilike match.
+        unresolved = [topic for topic in requested_topics if topic not in matched_requested]
+        for topic_key in unresolved:
+            try:
+                fallback_res = (
+                    supabase
+                    .table(AI_NOTES_TABLE)
+                    .select("title, title_ci, blink_link")
+                    .ilike("title_ci", f"%{topic_key}%")
+                    .limit(5)
+                    .execute()
+                )
+                fallback_rows = getattr(fallback_res, "data", []) or []
+            except Exception:
+                fallback_rows = []
+
+            chosen_link = ""
+            for row in fallback_rows:
+                blink_link = (row.get("blink_link") or "").strip()
+                if not blink_link:
+                    continue
+                row_key = _normalize_topic_key(row.get("title_ci") or row.get("title") or "")
+                if not row_key:
+                    continue
+                if row_key == topic_key or topic_key in row_key or row_key in topic_key:
+                    chosen_link = blink_link
+                    links[row_key] = blink_link
+                    break
+
+            if chosen_link:
+                links[topic_key] = chosen_link
+
         return {"links": links}
     except Exception as e:
         print(f"[Blink] Error fetching links: {e}")
