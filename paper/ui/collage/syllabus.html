@@ -1058,6 +1058,10 @@
         // Store labx cache status for topics
         let topicLabxCache = {};
 
+        function normalizeTopicKey(value) {
+            return (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        }
+
         async function fetchBlinkLinks(units) {
             // Collect all topic names from units
             const topicNames = [];
@@ -1073,7 +1077,14 @@
                 const res = await fetch(`${apiBase}/api/blink/links?topics=${encodeURIComponent(topicNames.join(','))}`);
                 if (res.ok) {
                     const data = await res.json();
-                    return data.links || {};
+                    const raw = data.links || {};
+                    const normalized = {};
+                    for (const [topic, url] of Object.entries(raw)) {
+                        const key = normalizeTopicKey(topic);
+                        if (!key || !url) continue;
+                        normalized[key] = url;
+                    }
+                    return normalized;
                 }
             } catch (e) {
                 console.error('[Blink] Error fetching links:', e);
@@ -1155,7 +1166,7 @@
                     const pptBtnAttr = hasPpt ? 'data-topic-ppt-remove' : 'data-topic-ppt-upload';
                     const pptCurrentAttr = hasPpt ? `data-current-url=\"${Collage.escapeHtml(pptUrl)}\"` : '';
                     // Check if blink exists for this topic
-                    const topicNameLower = (t.topic_title || t.topic || '').toLowerCase();
+                    const topicNameLower = normalizeTopicKey(t.topic_title || t.topic || '');
                     const blinkUrl = topicBlinkLinks[topicNameLower] || '';
                     const hasBlink = !!blinkUrl;
                     const blinkBtnLabel = hasBlink ? 'View Blink' : 'Gen Blink';
@@ -1358,7 +1369,7 @@
                         attachViewBlinkHandler(btn);
 
                         // Update local cache
-                        topicBlinkLinks[topicName.toLowerCase()] = blinkUrl;
+                        topicBlinkLinks[normalizeTopicKey(topicName)] = blinkUrl;
 
                     } catch (err) {
                         console.error('[GenBlink] Error:', err);
@@ -1438,7 +1449,7 @@
                 }
 
                 // Update local cache
-                delete topicBlinkLinks[topicName.toLowerCase()];
+                delete topicBlinkLinks[normalizeTopicKey(topicName)];
 
                 closeBlinkPreview();
 
@@ -1509,7 +1520,7 @@
                     attachViewBlinkHandler(btn);
 
                     // Update local cache
-                    topicBlinkLinks[topicName.toLowerCase()] = blinkUrl;
+                    topicBlinkLinks[normalizeTopicKey(topicName)] = blinkUrl;
 
                 } catch (err) {
                     console.error('[GenBlink] Error:', err);
