@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardiovascular System — Interactive Medical Learning</title>
+    <meta name="description"
+        content="Advanced interactive 3D cardiovascular system learning platform for medical students">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --primary: #00f0ff;
+            --secondary: #ff006e;
+            --accent: #7b2dff;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --danger: #ff3355;
+            --bg-dark: #050810;
+            --bg-card: rgba(10, 15, 30, 0.7);
+            --bg-glass: rgba(255, 255, 255, 0.03);
+            --text: #e8eaf6;
+            --text-dim: #8892b0;
+            --radius: 16px;
+            --glow: 0 0 30px rgba(0, 240, 255, 0.15)
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            overflow-x: hidden;
+            scroll-behavior: smooth
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-dark)
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 3px
+        }
+
+        .glass {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: var(--radius);
+            box-shadow: var(--glow)
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 22px;
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            background: rgba(0, 240, 255, 0.08);
+            color: var(--primary);
+            border-radius: 30px;
+            cursor: pointer;
+            font: 500 .85rem 'Inter';
+            transition: all .3s;
+            text-transform: uppercase;
+            letter-spacing: 1px
+        }
+
+        .btn:hover {
+            background: var(--primary);
+            color: var(--bg-dark);
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.4);
+            transform: translateY(-2px)
+        }
+
+        .btn-danger {
+            border-color: rgba(255, 0, 110, 0.3);
+            background: rgba(255, 0, 110, 0.08);
+            color: var(--secondary)
+        }
+
+        .btn-danger:hover {
+            background: var(--secondary);
+            color: #fff
+        }
+
+        .btn-accent {
+            border-color: rgba(123, 45, 255, 0.3);
+            background: rgba(123, 45, 255, 0.08);
+            color: var(--accent)
+        }
+
+        .btn-accent:hover {
+            background: var(--accent);
+            color: #fff
+        }
+
+        /* NAV */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            padding: 16px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(5, 8, 16, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04)
+        }
+
+        nav .logo {
+            font-size: 1.3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        nav .nav-links {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap
+        }
+
+        nav .nav-links a {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: .8rem;
+            padding: 6px 14px;
+            border-radius: 20px;
+            transition: all .3s;
+            font-weight: 500
+        }
+
+        nav .nav-links a:hover,
+        nav .nav-links a.active {
+            color: var(--primary);
+            background: rgba(0, 240, 255, 0.08)
+        }
+
+        /* HERO */
+        #hero {
+            position: relative;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            overflow: hidden
+        }
+
+        #hero-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 10;
+            padding: 0 60px;
+            max-width: 700px
+        }
+
+        .hero-content .tag {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: .7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--primary);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            background: rgba(0, 240, 255, 0.05);
+            margin-bottom: 20px
+        }
+
+        .hero-content h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 20px;
+            opacity: 0
+        }
+
+        .hero-content h1 span {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        .hero-content p {
+            font-size: 1.1rem;
+            color: var(--text-dim);
+            line-height: 1.7;
+            margin-bottom: 30px;
+            opacity: 0
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            opacity: 0
+        }
+
+        .scroll-ind {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-dim);
+            font-size: .7rem;
+            animation: bob 2s infinite
+        }
+
+        @keyframes bob {
+
+            0%,
+            100% {
+                transform: translateX(-50%) translateY(0)
+            }
+
+            50% {
+                transform: translateX(-50%) translateY(8px)
+            }
+        }
+
+        /* SECTIONS */
+        .section {
+            padding: 100px 40px;
+            position: relative
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px
+        }
+
+        .section-header h2 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin-bottom: 12px
+        }
+
+        .section-header h2 span {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        .section-header p {
+            color: var(--text-dim);
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.7
+        }
+
+        /* 3D MODEL SECTION */
+        #model-section {
+            min-height: 100vh
+        }
+
+        .model-container {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 24px;
+            max-width: 1400px;
+            margin: 0 auto
+        }
+
+        #model-canvas-container {
+            position: relative;
+            border-radius: var(--radius);
+            overflow: hidden;
+            min-height: 500px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.4)
+        }
+
+        #model-canvas {
+            width: 100%;
+            height: 100%;
+            display: block
+        }
+
+        .model-controls {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center
+        }
+
+        .model-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 16px
+        }
+
+        .sidebar-card {
+            padding: 20px
+        }
+
+        .sidebar-card h3 {
+            font-size: .9rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .layer-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: .82rem;
+            color: var(--text-dim)
+        }
+
+        .layer-toggle:last-child {
+            border: none
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            border-radius: 11px;
+            background: rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: all .3s
+        }
+
+        .toggle-switch.active {
+            background: var(--primary)
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #fff;
+            transition: all .3s
+        }
+
+        .toggle-switch.active::after {
+            left: 21px
+        }
+
+        .slider-group {
+            margin-bottom: 12px
+        }
+
+        .slider-group label {
+            display: flex;
+            justify-content: space-between;
+            font-size: .78rem;
+            color: var(--text-dim);
+            margin-bottom: 6px
+        }
+
+        .slider-group input[type=range] {
+            width: 100%;
+            -webkit-appearance: none;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            outline: none
+        }
+
+        .slider-group input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.4)
+        }
+
+        /* SIMULATION PANEL */
+        #sim-section .sim-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto
+        }
+
+        .param-card {
+            padding: 24px
+        }
+
+        .param-card .param-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px
+        }
+
+        .param-card .param-value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary)
+        }
+
+        .param-card .param-unit {
+            font-size: .8rem;
+            color: var(--text-dim);
+            margin-left: 4px
+        }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: .65rem;
+            font-weight: 700;
+            text-transform: uppercase
+        }
+
+        .status-normal {
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--success)
+        }
+
+        .status-warning {
+            background: rgba(255, 170, 0, 0.1);
+            color: var(--warning)
+        }
+
+        .status-critical {
+            background: rgba(255, 51, 85, 0.1);
+            color: var(--danger)
+        }
+
+        /* PATHOLOGY */
+        #path-section .path-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            max-width: 1200px;
+            margin: 0 auto
+        }
+
+        .path-card {
+            padding: 20px;
+            cursor: pointer;
+            transition: all .3s;
+            position: relative;
+            overflow: hidden
+        }
+
+        .path-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--secondary)
+        }
+
+        .path-card.active {
+            border-color: var(--secondary);
+            box-shadow: 0 0 30px rgba(255, 0, 110, 0.15)
+        }
+
+        .path-card h4 {
+            font-size: .95rem;
+            font-weight: 700;
+            margin-bottom: 8px
+        }
+
+        .path-card p {
+            font-size: .78rem;
+            color: var(--text-dim);
+            line-height: 1.5
+        }
+
+        /* GRAPHS */
+        #graphs-section .graph-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto
+        }
+
+        .graph-card {
+            padding: 20px
+        }
+
+        .graph-card h4 {
+            font-size: .85rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 12px
+        }
+
+        .graph-card canvas {
+            width: 100% !important;
+            height: 200px !important
+        }
+
+        /* CARDIAC CYCLE */
+        #cycle-section .cycle-container {
+            max-width: 1000px;
+            margin: 0 auto
+        }
+
+        .cycle-steps {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 30px;
+            overflow-x: auto;
+            padding-bottom: 10px
+        }
+
+        .cycle-step {
+            flex: 1;
+            min-width: 150px;
+            padding: 14px;
+            border-radius: 12px;
+            cursor: pointer;
+            text-align: center;
+            transition: all .3s;
+            background: var(--bg-glass);
+            border: 1px solid rgba(255, 255, 255, 0.05)
+        }
+
+        .cycle-step:hover,
+        .cycle-step.active {
+            background: rgba(0, 240, 255, 0.08);
+            border-color: var(--primary)
+        }
+
+        .cycle-step .step-num {
+            font-size: 1.8rem;
+            font-weight: 900;
+            color: var(--primary);
+            opacity: .3
+        }
+
+        .cycle-step.active .step-num {
+            opacity: 1
+        }
+
+        .cycle-step .step-name {
+            font-size: .72rem;
+            font-weight: 600;
+            margin-top: 4px;
+            color: var(--text-dim)
+        }
+
+        .cycle-step.active .step-name {
+            color: var(--primary)
+        }
+
+        .cycle-detail {
+            padding: 30px;
+            min-height: 250px
+        }
+
+        .cycle-detail h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 12px
+        }
+
+        .cycle-detail p {
+            color: var(--text-dim);
+            line-height: 1.8;
+            font-size: .92rem
+        }
+
+        .cycle-detail .key-events {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 16px
+        }
+
+        .cycle-detail .key-event {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: .72rem;
+            font-weight: 600;
+            background: rgba(0, 240, 255, 0.06);
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            color: var(--primary)
+        }
+
+        /* QUIZ */
+        #quiz-section .quiz-container {
+            max-width: 800px;
+            margin: 0 auto
+        }
+
+        .quiz-card {
+            padding: 30px;
+            margin-bottom: 20px
+        }
+
+        .quiz-card .q-num {
+            font-size: .7rem;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px
+        }
+
+        .quiz-card .q-text {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            line-height: 1.6
+        }
+
+        .quiz-options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        .quiz-opt {
+            padding: 14px 18px;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: var(--bg-glass);
+            transition: all .3s;
+            font-size: .88rem
+        }
+
+        .quiz-opt:hover {
+            border-color: var(--primary);
+            background: rgba(0, 240, 255, 0.05)
+        }
+
+        .quiz-opt.correct {
+            border-color: var(--success);
+            background: rgba(0, 255, 136, 0.08);
+            color: var(--success)
+        }
+
+        .quiz-opt.wrong {
+            border-color: var(--danger);
+            background: rgba(255, 51, 85, 0.08);
+            color: var(--danger)
+        }
+
+        .quiz-explanation {
+            margin-top: 16px;
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(0, 240, 255, 0.04);
+            border-left: 3px solid var(--primary);
+            font-size: .85rem;
+            color: var(--text-dim);
+            display: none
+        }
+
+        /* AI PANEL */
+        #ai-panel {
+            position: fixed;
+            top: 0;
+            right: -420px;
+            width: 420px;
+            height: 100%;
+            z-index: 1100;
+            transition: right .4s cubic-bezier(.4, 0, .2, 1);
+            display: flex;
+            flex-direction: column;
+            background: rgba(8, 12, 24, 0.97);
+            backdrop-filter: blur(30px);
+            border-left: 1px solid rgba(255, 255, 255, 0.05)
+        }
+
+        #ai-panel.open {
+            right: 0
+        }
+
+        .ai-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center
+        }
+
+        .ai-header h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .ai-header h3 i {
+            color: var(--accent)
+        }
+
+        .ai-close {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 4px
+        }
+
+        .ai-quick-actions {
+            padding: 12px 20px;
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04)
+        }
+
+        .ai-quick-btn {
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: .68rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid rgba(123, 45, 255, 0.2);
+            background: rgba(123, 45, 255, 0.06);
+            color: var(--accent);
+            transition: all .3s;
+            white-space: nowrap
+        }
+
+        .ai-quick-btn:hover {
+            background: var(--accent);
+            color: #fff
+        }
+
+        .ai-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px
+        }
+
+        .ai-msg {
+            padding: 14px;
+            border-radius: 14px;
+            font-size: .85rem;
+            line-height: 1.6;
+            max-width: 90%
+        }
+
+        .ai-msg.user {
+            background: rgba(0, 240, 255, 0.08);
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            align-self: flex-end
+        }
+
+        .ai-msg.assistant {
+            background: rgba(123, 45, 255, 0.06);
+            border: 1px solid rgba(123, 45, 255, 0.1);
+            align-self: flex-start
+        }
+
+        .ai-input-area {
+            padding: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            gap: 10px
+        }
+
+        .ai-input-area input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 12px 16px;
+            color: var(--text);
+            font-size: .85rem;
+            outline: none
+        }
+
+        .ai-input-area input:focus {
+            border-color: var(--primary)
+        }
+
+        .ai-input-area button {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        /* GAMIFICATION */
+        #game-section .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            max-width: 1000px;
+            margin: 0 auto
+        }
+
+        .badge-card {
+            padding: 20px;
+            text-align: center;
+            transition: all .3s
+        }
+
+        .badge-card:hover {
+            transform: translateY(-4px)
+        }
+
+        .badge-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin: 0 auto 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.1), rgba(123, 45, 255, 0.1));
+            border: 2px solid rgba(0, 240, 255, 0.2)
+        }
+
+        .badge-card.locked .badge-icon {
+            opacity: .3;
+            filter: grayscale(1)
+        }
+
+        .badge-card h4 {
+            font-size: .85rem;
+            font-weight: 700;
+            margin-bottom: 4px
+        }
+
+        .badge-card p {
+            font-size: .72rem;
+            color: var(--text-dim)
+        }
+
+        .score-display {
+            text-align: center;
+            padding: 30px;
+            margin-bottom: 30px
+        }
+
+        .score-display .score {
+            font-size: 4rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        /* AI TOGGLE BTN */
+        #ai-toggle {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1050;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--secondary));
+            border: none;
+            color: #fff;
+            font-size: 1.3rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 30px rgba(123, 45, 255, 0.4);
+            transition: all .3s
+        }
+
+        #ai-toggle:hover {
+            transform: scale(1.1)
+        }
+
+        /* RESPONSIVE */
+        @media(max-width:1024px) {
+            .model-container {
+                grid-template-columns: 1fr
+            }
+
+            .model-sidebar {
+                flex-direction: row;
+                overflow-x: auto
+            }
+
+            .sidebar-card {
+                min-width: 280px
+            }
+        }
+
+        @media(max-width:768px) {
+            nav {
+                padding: 12px 16px;
+                flex-direction: column;
+                gap: 10px
+            }
+
+            .hero-content {
+                padding: 0 24px
+            }
+
+            .section {
+                padding: 60px 20px
+            }
+
+            .graph-grid {
+                grid-template-columns: 1fr !important
+            }
+
+            #ai-panel {
+                width: 100%;
+                right: -100%
+            }
+
+            .model-container {
+                grid-template-columns: 1fr
+            }
+        }
+
+        @media(max-width:480px) {
+            .hero-content h1 {
+                font-size: 2rem
+            }
+
+            .cycle-steps {
+                flex-direction: column
+            }
+        }
+
+        /* PARTICLES */
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            animation: float-p linear infinite
+        }
+
+        @keyframes float-p {
+            0% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 0
+            }
+
+            10% {
+                opacity: 1
+            }
+
+            90% {
+                opacity: 1
+            }
+
+            100% {
+                transform: translateY(-100vh) rotate(720deg);
+                opacity: 0
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- NAV -->
+    <nav>
+        <div class="logo">CardioViz<sup>3D</sup></div>
+        <div class="nav-links">
+            <a href="#hero" class="active">Home</a>
+            <a href="#model-section">3D Model</a>
+            <a href="#sim-section">Simulation</a>
+            <a href="#path-section">Pathology</a>
+            <a href="#graphs-section">Graphs</a>
+            <a href="#cycle-section">Cardiac Cycle</a>
+            <a href="#quiz-section">Quiz</a>
+            <a href="#game-section">Achievements</a>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section id="hero">
+        <canvas id="hero-canvas"></canvas>
+        <div class="hero-content">
+            <div class="tag">🫀 Interactive Medical Learning</div>
+            <h1 id="hero-title">Master the <span>Cardiovascular System</span></h1>
+            <p id="hero-desc">Explore the heart in stunning 3D. Simulate physiological parameters, visualize
+                pathologies, and master cardiac physiology through interactive learning.</p>
+            <div class="hero-actions">
+                <button class="btn"
+                    onclick="document.getElementById('model-section').scrollIntoView({behavior:'smooth'})"><i
+                        data-lucide="rotate-3d"></i> Explore 3D Heart</button>
+                <button class="btn btn-danger"
+                    onclick="document.getElementById('sim-section').scrollIntoView({behavior:'smooth'})"><i
+                        data-lucide="activity"></i> Start Simulation</button>
+                <button class="btn btn-accent" onclick="toggleAI()"><i data-lucide="bot"></i> AI Assistant</button>
+            </div>
+        </div>
+        <div class="scroll-ind"><i data-lucide="chevrons-down"></i>Scroll to explore</div>
+    </section>
+
+    <!-- 3D MODEL SECTION -->
+    <section id="model-section" class="section">
+        <div class="section-header">
+            <h2>Interactive <span>3D Heart</span> Model</h2>
+            <p>Rotate, zoom, and explore the cardiac anatomy. Toggle layers and click structures for details.</p>
+        </div>
+        <div class="model-container">
+            <div id="model-canvas-container">
+                <canvas id="model-canvas"></canvas>
+                <div class="model-controls">
+                    <button class="btn" onclick="resetCamera()"><i data-lucide="maximize"></i> Reset View</button>
+                    <button class="btn" id="anim-toggle" onclick="toggleHeartbeat()"><i data-lucide="play"></i>
+                        Heartbeat</button>
+                    <button class="btn" onclick="toggleBloodFlow()"><i data-lucide="droplets"></i> Blood Flow</button>
+                </div>
+            </div>
+            <div class="model-sidebar">
+                <div class="sidebar-card glass">
+                    <h3><i data-lucide="layers"></i> Structure Layers</h3>
+                    <div class="layer-toggle"><span>Pericardium</span>
+                        <div class="toggle-switch active" onclick="toggleLayer(this,'pericardium')"></div>
+                    </div>
+                    <div class="layer-toggle"><span>Myocardium</span>
+                        <div class="toggle-switch active" onclick="toggleLayer(this,'myocardium')"></div>
+                    </div>
+                    <div class="layer-toggle"><span>Endocardium</span>
+                        <div class="toggle-switch active" onclick="toggleLayer(this,'endocardium')"></div>
+                    </div>
+                    <div class="layer-toggle"><span>Valves</span>
+                        <div class="toggle-switch active" onclick="toggleLayer(this,'valves')"></div>
+                    </div>
+                    <div class="layer-toggle"><span>Great Vessels</span>
+                        <div class="toggle-switch active" onclick="toggleLayer(this,'vessels')"></div>
+                    </div>
+                    <div class="layer-toggle"><span>Coronary Arteries</span>
+                        <div class="toggle-switch active" onclick="toggleLayer(this,'coronary')"></div>
+                    </div>
+                </div>
+                <div class="sidebar-card glass">
+                    <h3><i data-lucide="sliders"></i> Transparency</h3>
+                    <div class="slider-group"><label><span>Outer Wall</span><span
+                                id="trans-val">80%</span></label><input type="range" min="0" max="100" value="80"
+                            oninput="setTransparency(this.value)"></div>
+                    <div class="slider-group"><label><span>Animation Speed</span><span
+                                id="speed-val">1x</span></label><input type="range" min="1" max="10" value="5"
+                            oninput="setAnimSpeed(this.value)"></div>
+                </div>
+                <div class="sidebar-card glass" id="structure-info">
+                    <h3><i data-lucide="info"></i> Structure Info</h3>
+                    <p style="font-size:.82rem;color:var(--text-dim)">Click on any structure in the 3D model to view
+                        detailed anatomical information.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SIMULATION PANEL -->
+    <section id="sim-section" class="section">
+        <div class="section-header">
+            <h2>Parameter <span>Simulation</span></h2>
+            <p>Adjust physiological parameters and observe real-time changes in cardiac function.</p>
+        </div>
+        <div class="sim-grid" id="sim-grid"></div>
+    </section>
+
+    <!-- PATHOLOGY MODE -->
+    <section id="path-section" class="section">
+        <div class="section-header">
+            <h2>Pathology <span>Mode</span></h2>
+            <p>Explore common cardiovascular pathologies with structural and functional visualization.</p>
+        </div>
+        <div class="path-grid" id="path-grid"></div>
+    </section>
+
+    <!-- GRAPHS -->
+    <section id="graphs-section" class="section">
+        <div class="section-header">
+            <h2>Physiology <span>Dashboard</span></h2>
+            <p>Real-time physiological waveforms and hemodynamic monitoring.</p>
+        </div>
+        <div class="graph-grid" id="graph-grid"></div>
+    </section>
+
+    <!-- CARDIAC CYCLE -->
+    <section id="cycle-section" class="section">
+        <div class="section-header">
+            <h2>Cardiac <span>Cycle</span> Visualizer</h2>
+            <p>Step through each phase of the cardiac cycle with detailed explanations.</p>
+        </div>
+        <div class="cycle-container">
+            <div class="cycle-steps" id="cycle-steps"></div>
+            <div class="cycle-detail glass" id="cycle-detail"></div>
+        </div>
+    </section>
+
+    <!-- QUIZ -->
+    <section id="quiz-section" class="section">
+        <div class="section-header">
+            <h2>Test Your <span>Knowledge</span></h2>
+            <p>NEET PG style MCQs and clinical viva questions.</p>
+        </div>
+        <div class="quiz-container" id="quiz-container"></div>
+    </section>
+
+    <!-- GAMIFICATION -->
+    <section id="game-section" class="section">
+        <div class="section-header">
+            <h2>Your <span>Achievements</span></h2>
+            <p>Track your progress and unlock advanced modules.</p>
+        </div>
+        <div class="score-display glass">
+            <div class="score" id="total-score">0</div>
+            <div style="color:var(--text-dim);font-size:.85rem;margin-top:4px">Total Points</div>
+        </div>
+        <div class="game-grid" id="badge-grid"></div>
+    </section>
+
+    <!-- AI PANEL -->
+    <button id="ai-toggle" onclick="toggleAI()">🤖</button>
+    <div id="ai-panel">
+        <div class="ai-header">
+            <h3><i data-lucide="brain"></i> AI Assistant</h3><button class="ai-close" onclick="toggleAI()">✕</button>
+        </div>
+        <div class="ai-quick-actions">
+            <button class="ai-quick-btn" onclick="aiAsk('eli5')">Explain Like I'm 5</button>
+            <button class="ai-quick-btn" onclick="aiAsk('case')">Clinical Case</button>
+            <button class="ai-quick-btn" onclick="aiAsk('viva')">Viva Questions</button>
+            <button class="ai-quick-btn" onclick="aiAsk('mcq')">Generate MCQ</button>
+            <button class="ai-quick-btn" onclick="aiAsk('summary')">Summarize</button>
+            <button class="ai-quick-btn" onclick="aiAsk('pathology')">Explain Pathology</button>
+        </div>
+        <div class="ai-messages" id="ai-messages">
+            <div class="ai-msg assistant">👋 Hello! I'm your cardiovascular AI tutor. Ask me anything about the heart,
+                hemodynamics, or cardiac pathology.</div>
+        </div>
+        <div class="ai-input-area"><input id="ai-input" placeholder="Ask about the cardiovascular system..."
+                onkeydown="if(event.key==='Enter')sendAI()"><button class="btn" onclick="sendAI()">➤</button></div>
+    </div>
+
+    <!-- JAVASCRIPT PLACEHOLDER -->
+    <script>
+        // ============ TOPIC CONFIG ============
+        const TopicConfig = {
+            name: "Cardiovascular System",
+            structures: [
+                { id: "pericardium", name: "Pericardium", color: 0x334455, desc: "Double-walled sac enclosing the heart. The fibrous pericardium provides protection; the serous pericardium reduces friction during heartbeats." },
+                { id: "myocardium", name: "Myocardium", color: 0xcc3344, desc: "The thick muscular middle layer of the heart wall. Composed of cardiac muscle cells (cardiomyocytes) responsible for contraction. Thickest in the left ventricle." },
+                { id: "endocardium", name: "Endocardium", color: 0xff6677, desc: "The smooth endothelial lining of the heart chambers. Continuous with the endothelium of blood vessels. Prevents blood clot formation." },
+                { id: "valves", name: "Heart Valves", color: 0xffccdd, desc: "Four valves ensure unidirectional blood flow: Mitral (bicuspid), Tricuspid, Aortic, and Pulmonary valves. Dysfunction leads to stenosis or regurgitation." },
+                { id: "vessels", name: "Great Vessels", color: 0x4488ff, desc: "Aorta (systemic output), Pulmonary trunk (to lungs), Superior/Inferior Vena Cava (systemic return), Pulmonary veins (oxygenated return)." },
+                { id: "coronary", name: "Coronary Arteries", color: 0xff8800, desc: "Left coronary artery (LAD + LCx) and Right coronary artery supply the myocardium. Blockage causes myocardial infarction (heart attack)." }
+            ],
+            parameters: [
+                { id: "hr", name: "Heart Rate", unit: "bpm", min: 30, max: 220, default: 72, normal: [60, 100], warning: [40, 150], icon: "heart-pulse" },
+                { id: "sbp", name: "Systolic BP", unit: "mmHg", min: 60, max: 250, default: 120, normal: [90, 140], warning: [80, 180], icon: "gauge" },
+                { id: "dbp", name: "Diastolic BP", unit: "mmHg", min: 30, max: 150, default: 80, normal: [60, 90], warning: [50, 100], icon: "gauge" },
+                { id: "sv", name: "Stroke Volume", unit: "mL", min: 20, max: 150, default: 70, normal: [55, 100], warning: [40, 120], icon: "droplets" },
+                { id: "svr", name: "Syst. Vasc. Resistance", unit: "dynes", min: 500, max: 3000, default: 1200, normal: [800, 1600], warning: [600, 2200], icon: "git-branch" },
+                { id: "spo2", name: "Oxygen Saturation", unit: "%", min: 50, max: 100, default: 98, normal: [95, 100], warning: [88, 94], icon: "wind" }
+            ],
+            pathologies: [
+                { id: "normal", name: "Normal", desc: "Healthy cardiovascular function with normal hemodynamics.", color: "#00ff88", params: { hr: 72, sbp: 120, dbp: 80, sv: 70, svr: 1200, spo2: 98 } },
+                { id: "hypertension", name: "Hypertension", desc: "Sustained systolic BP >140 mmHg. Increased afterload, left ventricular hypertrophy, arterial stiffening.", color: "#ff3355", params: { hr: 82, sbp: 180, dbp: 110, sv: 65, svr: 2200, spo2: 97 } },
+                { id: "atherosclerosis", name: "Atherosclerosis", desc: "Plaque buildup in coronary arteries. Reduced lumen diameter, impaired perfusion, risk of MI.", color: "#ffaa00", params: { hr: 88, sbp: 150, dbp: 95, sv: 55, svr: 1800, spo2: 94 } },
+                { id: "heart_failure", name: "Heart Failure", desc: "Reduced ejection fraction (HFrEF). Compensatory tachycardia, fluid retention, decreased cardiac output.", color: "#ff006e", params: { hr: 110, sbp: 95, dbp: 70, sv: 35, svr: 2400, spo2: 90 } },
+                { id: "arrhythmia", name: "Atrial Fibrillation", desc: "Irregular, rapid atrial depolarization. Loss of atrial kick reduces ventricular filling by ~25%.", color: "#7b2dff", params: { hr: 145, sbp: 105, dbp: 75, sv: 45, svr: 1300, spo2: 93 } }
+            ],
+            cardiacCycle: [
+                { phase: "Atrial Systole", duration: "0.1s", desc: "The SA node fires, depolarizing both atria (P wave on ECG). Atrial contraction contributes the 'atrial kick' — approximately 20-25% of ventricular filling. AV valves are open; semilunar valves are closed. Atrial pressure briefly rises (a-wave in JVP).", events: ["P wave on ECG", "AV valves open", "Atrial contraction", "S4 heart sound (if pathological)"] },
+                { phase: "Isovolumetric Contraction", duration: "0.05s", desc: "Ventricles begin contracting (QRS complex). All four valves are closed — volume is constant but pressure rises rapidly. This is the period between mitral valve closure (S1) and aortic valve opening. Left ventricular pressure exceeds atrial but not yet aortic pressure.", events: ["QRS complex", "All valves closed", "S1 heart sound", "Rapid pressure rise"] },
+                { phase: "Ventricular Ejection", duration: "0.3s", desc: "Ventricular pressure exceeds aortic/pulmonary pressure, forcing semilunar valves open. Rapid ejection phase followed by reduced ejection. Stroke volume is ejected. T wave occurs during this phase as ventricles repolarize. Ejection fraction normally 55-70%.", events: ["Semilunar valves open", "Stroke volume ejected", "T wave (repolarization)", "Aortic pressure peaks"] },
+                { phase: "Isovolumetric Relaxation", duration: "0.08s", desc: "Ventricles relax, pressure drops below aortic/pulmonary pressure. Semilunar valves close (S2 — aortic component A2 before pulmonic P2). All valves closed again, volume constant. Dicrotic notch appears on aortic pressure waveform.", events: ["S2 heart sound", "Semilunar valves close", "Dicrotic notch", "All valves closed"] },
+                { phase: "Ventricular Filling", duration: "0.45s", desc: "Ventricular pressure drops below atrial pressure, AV valves open. Passive rapid filling accounts for ~75% of ventricular volume (S3 if heard = volume overload). Diastasis (slow filling) follows. This is the longest phase, shortened first with increasing heart rate.", events: ["AV valves open", "Rapid passive filling", "S3 sound (if pathological)", "Diastasis phase"] }
+            ],
+            quizBank: [
+                { q: "What is the normal ejection fraction of a healthy left ventricle?", opts: ["25-35%", "40-50%", "55-70%", "80-90%"], correct: 2, explain: "Normal LVEF is 55-70%. Values below 40% indicate heart failure with reduced ejection fraction (HFrEF). Preserved EF (>50%) with symptoms = HFpEF." },
+                { q: "Which heart sound is associated with the closure of the aortic and pulmonic valves?", opts: ["S1", "S2", "S3", "S4"], correct: 1, explain: "S2 is produced by closure of the semilunar valves. A2 (aortic) normally precedes P2 (pulmonic). Physiological splitting widens during inspiration." },
+                { q: "The 'atrial kick' contributes approximately what percentage of ventricular filling?", opts: ["5-10%", "20-25%", "40-50%", "60-70%"], correct: 1, explain: "Atrial contraction contributes ~20-25% of ventricular end-diastolic volume. This becomes critical in conditions like atrial fibrillation where loss of atrial kick reduces cardiac output." },
+                { q: "Which coronary artery supplies the anterior wall of the left ventricle?", opts: ["Right Coronary Artery", "Left Circumflex", "Left Anterior Descending", "Posterior Descending"], correct: 2, explain: "The LAD (left anterior descending) supplies the anterior wall and anterior 2/3 of the interventricular septum. Occlusion causes anterior STEMI." },
+                { q: "In the cardiac cycle, which phase is the longest?", opts: ["Atrial Systole", "Isovolumetric Contraction", "Ventricular Ejection", "Ventricular Filling"], correct: 3, explain: "Ventricular filling (diastole) is the longest phase at ~0.45s at normal HR. It is the first phase to shorten with tachycardia, which is why diastolic filling is impaired at high heart rates." },
+                { q: "What does the QRS complex on an ECG represent?", opts: ["Atrial depolarization", "Ventricular depolarization", "Ventricular repolarization", "Atrial repolarization"], correct: 1, explain: "QRS represents ventricular depolarization. Atrial repolarization occurs simultaneously but is masked by the much larger QRS. Normal QRS duration is 80-120ms." },
+                { q: "Starling's Law of the Heart states that:", opts: ["CO = HR × SV", "Increased preload increases stroke volume", "MAP = CO × SVR", "Heart rate is inversely proportional to stroke volume"], correct: 1, explain: "Frank-Starling mechanism: increased venous return stretches myocardial fibers, increasing the force of contraction and stroke volume — up to a physiological limit." },
+                { q: "Cardiac output of a resting adult is approximately:", opts: ["2 L/min", "5 L/min", "8 L/min", "12 L/min"], correct: 1, explain: "CO = HR × SV = 72 bpm × 70 mL = ~5 L/min at rest. Can increase to 20-25 L/min during maximal exercise in trained individuals." }
+            ],
+            badges: [
+                { id: "explorer", name: "Heart Explorer", desc: "Interact with all 3D structures", icon: "🫀", unlocked: false },
+                { id: "simulator", name: "Physiologist", desc: "Run 5 parameter simulations", icon: "🔬", unlocked: false },
+                { id: "pathologist", name: "Pathology Pro", desc: "Explore all pathological states", icon: "🩺", unlocked: false },
+                { id: "quiz_master", name: "Quiz Master", desc: "Score 100% on all MCQs", icon: "🏆", unlocked: false },
+                { id: "cycle_expert", name: "Cycle Expert", desc: "Review all cardiac cycle phases", icon: "💓", unlocked: false },
+                { id: "ai_learner", name: "AI Scholar", desc: "Ask 10 questions to AI", icon: "🤖", unlocked: false }
+            ]
+        };
+
+        // ============ STATE ============
+        let state = { params: {}, activePathology: 'normal', heartbeatActive: true, bloodFlowActive: false, score: 0, simCount: 0, aiCount: 0, exploredStructures: new Set(), exploredPaths: new Set(), exploredCycles: new Set(), quizAnswered: 0, quizCorrect: 0, animSpeed: 1 };
+        TopicConfig.parameters.forEach(p => state.params[p.id] = p.default);
+
+        // ============ HERO PARTICLES ============
+        (function initHero() {
+            const c = document.getElementById('hero-canvas'), ctx = c.getContext('2d');
+            let W, H; const particles = [];
+            function resize() { W = c.width = window.innerWidth; H = c.height = window.innerHeight }
+            resize(); window.addEventListener('resize', resize);
+            class Particle {
+                constructor() { this.reset() } reset() { this.x = Math.random() * W; this.y = Math.random() * H; this.r = Math.random() * 2 + .5; this.vx = (Math.random() - .5) * .3; this.vy = (Math.random() - .5) * .3; this.alpha = Math.random() * .5 + .1; this.color = Math.random() > .5 ? '0,240,255' : '255,0,110' }
+                update() { this.x += this.vx; this.y += this.vy; if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) this.reset() }
+                draw() { ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fillStyle = `rgba(${this.color},${this.alpha})`; ctx.fill() }
+            }
+            for (let i = 0; i < 80; i++)particles.push(new Particle());
+            function drawLines() { for (let i = 0; i < particles.length; i++)for (let j = i + 1; j < particles.length; j++) { const dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y, d = Math.sqrt(dx * dx + dy * dy); if (d < 120) { ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y); ctx.lineTo(particles[j].x, particles[j].y); ctx.strokeStyle = `rgba(0,240,255,${.08 * (1 - d / 120)})`; ctx.stroke() } } }
+            function animate() { ctx.clearRect(0, 0, W, H); particles.forEach(p => { p.update(); p.draw() }); drawLines(); requestAnimationFrame(animate) }
+            animate();
+            gsap.registerPlugin(ScrollTrigger);
+            gsap.to('#hero-title', { opacity: 1, y: 0, duration: 1.2, delay: .3, ease: 'power3.out' });
+            gsap.to('#hero-desc', { opacity: 1, y: 0, duration: 1, delay: .6, ease: 'power3.out' });
+            gsap.to('.hero-actions', { opacity: 1, y: 0, duration: 1, delay: .9, ease: 'power3.out' });
+            document.querySelectorAll('#hero-title, #hero-desc, .hero-actions').forEach(el => el.style.transform = 'translateY(30px)');
+        })();
+
+        // ============ 3D HEART MODEL ============
+        let heartScene, heartCamera, heartRenderer, heartControls, heartGroup, layers = {}, clock = new THREE.Clock();
+        let bloodParticles = [], heartbeatTween = null;
+
+        (function init3D() {
+            const container = document.getElementById('model-canvas-container');
+            const canvas = document.getElementById('model-canvas');
+            heartScene = new THREE.Scene();
+            heartScene.fog = new THREE.FogExp2(0x050810, 0.008);
+            heartCamera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 500);
+            heartCamera.position.set(0, 2, 14);
+            heartRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+            heartRenderer.setSize(container.clientWidth, container.clientHeight);
+            heartRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            heartRenderer.shadowMap.enabled = true;
+            heartControls = new THREE.OrbitControls(heartCamera, heartRenderer.domElement);
+            heartControls.enableDamping = true; heartControls.dampingFactor = 0.05;
+            heartControls.minDistance = 5; heartControls.maxDistance = 30;
+
+            // Lighting
+            heartScene.add(new THREE.AmbientLight(0x334466, 1.2));
+            const key = new THREE.DirectionalLight(0xffeedd, 1.5); key.position.set(5, 8, 5); key.castShadow = true; heartScene.add(key);
+            const fill = new THREE.PointLight(0x00f0ff, 1, 30); fill.position.set(-5, 3, -5); heartScene.add(fill);
+            const rim = new THREE.PointLight(0xff006e, .8, 25); rim.position.set(3, -3, -5); heartScene.add(rim);
+
+            heartGroup = new THREE.Group();
+
+            // -- Pericardium (outer shell)
+            const pericardiumGeo = new THREE.SphereGeometry(4.5, 32, 32);
+            pericardiumGeo.scale(1, 1.15, .85);
+            const pericardiumMat = new THREE.MeshPhongMaterial({ color: 0x334455, transparent: true, opacity: .15, side: THREE.DoubleSide, wireframe: false });
+            layers.pericardium = new THREE.Mesh(pericardiumGeo, pericardiumMat);
+            heartGroup.add(layers.pericardium);
+
+            // -- Myocardium (main heart body)
+            const myoGroup = new THREE.Group();
+            // Left Ventricle (larger, thicker)
+            const lvGeo = new THREE.SphereGeometry(2.8, 32, 32); lvGeo.scale(.9, 1.2, .8);
+            const lvMat = new THREE.MeshPhongMaterial({ color: 0xcc3344, shininess: 60 });
+            const lv = new THREE.Mesh(lvGeo, lvMat); lv.position.set(-.8, -.5, 0); lv.userData = { name: 'Left Ventricle', desc: 'Thickest chamber (12-15mm). Pumps oxygenated blood into systemic circulation via the aorta. Generates systolic BP.' }; myoGroup.add(lv);
+            // Right Ventricle
+            const rvGeo = new THREE.SphereGeometry(2.4, 32, 32); rvGeo.scale(.85, 1.1, .75);
+            const rvMat = new THREE.MeshPhongMaterial({ color: 0xaa2233, shininess: 60 });
+            const rv = new THREE.Mesh(rvGeo, rvMat); rv.position.set(1.2, -.3, .5); rv.userData = { name: 'Right Ventricle', desc: 'Thinner wall (3-5mm). Pumps deoxygenated blood to lungs via pulmonary trunk. Lower pressure system.' }; myoGroup.add(rv);
+            // Left Atrium
+            const laGeo = new THREE.SphereGeometry(1.8, 32, 32); laGeo.scale(.9, .8, .75);
+            const laMat = new THREE.MeshPhongMaterial({ color: 0xdd5566, shininess: 40 });
+            const la = new THREE.Mesh(laGeo, laMat); la.position.set(-1, 2.5, -.2); la.userData = { name: 'Left Atrium', desc: 'Receives oxygenated blood from 4 pulmonary veins. Posterior wall is close to esophagus (TEE window).' }; myoGroup.add(la);
+            // Right Atrium
+            const raGeo = new THREE.SphereGeometry(1.9, 32, 32); raGeo.scale(.85, .8, .7);
+            const raMat = new THREE.MeshPhongMaterial({ color: 0xbb3344, shininess: 40 });
+            const ra = new THREE.Mesh(raGeo, raMat); ra.position.set(1.3, 2.3, .3); ra.userData = { name: 'Right Atrium', desc: 'Receives deoxygenated blood from SVC, IVC, and coronary sinus. Contains SA node (pacemaker) and AV node.' }; myoGroup.add(ra);
+            layers.myocardium = myoGroup; heartGroup.add(myoGroup);
+
+            // -- Endocardium (inner glow)
+            const endoGeo = new THREE.SphereGeometry(2.2, 24, 24); endoGeo.scale(.85, 1, .7);
+            const endoMat = new THREE.MeshPhongMaterial({ color: 0xff6677, transparent: true, opacity: .3, emissive: 0x330011 });
+            layers.endocardium = new THREE.Mesh(endoGeo, endoMat);
+            layers.endocardium.position.set(0, 0, 0);
+            heartGroup.add(layers.endocardium);
+
+            // -- Valves
+            const valveGroup = new THREE.Group();
+            const valveGeo = new THREE.TorusGeometry(.6, .12, 8, 24);
+            const mitral = new THREE.Mesh(valveGeo, new THREE.MeshPhongMaterial({ color: 0xffccdd, emissive: 0x331122 }));
+            mitral.position.set(-.8, 1.2, 0); mitral.rotation.x = Math.PI / 2; mitral.userData = { name: 'Mitral Valve', desc: 'Bicuspid valve between LA and LV. Most commonly affected in rheumatic heart disease. Prolapse is common (MVP).' }; valveGroup.add(mitral);
+            const tricuspid = new THREE.Mesh(valveGeo.clone(), new THREE.MeshPhongMaterial({ color: 0xffccdd, emissive: 0x331122 }));
+            tricuspid.position.set(1.2, 1.2, .3); tricuspid.rotation.x = Math.PI / 2; tricuspid.userData = { name: 'Tricuspid Valve', desc: 'Three leaflets between RA and RV. Infective endocarditis common in IV drug users.' }; valveGroup.add(tricuspid);
+            const aorticV = new THREE.Mesh(new THREE.TorusGeometry(.5, .1, 8, 24), new THREE.MeshPhongMaterial({ color: 0xffeedd, emissive: 0x332211 }));
+            aorticV.position.set(-1.5, 3.2, 0); aorticV.rotation.x = Math.PI / 2; aorticV.userData = { name: 'Aortic Valve', desc: '3 semilunar cusps. Stenosis is the most common valvular disease in elderly. Bicuspid aortic valve is the most common congenital cardiac anomaly.' }; valveGroup.add(aorticV);
+            const pulV = new THREE.Mesh(new THREE.TorusGeometry(.45, .1, 8, 24), new THREE.MeshPhongMaterial({ color: 0xddccff, emissive: 0x221133 }));
+            pulV.position.set(1.8, 3.2, .3); pulV.rotation.x = Math.PI / 2; pulV.userData = { name: 'Pulmonary Valve', desc: 'Semilunar valve at RV outflow tract. Least commonly affected by disease.' }; valveGroup.add(pulV);
+            layers.valves = valveGroup; heartGroup.add(valveGroup);
+
+            // -- Great Vessels
+            const vesselGroup = new THREE.Group();
+            const aortaPath = new THREE.CatmullRomCurve3([new THREE.Vector3(-1.5, 3.5, 0), new THREE.Vector3(-1.5, 5.5, 0), new THREE.Vector3(0, 7, -.5), new THREE.Vector3(2, 6.5, -1), new THREE.Vector3(2.5, 4, -1.5)]);
+            const aortaGeo = new THREE.TubeGeometry(aortaPath, 32, .45, 12, false);
+            const aortaMat = new THREE.MeshPhongMaterial({ color: 0xff4444, shininess: 80 });
+            const aorta = new THREE.Mesh(aortaGeo, aortaMat); aorta.userData = { name: 'Aorta', desc: 'Largest artery. Ascending aorta → aortic arch (brachiocephalic, left CCA, left subclavian) → descending aorta.' }; vesselGroup.add(aorta);
+            const paGeo = new THREE.CylinderGeometry(.4, .4, 3, 16);
+            const pa = new THREE.Mesh(paGeo, new THREE.MeshPhongMaterial({ color: 0x4466cc }));
+            pa.position.set(1.8, 4.8, .3); pa.userData = { name: 'Pulmonary Trunk', desc: 'Carries deoxygenated blood from RV to lungs. Bifurcates into left and right pulmonary arteries.' }; vesselGroup.add(pa);
+            const svcGeo = new THREE.CylinderGeometry(.35, .35, 2.5, 16);
+            const svc = new THREE.Mesh(svcGeo, new THREE.MeshPhongMaterial({ color: 0x3355aa }));
+            svc.position.set(2, 4.5, .8); svc.userData = { name: 'Superior Vena Cava', desc: 'Returns deoxygenated blood from upper body to RA. Formed by junction of left and right brachiocephalic veins.' }; vesselGroup.add(svc);
+            const ivcGeo = new THREE.CylinderGeometry(.4, .4, 2, 16);
+            const ivc = new THREE.Mesh(ivcGeo, new THREE.MeshPhongMaterial({ color: 0x3355aa }));
+            ivc.position.set(1.5, -2, .5); ivc.userData = { name: 'Inferior Vena Cava', desc: 'Returns blood from lower body to RA. Passes through diaphragm at T8 level.' }; vesselGroup.add(ivc);
+            layers.vessels = vesselGroup; heartGroup.add(vesselGroup);
+
+            // -- Coronary Arteries
+            const coronaryGroup = new THREE.Group();
+            const ladPath = new THREE.CatmullRomCurve3([new THREE.Vector3(-1.2, 2, 1), new THREE.Vector3(-.5, .5, 1.8), new THREE.Vector3(-.2, -1, 1.5), new THREE.Vector3(0, -2.5, 1)]);
+            const ladGeo = new THREE.TubeGeometry(ladPath, 24, .08, 8, false);
+            const ladMat = new THREE.MeshPhongMaterial({ color: 0xff8800, emissive: 0x442200 });
+            const lad = new THREE.Mesh(ladGeo, ladMat); lad.userData = { name: 'LAD Artery', desc: 'Left Anterior Descending — "Widow maker". Supplies anterior LV wall and anterior 2/3 of septum.' }; coronaryGroup.add(lad);
+            const rcaPath = new THREE.CatmullRomCurve3([new THREE.Vector3(1.8, 2.5, .8), new THREE.Vector3(2.2, 1, 1.2), new THREE.Vector3(1.8, -.5, 1), new THREE.Vector3(1, -1.5, .5)]);
+            const rcaGeo = new THREE.TubeGeometry(rcaPath, 24, .08, 8, false);
+            const rca = new THREE.Mesh(rcaGeo, ladMat.clone()); rca.userData = { name: 'RCA', desc: 'Right Coronary Artery — supplies RA, RV, SA node (60%), AV node (80%), posterior descending artery (85% — right dominance).' }; coronaryGroup.add(rca);
+            layers.coronary = coronaryGroup; heartGroup.add(coronaryGroup);
+
+            heartGroup.rotation.z = .15;
+            heartScene.add(heartGroup);
+
+            // Raycaster for clicks
+            const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
+            canvas.addEventListener('click', e => {
+                const rect = canvas.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, heartCamera);
+                const all = []; heartGroup.traverse(c => { if (c.isMesh) all.push(c) });
+                const hits = raycaster.intersectObjects(all);
+                if (hits.length && hits[0].object.userData.name) {
+                    const o = hits[0].object;
+                    state.exploredStructures.add(o.userData.name);
+                    checkBadges();
+                    const info = document.getElementById('structure-info');
+                    info.innerHTML = `<h3 style="color:var(--primary);font-size:.9rem;margin-bottom:8px"><i data-lucide="info"></i> ${o.userData.name}</h3><p style="font-size:.82rem;color:var(--text-dim);line-height:1.6">${o.userData.desc}</p>`;
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                    gsap.to(o.scale, { x: 1.1, y: 1.1, z: 1.1, duration: .2, yoyo: true, repeat: 1 });
+                }
+            });
+
+            // Heartbeat animation
+            function pulseHeart() {
+                if (!heartbeatActive()) return;
+                const dur = 60 / state.params.hr;
+                heartbeatTween = gsap.timeline({ repeat: -1 }).to(heartGroup.scale, { x: 1.06, y: 1.06, z: 1.06, duration: dur * .15, ease: 'power2.out' }).to(heartGroup.scale, { x: 1, y: 1, z: 1, duration: dur * .35, ease: 'elastic.out(1,0.4)' }).to({}, { duration: dur * .5 });
+            }
+            function heartbeatActive() { return state.heartbeatActive }
+            pulseHeart();
+
+            // Blood flow particles
+            function createBloodParticles() {
+                const geo = new THREE.SphereGeometry(.06, 8, 8);
+                const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                for (let i = 0; i < 40; i++) {
+                    const p = new THREE.Mesh(geo, mat.clone());
+                    p.userData.t = Math.random(); p.userData.speed = .003 + Math.random() * .005;
+                    p.userData.path = Math.random() > .5 ? 'systemic' : 'pulmonary';
+                    p.visible = false; heartGroup.add(p); bloodParticles.push(p);
+                }
+            }
+            createBloodParticles();
+
+            function animateBloodFlow() {
+                bloodParticles.forEach(p => {
+                    p.visible = state.bloodFlowActive;
+                    if (!state.bloodFlowActive) return;
+                    p.userData.t += p.userData.speed * state.animSpeed;
+                    if (p.userData.t > 1) p.userData.t = 0;
+                    const t = p.userData.t;
+                    if (p.userData.path === 'systemic') {
+                        p.position.set(-1 + Math.sin(t * Math.PI * 2) * 3, (-2 + t * 10) - 3, Math.cos(t * Math.PI * 2) * 1.5);
+                        p.material.color.setHex(t < .5 ? 0xff0000 : 0x4444ff);
+                    } else {
+                        p.position.set(1.5 + Math.sin(t * Math.PI * 2) * 2, (-2 + t * 9) - 2, .5 + Math.cos(t * Math.PI * 2) * 1.2);
+                        p.material.color.setHex(t < .5 ? 0x4444ff : 0xff0000);
+                    }
+                });
+            }
+
+            // 3D Render loop
+            function render3D() {
+                requestAnimationFrame(render3D);
+                heartControls.update();
+                heartGroup.rotation.y += .001 * state.animSpeed;
+                animateBloodFlow();
+                heartRenderer.render(heartScene, heartCamera);
+            }
+            render3D();
+
+            // Resize
+            const ro = new ResizeObserver(() => {
+                const w = container.clientWidth, h = container.clientHeight;
+                heartCamera.aspect = w / h; heartCamera.updateProjectionMatrix();
+                heartRenderer.setSize(w, h);
+            });
+            ro.observe(container);
+        })();
+
+        function resetCamera() { gsap.to(heartCamera.position, { x: 0, y: 2, z: 14, duration: 1, ease: 'power2.inOut' }) }
+        function toggleHeartbeat() {
+            state.heartbeatActive = !state.heartbeatActive;
+            const btn = document.getElementById('anim-toggle');
+            if (state.heartbeatActive) { btn.innerHTML = '<i data-lucide="pause"></i> Pause'; pulseHeart() }
+            else { btn.innerHTML = '<i data-lucide="play"></i> Heartbeat'; if (heartbeatTween) heartbeatTween.kill(); gsap.to(heartGroup.scale, { x: 1, y: 1, z: 1, duration: .3 }) }
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+        function toggleBloodFlow() { state.bloodFlowActive = !state.bloodFlowActive }
+        function toggleLayer(el, id) {
+            el.classList.toggle('active');
+            const layer = layers[id]; if (layer) { layer.visible = !layer.visible }
+        }
+        function setTransparency(v) {
+            document.getElementById('trans-val').textContent = v + '%';
+            if (layers.pericardium) layers.pericardium.material.opacity = v / 100 * .3;
+        }
+        function setAnimSpeed(v) { state.animSpeed = v / 5; document.getElementById('speed-val').textContent = (v / 5).toFixed(1) + 'x' }
+
+        // ============ SIMULATION PANEL ============
+        function buildSimPanel() {
+            const grid = document.getElementById('sim-grid'); grid.innerHTML = '';
+            TopicConfig.parameters.forEach(p => {
+                const v = state.params[p.id];
+                const status = getParamStatus(p, v);
+                grid.innerHTML += `<div class="param-card glass" id="param-${p.id}">
+      <div class="param-header"><div><div style="font-size:.75rem;color:var(--text-dim);margin-bottom:4px">${p.name}</div><div class="param-value" id="pv-${p.id}">${v}<span class="param-unit">${p.unit}</span></div></div><span class="status-badge status-${status}">${status}</span></div>
+      <div class="slider-group"><input type="range" min="${p.min}" max="${p.max}" value="${v}" oninput="updateParam('${p.id}',this.value)"></div>
+    </div>`;
+            });
+            // Derived values
+            const co = (state.params.hr * state.params.sv / 1000).toFixed(1);
+            const map = (state.params.dbp + (state.params.sbp - state.params.dbp) / 3).toFixed(0);
+            grid.innerHTML += `<div class="param-card glass" style="border-left:3px solid var(--accent)"><div class="param-header"><div><div style="font-size:.75rem;color:var(--text-dim);margin-bottom:4px">Cardiac Output</div><div class="param-value" style="color:var(--accent)" id="pv-co">${co}<span class="param-unit">L/min</span></div></div></div><p style="font-size:.78rem;color:var(--text-dim);margin-top:8px">CO = HR × SV</p></div>`;
+            grid.innerHTML += `<div class="param-card glass" style="border-left:3px solid var(--warning)"><div class="param-header"><div><div style="font-size:.75rem;color:var(--text-dim);margin-bottom:4px">Mean Arterial Pressure</div><div class="param-value" style="color:var(--warning)" id="pv-map">${map}<span class="param-unit">mmHg</span></div></div></div><p style="font-size:.78rem;color:var(--text-dim);margin-top:8px">MAP = DBP + (SBP-DBP)/3</p></div>`;
+        }
+        function getParamStatus(p, v) {
+            if (v >= p.normal[0] && v <= p.normal[1]) return 'normal';
+            if (v >= p.warning[0] && v <= p.warning[1]) return 'warning';
+            return 'critical';
+        }
+        function updateParam(id, val) {
+            val = parseInt(val); state.params[id] = val;
+            const pEl = document.getElementById(`pv-${id}`);
+            const p = TopicConfig.parameters.find(x => x.id === id);
+            if (pEl) pEl.innerHTML = val + `<span class="param-unit">${p.unit}</span>`;
+            const card = document.getElementById(`param-${id}`);
+            const badge = card?.querySelector('.status-badge');
+            if (badge) { const s = getParamStatus(p, val); badge.className = `status-badge status-${s}`; badge.textContent = s }
+            // Update derived
+            const co = (state.params.hr * state.params.sv / 1000).toFixed(1);
+            const map = (state.params.dbp + (state.params.sbp - state.params.dbp) / 3).toFixed(0);
+            const coEl = document.getElementById('pv-co'); if (coEl) coEl.innerHTML = co + '<span class="param-unit">L/min</span>';
+            const mapEl = document.getElementById('pv-map'); if (mapEl) mapEl.innerHTML = map + '<span class="param-unit">mmHg</span>';
+            // Update heartbeat speed
+            if (heartbeatTween) { heartbeatTween.kill(); if (state.heartbeatActive) pulseHeart() }
+            state.simCount++; checkBadges();
+            updateGraphs();
+        }
+        buildSimPanel();
+    </script>
+    <script>
+        // ============ PATHOLOGY MODE ============
+        function buildPathology() {
+            const grid = document.getElementById('path-grid'); grid.innerHTML = '';
+            TopicConfig.pathologies.forEach(p => {
+                const isActive = state.activePathology === p.id;
+                grid.innerHTML += `<div class="path-card glass ${isActive ? 'active' : ''}" onclick="setPathology('${p.id}')" style="border-left:3px solid ${p.color}">
+      <h4 style="color:${p.color}">${p.name}</h4>
+      <p>${p.desc}</p>
+      ${isActive ? '<div style="margin-top:10px;font-size:.7rem;font-weight:700;color:' + p.color + ';text-transform:uppercase">✓ Active</div>' : ''}
+    </div>`;
+            });
+        }
+        function setPathology(id) {
+            state.activePathology = id;
+            state.exploredPaths.add(id);
+            const path = TopicConfig.pathologies.find(p => p.id === id);
+            if (path) {
+                Object.entries(path.params).forEach(([k, v]) => { state.params[k] = v });
+                buildSimPanel();
+                if (heartbeatTween) { heartbeatTween.kill(); if (state.heartbeatActive) pulseHeart() }
+                // Visual feedback on heart
+                if (layers.myocardium) {
+                    const tint = id === 'normal' ? 0xcc3344 : id === 'hypertension' ? 0xff2233 : id === 'heart_failure' ? 0x993366 : id === 'atherosclerosis' ? 0xcc6633 : 0x8844cc;
+                    layers.myocardium.traverse(c => { if (c.isMesh && c.material) gsap.to(c.material.color, { r: ((tint >> 16) & 0xff) / 255, g: ((tint >> 8) & 0xff) / 255, b: (tint & 0xff) / 255, duration: .8 }) });
+                }
+            }
+            buildPathology();
+            updateGraphs();
+            checkBadges();
+        }
+        buildPathology();
+
+        // ============ GRAPH DASHBOARD ============
+        let charts = {};
+        function buildGraphs() {
+            const grid = document.getElementById('graph-grid');
+            grid.innerHTML = '';
+            const graphDefs = [
+                { id: 'ecg', title: 'ECG Waveform', color: '#00ff88' },
+                { id: 'bp', title: 'Arterial Pressure', color: '#ff3355' },
+                { id: 'pv', title: 'Pressure-Volume Loop', color: '#00f0ff' },
+                { id: 'co', title: 'Cardiac Output Trend', color: '#7b2dff' }
+            ];
+            graphDefs.forEach(g => {
+                grid.innerHTML += `<div class="graph-card glass"><h4>${g.title}</h4><canvas id="chart-${g.id}"></canvas></div>`;
+            });
+            setTimeout(() => { initCharts() }, 100);
+        }
+        function generateECG(hr, pathology) {
+            const pts = []; const len = 200;
+            const period = len / (hr / 60);
+            for (let i = 0; i < len; i++) {
+                const t = (i % period) / period;
+                let v = 0;
+                if (pathology === 'arrhythmia') {
+                    const jitter = Math.random() * .3;
+                    if (t < .1) v = .1 * Math.sin(t * Math.PI / .1);
+                    else if (t < .16 + jitter * .05) v = -.1;
+                    else if (t < .2 + jitter * .03) v = 1 - jitter;
+                    else if (t < .24) v = -.2;
+                    else if (t < .5) v = 0;
+                    else if (t < .65) v = .2 + Math.random() * .1;
+                } else {
+                    if (t < .1) v = .15 * Math.sin(t * Math.PI / .1);
+                    else if (t < .16) v = 0;
+                    else if (t < .18) v = -.1;
+                    else if (t < .22) v = 1;
+                    else if (t < .26) v = -.15;
+                    else if (t < .32) v = 0;
+                    else if (t < .5) v = .2 * Math.sin((t - .32) * Math.PI / .18);
+                }
+                pts.push(v);
+            }
+            return pts;
+        }
+        function generateBP(sbp, dbp, hr) {
+            const pts = []; const len = 200; const period = len / (hr / 60);
+            for (let i = 0; i < len; i++) {
+                const t = (i % period) / period;
+                const sys = t < .35 ? dbp + (sbp - dbp) * Math.sin(t * Math.PI / .35) : sbp - (sbp - dbp) * (t - .35) / .65;
+                pts.push(sys + (Math.random() - .5) * 2);
+            }
+            return pts;
+        }
+        function initCharts() {
+            const ecgData = generateECG(state.params.hr, state.activePathology);
+            const bpData = generateBP(state.params.sbp, state.params.dbp, state.params.hr);
+            const labels = Array.from({ length: 200 }, (_, i) => i);
+            const cfgBase = (label, data, color, fill = false) => ({ type: 'line', data: { labels, datasets: [{ label, data, borderColor: color, backgroundColor: fill ? color + '22' : 'transparent', borderWidth: 1.5, pointRadius: 0, tension: .3, fill }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 }, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8892b0', font: { size: 9 } } } }, plugins: { legend: { display: false } } } });
+
+            const ecgCtx = document.getElementById('chart-ecg');
+            if (ecgCtx) charts.ecg = new Chart(ecgCtx, cfgBase('ECG', ecgData, '#00ff88'));
+
+            const bpCtx = document.getElementById('chart-bp');
+            if (bpCtx) charts.bp = new Chart(bpCtx, cfgBase('BP', bpData, '#ff3355', true));
+
+            // PV Loop
+            const pvCtx = document.getElementById('chart-pv');
+            if (pvCtx) {
+                const edv = state.params.sv + 50, esv = 50;
+                const pvData = [{ x: edv, y: 10 }, { x: edv, y: state.params.sbp }, { x: esv, y: state.params.sbp }, { x: esv, y: state.params.dbp }, { x: edv, y: 10 }];
+                charts.pv = new Chart(pvCtx, { type: 'scatter', data: { datasets: [{ label: 'PV Loop', data: pvData, borderColor: '#00f0ff', backgroundColor: 'rgba(0,240,255,0.08)', showLine: true, pointRadius: 3, pointBackgroundColor: '#00f0ff', borderWidth: 2, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, scales: { x: { title: { display: true, text: 'Volume (mL)', color: '#8892b0', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8892b0', font: { size: 9 } } }, y: { title: { display: true, text: 'Pressure (mmHg)', color: '#8892b0', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#8892b0', font: { size: 9 } } } }, plugins: { legend: { display: false } } } });
+            }
+
+            // CO Trend
+            const coCtx = document.getElementById('chart-co');
+            if (coCtx) {
+                const co = state.params.hr * state.params.sv / 1000;
+                const trend = Array.from({ length: 20 }, (_, i) => co + (Math.random() - .5) * .5);
+                charts.co = new Chart(coCtx, cfgBase('CO', trend, '#7b2dff', true));
+            }
+        }
+        function updateGraphs() {
+            if (charts.ecg) {
+                charts.ecg.data.datasets[0].data = generateECG(state.params.hr, state.activePathology);
+                charts.ecg.update();
+            }
+            if (charts.bp) {
+                charts.bp.data.datasets[0].data = generateBP(state.params.sbp, state.params.dbp, state.params.hr);
+                charts.bp.update();
+            }
+            if (charts.pv) {
+                const edv = state.params.sv + 50, esv = 50;
+                charts.pv.data.datasets[0].data = [{ x: edv, y: 10 }, { x: edv, y: state.params.sbp }, { x: esv, y: state.params.sbp }, { x: esv, y: state.params.dbp }, { x: edv, y: 10 }];
+                charts.pv.update();
+            }
+            if (charts.co) {
+                const co = state.params.hr * state.params.sv / 1000;
+                charts.co.data.datasets[0].data.push(co + (Math.random() - .5) * .3);
+                if (charts.co.data.datasets[0].data.length > 20) charts.co.data.datasets[0].data.shift();
+                charts.co.update();
+            }
+        }
+        buildGraphs();
+
+        // ============ CARDIAC CYCLE ============
+        function buildCycle() {
+            const steps = document.getElementById('cycle-steps');
+            const detail = document.getElementById('cycle-detail');
+            steps.innerHTML = '';
+            TopicConfig.cardiacCycle.forEach((c, i) => {
+                steps.innerHTML += `<div class="cycle-step ${i === 0 ? 'active' : ''}" onclick="showCyclePhase(${i})" id="cs-${i}"><div class="step-num">${i + 1}</div><div class="step-name">${c.phase}</div></div>`;
+            });
+            showCyclePhase(0);
+        }
+        function showCyclePhase(i) {
+            const c = TopicConfig.cardiacCycle[i];
+            state.exploredCycles.add(i); checkBadges();
+            document.querySelectorAll('.cycle-step').forEach((el, idx) => el.classList.toggle('active', idx === i));
+            const detail = document.getElementById('cycle-detail');
+            detail.innerHTML = `<h3>${c.phase} <span style="font-size:.8rem;color:var(--text-dim);font-weight:400">(${c.duration})</span></h3>
+    <p>${c.desc}</p>
+    <div class="key-events">${c.events.map(e => `<span class="key-event">${e}</span>`).join('')}</div>`;
+            gsap.from(detail, { opacity: 0, y: 20, duration: .4, ease: 'power2.out' });
+        }
+        buildCycle();
+
+        // ============ QUIZ SYSTEM ============
+        function buildQuiz() {
+            const container = document.getElementById('quiz-container'); container.innerHTML = '';
+            TopicConfig.quizBank.forEach((q, qi) => {
+                const optsHtml = q.opts.map((o, oi) => `<div class="quiz-opt" id="qo-${qi}-${oi}" onclick="answerQuiz(${qi},${oi})">${String.fromCharCode(65 + oi)}. ${o}</div>`).join('');
+                container.innerHTML += `<div class="quiz-card glass" id="qc-${qi}">
+      <div class="q-num">Question ${qi + 1} of ${TopicConfig.quizBank.length}</div>
+      <div class="q-text">${q.q}</div>
+      <div class="quiz-options">${optsHtml}</div>
+      <div class="quiz-explanation" id="qe-${qi}">${q.explain}</div>
+    </div>`;
+            });
+        }
+        function answerQuiz(qi, oi) {
+            const q = TopicConfig.quizBank[qi];
+            const card = document.getElementById(`qc-${qi}`);
+            if (card.dataset.answered) return;
+            card.dataset.answered = 'true';
+            state.quizAnswered++;
+            document.getElementById(`qo-${qi}-${q.correct}`).classList.add('correct');
+            if (oi === q.correct) { state.quizCorrect++; state.score += 10; updateScore() }
+            else { document.getElementById(`qo-${qi}-${oi}`).classList.add('wrong') }
+            document.getElementById(`qe-${qi}`).style.display = 'block';
+            gsap.from(`#qe-${qi}`, { opacity: 0, y: 10, duration: .3 });
+            checkBadges();
+        }
+        buildQuiz();
+
+        // ============ AI ASSISTANT ============
+        function toggleAI() { document.getElementById('ai-panel').classList.toggle('open') }
+        function sendAI() {
+            const input = document.getElementById('ai-input');
+            const msg = input.value.trim(); if (!msg) return;
+            addAIMsg(msg, 'user'); input.value = '';
+            state.aiCount++; checkBadges();
+            setTimeout(() => {
+                const resp = generateAIResponse(msg);
+                addAIMsg(resp, 'assistant');
+            }, 800);
+        }
+        function aiAsk(type) {
+            const prompts = {
+                eli5: "Explain the cardiovascular system like I'm 5 years old.",
+                case: "Generate a clinical case related to cardiovascular pathology.",
+                viva: "Give me 5 important viva questions about the cardiovascular system.",
+                mcq: "Generate a NEET PG style MCQ about cardiac physiology.",
+                summary: "Summarize the key points of the cardiovascular system.",
+                pathology: `Explain the pathophysiology of ${state.activePathology === 'normal' ? 'hypertension' : TopicConfig.pathologies.find(p => p.id === state.activePathology)?.name || 'hypertension'}.`
+            };
+            const msg = prompts[type] || "Tell me about the heart.";
+            addAIMsg(msg, 'user');
+            state.aiCount++; checkBadges();
+            setTimeout(() => addAIMsg(generateAIResponse(msg), 'assistant'), 600);
+        }
+        function addAIMsg(text, role) {
+            const container = document.getElementById('ai-messages');
+            container.innerHTML += `<div class="ai-msg ${role}">${text}</div>`;
+            container.scrollTop = container.scrollHeight;
+        }
+        function generateAIResponse(q) {
+            const ql = q.toLowerCase();
+            if (ql.includes('eli5') || ql.includes('like i')) return "🫀 Think of your heart like a house with 4 rooms! The top rooms (atria) are like waiting rooms, and the bottom rooms (ventricles) are the strong pumping rooms. Blood comes in from your body into the right side, gets sent to your lungs to pick up oxygen (like refueling), comes back to the left side, and then gets pumped out to your whole body! The heart has little doors (valves) that only open one way, so blood always goes in the right direction. It beats about 100,000 times every day!";
+            if (ql.includes('case') || ql.includes('clinical')) return "📋 <b>Clinical Case:</b><br><br>A 65-year-old male presents to the ED with sudden onset chest pain radiating to the left arm, associated with diaphoresis and nausea for 2 hours. PMH: HTN, DM, smoker for 30 years.<br><br><b>Vitals:</b> HR 110, BP 90/60, SpO2 92%<br><b>ECG:</b> ST elevation in leads V1-V4<br><b>Troponin I:</b> 2.5 ng/mL (elevated)<br><br><b>Diagnosis:</b> Anterior STEMI (LAD occlusion)<br><b>Immediate Rx:</b> Dual antiplatelet (Aspirin + Clopidogrel/Ticagrelor), Heparin, Primary PCI within 90 min (door-to-balloon time)";
+            if (ql.includes('viva')) return "📝 <b>Important Viva Questions:</b><br><br>1. Describe the conducting system of the heart and trace the path of an electrical impulse.<br>2. What is Frank-Starling law? Explain its clinical significance.<br>3. Draw and explain the cardiac cycle with Wiggers diagram.<br>4. Differentiate between S1, S2, S3, and S4 heart sounds. When are S3/S4 pathological?<br>5. Explain the regulation of cardiac output — intrinsic vs extrinsic mechanisms.";
+            if (ql.includes('mcq') || ql.includes('neet')) return "📋 <b>NEET PG MCQ:</b><br><br>A patient with mitral stenosis is most likely to develop which of the following?<br><br>A) Left ventricular hypertrophy<br>B) Left atrial dilation<br>C) Right ventricular dilation<br>D) Aortic root dilation<br><br><b>Answer: B</b> — Mitral stenosis causes back-pressure in the left atrium → LA dilation → pulmonary congestion → eventually right heart failure.";
+            if (ql.includes('summar')) return "📖 <b>Cardiovascular System Summary:</b><br><br>• 4-chambered muscular pump (2 atria + 2 ventricles)<br>• Right heart = pulmonary circuit (deoxygenated → lungs)<br>• Left heart = systemic circuit (oxygenated → body)<br>• 4 valves ensure unidirectional flow (AV: mitral, tricuspid; Semilunar: aortic, pulmonary)<br>• Cardiac output = HR × SV (~5 L/min at rest)<br>• Autorhythmic: SA node → AV node → Bundle of His → Purkinje fibers<br>• Regulated by autonomic NS, baroreceptors, chemoreceptors<br>• Coronary circulation: LAD, LCx, RCA<br>• Key pathologies: HTN, CAD, MI, Heart Failure, Arrhythmias";
+            if (ql.includes('pathol') || ql.includes('hypertension') || ql.includes('disease')) return "🩺 <b>Pathophysiology — Hypertension:</b><br><br>Sustained BP ≥140/90 mmHg. Two types:<br><br><b>Essential (95%):</b> Multifactorial — genetics, high salt, obesity, stress, RAAS activation<br><b>Secondary (5%):</b> Renal artery stenosis, pheochromocytoma, Conn's syndrome, coarctation of aorta<br><br><b>Consequences:</b><br>• Heart: LV hypertrophy → diastolic dysfunction → HF<br>• Brain: Stroke (hemorrhagic/ischemic)<br>• Kidneys: Nephrosclerosis → CKD<br>• Eyes: Hypertensive retinopathy<br>• Vessels: Accelerated atherosclerosis<br><br><b>Treatment:</b> ACE inhibitors, ARBs, CCBs, Diuretics, Beta-blockers";
+            return "🫀 The cardiovascular system is a closed-loop circulatory system powered by the heart — a 4-chambered muscular pump. It maintains tissue perfusion, nutrient delivery, and waste removal. Key concepts include cardiac output (CO = HR × SV), autorhythmicity, and the Frank-Starling mechanism. Feel free to ask about specific topics like ECG interpretation, heart sounds, coronary circulation, or pathologies!";
+        }
+
+        // ============ GAMIFICATION ============
+        function buildBadges() {
+            const grid = document.getElementById('badge-grid'); grid.innerHTML = '';
+            TopicConfig.badges.forEach(b => {
+                grid.innerHTML += `<div class="badge-card glass ${b.unlocked ? '' : 'locked'}">
+      <div class="badge-icon">${b.icon}</div>
+      <h4>${b.name}</h4>
+      <p>${b.desc}</p>
+      ${b.unlocked ? '<div style="color:var(--success);font-size:.7rem;margin-top:6px;font-weight:700">✓ UNLOCKED</div>' : '<div style="color:var(--text-dim);font-size:.7rem;margin-top:6px">🔒 Locked</div>'}
+    </div>`;
+            });
+        }
+        function checkBadges() {
+            const b = TopicConfig.badges;
+            if (state.exploredStructures.size >= 6) b.find(x => x.id === 'explorer').unlocked = true;
+            if (state.simCount >= 5) b.find(x => x.id === 'simulator').unlocked = true;
+            if (state.exploredPaths.size >= TopicConfig.pathologies.length) b.find(x => x.id === 'pathologist').unlocked = true;
+            if (state.quizAnswered >= TopicConfig.quizBank.length && state.quizCorrect === TopicConfig.quizBank.length) b.find(x => x.id === 'quiz_master').unlocked = true;
+            if (state.exploredCycles.size >= TopicConfig.cardiacCycle.length) b.find(x => x.id === 'cycle_expert').unlocked = true;
+            if (state.aiCount >= 10) b.find(x => x.id === 'ai_learner').unlocked = true;
+            buildBadges();
+        }
+        function updateScore() { document.getElementById('total-score').textContent = state.score }
+        buildBadges();
+
+        // ============ SCROLL ANIMATIONS ============
+        document.querySelectorAll('.section').forEach(sec => {
+            gsap.from(sec.querySelector('.section-header'), { scrollTrigger: { trigger: sec, start: 'top 80%' }, opacity: 0, y: 40, duration: .8, ease: 'power2.out' });
+        });
+
+        // ============ NAV ACTIVE STATE ============
+        document.querySelectorAll('nav .nav-links a').forEach(a => {
+            a.addEventListener('click', function () { document.querySelectorAll('nav .nav-links a').forEach(x => x.classList.remove('active')); this.classList.add('active') });
+        });
+        const sections = document.querySelectorAll('section[id]');
+        window.addEventListener('scroll', () => {
+            const scrollY = window.scrollY + 200;
+            sections.forEach(s => {
+                const top = s.offsetTop, h = s.offsetHeight, id = s.id;
+                const link = document.querySelector(`nav a[href="#${id}"]`);
+                if (link) { if (scrollY >= top && scrollY < top + h) link.classList.add('active'); else link.classList.remove('active') }
+            });
+        });
+
+        // ============ INIT ============
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    </script>
+</body>
+
+</html>
