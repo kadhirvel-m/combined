@@ -338,6 +338,28 @@
             color: rgba(30, 30, 47, 0.85);
         }
 
+        /* Loader Progress Bar */
+        #loaderProgressWrap {
+            width: 220px;
+            height: 16px;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .dark #loaderProgressWrap {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        #loaderProgressBar {
+            height: 100%;
+            width: 0%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #9E4B8A, #4C2A59);
+            transition: width 0.3s ease;
+        }
+
         .loaded #pageLoader {
             opacity: 0;
             visibility: hidden;
@@ -621,6 +643,246 @@
             border: 3px solid transparent;
             background-clip: content-box;
         }
+
+        /* ===== Developer Mode Toggle Switch ===== */
+        .dev-toggle-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dev-toggle-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: #6b7280;
+            user-select: none;
+        }
+
+        .dark .dev-toggle-label {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .dev-toggle-label.active {
+            color: #f59e0b;
+        }
+
+        .dark .dev-toggle-label.active {
+            color: #fbbf24;
+        }
+
+        .dev-toggle {
+            position: relative;
+            width: 42px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .dev-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+
+        .dev-toggle .slider {
+            position: absolute;
+            inset: 0;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.12);
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .dark .dev-toggle .slider {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .dev-toggle .slider::after {
+            content: '';
+            position: absolute;
+            left: 3px;
+            top: 3px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s ease;
+        }
+
+        .dev-toggle input:checked+.slider {
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+        }
+
+        .dev-toggle input:checked+.slider::after {
+            transform: translateX(18px);
+            background: #fff;
+        }
+
+        /* ===== Developer Mode — Dynamic Fire Aurora ===== */
+        #devAuroraOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            pointer-events: none;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.6s ease;
+        }
+
+        #devAuroraOverlay.active {
+            opacity: 1;
+        }
+
+        .aurora-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            will-change: transform;
+        }
+
+        /* Blob 1 — brand pink, drifts top-left to center */
+        .aurora-blob-1 {
+            width: 55vw;
+            height: 55vh;
+            background: rgba(158, 75, 138, 0.50);
+            top: -15%;
+            left: -10%;
+            animation: auroraMove1 7s ease-in-out infinite alternate;
+        }
+
+        /* Blob 2 — deep purple, drifts top-right to bottom-left */
+        .aurora-blob-2 {
+            width: 50vw;
+            height: 50vh;
+            background: rgba(76, 42, 89, 0.45);
+            top: -10%;
+            right: -15%;
+            animation: auroraMove2 9s ease-in-out infinite alternate;
+        }
+
+        /* Blob 3 — fire red, moves bottom-center upward */
+        .aurora-blob-3 {
+            width: 60vw;
+            height: 45vh;
+            background: rgba(239, 68, 68, 0.30);
+            bottom: -20%;
+            left: 20%;
+            animation: auroraMove3 8s ease-in-out infinite alternate;
+        }
+
+        /* Blob 4 — ember orange, floats mid-right */
+        .aurora-blob-4 {
+            width: 40vw;
+            height: 40vh;
+            background: rgba(245, 158, 11, 0.28);
+            top: 30%;
+            right: -5%;
+            animation: auroraMove4 6s ease-in-out infinite alternate;
+        }
+
+        /* Blob 5 — dark navy depth, slow wander */
+        .aurora-blob-5 {
+            width: 45vw;
+            height: 50vh;
+            background: rgba(30, 30, 47, 0.35);
+            bottom: 0%;
+            left: -5%;
+            animation: auroraMove5 11s ease-in-out infinite alternate;
+        }
+
+        @keyframes auroraMove1 {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(18vw, 22vh) scale(1.15);
+            }
+
+            100% {
+                transform: translate(8vw, 10vh) scale(1.05);
+            }
+        }
+
+        @keyframes auroraMove2 {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(-22vw, 28vh) scale(1.1);
+            }
+
+            100% {
+                transform: translate(-10vw, 15vh) scale(1.2);
+            }
+        }
+
+        @keyframes auroraMove3 {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(-10vw, -25vh) scale(1.2);
+            }
+
+            100% {
+                transform: translate(15vw, -18vh) scale(1.05);
+            }
+        }
+
+        @keyframes auroraMove4 {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(-15vw, -12vh) scale(1.15);
+            }
+
+            100% {
+                transform: translate(-20vw, 8vh) scale(1.1);
+            }
+        }
+
+        @keyframes auroraMove5 {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(20vw, -10vh) scale(1.1);
+            }
+
+            100% {
+                transform: translate(10vw, -20vh) scale(1.2);
+            }
+        }
+
+        /* Dark mode — brighter, more vivid blobs */
+        .dark .aurora-blob-1 {
+            background: rgba(158, 75, 138, 0.65);
+        }
+
+        .dark .aurora-blob-2 {
+            background: rgba(76, 42, 89, 0.60);
+        }
+
+        .dark .aurora-blob-3 {
+            background: rgba(239, 68, 68, 0.40);
+        }
+
+        .dark .aurora-blob-4 {
+            background: rgba(245, 158, 11, 0.35);
+        }
+
+        .dark .aurora-blob-5 {
+            background: rgba(30, 30, 47, 0.55);
+        }
     </style>
 
     <!-- Persist theme before paint -->
@@ -639,14 +901,80 @@
 </head>
 
 <body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+    <!-- Developer Mode Aurora Overlay -->
+    <div id="devAuroraOverlay">
+        <div class="aurora-blob aurora-blob-1"></div>
+        <div class="aurora-blob aurora-blob-2"></div>
+        <div class="aurora-blob aurora-blob-3"></div>
+        <div class="aurora-blob aurora-blob-4"></div>
+        <div class="aurora-blob aurora-blob-5"></div>
+    </div>
     <!-- Loading Overlay -->
     <div id="pageLoader">
         <div class="loader-shell">
             <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
                 style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
             <div id="pageLoaderStatus">Initializing...</div>
+            <div id="loaderProgressWrap">
+                <div id="loaderProgressBar"></div>
+            </div>
         </div>
     </div>
+    <!-- Loader Progress Bar Controller -->
+    <script>
+        (function () {
+            var bar = document.getElementById('loaderProgressBar');
+            if (!bar) return;
+            var current = 0;
+            var slowTimer = null;
+            var finished = false;
+
+            function setWidth(pct) {
+                current = Math.min(pct, 100);
+                bar.style.width = current + '%';
+            }
+
+            // Fast phase: 0 → 80% in ~800ms
+            function startFast() {
+                bar.style.transition = 'width 0.8s cubic-bezier(0.4,0,0.2,1)';
+                requestAnimationFrame(function () { setWidth(80); });
+            }
+
+            // Slow phase: 80% → 98% over ~3.5s (never quite reaches 100 until content loads)
+            function startSlow() {
+                if (finished) return;
+                bar.style.transition = 'width 3.5s cubic-bezier(0.1,0.4,0.2,1)';
+                requestAnimationFrame(function () { setWidth(98); });
+            }
+
+            // Set to a specific pct (used by setLoaderStatus)
+            function set(pct) {
+                if (finished) return;
+                if (pct <= current) return; // only go forward
+                if (pct < 80) {
+                    bar.style.transition = 'width 0.4s ease';
+                } else {
+                    bar.style.transition = 'width 0.6s ease';
+                }
+                setWidth(pct);
+            }
+
+            // Finish: jump to 100% immediately
+            function finish() {
+                if (finished) return;
+                finished = true;
+                if (slowTimer) clearTimeout(slowTimer);
+                bar.style.transition = 'width 0.3s ease';
+                setWidth(100);
+            }
+
+            // Kick off: fast phase, then start slow phase after fast completes
+            startFast();
+            slowTimer = setTimeout(startSlow, 850);
+
+            window.__pxLoaderProgress = { set: set, finish: finish };
+        })();
+    </script>
     <!-- ================= NAVBAR ================= -->
     <header
         class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
@@ -672,6 +1000,14 @@
                     <span class="material-symbols-rounded">dark_mode</span>
                     <span class="hidden lg:block">Theme</span>
                 </button>
+                <!-- Developer Mode Toggle (desktop) -->
+                <div id="devModeToggleDesktop" class="dev-toggle-wrap hidden">
+                    <span class="dev-toggle-label" id="devLabelDesktop">DEV</span>
+                    <label class="dev-toggle" title="Developer Mode">
+                        <input type="checkbox" id="devToggleDesktop" />
+                        <span class="slider"></span>
+                    </label>
+                </div>
                 <a href="login.html"
                     class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
                     in</a>
@@ -702,6 +1038,13 @@
                     class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
                     <span class="material-symbols-rounded">dark_mode</span>
                 </button>
+                <!-- Developer Mode Toggle (mobile) -->
+                <div id="devModeToggleMobile" class="dev-toggle-wrap hidden">
+                    <label class="dev-toggle" title="Developer Mode">
+                        <input type="checkbox" id="devToggleMobile" />
+                        <span class="slider"></span>
+                    </label>
+                </div>
             </div>
         </div>
     </header>
@@ -1041,6 +1384,11 @@
                 }
 
                 function openNotesGenerator(topic) {
+                    // Developer mode → redirect to img_gen.html
+                    if (window.__PX_DEV_MODE) {
+                        window.location.href = 'img_gen.html?topic=' + encodeURIComponent(topic);
+                        return;
+                    }
                     // Navigate to notes generator (medical stream → medical_notes.html)
                     const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
                     const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
@@ -1203,9 +1551,13 @@
                 heroGenBtn.addEventListener('click', function () {
                     var val = (heroInput.value || '').trim();
                     if (val) {
-                        const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                        const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
-                        window.location.href = page + '?topic=' + encodeURIComponent(val);
+                        if (window.__PX_DEV_MODE) {
+                            window.location.href = 'img_gen.html?topic=' + encodeURIComponent(val);
+                        } else {
+                            const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
+                            const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                            window.location.href = page + '?topic=' + encodeURIComponent(val);
+                        }
                     } else {
                         heroInput.focus();
                         // Optional: shake animation or visual cue
@@ -1339,6 +1691,19 @@
             const node = $('pageLoaderStatus');
             if (!node) return;
             node.textContent = message || 'Loading...';
+            // Advance progress bar based on status
+            if (window.__pxLoaderProgress) {
+                const map = {
+                    'Verifying session...': 10,
+                    'Loading profile and progress...': 30,
+                    'Loading syllabus...': 50,
+                    'Loading Blink and LabX...': 65,
+                    'Finalizing dashboard...': 78,
+                    'Ready': 100
+                };
+                const pct = map[message];
+                if (pct !== undefined) window.__pxLoaderProgress.set(pct);
+            }
         }
 
         async function fetchJson(url, opts = {}) {
@@ -1418,7 +1783,9 @@
                 if (result.ok) {
                     clearProgressError();
                     setLoaderStatus('Ready');
-                document.body.classList.add('loaded');
+                    // Signal progress bar to finish immediately
+                    if (window.__pxLoaderProgress) window.__pxLoaderProgress.finish();
+                    document.body.classList.add('loaded');
                     const loader = document.getElementById('pageLoader');
                     if (loader) {
                         setTimeout(() => { loader.style.display = 'none'; }, 450);
@@ -1457,6 +1824,8 @@
                 __pxEduMaybeRequire(profile).catch(err => console.error('Education modal failed', err));
                 if (typeof window.__PX_NAV_APPLY === 'function') { window.__PX_NAV_APPLY(profile); }
                 renderProfile(profile);
+                // Check dev-mode eligibility (admin / employee)
+                __pxCheckDevModeEligibility();
 
                 const progressIds = Array.isArray(progOut.data?.completed_topic_ids) ? progOut.data.completed_topic_ids : [];
                 completedTopicIds.clear();
@@ -1851,7 +2220,7 @@
                         const courseType = String(c.type || c.course_type || c.subject_type || '').trim().toLowerCase();
                         const isMathsCourse = (courseType === 'maths') || (courseType === 'math') || (courseType === 'mathematics') || (courseType.includes('math'));
                         const isMedicalStream = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                        const notesPage = isMathsCourse ? 'maths_notes.html' : (isMedicalStream ? 'medical_notes.html' : 'notes_generator.html');
+                        const notesPage = window.__PX_DEV_MODE ? 'img_gen.html' : (isMathsCourse ? 'maths_notes.html' : (isMedicalStream ? 'medical_notes.html' : 'notes_generator.html'));
 
                         const a = document.createElement('a');
                         a.href = notesPage + '?topic=' + encodeURIComponent(t.topic);
@@ -3243,9 +3612,13 @@
                             li.className = 'px-4 py-2.5 cursor-pointer hover:bg-brand-500/10 text-sm text-neutral-800 dark:text-white/90 transition';
                             li.textContent = name;
                             li.addEventListener('click', () => {
-                                const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                                const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
-                                window.location.href = page + '?topic=' + encodeURIComponent(name);
+                                if (window.__PX_DEV_MODE) {
+                                    window.location.href = 'img_gen.html?topic=' + encodeURIComponent(name);
+                                } else {
+                                    const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
+                                    const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                                    window.location.href = page + '?topic=' + encodeURIComponent(name);
+                                }
                             });
                             sheetList.appendChild(li);
                         });
@@ -3320,9 +3693,13 @@
                         const topicLink = inner.querySelector('a');
                         if (topicLink) {
                             const topicName = topicLink.textContent.trim();
-                            const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                            const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
-                            window.open(page + '?topic=' + encodeURIComponent(topicName), '_blank');
+                            if (window.__PX_DEV_MODE) {
+                                window.open('img_gen.html?topic=' + encodeURIComponent(topicName), '_blank');
+                            } else {
+                                const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
+                                const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                                window.open(page + '?topic=' + encodeURIComponent(topicName), '_blank');
+                            }
                         }
                         if (navigator.vibrate) navigator.vibrate(20);
                     }
@@ -3375,6 +3752,87 @@
             });
             tooltipObserver.observe(syllabusWrap, { childList: true, subtree: true });
         }
+    })();
+</script>
+
+<!-- ===== Developer Mode Logic ===== -->
+<script>
+    (function () {
+        // Restore dev mode state from localStorage
+        window.__PX_DEV_MODE = false;
+        try {
+            if (localStorage.getItem('px_dev_mode') === 'true') {
+                window.__PX_DEV_MODE = true;
+                var ov = document.getElementById('devAuroraOverlay');
+                if (ov) ov.classList.add('active');
+            }
+        } catch (_) { }
+
+        function syncToggleUI(on) {
+            const deskCb = document.getElementById('devToggleDesktop');
+            const mobCb = document.getElementById('devToggleMobile');
+            const deskLabel = document.getElementById('devLabelDesktop');
+            if (deskCb) deskCb.checked = on;
+            if (mobCb) mobCb.checked = on;
+            if (deskLabel) deskLabel.classList.toggle('active', on);
+        }
+
+        function setDevMode(on) {
+            window.__PX_DEV_MODE = on;
+            try { localStorage.setItem('px_dev_mode', on ? 'true' : 'false'); } catch (_) { }
+            var ov = document.getElementById('devAuroraOverlay');
+            if (ov) ov.classList.toggle('active', on);
+            syncToggleUI(on);
+
+            // Re-point existing topic links
+            document.querySelectorAll('#syllabus a[href*="?topic="]').forEach(a => {
+                const url = new URL(a.href, location.href);
+                const topic = url.searchParams.get('topic');
+                if (!topic) return;
+                if (on) {
+                    a.href = 'img_gen.html?topic=' + encodeURIComponent(topic);
+                } else {
+                    // Restore original page
+                    const isMaths = a.dataset.mathsCourse === '1';
+                    const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
+                    const page = isMaths ? 'maths_notes.html' : (isMedical ? 'medical_notes.html' : 'notes_generator.html');
+                    a.href = page + '?topic=' + encodeURIComponent(topic);
+                }
+            });
+        }
+
+        // Listen for toggle changes
+        document.addEventListener('change', e => {
+            if (e.target.id === 'devToggleDesktop' || e.target.id === 'devToggleMobile') {
+                setDevMode(e.target.checked);
+            }
+        });
+
+        // Restore toggle UI on load
+        syncToggleUI(window.__PX_DEV_MODE);
+
+        // Exposed for profile loader to call after role check
+        window.__pxCheckDevModeEligibility = async function () {
+            try {
+                const token = localStorage.getItem('px_token');
+                if (!token) return;
+                const API = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
+                const res = await fetch(API + '/api/admin/roles/me', {
+                    headers: { Authorization: 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const role = (data.role || '').toLowerCase().trim();
+                if (role === 'admin' || role === 'employee') {
+                    // Show toggles
+                    const dw = document.getElementById('devModeToggleDesktop');
+                    const mw = document.getElementById('devModeToggleMobile');
+                    if (dw) { dw.classList.remove('hidden'); dw.classList.add('inline-flex'); }
+                    if (mw) { mw.classList.remove('hidden'); mw.classList.add('inline-flex'); }
+                    syncToggleUI(window.__PX_DEV_MODE);
+                }
+            } catch (_) { /* silent */ }
+        };
     })();
 </script>
 
