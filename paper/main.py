@@ -1013,6 +1013,7 @@ AI_NOTES_CHEATSHEET_TABLE = os.getenv("AI_NOTES_CHEATSHEET_TABLE", "ai_notes_che
 AI_NOTES_SIMPLE_TABLE = os.getenv("AI_NOTES_SIMPLE_TABLE", "ai_notes_simple")
 AI_NOTES_USER_EDITS_TABLE = os.getenv("AI_NOTES_USER_EDITS_TABLE", "ai_notes_user_edits")
 AI_NOTES_CASEFLOW_SCENARIOS_TABLE = os.getenv("AI_NOTES_CASEFLOW_SCENARIOS_TABLE", "ai_notes_caseflow_scenarios")
+AI_SELECTED_IMAGES_TABLE = os.getenv("AI_SELECTED_IMAGES_TABLE", "ai_selected_images")
 
 VALID_NOTE_VARIANTS = {"detailed", "cheatsheet", "simple"}
 
@@ -7101,8 +7102,10 @@ def _is_admin_user(user_id: Optional[str], email: Optional[str]) -> bool:
 def list_admin_users(
     authorization: Optional[str] = Header(default=None),
     limit: int = Query(default=500, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
     q: Optional[str] = Query(default=None, max_length=120),
     role: Optional[str] = Query(default=None, max_length=32),
+    college_id: Optional[str] = Query(default=None, max_length=120),
     department: Optional[str] = Query(default=None, max_length=120),
     section: Optional[str] = Query(default=None, max_length=32),
     batch_range: Optional[str] = Query(default=None, max_length=32),
@@ -7130,25 +7133,43 @@ def list_admin_users(
         raise HTTPException(status_code=403, detail="Not an admin user")
 
     supabase = get_service_client()
-    # Core fields from user_profiles. Department/batch are sourced from user_education.
-    base_cols = [
-        "id","auth_user_id","email","name","gender","phone","semester","regno",
-        "profile_image_url","verification_score","updated_at","created_at","linkedin","github",
-        "leetcode","skills","technologies","specializations"
+    # Core fields from user_profiles.
+    # Include academic/FK fields when available for deployments where education lives on profile rows.
+    base_select_try = [
+        "id,auth_user_id,email,name,gender,phone,semester,regno,batch_from,batch_to,section,college_id,department_id,batch_id,"
+        "profile_image_url,verification_score,updated_at,created_at,linkedin,github,leetcode,skills,technologies,specializations",
+        "id,auth_user_id,email,name,gender,phone,semester,regno,batch_from,batch_to,college_id,department_id,batch_id,"
+        "profile_image_url,verification_score,updated_at,created_at,linkedin,github,leetcode,skills,technologies,specializations",
+        "id,auth_user_id,email,name,gender,phone,semester,regno,batch_from,batch_to,"
+        "profile_image_url,verification_score,updated_at,created_at,linkedin,github,leetcode,skills,technologies,specializations",
     ]
-    try:
-        query = supabase.table("user_profiles").select(",".join(base_cols))
-        if q:
-            qv = (q or "").strip()
-            if qv:
-                # Search by name/email/regno (case-insensitive)
-                pattern = f"%{qv}%"
-                query = query.or_(
-                    f"name.ilike.{pattern},email.ilike.{pattern},regno.ilike.{pattern}"
-                )
-        res = query.order("updated_at", desc=True).limit(limit).execute()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Supabase error (list users) exec: {str(e)}")
+    res = None
+    scan_limit = max(2000, min(10000, offset + limit + 2000))
+    for base_cols in base_select_try:
+        try:
+            query = supabase.table("user_profiles").select(base_cols)
+            if q:
+                qv = (q or "").strip()
+                if qv:
+                    # Search by name/email/regno (case-insensitive)
+                    pattern = f"%{qv}%"
+                    query = query.or_(
+                        f"name.ilike.{pattern},email.ilike.{pattern},regno.ilike.{pattern}"
+                    )
+            candidate = query.order("updated_at", desc=True).limit(scan_limit).execute()
+            if getattr(candidate, "error", None):
+                msg = str(candidate.error).lower()
+                if ("column" in msg and "does not exist" in msg) or ("schema cache" in msg and "column" in msg):
+                    continue
+            res = candidate
+            break
+        except Exception as e:
+            msg = str(e).lower()
+            if ("column" in msg and "does not exist" in msg) or ("schema cache" in msg and "column" in msg):
+                continue
+            raise HTTPException(status_code=500, detail=f"Supabase error (list users) exec: {str(e)}")
+    if res is None:
+        raise HTTPException(status_code=500, detail="Supabase error (list users): no compatible user_profiles column set found")
     err = getattr(res, "error", None)
     if err:
         raise HTTPException(status_code=500, detail=f"Supabase error (list users): {err}")
@@ -7163,6 +7184,39 @@ def list_admin_users(
     edu_map: Dict[str, dict] = {}
     profile_ids = [r.get("id") for r in rows if r.get("id")]
     uniq_profile_ids = list({pid for pid in profile_ids if pid})
+    def _id_norm(v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s if s else None
+
+    def _chunked_ids(values: List[Any], size: int = 120) -> List[List[str]]:
+        ids = [str(v).strip() for v in (values or []) if str(v).strip()]
+        if not ids:
+            return []
+        return [ids[i : i + size] for i in range(0, len(ids), size)]
+
+    auth_to_profile: Dict[str, str] = {
+        str(r.get("auth_user_id")): str(r.get("id"))
+        for r in rows
+        if r.get("auth_user_id") and r.get("id")
+    }
+
+    def _edu_rank(ed: dict) -> Tuple[int, float]:
+        oi_raw = ed.get("order_index")
+        try:
+            oi = int(oi_raw) if oi_raw is not None else 9999
+        except Exception:
+            oi = 9999
+        ts = 0.0
+        try:
+            if ed.get("created_at"):
+                ts = datetime.fromisoformat(str(ed.get("created_at")).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            ts = 0.0
+        # Prefer lower order_index; for ties prefer latest created_at.
+        return (oi, -ts)
+
     if uniq_profile_ids:
         # Try with order_index if present, else fallback.
         edu_select_try = [
@@ -7186,59 +7240,173 @@ def list_admin_users(
         ]
         edu_rows: List[dict] = []
         for sel in edu_select_try:
-            try:
-                eres = supabase.table("user_education").select(sel).in_("user_profile_id", uniq_profile_ids).execute()
-            except Exception as e:
-                msg = str(e)
-                low = msg.lower()
-                # Keep trying select variants when a column is missing in this deployment.
-                if "order_index" in sel and "order_index" in low:
-                    continue
-                if "degree_id" in sel and "degree_id" in low:
-                    continue
-                if ("column" in low and "does not exist" in low) or ("schema cache" in low and "column" in low):
-                    continue
-                # If user_education doesn't exist or query fails, just skip education enrichment.
+            sel_rows: List[dict] = []
+            missing_col_for_variant = False
+            failed_variant = False
+            for chunk in _chunked_ids(uniq_profile_ids, size=100):
+                try:
+                    eres = supabase.table("user_education").select(sel).in_("user_profile_id", chunk).execute()
+                except Exception as e:
+                    low = str(e).lower()
+                    if "order_index" in sel and "order_index" in low:
+                        missing_col_for_variant = True
+                        break
+                    if "degree_id" in sel and "degree_id" in low:
+                        missing_col_for_variant = True
+                        break
+                    if ("column" in low and "does not exist" in low) or ("schema cache" in low and "column" in low):
+                        missing_col_for_variant = True
+                        break
+                    failed_variant = True
+                    break
+                err_obj = getattr(eres, "error", None)
+                if err_obj:
+                    err_msg = str(err_obj or "").lower()
+                    if ("column" in err_msg and "does not exist" in err_msg) or ("schema cache" in err_msg and "column" in err_msg):
+                        missing_col_for_variant = True
+                        break
+                    failed_variant = True
+                    break
+                sel_rows.extend(getattr(eres, "data", []) or [])
+
+            if missing_col_for_variant:
+                continue
+            if failed_variant:
                 edu_rows = []
                 break
-            if getattr(eres, "error", None):
-                err_msg = str(getattr(eres, "error", "") or "").lower()
-                # Some PostgREST errors are surfaced via res.error instead of exceptions.
-                if ("column" in err_msg and "does not exist" in err_msg) or ("schema cache" in err_msg and "column" in err_msg):
-                    continue
-                edu_rows = []
-                break
-            edu_rows = getattr(eres, "data", []) or []
+            edu_rows = sel_rows
             break
 
-        def _edu_rank(ed: dict) -> Tuple[int, float]:
-            oi_raw = ed.get("order_index")
-            try:
-                oi = int(oi_raw) if oi_raw is not None else 9999
-            except Exception:
-                oi = 9999
-            ts = 0.0
-            try:
-                if ed.get("created_at"):
-                    ts = datetime.fromisoformat(str(ed.get("created_at")).replace("Z", "+00:00")).timestamp()
-            except Exception:
-                ts = 0.0
-            # Prefer lower order_index; for ties prefer latest created_at.
-            return (oi, -ts)
-
         for ed in edu_rows:
-            pid = ed.get("user_profile_id")
+            pid = _id_norm(ed.get("user_profile_id"))
             if not pid:
                 continue
             prev = edu_map.get(pid)
             if not prev or _edu_rank(ed) < _edu_rank(prev):
                 edu_map[pid] = ed
 
+    # Hard fallback: read raw rows to tolerate schema drift (missing/renamed columns).
+    if uniq_profile_ids and (len(edu_map) < len(uniq_profile_ids)):
+        try:
+            for chunk in _chunked_ids(uniq_profile_ids, size=100):
+                raw_edu_res = supabase.table("user_education").select("*").in_("user_profile_id", chunk).execute()
+                if getattr(raw_edu_res, "error", None):
+                    continue
+                for ed in (getattr(raw_edu_res, "data", None) or []):
+                    pid = _id_norm(ed.get("user_profile_id"))
+                    if not pid:
+                        continue
+                    prev = edu_map.get(pid)
+                    if not prev or _edu_rank(ed) < _edu_rank(prev):
+                        edu_map[pid] = ed
+        except Exception:
+            pass
+
+    # Legacy hard fallback: some old deployments may use profile_id instead of user_profile_id.
+    if uniq_profile_ids and (len(edu_map) < len(uniq_profile_ids)):
+        try:
+            for chunk in _chunked_ids(uniq_profile_ids, size=100):
+                raw_edu_res2 = supabase.table("user_education").select("*").in_("profile_id", chunk).execute()
+                if getattr(raw_edu_res2, "error", None):
+                    continue
+                for ed in (getattr(raw_edu_res2, "data", None) or []):
+                    pid = _id_norm(ed.get("profile_id"))
+                    if not pid:
+                        continue
+                    if "user_profile_id" not in ed:
+                        ed["user_profile_id"] = pid
+                    prev = edu_map.get(pid)
+                    if not prev or _edu_rank(ed) < _edu_rank(prev):
+                        edu_map[pid] = ed
+        except Exception:
+            pass
+
+    # Legacy fallback: some deployments link user_education via auth_user_id instead of user_profile_id.
+    if uniq_ids and (len(edu_map) < len(uniq_profile_ids)):
+        edu_select_auth_try = [
+            "auth_user_id,college_id,degree_id,department_id,batch_id,school,degree,department,batch_range,section,current_semester,regno,order_index,created_at",
+            "auth_user_id,college_id,degree_id,department_id,batch_id,school,degree,department,batch_range,section,current_semester,regno,created_at",
+            "auth_user_id,college_id,department_id,batch_id,school,degree,department,batch_range,section,current_semester,regno,order_index,created_at",
+            "auth_user_id,college_id,department_id,batch_id,school,degree,department,batch_range,section,current_semester,regno,created_at",
+            "auth_user_id,department_id,batch_id,college_id,section,current_semester,regno,order_index,created_at",
+            "auth_user_id,department_id,batch_id,college_id,section,current_semester,regno,created_at",
+            "auth_user_id,department_id,batch_id,current_semester,regno,order_index,created_at",
+            "auth_user_id,department_id,batch_id,current_semester,regno,created_at",
+        ]
+        auth_edu_rows: List[dict] = []
+        for sel in edu_select_auth_try:
+            sel_rows: List[dict] = []
+            missing_col_for_variant = False
+            failed_variant = False
+            for chunk in _chunked_ids(uniq_ids, size=100):
+                try:
+                    ares = supabase.table("user_education").select(sel).in_("auth_user_id", chunk).execute()
+                except Exception as e:
+                    msg = str(e).lower()
+                    if ("column" in msg and "does not exist" in msg) or ("schema cache" in msg and "column" in msg):
+                        missing_col_for_variant = True
+                        break
+                    failed_variant = True
+                    break
+                if getattr(ares, "error", None):
+                    err_msg = str(getattr(ares, "error", "") or "").lower()
+                    if ("column" in err_msg and "does not exist" in err_msg) or ("schema cache" in err_msg and "column" in err_msg):
+                        missing_col_for_variant = True
+                        break
+                    failed_variant = True
+                    break
+                sel_rows.extend(getattr(ares, "data", []) or [])
+
+            if missing_col_for_variant:
+                continue
+            if failed_variant:
+                auth_edu_rows = []
+                break
+            auth_edu_rows = sel_rows
+            break
+
+        for ed in auth_edu_rows:
+            auid = ed.get("auth_user_id")
+            if not auid:
+                continue
+            pid = auth_to_profile.get(str(auid))
+            if not pid:
+                continue
+            prev = edu_map.get(pid)
+            if not prev or _edu_rank(ed) < _edu_rank(prev):
+                edu_map[pid] = ed
+
+    # Final legacy fallback: raw auth_user_id-linked education rows.
+    if uniq_ids and (len(edu_map) < len(uniq_profile_ids)):
+        try:
+            for chunk in _chunked_ids(uniq_ids, size=100):
+                raw_auth_edu_res = supabase.table("user_education").select("*").in_("auth_user_id", chunk).execute()
+                if getattr(raw_auth_edu_res, "error", None):
+                    continue
+                for ed in (getattr(raw_auth_edu_res, "data", None) or []):
+                    auid = ed.get("auth_user_id")
+                    if not auid:
+                        continue
+                    pid = auth_to_profile.get(str(auid))
+                    if not pid:
+                        continue
+                    if "user_profile_id" not in ed:
+                        ed["user_profile_id"] = pid
+                    prev = edu_map.get(pid)
+                    if not prev or _edu_rank(ed) < _edu_rank(prev):
+                        edu_map[pid] = ed
+        except Exception:
+            pass
+
     # Preload department + batch + college + degree info to enrich output
-    dept_ids = {ed.get("department_id") for ed in edu_map.values() if ed.get("department_id")}
-    batch_ids = {ed.get("batch_id") for ed in edu_map.values() if ed.get("batch_id")}
-    college_ids = {ed.get("college_id") for ed in edu_map.values() if ed.get("college_id")}
-    degree_ids = {ed.get("degree_id") for ed in edu_map.values() if ed.get("degree_id")}
+    dept_ids = {_id_norm(ed.get("department_id")) for ed in edu_map.values() if _id_norm(ed.get("department_id"))}
+    batch_ids = {_id_norm(ed.get("batch_id")) for ed in edu_map.values() if _id_norm(ed.get("batch_id"))}
+    college_ids = {_id_norm(ed.get("college_id")) for ed in edu_map.values() if _id_norm(ed.get("college_id"))}
+    degree_ids = {_id_norm(ed.get("degree_id")) for ed in edu_map.values() if _id_norm(ed.get("degree_id"))}
+    # Also include profile-level IDs for deployments that store academics on user_profiles.
+    dept_ids.update({_id_norm(r.get("department_id")) for r in rows if _id_norm(r.get("department_id"))})
+    batch_ids.update({_id_norm(r.get("batch_id")) for r in rows if _id_norm(r.get("batch_id"))})
+    college_ids.update({_id_norm(r.get("college_id")) for r in rows if _id_norm(r.get("college_id"))})
     dept_map: Dict[str, dict] = {}
     batch_map: Dict[str, dict] = {}
     college_map: Dict[str, dict] = {}
@@ -7278,7 +7446,7 @@ def list_admin_users(
         dept_rows = _safe_in_select("departments", "id,name", "id", _as_id_list(dept_ids))
         for d in dept_rows:
             if isinstance(d, dict) and d.get("id"):
-                dept_map[d.get("id")] = d
+                dept_map[str(d.get("id"))] = d
     except Exception:
         pass
 
@@ -7286,7 +7454,7 @@ def list_admin_users(
         batch_rows = _safe_in_select("batches", "id,from_year,to_year", "id", _as_id_list(batch_ids))
         for b in batch_rows:
             if isinstance(b, dict) and b.get("id"):
-                batch_map[b.get("id")] = b
+                batch_map[str(b.get("id"))] = b
     except Exception:
         pass
 
@@ -7294,7 +7462,7 @@ def list_admin_users(
         college_rows = _safe_in_select("colleges", "id,name", "id", _as_id_list(college_ids))
         for c in college_rows:
             if isinstance(c, dict) and c.get("id"):
-                college_map[c.get("id")] = c
+                college_map[str(c.get("id"))] = c
     except Exception:
         pass
 
@@ -7302,7 +7470,7 @@ def list_admin_users(
         degree_rows = _safe_in_select("degrees", "id,name", "id", _as_id_list(degree_ids))
         for g in degree_rows:
             if isinstance(g, dict) and g.get("id"):
-                degree_map[g.get("id")] = g
+                degree_map[str(g.get("id"))] = g
     except Exception:
         pass
 
@@ -7324,19 +7492,23 @@ def list_admin_users(
     streak_last_activity_map: Dict[str, Any] = {}  # profile_id -> last_activity_date
     if uniq_profile_ids:
         for streak_table in ("notex_streak", "user_streaks"):
-            try:
-                sres = supabase.table(streak_table).select(
-                    "user_profile_id,current_streak,longest_streak,last_activity_date"
-                ).in_(
-                    "user_profile_id", uniq_profile_ids
-                ).execute()
-            except Exception:
-                continue
-            if getattr(sres, "error", None):
-                continue
-            for s in (getattr(sres, "data", None) or []):
-                pid = s.get("user_profile_id")
-                if pid:
+            got_any = False
+            for chunk in _chunked_ids(uniq_profile_ids, size=120):
+                try:
+                    sres = supabase.table(streak_table).select(
+                        "user_profile_id,current_streak,longest_streak,last_activity_date"
+                    ).in_(
+                        "user_profile_id", chunk
+                    ).execute()
+                except Exception:
+                    continue
+                if getattr(sres, "error", None):
+                    continue
+                for s in (getattr(sres, "data", None) or []):
+                    pid = _id_norm(s.get("user_profile_id"))
+                    if not pid:
+                        continue
+                    got_any = True
                     try:
                         streak_current_map[pid] = int(s.get("current_streak") or 0)
                     except Exception:
@@ -7347,7 +7519,46 @@ def list_admin_users(
                         streak_longest_map[pid] = 0
                     if s.get("last_activity_date") is not None:
                         streak_last_activity_map[pid] = s.get("last_activity_date")
-            # If we got any rows, stop trying fallbacks.
+            if got_any:
+                break
+
+    # Legacy fallback: some streak tables are keyed by auth_user_id/user_id.
+    if uniq_ids and not streak_current_map:
+        for streak_table in ("notex_streak", "user_streaks"):
+            sres = None
+            streak_select_try = [
+                ("auth_user_id,user_id,current_streak,longest_streak,last_activity_date", "auth_user_id"),
+                ("user_id,current_streak,longest_streak,last_activity_date", "user_id"),
+                ("auth_user_id,current_streak,longest_streak,last_activity_date", "auth_user_id"),
+            ]
+            for sel, key in streak_select_try:
+                try:
+                    cand = supabase.table(streak_table).select(sel).in_(key, uniq_ids).execute()
+                except Exception:
+                    continue
+                if getattr(cand, "error", None):
+                    continue
+                sres = cand
+                break
+            if sres is None:
+                continue
+            for s in (getattr(sres, "data", None) or []):
+                auid = s.get("auth_user_id") or s.get("user_id")
+                if not auid:
+                    continue
+                pid = auth_to_profile.get(str(auid))
+                if not pid:
+                    continue
+                try:
+                    streak_current_map[pid] = int(s.get("current_streak") or 0)
+                except Exception:
+                    streak_current_map[pid] = 0
+                try:
+                    streak_longest_map[pid] = int(s.get("longest_streak") or 0)
+                except Exception:
+                    streak_longest_map[pid] = 0
+                if s.get("last_activity_date") is not None:
+                    streak_last_activity_map[pid] = s.get("last_activity_date")
             if streak_current_map:
                 break
 
@@ -7355,40 +7566,47 @@ def list_admin_users(
     last_seen_map: Dict[str, str] = {}  # auth_user_id -> ISO timestamp
     if uniq_ids:
         try:
-            # Cap rows to avoid unbounded reads on very large session tables.
-            sres = (
-                supabase.table("user_sessions")
-                .select("user_id,last_seen_at")
-                .in_("user_id", uniq_ids)
-                .order("last_seen_at", desc=True)
-                .limit(50000)
-                .execute()
-            )
-            if not getattr(sres, "error", None):
+            for chunk in _chunked_ids(uniq_ids, size=120):
+                sres = (
+                    supabase.table("user_sessions")
+                    .select("user_id,last_seen_at")
+                    .in_("user_id", chunk)
+                    .order("last_seen_at", desc=True)
+                    .limit(50000)
+                    .execute()
+                )
+                if getattr(sres, "error", None):
+                    continue
                 for row in (getattr(sres, "data", None) or []):
                     uid = row.get("user_id")
                     ts = row.get("last_seen_at")
-                    if uid and ts and uid not in last_seen_map:
-                        # Because results are ordered desc, first seen is the latest.
-                        last_seen_map[uid] = ts
+                    uid_s = _id_norm(uid)
+                    if uid_s and ts and uid_s not in last_seen_map:
+                        last_seen_map[uid_s] = ts
         except Exception:
             pass
 
     out: List[dict] = []
     for r in rows:
-        pid = r.get("id")
+        pid = _id_norm(r.get("id"))
         edu = edu_map.get(pid, {}) if pid else {}
-        dept = dept_map.get(edu.get("department_id")) if edu.get("department_id") else {}
-        batch = batch_map.get(edu.get("batch_id")) if edu.get("batch_id") else {}
-        college = college_map.get(edu.get("college_id")) if edu.get("college_id") else {}
-        degree = degree_map.get(edu.get("degree_id")) if edu.get("degree_id") else {}
+        dept_id_val = _id_norm(edu.get("department_id") if edu.get("department_id") else r.get("department_id"))
+        batch_id_val = _id_norm(edu.get("batch_id") if edu.get("batch_id") else r.get("batch_id"))
+        college_id_val = _id_norm(edu.get("college_id") if edu.get("college_id") else r.get("college_id"))
+        dept = dept_map.get(dept_id_val) if dept_id_val else {}
+        batch = batch_map.get(batch_id_val) if batch_id_val else {}
+        college = college_map.get(college_id_val) if college_id_val else {}
+        degree_key = _id_norm(edu.get("degree_id"))
+        degree = degree_map.get(degree_key) if degree_key else {}
         semester_val = r.get("semester") if r.get("semester") is not None else edu.get("current_semester")
         regno_val = r.get("regno") if r.get("regno") else edu.get("regno")
         user_id_val = r.get("auth_user_id")
         current_streak_val = streak_current_map.get(pid, 0) if pid else 0
         longest_streak_val = streak_longest_map.get(pid, 0) if pid else 0
         last_seen_val = last_seen_map.get(user_id_val) if user_id_val else None
-        batch_range_val = (f"{batch.get('from_year')}-{batch.get('to_year')}" if batch and batch.get('from_year') and batch.get('to_year') else None)
+        batch_from_val = batch.get("from_year") if batch else r.get("batch_from")
+        batch_to_val = batch.get("to_year") if batch else r.get("batch_to")
+        batch_range_val = (f"{batch_from_val}-{batch_to_val}" if batch_from_val and batch_to_val else None)
 
         # Text-based fallback values (as used in profile/academics pages)
         college_name_val = (college.get("name") if college else None) or (edu.get("school") if isinstance(edu, dict) else None)
@@ -7402,6 +7620,8 @@ def list_admin_users(
             semester_val = edu.get("current_semester")
         if not regno_val and isinstance(edu, dict):
             regno_val = edu.get("regno")
+
+        section_val = (edu.get("section") if isinstance(edu, dict) else None) or r.get("section")
 
         # Match leaderboard behaviour: if last activity is older than 2 days, show streak as 0
         if pid and streak_last_activity_map.get(pid):
@@ -7420,17 +7640,23 @@ def list_admin_users(
             "role": role_map.get(r.get("auth_user_id"), "student"),
             "semester": semester_val,
             "regno": regno_val,
+            "roll_no": regno_val,
+            "college_id": college_id_val,
             "college": college_name_val,
+            "college_name": college_name_val,
             "degree": degree_name_val,
             "department": department_name_val,
-            "section": edu.get("section") if edu else None,
-            "batch_from": batch.get("from_year") if batch else None,
-            "batch_to": batch.get("to_year") if batch else None,
+            "dept": department_name_val,
+            "section": section_val,
+            "sec": section_val,
+            "batch_from": batch_from_val,
+            "batch_to": batch_to_val,
             "batch_range": batch_range_val,
             # Back-compat (users.html initially used streak_current)
             "streak_current": current_streak_val,
             # Align naming with /api/streak response (academicas.html)
             "current_streak": current_streak_val,
+            "streak": current_streak_val,
             "longest_streak": longest_streak_val,
             "last_activity_date": streak_last_activity_map.get(pid) if pid else None,
             "last_seen_at": last_seen_val,
@@ -7454,6 +7680,9 @@ def list_admin_users(
     if role:
         want = _norm(role)
         filtered = [u for u in filtered if _norm(u.get("role")) == want]
+    if college_id:
+        want = _norm(college_id)
+        filtered = [u for u in filtered if _norm(u.get("college_id")) == want]
     if department:
         want = _norm(department)
         filtered = [u for u in filtered if _norm(u.get("department")) == want]
@@ -7485,7 +7714,16 @@ def list_admin_users(
 
         filtered = [u for u in filtered if _is_recent(u)]
 
-    return {"users": filtered, "count": len(filtered)}
+    total_count = len(filtered)
+    page_users = filtered[offset : offset + limit]
+
+    return {
+        "users": page_users,
+        "count": total_count,
+        "limit": limit,
+        "offset": offset,
+        "has_more": (offset + len(page_users)) < total_count,
+    }
 
 
 @academics_router.get("/api/admin/self-check", summary="Admin: verify current token admin status")
@@ -21913,18 +22151,26 @@ async def analytics_heartbeat(payload: AnalyticsHeartbeat):
 
 @analytics_router.post("/event")
 async def analytics_track_event(payload: AnalyticsEventModel):
+    data = {
+        "session_id": payload.session_id,
+        "user_id": payload.user_id if payload.user_id else None,
+        "event_type": payload.event_type,
+        "event_data": payload.event_data
+    }
+    if not data["user_id"]:
+        del data["user_id"]
+
+    def _insert_once(event_payload: Dict[str, Any]) -> None:
+        get_service_client().table("analytics_events").insert(event_payload).execute()
+
     try:
-        supabase = get_service_client()
-        data = {
-            "session_id": payload.session_id,
-            "user_id": payload.user_id if payload.user_id else None,
-            "event_type": payload.event_type,
-            "event_data": payload.event_data
-        }
-        if not data["user_id"]: del data["user_id"]
-        supabase.table("analytics_events").insert(data).execute()
-    except Exception as e:
-        print(f"Analytics Event Error: {e}")
+        await run_in_threadpool(_insert_once, data)
+    except Exception as first_error:
+        try:
+            await asyncio.sleep(0.12)
+            await run_in_threadpool(_insert_once, data)
+        except Exception as second_error:
+            print(f"Analytics Event Error: {second_error} (first: {first_error})")
     return {"status": "ok"}
 
 @analytics_router.post("/feedback/topic")
@@ -22757,13 +23003,89 @@ async def run_java_compiler(request: CompilerRequest):
 # Blink Generation Endpoint (Gemini 3 Pro + Supabase)
 # ------------------------------------------------------------------------------
 
+_BLINK_LINK_CACHE_TTL_S = max(1, int(os.getenv("BLINK_LINK_CACHE_TTL_SECONDS", "45") or "45"))
+_BLINK_LINK_CACHE_MAX_ENTRIES = max(100, int(os.getenv("BLINK_LINK_CACHE_MAX_ENTRIES", "5000") or "5000"))
+_BLINK_LINK_FALLBACK_CONCURRENCY = max(1, int(os.getenv("BLINK_LINK_FALLBACK_CONCURRENCY", "6") or "6"))
+_blink_link_cache: Dict[str, Tuple[float, str, str]] = {}
+_blink_link_cache_lock = Lock()
+
+
+def _blink_cache_get(topic_ci: str) -> Optional[Tuple[str, str]]:
+    now = time.time()
+    with _blink_link_cache_lock:
+        item = _blink_link_cache.get(topic_ci)
+        if not item:
+            return None
+        expires_at, link, alias_key = item
+        if expires_at <= now:
+            _blink_link_cache.pop(topic_ci, None)
+            return None
+        return link, alias_key
+
+
+def _blink_cache_set(topic_ci: str, link: str, alias_key: Optional[str] = None) -> None:
+    if not topic_ci or not link:
+        return
+    cache_alias = (alias_key or topic_ci).strip()
+    if not cache_alias:
+        cache_alias = topic_ci
+    now = time.time()
+    with _blink_link_cache_lock:
+        if len(_blink_link_cache) >= _BLINK_LINK_CACHE_MAX_ENTRIES:
+            expired_keys = [k for k, (exp, _, _) in _blink_link_cache.items() if exp <= now]
+            for k in expired_keys:
+                _blink_link_cache.pop(k, None)
+            if len(_blink_link_cache) >= _BLINK_LINK_CACHE_MAX_ENTRIES:
+                for k in list(_blink_link_cache.keys())[: max(1, _BLINK_LINK_CACHE_MAX_ENTRIES // 10)]:
+                    _blink_link_cache.pop(k, None)
+        _blink_link_cache[topic_ci] = (now + _BLINK_LINK_CACHE_TTL_S, link, cache_alias)
+
 class BlinkRequest(BaseModel):
     topic: Optional[str] = None
     topic_id: Optional[str] = None
     note_content: Optional[str] = None # Optional override
 
+class SelectedImageRequest(BaseModel):
+    selected_text: str = Field(..., min_length=1, description="Selected text to illustrate")
+
+class SelectedImageStoreRequest(BaseModel):
+    topic: str = Field(..., min_length=1, description="Topic name")
+    image_url: str = Field(..., min_length=1, description="Generated image URL")
+    selected_text: Optional[str] = None
+
+
+def _parse_topic_list_query(topics: Optional[str], topics_json: Optional[str]) -> List[str]:
+    parsed_topics: List[str] = []
+    if topics_json:
+        try:
+            arr = json.loads(topics_json)
+            if isinstance(arr, list):
+                parsed_topics.extend([str(x) for x in arr if x is not None])
+        except Exception:
+            pass
+    if topics:
+        parsed_topics.extend([t for t in topics.split(",") if t and t.strip()])
+    return parsed_topics
+
+
+async def _execute_with_retry(fn, attempts: int = 3, base_delay_s: float = 0.14):
+    last_error = None
+    for attempt in range(max(1, attempts)):
+        try:
+            return await run_in_threadpool(fn)
+        except Exception as e:
+            last_error = e
+            if attempt < attempts - 1:
+                await asyncio.sleep(base_delay_s * (attempt + 1))
+    if last_error:
+        raise last_error
+    raise RuntimeError("retry execution failed")
+
 @app.get("/api/blink/links")
-async def get_blink_links(topics: str = Query(..., description="Comma-separated list of topic names")):
+async def get_blink_links(
+    topics: Optional[str] = Query(None, description="Comma-separated list of topic names"),
+    topics_json: Optional[str] = Query(None, description="JSON array of topic names (preferred)")
+):
     """
     Fetch existing blink links for given topic names.
     Returns a map of topic_name -> blink_link for topics that have blinks.
@@ -22775,7 +23097,7 @@ async def get_blink_links(topics: str = Query(..., description="Comma-separated 
             return ""
         return " ".join(value.strip().lower().split())
 
-    raw_topics = [t for t in topics.split(",") if t and t.strip()]
+    raw_topics = _parse_topic_list_query(topics, topics_json)
     requested_topics = []
     seen_requested = set()
     for raw in raw_topics:
@@ -22790,12 +23112,31 @@ async def get_blink_links(topics: str = Query(..., description="Comma-separated 
 
     try:
         links = {}
+        matched_requested = set()
+
+        uncached_requested = []
+        for topic_key in requested_topics:
+            cached_item = _blink_cache_get(topic_key)
+            if cached_item:
+                cached_link, cached_alias = cached_item
+                links[topic_key] = cached_link
+                if cached_alias and cached_alias != topic_key:
+                    links[cached_alias] = cached_link
+                matched_requested.add(topic_key)
+            else:
+                uncached_requested.append(topic_key)
 
         # Fast path: exact title_ci matches.
-        res = supabase.table(AI_NOTES_TABLE).select("title, title_ci, blink_link").in_("title_ci", requested_topics).execute()
-        data = getattr(res, "data", []) or []
+        data = []
+        if uncached_requested:
+            exact_res = await _execute_with_retry(
+                lambda: supabase.table(AI_NOTES_TABLE)
+                .select("title, title_ci, blink_link")
+                .in_("title_ci", uncached_requested)
+                .execute()
+            )
+            data = getattr(exact_res, "data", []) or []
 
-        matched_requested = set()
         for row in data:
             blink_link = (row.get("blink_link") or "").strip()
             if not blink_link:
@@ -22805,45 +23146,59 @@ async def get_blink_links(topics: str = Query(..., description="Comma-separated 
                 continue
 
             links[row_key] = blink_link
+            _blink_cache_set(row_key, blink_link, row_key)
+            if row_key in seen_requested:
+                links[row_key] = blink_link
             if row_key in seen_requested:
                 matched_requested.add(row_key)
 
         # Fallback path: for unresolved topics, try looser ilike match.
         unresolved = [topic for topic in requested_topics if topic not in matched_requested]
-        for topic_key in unresolved:
-            try:
-                fallback_res = (
-                    supabase
-                    .table(AI_NOTES_TABLE)
-                    .select("title, title_ci, blink_link")
-                    .ilike("title_ci", f"%{topic_key}%")
-                    .limit(5)
-                    .execute()
-                )
-                fallback_rows = getattr(fallback_res, "data", []) or []
-            except Exception:
-                fallback_rows = []
+        if unresolved:
+            semaphore = asyncio.Semaphore(_BLINK_LINK_FALLBACK_CONCURRENCY)
 
-            chosen_link = ""
-            for row in fallback_rows:
-                blink_link = (row.get("blink_link") or "").strip()
-                if not blink_link:
-                    continue
-                row_key = _normalize_topic_key(row.get("title_ci") or row.get("title") or "")
-                if not row_key:
-                    continue
-                if row_key == topic_key or topic_key in row_key or row_key in topic_key:
-                    chosen_link = blink_link
-                    links[row_key] = blink_link
-                    break
+            async def _fetch_fallback_rows(topic_key: str) -> Tuple[str, List[Dict[str, Any]]]:
+                try:
+                    async with semaphore:
+                        fallback_res = await _execute_with_retry(
+                            lambda: get_service_client()
+                            .table(AI_NOTES_TABLE)
+                            .select("title, title_ci, blink_link")
+                            .ilike("title_ci", f"%{topic_key}%")
+                            .limit(5)
+                            .execute()
+                        )
+                    return topic_key, (getattr(fallback_res, "data", []) or [])
+                except Exception:
+                    return topic_key, []
 
-            if chosen_link:
-                links[topic_key] = chosen_link
+            fallback_results = await asyncio.gather(*[_fetch_fallback_rows(topic_key) for topic_key in unresolved])
 
-        return {"links": links}
+            for topic_key, fallback_rows in fallback_results:
+                chosen_link = ""
+                matched_row_key = ""
+                for row in fallback_rows:
+                    blink_link = (row.get("blink_link") or "").strip()
+                    if not blink_link:
+                        continue
+                    row_key = _normalize_topic_key(row.get("title_ci") or row.get("title") or "")
+                    if not row_key:
+                        continue
+                    if row_key == topic_key or topic_key in row_key or row_key in topic_key:
+                        chosen_link = blink_link
+                        matched_row_key = row_key
+                        links[row_key] = blink_link
+                        _blink_cache_set(row_key, blink_link, row_key)
+                        break
+
+                if chosen_link:
+                    links[topic_key] = chosen_link
+                    _blink_cache_set(topic_key, chosen_link, matched_row_key or topic_key)
+
+        return {"links": links, "loaded": True}
     except Exception as e:
         print(f"[Blink] Error fetching links: {e}")
-        return {"links": {}}
+        return {"links": {}, "loaded": False}
 
 @app.post("/api/blink/generate")
 async def generate_blink_endpoint(
@@ -22966,6 +23321,139 @@ async def generate_blink_endpoint(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/blink/generate-selected")
+async def generate_selected_image_endpoint(req: SelectedImageRequest):
+    """
+    Generate an illustration for selected note text and upload it to Supabase bucket `gen_img`.
+    """
+    selected_text = (req.selected_text or "").strip()
+    if not selected_text:
+        raise HTTPException(status_code=400, detail="selected_text is required")
+
+    if not os.getenv("GEMINI_API_KEY"):
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured.")
+
+    if genai is None:
+        print("Warning: google-genai not imported. Simulating or failing.")
+
+    trimmed = selected_text[:4000]
+    prompt = f"""Generate an illustration illustrating {trimmed}"""
+
+    try:
+        def _generate_bytes_sync():
+            if not genai:
+                raise RuntimeError("google-genai library not available")
+
+            client_g = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            chat = client_g.chats.create(
+                model="gemini-3-pro-image-preview",
+                config=types.GenerateContentConfig(
+                    response_modalities=['TEXT', 'IMAGE'],
+                    tools=[{"google_search": {}}]
+                )
+            )
+
+            resp = chat.send_message(
+                prompt,
+                config=types.GenerateContentConfig(
+                    image_config=types.ImageConfig(
+                        aspect_ratio="16:9",
+                        image_size="1K"
+                    ),
+                )
+            )
+
+            for part in resp.parts:
+                if part.as_image():
+                    return part.as_image().image_bytes
+                elif part.text:
+                    print(f"[SelImg] Model returned text: {part.text}")
+
+            raise RuntimeError(f"No image part in response. Response text: {resp.text if hasattr(resp, 'text') else 'Unknown'}")
+
+        image_bytes = await run_in_threadpool(_generate_bytes_sync)
+
+        filename = f"gen_img_{uuid.uuid4().hex[:8]}.png"
+        bucket_name = "gen_img"
+        supabase = get_service_client()
+
+        def _upload_sync():
+            supabase.storage.from_(bucket_name).upload(
+                path=filename,
+                file=image_bytes,
+                file_options={"content-type": "image/png"}
+            )
+            return supabase.storage.from_(bucket_name).get_public_url(filename)
+
+        public_url = await run_in_threadpool(_upload_sync)
+
+        return {
+            "success": True,
+            "url": public_url,
+            "filename": filename,
+            "bucket": bucket_name,
+            "prompt": prompt
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/blink/selected-images")
+async def save_selected_image_endpoint(req: SelectedImageStoreRequest):
+    """
+    Save generated selected-text image URL by topic.
+    """
+    topic = (req.topic or "").strip()
+    image_url = (req.image_url or "").strip()
+    selected_text = (req.selected_text or "").strip()
+
+    if not topic:
+        raise HTTPException(status_code=400, detail="topic is required")
+    if not image_url:
+        raise HTTPException(status_code=400, detail="image_url is required")
+
+    try:
+        supabase = get_service_client()
+        payload = {
+            "topic": topic,
+            "topic_ci": " ".join(topic.lower().split()),
+            "image_url": image_url,
+            "selected_text": selected_text[:1200] if selected_text else None,
+        }
+        supabase.table(AI_SELECTED_IMAGES_TABLE).insert(payload).execute()
+        return {"success": True}
+    except Exception as e:
+        print(f"[SelImg] Save error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/blink/selected-images")
+async def list_selected_images_endpoint(topic: str = Query(..., min_length=1, description="Topic name")):
+    """
+    Fetch generated selected-text image URLs by topic.
+    """
+    topic_ci = " ".join((topic or "").strip().lower().split())
+    if not topic_ci:
+        return {"items": []}
+
+    try:
+        supabase = get_service_client()
+        res = (
+            supabase
+            .table(AI_SELECTED_IMAGES_TABLE)
+            .select("id,topic,image_url,selected_text,created_at")
+            .eq("topic_ci", topic_ci)
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+        items = getattr(res, "data", []) or []
+        return {"items": items}
+    except Exception as e:
+        print(f"[SelImg] Fetch error: {e}")
+        return {"items": []}
 
 class BlinkRemoveRequest(BaseModel):
     topic: str = Field(..., min_length=1, description="Topic name to remove blink for")
@@ -23192,9 +23680,17 @@ async def list_labx_explanations():
 
 
 @labx_router.get("/check-batch", summary="Check multiple topics at once")
-async def check_labx_cache_batch(topics: str = Query(..., description="Comma-separated list of topic names")):
+async def check_labx_cache_batch(
+    topics: Optional[str] = Query(None, description="Comma-separated list of topic names"),
+    topics_json: Optional[str] = Query(None, description="JSON array of topic names (preferred)")
+):
     """Check which topics have cached explanations. Returns a map of topic_name -> exists boolean."""
-    topics_list = [t.strip().lower() for t in topics.split(",") if t.strip()]
+    topics_list = []
+    for topic in _parse_topic_list_query(topics, topics_json):
+        norm = " ".join(str(topic).strip().lower().split())
+        if norm:
+            topics_list.append(norm)
+    topics_list = list(dict.fromkeys(topics_list))
     
     if not topics_list:
         return JSONResponse(content={"cached": {}})
@@ -23202,9 +23698,11 @@ async def check_labx_cache_batch(topics: str = Query(..., description="Comma-sep
     try:
         supabase = get_service_client()
         # Fetch all matching topics in one query
-        result = supabase.table(LABX_EXPLANATIONS_TABLE).select(
-            "topic_ci"
-        ).in_("topic_ci", topics_list).execute()
+        result = await _execute_with_retry(
+            lambda: supabase.table(LABX_EXPLANATIONS_TABLE).select(
+                "topic_ci"
+            ).in_("topic_ci", topics_list).execute()
+        )
         
         # Build map of which topics exist
         cached_set = set()
@@ -23214,10 +23712,10 @@ async def check_labx_cache_batch(topics: str = Query(..., description="Comma-sep
         
         cached_map = {topic: topic in cached_set for topic in topics_list}
         
-        return JSONResponse(content={"cached": cached_map})
+        return JSONResponse(content={"cached": cached_map, "loaded": True})
     except Exception as e:
         print(f"[LabX] Batch check error: {e}")
-        return JSONResponse(content={"cached": {}})
+        return JSONResponse(content={"cached": {}, "loaded": False})
 
 
 @labx_router.get("/check/{topic}", summary="Check if a topic is cached")

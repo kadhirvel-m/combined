@@ -181,6 +181,14 @@
                     </div>
 
                     <div>
+                        <label class="text-[11px] font-medium text-neutral-600 dark:text-white/60">College</label>
+                        <select id="collegeFilter"
+                            class="mt-1 w-full rounded-xl bg-white/80 dark:bg-white/10 border border-black/10 dark:border-white/10 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/60">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+
+                    <div>
                         <label class="text-[11px] font-medium text-neutral-600 dark:text-white/60">Department</label>
                         <select id="deptFilter"
                             class="mt-1 w-full rounded-xl bg-white/80 dark:bg-white/10 border border-black/10 dark:border-white/10 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/60">
@@ -196,6 +204,9 @@
                         </select>
                     </div>
 
+                </div>
+
+                <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
                     <div>
                         <label class="text-[11px] font-medium text-neutral-600 dark:text-white/60">Semester</label>
                         <select id="semFilter"
@@ -215,9 +226,6 @@
                             <option value="12">12</option>
                         </select>
                     </div>
-                </div>
-
-                <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
                         <label class="text-[11px] font-medium text-neutral-600 dark:text-white/60">Min streak</label>
                         <input id="streakMin" type="number" min="0" placeholder="0"
@@ -270,6 +278,15 @@
                     </thead>
                     <tbody id="usersTbody" class="divide-y divide-black/5 dark:divide-white/10"></tbody>
                 </table>
+            </div>
+            <div class="px-4 py-3 border-t border-black/5 dark:border-white/10 flex items-center justify-between gap-3">
+                <span id="pageInfo" class="text-xs text-neutral-600 dark:text-white/60">Showing 0</span>
+                <button id="nextPageBtn"
+                    class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                    Next 50
+                    <span class="material-symbols-rounded text-[18px]">chevron_right</span>
+                </button>
             </div>
         </section>
     </main>
@@ -494,6 +511,7 @@
                 u?.college,
                 u?.college_name,
                 u?.clg_name,
+                u?.college_id,
                 firstEdu?.school,
                 firstEdu?.college,
                 firstEdu?.college_name
@@ -505,6 +523,7 @@
                 u?.department_name,
                 u?.dept,
                 u?.dept_name,
+                u?.department_id,
                 firstEdu?.department,
                 firstEdu?.department_name
             );
@@ -525,6 +544,8 @@
                 u?.regno,
                 u?.reg_no,
                 u?.reg_number,
+                u?.roll_no,
+                u?.roll_number,
                 u?.registration_no,
                 u?.register_no,
                 firstEdu?.regno,
@@ -662,6 +683,7 @@
 
         function getFilterState() {
             const role = document.getElementById('roleFilter').value;
+            const collegeId = document.getElementById('collegeFilter').value;
             const dept = document.getElementById('deptFilter').value;
             const batch = document.getElementById('batchFilter').value;
             const sem = document.getElementById('semFilter').value;
@@ -672,6 +694,7 @@
             return {
                 q: (document.getElementById('searchInput').value || '').trim(),
                 role: (role || '').trim(),
+                college_id: (collegeId || '').trim(),
                 department: (dept || '').trim(),
                 section: (section || '').trim(),
                 batch_range: (batch || '').trim(),
@@ -684,60 +707,12 @@
         let apiBase = '';
         let allUsers = [];
         let fetchTimer = null;
-        let enrichRunId = 0;
-
-        function needsAcademicEnrichment(u) {
-            return !(u?.college && u?.department && u?.batch_range && u?.semester && u?.regno);
-        }
-
-        async function enrichUsersFromPublicProfiles(users) {
-            if (!Array.isArray(users) || !users.length) return;
-            const runId = ++enrichRunId;
-            const targets = users.filter(u => u?.user_id && needsAcademicEnrichment(u));
-            if (!targets.length) return;
-
-            const concurrency = 8;
-            let cursor = 0;
-            let changed = false;
-
-            async function worker() {
-                while (cursor < targets.length) {
-                    if (runId !== enrichRunId) return;
-                    const idx = cursor++;
-                    const user = targets[idx];
-                    try {
-                        const uid = encodeURIComponent(String(user.user_id));
-                        const res = await fetch(`${apiBase}/api/public/profiles/${uid}`);
-                        if (!res.ok) continue;
-                        const profile = await res.json();
-                        const firstEdu = Array.isArray(profile?.education_entries) && profile.education_entries.length
-                            ? profile.education_entries[0]
-                            : null;
-
-                        const merged = normalizeUserRecord({
-                            ...user,
-                            college: firstNonEmpty(user.college, profile?.college?.name, profile?.college, firstEdu?.school, firstEdu?.college, firstEdu?.college_name),
-                            department: firstNonEmpty(user.department, profile?.department?.name, profile?.department, firstEdu?.department, firstEdu?.department_name),
-                            semester: firstNonEmpty(user.semester, profile?.semester, firstEdu?.current_semester, firstEdu?.semester),
-                            regno: firstNonEmpty(user.regno, profile?.regno, firstEdu?.regno, firstEdu?.reg_no),
-                            section: firstNonEmpty(user.section, firstEdu?.section, firstEdu?.sec),
-                            batch_range: firstNonEmpty(user.batch_range, firstEdu?.batch_range),
-                            batch_from: firstNonEmpty(user.batch_from, firstEdu?.batch?.from, firstEdu?.batch_from),
-                            batch_to: firstNonEmpty(user.batch_to, firstEdu?.batch?.to, firstEdu?.batch_to),
-                        });
-
-                        Object.assign(user, merged);
-                        changed = true;
-                    } catch (_) {
-                        // best-effort enrichment
-                    }
-                }
-            }
-
-            await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, () => worker()));
-            if (runId !== enrichRunId) return;
-            if (changed) rerender();
-        }
+        const pageSize = 50;
+        const filteredPageSize = 2000;
+        let currentOffset = 0;
+        let hasMorePages = false;
+        let filteredFetchAllMode = false;
+        let collegesFilterLoaded = false;
 
         // ---------- Education modal logic ----------
         const EDUCATION_CUSTOM_VALUE = '__custom__';
@@ -1237,16 +1212,28 @@
             }
         }
 
-        async function fetchUsers() {
-            hideError();
-            setStatus('busy', 'Loading');
+        function hasActiveFilters(st) {
+            return !!(
+                st.q ||
+                st.role ||
+                st.college_id ||
+                st.department ||
+                st.section ||
+                st.batch_range ||
+                st.semester ||
+                st.min_streak ||
+                st.last_login_days
+            );
+        }
 
+        async function fetchUsersPage(st, offset, limit) {
             const token = getToken();
-            const st = getFilterState();
             const url = new URL(apiBase + '/api/admin/users');
-            url.searchParams.set('limit', '2000');
+            url.searchParams.set('limit', String(limit));
+            url.searchParams.set('offset', String(offset));
             if (st.q) url.searchParams.set('q', st.q);
             if (st.role) url.searchParams.set('role', st.role);
+            if (st.college_id) url.searchParams.set('college_id', st.college_id);
             if (st.department) url.searchParams.set('department', st.department);
             if (st.section) url.searchParams.set('section', st.section);
             if (st.batch_range) url.searchParams.set('batch_range', st.batch_range);
@@ -1263,7 +1250,63 @@
             }
             const data = await res.json();
             const users = (data && data.users) ? data.users : [];
-            return users.map(normalizeUserRecord);
+            return {
+                users,
+                hasMore: !!(data && data.has_more),
+                count: Number((data && data.count) || 0)
+            };
+        }
+
+        async function fetchUsers() {
+            hideError();
+            setStatus('busy', 'Loading');
+
+            const st = getFilterState();
+            filteredFetchAllMode = hasActiveFilters(st);
+
+            if (!filteredFetchAllMode) {
+                const page = await fetchUsersPage(st, currentOffset, pageSize);
+                hasMorePages = page.hasMore;
+                return page.users.map(normalizeUserRecord);
+            }
+
+            const all = [];
+            const seen = new Set();
+
+            const addRows = (rows, baseOffset = 0) => {
+                (rows || []).forEach((raw, index) => {
+                    const key = String(
+                        raw?.profile_id ||
+                        raw?.user_id ||
+                        raw?.email ||
+                        `row-${baseOffset + index}`
+                    );
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    all.push(raw);
+                });
+            };
+
+            const firstPage = await fetchUsersPage(st, 0, filteredPageSize);
+            addRows(firstPage.users, 0);
+
+            const totalCount = Number.isFinite(firstPage.count) ? firstPage.count : all.length;
+            if (firstPage.hasMore) {
+                let fetchOffset = filteredPageSize;
+                let safety = 0;
+                while (fetchOffset < totalCount) {
+                    const page = await fetchUsersPage(st, fetchOffset, filteredPageSize);
+                    addRows(page.users, fetchOffset);
+                    if (!page.hasMore) break;
+                    fetchOffset += filteredPageSize;
+                    safety += 1;
+                    if (safety > 50) break;
+                }
+            }
+
+            hasMorePages = false;
+            currentOffset = 0;
+            return all.map(normalizeUserRecord);
         }
 
         function rebuildFacetOptions(users) {
@@ -1281,19 +1324,64 @@
             buildOptionList(document.getElementById('sectionFilter'), sections);
         }
 
+        async function loadCollegeFilterOptions() {
+            if (collegesFilterLoaded) return;
+            const select = document.getElementById('collegeFilter');
+            try {
+                const res = await fetch(`${apiBase}/api/colleges`);
+                if (!res.ok) return;
+                const colleges = await res.json();
+                if (!Array.isArray(colleges)) return;
+
+                const existing = new Set(Array.from(select.options).map(o => o.value));
+                const rows = colleges
+                    .filter(c => c && c.id && c.name)
+                    .map(c => ({ id: String(c.id), name: String(c.name) }))
+                    .sort((a, b) => a.name.localeCompare(b.name));
+
+                for (const c of rows) {
+                    if (existing.has(c.id)) continue;
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = c.name;
+                    select.appendChild(opt);
+                }
+                collegesFilterLoaded = true;
+            } catch (_) {
+                // keep page usable if college list fails
+            }
+        }
+
         function rerender() {
             renderUsers(allUsers);
+            const pageInfo = document.getElementById('pageInfo');
+            const nextBtn = document.getElementById('nextPageBtn');
+            if (filteredFetchAllMode) {
+                pageInfo.textContent = `Showing all ${allUsers.length}`;
+                nextBtn.disabled = true;
+                nextBtn.classList.add('hidden');
+            } else {
+                const shownStart = allUsers.length ? (currentOffset + 1) : 0;
+                const shownEnd = currentOffset + allUsers.length;
+                pageInfo.textContent = allUsers.length ? `Showing ${shownStart}-${shownEnd}` : 'Showing 0';
+                nextBtn.disabled = !hasMorePages;
+                nextBtn.classList.remove('hidden');
+            }
             setStatus('ok', 'Ready');
+        }
+
+        async function loadCurrentPage() {
+            allUsers = await fetchUsers();
+            rebuildFacetOptions(allUsers);
+            rerender();
         }
 
         function scheduleRefetch() {
             if (fetchTimer) clearTimeout(fetchTimer);
             fetchTimer = setTimeout(async () => {
                 try {
-                    allUsers = await fetchUsers();
-                    rebuildFacetOptions(allUsers);
-                    rerender();
-                    enrichUsersFromPublicProfiles(allUsers).catch(() => { });
+                    currentOffset = 0;
+                    await loadCurrentPage();
                 } catch (e) {
                     setStatus('err', 'Error');
                     showError('Failed to load users: ' + (e && e.message ? e.message : String(e)));
@@ -1307,10 +1395,8 @@
             if (!ok) return;
 
             try {
-                allUsers = await fetchUsers();
-                rebuildFacetOptions(allUsers);
-                rerender();
-                enrichUsersFromPublicProfiles(allUsers).catch(() => { });
+                await loadCollegeFilterOptions();
+                await loadCurrentPage();
             } catch (e) {
                 setStatus('err', 'Error');
                 showError('Failed to load users: ' + (e && e.message ? e.message : String(e)));
@@ -1319,8 +1405,18 @@
 
             document.getElementById('searchInput').addEventListener('input', scheduleRefetch);
             document.getElementById('refreshBtn').addEventListener('click', () => scheduleRefetch());
+            document.getElementById('nextPageBtn').addEventListener('click', async () => {
+                if (!hasMorePages) return;
+                currentOffset += pageSize;
+                try {
+                    await loadCurrentPage();
+                } catch (e) {
+                    setStatus('err', 'Error');
+                    showError('Failed to load users: ' + (e && e.message ? e.message : String(e)));
+                }
+            });
 
-            const filters = ['roleFilter', 'deptFilter', 'sectionFilter', 'batchFilter', 'semFilter', 'streakMin', 'lastLoginFilter'];
+            const filters = ['roleFilter', 'collegeFilter', 'deptFilter', 'sectionFilter', 'batchFilter', 'semFilter', 'streakMin', 'lastLoginFilter'];
             for (const id of filters) {
                 document.getElementById(id).addEventListener('change', scheduleRefetch);
                 if (id === 'streakMin') document.getElementById(id).addEventListener('input', scheduleRefetch);
@@ -1329,6 +1425,7 @@
             document.getElementById('clearBtn').addEventListener('click', () => {
                 document.getElementById('searchInput').value = '';
                 document.getElementById('roleFilter').value = '';
+                document.getElementById('collegeFilter').value = '';
                 document.getElementById('deptFilter').value = '';
                 document.getElementById('sectionFilter').value = '';
                 document.getElementById('batchFilter').value = '';

@@ -322,6 +322,22 @@
             transition: opacity 0.4s ease, visibility 0.4s;
         }
 
+        #pageLoader .loader-shell {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-align: center;
+        }
+
+        #pageLoaderStatus {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            color: rgba(30, 30, 47, 0.85);
+        }
+
         .loaded #pageLoader {
             opacity: 0;
             visibility: hidden;
@@ -330,6 +346,10 @@
 
         .dark #pageLoader {
             background: rgba(30, 30, 47, 0.7);
+        }
+
+        .dark #pageLoaderStatus {
+            color: rgba(255, 255, 255, 0.9);
         }
 
         /* ===== Enhanced Streak Component Styles ===== */
@@ -621,8 +641,11 @@
 <body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
     <!-- Loading Overlay -->
     <div id="pageLoader">
-        <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
-            style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
+        <div class="loader-shell">
+            <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie"
+                style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
+            <div id="pageLoaderStatus">Initializing...</div>
+        </div>
     </div>
     <!-- ================= NAVBAR ================= -->
     <header
@@ -1312,6 +1335,12 @@
             el.classList.add('hidden');
         }
 
+        function setLoaderStatus(message) {
+            const node = $('pageLoaderStatus');
+            if (!node) return;
+            node.textContent = message || 'Loading...';
+        }
+
         async function fetchJson(url, opts = {}) {
             try {
                 const r = await fetch(url, opts);
@@ -1376,32 +1405,38 @@
 
         async function loadProfileAndProgress() {
             // First attempt to refresh token if needed
+            setLoaderStatus('Verifying session...');
             await refreshTokenIfNeeded();
 
             if (!getToken()) { window.location.href = 'login.html'; return; }
             clearProgressError();
             const maxAttempts = 3;
-            try {
-                for (let attempt = 0; attempt < maxAttempts; attempt++) {
-                    const result = await attemptProfileAndProgressLoad();
-                    if (result.unauthorized) { window.location.href = 'login.html'; return; }
-                    if (result.ok) { clearProgressError(); return; }
-                    showProgressError('Still syncing your progress, retrying...');
-                    await wait(Math.min(1200, 400 * (attempt + 1)));
-                }
-                showProgressError('We could not load your progress right now. Please refresh or try again in a moment.');
-            } finally {
-                // Hide loader
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                setLoaderStatus('Loading profile and progress...');
+                const result = await attemptProfileAndProgressLoad();
+                if (result.unauthorized) { window.location.href = 'login.html'; return; }
+                if (result.ok) {
+                    clearProgressError();
+                    setLoaderStatus('Ready');
                 document.body.classList.add('loaded');
-                const loader = document.getElementById('pageLoader');
-                if (loader) {
-                    setTimeout(() => { loader.style.display = 'none'; }, 450);
+                    const loader = document.getElementById('pageLoader');
+                    if (loader) {
+                        setTimeout(() => { loader.style.display = 'none'; }, 450);
+                    }
+                    return;
                 }
+                showProgressError('Still syncing your progress, retrying...');
+                setLoaderStatus('Retrying data sync...');
+                await wait(Math.min(1200, 400 * (attempt + 1)));
             }
+
+            // Keep spinner visible when required data is not fully ready.
+            showProgressError('We could not load your progress right now. Please refresh or try again in a moment.');
         }
 
         async function attemptProfileAndProgressLoad() {
             try {
+                setLoaderStatus('Loading profile and progress...');
                 const [meOut, progOut] = await Promise.all([
                     fetchJson(`${API_BASE}/api/me`, { headers: authHeaders() }),
                     fetchJson(`${API_BASE}/api/progress/topics`, { headers: authHeaders() })
@@ -1430,28 +1465,32 @@
                 const syllabus = Array.isArray(meOut.data?.syllabus) ? meOut.data.syllabus : [];
                 const emptyState = $('syllabusEmpty');
                 if (emptyState) emptyState.classList.toggle('hidden', Boolean(syllabus.length));
+                setLoaderStatus('Loading syllabus...');
 
-                const teacherNotesBySubject = await loadTeacherNotesForSubjects(syllabus);
+                const teacherNotesPromise = loadTeacherNotesForSubjects(syllabus);
 
                 // Collect all topic names (lowercase) and fetch blink links
                 const allTopicNames = [];
                 const allTopicIds = [];
                 syllabus.forEach(c => (c.units || []).forEach(u => (u.topics || []).forEach(t => {
-                    if (t.topic) allTopicNames.push(t.topic.toLowerCase());
+                    if (t.topic) allTopicNames.push(normalizeTopicKey(t.topic));
                     if (t.id) allTopicIds.push(t.id);
                 })));
                 const uniqueTopicNames = Array.from(new Set(allTopicNames));
-                const [blinkLinks, labxStatus, topicRatings] = await Promise.all([
+                setLoaderStatus('Loading Blink and LabX...');
+
+                // Fire ALL enrichment calls in parallel — no waterfall
+                const [teacherNotesBySubject, blinkLinks, labxStatus, topicRatings] = await Promise.all([
+                    teacherNotesPromise,
                     fetchBlinkLinks(uniqueTopicNames),
                     fetchLabxStatus(uniqueTopicNames),
-                    fetchTopicRatings(allTopicIds)
+                    fetchTopicRatings(allTopicIds),
+                    fetchWishlistStatus()  // runs in parallel, populates wishlistedTopicIds set
                 ]);
-
-                // Fetch wishlist status for all topics
-                await fetchWishlistStatus();
 
                 renderSyllabus(syllabus, teacherNotesBySubject, blinkLinks, topicRatings, labxStatus);
                 computeAggregateStats(syllabus);
+                setLoaderStatus('Finalizing dashboard...');
 
                 // Load streak data after main content is loaded
                 loadStreakFromAPI();
@@ -1511,23 +1550,39 @@
         function pct(done, total) { return total ? Math.round((done / total) * 100) : 0; }
         function updateRing(p) { const ring = $('ringCompletion'); const text = $('ringCompletionText'); if (ring) ring.style.setProperty('--pct', p); if (text) text.textContent = p + '%'; }
 
+        function normalizeTopicKey(value) {
+            return String(value || '').trim().toLowerCase().split(/\s+/).join(' ');
+        }
+
         // Fetch blink links for topic names
         async function fetchBlinkLinks(topicNames) {
             const blinkLinksMap = new Map();
             if (!topicNames || !topicNames.length) return blinkLinksMap;
 
-            try {
-                const topicsParam = topicNames.join(',');
-                const res = await fetchJson(`${API_BASE}/api/blink/links?topics=${encodeURIComponent(topicsParam)}`, { headers: authHeaders() });
-                if (isSuccess(res) && res.data?.links) {
-                    Object.entries(res.data.links).forEach(([topicKey, link]) => {
-                        blinkLinksMap.set(topicKey, link);
-                    });
+            const normalizedTopics = Array.from(new Set(topicNames.map(normalizeTopicKey).filter(Boolean)));
+            const topicsJsonParam = encodeURIComponent(JSON.stringify(normalizedTopics));
+
+            const maxAttempts = 3;
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                try {
+                    const res = await fetchJson(`${API_BASE}/api/blink/links?topics_json=${topicsJsonParam}`, { headers: authHeaders() });
+                    if (isSuccess(res) && res.data) {
+                        if (res.data.loaded === false) throw new Error('Blink backend not ready');
+                        const links = res.data.links || {};
+                        Object.entries(links).forEach(([topicKey, link]) => {
+                            blinkLinksMap.set(normalizeTopicKey(topicKey), link);
+                        });
+                        return blinkLinksMap;
+                    }
+                } catch (err) {
+                    if (attempt === maxAttempts - 1) {
+                        console.warn('[Academics] Failed to fetch blink links', err);
+                        throw err;
+                    }
                 }
-            } catch (err) {
-                console.warn('[Academics] Failed to fetch blink links', err);
+                await wait(180 * (attempt + 1));
             }
-            return blinkLinksMap;
+            throw new Error('Blink fetch retry exhausted');
         }
 
         // Fetch LabX cache status for topic names from labx_explanations (bulk)
@@ -1535,22 +1590,33 @@
             const labxMap = new Map();
             if (!topicNames || !topicNames.length) return labxMap;
 
-            try {
-                const topicsParam = topicNames.join(',');
-                const res = await fetch(`${API_BASE}/api/labx/check-batch?topics=${encodeURIComponent(topicsParam)}`, {
-                    headers: authHeaders()
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    const cached = data?.cached || {};
-                    Object.entries(cached).forEach(([topicCi, exists]) => {
-                        if (exists) labxMap.set(String(topicCi || '').toLowerCase(), true);
+            const normalizedTopics = Array.from(new Set(topicNames.map(normalizeTopicKey).filter(Boolean)));
+            const topicsJsonParam = encodeURIComponent(JSON.stringify(normalizedTopics));
+
+            const maxAttempts = 3;
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                try {
+                    const res = await fetch(`${API_BASE}/api/labx/check-batch?topics_json=${topicsJsonParam}`, {
+                        headers: authHeaders()
                     });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data?.loaded === false) throw new Error('LabX backend not ready');
+                        const cached = data?.cached || {};
+                        Object.entries(cached).forEach(([topicCi, exists]) => {
+                            if (exists) labxMap.set(normalizeTopicKey(topicCi), true);
+                        });
+                        return labxMap;
+                    }
+                } catch (err) {
+                    if (attempt === maxAttempts - 1) {
+                        console.warn('[Academics] Failed to fetch LabX status', err);
+                        throw err;
+                    }
                 }
-            } catch (err) {
-                console.warn('[Academics] Failed to fetch LabX status', err);
+                await wait(180 * (attempt + 1));
             }
-            return labxMap;
+            throw new Error('LabX fetch retry exhausted');
         }
 
         async function openLabxInNewTab(topicName) {
@@ -1735,7 +1801,7 @@
                     let hasBlinkInAiNotes = false;
                     if (Array.isArray(u.topics)) {
                         for (const t of u.topics) {
-                            const topicKey = (t.topic || '').toLowerCase();
+                            const topicKey = normalizeTopicKey(t.topic);
                             if (blinkLinksMap.has(topicKey)) {
                                 hasBlinkInAiNotes = true;
                                 break;
@@ -1851,7 +1917,7 @@
                             li.appendChild(starContainer);
                         }
 
-                        const topicKey = (t.topic || '').trim().toLowerCase();
+                        const topicKey = normalizeTopicKey(t.topic);
                         const hasLabX = topicKey && labxStatusMap.has(topicKey);
 
                         // Priority 1: LabX (cached HTML explorable)

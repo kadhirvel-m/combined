@@ -1074,7 +1074,9 @@
             if (!topicNames.length) return {};
 
             try {
-                const res = await fetch(`${apiBase}/api/blink/links?topics=${encodeURIComponent(topicNames.join(','))}`);
+                const normalizedTopics = Array.from(new Set(topicNames.map(normalizeTopicKey).filter(Boolean)));
+                const topicsJsonParam = encodeURIComponent(JSON.stringify(normalizedTopics));
+                const res = await fetch(`${apiBase}/api/blink/links?topics_json=${topicsJsonParam}`);
                 if (res.ok) {
                     const data = await res.json();
                     const raw = data.links || {};
@@ -1104,7 +1106,9 @@
             if (!topicNames.length) return {};
 
             try {
-                const res = await fetch(`${apiBase}/api/labx/check-batch?topics=${encodeURIComponent(topicNames.join(','))}`);
+                const normalizedTopics = Array.from(new Set(topicNames.map(normalizeTopicKey).filter(Boolean)));
+                const topicsJsonParam = encodeURIComponent(JSON.stringify(normalizedTopics));
+                const res = await fetch(`${apiBase}/api/labx/check-batch?topics_json=${topicsJsonParam}`);
                 if (res.ok) {
                     const data = await res.json();
                     // Convert to map of topic -> true for cached topics

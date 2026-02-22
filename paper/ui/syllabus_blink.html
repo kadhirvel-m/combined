@@ -250,14 +250,15 @@
             const rawTopics = Array.isArray(res.data) ? res.data : [];
 
             // Also fetch blink links from ai_notes table
-            const topicNames = rawTopics.map(t => (t.topic || '').toLowerCase()).filter(Boolean);
+            const topicNames = rawTopics.map(t => (t.topic || '').trim().toLowerCase().replace(/\s+/g, ' ')).filter(Boolean);
             let aiNotesBlinkMap = new Map();
             if (topicNames.length > 0) {
                 try {
-                    const blinkRes = await fetchJson(`${API_BASE}/api/blink/links?topics=${encodeURIComponent(topicNames.join(','))}`, { headers: authHeaders() });
+                    const topicsJsonParam = encodeURIComponent(JSON.stringify(Array.from(new Set(topicNames))));
+                    const blinkRes = await fetchJson(`${API_BASE}/api/blink/links?topics_json=${topicsJsonParam}`, { headers: authHeaders() });
                     if (blinkRes.ok && blinkRes.data?.links) {
                         Object.entries(blinkRes.data.links).forEach(([key, link]) => {
-                            aiNotesBlinkMap.set(key.toLowerCase(), link);
+                            aiNotesBlinkMap.set((key || '').trim().toLowerCase().replace(/\s+/g, ' '), link);
                         });
                     }
                 } catch (err) {
@@ -267,7 +268,7 @@
 
             // Merge: for each topic, use blink_link from ai_notes (preferred) OR image_url from syllabus_topics
             topics = rawTopics.map(t => {
-                const topicKey = (t.topic || '').toLowerCase();
+                const topicKey = (t.topic || '').trim().toLowerCase().replace(/\s+/g, ' ');
                 const aiNotesBlink = aiNotesBlinkMap.get(topicKey);
                 // Prefer ai_notes.blink_link when present; otherwise fallback to syllabus_topics.image_url
                 const imageUrl = (aiNotesBlink || '').trim() || (t.image_url || '').trim() || '';
