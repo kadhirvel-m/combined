@@ -6577,7 +6577,7 @@ def get_public_profile(user_id: str):
     res = (
         supabase.table("user_profiles")
         .select(
-            "auth_user_id,name,profile_image_url,bio,headline,location,linkedin,github,leetcode,technologies,skills,certifications,languages,interests,project_info,publications,achievements,experience,verification_score"
+            "id,auth_user_id,name,profile_image_url,bio,headline,location,linkedin,github,leetcode,technologies,skills,certifications,languages,interests,project_info,publications,achievements,experience,verification_score,semester,regno"
         )
         .eq("auth_user_id", user_id)
         .limit(1)
@@ -7166,6 +7166,10 @@ def list_admin_users(
     if uniq_profile_ids:
         # Try with order_index if present, else fallback.
         edu_select_try = [
+            "user_profile_id,college_id,degree_id,department_id,batch_id,school,degree,department,batch_range,section,current_semester,regno,order_index,created_at",
+            "user_profile_id,college_id,degree_id,department_id,batch_id,school,degree,department,batch_range,section,current_semester,regno,created_at",
+            "user_profile_id,college_id,degree_id,department_id,batch_id,school,degree,department,batch_range,current_semester,regno,order_index,created_at",
+            "user_profile_id,college_id,degree_id,department_id,batch_id,school,degree,department,batch_range,current_semester,regno,created_at",
             "user_profile_id,department_id,batch_id,college_id,degree_id,section,current_semester,regno,order_index,created_at",
             "user_profile_id,department_id,batch_id,college_id,degree_id,section,current_semester,regno,created_at",
             "user_profile_id,department_id,batch_id,college_id,degree_id,current_semester,regno,order_index,created_at",
@@ -7186,14 +7190,22 @@ def list_admin_users(
                 eres = supabase.table("user_education").select(sel).in_("user_profile_id", uniq_profile_ids).execute()
             except Exception as e:
                 msg = str(e)
-                if "order_index" in sel and "order_index" in msg:
+                low = msg.lower()
+                # Keep trying select variants when a column is missing in this deployment.
+                if "order_index" in sel and "order_index" in low:
                     continue
-                if "degree_id" in sel and "degree_id" in msg:
+                if "degree_id" in sel and "degree_id" in low:
+                    continue
+                if ("column" in low and "does not exist" in low) or ("schema cache" in low and "column" in low):
                     continue
                 # If user_education doesn't exist or query fails, just skip education enrichment.
                 edu_rows = []
                 break
             if getattr(eres, "error", None):
+                err_msg = str(getattr(eres, "error", "") or "").lower()
+                # Some PostgREST errors are surfaced via res.error instead of exceptions.
+                if ("column" in err_msg and "does not exist" in err_msg) or ("schema cache" in err_msg and "column" in err_msg):
+                    continue
                 edu_rows = []
                 break
             edu_rows = getattr(eres, "data", []) or []
@@ -7378,6 +7390,28 @@ def list_admin_users(
         last_seen_val = last_seen_map.get(user_id_val) if user_id_val else None
         batch_range_val = (f"{batch.get('from_year')}-{batch.get('to_year')}" if batch and batch.get('from_year') and batch.get('to_year') else None)
 
+        # Text-based fallback values (as used in profile/academics pages)
+        college_name_val = (college.get("name") if college else None) or (edu.get("school") if isinstance(edu, dict) else None)
+        degree_name_val = (degree.get("name") if degree else None) or (edu.get("degree") if isinstance(edu, dict) else None)
+        department_name_val = (dept.get("name") if dept else None) or (edu.get("department") if isinstance(edu, dict) else None)
+        if not batch_range_val:
+            batch_range_val = (edu.get("batch_range") if isinstance(edu, dict) else None)
+
+        # If semester/regno missing in user_profiles, fallback to education text row
+        if semester_val is None and isinstance(edu, dict):
+            semester_val = edu.get("current_semester")
+        if not regno_val and isinstance(edu, dict):
+            regno_val = edu.get("regno")
+
+        # Match leaderboard behaviour: if last activity is older than 2 days, show streak as 0
+        if pid and streak_last_activity_map.get(pid):
+            try:
+                last_dt = date.fromisoformat(str(streak_last_activity_map.get(pid)))
+                if (date.today() - last_dt).days > 2:
+                    current_streak_val = 0
+            except Exception:
+                current_streak_val = 0
+
         out.append({
             "profile_id": r.get("id"),
             "user_id": user_id_val,
@@ -7386,9 +7420,9 @@ def list_admin_users(
             "role": role_map.get(r.get("auth_user_id"), "student"),
             "semester": semester_val,
             "regno": regno_val,
-            "college": college.get("name") if college else None,
-            "degree": degree.get("name") if degree else None,
-            "department": dept.get("name") if dept else None,
+            "college": college_name_val,
+            "degree": degree_name_val,
+            "department": department_name_val,
             "section": edu.get("section") if edu else None,
             "batch_from": batch.get("from_year") if batch else None,
             "batch_to": batch.get("to_year") if batch else None,

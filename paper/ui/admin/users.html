@@ -434,6 +434,26 @@
             return (v == null ? '' : String(v)).toLowerCase();
         }
 
+        function firstNonEmpty(...values) {
+            for (const v of values) {
+                if (v == null) continue;
+                if (typeof v === 'number' && Number.isFinite(v)) return v;
+                const s = String(v).trim();
+                if (s) return s;
+            }
+            return '';
+        }
+
+        function normalizeInt(value, { min = null, max = null } = {}) {
+            if (value == null || value === '') return null;
+            const n = Number(value);
+            if (!Number.isFinite(n)) return null;
+            const out = Math.trunc(n);
+            if (min != null && out < min) return null;
+            if (max != null && out > max) return null;
+            return out;
+        }
+
         function initialsFrom(u) {
             const base = (u?.name || u?.email || '').trim();
             if (!base) return 'ME';
@@ -443,7 +463,104 @@
         }
 
         function toBatchRange(u) {
-            return u.batch_range || (u.batch_from && u.batch_to ? `${u.batch_from}-${u.batch_to}` : '—');
+            const firstEdu = Array.isArray(u?.education_entries) && u.education_entries.length ? u.education_entries[0] : null;
+            const from = firstNonEmpty(u?.batch_from, u?.batch?.from, firstEdu?.batch?.from, firstEdu?.batch_from);
+            const to = firstNonEmpty(u?.batch_to, u?.batch?.to, firstEdu?.batch?.to, firstEdu?.batch_to);
+            const directRange = firstNonEmpty(u?.batch_range, u?.batchRange, u?.batch, firstEdu?.batch_range);
+            if (directRange) return String(directRange);
+            if (from && to) return `${from}-${to}`;
+            return '—';
+        }
+
+        function resolveCurrentStreak(u) {
+            const raw = firstNonEmpty(
+                u?.current_streak,
+                u?.streak_current,
+                u?.streak_count_no,
+                u?.streak_count,
+                u?.streak_no,
+                u?.streak,
+                u?.streakCount
+            );
+            const n = normalizeInt(raw, { min: 0 });
+            return n == null ? 0 : n;
+        }
+
+        function normalizeUserRecord(u) {
+            const firstEdu = Array.isArray(u?.education_entries) && u.education_entries.length ? u.education_entries[0] : null;
+
+            const college = firstNonEmpty(
+                u?.college?.name,
+                u?.college,
+                u?.college_name,
+                u?.clg_name,
+                firstEdu?.school,
+                firstEdu?.college,
+                firstEdu?.college_name
+            );
+
+            const department = firstNonEmpty(
+                u?.department?.name,
+                u?.department,
+                u?.department_name,
+                u?.dept,
+                u?.dept_name,
+                firstEdu?.department,
+                firstEdu?.department_name
+            );
+
+            const semester = normalizeInt(firstNonEmpty(
+                u?.semester,
+                u?.current_semester,
+                u?.sem,
+                u?.secm,
+                u?.semester_no,
+                firstEdu?.current_semester,
+                firstEdu?.semester,
+                firstEdu?.sem,
+                firstEdu?.secm
+            ), { min: 1, max: 12 });
+
+            const regno = firstNonEmpty(
+                u?.regno,
+                u?.reg_no,
+                u?.reg_number,
+                u?.registration_no,
+                u?.register_no,
+                firstEdu?.regno,
+                firstEdu?.reg_no,
+                firstEdu?.reg_number
+            );
+
+            const section = firstNonEmpty(
+                u?.section,
+                u?.sec,
+                u?.section_name,
+                firstEdu?.section,
+                firstEdu?.sec
+            );
+
+            const lastSeen = firstNonEmpty(
+                u?.last_seen_at,
+                u?.lastSeenAt,
+                u?.last_login_at,
+                u?.last_login
+            );
+
+            const currentStreak = resolveCurrentStreak(u);
+
+            return {
+                ...u,
+                college: college || '',
+                department: department || '',
+                semester,
+                regno: regno || '',
+                section: section || '',
+                current_streak: currentStreak,
+                streak_current: currentStreak,
+                batch_range: toBatchRange(u) !== '—' ? toBatchRange(u) : (u?.batch_range || ''),
+                last_seen_at: lastSeen || null,
+            };
         }
 
         function formatLastSeen(iso) {
@@ -500,7 +617,7 @@
                 const sem = (u.semester == null || u.semester === '') ? '—' : String(u.semester);
                 const batch = toBatchRange(u);
                 const role = u.role || 'student';
-                const streak = (u.current_streak != null ? u.current_streak : (u.streak_current == null ? 0 : u.streak_current));
+                const streak = resolveCurrentStreak(u);
                 const lastSeen = formatLastSeen(u.last_seen_at);
 
                                 const avatarHtml = hasImg
@@ -567,6 +684,60 @@
         let apiBase = '';
         let allUsers = [];
         let fetchTimer = null;
+        let enrichRunId = 0;
+
+        function needsAcademicEnrichment(u) {
+            return !(u?.college && u?.department && u?.batch_range && u?.semester && u?.regno);
+        }
+
+        async function enrichUsersFromPublicProfiles(users) {
+            if (!Array.isArray(users) || !users.length) return;
+            const runId = ++enrichRunId;
+            const targets = users.filter(u => u?.user_id && needsAcademicEnrichment(u));
+            if (!targets.length) return;
+
+            const concurrency = 8;
+            let cursor = 0;
+            let changed = false;
+
+            async function worker() {
+                while (cursor < targets.length) {
+                    if (runId !== enrichRunId) return;
+                    const idx = cursor++;
+                    const user = targets[idx];
+                    try {
+                        const uid = encodeURIComponent(String(user.user_id));
+                        const res = await fetch(`${apiBase}/api/public/profiles/${uid}`);
+                        if (!res.ok) continue;
+                        const profile = await res.json();
+                        const firstEdu = Array.isArray(profile?.education_entries) && profile.education_entries.length
+                            ? profile.education_entries[0]
+                            : null;
+
+                        const merged = normalizeUserRecord({
+                            ...user,
+                            college: firstNonEmpty(user.college, profile?.college?.name, profile?.college, firstEdu?.school, firstEdu?.college, firstEdu?.college_name),
+                            department: firstNonEmpty(user.department, profile?.department?.name, profile?.department, firstEdu?.department, firstEdu?.department_name),
+                            semester: firstNonEmpty(user.semester, profile?.semester, firstEdu?.current_semester, firstEdu?.semester),
+                            regno: firstNonEmpty(user.regno, profile?.regno, firstEdu?.regno, firstEdu?.reg_no),
+                            section: firstNonEmpty(user.section, firstEdu?.section, firstEdu?.sec),
+                            batch_range: firstNonEmpty(user.batch_range, firstEdu?.batch_range),
+                            batch_from: firstNonEmpty(user.batch_from, firstEdu?.batch?.from, firstEdu?.batch_from),
+                            batch_to: firstNonEmpty(user.batch_to, firstEdu?.batch?.to, firstEdu?.batch_to),
+                        });
+
+                        Object.assign(user, merged);
+                        changed = true;
+                    } catch (_) {
+                        // best-effort enrichment
+                    }
+                }
+            }
+
+            await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, () => worker()));
+            if (runId !== enrichRunId) return;
+            if (changed) rerender();
+        }
 
         // ---------- Education modal logic ----------
         const EDUCATION_CUSTOM_VALUE = '__custom__';
@@ -1091,7 +1262,8 @@
                 throw new Error(t || ('HTTP ' + res.status));
             }
             const data = await res.json();
-            return (data && data.users) ? data.users : [];
+            const users = (data && data.users) ? data.users : [];
+            return users.map(normalizeUserRecord);
         }
 
         function rebuildFacetOptions(users) {
@@ -1121,6 +1293,7 @@
                     allUsers = await fetchUsers();
                     rebuildFacetOptions(allUsers);
                     rerender();
+                    enrichUsersFromPublicProfiles(allUsers).catch(() => { });
                 } catch (e) {
                     setStatus('err', 'Error');
                     showError('Failed to load users: ' + (e && e.message ? e.message : String(e)));
@@ -1137,6 +1310,7 @@
                 allUsers = await fetchUsers();
                 rebuildFacetOptions(allUsers);
                 rerender();
+                enrichUsersFromPublicProfiles(allUsers).catch(() => { });
             } catch (e) {
                 setStatus('err', 'Error');
                 showError('Failed to load users: ' + (e && e.message ? e.message : String(e)));
