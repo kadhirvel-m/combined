@@ -56,6 +56,8 @@
     }
   </script>
   <script src="config.js"></script>
+  <link rel="preconnect" href="https://challenges.cloudflare.com">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
   <style>
     input,
     select,
@@ -370,6 +372,7 @@
                 </label>
                 <a href="#" class="font-medium text-brand-500 hover:text-brand-700">Forgot password?</a>
               </div>
+              <div id="turnstileContainer" class="min-h-[65px] flex justify-center"></div>
               <button type="submit" id="submitBtn"
                 class="w-full inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(158,75,138,0.28)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.35)] transition disabled:opacity-60">
                 <span class="material-symbols-rounded text-base" data-icon>login</span>
@@ -505,7 +508,12 @@
     const submitIcon = submitBtn?.querySelector('[data-icon]');
     const submitLabel = submitBtn?.querySelector('[data-label]');
     const googleBtn = document.getElementById('googleBtn');
+    const turnstileContainer = document.getElementById('turnstileContainer');
     let supabaseClient = null;
+    let turnstileWidgetId = null;
+    let turnstileToken = '';
+    let turnstileReady = false;
+    let submitting = false;
     const __scriptCache = new Map();
 
     function getSafeNextPath() {
@@ -547,13 +555,87 @@
       try { await loadScriptOnce(LOTTIE_SRC, { module: true }); } catch { }
     }
 
-    const setSubmitState = (loading) => {
+    const syncSubmitAvailability = () => {
       if (!submitBtn) return;
-      submitBtn.disabled = loading;
+      submitBtn.disabled = submitting || !turnstileReady || !turnstileToken;
+    };
+
+    const setSubmitState = (loading) => {
+      submitting = loading;
+      if (!submitBtn) return;
       submitBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
       if (submitLabel) submitLabel.textContent = loading ? 'Signing in…' : 'Sign in';
       if (submitIcon) submitIcon.textContent = loading ? 'hourglass_empty' : 'login';
+      syncSubmitAvailability();
     };
+
+    async function waitForTurnstileReady(maxWaitMs = 8000) {
+      const start = Date.now();
+      while (Date.now() - start < maxWaitMs) {
+        if (window.turnstile && typeof window.turnstile.render === 'function') {
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error('Turnstile script did not load in time');
+    }
+
+    function resetTurnstile() {
+      turnstileToken = '';
+      if (window.turnstile && turnstileWidgetId !== null) {
+        try { window.turnstile.reset(turnstileWidgetId); } catch { }
+      }
+      syncSubmitAvailability();
+    }
+
+    async function initTurnstile() {
+      if (!turnstileContainer) return;
+      turnstileReady = false;
+      turnstileToken = '';
+      syncSubmitAvailability();
+      try {
+        const cfgRes = await fetch(`${apiBase}/api/public/turnstile`);
+        const cfg = await cfgRes.json().catch(() => ({}));
+        if (!cfgRes.ok || !cfg?.siteKey) {
+          throw new Error(cfg?.detail || 'Turnstile config unavailable');
+        }
+        await waitForTurnstileReady();
+        turnstileWidgetId = window.turnstile.render('#turnstileContainer', {
+          sitekey: cfg.siteKey,
+          action: 'login',
+          callback: (token) => {
+            turnstileToken = token || '';
+            syncSubmitAvailability();
+          },
+          'expired-callback': () => {
+            turnstileToken = '';
+            syncSubmitAvailability();
+            status.classList.remove('hidden');
+            status.textContent = '⚠️ Verification expired. Please complete Turnstile again.';
+          },
+          'error-callback': (errorCode) => {
+            turnstileToken = '';
+            syncSubmitAvailability();
+            status.classList.remove('hidden');
+            const family = Math.floor(Number(errorCode || 0) / 1000);
+            if (Number(errorCode) === 110200 || family === 110) {
+              status.textContent = '❌ Turnstile domain config issue (110200). Use localhost test keys or add this hostname in Cloudflare Turnstile Hostname Management.';
+            } else {
+              status.textContent = '❌ Verification failed to load. Refresh and try again.';
+            }
+          },
+          theme: root.classList.contains('dark') ? 'dark' : 'light'
+        });
+        turnstileReady = true;
+        syncSubmitAvailability();
+      } catch (err) {
+        turnstileReady = false;
+        turnstileToken = '';
+        syncSubmitAvailability();
+        status.classList.remove('hidden');
+        status.textContent = '❌ Unable to initialize verification. Please refresh the page.';
+      }
+    }
 
     async function ensureSupabase() {
       if (supabaseClient) return supabaseClient;
@@ -601,16 +683,28 @@
     }
 
     handleHashSession();
+    syncSubmitAvailability();
+    initTurnstile();
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!form.reportValidity()) return;
+      const tokenFromWidget = (window.turnstile && turnstileWidgetId !== null)
+        ? (window.turnstile.getResponse(turnstileWidgetId) || '')
+        : '';
+      turnstileToken = tokenFromWidget || turnstileToken;
+      if (!turnstileToken) {
+        status.classList.remove('hidden');
+        status.textContent = '⚠️ Please complete Turnstile verification before signing in.';
+        syncSubmitAvailability();
+        return;
+      }
       showLoader();
       status.classList.remove('hidden');
       status.textContent = '';
       setSubmitState(true);
       const fd = new FormData(form);
-      const payload = { email: fd.get('email'), password: fd.get('password') };
+      const payload = { email: fd.get('email'), password: fd.get('password'), turnstile_token: turnstileToken };
       try {
         const res = await fetch(`${apiBase}/login`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
@@ -618,6 +712,7 @@
         const out = await res.json().catch(() => ({}));
         if (!res.ok) {
           status.textContent = `❌ ${out?.detail || out?.message || 'Login failed.'}`;
+          resetTurnstile();
           hideLoader();
           return;
         }
@@ -642,6 +737,7 @@
         setTimeout(() => { window.location.href = nextPath || 'academicas.html'; }, 400);
       } catch (err) {
         status.textContent = '❌ Network error. Please try again.';
+        resetTurnstile();
         hideLoader();
       } finally {
         setSubmitState(false);
