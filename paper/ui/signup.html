@@ -44,6 +44,8 @@
   </script>
   <script src="config.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <link rel="preconnect" href="https://challenges.cloudflare.com">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
   <style>
     input,
     select,
@@ -286,6 +288,7 @@
                     class="mt-2 block w-full rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 text-sm text-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/70 focus:border-transparent transition" />
                 </div>
               </div>
+              <div id="turnstileContainer" class="min-h-[65px] flex justify-center"></div>
               <button type="submit" id="submitBtn"
                 class="w-full inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(158,75,138,0.28)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.35)] transition disabled:opacity-60">
                 <span class="material-symbols-rounded text-base" data-icon>person_add</span>
@@ -340,28 +343,123 @@
     const submitLabel = submitBtn?.querySelector('[data-label]');
     const togglePwd = document.getElementById('togglePwd');
     const googleBtn = document.getElementById('googleBtn');
+    const turnstileContainer = document.getElementById('turnstileContainer');
     let supabaseClient = null;
+    let turnstileWidgetId = null;
+    let turnstileToken = '';
+    let turnstileReady = false;
+    let submitting = false;
 
     togglePwd?.addEventListener('click', () => { const pwd = document.getElementById('pwd'); const icon = togglePwd.querySelector('.material-symbols-rounded'); if (!pwd) return; pwd.type = pwd.type === 'password' ? 'text' : 'password'; togglePwd.setAttribute('aria-label', pwd.type === 'password' ? 'Show password' : 'Hide password'); if (icon) icon.textContent = pwd.type === 'password' ? 'visibility' : 'visibility_off'; });
 
-    const setSubmitState = (loading) => { if (!submitBtn) return; submitBtn.disabled = loading; submitBtn.setAttribute('aria-busy', loading ? 'true' : 'false'); if (submitLabel) submitLabel.textContent = loading ? 'Creating…' : 'Create account'; if (submitIcon) submitIcon.textContent = loading ? 'hourglass_empty' : 'person_add'; };
+    const syncSubmitAvailability = () => {
+      if (!submitBtn) return;
+      submitBtn.disabled = submitting || !turnstileReady || !turnstileToken;
+    };
+
+    const setSubmitState = (loading) => {
+      submitting = loading;
+      if (!submitBtn) return;
+      submitBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
+      if (submitLabel) submitLabel.textContent = loading ? 'Creating…' : 'Create account';
+      if (submitIcon) submitIcon.textContent = loading ? 'hourglass_empty' : 'person_add';
+      syncSubmitAvailability();
+    };
+
+    async function waitForTurnstileReady(maxWaitMs = 8000) {
+      const start = Date.now();
+      while (Date.now() - start < maxWaitMs) {
+        if (window.turnstile && typeof window.turnstile.render === 'function') return;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error('Turnstile script did not load in time');
+    }
+
+    function resetTurnstile() {
+      turnstileToken = '';
+      if (window.turnstile && turnstileWidgetId !== null) {
+        try { window.turnstile.reset(turnstileWidgetId); } catch { }
+      }
+      syncSubmitAvailability();
+    }
+
+    async function initTurnstile() {
+      if (!turnstileContainer) return;
+      turnstileReady = false;
+      turnstileToken = '';
+      syncSubmitAvailability();
+      try {
+        const cfgRes = await fetch(`${apiBase}/api/public/turnstile`);
+        const cfg = await cfgRes.json().catch(() => ({}));
+        if (!cfgRes.ok || !cfg?.siteKey) {
+          throw new Error(cfg?.detail || 'Turnstile config unavailable');
+        }
+        await waitForTurnstileReady();
+        turnstileWidgetId = window.turnstile.render('#turnstileContainer', {
+          sitekey: cfg.siteKey,
+          action: 'signup',
+          callback: (token) => {
+            turnstileToken = token || '';
+            syncSubmitAvailability();
+          },
+          'expired-callback': () => {
+            turnstileToken = '';
+            syncSubmitAvailability();
+            status.classList.remove('hidden');
+            status.textContent = '⚠️ Verification expired. Please complete Turnstile again.';
+          },
+          'error-callback': (errorCode) => {
+            turnstileToken = '';
+            syncSubmitAvailability();
+            status.classList.remove('hidden');
+            const family = Math.floor(Number(errorCode || 0) / 1000);
+            if (Number(errorCode) === 110200 || family === 110) {
+              status.textContent = '❌ Turnstile domain config issue (110200). Use localhost test keys or add this hostname in Cloudflare Turnstile Hostname Management.';
+            } else {
+              status.textContent = '❌ Verification failed to load. Refresh and try again.';
+            }
+          },
+          theme: root.classList.contains('dark') ? 'dark' : 'light'
+        });
+        turnstileReady = true;
+        syncSubmitAvailability();
+      } catch (err) {
+        turnstileReady = false;
+        turnstileToken = '';
+        syncSubmitAvailability();
+        status.classList.remove('hidden');
+        status.textContent = '❌ Unable to initialize verification. Please refresh the page.';
+      }
+    }
 
     async function ensureSupabase() { if (supabaseClient) return supabaseClient; try { const cfg = await fetch(`${apiBase}/api/public/supabase`).then(r => r.json()); if (!cfg?.url || !cfg?.anonKey) throw new Error('Missing Supabase config'); supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey); return supabaseClient; } catch (e) { console.error('Supabase init failed', e); throw e; } }
+
+    syncSubmitAvailability();
+    initTurnstile();
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!form.reportValidity()) return;
       const pwd = document.getElementById('pwd').value.trim();
       const confirm = document.getElementById('confirm').value.trim();
+      const tokenFromWidget = (window.turnstile && turnstileWidgetId !== null)
+        ? (window.turnstile.getResponse(turnstileWidgetId) || '')
+        : '';
+      turnstileToken = tokenFromWidget || turnstileToken;
       status.classList.remove('hidden'); status.textContent = '';
       if (pwd !== confirm) { status.textContent = '⚠️ Passwords do not match.'; return; }
+      if (!turnstileToken) {
+        status.textContent = '⚠️ Please complete Turnstile verification before creating an account.';
+        syncSubmitAvailability();
+        return;
+      }
       const fd = new FormData(form);
-      const payload = { email: fd.get('email'), password: fd.get('password') };
+      const payload = { email: fd.get('email'), password: fd.get('password'), turnstile_token: turnstileToken };
       setSubmitState(true);
       try {
         const res = await fetch(`${apiBase}/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const out = await res.json().catch(() => ({}));
-        if (!res.ok) { status.textContent = `❌ ${out?.detail || out?.message || 'Signup failed.'}`; return; }
+        if (!res.ok) { status.textContent = `❌ ${out?.detail || out?.message || 'Signup failed.'}`; resetTurnstile(); return; }
         if (out.access_token) {
           try {
             localStorage.setItem('px_token', out.access_token);
@@ -380,7 +478,7 @@
           const safeNext = next && /^[a-zA-Z0-9_\-/]+\.html$/.test(next) ? next : null;
           window.location.href = safeNext || 'academicas.html';
         }, 600);
-      } catch (err) { status.textContent = '❌ Network error. Please try again.'; }
+      } catch (err) { status.textContent = '❌ Network error. Please try again.'; resetTurnstile(); }
       finally { setSubmitState(false); }
     });
 

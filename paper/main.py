@@ -2829,6 +2829,10 @@ class UserAuth(BaseModel):
     password: str
 
 
+class UserAuthWithTurnstile(UserAuth):
+    turnstile_token: str = Field(..., min_length=1)
+
+
 class SignupFullIn(BaseModel):
     name: str
     gender: Optional[str] = Field(None, pattern=r"^(female|male|other)$")
@@ -4052,6 +4056,121 @@ def signup_user(user):
     except Exception as e:
         supabase_logger.exception("Signup error")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+def _extract_client_ip(request: Optional[Request]) -> Optional[str]:
+    if request is None:
+        return None
+    try:
+        cf_ip = (request.headers.get("CF-Connecting-IP") or "").strip()
+        if cf_ip:
+            return cf_ip
+        forwarded = (request.headers.get("X-Forwarded-For") or "").strip()
+        if forwarded:
+            return forwarded.split(",", 1)[0].strip() or None
+        if request.client and request.client.host:
+            return request.client.host
+    except Exception:
+        return None
+    return None
+
+
+def _request_host(request: Optional[Request]) -> str:
+    if request is None:
+        return ""
+    try:
+        host = (request.headers.get("host") or "").strip().lower()
+        if not host:
+            return ""
+        if host.startswith("[") and "]" in host:
+            return host[1:host.index("]")]
+        return host.split(":", 1)[0]
+    except Exception:
+        return ""
+
+
+def _is_local_host(request: Optional[Request]) -> bool:
+    host = _request_host(request)
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+def _is_production_env() -> bool:
+    raw = (
+        os.getenv("APP_ENV")
+        or os.getenv("ENV")
+        or os.getenv("ENVIRONMENT")
+        or os.getenv("FASTAPI_ENV")
+        or ""
+    )
+    env_value = raw.strip().lower()
+    return env_value in {"production", "prod"}
+
+
+def _resolve_turnstile_keys(request: Optional[Request] = None) -> Tuple[str, str]:
+    test_site = "1x00000000000000000000AA"
+    test_secret = "1x0000000000000000000000000000000AA"
+
+    if _is_production_env():
+        site_key = (os.getenv("CLOUDFLARE_SITE_KEY") or "").strip()
+        secret = (os.getenv("CLOUDFLARE_SECRET_KEY") or "").strip()
+        return site_key, secret
+
+    use_test = (os.getenv("TURNSTILE_USE_TEST_KEYS", "").strip().lower() in {"1", "true", "yes", "on"})
+    if not use_test and _is_local_host(request):
+        use_test = True
+
+    if use_test:
+        return test_site, test_secret
+
+    site_key = (os.getenv("CLOUDFLARE_SITE_KEY") or "").strip()
+    secret = (os.getenv("CLOUDFLARE_SECRET_KEY") or "").strip()
+    return site_key, secret
+
+
+def verify_turnstile_token(token: str, request: Optional[Request] = None, *, expected_action: Optional[str] = None) -> Dict[str, Any]:
+    _, secret = _resolve_turnstile_keys(request)
+    if not secret:
+        raise HTTPException(status_code=500, detail="Server missing CLOUDFLARE_SECRET_KEY")
+
+    token_value = (token or "").strip()
+    if not token_value:
+        raise HTTPException(status_code=400, detail="Turnstile token is required")
+
+    form_data: Dict[str, str] = {
+        "secret": secret,
+        "response": token_value,
+        "idempotency_key": str(uuid.uuid4()),
+    }
+    remote_ip = _extract_client_ip(request)
+    if remote_ip:
+        form_data["remoteip"] = remote_ip
+
+    try:
+        response = requests.post(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            data=form_data,
+            timeout=10,
+        )
+        response.raise_for_status()
+        result = response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Turnstile verification service unavailable")
+    except ValueError:
+        raise HTTPException(status_code=503, detail="Invalid Turnstile verification response")
+
+    if not result.get("success"):
+        error_codes = result.get("error-codes") or []
+        detail = "Turnstile verification failed"
+        if error_codes:
+            detail = f"{detail}: {', '.join(str(c) for c in error_codes)}"
+        raise HTTPException(status_code=400, detail=detail)
+
+    if expected_action:
+        action = (result.get("action") or "").strip()
+        if action and action != expected_action:
+            raise HTTPException(status_code=400, detail="Turnstile action mismatch")
+
+    return result
 
 
 def login_user(user):
@@ -12382,12 +12501,14 @@ def resolve_or_create_batch(payload: BatchResolveIn):
 
 
 @academics_router.post("/signup")
-def signup(user: UserAuth):
+def signup(user: UserAuthWithTurnstile, request: Request):
+    verify_turnstile_token(user.turnstile_token, request=request, expected_action="signup")
     return signup_user(user)
 
 
 @academics_router.post("/login")
-def login(user: UserAuth):
+def login(user: UserAuthWithTurnstile, request: Request):
+    verify_turnstile_token(user.turnstile_token, request=request, expected_action="login")
     return login_user(user)
 
 
@@ -12436,6 +12557,14 @@ def public_supabase_config():
     if not base_url or not anon:
         raise HTTPException(status_code=500, detail="Missing SUPABASE_URL or SUPABASE_ANON_KEY")
     return {"url": base_url, "anonKey": anon}
+
+
+@academics_router.get("/api/public/turnstile", summary="Public Cloudflare Turnstile config")
+def public_turnstile_config(request: Request):
+    site_key, _ = _resolve_turnstile_keys(request)
+    if not site_key:
+        raise HTTPException(status_code=500, detail="Missing CLOUDFLARE_SITE_KEY")
+    return {"siteKey": site_key}
 
 
 @academics_router.get("/api/public/academic-meta", summary="Public academic hierarchy for signup")
