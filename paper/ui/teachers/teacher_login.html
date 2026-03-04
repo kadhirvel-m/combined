@@ -12,9 +12,13 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0"
     rel="stylesheet">
   <link rel="stylesheet" href="../assets/css/tailwind.css" />
-  <script src="../../config.js"></script>
+  <script src="../config.js"></script>
+  <link rel="preconnect" href="https://challenges.cloudflare.com">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
   <script>
-    tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' }, brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }, ink: '#1E1E2F', plum: '#4C2A59', orchid: '#9E4B8A' }, boxShadow: { glow: '0 8px 30px rgba(158,75,138,0.35)', card: '0 24px 60px rgba(30,30,47,0.35)' }, backgroundImage: { 'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)', 'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)' } } } }
+    if (window.tailwind) {
+      tailwind.config = { darkMode: 'class', theme: { container: { center: true, padding: '1rem' }, extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }, colors: { brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' }, brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }, ink: '#1E1E2F', plum: '#4C2A59', orchid: '#9E4B8A' }, boxShadow: { glow: '0 8px 30px rgba(158,75,138,0.35)', card: '0 24px 60px rgba(30,30,47,0.35)' }, backgroundImage: { 'hero-dark': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.28), transparent 60%), linear-gradient(180deg, #1E1E2F 0%, #201934 35%, #141321 100%)', 'hero-light': 'radial-gradient(1000px 600px at 50% -10%, rgba(158,75,138,0.18), transparent 60%), linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 45%, #F7F2F9 100%)' } } } }
+    }
   </script>
   <style>
     .material-symbols-rounded {
@@ -147,6 +151,7 @@
                 <input type="password" name="password" required minlength="6" placeholder="Minimum 6 characters"
                   class="mt-2 block w-full rounded-2xl border border-black/5 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 pr-12 text-sm text-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/70 focus:border-transparent transition" />
               </div>
+              <div id="turnstileContainer" class="min-h-[65px] flex justify-center"></div>
               <button type="submit"
                 class="w-full inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#9E4B8A] via-[#B06AB3] to-[#FF7FD1] px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(158,75,138,0.28)] hover:shadow-[0_16px_36px_rgba(158,75,138,0.35)] transition">
                 <span class="material-symbols-rounded text-base">login</span>
@@ -232,7 +237,32 @@
 
     const form = document.getElementById('loginForm');
     const statusEl = document.getElementById('status');
+    const submitBtn = form?.querySelector('button[type="submit"]');
+    const turnstileContainer = document.getElementById('turnstileContainer');
+    let turnstileWidgetId = null;
+    let turnstileToken = '';
+    let turnstileReady = false;
     function friendlyError(msg) { statusEl.classList.remove('hidden'); statusEl.textContent = msg; }
+    function normalizeErrorMessage(value, fallback) {
+      if (value == null) return fallback;
+      if (typeof value === 'string') {
+        const s = value.trim();
+        return s || fallback;
+      }
+      if (Array.isArray(value)) {
+        const joined = value
+          .map((v) => normalizeErrorMessage(v, ''))
+          .filter(Boolean)
+          .join(' | ');
+        return joined || fallback;
+      }
+      if (typeof value === 'object') {
+        if (typeof value.message === 'string' && value.message.trim()) return value.message.trim();
+        if (typeof value.detail === 'string' && value.detail.trim()) return value.detail.trim();
+        try { return JSON.stringify(value); } catch (_) { return fallback; }
+      }
+      return String(value);
+    }
     async function safeJson(res) {
       const ct = res.headers.get('content-type') || '';
       let text = '';
@@ -246,6 +276,76 @@
       catch (err) { console.warn('[login] JSON parse error', err, { sample: text.slice(0, 120) }); return {}; }
     }
 
+    function syncSubmitAvailability() {
+      if (!submitBtn) return;
+      submitBtn.disabled = !turnstileReady || !turnstileToken;
+    }
+
+    async function waitForApiBase(maxWaitMs = 1200) {
+      const start = Date.now();
+      while (!API_BASE && Date.now() - start < maxWaitMs) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+      return (API_BASE || location.origin).replace(/\/$/, '');
+    }
+
+    async function waitForTurnstileReady(maxWaitMs = 8000) {
+      const start = Date.now();
+      while (Date.now() - start < maxWaitMs) {
+        if (window.turnstile && typeof window.turnstile.render === 'function') return;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Turnstile script did not load in time');
+    }
+
+    function resetTurnstile() {
+      turnstileToken = '';
+      if (window.turnstile && turnstileWidgetId !== null) {
+        try { window.turnstile.reset(turnstileWidgetId); } catch (_) { }
+      }
+      syncSubmitAvailability();
+    }
+
+    async function initTurnstile() {
+      if (!turnstileContainer) return;
+      turnstileReady = false;
+      turnstileToken = '';
+      syncSubmitAvailability();
+      try {
+        const base = await waitForApiBase();
+        const cfgRes = await fetch(base + '/api/public/turnstile');
+        const cfg = await cfgRes.json().catch(() => ({}));
+        if (!cfgRes.ok || !cfg?.siteKey) throw new Error(cfg?.detail || 'Turnstile config unavailable');
+        await waitForTurnstileReady();
+        turnstileWidgetId = window.turnstile.render('#turnstileContainer', {
+          sitekey: cfg.siteKey,
+          action: 'login',
+          callback: (token) => {
+            turnstileToken = token || '';
+            syncSubmitAvailability();
+          },
+          'expired-callback': () => {
+            turnstileToken = '';
+            syncSubmitAvailability();
+            friendlyError('Verification expired. Please complete Turnstile again.');
+          },
+          'error-callback': () => {
+            turnstileToken = '';
+            syncSubmitAvailability();
+            friendlyError('Verification failed to load. Refresh and try again.');
+          },
+          theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+        });
+        turnstileReady = true;
+        syncSubmitAvailability();
+      } catch (_) {
+        turnstileReady = false;
+        turnstileToken = '';
+        syncSubmitAvailability();
+        friendlyError('Unable to initialize verification. Please refresh the page.');
+      }
+    }
+
     async function hasHodAccess(base, token) {
       try {
         const res = await fetch(base + '/api/hod/me', { headers: { 'Authorization': 'Bearer ' + token } });
@@ -257,9 +357,18 @@
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const tokenFromWidget = (window.turnstile && turnstileWidgetId !== null)
+        ? (window.turnstile.getResponse(turnstileWidgetId) || '')
+        : '';
+      turnstileToken = tokenFromWidget || turnstileToken;
+      if (!turnstileToken) {
+        friendlyError('Please complete Turnstile verification before signing in.');
+        syncSubmitAvailability();
+        return;
+      }
       statusEl.textContent = 'Logging in...';
       const fd = new FormData(form);
-      const body = { email: (fd.get('email') || '').trim(), password: fd.get('password') };
+      const body = { email: (fd.get('email') || '').trim(), password: fd.get('password'), turnstile_token: turnstileToken };
       if (!body.email || !body.password) { friendlyError('Email & password required'); return; }
       try {
         // Wait briefly if API_BASE resolving
@@ -267,7 +376,11 @@
         const base = (API_BASE || location.origin).replace(/\/$/, '');
         const res = await fetch(base + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const data = await safeJson(res);
-        if (!res.ok) { throw new Error(data.detail || data.error || 'Login failed (' + res.status + ')'); }
+        if (!res.ok) {
+          const message = normalizeErrorMessage(data.detail || data.error, 'Login failed (' + res.status + ')');
+          resetTurnstile();
+          throw new Error(message);
+        }
         if (!data.access_token) { throw new Error('No access token returned'); }
         // Enforce single active session (teacher wins here)
         localStorage.setItem('teacherToken', data.access_token || '');
@@ -302,6 +415,8 @@
         }
       } catch (err) { friendlyError(err.message || 'Unexpected error'); }
     });
+
+    initTurnstile();
 
     // Pending Modal Functions
     const pendingModal = document.getElementById('pendingModal');
