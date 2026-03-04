@@ -1,12 +1,16 @@
 // Global API base config for UI pages
 // Priority:
 // 1) LocalStorage key 'API_BASE'
-// 2) If running on localhost/127.0.0.1, use FastAPI default http://127.0.0.1:8000
+// 2) If running on localhost/127.0.0.1, use local FastAPI default http://127.0.0.1:8000
 // 3) Fallback to current origin
 (function () {
   try {
     var preset = (typeof window.API_BASE === 'string' && window.API_BASE.trim()) || null;
     var saved = !preset && localStorage.getItem('API_BASE');
+    if (!preset && saved && /^https?:\/\/(localhost|127\.0\.0\.1):8001$/i.test(saved)) {
+      saved = saved.replace(':8001', ':8000');
+      try { localStorage.setItem('API_BASE', saved); } catch (_) { }
+    }
     var resolved = preset || (saved && /^https?:\/\//i.test(saved) ? saved : null);
     if (!resolved) {
       var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';

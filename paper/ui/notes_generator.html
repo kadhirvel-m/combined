@@ -1162,6 +1162,7 @@
     const $fsHome = document.getElementById('fsHomeBtn');
     const $flashcardBtn = document.getElementById('flashcardBtn');
     const $mcqBtn = document.getElementById('mcqBtn');
+    let currentAccessSummary = null;
     const flashcardDefaultLabel = $flashcardBtn ? ($flashcardBtn.textContent || 'Flashcards') : 'Flashcards';
     const mcqDefaultLabel = $mcqBtn ? ($mcqBtn.textContent || 'MCQ') : 'MCQ';
     const $variantDetailed = document.getElementById('variantDetailed');
@@ -1354,6 +1355,10 @@
 
     function enableFlashcardAccess(noteId, topic) {
       if (!$flashcardBtn) return;
+      if (!isFeatureAllowedForCurrentPlan('flashcard_access', true)) {
+        resetFlashcardAccess();
+        return;
+      }
       $flashcardBtn.dataset.noteId = noteId || '';
       $flashcardBtn.dataset.topic = topic || '';
       $flashcardBtn.disabled = false;
@@ -1367,6 +1372,10 @@
 
     function enableMCQAccess(noteId, topic) {
       if (!$mcqBtn) return;
+      if (!isFeatureAllowedForCurrentPlan('mcq_access', true)) {
+        resetMCQAccess();
+        return;
+      }
       $mcqBtn.dataset.noteId = noteId || '';
       $mcqBtn.dataset.topic = topic || '';
       $mcqBtn.disabled = false;
@@ -1403,8 +1412,14 @@
       setTimeout(() => { window.location.href = target; }, 120);
     }
 
-    function openMCQ() {
+    async function openMCQ() {
       if (!$mcqBtn) return;
+      if (!isFeatureAllowedForCurrentPlan('mcq_access', true)) {
+        snack('MCQ access disabled for your current plan');
+        return;
+      }
+      const allowed = await ensureUserAccess('mcq_attempt', { consume: false, allowOnTransientFailure: false });
+      if (!allowed) return;
       const noteId = ($mcqBtn.dataset.noteId || '').trim();
       if (!noteId) {
         snack('Generate notes first');
@@ -1439,6 +1454,124 @@
         } catch { /* ignore */ }
       }
       return '';
+    }
+
+    function renderLimitReachedState({ action = '', reason = 'Plan limit reached', remaining = null } = {}) {
+      if (!$output) return;
+      clearUI();
+      const actionLabelMap = {
+        topic_open: 'Topic access',
+        subject_open: 'Subject access',
+        ai_prompt: 'AI generation',
+        mcq_attempt: 'MCQ access',
+        blink_view: 'Blink access',
+        search: 'Search access'
+      };
+      const actionLabel = actionLabelMap[action] || 'Access';
+      const rem = (remaining === null || remaining === undefined)
+        ? 'Remaining today: —'
+        : `Remaining today: ${remaining}`;
+      $meta.textContent = `Access limited • ${currentVariant}`;
+      $output.innerHTML = `
+        <section class="rounded-3xl border p-6 sm:p-8 shadow-glow"
+          style="border-color: var(--outline); background:
+            radial-gradient(1200px 400px at 0% 0%, color-mix(in oklab, var(--brand) 22%, transparent), transparent 45%),
+            radial-gradient(900px 300px at 100% 100%, color-mix(in oklab, var(--brand-strong) 20%, transparent), transparent 48%),
+            color-mix(in oklab, var(--surface) 88%, transparent);">
+          <div class="flex flex-col gap-4">
+            <div class="inline-flex items-center gap-3 text-[12px] font-semibold tracking-wide uppercase text-[var(--muted)]">
+              <span class="inline-flex items-center justify-center w-8 h-8 rounded-full border" style="border-color:var(--outline)">🛸</span>
+              <span>Policy Shield Active</span>
+            </div>
+            <div class="text-4xl sm:text-5xl leading-none">🛰️🚫✨💫</div>
+            <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight">Daily limit reached for ${actionLabel}</h2>
+            <p class="text-sm sm:text-base text-[var(--muted)]">${reason}</p>
+            <div class="mt-1 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm"
+              style="border-color:var(--outline); background:color-mix(in oklab, var(--brand-soft) 70%, transparent)">
+              <span class="material-symbols-rounded text-base">schedule</span>
+              <span>${rem}</span>
+            </div>
+            <p class="text-xs sm:text-sm text-[var(--muted)]">Try again after your daily quota resets or upgrade your plan for higher limits.</p>
+          </div>
+        </section>
+      `;
+    }
+
+    async function ensureUserAccess(action, { consume = true, increment = 1, allowOnTransientFailure = true, renderInOutput = false } = {}) {
+      const token = getAuthToken();
+      if (!token) {
+        return true;
+      }
+      try {
+        const res = await fetch(`${apiBase}/api/access/check-and-consume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action, consume: !!consume, increment: Math.max(1, Number(increment) || 1) })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            snack((data && data.detail) ? data.detail : 'Sign in required');
+            return false;
+          }
+          console.warn('Access check failed', res.status, data);
+          return !!allowOnTransientFailure;
+        }
+        if (!data.allowed) {
+          const reason = data.reason || 'Plan limit reached';
+          const remaining = (data.remaining === null || data.remaining === undefined) ? '' : ` (Remaining today: ${data.remaining})`;
+          snack(`${reason}${remaining}`);
+          if (renderInOutput) {
+            renderLimitReachedState({ action, reason, remaining: data.remaining });
+          }
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.warn('Access check failed', err);
+        return !!allowOnTransientFailure;
+      }
+    }
+
+    function isFeatureAllowedForCurrentPlan(featureKey, fallback = true) {
+      const tier = String(currentAccessSummary?.tier || '').toLowerCase();
+      if (tier !== 'paid') return true;
+      const plan = currentAccessSummary?.plan || {};
+      if (!Object.prototype.hasOwnProperty.call(plan, featureKey)) return !!fallback;
+      return !!plan[featureKey];
+    }
+
+    function applyFeatureAccessUI() {
+      if (!isFeatureAllowedForCurrentPlan('mcq_access', true)) {
+        resetMCQAccess();
+      }
+      if (!isFeatureAllowedForCurrentPlan('flashcard_access', true)) {
+        resetFlashcardAccess();
+      }
+    }
+
+    async function loadAccessSummary() {
+      const token = getAuthToken();
+      if (!token) {
+        currentAccessSummary = null;
+        applyFeatureAccessUI();
+        return;
+      }
+      try {
+        const res = await fetch(`${apiBase}/api/access/summary`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          currentAccessSummary = null;
+          applyFeatureAccessUI();
+          return;
+        }
+        currentAccessSummary = await res.json().catch(() => null);
+      } catch (err) {
+        console.warn('Access summary load failed', err);
+        currentAccessSummary = null;
+      }
+      applyFeatureAccessUI();
     }
 
     // ===== Role-gated actions (admin / employee only) =====
@@ -2577,6 +2710,7 @@
           }
         }
       }
+      await loadAccessSummary();
       updateDomainsHintDebounced();
     })();
 
@@ -3001,10 +3135,14 @@
     async function startGeneration(topic, force = false) {
       const t = (topic || '').trim();
       if (!t) { alert('Enter a topic'); return; }
+
       loadRelatedVideos(t, { force: true });
       if (es) { try { es.close(); } catch { } es = null; }
       // DB-first behavior: only generate when we are definitively sure it doesn't exist.
       if (!force) {
+        const canOpen = await ensureUserAccess('topic_open', { consume: true, allowOnTransientFailure: false, renderInOutput: true });
+        if (!canOpen) return;
+
         setBusy(true);
         showOutputLoader();
         $meta.textContent = `Checking DB • ${currentVariant}`;
@@ -3032,15 +3170,15 @@
           return;
         }
         if (check.status !== 404) {
-          // Not definitive -> do not generate.
-          console.warn('[Generate] DB check not definitive; refusing to generate', check);
-          hideOutputLoader();
-          setBusy(false);
-          snack('Unable to confirm in DB. Try again.');
-          return;
+          // Not definitive -> continue with live generation fallback.
+          console.warn('[Generate] DB check not definitive; continuing with generation fallback', check);
+          snack('DB check skipped. Generating notes...');
         }
         // check.status === 404 => definitively missing; proceed to generation.
       }
+
+      const canGenerate = await ensureUserAccess('ai_prompt', { consume: true, allowOnTransientFailure: false, renderInOutput: true });
+      if (!canGenerate) return;
 
       clearUI();
       setBusy(true);
