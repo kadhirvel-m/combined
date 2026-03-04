@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Control Panel — Plans Manager</title>
+  <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+    rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../../config.js"></script>
+  <script src="./cp-common.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: {
+            brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A', 300: '#d8a8cb' },
+            brandlt: { 900: '#312e81' }
+          },
+          boxShadow: {
+            glow: '0 20px 45px rgba(158,75,138,.35)',
+            soft: '0 10px 30px rgba(15,23,42,.12)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .px-field {
+      width: 100%;
+      border-radius: 0.9rem;
+      border: 1px solid rgb(148 163 184 / 0.32);
+      background: linear-gradient(180deg, rgb(255 255 255 / 0.96) 0%, rgb(248 250 252 / 0.9) 100%);
+      padding: 0.62rem 0.78rem;
+      font-size: 0.84rem;
+      color: rgb(15 23 42);
+      outline: none;
+      transition: border-color .2s ease, box-shadow .2s ease, transform .15s ease;
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / .8), 0 1px 2px rgb(15 23 42 / 0.05);
+    }
+
+    .dark .px-field {
+      border-color: rgb(255 255 255 / 0.14);
+      background: linear-gradient(180deg, rgb(30 41 59 / .62) 0%, rgb(15 23 42 / .58) 100%);
+      color: rgb(248 250 252);
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / .06), 0 8px 18px rgb(2 6 23 / .28);
+    }
+
+    .px-field:focus {
+      border-color: rgb(158 75 138 / .8);
+      box-shadow: 0 0 0 3px rgb(158 75 138 / .18), 0 10px 20px rgb(158 75 138 / .12);
+      transform: translateY(-1px);
+    }
+
+    .px-select-wrap {
+      position: relative;
+      margin-top: .25rem;
+    }
+
+    .px-select {
+      appearance: none;
+      padding-right: 2.2rem;
+      cursor: pointer;
+    }
+
+    .px-select-icon {
+      position: absolute;
+      right: .65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      opacity: .7;
+      pointer-events: none;
+      font-size: 1rem;
+    }
+
+    .px-check {
+      display: inline-flex;
+      align-items: center;
+      gap: .52rem;
+      border: 1px solid rgb(148 163 184 / .35);
+      border-radius: .72rem;
+      padding: .44rem .58rem;
+      background: rgb(255 255 255 / .85);
+      cursor: pointer;
+      user-select: none;
+      transition: border-color .2s ease, background .2s ease;
+    }
+
+    .dark .px-check {
+      border-color: rgb(255 255 255 / .12);
+      background: rgb(255 255 255 / .03);
+    }
+
+    .px-check-box {
+      width: 1rem;
+      height: 1rem;
+      border-radius: .32rem;
+      border: 1px solid rgb(148 163 184 / .7);
+      background: rgb(255 255 255 / .7);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s ease;
+    }
+
+    .dark .px-check-box {
+      border-color: rgb(255 255 255 / .25);
+      background: rgb(15 23 42 / .65);
+    }
+
+    .px-check-label {
+      font-size: .76rem;
+      line-height: 1rem;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-slate-100 text-slate-900 dark:bg-brand-900 dark:text-white font-sans">
+  <header
+    class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+    <div class="container mx-auto px-4 flex items-center justify-between py-3.5">
+      <a href="../../index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+        <img src="../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+        <img src="../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+      </a>
+      <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+        <a href="../../index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+        <a href="../../wishlist.html"
+          class="hover:text-brandlt-900 dark:hover:text-white inline-flex items-center gap-1"><span
+            class="material-symbols-rounded text-base">favorite</span>Wishlist</a>
+        <a href="../../history.html"
+          class="hover:text-brandlt-900 dark:hover:text-white inline-flex items-center gap-1"><span
+            class="material-symbols-rounded text-base">history</span>History</a>
+        <a href="../../contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Contact</a>
+      </nav>
+      <div class="hidden md:flex items-center gap-2">
+        <button data-theme-toggle
+          class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+          aria-label="Toggle theme">
+          <span class="material-symbols-rounded">dark_mode</span>
+          <span class="hidden lg:block">Theme</span>
+        </button>
+        <a href="../../login.html"
+          class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+          in</a>
+        <a href="../../signup.html"
+          class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+          up</a>
+        <a id="navProfile" href="../../profile.html" title="Profile"
+          class="hidden items-center justify-center w-10 h-10 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60">
+          <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+          <span id="navProfileInitial" class="text-xs font-semibold">ME</span>
+        </a>
+        <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out"
+          class="hidden items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          <span class="material-symbols-rounded text-base">logout</span>
+          <span>Sign out</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container mx-auto px-4 py-8 space-y-6">
+    <section
+      class="rounded-3xl border border-black/10 dark:border-white/10 bg-gradient-to-br from-white/90 via-white/80 to-fuchsia-50 dark:from-white/10 dark:via-white/5 dark:to-transparent backdrop-blur p-6">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Plans Manager</h1>
+          <p class="text-sm text-slate-600 dark:text-white/70 mt-2">Modern plan orchestration for pricing, entitlement, and academic scope.</p>
+        </div>
+        <div class="flex flex-wrap gap-2 text-sm">
+          <a data-cp-tab="plans" href="./plans-manager.html"
+            class="rounded-full px-4 py-2 border border-black/10 dark:border-white/15 transition">Plans</a>
+          <a data-cp-tab="limits" href="./usage-limits.html"
+            class="rounded-full px-4 py-2 border border-black/10 dark:border-white/15 transition">Usage Limits</a>
+          <a data-cp-tab="manual" href="./manual-access.html"
+            class="rounded-full px-4 py-2 border border-black/10 dark:border-white/15 transition">Manual Access</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid lg:grid-cols-[0.66fr_1.34fr] gap-6 items-start">
+      <article class="order-1 rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-white/5 shadow-soft p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 class="font-semibold text-lg">All Plans</h2>
+          <div class="flex items-center gap-2">
+            <input id="searchPlan" placeholder="Search by name / code" class="px-field w-56" />
+            <button id="reloadBtn"
+              class="rounded-xl bg-white dark:bg-white/10 border border-black/10 dark:border-white/10 px-3 py-2 text-xs">Reload</button>
+          </div>
+        </div>
+
+        <div class="overflow-auto max-h-[74vh] rounded-2xl border border-black/10 dark:border-white/10">
+          <table class="w-full text-sm">
+            <thead
+              class="sticky top-0 bg-slate-50/95 dark:bg-brand-900/80 text-xs text-slate-500 dark:text-white/60 border-b border-black/10 dark:border-white/10">
+              <tr>
+                <th class="text-left py-3 px-3">Plan</th>
+                <th class="text-left px-3">Price</th>
+                <th class="text-left px-3">Status</th>
+                <th class="text-right px-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="plansTbody"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="order-2 rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-white/5 shadow-soft p-5">
+        <div class="mb-4">
+          <h2 class="font-semibold text-lg">Create / Edit Plan</h2>
+          <p id="status" class="hidden text-xs mt-2"></p>
+        </div>
+
+        <form id="planForm" class="space-y-4">
+          <input type="hidden" id="planId" />
+
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 p-3">
+            <div class="grid grid-cols-1 gap-3">
+              <label class="text-xs">Plan Name<input id="name" class="px-field mt-1" required></label>
+            </div>
+            <label class="text-xs block mt-3">Description<textarea id="description" rows="2" class="px-field mt-1"></textarea></label>
+          </section>
+
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 p-3">
+            <h3 class="text-xs uppercase tracking-wide text-slate-500 dark:text-white/60 mb-3">Billing & Entitlements</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <label class="text-xs">Price (₹)<input type="number" id="price_inr" min="0" step="0.01" class="px-field mt-1" value="0"></label>
+              <label class="text-xs">Duration Days<input type="number" id="duration_days" min="1" class="px-field mt-1" value="30"></label>
+              <label class="text-xs">Print Discount %<input type="number" id="print_discount_percent" min="0" max="100" step="0.01" class="px-field mt-1" value="0"></label>
+            </div>
+
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="rounded-xl border border-black/10 dark:border-white/10 px-3 py-2 bg-black/[0.02] dark:bg-white/[0.03]">
+                <div class="text-[11px] text-slate-500 dark:text-white/60">Discount Amount</div>
+                <div id="discount_amount_preview" class="text-sm font-semibold mt-1">₹0.00</div>
+              </div>
+              <div class="rounded-xl border border-black/10 dark:border-white/10 px-3 py-2 bg-brand-500/10">
+                <div class="text-[11px] text-slate-500 dark:text-white/60">Effective Price (Live)</div>
+                <div id="effective_price_preview" class="text-sm font-semibold mt-1">₹0.00</div>
+              </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+              <label class="px-check"><input class="sr-only peer" type="checkbox" id="active_status" checked><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">Active</span></label>
+              <label class="px-check"><input class="sr-only peer" type="checkbox" id="unlimited_topics"><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">Unlimited Topics</span></label>
+              <label class="px-check"><input class="sr-only peer" type="checkbox" id="mcq_access" checked><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">MCQ</span></label>
+              <label class="px-check"><input class="sr-only peer" type="checkbox" id="blink_access" checked><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">Blink</span></label>
+              <label class="px-check"><input class="sr-only peer" type="checkbox" id="ai_chat_access" checked><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">AI Chat</span></label>
+              <label class="px-check"><input class="sr-only peer" type="checkbox" id="pdf_download" checked><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">PDF Download</span></label>
+              <label class="px-check"><input class="sr-only peer" type="checkbox" id="leaderboard_access" checked><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">Leaderboard</span></label>
+              <label class="px-check"><input class="sr-only peer" type="checkbox" id="coupon_enabled"><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">Coupon Enabled</span></label>
+              <label class="px-check"><input class="sr-only peer" type="checkbox" id="early_bird_tag"><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">Early Bird</span></label>
+            </div>
+          </section>
+
+          <section class="rounded-2xl border border-black/10 dark:border-white/10 p-3">
+            <h3 class="text-xs uppercase tracking-wide text-slate-500 dark:text-white/60 mb-3">Limits & Academic Scope</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label class="text-xs">Max Topics / Day<input type="number" id="max_topics_per_day" min="0" class="px-field mt-1" placeholder="empty = unlimited"></label>
+              <label class="text-xs">Max Subjects / Day<input type="number" id="max_subjects_per_day" min="0" class="px-field mt-1" placeholder="empty = unlimited"></label>
+
+              <label class="text-xs">Applicable College
+                <span class="px-select-wrap"><select id="applicable_college" class="px-field px-select">
+                    <option value="">All</option>
+                  </select><span class="material-symbols-rounded px-select-icon">expand_more</span></span>
+              </label>
+              <label class="text-xs">Applicable Degree
+                <div class="mt-1 flex items-center justify-between gap-2">
+                  <button type="button" id="allDegreeBtn" class="text-[11px] px-2 py-1 rounded-lg border border-black/10 dark:border-white/20 bg-black/[0.03] dark:bg-white/[0.06]">Select All</button>
+                </div>
+                <span class="px-select-wrap"><select id="applicable_degree" class="px-field px-select" disabled>
+                    <option value="">All</option>
+                  </select><span class="material-symbols-rounded px-select-icon">expand_more</span></span>
+              </label>
+              <label class="text-xs">Applicable Department
+                <div class="mt-1 flex items-center justify-between gap-2">
+                  <button type="button" id="allDepartmentBtn" class="text-[11px] px-2 py-1 rounded-lg border border-black/10 dark:border-white/20 bg-black/[0.03] dark:bg-white/[0.06]">Select All</button>
+                </div>
+                <span class="px-select-wrap"><select id="applicable_department" class="px-field px-select" disabled>
+                    <option value="">All</option>
+                  </select><span class="material-symbols-rounded px-select-icon">expand_more</span></span>
+              </label>
+              <label class="text-xs">Applicable Batch
+                <div class="mt-1 flex items-center justify-between gap-2">
+                  <button type="button" id="allBatchBtn" class="text-[11px] px-2 py-1 rounded-lg border border-black/10 dark:border-white/20 bg-black/[0.03] dark:bg-white/[0.06]">Select All</button>
+                </div>
+                <span class="px-select-wrap"><select id="applicable_batch" class="px-field px-select" disabled>
+                    <option value="">All</option>
+                  </select><span class="material-symbols-rounded px-select-icon">expand_more</span></span>
+              </label>
+              <label class="text-xs">Applicable Semester<input type="number" id="applicable_semester" min="1" max="12" class="px-field mt-1" placeholder="All"></label>
+              <label class="text-xs">Availability Expiry
+                <div class="mt-1 flex items-center justify-between gap-2">
+                  <label class="px-check"><input class="sr-only peer" type="checkbox" id="availability_never" checked><span class="px-check-box peer-checked:bg-brand-500 peer-checked:border-brand-500 peer-checked:text-white"><span class="material-symbols-rounded text-[0.72rem] opacity-0 peer-checked:opacity-100">check</span></span><span class="px-check-label">Never</span></label>
+                </div>
+                <input type="datetime-local" id="availability_expires_at" class="px-field mt-2" disabled>
+              </label>
+            </div>
+          </section>
+
+          <div class="flex gap-2">
+            <button class="rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white" type="submit">Save Plan</button>
+            <button class="rounded-xl bg-white dark:bg-white/10 border border-black/10 dark:border-white/10 px-4 py-2 text-sm"
+              type="button" id="resetBtn">Reset</button>
+          </div>
+        </form>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const $ = (id) => document.getElementById(id);
+      const form = $('planForm');
+      const tbody = $('plansTbody');
+      const statusEl = $('status');
+      const searchInput = $('searchPlan');
+
+      let plans = [];
+      let collegesCache = [];
+      let collegesLoadPromise = null;
+      const collegeDetailCache = new Map();
+      let currentDegrees = [];
+      let currentDepartments = [];
+
+      function numOrNull(v) { return v === '' || v == null ? null : Number(v); }
+      function boolVal(id) { return !!$(id).checked; }
+      function textVal(id) { return ($(id).value || '').trim(); }
+
+      function toBatchLabel(batch) {
+        const from = Number(batch?.from ?? batch?.from_year);
+        const to = Number(batch?.to ?? batch?.to_year);
+        if (Number.isFinite(from) && Number.isFinite(to)) return `${from}-${to}`;
+        return String(batch?.range || '').trim();
+      }
+
+      function fillSelectOptions(select, options, placeholder) {
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '';
+        const base = document.createElement('option');
+        base.value = '';
+        base.textContent = placeholder;
+        select.appendChild(base);
+        (options || []).forEach((opt) => {
+          if (!opt) return;
+          const option = document.createElement('option');
+          option.value = String(opt.value);
+          option.textContent = opt.label;
+          select.appendChild(option);
+        });
+        if ([...select.options].some((opt) => opt.value === current)) select.value = current;
+      }
+
+      function resetAcademicChain(level) {
+        if (level <= 1) {
+          currentDegrees = [];
+          $('applicable_degree').disabled = true;
+          fillSelectOptions($('applicable_degree'), [], 'All');
+        }
+        if (level <= 2) {
+          currentDepartments = [];
+          $('applicable_department').disabled = true;
+          fillSelectOptions($('applicable_department'), [], 'All');
+        }
+        if (level <= 3) {
+          $('applicable_batch').disabled = true;
+          fillSelectOptions($('applicable_batch'), [], 'All');
+        }
+      }
+
+      async function loadCollegesList() {
+        if (collegesCache.length) return collegesCache;
+        if (!collegesLoadPromise) {
+          collegesLoadPromise = fetch(`${CP.API}/api/colleges`, { headers: CP.authHeaders() })
+            .then((res) => {
+              if (!res.ok) throw new Error(`Failed colleges (${res.status})`);
+              return res.json();
+            })
+            .then((items) => {
+              collegesCache = Array.isArray(items)
+                ? items.filter((col) => col && col.id && col.name).map((col) => ({ id: String(col.id), name: col.name }))
+                : [];
+              return collegesCache;
+            })
+            .catch((err) => {
+              collegesLoadPromise = null;
+              throw err;
+            });
+        }
+        return collegesLoadPromise;
+      }
+
+      async function loadCollegeDetails(collegeId) {
+        if (!collegeId) return null;
+        const key = String(collegeId);
+        if (collegeDetailCache.has(key)) return collegeDetailCache.get(key);
+        const res = await fetch(`${CP.API}/api/colleges/${key}`, { headers: CP.authHeaders() });
+        if (!res.ok) throw new Error(`Failed college details (${res.status})`);
+        const data = await res.json();
+        collegeDetailCache.set(key, data);
+        return data;
+      }
+
+      async function onCollegeChanged() {
+        const selectedCollege = textVal('applicable_college');
+        resetAcademicChain(1);
+        if (!selectedCollege) return;
+
+        const details = await loadCollegeDetails(selectedCollege);
+        currentDegrees = Array.isArray(details?.degrees) ? details.degrees : [];
+        const degreeOptions = currentDegrees.map((deg) => ({ value: String(deg.id), label: deg.name }));
+        $('applicable_degree').disabled = false;
+        fillSelectOptions($('applicable_degree'), degreeOptions, 'All');
+      }
+
+      async function onDegreeChanged() {
+        const selectedDegree = textVal('applicable_degree');
+        resetAcademicChain(2);
+        if (!selectedDegree) return;
+
+        const degree = currentDegrees.find((deg) => String(deg.id) === selectedDegree) || null;
+        currentDepartments = Array.isArray(degree?.departments) ? degree.departments : [];
+        const departmentOptions = currentDepartments.map((dep) => ({ value: String(dep.id), label: dep.name }));
+        $('applicable_department').disabled = false;
+        fillSelectOptions($('applicable_department'), departmentOptions, 'All');
+      }
+
+      async function onDepartmentChanged() {
+        const selectedDepartment = textVal('applicable_department');
+        resetAcademicChain(3);
+        if (!selectedDepartment) return;
+
+        const res = await fetch(`${CP.API}/api/departments/${encodeURIComponent(selectedDepartment)}/batches/full`, { headers: CP.authHeaders() });
+        if (!res.ok) throw new Error(`Failed department batches (${res.status})`);
+        const batches = await res.json().catch(() => []);
+        const batchOptions = batches
+          .map((batch) => {
+            const label = toBatchLabel(batch);
+            if (!label || !batch?.id) return null;
+            return { value: String(batch.id), label };
+          })
+          .filter(Boolean);
+
+        $('applicable_batch').disabled = false;
+        fillSelectOptions($('applicable_batch'), batchOptions, 'All');
+      }
+
+      function payloadFromForm() {
+        const neverExpiry = boolVal('availability_never');
+        return {
+          name: textVal('name'),
+          description: textVal('description') || null,
+          price_inr: Number(textVal('price_inr') || 0),
+          duration_days: Number(textVal('duration_days') || 30),
+          active_status: boolVal('active_status'),
+          unlimited_topics: boolVal('unlimited_topics'),
+          max_topics_per_day: numOrNull(textVal('max_topics_per_day')),
+          max_subjects_per_day: numOrNull(textVal('max_subjects_per_day')),
+          mcq_access: boolVal('mcq_access'),
+          blink_access: boolVal('blink_access'),
+          ai_chat_access: boolVal('ai_chat_access'),
+          pdf_download: boolVal('pdf_download'),
+          print_discount_percent: Number(textVal('print_discount_percent') || 0),
+          leaderboard_access: boolVal('leaderboard_access'),
+          applicable_college: textVal('applicable_college') || null,
+          applicable_degree: textVal('applicable_degree') || null,
+          applicable_department: textVal('applicable_department') || null,
+          applicable_batch: textVal('applicable_batch') || null,
+          applicable_semester: numOrNull(textVal('applicable_semester')),
+          early_bird_tag: boolVal('early_bird_tag'),
+          availability_expires_at: neverExpiry ? null : (textVal('availability_expires_at') ? new Date(textVal('availability_expires_at')).toISOString() : null),
+          coupon_enabled: boolVal('coupon_enabled')
+        };
+      }
+
+      function updatePricePreview() {
+        const rawPrice = Number(textVal('price_inr') || 0);
+        const rawDiscount = Number(textVal('print_discount_percent') || 0);
+        const price = Number.isFinite(rawPrice) ? Math.max(0, rawPrice) : 0;
+        const discountPercent = Number.isFinite(rawDiscount) ? Math.min(100, Math.max(0, rawDiscount)) : 0;
+        const discountAmount = (price * discountPercent) / 100;
+        const effective = Math.max(0, price - discountAmount);
+        $('discount_amount_preview').textContent = `₹${discountAmount.toFixed(2)}`;
+        $('effective_price_preview').textContent = `₹${effective.toFixed(2)}`;
+      }
+
+      function syncAvailabilityMode() {
+        const never = boolVal('availability_never');
+        $('availability_expires_at').disabled = never;
+        if (never) $('availability_expires_at').value = '';
+      }
+
+      async function setForm(row) {
+        $('planId').value = row?.id || '';
+        $('name').value = row?.name || '';
+        $('description').value = row?.description || '';
+        $('price_inr').value = row?.price_inr ?? 0;
+        $('duration_days').value = row?.duration_days ?? 30;
+        $('active_status').checked = row ? !!row.active_status : true;
+        $('unlimited_topics').checked = !!row?.unlimited_topics;
+        $('max_topics_per_day').value = row?.max_topics_per_day ?? '';
+        $('max_subjects_per_day').value = row?.max_subjects_per_day ?? '';
+        $('mcq_access').checked = row ? !!row.mcq_access : true;
+        $('blink_access').checked = row ? !!row.blink_access : true;
+        $('ai_chat_access').checked = row ? !!row.ai_chat_access : true;
+        $('pdf_download').checked = row ? !!row.pdf_download : true;
+        $('print_discount_percent').value = row?.print_discount_percent ?? 0;
+        $('leaderboard_access').checked = row ? !!row.leaderboard_access : true;
+        $('applicable_semester').value = row?.applicable_semester ?? '';
+        $('early_bird_tag').checked = !!row?.early_bird_tag;
+        $('availability_never').checked = !row?.availability_expires_at;
+        $('availability_expires_at').value = row?.availability_expires_at ? new Date(row.availability_expires_at).toISOString().slice(0, 16) : '';
+        syncAvailabilityMode();
+        $('coupon_enabled').checked = !!row?.coupon_enabled;
+        updatePricePreview();
+
+        $('applicable_college').value = row?.applicable_college || '';
+        await onCollegeChanged();
+        $('applicable_degree').value = row?.applicable_degree || '';
+        await onDegreeChanged();
+        $('applicable_department').value = row?.applicable_department || '';
+        await onDepartmentChanged();
+        $('applicable_batch').value = row?.applicable_batch || '';
+      }
+
+      function render() {
+        const query = (searchInput.value || '').trim().toLowerCase();
+        const filtered = plans.filter((p) => {
+          if (!query) return true;
+          return String(p.name || '').toLowerCase().includes(query) || String(p.plan_code || '').toLowerCase().includes(query);
+        });
+
+        if (!filtered.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="py-6 px-3 text-slate-500 dark:text-white/60">No plans found.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = filtered.map((p) => `
+          <tr class="border-b border-black/5 dark:border-white/5 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]">
+            <td class="py-3 px-3">
+              <div class="font-medium">${CP.escapeHtml(p.name)}</div>
+              <div class="text-xs text-slate-500 dark:text-white/60">${CP.escapeHtml(p.plan_code)}</div>
+            </td>
+            <td class="px-3">₹${Number(p.price_inr || 0).toFixed(2)} / ${p.duration_days || 0}d</td>
+            <td class="px-3">${p.active_status ? '<span class="text-emerald-600 dark:text-emerald-300">Active</span>' : '<span class="text-slate-500 dark:text-white/60">Inactive</span>'}</td>
+            <td class="text-right px-3">
+              <div class="inline-flex gap-1">
+                <button data-act="edit" data-id="${p.id}" class="px-2 py-1 rounded bg-black/5 dark:bg-white/10 text-xs">Edit</button>
+                <button data-act="dup" data-id="${p.id}" class="px-2 py-1 rounded bg-black/5 dark:bg-white/10 text-xs">Duplicate</button>
+                <button data-act="toggle" data-id="${p.id}" class="px-2 py-1 rounded bg-black/5 dark:bg-white/10 text-xs">${p.active_status ? 'Disable' : 'Enable'}</button>
+                <button data-act="del" data-id="${p.id}" class="px-2 py-1 rounded bg-red-500/20 text-xs">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      async function loadAcademicSelectors() {
+        const colleges = await loadCollegesList();
+        const collegeOptions = colleges.map((col) => ({ value: col.id, label: col.name }));
+        fillSelectOptions($('applicable_college'), collegeOptions, 'All');
+        resetAcademicChain(1);
+      }
+
+      async function loadPlans() {
+        const data = await CP.fetchJson('/api/admin/plans');
+        plans = data.plans || [];
+        render();
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+          const planId = textVal('planId');
+          const body = payloadFromForm();
+          if (planId) await CP.fetchJson(`/api/admin/plans/${encodeURIComponent(planId)}`, { method: 'PUT', body: JSON.stringify(body) });
+          else await CP.fetchJson('/api/admin/plans', { method: 'POST', body: JSON.stringify(body) });
+          CP.showStatus(statusEl, 'Plan saved successfully.', 'success');
+          await setForm(null);
+          await loadPlans();
+        } catch (err) {
+          CP.showStatus(statusEl, err.message || 'Save failed', 'error');
+        }
+      });
+
+      $('applicable_college').addEventListener('change', async () => {
+        try {
+          await onCollegeChanged();
+        } catch (err) {
+          CP.showStatus(statusEl, err.message || 'Failed to load degrees', 'error');
+        }
+      });
+
+      $('applicable_degree').addEventListener('change', async () => {
+        try {
+          await onDegreeChanged();
+        } catch (err) {
+          CP.showStatus(statusEl, err.message || 'Failed to load departments', 'error');
+        }
+      });
+
+      $('applicable_department').addEventListener('change', async () => {
+        try {
+          await onDepartmentChanged();
+        } catch (err) {
+          CP.showStatus(statusEl, err.message || 'Failed to load batches', 'error');
+        }
+      });
+
+      $('resetBtn').addEventListener('click', async () => {
+        await setForm(null);
+      });
+
+      $('availability_never').addEventListener('change', syncAvailabilityMode);
+      $('price_inr').addEventListener('input', updatePricePreview);
+      $('print_discount_percent').addEventListener('input', updatePricePreview);
+
+      $('allDegreeBtn').addEventListener('click', async () => {
+        $('applicable_degree').value = '';
+        await onDegreeChanged();
+      });
+
+      $('allDepartmentBtn').addEventListener('click', async () => {
+        $('applicable_department').value = '';
+        await onDepartmentChanged();
+      });
+
+      $('allBatchBtn').addEventListener('click', () => {
+        $('applicable_batch').value = '';
+      });
+
+      $('reloadBtn').addEventListener('click', () => loadPlans().catch((e) => CP.showStatus(statusEl, e.message, 'error')));
+      searchInput.addEventListener('input', render);
+
+      tbody.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const act = btn.getAttribute('data-act');
+        const id = btn.getAttribute('data-id');
+        const plan = plans.find((p) => p.id === id);
+        if (!plan) return;
+        try {
+          if (act === 'edit') await setForm(plan);
+          else if (act === 'dup') {
+            await CP.fetchJson(`/api/admin/plans/${encodeURIComponent(id)}/duplicate`, { method: 'POST' });
+            await loadPlans();
+          } else if (act === 'toggle') {
+            await CP.fetchJson(`/api/admin/plans/${encodeURIComponent(id)}/disable?active=${plan.active_status ? 'false' : 'true'}`, { method: 'POST' });
+            await loadPlans();
+          } else if (act === 'del') {
+            if (!confirm('Delete this plan permanently?')) return;
+            await CP.fetchJson(`/api/admin/plans/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            await loadPlans();
+          }
+        } catch (err) {
+          CP.showStatus(statusEl, err.message || 'Action failed', 'error');
+        }
+      });
+
+      async function init() {
+        CP.initPageChrome('plans');
+        try {
+          await CP.ensureAdmin();
+          await loadAcademicSelectors();
+          await setForm(null);
+          await loadPlans();
+          syncAvailabilityMode();
+          updatePricePreview();
+          CP.showStatus(statusEl, 'Connected. Plans and colleges loaded.', 'success');
+        } catch (err) {
+          CP.showStatus(statusEl, err.message || 'Init failed', 'error');
+        }
+      }
+
+      init();
+    })();
+  </script>
+</body>
+
+</html>

@@ -7987,6 +7987,1066 @@ def _require_admin_or_employee(authorization: Optional[str]):
     return uid, em
 
 
+# ===================== Admin Control Panel: Plans/Limits/Overrides =====================
+
+SUBSCRIPTION_PLANS_TABLE = os.getenv("SUBSCRIPTION_PLANS_TABLE", "subscription_plans")
+USER_PLAN_SUBSCRIPTIONS_TABLE = os.getenv("USER_PLAN_SUBSCRIPTIONS_TABLE", "user_plan_subscriptions")
+USAGE_LIMIT_RULES_TABLE = os.getenv("USAGE_LIMIT_RULES_TABLE", "usage_limit_rules")
+USAGE_DAILY_COUNTERS_TABLE = os.getenv("USAGE_DAILY_COUNTERS_TABLE", "usage_daily_counters")
+MANUAL_ACCESS_OVERRIDES_TABLE = os.getenv("MANUAL_ACCESS_OVERRIDES_TABLE", "manual_access_overrides")
+
+
+def _admin_now_iso() -> str:
+    return datetime.utcnow().isoformat() + "Z"
+
+
+def _slug_plan_code(value: str) -> str:
+    s = (value or "").strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    s = re.sub(r"-+", "-", s).strip("-")
+    return s or "plan"
+
+
+def _build_unique_plan_code(supabase: Client, base_text: str) -> str:
+    base_code = _slug_plan_code(base_text)
+    for index in range(0, 100):
+        candidate = base_code if index == 0 else f"{base_code}-{index + 1}"
+        check = (
+            supabase.table(SUBSCRIPTION_PLANS_TABLE)
+            .select("id")
+            .eq("plan_code", candidate)
+            .limit(1)
+            .execute()
+        )
+        if getattr(check, "error", None):
+            continue
+        if not (getattr(check, "data", None) or []):
+            return candidate
+    return f"{base_code}-{int(time.time())}"
+
+
+def _to_uuid_str(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    try:
+        return str(uuid.UUID(str(value).strip()))
+    except Exception:
+        return None
+
+
+def _first_or_none(data: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(data, list) and data:
+        first = data[0]
+        return first if isinstance(first, dict) else None
+    if isinstance(data, dict):
+        return data
+    return None
+
+
+class PlanCreateIn(BaseModel):
+    plan_code: Optional[str] = Field(default=None, min_length=2, max_length=64)
+    name: str = Field(..., min_length=2, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=600)
+    price_inr: float = Field(default=0, ge=0)
+    duration_days: int = Field(default=30, ge=1, le=3650)
+    active_status: bool = True
+
+    unlimited_topics: bool = False
+    max_topics_per_day: Optional[int] = Field(default=None, ge=0, le=5000)
+    max_subjects_per_day: Optional[int] = Field(default=None, ge=0, le=5000)
+    mcq_access: bool = True
+    blink_access: bool = True
+    ai_chat_access: bool = True
+    pdf_download: bool = True
+    print_discount_percent: float = Field(default=0, ge=0, le=100)
+    leaderboard_access: bool = True
+
+    applicable_college: Optional[str] = None
+    applicable_degree: Optional[str] = None
+    applicable_department: Optional[str] = None
+    applicable_batch: Optional[str] = None
+    applicable_semester: Optional[int] = Field(default=None, ge=1, le=12)
+
+    early_bird_tag: bool = False
+    availability_expires_at: Optional[datetime] = None
+    coupon_enabled: bool = False
+
+
+class PlanUpdateIn(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=600)
+    price_inr: Optional[float] = Field(default=None, ge=0)
+    duration_days: Optional[int] = Field(default=None, ge=1, le=3650)
+    active_status: Optional[bool] = None
+
+    unlimited_topics: Optional[bool] = None
+    max_topics_per_day: Optional[int] = Field(default=None, ge=0, le=5000)
+    max_subjects_per_day: Optional[int] = Field(default=None, ge=0, le=5000)
+    mcq_access: Optional[bool] = None
+    blink_access: Optional[bool] = None
+    ai_chat_access: Optional[bool] = None
+    pdf_download: Optional[bool] = None
+    print_discount_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    leaderboard_access: Optional[bool] = None
+
+    applicable_college: Optional[str] = None
+    applicable_degree: Optional[str] = None
+    applicable_department: Optional[str] = None
+    applicable_batch: Optional[str] = None
+    applicable_semester: Optional[int] = Field(default=None, ge=1, le=12)
+
+    early_bird_tag: Optional[bool] = None
+    availability_expires_at: Optional[datetime] = None
+    coupon_enabled: Optional[bool] = None
+
+
+class UsageLimitRuleIn(BaseModel):
+    rule_name: str = Field(..., min_length=2, max_length=120)
+    scope_type: Literal["global", "college", "degree", "department", "batch", "semester"] = "global"
+    scope_college_id: Optional[str] = None
+    scope_degree_id: Optional[str] = None
+    scope_department_id: Optional[str] = None
+    scope_batch_id: Optional[str] = None
+    scope_semester: Optional[int] = Field(default=None, ge=1, le=12)
+
+    max_topics_per_day: Optional[int] = Field(default=None, ge=0, le=5000)
+    max_subjects_per_day: Optional[int] = Field(default=None, ge=0, le=5000)
+    max_mcq_attempts_per_day: Optional[int] = Field(default=None, ge=0, le=20000)
+    max_blink_views_per_day: Optional[int] = Field(default=None, ge=0, le=20000)
+    max_searches_per_day: Optional[int] = Field(default=None, ge=0, le=20000)
+    max_ai_prompts_per_day: Optional[int] = Field(default=None, ge=0, le=20000)
+    max_session_minutes_per_day: Optional[int] = Field(default=None, ge=0, le=1440)
+    trial_duration_days: Optional[int] = Field(default=None, ge=0, le=365)
+
+    apply_to_free_users: bool = True
+    active_status: bool = True
+
+
+class UsageLimitRuleUpdateIn(BaseModel):
+    rule_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    active_status: Optional[bool] = None
+    apply_to_free_users: Optional[bool] = None
+    max_topics_per_day: Optional[int] = Field(default=None, ge=0, le=5000)
+    max_subjects_per_day: Optional[int] = Field(default=None, ge=0, le=5000)
+    max_mcq_attempts_per_day: Optional[int] = Field(default=None, ge=0, le=20000)
+    max_blink_views_per_day: Optional[int] = Field(default=None, ge=0, le=20000)
+    max_searches_per_day: Optional[int] = Field(default=None, ge=0, le=20000)
+    max_ai_prompts_per_day: Optional[int] = Field(default=None, ge=0, le=20000)
+    max_session_minutes_per_day: Optional[int] = Field(default=None, ge=0, le=1440)
+    trial_duration_days: Optional[int] = Field(default=None, ge=0, le=365)
+
+
+class ManualAccessActionIn(BaseModel):
+    action: Literal[
+        "grant_premium",
+        "extend_subscription",
+        "change_plan",
+        "reset_daily_usage",
+        "block_user",
+        "mark_refund",
+        "mark_ambassador",
+        "change_department",
+    ]
+    plan_id: Optional[str] = None
+    days: Optional[int] = Field(default=None, ge=1, le=3650)
+    value: Optional[bool] = None
+    department_id: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+class AccessCheckIn(BaseModel):
+    action: Literal["topic_open", "subject_open", "mcq_attempt", "blink_view", "search", "ai_prompt"]
+    consume: bool = True
+    increment: int = Field(default=1, ge=1, le=100)
+
+
+_ACTION_COUNTER_COLUMN: Dict[str, str] = {
+    "topic_open": "topics_opened",
+    "subject_open": "subjects_opened",
+    "mcq_attempt": "mcq_attempts",
+    "blink_view": "blink_views",
+    "search": "searches",
+    "ai_prompt": "ai_prompts",
+}
+
+_ACTION_LIMIT_COLUMN: Dict[str, str] = {
+    "topic_open": "max_topics_per_day",
+    "subject_open": "max_subjects_per_day",
+    "mcq_attempt": "max_mcq_attempts_per_day",
+    "blink_view": "max_blink_views_per_day",
+    "search": "max_searches_per_day",
+    "ai_prompt": "max_ai_prompts_per_day",
+}
+
+
+def _validate_plan_scope(plan_row: Dict[str, Any], profile: Optional[Dict[str, Any]]) -> bool:
+    if not plan_row:
+        return False
+    if not profile:
+        return True
+
+    checks = [
+        ("applicable_college", "college_id"),
+        ("applicable_degree", "degree_id"),
+        ("applicable_department", "department_id"),
+        ("applicable_batch", "batch_id"),
+    ]
+    for plan_key, profile_key in checks:
+        pv = _to_uuid_str(plan_row.get(plan_key))
+        if pv and pv != _to_uuid_str(profile.get(profile_key)):
+            return False
+    sem = plan_row.get("applicable_semester")
+    if sem is not None and str(sem) != str(profile.get("semester") or ""):
+        return False
+    return True
+
+
+def _get_user_profile_scope(auth_user_id: str) -> Optional[Dict[str, Any]]:
+    supabase = get_service_client()
+    r = (
+        supabase.table("user_profiles")
+        .select("id,auth_user_id,college_id,department_id,batch_id,semester")
+        .eq("auth_user_id", auth_user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(r, "error", None):
+        return None
+    return _first_or_none(getattr(r, "data", None))
+
+
+def _get_user_degree_id(profile: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not profile:
+        return None
+    dept_id = _to_uuid_str(profile.get("department_id"))
+    if not dept_id:
+        return None
+    supabase = get_service_client()
+    r = (
+        supabase.table("departments")
+        .select("degree_id")
+        .eq("id", dept_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(r, "error", None):
+        return None
+    row = _first_or_none(getattr(r, "data", None))
+    return _to_uuid_str((row or {}).get("degree_id"))
+
+
+def _get_manual_override(auth_user_id: str) -> Optional[Dict[str, Any]]:
+    supabase = get_service_client()
+    r = (
+        supabase.table(MANUAL_ACCESS_OVERRIDES_TABLE)
+        .select("*")
+        .eq("auth_user_id", auth_user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(r, "error", None):
+        return None
+    return _first_or_none(getattr(r, "data", None))
+
+
+def _get_active_subscription_with_plan(auth_user_id: str) -> Optional[Dict[str, Any]]:
+    now_iso = datetime.utcnow().isoformat()
+    supabase = get_service_client()
+    r = (
+        supabase.table(USER_PLAN_SUBSCRIPTIONS_TABLE)
+        .select("id,plan_id,status,start_at,end_at,source,notes")
+        .eq("auth_user_id", auth_user_id)
+        .eq("status", "active")
+        .gte("end_at", now_iso)
+        .order("end_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if getattr(r, "error", None):
+        return None
+    sub = _first_or_none(getattr(r, "data", None))
+    if not sub:
+        return None
+    plan_id = _to_uuid_str(sub.get("plan_id"))
+    if not plan_id:
+        return None
+    p = (
+        supabase.table(SUBSCRIPTION_PLANS_TABLE)
+        .select("*")
+        .eq("id", plan_id)
+        .eq("active_status", True)
+        .limit(1)
+        .execute()
+    )
+    if getattr(p, "error", None):
+        return None
+    plan = _first_or_none(getattr(p, "data", None))
+    if not plan:
+        return None
+    return {"subscription": sub, "plan": plan}
+
+
+def _get_best_active_plan_for_profile(profile: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    supabase = get_service_client()
+    res = (
+        supabase.table(SUBSCRIPTION_PLANS_TABLE)
+        .select("*")
+        .eq("active_status", True)
+        .order("updated_at", desc=True)
+        .order("created_at", desc=True)
+        .limit(200)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        return None
+    rows = [r for r in (getattr(res, "data", None) or []) if isinstance(r, dict)]
+    if not rows:
+        return None
+
+    now_dt = datetime.utcnow()
+
+    def _is_not_expired(plan_row: Dict[str, Any]) -> bool:
+        raw = plan_row.get("availability_expires_at")
+        if not raw:
+            return True
+        try:
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+            return dt >= now_dt
+        except Exception:
+            return True
+
+    def _specificity(plan_row: Dict[str, Any]) -> int:
+        score = 0
+        if _to_uuid_str(plan_row.get("applicable_college")):
+            score += 1
+        if _to_uuid_str(plan_row.get("applicable_degree")):
+            score += 1
+        if _to_uuid_str(plan_row.get("applicable_department")):
+            score += 1
+        if _to_uuid_str(plan_row.get("applicable_batch")):
+            score += 1
+        if plan_row.get("applicable_semester") is not None:
+            score += 1
+        return score
+
+    def _sort_time(plan_row: Dict[str, Any]) -> str:
+        return str(plan_row.get("updated_at") or plan_row.get("created_at") or "")
+
+    candidates = []
+    for row in rows:
+        if not _is_not_expired(row):
+            continue
+        if not _validate_plan_scope(row, profile):
+            continue
+        candidates.append(row)
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda r: (_specificity(r), _sort_time(r)), reverse=True)
+    return candidates[0]
+
+
+def _resolve_free_limit_rule(profile: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    supabase = get_service_client()
+    base_res = (
+        supabase.table(USAGE_LIMIT_RULES_TABLE)
+        .select("*")
+        .eq("active_status", True)
+        .eq("apply_to_free_users", True)
+        .order("updated_at", desc=True)
+        .limit(200)
+        .execute()
+    )
+    if getattr(base_res, "error", None):
+        return None
+    rows = getattr(base_res, "data", []) or []
+    if not rows:
+        return None
+
+    profile_college = _to_uuid_str((profile or {}).get("college_id"))
+    profile_dept = _to_uuid_str((profile or {}).get("department_id"))
+    profile_batch = _to_uuid_str((profile or {}).get("batch_id"))
+    profile_sem = (profile or {}).get("semester")
+    profile_degree = _get_user_degree_id(profile)
+
+    def _score(row: Dict[str, Any]) -> int:
+        scope = str(row.get("scope_type") or "global").strip().lower()
+        if scope == "department":
+            return 6 if _to_uuid_str(row.get("scope_department_id")) == profile_dept else -1
+        if scope == "batch":
+            return 5 if _to_uuid_str(row.get("scope_batch_id")) == profile_batch else -1
+        if scope == "degree":
+            return 4 if _to_uuid_str(row.get("scope_degree_id")) == profile_degree else -1
+        if scope == "college":
+            return 3 if _to_uuid_str(row.get("scope_college_id")) == profile_college else -1
+        if scope == "semester":
+            return 2 if row.get("scope_semester") is not None and str(row.get("scope_semester")) == str(profile_sem or "") else -1
+        if scope == "global":
+            return 1
+        return -1
+
+    best: Optional[Tuple[int, Dict[str, Any]]] = None
+    for row in rows:
+        s = _score(row)
+        if s < 0:
+            continue
+        if best is None or s > best[0]:
+            best = (s, row)
+    return best[1] if best else None
+
+
+def _upsert_daily_counter(auth_user_id: str, action: str, increment: int, max_allowed: Optional[int]) -> Dict[str, Any]:
+    today_str = date.today().isoformat()
+    col = _ACTION_COUNTER_COLUMN[action]
+    supabase = get_service_client()
+
+    current_res = (
+        supabase.table(USAGE_DAILY_COUNTERS_TABLE)
+        .select("*")
+        .eq("auth_user_id", auth_user_id)
+        .eq("usage_date", today_str)
+        .limit(1)
+        .execute()
+    )
+    if getattr(current_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Usage counter read failed: {current_res.error}")
+    current_row = _first_or_none(getattr(current_res, "data", None)) or {}
+    current_value = int(current_row.get(col) or 0)
+    next_value = current_value + int(increment)
+
+    if max_allowed is not None and next_value > int(max_allowed):
+        return {
+            "allowed": False,
+            "current": current_value,
+            "next": next_value,
+            "remaining": max(0, int(max_allowed) - current_value),
+            "limit": int(max_allowed),
+        }
+
+    now_iso = _admin_now_iso()
+    if current_row and current_row.get("id"):
+        upd = (
+            supabase.table(USAGE_DAILY_COUNTERS_TABLE)
+            .update({col: next_value, "updated_at": now_iso})
+            .eq("id", current_row.get("id"))
+            .execute()
+        )
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Usage counter update failed: {upd.error}")
+    else:
+        ins_payload = {
+            "auth_user_id": auth_user_id,
+            "usage_date": today_str,
+            "topics_opened": 0,
+            "subjects_opened": 0,
+            "mcq_attempts": 0,
+            "blink_views": 0,
+            "searches": 0,
+            "ai_prompts": 0,
+            "session_seconds": 0,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+            col: next_value,
+        }
+        ins = supabase.table(USAGE_DAILY_COUNTERS_TABLE).insert(ins_payload).execute()
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Usage counter insert failed: {ins.error}")
+
+    return {
+        "allowed": True,
+        "current": current_value,
+        "next": next_value,
+        "remaining": None if max_allowed is None else max(0, int(max_allowed) - next_value),
+        "limit": max_allowed,
+    }
+
+
+def _resolve_effective_access(auth_user_id: str) -> Dict[str, Any]:
+    profile = _get_user_profile_scope(auth_user_id)
+    override = _get_manual_override(auth_user_id) or {}
+
+    if bool(override.get("is_blocked")):
+        return {
+            "blocked": True,
+            "tier": "blocked",
+            "reason": "User is blocked by manual override",
+            "profile": profile,
+            "override": override,
+        }
+
+    now_dt = datetime.utcnow()
+    forced_plan = None
+    forced_plan_id = _to_uuid_str(override.get("force_plan_id"))
+    forced_until_raw = override.get("force_plan_until")
+    forced_until_ok = False
+    if forced_until_raw:
+        try:
+            forced_until_dt = datetime.fromisoformat(str(forced_until_raw).replace("Z", "+00:00"))
+            if forced_until_dt.tzinfo is not None:
+                forced_until_dt = forced_until_dt.replace(tzinfo=None)
+            forced_until_ok = forced_until_dt >= now_dt
+        except Exception:
+            forced_until_ok = False
+
+    if bool(override.get("grant_premium")) and forced_plan_id and forced_until_ok:
+        supabase = get_service_client()
+        pr = (
+            supabase.table(SUBSCRIPTION_PLANS_TABLE)
+            .select("*")
+            .eq("id", forced_plan_id)
+            .eq("active_status", True)
+            .limit(1)
+            .execute()
+        )
+        if not getattr(pr, "error", None):
+            forced_plan = _first_or_none(getattr(pr, "data", None))
+
+    active_sub_bundle = None if forced_plan else _get_active_subscription_with_plan(auth_user_id)
+    active_plan = forced_plan or (active_sub_bundle or {}).get("plan")
+
+    if not active_plan:
+        active_plan = _get_best_active_plan_for_profile(profile)
+
+    if active_plan and not _validate_plan_scope(active_plan, profile):
+        active_plan = None
+
+    if active_plan:
+        return {
+            "blocked": False,
+            "tier": "paid",
+            "plan": active_plan,
+            "subscription": (active_sub_bundle or {}).get("subscription"),
+            "profile": profile,
+            "override": override,
+            "free_rule": None,
+        }
+
+    free_rule = _resolve_free_limit_rule(profile)
+    return {
+        "blocked": False,
+        "tier": "free",
+        "plan": None,
+        "subscription": None,
+        "profile": profile,
+        "override": override,
+        "free_rule": free_rule,
+    }
+
+
+@academics_router.get("/api/admin/plans", summary="Admin: list subscription plans")
+def admin_list_plans(authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    try:
+        res = _supabase_retry(
+            lambda: supabase.table(SUBSCRIPTION_PLANS_TABLE).select("*").order("created_at", desc=True).execute(),
+            retries=3,
+            base_delay=0.35,
+        )
+    except RETRYABLE_EXCEPTIONS as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Plans service temporarily unavailable. Please retry. ({type(exc).__name__})",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list plans: {exc}")
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Failed to list plans: {res.error}")
+    return {"plans": getattr(res, "data", []) or []}
+
+
+@academics_router.post("/api/admin/plans", summary="Admin: create subscription plan")
+def admin_create_plan(payload: PlanCreateIn, authorization: Optional[str] = Header(default=None)):
+    uid, _ = _require_admin(authorization)
+    supabase = get_service_client()
+    code = _build_unique_plan_code(supabase, payload.plan_code or payload.name)
+    now_iso = _admin_now_iso()
+    row = {
+        "plan_code": code,
+        "name": payload.name,
+        "description": payload.description,
+        "price_inr": payload.price_inr,
+        "duration_days": payload.duration_days,
+        "active_status": payload.active_status,
+        "unlimited_topics": payload.unlimited_topics,
+        "max_topics_per_day": payload.max_topics_per_day,
+        "max_subjects_per_day": payload.max_subjects_per_day,
+        "mcq_access": payload.mcq_access,
+        "blink_access": payload.blink_access,
+        "ai_chat_access": payload.ai_chat_access,
+        "pdf_download": payload.pdf_download,
+        "print_discount_percent": payload.print_discount_percent,
+        "leaderboard_access": payload.leaderboard_access,
+        "applicable_college": _to_uuid_str(payload.applicable_college),
+        "applicable_degree": _to_uuid_str(payload.applicable_degree),
+        "applicable_department": _to_uuid_str(payload.applicable_department),
+        "applicable_batch": _to_uuid_str(payload.applicable_batch),
+        "applicable_semester": payload.applicable_semester,
+        "early_bird_tag": payload.early_bird_tag,
+        "availability_expires_at": payload.availability_expires_at.isoformat() if payload.availability_expires_at else None,
+        "coupon_enabled": payload.coupon_enabled,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+        "created_by": uid,
+        "updated_by": uid,
+    }
+    ins = supabase.table(SUBSCRIPTION_PLANS_TABLE).insert(_supabase_payload(row)).execute()
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Failed to create plan: {ins.error}")
+    return {"plan": _first_or_none(getattr(ins, "data", None))}
+
+
+@academics_router.put("/api/admin/plans/{plan_id}", summary="Admin: update subscription plan")
+def admin_update_plan(plan_id: str, payload: PlanUpdateIn, authorization: Optional[str] = Header(default=None)):
+    uid, _ = _require_admin(authorization)
+    plan_uuid = _to_uuid_str(plan_id)
+    if not plan_uuid:
+        raise HTTPException(status_code=400, detail="Invalid plan id")
+    updates = payload.dict(exclude_unset=True)
+    if "applicable_college" in updates:
+        updates["applicable_college"] = _to_uuid_str(updates.get("applicable_college"))
+    if "applicable_degree" in updates:
+        updates["applicable_degree"] = _to_uuid_str(updates.get("applicable_degree"))
+    if "applicable_department" in updates:
+        updates["applicable_department"] = _to_uuid_str(updates.get("applicable_department"))
+    if "applicable_batch" in updates:
+        updates["applicable_batch"] = _to_uuid_str(updates.get("applicable_batch"))
+    if "availability_expires_at" in updates and updates.get("availability_expires_at"):
+        updates["availability_expires_at"] = updates["availability_expires_at"].isoformat()
+    updates["updated_at"] = _admin_now_iso()
+    updates["updated_by"] = uid
+    supabase = get_service_client()
+    upd = supabase.table(SUBSCRIPTION_PLANS_TABLE).update(_supabase_payload(updates)).eq("id", plan_uuid).execute()
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Failed to update plan: {upd.error}")
+    return {"ok": True}
+
+
+@academics_router.post("/api/admin/plans/{plan_id}/duplicate", summary="Admin: duplicate subscription plan")
+def admin_duplicate_plan(plan_id: str, authorization: Optional[str] = Header(default=None)):
+    uid, _ = _require_admin(authorization)
+    plan_uuid = _to_uuid_str(plan_id)
+    if not plan_uuid:
+        raise HTTPException(status_code=400, detail="Invalid plan id")
+    supabase = get_service_client()
+    r = supabase.table(SUBSCRIPTION_PLANS_TABLE).select("*").eq("id", plan_uuid).limit(1).execute()
+    if getattr(r, "error", None):
+        raise HTTPException(status_code=500, detail=f"Plan read failed: {r.error}")
+    base = _first_or_none(getattr(r, "data", None))
+    if not base:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    now_iso = _admin_now_iso()
+    clone = dict(base)
+    clone.pop("id", None)
+    clone["plan_code"] = _slug_plan_code(f"{base.get('plan_code')}-copy-{int(time.time())}")
+    clone["name"] = f"{base.get('name') or 'Plan'} (Copy)"
+    clone["created_at"] = now_iso
+    clone["updated_at"] = now_iso
+    clone["created_by"] = uid
+    clone["updated_by"] = uid
+    ins = supabase.table(SUBSCRIPTION_PLANS_TABLE).insert(_supabase_payload(clone)).execute()
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Duplicate failed: {ins.error}")
+    return {"plan": _first_or_none(getattr(ins, "data", None))}
+
+
+@academics_router.post("/api/admin/plans/{plan_id}/disable", summary="Admin: enable/disable plan")
+def admin_disable_plan(plan_id: str, active: bool = Query(default=False), authorization: Optional[str] = Header(default=None)):
+    uid, _ = _require_admin(authorization)
+    plan_uuid = _to_uuid_str(plan_id)
+    if not plan_uuid:
+        raise HTTPException(status_code=400, detail="Invalid plan id")
+    supabase = get_service_client()
+    upd = (
+        supabase.table(SUBSCRIPTION_PLANS_TABLE)
+        .update({"active_status": bool(active), "updated_at": _admin_now_iso(), "updated_by": uid})
+        .eq("id", plan_uuid)
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Failed to change status: {upd.error}")
+    return {"ok": True, "active_status": bool(active)}
+
+
+@academics_router.delete("/api/admin/plans/{plan_id}", summary="Admin: delete plan")
+def admin_delete_plan(plan_id: str, authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    plan_uuid = _to_uuid_str(plan_id)
+    if not plan_uuid:
+        raise HTTPException(status_code=400, detail="Invalid plan id")
+    supabase = get_service_client()
+    use_q = (
+        supabase.table(USER_PLAN_SUBSCRIPTIONS_TABLE)
+        .select("id", count="exact")
+        .eq("plan_id", plan_uuid)
+        .limit(1)
+        .execute()
+    )
+    use_count = 0
+    try:
+        use_count = int(getattr(use_q, "count", 0) or 0)
+    except Exception:
+        use_count = 0
+    if use_count > 0:
+        raise HTTPException(status_code=409, detail="Plan is referenced by subscriptions; disable instead of delete")
+    d = supabase.table(SUBSCRIPTION_PLANS_TABLE).delete().eq("id", plan_uuid).execute()
+    if getattr(d, "error", None):
+        raise HTTPException(status_code=500, detail=f"Delete failed: {d.error}")
+    return {"ok": True}
+
+
+@academics_router.get("/api/admin/usage-limits", summary="Admin: list usage limit rules")
+def admin_list_usage_limits(authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    r = supabase.table(USAGE_LIMIT_RULES_TABLE).select("*").order("updated_at", desc=True).execute()
+    if getattr(r, "error", None):
+        raise HTTPException(status_code=500, detail=f"Failed to list usage rules: {r.error}")
+    return {"rules": getattr(r, "data", []) or []}
+
+
+@academics_router.post("/api/admin/usage-limits", summary="Admin: create usage limit rule")
+def admin_create_usage_limit(payload: UsageLimitRuleIn, authorization: Optional[str] = Header(default=None)):
+    uid, _ = _require_admin(authorization)
+    supabase = get_service_client()
+    now_iso = _admin_now_iso()
+    row = payload.dict()
+    row["scope_college_id"] = _to_uuid_str(row.get("scope_college_id"))
+    row["scope_degree_id"] = _to_uuid_str(row.get("scope_degree_id"))
+    row["scope_department_id"] = _to_uuid_str(row.get("scope_department_id"))
+    row["scope_batch_id"] = _to_uuid_str(row.get("scope_batch_id"))
+    row["created_at"] = now_iso
+    row["updated_at"] = now_iso
+    row["created_by"] = uid
+    row["updated_by"] = uid
+    ins = supabase.table(USAGE_LIMIT_RULES_TABLE).insert(_supabase_payload(row)).execute()
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Create usage rule failed: {ins.error}")
+    return {"rule": _first_or_none(getattr(ins, "data", None))}
+
+
+@academics_router.put("/api/admin/usage-limits/{rule_id}", summary="Admin: update usage limit rule")
+def admin_update_usage_limit(rule_id: str, payload: UsageLimitRuleUpdateIn, authorization: Optional[str] = Header(default=None)):
+    uid, _ = _require_admin(authorization)
+    rid = _to_uuid_str(rule_id)
+    if not rid:
+        raise HTTPException(status_code=400, detail="Invalid rule id")
+    updates = payload.dict(exclude_unset=True)
+    updates["updated_at"] = _admin_now_iso()
+    updates["updated_by"] = uid
+    supabase = get_service_client()
+    upd = supabase.table(USAGE_LIMIT_RULES_TABLE).update(_supabase_payload(updates)).eq("id", rid).execute()
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Update usage rule failed: {upd.error}")
+    return {"ok": True}
+
+
+@academics_router.delete("/api/admin/usage-limits/{rule_id}", summary="Admin: delete usage limit rule")
+def admin_delete_usage_limit(rule_id: str, authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    rid = _to_uuid_str(rule_id)
+    if not rid:
+        raise HTTPException(status_code=400, detail="Invalid rule id")
+    supabase = get_service_client()
+    d = supabase.table(USAGE_LIMIT_RULES_TABLE).delete().eq("id", rid).execute()
+    if getattr(d, "error", None):
+        raise HTTPException(status_code=500, detail=f"Delete usage rule failed: {d.error}")
+    return {"ok": True}
+
+
+@academics_router.get("/api/admin/manual-access/search", summary="Admin: search users for manual access")
+def admin_manual_access_search(
+    authorization: Optional[str] = Header(default=None),
+    q: Optional[str] = Query(default=None, max_length=120),
+    department_id: Optional[str] = Query(default=None),
+    batch_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=1000),
+):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    builder = (
+        supabase.table("user_profiles")
+        .select("auth_user_id,name,email,phone,department_id,batch_id,college_id,semester,regno,created_at")
+        .order("created_at", desc=True)
+        .limit(limit)
+    )
+    if q:
+        pattern = f"%{q.strip()}%"
+        builder = builder.or_(f"name.ilike.{pattern},email.ilike.{pattern},phone.ilike.{pattern},regno.ilike.{pattern}")
+    if _to_uuid_str(department_id):
+        builder = builder.eq("department_id", _to_uuid_str(department_id))
+    if _to_uuid_str(batch_id):
+        builder = builder.eq("batch_id", _to_uuid_str(batch_id))
+    res = builder.execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"User search failed: {res.error}")
+    return {"users": getattr(res, "data", []) or []}
+
+
+@academics_router.get("/api/admin/manual-access/{auth_user_id}", summary="Admin: get manual access state")
+def admin_manual_access_get(auth_user_id: str, authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    uid = _to_uuid_str(auth_user_id)
+    if not uid:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    effective = _resolve_effective_access(uid)
+    override = _get_manual_override(uid)
+    return {
+        "auth_user_id": uid,
+        "override": override,
+        "effective": effective,
+    }
+
+
+def _upsert_manual_override(uid: str, patch: Dict[str, Any], admin_uid: str) -> None:
+    supabase = get_service_client()
+    now_iso = _admin_now_iso()
+    existing = (
+        supabase.table(MANUAL_ACCESS_OVERRIDES_TABLE)
+        .select("id")
+        .eq("auth_user_id", uid)
+        .limit(1)
+        .execute()
+    )
+    if getattr(existing, "error", None):
+        raise HTTPException(status_code=500, detail=f"Manual override read failed: {existing.error}")
+    row = _first_or_none(getattr(existing, "data", None))
+    payload = {**patch, "updated_at": now_iso, "updated_by": admin_uid}
+    if row and row.get("id"):
+        upd = (
+            supabase.table(MANUAL_ACCESS_OVERRIDES_TABLE)
+            .update(_supabase_payload(payload))
+            .eq("id", row.get("id"))
+            .execute()
+        )
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Manual override update failed: {upd.error}")
+    else:
+        ins = (
+            supabase.table(MANUAL_ACCESS_OVERRIDES_TABLE)
+            .insert(_supabase_payload({"auth_user_id": uid, "created_at": now_iso, **payload}))
+            .execute()
+        )
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Manual override create failed: {ins.error}")
+
+
+def _create_or_replace_subscription(uid: str, plan_id: str, days: int, admin_uid: str, notes: Optional[str], source: str = "manual") -> Dict[str, Any]:
+    supabase = get_service_client()
+    now = datetime.utcnow()
+    now_iso = now.isoformat() + "Z"
+    end_iso = (now + timedelta(days=int(days))).isoformat() + "Z"
+
+    _ = (
+        supabase.table(USER_PLAN_SUBSCRIPTIONS_TABLE)
+        .update({"status": "expired", "updated_at": now_iso})
+        .eq("auth_user_id", uid)
+        .eq("status", "active")
+        .execute()
+    )
+
+    payload = {
+        "auth_user_id": uid,
+        "plan_id": plan_id,
+        "status": "active",
+        "start_at": now_iso,
+        "end_at": end_iso,
+        "source": source,
+        "notes": notes,
+        "granted_by": admin_uid,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    ins = supabase.table(USER_PLAN_SUBSCRIPTIONS_TABLE).insert(_supabase_payload(payload)).execute()
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Subscription update failed: {ins.error}")
+    return _first_or_none(getattr(ins, "data", None)) or payload
+
+
+@academics_router.post("/api/admin/manual-access/{auth_user_id}/action", summary="Admin: execute manual access action")
+def admin_manual_access_action(auth_user_id: str, payload: ManualAccessActionIn, authorization: Optional[str] = Header(default=None)):
+    admin_uid, _ = _require_admin(authorization)
+    uid = _to_uuid_str(auth_user_id)
+    if not uid:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+
+    plan_uuid = _to_uuid_str(payload.plan_id)
+    dept_uuid = _to_uuid_str(payload.department_id)
+    days = int(payload.days or 30)
+
+    if payload.action in {"grant_premium", "change_plan"} and not plan_uuid:
+        raise HTTPException(status_code=400, detail="plan_id is required")
+
+    if payload.action == "grant_premium":
+        sub = _create_or_replace_subscription(uid, plan_uuid, days, admin_uid, payload.notes, source="manual_grant")
+        _upsert_manual_override(
+            uid,
+            {
+                "grant_premium": True,
+                "force_plan_id": plan_uuid,
+                "force_plan_until": sub.get("end_at"),
+                "notes": payload.notes,
+            },
+            admin_uid,
+        )
+    elif payload.action == "extend_subscription":
+        supabase = get_service_client()
+        current = _get_active_subscription_with_plan(uid)
+        if not current:
+            raise HTTPException(status_code=404, detail="No active subscription to extend")
+        sub = current.get("subscription") or {}
+        end_raw = sub.get("end_at")
+        if not end_raw:
+            raise HTTPException(status_code=400, detail="Active subscription has no end date")
+        try:
+            end_dt = datetime.fromisoformat(str(end_raw).replace("Z", "+00:00"))
+            if end_dt.tzinfo is not None:
+                end_dt = end_dt.replace(tzinfo=None)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid subscription end date")
+        new_end = end_dt + timedelta(days=days)
+        upd = (
+            supabase.table(USER_PLAN_SUBSCRIPTIONS_TABLE)
+            .update({"end_at": new_end.isoformat() + "Z", "updated_at": _admin_now_iso(), "notes": payload.notes})
+            .eq("id", sub.get("id"))
+            .execute()
+        )
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Extend subscription failed: {upd.error}")
+    elif payload.action == "change_plan":
+        _ = _create_or_replace_subscription(uid, plan_uuid, days, admin_uid, payload.notes, source="manual_change")
+    elif payload.action == "reset_daily_usage":
+        supabase = get_service_client()
+        today_str = date.today().isoformat()
+        d = (
+            supabase.table(USAGE_DAILY_COUNTERS_TABLE)
+            .delete()
+            .eq("auth_user_id", uid)
+            .eq("usage_date", today_str)
+            .execute()
+        )
+        if getattr(d, "error", None):
+            raise HTTPException(status_code=500, detail=f"Reset daily usage failed: {d.error}")
+    elif payload.action == "block_user":
+        _upsert_manual_override(uid, {"is_blocked": bool(payload.value), "notes": payload.notes}, admin_uid)
+    elif payload.action == "mark_refund":
+        _upsert_manual_override(uid, {"refund_marked": bool(payload.value), "notes": payload.notes}, admin_uid)
+    elif payload.action == "mark_ambassador":
+        _upsert_manual_override(uid, {"campus_ambassador": bool(payload.value), "notes": payload.notes}, admin_uid)
+    elif payload.action == "change_department":
+        if not dept_uuid:
+            raise HTTPException(status_code=400, detail="department_id is required")
+        supabase = get_service_client()
+        upd = supabase.table("user_profiles").update({"department_id": dept_uuid, "updated_at": _admin_now_iso()}).eq("auth_user_id", uid).execute()
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Department update failed: {upd.error}")
+        _upsert_manual_override(uid, {"department_id_override": dept_uuid, "notes": payload.notes}, admin_uid)
+
+    return {"ok": True, "auth_user_id": uid, "action": payload.action}
+
+
+@academics_router.post("/api/access/check-and-consume", summary="Server-side access decision and usage consumption")
+def access_check_and_consume(payload: AccessCheckIn, authorization: Optional[str] = Header(default=None)):
+    user_id, _ = _get_auth_user(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Missing auth user")
+
+    effective = _resolve_effective_access(str(user_id))
+    if effective.get("blocked"):
+        return {
+            "allowed": False,
+            "reason": effective.get("reason") or "Blocked",
+            "tier": "blocked",
+            "remaining": 0,
+        }
+
+    action = payload.action
+    tier = str(effective.get("tier") or "free")
+    plan = effective.get("plan") or {}
+    free_rule = effective.get("free_rule") or {}
+    profile = effective.get("profile") or {}
+    override = effective.get("override") or {}
+
+    if bool(override.get("reset_usage_on_next_check")):
+        supabase = get_service_client()
+        today_str = date.today().isoformat()
+        _ = (
+            supabase.table(USAGE_DAILY_COUNTERS_TABLE)
+            .delete()
+            .eq("auth_user_id", str(user_id))
+            .eq("usage_date", today_str)
+            .execute()
+        )
+        _upsert_manual_override(str(user_id), {"reset_usage_on_next_check": False}, str(user_id))
+
+    limit_source = plan if tier == "paid" else free_rule
+
+    if action == "mcq_attempt" and tier == "paid" and not bool(plan.get("mcq_access", True)):
+        return {"allowed": False, "reason": "MCQ access disabled for this plan", "tier": tier}
+    if action == "blink_view" and tier == "paid" and not bool(plan.get("blink_access", True)):
+        return {"allowed": False, "reason": "Blink access disabled for this plan", "tier": tier}
+    if action == "ai_prompt" and tier == "paid" and not bool(plan.get("ai_chat_access", True)):
+        return {"allowed": False, "reason": "AI chat access disabled for this plan", "tier": tier}
+
+    if tier == "paid" and bool(plan.get("unlimited_topics")) and action in {"topic_open", "subject_open"}:
+        return {
+            "allowed": True,
+            "reason": "Unlimited topics for active plan",
+            "tier": tier,
+            "remaining": None,
+            "profile": profile,
+        }
+
+    limit_col = _ACTION_LIMIT_COLUMN.get(action)
+    max_allowed = None
+    if limit_col:
+        raw_limit = (limit_source or {}).get(limit_col)
+        if raw_limit is not None:
+            try:
+                max_allowed = int(raw_limit)
+            except Exception:
+                max_allowed = None
+
+    if not payload.consume:
+        return {
+            "allowed": True if max_allowed is None else True,
+            "tier": tier,
+            "limit": max_allowed,
+            "reason": "Dry run",
+        }
+
+    counter_result = _upsert_daily_counter(str(user_id), action, payload.increment, max_allowed)
+    if not counter_result.get("allowed"):
+        return {
+            "allowed": False,
+            "tier": tier,
+            "reason": f"Daily limit reached for {action}",
+            "limit": counter_result.get("limit"),
+            "remaining": counter_result.get("remaining"),
+            "current": counter_result.get("current"),
+        }
+
+    return {
+        "allowed": True,
+        "tier": tier,
+        "reason": "Allowed",
+        "limit": counter_result.get("limit"),
+        "remaining": counter_result.get("remaining"),
+        "current": counter_result.get("next"),
+    }
+
+
+@academics_router.get("/api/access/summary", summary="Get effective access summary for current user")
+def access_summary(authorization: Optional[str] = Header(default=None)):
+    user_id, _ = _get_auth_user(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Missing auth user")
+    return _resolve_effective_access(str(user_id))
+
+
 def _count_admins(supabase) -> int:
     try:
         resp = supabase.table("admin_roles").select("role", count='exact').eq("role", "admin").execute()
@@ -22231,9 +23291,11 @@ def create_app() -> FastAPI:
             "http://127.0.0.1:8000",
             "http://localhost:5500",
             "http://localhost:8000",
+            "http://localhost:8001",
             "http://localhost",
+            "null",
         ],
-        allow_origin_regex=r"https://([a-z0-9-]+\.)*paperx\.tech",
+        allow_origin_regex=r"^(https://([a-z0-9-]+\.)*paperx\.tech|https?://(localhost|127\.0\.0\.1)(:\d+)?|vscode-webview://.*|null)$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
