@@ -7,6 +7,7 @@ import enum
 import io
 import json
 import logging
+import mimetypes
 import os
 import random
 import re
@@ -18,6 +19,7 @@ import uuid
 import math
 import sqlite3
 import ast
+import importlib
 from dataclasses import dataclass, field
 from datetime import datetime, date, timezone
 from decimal import Decimal
@@ -35,6 +37,31 @@ try:
 except ImportError:
     genai = None
     types = None
+
+try:
+    import google.cloud.storage as gcs_storage
+except Exception:
+    gcs_storage = None
+
+try:
+    from google.cloud.storage import Client as GCSStorageClient
+except Exception:
+    GCSStorageClient = None
+
+try:
+    from google.oauth2 import service_account
+except Exception:
+    service_account = None
+
+try:
+    from google.auth.transport.requests import Request as GoogleAuthRequest
+except Exception:
+    GoogleAuthRequest = None
+
+try:
+    from google.auth import default as google_auth_default
+except Exception:
+    google_auth_default = None
 
 
 from autogen_agentchat.agents import AssistantAgent
@@ -22105,26 +22132,6 @@ def get_leaderboard(
 def create_app() -> FastAPI:
     app = FastAPI(title="PaperX Unified API", version="1.0.0")
 
-    # CORS: allow dev origins and support Authorization header
-    # Note: Using allow_origin_regex to correctly echo Origin when credentials are enabled.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "https://paperx.tech",
-            "https://www.paperx.tech",
-            "https://squid-app-6jvdq.ondigitalocean.app",
-            "https://uppzpkmpxgyipjzcskva.supabase.co",
-            "http://127.0.0.1:5500",
-            "http://127.0.0.1:8000",
-            "http://localhost:5500",
-            "http://localhost:8000",
-            "http://localhost",
-        ],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
     # Compress large HTML/CSS/JS/JSON responses to reduce bandwidth
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
@@ -22210,6 +22217,27 @@ def create_app() -> FastAPI:
     if assets_dir.is_dir():
         # Serve at /assets so front-end references like ../assets/... resolve
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    # CORS should be registered last so it wraps all other middleware and adds
+    # CORS headers even for error responses generated deeper in the stack.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "https://paperx.tech",
+            "https://www.paperx.tech",
+            "https://starfish-app-mu3b8.ondigitalocean.app",
+            "https://uppzpkmpxgyipjzcskva.supabase.co",
+            "http://127.0.0.1:5500",
+            "http://127.0.0.1:8000",
+            "http://localhost:5500",
+            "http://localhost:8000",
+            "http://localhost",
+        ],
+        allow_origin_regex=r"https://([a-z0-9-]+\.)*paperx\.tech",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     return app
 
@@ -23138,6 +23166,10 @@ async def run_java_compiler(request: CompilerRequest):
 _BLINK_LINK_CACHE_TTL_S = max(1, int(os.getenv("BLINK_LINK_CACHE_TTL_SECONDS", "45") or "45"))
 _BLINK_LINK_CACHE_MAX_ENTRIES = max(100, int(os.getenv("BLINK_LINK_CACHE_MAX_ENTRIES", "5000") or "5000"))
 _BLINK_LINK_FALLBACK_CONCURRENCY = max(1, int(os.getenv("BLINK_LINK_FALLBACK_CONCURRENCY", "6") or "6"))
+_SELECTED_IMAGE_GEN_TIMEOUT_S = max(20, int(os.getenv("SELECTED_IMAGE_GEN_TIMEOUT_SECONDS", "120") or "120"))
+_SELECTED_IMAGE_MAX_INPUT_CHARS = max(200, int(os.getenv("SELECTED_IMAGE_MAX_INPUT_CHARS", "1200") or "1200"))
+_SELECTED_IMAGE_MODEL = (os.getenv("SELECTED_IMAGE_MODEL", "gemini-3.1-flash-image-preview") or "gemini-3.1-flash-image-preview").strip()
+_SELECTED_IMAGE_SIZE = (os.getenv("SELECTED_IMAGE_SIZE", "1K") or "1K").strip()
 _blink_link_cache: Dict[str, Tuple[float, str, str]] = {}
 _blink_link_cache_lock = Lock()
 
@@ -23184,6 +23216,209 @@ class SelectedImageStoreRequest(BaseModel):
     topic: str = Field(..., min_length=1, description="Topic name")
     image_url: str = Field(..., min_length=1, description="Generated image URL")
     selected_text: Optional[str] = None
+
+
+GCS_IMAGE_BUCKET = os.getenv("GCS_IMAGE_BUCKET", "paperx-pro").strip() or "paperx-pro"
+GCS_LOCAL_SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR, "service_account_key.json")
+
+
+def _resolve_gcs_client_class():
+    errors: List[str] = []
+
+    if GCSStorageClient is not None:
+        return GCSStorageClient
+
+    if gcs_storage is not None:
+        cls = getattr(gcs_storage, "Client", None)
+        if cls is not None:
+            return cls
+        errors.append("google.cloud.storage imported but Client attribute missing")
+    else:
+        errors.append("google.cloud.storage import unavailable at module load")
+
+    try:
+        mod_client = importlib.import_module("google.cloud.storage.client")
+        cls = getattr(mod_client, "Client", None)
+        if cls is not None:
+            return cls
+        errors.append("google.cloud.storage.client imported but Client missing")
+    except Exception as e:
+        errors.append(f"import google.cloud.storage.client failed: {e}")
+
+    try:
+        mod_storage = importlib.import_module("google.cloud.storage")
+        cls = getattr(mod_storage, "Client", None)
+        if cls is not None:
+            return cls
+        errors.append("import google.cloud.storage succeeded but Client missing")
+    except Exception as e:
+        errors.append(f"import google.cloud.storage failed: {e}")
+
+    raise RuntimeError("google-cloud-storage client not available. " + " | ".join(errors))
+
+
+@lru_cache(maxsize=1)
+def _load_local_service_account_info() -> Optional[Dict[str, Any]]:
+    if not os.path.isfile(GCS_LOCAL_SERVICE_ACCOUNT_FILE):
+        return None
+    try:
+        with open(GCS_LOCAL_SERVICE_ACCOUNT_FILE, "r", encoding="utf-8") as fh:
+            parsed = json.load(fh)
+        if isinstance(parsed, dict) and parsed.get("type") == "service_account":
+            return parsed
+    except Exception:
+        return None
+    return None
+
+
+def _resolve_gcs_credentials_file() -> Optional[str]:
+    default_key = os.path.join(BASE_DIR, "service_account_key.json")
+    if os.path.isfile(default_key):
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = default_key
+        return default_key
+
+    creds = (os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "").strip()
+    if creds:
+        candidate_paths = [creds]
+        if not os.path.isabs(creds):
+            candidate_paths.append(os.path.join(BASE_DIR, creds))
+            candidate_paths.append(os.path.abspath(creds))
+        for candidate in candidate_paths:
+            if os.path.isfile(candidate):
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = candidate
+                return candidate
+
+    creds_json = (os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.getenv("GCP_SERVICE_ACCOUNT_JSON") or "").strip()
+    if creds_json:
+        try:
+            parsed = json.loads(creds_json)
+            if isinstance(parsed, dict) and parsed.get("type") == "service_account":
+                fd, temp_path = tempfile.mkstemp(prefix="paperx-gcp-sa-", suffix=".json")
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    json.dump(parsed, fh)
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_path
+                return temp_path
+        except Exception:
+            pass
+
+    return None
+
+
+def _gcs_upload_via_json_api(
+    image_bytes: bytes,
+    *,
+    bucket_name: str,
+    object_path: str,
+    content_type: str,
+) -> Dict[str, str]:
+    scopes = ["https://www.googleapis.com/auth/devstorage.full_control"]
+    credentials = None
+
+    if service_account is not None:
+        info = _load_local_service_account_info()
+        if info:
+            credentials = service_account.Credentials.from_service_account_info(info, scopes=scopes)
+
+    creds_file = _resolve_gcs_credentials_file() if credentials is None else None
+    if creds_file and credentials is None and service_account is not None:
+        credentials = service_account.Credentials.from_service_account_file(creds_file, scopes=scopes)
+    elif credentials is None and google_auth_default is not None:
+        try:
+            credentials, _ = google_auth_default(scopes=scopes)
+        except Exception:
+            credentials = None
+
+    if credentials is None:
+        raise RuntimeError(
+            f"GCS credentials unavailable. Expected local service account file at: {GCS_LOCAL_SERVICE_ACCOUNT_FILE}"
+        )
+    if GoogleAuthRequest is None:
+        raise RuntimeError("google-auth transport is unavailable; install/repair google-auth package.")
+
+    credentials.refresh(GoogleAuthRequest())
+    token = getattr(credentials, "token", None)
+    if not token:
+        raise RuntimeError("Failed to obtain GCS access token")
+
+    upload_url = (
+        f"https://storage.googleapis.com/upload/storage/v1/b/{quote(bucket_name, safe='')}/o"
+        f"?uploadType=media&name={quote(object_path, safe='')}"
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": content_type,
+    }
+    response = requests.post(upload_url, headers=headers, data=image_bytes, timeout=45)
+    if response.status_code >= 400:
+        detail = response.text[:700] if response.text else f"HTTP {response.status_code}"
+        raise RuntimeError(f"GCS JSON API upload failed: {detail}")
+
+    return {
+        "bucket": bucket_name,
+        "gcs_path": object_path,
+        "public_url": f"https://storage.googleapis.com/{bucket_name}/{object_path}",
+        "content_type": content_type,
+    }
+
+
+@lru_cache(maxsize=1)
+def _get_gcs_bucket_for_images():
+    client_cls = _resolve_gcs_client_class()
+    client = None
+
+    if service_account is not None:
+        info = _load_local_service_account_info()
+        if info:
+            credentials = service_account.Credentials.from_service_account_info(info)
+            project_id = (info.get("project_id") or "").strip() or None
+            try:
+                client = client_cls(credentials=credentials, project=project_id)
+            except TypeError:
+                client = client_cls(credentials=credentials)
+
+    if client is None:
+        _resolve_gcs_credentials_file()
+        client = client_cls()
+
+    return client.bucket(GCS_IMAGE_BUCKET)
+
+
+def _upload_generated_image_to_gcs(image_bytes: bytes, *, original_name: str = "generated.png") -> Dict[str, str]:
+    if not image_bytes:
+        raise RuntimeError("No image bytes to upload")
+
+    guessed_content_type, _ = mimetypes.guess_type(original_name)
+    content_type = guessed_content_type or "image/png"
+    ext = os.path.splitext(original_name)[1].strip().lower() or ".png"
+    if len(ext) > 6 or not re.match(r"^\.[a-z0-9]+$", ext):
+        ext = ".png"
+
+    stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    object_path = f"img_gen/{stamp}_{uuid.uuid4().hex[:8]}{ext}"
+    try:
+        bucket = _get_gcs_bucket_for_images()
+        blob = bucket.blob(object_path)
+        blob.upload_from_string(image_bytes, content_type=content_type)
+        try:
+            blob.make_public()
+        except Exception as acl_err:
+            print(f"[SelImg] GCS make_public skipped/failed for {object_path}: {acl_err}")
+
+        public_url = blob.public_url or f"https://storage.googleapis.com/{bucket.name}/{object_path}"
+        return {
+            "bucket": bucket.name,
+            "gcs_path": object_path,
+            "public_url": public_url,
+            "content_type": content_type,
+        }
+    except Exception as lib_err:
+        print(f"[SelImg] google-cloud-storage path failed, trying JSON API fallback: {lib_err}")
+        return _gcs_upload_via_json_api(
+            image_bytes,
+            bucket_name=GCS_IMAGE_BUCKET,
+            object_path=object_path,
+            content_type=content_type,
+        )
 
 
 def _parse_topic_list_query(topics: Optional[str], topics_json: Optional[str]) -> List[str]:
@@ -23397,7 +23632,7 @@ async def generate_blink_endpoint(
             
             # Using user-provided structure specifically:
             chat = client_g.chats.create(
-                model="gemini-3-pro-image-preview", 
+                model="gemini-3.1-flash-image-preview", 
                 config=types.GenerateContentConfig(
                     response_modalities=['TEXT', 'IMAGE'],
                     tools=[{"google_search": {}}]
@@ -23457,7 +23692,7 @@ async def generate_blink_endpoint(
 @app.post("/api/blink/generate-selected")
 async def generate_selected_image_endpoint(req: SelectedImageRequest):
     """
-    Generate an illustration for selected note text and upload it to Supabase bucket `gen_img`.
+    Generate an illustration for selected note text and upload it to Google Cloud Storage.
     """
     selected_text = (req.selected_text or "").strip()
     if not selected_text:
@@ -23469,8 +23704,8 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
     if genai is None:
         print("Warning: google-genai not imported. Simulating or failing.")
 
-    trimmed = selected_text[:4000]
-    prompt = f"""Generate an illustration illustrating {trimmed}"""
+    trimmed = selected_text[:_SELECTED_IMAGE_MAX_INPUT_CHARS]
+    prompt = f"Create one clean educational illustration for: {trimmed}"
 
     try:
         def _generate_bytes_sync():
@@ -23479,10 +23714,9 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
 
             client_g = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
             chat = client_g.chats.create(
-                model="gemini-3-pro-image-preview",
+                model=_SELECTED_IMAGE_MODEL,
                 config=types.GenerateContentConfig(
-                    response_modalities=['TEXT', 'IMAGE'],
-                    tools=[{"google_search": {}}]
+                    response_modalities=['TEXT', 'IMAGE']
                 )
             )
 
@@ -23491,7 +23725,7 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
                 config=types.GenerateContentConfig(
                     image_config=types.ImageConfig(
                         aspect_ratio="16:9",
-                        image_size="1K"
+                        image_size=_SELECTED_IMAGE_SIZE
                     ),
                 )
             )
@@ -23504,30 +23738,38 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
 
             raise RuntimeError(f"No image part in response. Response text: {resp.text if hasattr(resp, 'text') else 'Unknown'}")
 
-        image_bytes = await run_in_threadpool(_generate_bytes_sync)
+        image_bytes = await asyncio.wait_for(
+            run_in_threadpool(_generate_bytes_sync),
+            timeout=_SELECTED_IMAGE_GEN_TIMEOUT_S,
+        )
 
-        filename = f"gen_img_{uuid.uuid4().hex[:8]}.png"
-        bucket_name = "gen_img"
-        supabase = get_service_client()
-
-        def _upload_sync():
-            supabase.storage.from_(bucket_name).upload(
-                path=filename,
-                file=image_bytes,
-                file_options={"content-type": "image/png"}
+        gcs_upload = await run_in_threadpool(
+            lambda: _upload_generated_image_to_gcs(
+                image_bytes,
+                original_name=f"selected_{uuid.uuid4().hex[:8]}.png",
             )
-            return supabase.storage.from_(bucket_name).get_public_url(filename)
-
-        public_url = await run_in_threadpool(_upload_sync)
+        )
+        public_url = (gcs_upload.get("public_url") or "").strip()
+        if not public_url:
+            raise RuntimeError("Failed to resolve public URL after GCS upload")
 
         return {
             "success": True,
             "url": public_url,
-            "filename": filename,
-            "bucket": bucket_name,
+            "public_url": public_url,
+            "bucket": gcs_upload.get("bucket") or GCS_IMAGE_BUCKET,
+            "gcs_path": gcs_upload.get("gcs_path"),
             "prompt": prompt
         }
 
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                f"Image generation timed out after {_SELECTED_IMAGE_GEN_TIMEOUT_S}s. "
+                "Increase SELECTED_IMAGE_GEN_TIMEOUT_SECONDS if your deployment allows longer requests."
+            ),
+        )
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -30122,7 +30364,7 @@ No markdown, no code blocks, no explanations — just JSON.
 
 @app.post("/api/ppt/generate-slide")
 async def ppt_generate_slide(body: PPTSlideRequest):
-    """Generate a single PPT slide image using gemini-3-pro-image-preview with reference designs."""
+    """Generate a single PPT slide image using gemini-3.1-flash-image-preview with reference designs."""
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="Gemini API key not configured")
     if not genai:
@@ -30205,7 +30447,7 @@ Generate this slide image now. Make it VISUALLY STUNNING with diagrams and infog
             contents = [prompt] + ref_images
 
             response = client_g.models.generate_content(
-                model="gemini-3-pro-image-preview",
+                model="gemini-3.1-flash-image-preview",
                 contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=['TEXT', 'IMAGE'],
