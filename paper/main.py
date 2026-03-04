@@ -7230,6 +7230,7 @@ def list_admin_users(
     batch_range: Optional[str] = Query(default=None, max_length=32),
     semester: Optional[int] = Query(default=None, ge=1, le=12),
     min_streak: Optional[int] = Query(default=None, ge=0, le=3650),
+    min_streak_overall: Optional[int] = Query(default=None, ge=0, le=3650),
     last_login_days: Optional[int] = Query(default=None, ge=1, le=3650),
 ):
     token = _parse_bearer_token(authorization)
@@ -7815,6 +7816,8 @@ def list_admin_users(
         filtered = [u for u in filtered if str(u.get("semester") or "") == str(semester)]
     if min_streak is not None:
         filtered = [u for u in filtered if int(u.get("current_streak") or 0) >= int(min_streak)]
+    if min_streak_overall is not None:
+        filtered = [u for u in filtered if int(u.get("longest_streak") or 0) >= int(min_streak_overall)]
     if last_login_days is not None:
         cutoff = datetime.utcnow() - timedelta(days=int(last_login_days))
 
