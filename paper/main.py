@@ -12660,11 +12660,13 @@ def delete_degree(degree_id: uuid.UUID, force: bool = False):
         stats["batches"] += int(batch_stats.get("batches", 0))
         stats["courses"] += int(batch_stats.get("courses", 0))
 
+        _detach_subscription_plans_from_department(supabase, dept_id_str)
         del_dept = supabase.table("departments").delete().eq("id", dept_id_str).execute()
         if getattr(del_dept, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (delete department): {del_dept.error}")
         stats["departments"] += 1
 
+    _detach_subscription_plans_from_degree(supabase, str(degree_id))
     del_deg = supabase.table("degrees").delete().eq("id", str(degree_id)).execute()
     if getattr(del_deg, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (delete degree): {del_deg.error}")
@@ -12847,12 +12849,61 @@ def _cascade_delete_department_batches(supabase: Client, department_id: uuid.UUI
             delete_course_cascade(uuid.UUID(course_id_str))
             stats["courses"] += 1
 
+        _detach_subscription_plans_from_batch(supabase, batch_id_str)
         batch_del = supabase.table("batches").delete().eq("id", batch_id_str).execute()
         if getattr(batch_del, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (delete batch): {batch_del.error}")
         stats["batches"] += 1
 
     return stats
+
+
+def _detach_subscription_plans_from_batch(supabase: Client, batch_id: str) -> int:
+    """Clear subscription_plans.applicable_batch references before batch deletion."""
+    affected = (
+        supabase.table(SUBSCRIPTION_PLANS_TABLE)
+        .update({"applicable_batch": None})
+        .eq("applicable_batch", batch_id)
+        .execute()
+    )
+    if getattr(affected, "error", None):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Supabase error (detach subscription plans for batch): {affected.error}",
+        )
+    return len(affected.data or [])
+
+
+def _detach_subscription_plans_from_department(supabase: Client, department_id: str) -> int:
+    """Clear subscription_plans.applicable_department references before department deletion."""
+    affected = (
+        supabase.table(SUBSCRIPTION_PLANS_TABLE)
+        .update({"applicable_department": None})
+        .eq("applicable_department", department_id)
+        .execute()
+    )
+    if getattr(affected, "error", None):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Supabase error (detach subscription plans for department): {affected.error}",
+        )
+    return len(affected.data or [])
+
+
+def _detach_subscription_plans_from_degree(supabase: Client, degree_id: str) -> int:
+    """Clear subscription_plans.applicable_degree references before degree deletion."""
+    affected = (
+        supabase.table(SUBSCRIPTION_PLANS_TABLE)
+        .update({"applicable_degree": None})
+        .eq("applicable_degree", degree_id)
+        .execute()
+    )
+    if getattr(affected, "error", None):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Supabase error (detach subscription plans for degree): {affected.error}",
+        )
+    return len(affected.data or [])
 
 
 @academics_router.delete(
@@ -12906,6 +12957,7 @@ def delete_department(department_id: uuid.UUID):
         )
 
     batch_stats = _cascade_delete_department_batches(supabase, department_id)
+    _detach_subscription_plans_from_department(supabase, str(department_id))
 
     del_res = supabase.table("departments").delete().eq("id", str(department_id)).execute()
     if getattr(del_res, "error", None):
@@ -13494,6 +13546,7 @@ def delete_batch(batch_id: uuid.UUID):
         delete_course_cascade(uuid.UUID(course_id_str))
         deleted_courses += 1
 
+    _detach_subscription_plans_from_batch(supabase, str(batch_id))
     del_res = supabase.table("batches").delete().eq("id", str(batch_id)).execute()
     if getattr(del_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (delete batch): {del_res.error}")

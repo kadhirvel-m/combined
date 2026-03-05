@@ -56,42 +56,6 @@ CREATE TABLE public.ai_notes (
   decision_tree_generated_at timestamp with time zone,
   CONSTRAINT ai_notes_pkey PRIMARY KEY (id)
 );
-
--- Decision Tree cache columns (safe re-run migration)
-ALTER TABLE IF EXISTS public.ai_notes
-  ADD COLUMN IF NOT EXISTS decision_tree_json jsonb;
-
-ALTER TABLE IF EXISTS public.ai_notes
-  ADD COLUMN IF NOT EXISTS decision_tree_generated_at timestamp with time zone;
-CREATE TABLE public.ai_notes_cheatsheet (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  title text NOT NULL,
-  title_ci text DEFAULT lower(title),
-  markdown text NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  image_urls ARRAY DEFAULT '{}'::text[],
-  CONSTRAINT ai_notes_cheatsheet_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.ai_notes_mcq (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  note_id uuid NOT NULL,
-  topic text NOT NULL,
-  topic_ci text DEFAULT lower(topic),
-  questions jsonb NOT NULL DEFAULT '[]'::jsonb,
-  model text,
-  generated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT ai_notes_mcq_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.ai_notes_match (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  topic text NOT NULL,
-  topic_ci text DEFAULT lower(topic),
-  pairs jsonb NOT NULL DEFAULT '[]'::jsonb,
-  model text,
-  generated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT ai_notes_match_pkey PRIMARY KEY (id)
-);
 CREATE TABLE public.ai_notes_caseflow_scenarios (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   topic text NOT NULL,
@@ -102,6 +66,35 @@ CREATE TABLE public.ai_notes_caseflow_scenarios (
   model text,
   generated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT ai_notes_caseflow_scenarios_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ai_notes_cheatsheet (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  title_ci text DEFAULT lower(title),
+  markdown text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  image_urls ARRAY DEFAULT '{}'::text[],
+  CONSTRAINT ai_notes_cheatsheet_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ai_notes_match (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  topic text NOT NULL,
+  topic_ci text DEFAULT lower(topic),
+  pairs jsonb NOT NULL DEFAULT '[]'::jsonb,
+  model text,
+  generated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_match_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ai_notes_mcq (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  note_id uuid NOT NULL,
+  topic text NOT NULL,
+  topic_ci text DEFAULT lower(topic),
+  questions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  model text,
+  generated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_notes_mcq_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.ai_notes_simple (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -124,6 +117,15 @@ CREATE TABLE public.ai_notes_user_edits (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT ai_notes_user_edits_pkey PRIMARY KEY (id),
   CONSTRAINT ai_notes_user_edits_user_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.ai_selected_images (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  topic text NOT NULL,
+  topic_ci text NOT NULL,
+  image_url text NOT NULL CHECK (image_url ~* '^https?://'::text),
+  selected_text text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT ai_selected_images_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.analytics_events (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -289,8 +291,8 @@ CREATE TABLE public.degrees (
   name text NOT NULL,
   level text,
   duration_years integer CHECK (duration_years >= 1 AND duration_years <= 10),
-  stream text DEFAULT 'Engineering'::text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  stream text DEFAULT 'Engineering'::text,
   CONSTRAINT degrees_pkey PRIMARY KEY (id),
   CONSTRAINT degrees_college_id_fkey FOREIGN KEY (college_id) REFERENCES public.colleges(id)
 );
@@ -672,6 +674,27 @@ CREATE TABLE public.learning_track_progress (
   CONSTRAINT learning_track_progress_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.user_profiles(id),
   CONSTRAINT learning_track_progress_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.learning_track_plans(plan_id)
 );
+CREATE TABLE public.manual_access_overrides (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL UNIQUE,
+  grant_premium boolean NOT NULL DEFAULT false,
+  force_plan_id uuid,
+  force_plan_until timestamp with time zone,
+  reset_usage_on_next_check boolean NOT NULL DEFAULT false,
+  is_blocked boolean NOT NULL DEFAULT false,
+  refund_marked boolean NOT NULL DEFAULT false,
+  campus_ambassador boolean NOT NULL DEFAULT false,
+  department_id_override uuid,
+  notes text,
+  updated_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT manual_access_overrides_pkey PRIMARY KEY (id),
+  CONSTRAINT manual_access_overrides_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT manual_access_overrides_force_plan_id_fkey FOREIGN KEY (force_plan_id) REFERENCES public.subscription_plans(id),
+  CONSTRAINT manual_access_overrides_department_id_override_fkey FOREIGN KEY (department_id_override) REFERENCES public.departments(id),
+  CONSTRAINT manual_access_overrides_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
+);
 CREATE TABLE public.marketplace_notes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   owner_user_id uuid NOT NULL,
@@ -764,6 +787,53 @@ CREATE TABLE public.math_td_sessions (
   updated_at text NOT NULL,
   ended_at text,
   CONSTRAINT math_td_sessions_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.medix_rag_chunks (
+  id bigint NOT NULL DEFAULT nextval('medix_rag_chunks_id_seq'::regclass),
+  source_id uuid NOT NULL,
+  chunk_index integer NOT NULL,
+  section_title text,
+  section_index integer,
+  window_start_char integer,
+  window_end_char integer,
+  chunk_text text NOT NULL,
+  token_count integer,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  embedding USER-DEFINED NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT medix_rag_chunks_pkey PRIMARY KEY (id),
+  CONSTRAINT medix_rag_chunks_source_id_fkey FOREIGN KEY (source_id) REFERENCES public.medix_rag_sources(id)
+);
+CREATE TABLE public.medix_rag_messages (
+  id bigint NOT NULL DEFAULT nextval('medix_rag_messages_id_seq'::regclass),
+  session_id uuid NOT NULL,
+  role text NOT NULL CHECK (role = ANY (ARRAY['user'::text, 'assistant'::text, 'system'::text])),
+  content text NOT NULL,
+  citations jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT medix_rag_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT medix_rag_messages_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.medix_rag_sessions(id)
+);
+CREATE TABLE public.medix_rag_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id text,
+  title text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT medix_rag_sessions_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.medix_rag_sources (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  source_name text NOT NULL,
+  file_name text,
+  file_hash text UNIQUE,
+  uploaded_by text,
+  chunk_count integer NOT NULL DEFAULT 0,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT medix_rag_sources_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.notes_feedback (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -998,6 +1068,43 @@ CREATE TABLE public.skill_verifications (
   CONSTRAINT skill_verifications_pkey PRIMARY KEY (user_id, skill),
   CONSTRAINT skill_verifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.subscription_plans (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  plan_code text NOT NULL UNIQUE,
+  name text NOT NULL,
+  description text,
+  price_inr numeric NOT NULL DEFAULT 0,
+  duration_days integer NOT NULL DEFAULT 30,
+  active_status boolean NOT NULL DEFAULT true,
+  unlimited_topics boolean NOT NULL DEFAULT false,
+  max_topics_per_day integer,
+  max_subjects_per_day integer,
+  mcq_access boolean NOT NULL DEFAULT true,
+  blink_access boolean NOT NULL DEFAULT true,
+  ai_chat_access boolean NOT NULL DEFAULT true,
+  pdf_download boolean NOT NULL DEFAULT true,
+  print_discount_percent numeric NOT NULL DEFAULT 0,
+  leaderboard_access boolean NOT NULL DEFAULT true,
+  applicable_college uuid,
+  applicable_degree uuid,
+  applicable_department uuid,
+  applicable_batch uuid,
+  applicable_semester integer,
+  early_bird_tag boolean NOT NULL DEFAULT false,
+  availability_expires_at timestamp with time zone,
+  coupon_enabled boolean NOT NULL DEFAULT false,
+  created_by uuid,
+  updated_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT subscription_plans_pkey PRIMARY KEY (id),
+  CONSTRAINT subscription_plans_applicable_college_fkey FOREIGN KEY (applicable_college) REFERENCES public.colleges(id),
+  CONSTRAINT subscription_plans_applicable_degree_fkey FOREIGN KEY (applicable_degree) REFERENCES public.degrees(id),
+  CONSTRAINT subscription_plans_applicable_department_fkey FOREIGN KEY (applicable_department) REFERENCES public.departments(id),
+  CONSTRAINT subscription_plans_applicable_batch_fkey FOREIGN KEY (applicable_batch) REFERENCES public.batches(id),
+  CONSTRAINT subscription_plans_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id),
+  CONSTRAINT subscription_plans_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
+);
 CREATE TABLE public.syllabus_courses (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   batch_id uuid NOT NULL,
@@ -1198,6 +1305,53 @@ CREATE TABLE public.units (
   CONSTRAINT units_pkey PRIMARY KEY (id),
   CONSTRAINT units_section_id_fkey FOREIGN KEY (section_id) REFERENCES public.sections(id)
 );
+CREATE TABLE public.usage_daily_counters (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL,
+  usage_date date NOT NULL DEFAULT CURRENT_DATE,
+  topics_opened integer NOT NULL DEFAULT 0,
+  subjects_opened integer NOT NULL DEFAULT 0,
+  mcq_attempts integer NOT NULL DEFAULT 0,
+  blink_views integer NOT NULL DEFAULT 0,
+  searches integer NOT NULL DEFAULT 0,
+  ai_prompts integer NOT NULL DEFAULT 0,
+  session_seconds integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT usage_daily_counters_pkey PRIMARY KEY (id),
+  CONSTRAINT usage_daily_counters_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.usage_limit_rules (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  rule_name text NOT NULL,
+  scope_type text NOT NULL DEFAULT 'global'::text CHECK (scope_type = ANY (ARRAY['global'::text, 'college'::text, 'degree'::text, 'department'::text, 'batch'::text, 'semester'::text])),
+  scope_college_id uuid,
+  scope_degree_id uuid,
+  scope_department_id uuid,
+  scope_batch_id uuid,
+  scope_semester integer,
+  max_topics_per_day integer,
+  max_subjects_per_day integer,
+  max_mcq_attempts_per_day integer,
+  max_blink_views_per_day integer,
+  max_searches_per_day integer,
+  max_ai_prompts_per_day integer,
+  max_session_minutes_per_day integer,
+  trial_duration_days integer,
+  apply_to_free_users boolean NOT NULL DEFAULT true,
+  active_status boolean NOT NULL DEFAULT true,
+  created_by uuid,
+  updated_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT usage_limit_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT usage_limit_rules_scope_college_id_fkey FOREIGN KEY (scope_college_id) REFERENCES public.colleges(id),
+  CONSTRAINT usage_limit_rules_scope_degree_id_fkey FOREIGN KEY (scope_degree_id) REFERENCES public.degrees(id),
+  CONSTRAINT usage_limit_rules_scope_department_id_fkey FOREIGN KEY (scope_department_id) REFERENCES public.departments(id),
+  CONSTRAINT usage_limit_rules_scope_batch_id_fkey FOREIGN KEY (scope_batch_id) REFERENCES public.batches(id),
+  CONSTRAINT usage_limit_rules_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id),
+  CONSTRAINT usage_limit_rules_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
+);
 CREATE TABLE public.user_activity_logs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_profile_id uuid NOT NULL,
@@ -1281,6 +1435,23 @@ CREATE TABLE public.user_gate (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT user_gate_pkey PRIMARY KEY (id),
   CONSTRAINT user_gate_user_profile_id_fkey FOREIGN KEY (user_profile_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.user_plan_subscriptions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_user_id uuid NOT NULL,
+  plan_id uuid NOT NULL,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'expired'::text, 'cancelled'::text])),
+  start_at timestamp with time zone NOT NULL DEFAULT now(),
+  end_at timestamp with time zone NOT NULL,
+  source text NOT NULL DEFAULT 'manual'::text,
+  notes text,
+  granted_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_plan_subscriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT user_plan_subscriptions_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
+  CONSTRAINT user_plan_subscriptions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id),
+  CONSTRAINT user_plan_subscriptions_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES auth.users(id)
 );
 CREATE TABLE public.user_portfolio_projects (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1469,132 +1640,4 @@ CREATE TABLE public.youtube_ai_notes (
   transcript_chars integer,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
-);
-
-CREATE TABLE public.subscription_plans (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  plan_code text NOT NULL UNIQUE,
-  name text NOT NULL,
-  description text,
-  price_inr numeric NOT NULL DEFAULT 0,
-  duration_days integer NOT NULL DEFAULT 30,
-  active_status boolean NOT NULL DEFAULT true,
-  unlimited_topics boolean NOT NULL DEFAULT false,
-  max_topics_per_day integer,
-  max_subjects_per_day integer,
-  mcq_access boolean NOT NULL DEFAULT true,
-  blink_access boolean NOT NULL DEFAULT true,
-  ai_chat_access boolean NOT NULL DEFAULT true,
-  pdf_download boolean NOT NULL DEFAULT true,
-  print_discount_percent numeric NOT NULL DEFAULT 0,
-  leaderboard_access boolean NOT NULL DEFAULT true,
-  applicable_college uuid,
-  applicable_degree uuid,
-  applicable_department uuid,
-  applicable_batch uuid,
-  applicable_semester integer,
-  early_bird_tag boolean NOT NULL DEFAULT false,
-  availability_expires_at timestamp with time zone,
-  coupon_enabled boolean NOT NULL DEFAULT false,
-  created_by uuid,
-  updated_by uuid,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT subscription_plans_pkey PRIMARY KEY (id),
-  CONSTRAINT subscription_plans_applicable_college_fkey FOREIGN KEY (applicable_college) REFERENCES public.colleges(id),
-  CONSTRAINT subscription_plans_applicable_degree_fkey FOREIGN KEY (applicable_degree) REFERENCES public.degrees(id),
-  CONSTRAINT subscription_plans_applicable_department_fkey FOREIGN KEY (applicable_department) REFERENCES public.departments(id),
-  CONSTRAINT subscription_plans_applicable_batch_fkey FOREIGN KEY (applicable_batch) REFERENCES public.batches(id),
-  CONSTRAINT subscription_plans_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id),
-  CONSTRAINT subscription_plans_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
-);
-
-CREATE TABLE public.user_plan_subscriptions (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  auth_user_id uuid NOT NULL,
-  plan_id uuid NOT NULL,
-  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'expired'::text, 'cancelled'::text])),
-  start_at timestamp with time zone NOT NULL DEFAULT now(),
-  end_at timestamp with time zone NOT NULL,
-  source text NOT NULL DEFAULT 'manual'::text,
-  notes text,
-  granted_by uuid,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT user_plan_subscriptions_pkey PRIMARY KEY (id),
-  CONSTRAINT user_plan_subscriptions_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
-  CONSTRAINT user_plan_subscriptions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id),
-  CONSTRAINT user_plan_subscriptions_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES auth.users(id)
-);
-
-CREATE TABLE public.usage_limit_rules (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  rule_name text NOT NULL,
-  scope_type text NOT NULL DEFAULT 'global'::text CHECK (scope_type = ANY (ARRAY['global'::text, 'college'::text, 'degree'::text, 'department'::text, 'batch'::text, 'semester'::text])),
-  scope_college_id uuid,
-  scope_degree_id uuid,
-  scope_department_id uuid,
-  scope_batch_id uuid,
-  scope_semester integer,
-  max_topics_per_day integer,
-  max_subjects_per_day integer,
-  max_mcq_attempts_per_day integer,
-  max_blink_views_per_day integer,
-  max_searches_per_day integer,
-  max_ai_prompts_per_day integer,
-  max_session_minutes_per_day integer,
-  trial_duration_days integer,
-  apply_to_free_users boolean NOT NULL DEFAULT true,
-  active_status boolean NOT NULL DEFAULT true,
-  created_by uuid,
-  updated_by uuid,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT usage_limit_rules_pkey PRIMARY KEY (id),
-  CONSTRAINT usage_limit_rules_scope_college_id_fkey FOREIGN KEY (scope_college_id) REFERENCES public.colleges(id),
-  CONSTRAINT usage_limit_rules_scope_degree_id_fkey FOREIGN KEY (scope_degree_id) REFERENCES public.degrees(id),
-  CONSTRAINT usage_limit_rules_scope_department_id_fkey FOREIGN KEY (scope_department_id) REFERENCES public.departments(id),
-  CONSTRAINT usage_limit_rules_scope_batch_id_fkey FOREIGN KEY (scope_batch_id) REFERENCES public.batches(id),
-  CONSTRAINT usage_limit_rules_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id),
-  CONSTRAINT usage_limit_rules_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
-);
-
-CREATE TABLE public.usage_daily_counters (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  auth_user_id uuid NOT NULL,
-  usage_date date NOT NULL DEFAULT CURRENT_DATE,
-  topics_opened integer NOT NULL DEFAULT 0,
-  subjects_opened integer NOT NULL DEFAULT 0,
-  mcq_attempts integer NOT NULL DEFAULT 0,
-  blink_views integer NOT NULL DEFAULT 0,
-  searches integer NOT NULL DEFAULT 0,
-  ai_prompts integer NOT NULL DEFAULT 0,
-  session_seconds integer NOT NULL DEFAULT 0,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT usage_daily_counters_pkey PRIMARY KEY (id),
-  CONSTRAINT usage_daily_counters_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
-  CONSTRAINT usage_daily_counters_user_date_unique UNIQUE (auth_user_id, usage_date)
-);
-
-CREATE TABLE public.manual_access_overrides (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  auth_user_id uuid NOT NULL UNIQUE,
-  grant_premium boolean NOT NULL DEFAULT false,
-  force_plan_id uuid,
-  force_plan_until timestamp with time zone,
-  reset_usage_on_next_check boolean NOT NULL DEFAULT false,
-  is_blocked boolean NOT NULL DEFAULT false,
-  refund_marked boolean NOT NULL DEFAULT false,
-  campus_ambassador boolean NOT NULL DEFAULT false,
-  department_id_override uuid,
-  notes text,
-  updated_by uuid,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT manual_access_overrides_pkey PRIMARY KEY (id),
-  CONSTRAINT manual_access_overrides_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id),
-  CONSTRAINT manual_access_overrides_force_plan_id_fkey FOREIGN KEY (force_plan_id) REFERENCES public.subscription_plans(id),
-  CONSTRAINT manual_access_overrides_department_id_override_fkey FOREIGN KEY (department_id_override) REFERENCES public.departments(id),
-  CONSTRAINT manual_access_overrides_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
 );
