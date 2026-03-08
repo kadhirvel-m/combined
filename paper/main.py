@@ -8178,12 +8178,23 @@ _ACTION_LIMIT_COLUMN: Dict[str, str] = {
     "ai_prompt": "max_ai_prompts_per_day",
 }
 
+_ACCESS_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_ACCESS_CACHE_LOCK = Lock()
+
 
 def _validate_plan_scope(plan_row: Dict[str, Any], profile: Optional[Dict[str, Any]]) -> bool:
     if not plan_row:
         return False
     if not profile:
-        return True
+        # Without profile context, only global (unscoped) plans should match.
+        scoped_keys = (
+            "applicable_college",
+            "applicable_degree",
+            "applicable_department",
+            "applicable_batch",
+            "applicable_semester",
+        )
+        return not any(plan_row.get(k) not in (None, "") for k in scoped_keys)
 
     checks = [
         ("applicable_college", "college_id"),
@@ -8203,16 +8214,106 @@ def _validate_plan_scope(plan_row: Dict[str, Any], profile: Optional[Dict[str, A
 
 def _get_user_profile_scope(auth_user_id: str) -> Optional[Dict[str, Any]]:
     supabase = get_service_client()
-    r = (
-        supabase.table("user_profiles")
-        .select("id,auth_user_id,college_id,department_id,batch_id,semester")
-        .eq("auth_user_id", auth_user_id)
-        .limit(1)
-        .execute()
-    )
-    if getattr(r, "error", None):
-        return None
-    return _first_or_none(getattr(r, "data", None))
+    profile = None
+    profile_select_candidates = [
+        "id,auth_user_id,college_id,department_id,batch_id,degree_id,semester,current_semester",
+        "id,auth_user_id,college_id,department_id,batch_id,semester,current_semester",
+        "id,auth_user_id,college_id,department_id,batch_id,degree_id,semester",
+        "id,auth_user_id,college_id,department_id,batch_id,semester",
+    ]
+    for select_cols in profile_select_candidates:
+        try:
+            r = (
+                supabase.table("user_profiles")
+                .select(select_cols)
+                .eq("auth_user_id", auth_user_id)
+                .limit(1)
+                .execute()
+            )
+            if getattr(r, "error", None):
+                continue
+            profile = _first_or_none(getattr(r, "data", None))
+            if profile:
+                break
+        except Exception:
+            continue
+
+    if not profile:
+        return profile
+
+    # Always prefer current_semester when available; it reflects latest academic state.
+    if profile.get("current_semester") is not None:
+        profile["semester"] = profile.get("current_semester")
+
+    def _pick_best_edu_row(rows: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        valid_rows = [row for row in (rows or []) if isinstance(row, dict)]
+        if not valid_rows:
+            return None
+        valid_rows.sort(
+            key=lambda row: (
+                int(row.get("current_semester") or 0),
+                int(row.get("order_index") or 0),
+                str(row.get("created_at") or ""),
+            ),
+            reverse=True,
+        )
+        return valid_rows[0]
+
+    primary_edu: Optional[Dict[str, Any]] = None
+
+    profile_id = _to_uuid_str(profile.get("id"))
+    if profile_id:
+        try:
+            edu_res = (
+                supabase.table("user_education")
+                .select("degree_id,current_semester,department_id,batch_id,college_id,order_index,created_at")
+                .eq("user_profile_id", profile_id)
+                .order("current_semester", desc=True)
+                .order("order_index", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if not getattr(edu_res, "error", None):
+                primary_edu = _pick_best_edu_row(getattr(edu_res, "data", None) or [])
+        except Exception:
+            pass
+
+    if not primary_edu:
+        # Fallback schema path: some deployments keep auth_user_id directly in user_education.
+        try:
+            edu_res2 = (
+                supabase.table("user_education")
+                .select("degree_id,current_semester,department_id,batch_id,college_id,order_index,created_at")
+                .eq("auth_user_id", auth_user_id)
+                .order("current_semester", desc=True)
+                .order("order_index", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if not getattr(edu_res2, "error", None):
+                primary_edu = _pick_best_edu_row(getattr(edu_res2, "data", None) or [])
+        except Exception:
+            pass
+
+    edu = primary_edu or {}
+    if not _to_uuid_str(profile.get("degree_id")) and _to_uuid_str(edu.get("degree_id")):
+        profile["degree_id"] = _to_uuid_str(edu.get("degree_id"))
+    # Education row current_semester is the most reliable and should override stale profile.semester.
+    if edu.get("current_semester") is not None:
+        profile["semester"] = edu.get("current_semester")
+    if not _to_uuid_str(profile.get("college_id")) and _to_uuid_str(edu.get("college_id")):
+        profile["college_id"] = _to_uuid_str(edu.get("college_id"))
+    if not _to_uuid_str(profile.get("department_id")) and _to_uuid_str(edu.get("department_id")):
+        profile["department_id"] = _to_uuid_str(edu.get("department_id"))
+    if not _to_uuid_str(profile.get("batch_id")) and _to_uuid_str(edu.get("batch_id")):
+        profile["batch_id"] = _to_uuid_str(edu.get("batch_id"))
+
+    if not _to_uuid_str(profile.get("degree_id")):
+        derived_degree_id = _get_user_degree_id(profile)
+        if derived_degree_id:
+            profile["degree_id"] = derived_degree_id
+
+    return profile
 
 
 def _get_user_degree_id(profile: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -8347,6 +8448,38 @@ def _get_best_active_plan_for_profile(profile: Optional[Dict[str, Any]]) -> Opti
 
     candidates.sort(key=lambda r: (_specificity(r), _sort_time(r)), reverse=True)
     return candidates[0]
+
+
+def _has_matching_disabled_plan(profile: Optional[Dict[str, Any]]) -> bool:
+    supabase = get_service_client()
+    res = (
+        supabase.table(SUBSCRIPTION_PLANS_TABLE)
+        .select("id,applicable_college,applicable_degree,applicable_department,applicable_batch,applicable_semester,availability_expires_at")
+        .eq("active_status", False)
+        .order("updated_at", desc=True)
+        .limit(200)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        return False
+
+    now_dt = datetime.utcnow()
+    for row in (getattr(res, "data", None) or []):
+        if not isinstance(row, dict):
+            continue
+        raw = row.get("availability_expires_at")
+        if raw:
+            try:
+                dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                if dt.tzinfo is not None:
+                    dt = dt.replace(tzinfo=None)
+                if dt < now_dt:
+                    continue
+            except Exception:
+                pass
+        if _validate_plan_scope(row, profile):
+            return True
+    return False
 
 
 def _resolve_free_limit_rule(profile: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -8524,6 +8657,19 @@ def _resolve_effective_access(auth_user_id: str) -> Dict[str, Any]:
             "free_rule": None,
         }
 
+    # If a matching plan is explicitly disabled, do not apply fallback free-rule throttling.
+    # This honors admin intent when disabling a plan for that scope.
+    if _has_matching_disabled_plan(profile):
+        return {
+            "blocked": False,
+            "tier": "free",
+            "plan": None,
+            "subscription": None,
+            "profile": profile,
+            "override": override,
+            "free_rule": None,
+        }
+
     free_rule = _resolve_free_limit_rule(profile)
     return {
         "blocked": False,
@@ -8534,6 +8680,19 @@ def _resolve_effective_access(auth_user_id: str) -> Dict[str, Any]:
         "override": override,
         "free_rule": free_rule,
     }
+
+
+def _resolve_effective_access_cached(auth_user_id: str, ttl_seconds: float = 8.0) -> Dict[str, Any]:
+    now_ts = time.time()
+    with _ACCESS_CACHE_LOCK:
+        cached = _ACCESS_CACHE.get(auth_user_id)
+        if cached and (now_ts - cached[0]) <= ttl_seconds:
+            return cached[1]
+
+    resolved = _resolve_effective_access(auth_user_id)
+    with _ACCESS_CACHE_LOCK:
+        _ACCESS_CACHE[auth_user_id] = (now_ts, resolved)
+    return resolved
 
 
 @academics_router.get("/api/admin/plans", summary="Admin: list subscription plans")
@@ -8669,6 +8828,93 @@ def admin_disable_plan(plan_id: str, active: bool = Query(default=False), author
     if getattr(upd, "error", None):
         raise HTTPException(status_code=500, detail=f"Failed to change status: {upd.error}")
     return {"ok": True, "active_status": bool(active)}
+
+
+@academics_router.post("/api/admin/plans/{plan_id}/rest", summary="Admin: reset today's usage for all active users of a plan")
+def admin_rest_plan_limits(plan_id: str, authorization: Optional[str] = Header(default=None)):
+    _require_admin(authorization)
+    plan_uuid = _to_uuid_str(plan_id)
+    if not plan_uuid:
+        raise HTTPException(status_code=400, detail="Invalid plan id")
+
+    supabase = get_service_client()
+    now_iso = datetime.utcnow().isoformat()
+    today_str = date.today().isoformat()
+
+    subs = (
+        supabase.table(USER_PLAN_SUBSCRIPTIONS_TABLE)
+        .select("auth_user_id")
+        .eq("plan_id", plan_uuid)
+        .limit(10000)
+        .execute()
+    )
+    if getattr(subs, "error", None):
+        raise HTTPException(status_code=500, detail=f"Failed to fetch plan users: {subs.error}")
+
+    auth_user_ids = {
+        str(row.get("auth_user_id"))
+        for row in (getattr(subs, "data", None) or [])
+        if row and row.get("auth_user_id")
+    }
+
+    # Also include users currently matching plan scope (scope-based assignment without explicit subscription rows).
+    try:
+        plan_q = (
+            supabase.table(SUBSCRIPTION_PLANS_TABLE)
+            .select("id,applicable_college,applicable_degree,applicable_department,applicable_batch,applicable_semester")
+            .eq("id", plan_uuid)
+            .limit(1)
+            .execute()
+        )
+        plan_row = _first_or_none(getattr(plan_q, "data", None)) or {}
+        if plan_row:
+            prof_q = (
+                supabase.table("user_profiles")
+                .select("auth_user_id,college_id,department_id,batch_id,semester,current_semester")
+                .limit(50000)
+                .execute()
+            )
+            if not getattr(prof_q, "error", None):
+                for row in (getattr(prof_q, "data", None) or []):
+                    if not isinstance(row, dict):
+                        continue
+                    sem = row.get("semester")
+                    if sem is None and row.get("current_semester") is not None:
+                        sem = row.get("current_semester")
+                    profile_row = {
+                        "college_id": row.get("college_id"),
+                        "department_id": row.get("department_id"),
+                        "batch_id": row.get("batch_id"),
+                        "semester": sem,
+                    }
+                    if _validate_plan_scope(plan_row, profile_row):
+                        uid = str(row.get("auth_user_id") or "").strip()
+                        if uid:
+                            auth_user_ids.add(uid)
+    except Exception:
+        pass
+
+    auth_user_ids = sorted(auth_user_ids)
+
+    if not auth_user_ids:
+        return {"ok": True, "plan_id": plan_uuid, "users": 0, "reset_rows": 0, "message": "No users resolved for this plan"}
+
+    reset_rows = 0
+    batch_size = 200
+    for idx in range(0, len(auth_user_ids), batch_size):
+        chunk = auth_user_ids[idx: idx + batch_size]
+        d = (
+            supabase.table(USAGE_DAILY_COUNTERS_TABLE)
+            .delete()
+            .in_("auth_user_id", chunk)
+            .eq("usage_date", today_str)
+            .execute()
+        )
+        if getattr(d, "error", None):
+            raise HTTPException(status_code=500, detail=f"Failed resetting usage counters: {d.error}")
+        reset_rows += len(getattr(d, "data", None) or [])
+
+    return {"ok": True, "plan_id": plan_uuid, "users": len(auth_user_ids), "reset_rows": reset_rows}
 
 
 @academics_router.delete("/api/admin/plans/{plan_id}", summary="Admin: delete plan")
@@ -8953,90 +9199,114 @@ def access_check_and_consume(payload: AccessCheckIn, authorization: Optional[str
     user_id, _ = _get_auth_user(authorization)
     if not user_id:
         raise HTTPException(status_code=401, detail="Missing auth user")
+    try:
+        effective = _resolve_effective_access_cached(str(user_id))
+        if effective.get("blocked"):
+            return {
+                "allowed": False,
+                "reason": effective.get("reason") or "Blocked",
+                "tier": "blocked",
+                "remaining": 0,
+            }
 
-    effective = _resolve_effective_access(str(user_id))
-    if effective.get("blocked"):
-        return {
-            "allowed": False,
-            "reason": effective.get("reason") or "Blocked",
-            "tier": "blocked",
-            "remaining": 0,
-        }
+        action = payload.action
+        tier = str(effective.get("tier") or "free")
+        plan = effective.get("plan") or {}
+        free_rule = effective.get("free_rule") or {}
+        profile = effective.get("profile") or {}
+        override = effective.get("override") or {}
 
-    action = payload.action
-    tier = str(effective.get("tier") or "free")
-    plan = effective.get("plan") or {}
-    free_rule = effective.get("free_rule") or {}
-    profile = effective.get("profile") or {}
-    override = effective.get("override") or {}
+        # Subject/topic caps are enforced only for paid users with an active matching plan.
+        # This avoids false blocking when user falls out of scoped plan (e.g., semester moved).
+        if tier != "paid" and action in {"topic_open", "subject_open"}:
+            return {
+                "allowed": True,
+                "tier": tier,
+                "reason": "No daily subject/topic cap for free tier",
+                "limit": None,
+                "remaining": None,
+                "current": None,
+            }
 
-    if bool(override.get("reset_usage_on_next_check")):
-        supabase = get_service_client()
-        today_str = date.today().isoformat()
-        _ = (
-            supabase.table(USAGE_DAILY_COUNTERS_TABLE)
-            .delete()
-            .eq("auth_user_id", str(user_id))
-            .eq("usage_date", today_str)
-            .execute()
-        )
-        _upsert_manual_override(str(user_id), {"reset_usage_on_next_check": False}, str(user_id))
+        if bool(override.get("reset_usage_on_next_check")):
+            supabase = get_service_client()
+            today_str = date.today().isoformat()
+            _ = (
+                supabase.table(USAGE_DAILY_COUNTERS_TABLE)
+                .delete()
+                .eq("auth_user_id", str(user_id))
+                .eq("usage_date", today_str)
+                .execute()
+            )
+            _upsert_manual_override(str(user_id), {"reset_usage_on_next_check": False}, str(user_id))
 
-    limit_source = plan if tier == "paid" else free_rule
+        limit_source = plan if tier == "paid" else free_rule
 
-    if action == "mcq_attempt" and tier == "paid" and not bool(plan.get("mcq_access", True)):
-        return {"allowed": False, "reason": "MCQ access disabled for this plan", "tier": tier}
-    if action == "blink_view" and tier == "paid" and not bool(plan.get("blink_access", True)):
-        return {"allowed": False, "reason": "Blink access disabled for this plan", "tier": tier}
-    if action == "ai_prompt" and tier == "paid" and not bool(plan.get("ai_chat_access", True)):
-        return {"allowed": False, "reason": "AI chat access disabled for this plan", "tier": tier}
+        if action == "mcq_attempt" and tier == "paid" and not bool(plan.get("mcq_access", True)):
+            return {"allowed": False, "reason": "MCQ access disabled for this plan", "tier": tier}
+        if action == "blink_view" and tier == "paid" and not bool(plan.get("blink_access", True)):
+            return {"allowed": False, "reason": "Blink access disabled for this plan", "tier": tier}
+        if action == "ai_prompt" and tier == "paid" and not bool(plan.get("ai_chat_access", True)):
+            return {"allowed": False, "reason": "AI chat access disabled for this plan", "tier": tier}
 
-    if tier == "paid" and bool(plan.get("unlimited_topics")) and action in {"topic_open", "subject_open"}:
+        if tier == "paid" and bool(plan.get("unlimited_topics")) and action in {"topic_open", "subject_open"}:
+            return {
+                "allowed": True,
+                "reason": "Unlimited topics for active plan",
+                "tier": tier,
+                "remaining": None,
+                "profile": profile,
+            }
+
+        limit_col = _ACTION_LIMIT_COLUMN.get(action)
+        max_allowed = None
+        if limit_col:
+            raw_limit = (limit_source or {}).get(limit_col)
+            if raw_limit is not None:
+                try:
+                    max_allowed = int(raw_limit)
+                except Exception:
+                    max_allowed = None
+
+        if not payload.consume:
+            return {
+                "allowed": True if max_allowed is None else True,
+                "tier": tier,
+                "limit": max_allowed,
+                "reason": "Dry run",
+            }
+
+        counter_result = _upsert_daily_counter(str(user_id), action, payload.increment, max_allowed)
+        if not counter_result.get("allowed"):
+            return {
+                "allowed": False,
+                "tier": tier,
+                "reason": f"Daily limit reached for {action}",
+                "limit": counter_result.get("limit"),
+                "remaining": counter_result.get("remaining"),
+                "current": counter_result.get("current"),
+            }
+
         return {
             "allowed": True,
-            "reason": "Unlimited topics for active plan",
             "tier": tier,
-            "remaining": None,
-            "profile": profile,
-        }
-
-    limit_col = _ACTION_LIMIT_COLUMN.get(action)
-    max_allowed = None
-    if limit_col:
-        raw_limit = (limit_source or {}).get(limit_col)
-        if raw_limit is not None:
-            try:
-                max_allowed = int(raw_limit)
-            except Exception:
-                max_allowed = None
-
-    if not payload.consume:
-        return {
-            "allowed": True if max_allowed is None else True,
-            "tier": tier,
-            "limit": max_allowed,
-            "reason": "Dry run",
-        }
-
-    counter_result = _upsert_daily_counter(str(user_id), action, payload.increment, max_allowed)
-    if not counter_result.get("allowed"):
-        return {
-            "allowed": False,
-            "tier": tier,
-            "reason": f"Daily limit reached for {action}",
+            "reason": "Allowed",
             "limit": counter_result.get("limit"),
             "remaining": counter_result.get("remaining"),
-            "current": counter_result.get("current"),
+            "current": counter_result.get("next"),
         }
-
-    return {
-        "allowed": True,
-        "tier": tier,
-        "reason": "Allowed",
-        "limit": counter_result.get("limit"),
-        "remaining": counter_result.get("remaining"),
-        "current": counter_result.get("next"),
-    }
+    except Exception as exc:
+        try:
+            supabase_logger.exception("Access check failed for user %s", str(user_id))
+        except Exception:
+            pass
+        return {
+            "allowed": False,
+            "tier": "unknown",
+            "reason": "Access check unavailable",
+            "remaining": None,
+            "error": str(exc),
+        }
 
 
 @academics_router.get("/api/access/summary", summary="Get effective access summary for current user")
@@ -9044,7 +9314,7 @@ def access_summary(authorization: Optional[str] = Header(default=None)):
     user_id, _ = _get_auth_user(authorization)
     if not user_id:
         raise HTTPException(status_code=401, detail="Missing auth user")
-    return _resolve_effective_access(str(user_id))
+    return _resolve_effective_access_cached(str(user_id))
 
 
 def _count_admins(supabase) -> int:

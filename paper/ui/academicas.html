@@ -1699,7 +1699,27 @@
         const API_BASE = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
         const completedTopicIds = new Set();
         const wishlistedTopicIds = new Set();
-        const consumedSubjectOpenIds = new Set();
+        const subjectOpenStorageDate = new Date().toISOString().slice(0, 10);
+        const consumedSubjectOpenStorageKey = `paperx:consumedSubjectOpenIds:v2:${subjectOpenStorageDate}`;
+        function loadDailySet(storageKey) {
+            try {
+                const raw = localStorage.getItem(storageKey);
+                if (!raw) return new Set();
+                const list = JSON.parse(raw);
+                if (!Array.isArray(list)) return new Set();
+                return new Set(list.map((item) => String(item || '').trim()).filter(Boolean));
+            } catch {
+                return new Set();
+            }
+        }
+        function persistDailySet(storageKey, valueSet) {
+            try {
+                localStorage.setItem(storageKey, JSON.stringify(Array.from(valueSet || [])));
+            } catch {
+                // ignore localStorage failures
+            }
+        }
+        const consumedSubjectOpenIds = loadDailySet(consumedSubjectOpenStorageKey);
         let __pxAccessSummary = null;
         const $ = (id) => document.getElementById(id);
         const setText = (id, val) => { const n = $(id); if (n) n.textContent = val ?? '-'; };
@@ -2310,6 +2330,7 @@
                         const ok = await canUseAction('subject_open', true);
                         if (!ok) return;
                         consumedSubjectOpenIds.add(courseKey);
+                        persistDailySet(consumedSubjectOpenStorageKey, consumedSubjectOpenIds);
                     }
                     const collapsed = unitsWrap.classList.toggle('hidden');
                     const expanded = !collapsed;

@@ -557,6 +557,7 @@
                 <button data-act="edit" data-id="${p.id}" class="px-2 py-1 rounded bg-black/5 dark:bg-white/10 text-xs">Edit</button>
                 <button data-act="dup" data-id="${p.id}" class="px-2 py-1 rounded bg-black/5 dark:bg-white/10 text-xs">Duplicate</button>
                 <button data-act="toggle" data-id="${p.id}" class="px-2 py-1 rounded bg-black/5 dark:bg-white/10 text-xs">${p.active_status ? 'Disable' : 'Enable'}</button>
+                <button data-act="rest" data-id="${p.id}" class="px-2 py-1 rounded bg-amber-500/20 text-xs">Rest</button>
                 <button data-act="del" data-id="${p.id}" class="px-2 py-1 rounded bg-red-500/20 text-xs">Delete</button>
               </div>
             </td>
@@ -656,6 +657,12 @@
           } else if (act === 'toggle') {
             await CP.fetchJson(`/api/admin/plans/${encodeURIComponent(id)}/disable?active=${plan.active_status ? 'false' : 'true'}`, { method: 'POST' });
             await loadPlans();
+          } else if (act === 'rest') {
+            if (!confirm('Reset today\'s limits for all active users of this plan?')) return;
+            const out = await CP.fetchJson(`/api/admin/plans/${encodeURIComponent(id)}/rest`, { method: 'POST' });
+            const users = Number(out?.users || 0);
+            const resetRows = Number(out?.reset_rows || 0);
+            CP.showStatus(statusEl, `Rest done. Users: ${users}, reset rows: ${resetRows}`, 'success');
           } else if (act === 'del') {
             if (!confirm('Delete this plan permanently?')) return;
             await CP.fetchJson(`/api/admin/plans/${encodeURIComponent(id)}`, { method: 'DELETE' });
