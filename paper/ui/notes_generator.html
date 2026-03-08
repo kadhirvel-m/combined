@@ -477,6 +477,31 @@
       background: rgba(148, 163, 184, 0.2);
     }
 
+    .topic-remaining-toast {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 95;
+      max-width: min(90vw, 320px);
+      padding: .6rem .9rem;
+      border-radius: .8rem;
+      border: 1px solid var(--outline);
+      background: color-mix(in oklab, var(--surface) 86%, var(--brand-soft));
+      color: var(--surface-contrast);
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
+      font-size: .8rem;
+      font-weight: 600;
+      transform: translateX(125%);
+      opacity: 0;
+      transition: transform .34s ease, opacity .34s ease;
+      pointer-events: none;
+    }
+
+    .topic-remaining-toast.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+
     /* Mobile adjustments: reduce Related Videos height */
     @media (max-width: 640px) {
 
@@ -1179,6 +1204,72 @@
 
     // ===== Degree handling =====
     const DEGREE_KEY = 'paperx:degree';
+    const topicOpenUsageDate = new Date().toISOString().slice(0, 10);
+    const topicOpenUsageStorageKey = `paperx:consumedTopicOpen:v3:${topicOpenUsageDate}`;
+    let topicRemainingToastHideTimer = null;
+
+    function loadDailyTopicOpenSet() {
+      try {
+        const raw = localStorage.getItem(topicOpenUsageStorageKey);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return new Set();
+        return new Set(parsed.map((item) => String(item || '').trim()).filter(Boolean));
+      } catch {
+        return new Set();
+      }
+    }
+
+    function persistDailyTopicOpenSet() {
+      try {
+        localStorage.setItem(topicOpenUsageStorageKey, JSON.stringify(Array.from(consumedTopicOpenSet)));
+      } catch {
+      }
+    }
+
+    function normalizeTopicAccessKey(value) {
+      return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    const consumedTopicOpenSet = loadDailyTopicOpenSet();
+
+    function hasConsumedTopicOpen(topic) {
+      const key = normalizeTopicAccessKey(topic);
+      if (!key) return false;
+      return consumedTopicOpenSet.has(key);
+    }
+
+    function markTopicOpenConsumed(topic) {
+      const key = normalizeTopicAccessKey(topic);
+      if (!key) return;
+      consumedTopicOpenSet.add(key);
+      persistDailyTopicOpenSet();
+    }
+
+    function ensureTopicRemainingToast() {
+      let node = document.getElementById('topicRemainingToast');
+      if (node) return node;
+      node = document.createElement('div');
+      node.id = 'topicRemainingToast';
+      node.className = 'topic-remaining-toast';
+      document.body.appendChild(node);
+      return node;
+    }
+
+    function showTopicRemainingToast(remaining) {
+      const value = Number(remaining);
+      if (!Number.isFinite(value)) return;
+      const node = ensureTopicRemainingToast();
+      node.textContent = `Topics left today: ${Math.max(0, Math.floor(value))}`;
+      node.classList.remove('show');
+      void node.offsetWidth;
+      node.classList.add('show');
+      if (topicRemainingToastHideTimer) clearTimeout(topicRemainingToastHideTimer);
+      topicRemainingToastHideTimer = setTimeout(() => {
+        node.classList.remove('show');
+      }, 3200);
+    }
+
     function getStoredDegree() {
       try { return localStorage.getItem(DEGREE_KEY) || ''; } catch { return ''; }
     }
@@ -1525,6 +1616,9 @@
             renderLimitReachedState({ action, reason, remaining: data.remaining });
           }
           return false;
+        }
+        if (action === 'topic_open' && consume) {
+          showTopicRemainingToast((data || {}).remaining);
         }
         return true;
       } catch (err) {
@@ -3140,8 +3234,12 @@
       if (es) { try { es.close(); } catch { } es = null; }
       // DB-first behavior: only generate when we are definitively sure it doesn't exist.
       if (!force) {
-        const canOpen = await ensureUserAccess('topic_open', { consume: true, allowOnTransientFailure: false, renderInOutput: true });
-        if (!canOpen) return;
+        const openedAlreadyToday = hasConsumedTopicOpen(t);
+        if (!openedAlreadyToday) {
+          const canOpen = await ensureUserAccess('topic_open', { consume: true, allowOnTransientFailure: false, renderInOutput: true });
+          if (!canOpen) return;
+          markTopicOpenConsumed(t);
+        }
 
         setBusy(true);
         showOutputLoader();
@@ -3575,9 +3673,14 @@
     }
 
     let queryTopic = (() => {
-      try { return new URLSearchParams(window.location.search).get('topic')?.trim() || ''; }
+      try {
+        const qs = new URLSearchParams(window.location.search);
+        return (qs.get('topic') || qs.get('q') || '').trim();
+      }
       catch { return ''; }
     })();
+    const initialQueryTopic = queryTopic;
+    let autoInitialStarted = false;
 
     // Load last note on open (persistence)
     (async function loadLastNote() {
@@ -3606,14 +3709,36 @@
       } catch { }
     })();
 
-    // If opened with ?topic=..., prefill and auto-generate
-    (function maybeAutoStartFromQuery() {
-      if (!queryTopic) return;
-      $topic.value = queryTopic;
-      startGeneration(queryTopic, false);
-      setTimeout(() => document.getElementById('output')?.scrollIntoView({ behavior: 'smooth' }), 50);
+    function tryAutoStartFromPageLoad(force = false) {
+      if (autoInitialStarted && !force) return;
+      const t = (initialQueryTopic || $topic.value || '').trim();
+      if (!t) return;
+      autoInitialStarted = true;
+      $topic.value = t;
+      startGeneration(t, false);
+      setTimeout(() => document.getElementById('output')?.scrollIntoView({ behavior: 'smooth' }), 80);
+      // Keep URL clean only after we actually trigger auto-start
       try { history.replaceState(null, '', window.location.pathname + window.location.hash); } catch { }
       queryTopic = '';
+    }
+
+    // Auto-generate immediately on load (URL topic or prefilled topic), no button click needed.
+    (function ensureAutoStartOnLoad() {
+      if (!initialQueryTopic && !($topic.value || '').trim()) return;
+      // immediate attempt
+      tryAutoStartFromPageLoad(false);
+      // retry once soon in case of startup race
+      setTimeout(() => {
+        if (!autoInitialStarted) {
+          tryAutoStartFromPageLoad(true);
+        }
+      }, 250);
+      // final retry after full load
+      window.addEventListener('load', () => {
+        if (!autoInitialStarted) {
+          tryAutoStartFromPageLoad(true);
+        }
+      }, { once: true });
     })();
 
     // Edit / Save
