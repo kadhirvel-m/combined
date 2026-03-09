@@ -1416,9 +1416,10 @@
                         window.location.href = 'img_gen.html?topic=' + encodeURIComponent(topic);
                         return;
                     }
-                    // Navigate to notes generator (medical stream → medical_notes.html)
-                    const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                    const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                    // Medical and nursing streams use mediX notes chat page.
+                    const stream = (window.__PX_DEGREE_STREAM || '').trim().toLowerCase();
+                    const isMedical = (stream === 'medical' || stream === 'nursing');
+                    const page = isMedical ? 'mediX/notes_chat.html' : 'notes_generator.html';
                     window.location.href = page + '?topic=' + encodeURIComponent(topic);
                 }
 
@@ -1594,8 +1595,9 @@
                             if (window.__PX_DEV_MODE) {
                                 window.location.href = 'img_gen.html?topic=' + encodeURIComponent(val);
                             } else {
-                                const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                                const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                                const stream = (window.__PX_DEGREE_STREAM || '').trim().toLowerCase();
+                                const isMedical = (stream === 'medical' || stream === 'nursing');
+                                const page = isMedical ? 'mediX/notes_chat.html' : 'notes_generator.html';
                                 window.location.href = page + '?topic=' + encodeURIComponent(val);
                             }
                         } catch (_) {
@@ -2413,8 +2415,9 @@
 
                         const courseType = String(c.type || c.course_type || c.subject_type || '').trim().toLowerCase();
                         const isMathsCourse = (courseType === 'maths') || (courseType === 'math') || (courseType === 'mathematics') || (courseType.includes('math'));
-                        const isMedicalStream = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                        const notesPage = window.__PX_DEV_MODE ? 'img_gen.html' : (isMathsCourse ? 'maths_notes.html' : (isMedicalStream ? 'medical_notes.html' : 'notes_generator.html'));
+                        const stream = (window.__PX_DEGREE_STREAM || '').trim().toLowerCase();
+                        const isMedicalStream = (stream === 'medical' || stream === 'nursing');
+                        const notesPage = window.__PX_DEV_MODE ? 'img_gen.html' : (isMathsCourse ? 'maths_notes.html' : (isMedicalStream ? 'mediX/notes_chat.html' : 'notes_generator.html'));
 
                         const a = document.createElement('a');
                         a.href = notesPage + '?topic=' + encodeURIComponent(t.topic);
@@ -3809,8 +3812,9 @@
                                 if (window.__PX_DEV_MODE) {
                                     window.location.href = 'img_gen.html?topic=' + encodeURIComponent(name);
                                 } else {
-                                    const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                                    const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                                    const stream = (window.__PX_DEGREE_STREAM || '').trim().toLowerCase();
+                                    const isMedical = (stream === 'medical' || stream === 'nursing');
+                                    const page = isMedical ? 'mediX/notes_chat.html' : 'notes_generator.html';
                                     window.location.href = page + '?topic=' + encodeURIComponent(name);
                                 }
                             });
@@ -3890,8 +3894,9 @@
                             if (window.__PX_DEV_MODE) {
                                 window.open('img_gen.html?topic=' + encodeURIComponent(topicName), '_blank');
                             } else {
-                                const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                                const page = isMedical ? 'medical_notes.html' : 'notes_generator.html';
+                                const stream = (window.__PX_DEGREE_STREAM || '').trim().toLowerCase();
+                                const isMedical = (stream === 'medical' || stream === 'nursing');
+                                const page = isMedical ? 'mediX/notes_chat.html' : 'notes_generator.html';
                                 window.open(page + '?topic=' + encodeURIComponent(topicName), '_blank');
                             }
                         }
@@ -3988,8 +3993,9 @@
                 } else {
                     // Restore original page
                     const isMaths = a.dataset.mathsCourse === '1';
-                    const isMedical = (window.__PX_DEGREE_STREAM || '') === 'medical';
-                    const page = isMaths ? 'maths_notes.html' : (isMedical ? 'medical_notes.html' : 'notes_generator.html');
+                    const stream = (window.__PX_DEGREE_STREAM || '').trim().toLowerCase();
+                    const isMedical = (stream === 'medical' || stream === 'nursing');
+                    const page = isMaths ? 'maths_notes.html' : (isMedical ? 'mediX/notes_chat.html' : 'notes_generator.html');
                     a.href = page + '?topic=' + encodeURIComponent(topic);
                 }
             });
