@@ -2357,6 +2357,7 @@ Context:
 Output rules (STRICT):
 - Keep it ultra concise (≈ 250-400 words). Use bullets and tables.
 - Start with a single H1: '# {topic} — Cheat Sheet'.
+- If a `RAG PRIORITY CONTEXT` block is present, prioritize those facts over generic web context.
 - Sections (H2):
   1) Core Concepts (5–10 bullets, crisp one-liners)
   2) Key Definitions & Formulas (bullets; inline math where relevant)
@@ -2378,6 +2379,7 @@ Context:
 Output rules (STRICT):
 - Target length: 600–900 words, plain language, short sentences.
 - Start with '# {topic} — Simple Notes'.
+- If a `RAG PRIORITY CONTEXT` block is present, prioritize those facts over generic web context.
 - Structure with logical H2 sections, including: Introduction, Concepts, Examples, Conclusion.
 - Explain in everyday words without dumbing down definitions.
 - Use bullets and small tables where helpful.
@@ -2403,6 +2405,7 @@ Instructions:
 STRICT CONTENT RULES:
 - Use ONLY content that genuinely matches the topic.
 - Do NOT force‑fit unrelated context.
+- If a `RAG PRIORITY CONTEXT` block is present, treat it as highest-priority evidence.
 - Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
 - If information is missing, **generate it yourself accurately**.
 - Ensure **conceptual correctness suitable for university exams**.
@@ -2446,7 +2449,14 @@ The output should be **exam‑ready**, **self‑contained**, and **require no fu
 Start with '# {topic}' and then the sections in a logical order.
 """.strip()
 
-def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] = None, variant: str = "detailed", degree: Optional[str] = None) -> Iterator[Tuple[str, Dict[str, Any]]]:
+def generate_notes_events(
+    topic: str,
+    *,
+    stop_event: Optional[threading.Event] = None,
+    variant: str = "detailed",
+    degree: Optional[str] = None,
+    rag_priority_context: Optional[str] = None,
+) -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Yield (event_name, payload) tuples describing real-time progress and final output.
 
     Events emitted in order (names):
@@ -2503,7 +2513,14 @@ def generate_notes_events(topic: str, *, stop_event: Optional[threading.Event] =
         if stop_event and stop_event.is_set():
             return
         context = assemble_context_for_llm(pages, merged_titles, topic)
-        yield ("context_ready", {"chars": len(context)})
+        if rag_priority_context:
+            context = (
+                "RAG PRIORITY CONTEXT (use this first when relevant):\n"
+                + rag_priority_context.strip()
+                + "\n\nWEB CONTEXT:\n"
+                + context
+            )
+        yield ("context_ready", {"chars": len(context), "rag_priority": bool(rag_priority_context)})
 
         assistant = build_agent()
         user_prompt = _build_variant_user_prompt(context, topic, variant)
@@ -13987,11 +14004,30 @@ def public_academic_meta():
     Used by teacher signup (pre-auth). Batches omitted for brevity.
     """
     supabase = get_service_client()
-    colleges = supabase.table("colleges").select("id,name").order("name").execute()
-    if getattr(colleges, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (colleges): {colleges.error}")
-    degrees = supabase.table("degrees").select("id,name,college_id").execute()
-    departments = supabase.table("departments").select("id,name,college_id,degree_id").execute()
+    try:
+        colleges = _supabase_retry(
+            lambda: supabase.table("colleges").select("id,name").order("name").execute(),
+            retries=3,
+            base_delay=0.3,
+        )
+        if getattr(colleges, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (colleges): {colleges.error}")
+
+        degrees = _supabase_retry(
+            lambda: supabase.table("degrees").select("id,name,college_id").execute(),
+            retries=3,
+            base_delay=0.3,
+        )
+        departments = _supabase_retry(
+            lambda: supabase.table("departments").select("id,name,college_id,degree_id").execute(),
+            retries=3,
+            base_delay=0.3,
+        )
+    except RETRYABLE_EXCEPTIONS as exc:
+        # Degrade gracefully for transient upstream disconnects instead of crashing with a traceback.
+        supabase_logger.warning("public_academic_meta transient disconnect", exc_info=exc)
+        return {"colleges": [], "degrees": [], "departments": []}
+
     return {
         "colleges": getattr(colleges, "data", []) or [],
         "degrees": getattr(degrees, "data", []) or [],
@@ -14248,14 +14284,21 @@ def api_find_topics_by_title(topic: str = Query(..., min_length=1, max_length=51
         return []
 
     supabase = get_service_client()
-    res = (
-        supabase.table("syllabus_topics")
-        .select("id,topic,order_in_unit,image_url,video_url,ppt_url,lab_url,unit_id")
-        .eq("topic", clean)
-        .order("order_in_unit")
-        .limit(5)
-        .execute()
-    )
+    try:
+        res = _supabase_retry(
+            lambda: (
+                supabase.table("syllabus_topics")
+                .select("id,topic,order_in_unit,image_url,video_url,ppt_url,lab_url,unit_id")
+                .eq("topic", clean)
+                .order("order_in_unit")
+                .limit(5)
+                .execute()
+            )
+        )
+    except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+        supabase_logger.warning("api_find_topics_by_title transient disconnect (topics lookup)", exc_info=exc)
+        return []
+
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (find topic by title): {res.error}")
 
@@ -14263,12 +14306,19 @@ def api_find_topics_by_title(topic: str = Query(..., min_length=1, max_length=51
     course_by_unit: Dict[str, str] = {}
     course_types: Dict[str, str] = {}
     if unit_ids:
-        units_res = (
-            supabase.table("syllabus_units")
-            .select("id,course_id")
-            .in_("id", list({uid for uid in unit_ids}))
-            .execute()
-        )
+        try:
+            units_res = _supabase_retry(
+                lambda: (
+                    supabase.table("syllabus_units")
+                    .select("id,course_id")
+                    .in_("id", list({uid for uid in unit_ids}))
+                    .execute()
+                )
+            )
+        except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+            supabase_logger.warning("api_find_topics_by_title transient disconnect (units lookup)", exc_info=exc)
+            return []
+
         if getattr(units_res, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (lookup units for topics): {units_res.error}")
         course_ids = [row.get("course_id") for row in (units_res.data or []) if row.get("course_id")]
@@ -14278,12 +14328,19 @@ def api_find_topics_by_title(topic: str = Query(..., min_length=1, max_length=51
             if uid and cid:
                 course_by_unit[str(uid)] = str(cid)
         if course_ids:
-            courses_res = (
-                supabase.table("syllabus_courses")
-                .select("id,type")
-                .in_("id", list({cid for cid in course_ids}))
-                .execute()
-            )
+            try:
+                courses_res = _supabase_retry(
+                    lambda: (
+                        supabase.table("syllabus_courses")
+                        .select("id,type")
+                        .in_("id", list({cid for cid in course_ids}))
+                        .execute()
+                    )
+                )
+            except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+                supabase_logger.warning("api_find_topics_by_title transient disconnect (courses lookup)", exc_info=exc)
+                return []
+
             if getattr(courses_res, "error", None):
                 raise HTTPException(status_code=500, detail=f"Supabase error (lookup course types): {courses_res.error}")
             for crow in (courses_res.data or []):
@@ -18298,9 +18355,36 @@ async def generate(payload: dict):
 
 @notes_router.get("/generate/stream")
 @notes_router.get("/api/notes/generate/stream")
-async def generate_stream(topic: str, force: bool = False, variant: str = "detailed", degree: Optional[str] = None):
+async def generate_stream(
+    topic: str,
+    force: bool = False,
+    variant: str = "detailed",
+    degree: Optional[str] = None,
+    rag_answer: Optional[str] = None,
+    rag_citations: Optional[str] = None,
+):
     async def event_source() -> AsyncGenerator[bytes, None]:
         normalized_variant = _normalize_variant(variant)
+        rag_priority_context: Optional[str] = None
+        rag_answer_text = (rag_answer or "").strip()
+        if rag_answer_text:
+            rag_lines: List[str] = [f"RAG summary: {rag_answer_text}"]
+            if rag_citations:
+                try:
+                    parsed = json.loads(rag_citations)
+                    if isinstance(parsed, list):
+                        for idx, item in enumerate(parsed[:10], start=1):
+                            if not isinstance(item, dict):
+                                continue
+                            src = str(item.get("source_name") or "RAG source").strip() or "RAG source"
+                            chunk = str(item.get("chunk_index") or "").strip()
+                            label = f"[RAG{idx}]"
+                            suffix = f" #{chunk}" if chunk else ""
+                            rag_lines.append(f"{label} {src}{suffix}")
+                except Exception:
+                    pass
+            rag_priority_context = "\n".join(rag_lines).strip()
+
         yield b"event: open\n\n"
         # Early cache hit: exact-title lookup in DB
         if not force:
@@ -18409,7 +18493,13 @@ async def generate_stream(topic: str, force: bool = False, variant: str = "detai
 
         def worker() -> None:
             try:
-                for name, payload in generate_notes_events(topic, stop_event=stop_event, variant=normalized_variant, degree=degree):
+                for name, payload in generate_notes_events(
+                    topic,
+                    stop_event=stop_event,
+                    variant=normalized_variant,
+                    degree=degree,
+                    rag_priority_context=rag_priority_context,
+                ):
                     if stop_event.is_set():
                         break
                     dispatch(("event", name, payload))
@@ -33479,14 +33569,22 @@ def medix_rag_chat(req: MedixRagChatRequest):
     session_id = _medix_ensure_session(req.session_id, req.user_id, question)
     supabase = get_service_client()
 
-    history_res = (
-        supabase.table(MEDIX_RAG_MESSAGES_TABLE)
-        .select("role, content, created_at")
-        .eq("session_id", session_id)
-        .order("created_at", desc=False)
-        .limit(24)
-        .execute()
-    )
+    try:
+        history_res = _supabase_retry(
+            lambda: (
+                supabase.table(MEDIX_RAG_MESSAGES_TABLE)
+                .select("role, content, created_at")
+                .eq("session_id", session_id)
+                .order("created_at", desc=False)
+                .limit(24)
+                .execute()
+            ),
+            retries=3,
+            base_delay=0.35,
+        )
+    except RETRYABLE_EXCEPTIONS as exc:
+        raise HTTPException(status_code=503, detail="RAG service temporarily unavailable. Please retry.") from exc
+
     if getattr(history_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (history): {history_res.error}")
     history_rows = getattr(history_res, "data", None) or []
