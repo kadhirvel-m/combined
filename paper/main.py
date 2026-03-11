@@ -7276,6 +7276,7 @@ def list_admin_users(
     min_streak: Optional[int] = Query(default=None, ge=0, le=3650),
     min_streak_overall: Optional[int] = Query(default=None, ge=0, le=3650),
     last_login_days: Optional[int] = Query(default=None, ge=1, le=3650),
+    sort_by: Optional[str] = Query(default=None, max_length=32),
 ):
     token = _parse_bearer_token(authorization)
     if not token:
@@ -7726,29 +7727,177 @@ def list_admin_users(
             if streak_current_map:
                 break
 
-    # Load last_seen_at per auth user from user_sessions (aggregate in Python).
-    last_seen_map: Dict[str, str] = {}  # auth_user_id -> ISO timestamp
+    # Load last_seen_at and distinct session days per auth user from user_sessions.
+    last_seen_map: Dict[str, str] = {}  # auth_user_id -> latest ISO timestamp
+    session_days_map: Dict[str, Set[str]] = {}  # auth_user_id -> distinct YYYY-MM-DD
     if uniq_ids:
         try:
+            session_page_size = 5000
             for chunk in _chunked_ids(uniq_ids, size=120):
-                sres = (
-                    supabase.table("user_sessions")
-                    .select("user_id,last_seen_at")
-                    .in_("user_id", chunk)
-                    .order("last_seen_at", desc=True)
-                    .limit(50000)
-                    .execute()
-                )
-                if getattr(sres, "error", None):
-                    continue
-                for row in (getattr(sres, "data", None) or []):
-                    uid = row.get("user_id")
-                    ts = row.get("last_seen_at")
-                    uid_s = _id_norm(uid)
-                    if uid_s and ts and uid_s not in last_seen_map:
-                        last_seen_map[uid_s] = ts
+                page = 0
+                while True:
+                    start = page * session_page_size
+                    end = start + session_page_size - 1
+                    sres = (
+                        supabase.table("user_sessions")
+                        .select("user_id,started_at,last_seen_at")
+                        .in_("user_id", chunk)
+                        .order("last_seen_at", desc=True)
+                        .range(start, end)
+                        .execute()
+                    )
+                    if getattr(sres, "error", None):
+                        break
+                    srows = (getattr(sres, "data", None) or [])
+                    if not srows:
+                        break
+
+                    for row in srows:
+                        uid = row.get("user_id")
+                        ts = row.get("last_seen_at")
+                        uid_s = _id_norm(uid)
+                        if uid_s and ts and uid_s not in last_seen_map:
+                            last_seen_map[uid_s] = ts
+
+                        if not uid_s:
+                            continue
+
+                        day_values = [row.get("started_at"), row.get("last_seen_at")]
+                        for dt_raw in day_values:
+                            if not dt_raw:
+                                continue
+                            day_s: Optional[str] = None
+                            try:
+                                day_s = datetime.fromisoformat(str(dt_raw).replace("Z", "+00:00")).date().isoformat()
+                            except Exception:
+                                # Accept date-like strings as fallback.
+                                txt = str(dt_raw)
+                                if len(txt) >= 10:
+                                    day_s = txt[:10]
+                            if not day_s:
+                                continue
+                            if uid_s not in session_days_map:
+                                session_days_map[uid_s] = set()
+                            session_days_map[uid_s].add(day_s)
+
+                    if len(srows) < session_page_size:
+                        break
+                    page += 1
         except Exception:
             pass
+
+    # Count total distinct active days from usage_daily_counters and merge with session days.
+    usage_days_map: Dict[str, Set[str]] = {}  # auth_user_id -> distinct YYYY-MM-DD from counters
+    if uniq_ids:
+        try:
+            usage_page_size = 5000
+            for chunk in _chunked_ids(uniq_ids, size=120):
+                page = 0
+                while True:
+                    start = page * usage_page_size
+                    end = start + usage_page_size - 1
+                    ures = (
+                        supabase.table(USAGE_DAILY_COUNTERS_TABLE)
+                        .select("auth_user_id,usage_date")
+                        .in_("auth_user_id", chunk)
+                        .range(start, end)
+                        .execute()
+                    )
+                    if getattr(ures, "error", None):
+                        break
+                    urows = (getattr(ures, "data", None) or [])
+                    if not urows:
+                        break
+
+                    for row in urows:
+                        uid = _id_norm(row.get("auth_user_id"))
+                        day = row.get("usage_date")
+                        if not uid or not day:
+                            continue
+                        day_s = str(day)
+                        if uid not in usage_days_map:
+                            usage_days_map[uid] = set()
+                        usage_days_map[uid].add(day_s)
+
+                    if len(urows) < usage_page_size:
+                        break
+                    page += 1
+        except Exception:
+            pass
+
+    usage_days_count_map: Dict[str, int] = {}
+
+    # Also include profile-based activity days for lifetime coverage.
+    profile_days_map: Dict[str, Set[str]] = {}  # profile_id -> distinct YYYY-MM-DD
+    if uniq_profile_ids:
+        try:
+            profile_page_size = 5000
+            profile_activity_sources = [
+                ("notex_activity_logs", "activity_date"),
+                ("user_activity_logs", "activity_date"),
+                ("user_topic_history", "viewed_at"),
+            ]
+            for table_name, date_col in profile_activity_sources:
+                for chunk in _chunked_ids(uniq_profile_ids, size=120):
+                    page = 0
+                    while True:
+                        start = page * profile_page_size
+                        end = start + profile_page_size - 1
+                        pres = (
+                            supabase.table(table_name)
+                            .select(f"user_profile_id,{date_col}")
+                            .in_("user_profile_id", chunk)
+                            .range(start, end)
+                            .execute()
+                        )
+                        if getattr(pres, "error", None):
+                            break
+                        prows = (getattr(pres, "data", None) or [])
+                        if not prows:
+                            break
+
+                        for row in prows:
+                            pid = _id_norm(row.get("user_profile_id"))
+                            dt_raw = row.get(date_col)
+                            if not pid or not dt_raw:
+                                continue
+                            day_s: Optional[str] = None
+                            try:
+                                day_s = datetime.fromisoformat(str(dt_raw).replace("Z", "+00:00")).date().isoformat()
+                            except Exception:
+                                txt = str(dt_raw)
+                                if len(txt) >= 10:
+                                    day_s = txt[:10]
+                            if not day_s:
+                                continue
+                            if pid not in profile_days_map:
+                                profile_days_map[pid] = set()
+                            profile_days_map[pid].add(day_s)
+
+                        if len(prows) < profile_page_size:
+                            break
+                        page += 1
+        except Exception:
+            pass
+
+    for uid in uniq_ids:
+        uid_s = str(uid)
+        all_days: Set[str] = set()
+        if uid_s in usage_days_map:
+            all_days.update(usage_days_map[uid_s])
+        if uid_s in session_days_map:
+            all_days.update(session_days_map[uid_s])
+
+        pid = auth_to_profile.get(uid_s)
+        if pid and pid in profile_days_map:
+            all_days.update(profile_days_map[pid])
+        if pid and streak_last_activity_map.get(pid):
+            try:
+                all_days.add(date.fromisoformat(str(streak_last_activity_map.get(pid))).isoformat())
+            except Exception:
+                pass
+
+        usage_days_count_map[uid_s] = len(all_days)
 
     out: List[dict] = []
     for r in rows:
@@ -7824,6 +7973,7 @@ def list_admin_users(
             "longest_streak": longest_streak_val,
             "last_activity_date": streak_last_activity_map.get(pid) if pid else None,
             "last_seen_at": last_seen_val,
+            "usage_days_count": usage_days_count_map.get(str(user_id_val), 0) if user_id_val else 0,
             "profile_image_url": r.get("profile_image_url"),
             "verification_score": r.get("verification_score"),
             "linkedin": r.get("linkedin"),
@@ -7879,6 +8029,25 @@ def list_admin_users(
                 return False
 
         filtered = [u for u in filtered if _is_recent(u)]
+
+    sort_mode = (sort_by or "").strip().lower()
+    if sort_mode == "usage_days_desc":
+        filtered.sort(
+            key=lambda u: (
+                int(u.get("usage_days_count") or 0),
+                int(u.get("current_streak") or 0),
+                str(u.get("updated_at") or ""),
+            ),
+            reverse=True,
+        )
+    elif sort_mode == "usage_days_asc":
+        filtered.sort(
+            key=lambda u: (
+                int(u.get("usage_days_count") or 0),
+                int(u.get("current_streak") or 0),
+                str(u.get("updated_at") or ""),
+            )
+        )
 
     total_count = len(filtered)
     page_users = filtered[offset : offset + limit]
