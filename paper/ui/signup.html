@@ -18,7 +18,8 @@
   <!-- Tailwind (forms/typography/aspect-ratio) -->
   <link rel="stylesheet" href="assets/css/tailwind.css" />
   <script>
-    tailwind.config = {
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
       darkMode: 'class',
       theme: {
         container: { center: true, padding: '1rem' },
@@ -462,14 +463,10 @@
         if (!res.ok) { status.textContent = `❌ ${out?.detail || out?.message || 'Signup failed.'}`; resetTurnstile(); return; }
         if (out.access_token) {
           try {
-            localStorage.setItem('px_token', out.access_token);
-            if (out.refresh_token) {
-              localStorage.setItem('px_refresh_token', out.refresh_token);
-            }
-            if (out.expires_in) {
-              const expiresAt = Date.now() + (out.expires_in * 1000);
-              localStorage.setItem('px_token_expires_at', expiresAt.toString());
-            }
+            // Cookie session is authoritative; clear any stale legacy token keys.
+            localStorage.removeItem('px_token');
+            localStorage.removeItem('px_refresh_token');
+            localStorage.removeItem('px_token_expires_at');
           } catch { }
         }
         status.textContent = '✔ Account created. Redirecting…';

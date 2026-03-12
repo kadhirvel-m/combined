@@ -18,7 +18,8 @@
   <!-- Tailwind (forms/typography/aspect-ratio) -->
   <link rel="stylesheet" href="assets/css/tailwind.css" />
   <script>
-    tailwind.config = {
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
       darkMode: 'class',
       theme: {
         container: { center: true, padding: '1rem' },
@@ -659,24 +660,25 @@
       const hash = new URLSearchParams(location.hash.slice(1));
       const token = hash.get('access_token');
       const refreshToken = hash.get('refresh_token');
-      const expiresIn = hash.get('expires_in');
       if (token) {
         try {
-          localStorage.setItem('px_token', token);
-          // Store refresh token and expiry for persistent OAuth sessions
-          if (refreshToken) {
-            localStorage.setItem('px_refresh_token', refreshToken);
-          }
-          if (expiresIn) {
-            const expiresAt = Date.now() + (parseInt(expiresIn, 10) * 1000);
-            localStorage.setItem('px_token_expires_at', expiresAt.toString());
-          }
+          // Cookie session is authoritative; clear any stale legacy token keys.
+          localStorage.removeItem('px_token');
+          localStorage.removeItem('px_refresh_token');
+          localStorage.removeItem('px_token_expires_at');
         } catch { }
         history.replaceState(null, document.title, location.pathname + location.search);
         try {
-          await fetch(`${apiBase}/api/profile/me`, { headers: { Authorization: `Bearer ${token}` } });
-        } catch {
-        }
+          // Exchange OAuth refresh token for first-party HttpOnly cookies.
+          if (refreshToken) {
+            await fetch(`${apiBase}/refresh`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ refresh_token: refreshToken })
+            });
+          }
+        } catch { }
         const nextPath = getSafeNextPath();
         location.href = nextPath || 'academicas.html';
       }
@@ -718,20 +720,15 @@
         }
         if (out.access_token) {
           try {
-            localStorage.setItem('px_token', out.access_token);
-            // Store refresh token and expiry for persistent sessions
-            if (out.refresh_token) {
-              localStorage.setItem('px_refresh_token', out.refresh_token);
-            }
-            if (out.expires_in) {
-              // Store token expiry time (current time + expires_in seconds)
-              const expiresAt = Date.now() + (out.expires_in * 1000);
-              localStorage.setItem('px_token_expires_at', expiresAt.toString());
-            }
+            // Cookie session is authoritative; clear any stale legacy token keys.
+            localStorage.removeItem('px_token');
+            localStorage.removeItem('px_refresh_token');
+            localStorage.removeItem('px_token_expires_at');
             // Enforce single active session: clear teacher session if any
             localStorage.removeItem('teacherToken');
           } catch { }
         }
+        console.info('[auth] login success, cookie-session mode active');
         status.textContent = '✔ Signed in. Redirecting…';
         const nextPath = getSafeNextPath();
         setTimeout(() => { window.location.href = nextPath || 'academicas.html'; }, 400);

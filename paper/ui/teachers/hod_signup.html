@@ -316,8 +316,12 @@
         const res = await fetch(base + '/api/hod/signup', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Signup failed');
-        localStorage.setItem('teacherToken', data.access_token || '');
-        try { localStorage.removeItem('px_token'); } catch { }
+        try {
+          localStorage.removeItem('teacherToken');
+          localStorage.removeItem('px_token');
+          localStorage.removeItem('px_refresh_token');
+          localStorage.removeItem('px_token_expires_at');
+        } catch { }
         statusBox.className = 'mt-6 text-sm rounded-xl px-4 py-3 font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
         statusBox.textContent = 'HOD application submitted successfully! Redirecting to teacher login...';
         statusBox.style.display = 'block';

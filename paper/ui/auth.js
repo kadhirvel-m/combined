@@ -2,7 +2,7 @@
  * Paper X Navbar Auth/UI Helper
  * -------------------------------------------------
  * Responsibilities:
- * 1. Detect login state via presence of localStorage key 'px_token'.
+ * 1. Detect login state via secure auth cookie bridge (legacy localStorage lookups are shimmed).
  * 2. (Optional) Load lightweight /api/me snapshot if not already exposed by another page.
  * 3. Toggle visibility of:
  *    - Login / Signup buttons (hide when logged in)
@@ -31,65 +31,41 @@
   const TEACHER_TOKEN_KEY = 'teacherToken';
   const REFRESH_TOKEN_KEY = 'px_refresh_token';
   const TOKEN_EXPIRES_KEY = 'px_token_expires_at';
+  const AUTH_SENTINEL = '__COOKIE_AUTH__';
   const tokenUser = safeGet(USER_TOKEN_KEY);
   const tokenTeacher = safeGet(TEACHER_TOKEN_KEY);
 
   function safeGet(k){ try { return localStorage.getItem(k); } catch(_) { return null; } }
   function safeSet(k,v){ try { localStorage.setItem(k,v); } catch(_) { } }
   function safeRemove(k){ try { localStorage.removeItem(k); } catch(_) { } }
+  function hasAuthStateCookie(){ try { return document.cookie.indexOf('paperx_auth=') !== -1; } catch(_) { return false; } }
+  function normalizeStoredToken(v){
+    if (!v) return null;
+    const t = String(v).trim();
+    if (!t || t === AUTH_SENTINEL) return null;
+    return t;
+  }
 
-  // Auto-refresh token if expired or about to expire (within 5 minutes)
+  // Auto-refresh using HttpOnly refresh cookie.
   async function refreshTokensIfNeeded() {
-    console.log('[Auth] Checking if token refresh is needed...');
-    const refreshToken = safeGet(REFRESH_TOKEN_KEY);
-    const expiresAt = safeGet(TOKEN_EXPIRES_KEY);
-    const accessToken = safeGet(USER_TOKEN_KEY);
-    
-    // If no refresh token, can't refresh
-    if (!refreshToken) {
-      console.log('[Auth] No refresh token found. Skipping auto-refresh.');
-      return false;
-    }
-    
-    // If access token exists and not expired (with 5 min buffer), no refresh needed
-    if (accessToken && expiresAt) {
-      const expiryTime = parseInt(expiresAt, 10);
-      const bufferMs = 5 * 60 * 1000; // 5 minutes
-      if (Date.now() < (expiryTime - bufferMs)) {
-        console.log('[Auth] Access token is still valid. No refresh needed.');
-        return true; // Token still valid
-      }
-    }
-    
-    console.log('[Auth] Token expired or missing. Attempting refresh...');
-    
-    // Need to refresh
+    console.log('[Auth] Attempting cookie-based token refresh...');
     try {
+      const refreshToken = safeGet(REFRESH_TOKEN_KEY);
+      const body = refreshToken && refreshToken !== '__COOKIE_AUTH__' ? JSON.stringify({ refresh_token: refreshToken }) : '{}';
       const res = await fetch(`${API}/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken })
+        credentials: 'include',
+        body
       });
       if (!res.ok) {
         console.error('[Auth] Refresh request failed:', res.status);
-        // Refresh failed - clear tokens and redirect to login
         clearAllTokens();
         return false;
       }
       const data = await res.json();
-      if (data.access_token) {
-        console.log('[Auth] Token refreshed successfully.');
-        safeSet(USER_TOKEN_KEY, data.access_token);
-        if (data.refresh_token) {
-          safeSet(REFRESH_TOKEN_KEY, data.refresh_token);
-        }
-        if (data.expires_in) {
-          const newExpiresAt = Date.now() + (data.expires_in * 1000);
-          safeSet(TOKEN_EXPIRES_KEY, newExpiresAt.toString());
-        }
-        return true;
-      }
-      return false;
+      console.log('[Auth] Token refreshed successfully.', data && data.message ? data.message : 'ok');
+      return true;
     } catch (e) {
       console.error('[Auth] Token refresh failed with exception:', e);
       return false;
@@ -166,14 +142,16 @@
   }
 
   function activeSession(){
-    // If both exist, prefer teacher session and clear user token
-    var tUser = safeGet('px_token');
-    var tTeach = safeGet('teacherToken');
+    // If both legacy real tokens exist, prefer teacher and clear user token.
+    // Cookie sentinel must never force teacher mode.
+    var tUser = normalizeStoredToken(safeGet('px_token'));
+    var tTeach = normalizeStoredToken(safeGet('teacherToken'));
     if (tTeach && tUser) {
       try { localStorage.removeItem('px_token'); } catch {}
     }
     if (tTeach) return { kind: 'teacher', token: tTeach };
     if (tUser) return { kind: 'user', token: tUser };
+    if (hasAuthStateCookie()) return { kind: 'user', token: AUTH_SENTINEL };
     return { kind: null, token: null };
   }
 
@@ -238,10 +216,13 @@
 
   function handleSignOut(ev){
     if(ev) ev.preventDefault();
-    // Clear all session tokens including refresh tokens
-    clearAllTokens();
-    if(typeof window.__PX_CLOSE_MOBILE_NAV === 'function'){ window.__PX_CLOSE_MOBILE_NAV(); }
-    window.location.href = 'login.html';
+    fetch(`${API}/logout`, { method: 'POST', credentials: 'include' })
+      .catch(() => null)
+      .finally(() => {
+        clearAllTokens();
+        if(typeof window.__PX_CLOSE_MOBILE_NAV === 'function'){ window.__PX_CLOSE_MOBILE_NAV(); }
+        window.location.href = 'login.html';
+      });
   }
 
   function attachSignOutHandlers(){
@@ -257,7 +238,11 @@
       if (!session.token) { showAuthButtons(); hideSessionUI(); return; }
       let url = `${API}/api/me`;
       if (session.kind === 'teacher') url = `${API}/api/teacher/profile/me`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${session.token}` }});
+      const reqHeaders = {};
+      if (session.token && session.token !== AUTH_SENTINEL) {
+        reqHeaders.Authorization = `Bearer ${session.token}`;
+      }
+      const res = await fetch(url, { headers: reqHeaders, credentials: 'include' });
       if(res.status === 401){ safeRemove(USER_TOKEN_KEY); safeRemove(TEACHER_TOKEN_KEY); showAuthButtons(); hideSessionUI(); return; }
       const data = await res.json().catch(()=>({}));
       const profile = session.kind === 'teacher'
@@ -300,16 +285,13 @@
 
   async function init(){
     // Auto-refresh token if needed (for persistent sessions)
-    const hasRefreshToken = safeGet(REFRESH_TOKEN_KEY);
+    const hasRefreshToken = safeGet(REFRESH_TOKEN_KEY) || document.cookie.indexOf('paperx_auth=') !== -1;
     if (hasRefreshToken) {
       const refreshed = await refreshTokensIfNeeded();
       if (!refreshed && !safeGet(USER_TOKEN_KEY)) {
-        console.warn('[Auth] Init - Refresh failed and no access token. Clearing session.');
-        // Refresh failed and no access token - user needs to re-login
+        console.warn('[Auth] Init - Refresh failed and no active cookie session. Clearing local markers.');
         clearAllTokens();
       }
-    } else {
-        console.log('[Auth] Init - No refresh token found.');
     }
 
     const session = activeSession();

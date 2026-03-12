@@ -7,11 +7,13 @@ import enum
 import io
 import json
 import logging
+import hmac
 import mimetypes
 import os
 import random
 import re
 import requests
+import secrets
 import sys
 import textwrap
 import time
@@ -21,7 +23,8 @@ import sqlite3
 import ast
 import importlib
 from dataclasses import dataclass, field
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
+from collections import deque
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
@@ -29,6 +32,7 @@ from typing import Any, AsyncGenerator, Dict, Iterator, List, Literal, Optional,
 from urllib.parse import quote, urlparse
 import threading
 import concurrent.futures
+import contextvars
 
 # New imports for using google.genai as requested
 try:
@@ -151,6 +155,347 @@ except Exception:
 # ==========================================
 # INLINED PACKAGES: youtube_video & yt_transcript
 # ==========================================
+
+AUTH_ACCESS_COOKIE_NAME = os.getenv("AUTH_ACCESS_COOKIE_NAME", "paperx_at")
+AUTH_REFRESH_COOKIE_NAME = os.getenv("AUTH_REFRESH_COOKIE_NAME", "paperx_rt")
+AUTH_STATE_COOKIE_NAME = os.getenv("AUTH_STATE_COOKIE_NAME", "paperx_auth")
+AUTH_COOKIE_DOMAIN = (os.getenv("AUTH_COOKIE_DOMAIN") or "").strip() or None
+AUTH_COOKIE_SECURE = (os.getenv("AUTH_COOKIE_SECURE", "true").strip().lower() in {"1", "true", "yes", "on"})
+AUTH_COOKIE_SAMESITE = (os.getenv("AUTH_COOKIE_SAMESITE", "lax") or "lax").strip().lower()
+if AUTH_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+    AUTH_COOKIE_SAMESITE = "lax"
+AUTH_ACCESS_TTL_SECONDS = max(300, int(os.getenv("AUTH_ACCESS_TTL_SECONDS", "900")))
+AUTH_REFRESH_TTL_SECONDS = max(3600, int(os.getenv("AUTH_REFRESH_TTL_SECONDS", "2592000")))
+AUTH_ROTATION_TABLE = os.getenv("AUTH_ROTATION_TABLE", "auth_refresh_tokens")
+AUTH_REFRESH_HASH_SECRET = (os.getenv("AUTH_REFRESH_HASH_SECRET") or "").strip()
+AUTH_REQUEST_CTX: contextvars.ContextVar[Optional[Request]] = contextvars.ContextVar("auth_request_ctx", default=None)
+AUTH_SENTINEL_VALUES = {"__COOKIE_AUTH__", "__cookie__", "cookie", "null", "undefined", "none"}
+
+RATE_LIMIT_ENABLED = (os.getenv("RATE_LIMIT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+RATE_LIMIT_GLOBAL_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_GLOBAL_WINDOW_SECONDS", "60")))
+RATE_LIMIT_GLOBAL_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_GLOBAL_MAX_REQUESTS", "240")))
+RATE_LIMIT_AUTH_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_AUTH_WINDOW_SECONDS", "60")))
+RATE_LIMIT_AUTH_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_AUTH_MAX_REQUESTS", "40")))
+RATE_LIMIT_LOGIN_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_LOGIN_WINDOW_SECONDS", "60")))
+RATE_LIMIT_LOGIN_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_LOGIN_MAX_REQUESTS", "12")))
+RATE_LIMIT_MAX_BUCKETS = max(500, int(os.getenv("RATE_LIMIT_MAX_BUCKETS", "20000")))
+
+RATE_LIMIT_LOGIN_ROUTES: Set[str] = {
+    "/login",
+    "/api/teacher/login",
+}
+RATE_LIMIT_AUTH_ROUTES: Set[str] = {
+    "/signup",
+    "/refresh",
+    "/logout",
+    "/api/signup/full",
+    "/api/teacher/signup",
+    "/api/hod/signup",
+}
+
+
+def _rl_norm_path(path: str) -> str:
+    p = (path or "").strip()
+    if not p:
+        return "/"
+    if p != "/" and p.endswith("/"):
+        p = p[:-1]
+    return p
+
+
+def _rl_is_login_route(path: str) -> bool:
+    return _rl_norm_path(path) in RATE_LIMIT_LOGIN_ROUTES
+
+
+def _rl_is_auth_route(path: str) -> bool:
+    return _rl_norm_path(path) in RATE_LIMIT_AUTH_ROUTES or _rl_is_login_route(path)
+
+
+class _SlidingWindowLimiter:
+    """Process-local sliding window limiter.
+
+    For horizontally scaled deployments, move counters to Redis for cluster-wide limits.
+    """
+
+    def __init__(self, *, window_seconds: int, max_requests: int, max_buckets: int) -> None:
+        self.window_seconds = max(1, int(window_seconds))
+        self.max_requests = max(1, int(max_requests))
+        self.max_buckets = max(100, int(max_buckets))
+        self._buckets: Dict[str, deque] = {}
+        self._lock = threading.Lock()
+
+    def _evict_stale_buckets(self, now_ts: float) -> None:
+        if len(self._buckets) <= self.max_buckets:
+            return
+        cutoff = now_ts - self.window_seconds
+        stale = [k for k, q in self._buckets.items() if (not q) or (q[-1] < cutoff)]
+        for key in stale[: max(1, len(stale) // 2)]:
+            self._buckets.pop(key, None)
+
+    def allow(self, key: str, now_ts: Optional[float] = None) -> Tuple[bool, int, int]:
+        ts = float(now_ts if now_ts is not None else time.time())
+        with self._lock:
+            self._evict_stale_buckets(ts)
+            bucket = self._buckets.get(key)
+            if bucket is None:
+                bucket = deque()
+                self._buckets[key] = bucket
+
+            cutoff = ts - self.window_seconds
+            while bucket and bucket[0] <= cutoff:
+                bucket.popleft()
+
+            if len(bucket) >= self.max_requests:
+                retry_after = max(1, int(self.window_seconds - (ts - bucket[0])) + 1)
+                return False, retry_after, len(bucket)
+
+            bucket.append(ts)
+            return True, 0, len(bucket)
+
+
+SECURITY_TELEMETRY_ENABLED = (os.getenv("SECURITY_TELEMETRY_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+SECURITY_MONITOR_WINDOW_SECONDS = max(10, int(os.getenv("SECURITY_MONITOR_WINDOW_SECONDS", "300")))
+ALERT_UPLOAD_SPIKE_THRESHOLD = max(10, int(os.getenv("ALERT_UPLOAD_SPIKE_THRESHOLD", "40")))
+ALERT_STATUS_PATTERN_THRESHOLD = max(10, int(os.getenv("ALERT_STATUS_PATTERN_THRESHOLD", "30")))
+ALERT_RAG_MUTATION_BURST_THRESHOLD = max(3, int(os.getenv("ALERT_RAG_MUTATION_BURST_THRESHOLD", "8")))
+ALERT_TOOL_CHAIN_THRESHOLD = max(6, int(os.getenv("ALERT_TOOL_CHAIN_THRESHOLD", "20")))
+ALERT_TOOL_CHAIN_WINDOW_SECONDS = max(10, int(os.getenv("ALERT_TOOL_CHAIN_WINDOW_SECONDS", "120")))
+ALERT_REFRESH_FINGERPRINT_CHANGE_WINDOW_SECONDS = max(60, int(os.getenv("ALERT_REFRESH_FINGERPRINT_CHANGE_WINDOW_SECONDS", "7200")))
+
+security_logger = logging.getLogger("paperx.security")
+_SECURITY_LOCK = threading.Lock()
+_SECURITY_WINDOWS: Dict[str, deque] = {}
+_SECURITY_REFRESH_FINGERPRINT: Dict[str, Dict[str, Any]] = {}
+OUTBOUND_API_TELEMETRY_ENABLED = (os.getenv("OUTBOUND_API_TELEMETRY_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+SECURITY_DB_LOGGING_ENABLED = (os.getenv("SECURITY_DB_LOGGING_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+SECURITY_EVENTS_TABLE = os.getenv("SECURITY_EVENTS_TABLE", "security_events")
+
+
+def _security_extract_ip(request: Optional[Request]) -> Optional[str]:
+    if request is None:
+        return None
+    try:
+        cf_ip = (request.headers.get("CF-Connecting-IP") or "").strip()
+        if cf_ip:
+            return cf_ip
+        fwd = (request.headers.get("X-Forwarded-For") or "").strip()
+        if fwd:
+            return fwd.split(",", 1)[0].strip() or None
+        if request.client and request.client.host:
+            return request.client.host
+    except Exception:
+        return None
+    return None
+
+
+def _security_emit(event_type: str, *, request: Optional[Request] = None, severity: str = "info", **payload: Any) -> None:
+    if not SECURITY_TELEMETRY_ENABLED:
+        return
+    event = {
+        "ts": datetime.utcnow().isoformat() + "Z",
+        "event_type": event_type,
+        "path": (request.url.path if request else None),
+        "method": (request.method if request else None),
+        "client_ip": _security_extract_ip(request),
+        "user_agent": ((request.headers.get("user-agent") if request else None) or "")[:300],
+        **payload,
+    }
+    line = json.dumps(event, default=str, separators=(",", ":"))
+    level = (severity or "info").lower()
+    if level == "error":
+        security_logger.error(line)
+    elif level == "warning":
+        security_logger.warning(line)
+    else:
+        security_logger.info(line)
+    _security_persist_event(event, severity=level)
+
+
+def _security_persist_event(event: Dict[str, Any], *, severity: str) -> None:
+    if not SECURITY_DB_LOGGING_ENABLED:
+        return
+    try:
+        supabase = get_service_client()
+        if not supabase:
+            return
+
+        # Keep common fields queryable while preserving full raw payload for forensics.
+        user_id = (
+            str(event.get("user_id") or "").strip()
+            or str(event.get("actor_user_id") or "").strip()
+            or None
+        )
+        email = (
+            str(event.get("email") or "").strip().lower()
+            or str(event.get("actor_email") or "").strip().lower()
+            or None
+        )
+        row = {
+            "event_type": str(event.get("event_type") or "unknown"),
+            "severity": (severity or "info").lower(),
+            "path": event.get("path"),
+            "method": event.get("method"),
+            "client_ip": event.get("client_ip"),
+            "user_agent": event.get("user_agent"),
+            "user_id": user_id,
+            "email": email,
+            "event_ts": event.get("ts"),
+            "event_payload": event,
+        }
+        res = supabase.table(SECURITY_EVENTS_TABLE).insert(row).execute()
+        if getattr(res, "error", None):
+            security_logger.warning("security event db insert failed: %s", res.error)
+    except Exception as exc:
+        security_logger.warning("security event db insert exception: %s", exc)
+
+
+def _security_track_window(key: str, *, window_seconds: int, now_ts: Optional[float] = None) -> int:
+    ts = float(now_ts if now_ts is not None else time.time())
+    with _SECURITY_LOCK:
+        q = _SECURITY_WINDOWS.get(key)
+        if q is None:
+            q = deque()
+            _SECURITY_WINDOWS[key] = q
+        cutoff = ts - max(1, int(window_seconds))
+        while q and q[0] <= cutoff:
+            q.popleft()
+        q.append(ts)
+        return len(q)
+
+
+def _security_alert(alert_type: str, *, request: Optional[Request] = None, severity: str = "warning", **payload: Any) -> None:
+    _security_emit(f"alert.{alert_type}", request=request, severity=severity, **payload)
+
+
+def _security_track_status_pattern(status_code: int, request: Optional[Request]) -> None:
+    if status_code not in {401, 403, 429}:
+        return
+    ip = _security_extract_ip(request) or "unknown"
+    bucket_key = f"status:{status_code}:{ip}"
+    count = _security_track_window(bucket_key, window_seconds=SECURITY_MONITOR_WINDOW_SECONDS)
+    if count >= ALERT_STATUS_PATTERN_THRESHOLD:
+        _security_alert(
+            "status_pattern",
+            request=request,
+            status_code=status_code,
+            count=count,
+            window_seconds=SECURITY_MONITOR_WINDOW_SECONDS,
+            threshold=ALERT_STATUS_PATTERN_THRESHOLD,
+        )
+
+
+def _security_track_upload_spike(*, request: Optional[Request], category: str = "generic_upload") -> None:
+    count = _security_track_window(f"upload:{category}", window_seconds=SECURITY_MONITOR_WINDOW_SECONDS)
+    if count >= ALERT_UPLOAD_SPIKE_THRESHOLD:
+        _security_alert(
+            "upload_spike",
+            request=request,
+            category=category,
+            count=count,
+            window_seconds=SECURITY_MONITOR_WINDOW_SECONDS,
+            threshold=ALERT_UPLOAD_SPIKE_THRESHOLD,
+        )
+
+
+def _security_track_rag_mutation_burst(*, request: Optional[Request], action: str) -> None:
+    if action not in {"medix_rag_source_deleted", "medix_rag_source_reindexed"}:
+        return
+    count = _security_track_window("rag:mutations", window_seconds=SECURITY_MONITOR_WINDOW_SECONDS)
+    if count >= ALERT_RAG_MUTATION_BURST_THRESHOLD:
+        _security_alert(
+            "rag_mutation_burst",
+            request=request,
+            action=action,
+            count=count,
+            window_seconds=SECURITY_MONITOR_WINDOW_SECONDS,
+            threshold=ALERT_RAG_MUTATION_BURST_THRESHOLD,
+        )
+
+
+def _security_track_tool_chain(*, chain_key: str, tool_name: str, request: Optional[Request]) -> None:
+    if not chain_key:
+        return
+    bucket = f"toolchain:{chain_key}"
+    count = _security_track_window(bucket, window_seconds=ALERT_TOOL_CHAIN_WINDOW_SECONDS)
+    if count >= ALERT_TOOL_CHAIN_THRESHOLD:
+        _security_alert(
+            "abnormal_tool_chain",
+            request=request,
+            chain_key=chain_key,
+            tool_name=tool_name,
+            count=count,
+            window_seconds=ALERT_TOOL_CHAIN_WINDOW_SECONDS,
+            threshold=ALERT_TOOL_CHAIN_THRESHOLD,
+        )
+
+
+def _security_track_refresh_fingerprint(*, user_id: Optional[str], request: Optional[Request], action: str) -> None:
+    uid = (user_id or "").strip()
+    if not uid:
+        return
+    ip = _security_extract_ip(request) or ""
+    ua = (request.headers.get("user-agent") if request else "") or ""
+    country = (request.headers.get("CF-IPCountry") if request else "") or ""
+    fingerprint = f"{ip}|{country}|{ua[:180]}"
+    now_ts = time.time()
+    with _SECURITY_LOCK:
+        prev = _SECURITY_REFRESH_FINGERPRINT.get(uid)
+        _SECURITY_REFRESH_FINGERPRINT[uid] = {
+            "fingerprint": fingerprint,
+            "ip": ip,
+            "country": country,
+            "ua": ua[:180],
+            "ts": now_ts,
+        }
+    if prev and prev.get("fingerprint") != fingerprint and (now_ts - float(prev.get("ts") or 0.0)) <= ALERT_REFRESH_FINGERPRINT_CHANGE_WINDOW_SECONDS:
+        _security_alert(
+            "refresh_fingerprint_change",
+            request=request,
+            user_id=uid,
+            action=action,
+            previous={"ip": prev.get("ip"), "country": prev.get("country"), "ua": prev.get("ua")},
+            current={"ip": ip, "country": country, "ua": ua[:180]},
+            window_seconds=ALERT_REFRESH_FINGERPRINT_CHANGE_WINDOW_SECONDS,
+        )
+
+
+_ORIGINAL_REQUESTS_SESSION_REQUEST = getattr(requests.sessions.Session, "request", None)
+
+
+def _install_requests_outbound_telemetry() -> None:
+    if not OUTBOUND_API_TELEMETRY_ENABLED or _ORIGINAL_REQUESTS_SESSION_REQUEST is None:
+        return
+    if getattr(requests.sessions.Session, "_paperx_security_wrapped", False):
+        return
+
+    def _wrapped_request(self, method, url, *args, **kwargs):  # type: ignore[no-untyped-def]
+        started = time.perf_counter()
+        try:
+            resp = _ORIGINAL_REQUESTS_SESSION_REQUEST(self, method, url, *args, **kwargs)
+            _security_emit(
+                "outbound_api.call",
+                method=str(method or "").upper(),
+                target=str(url or "")[:300],
+                status_code=int(getattr(resp, "status_code", 0) or 0),
+                duration_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
+            return resp
+        except Exception as exc:
+            _security_emit(
+                "outbound_api.error",
+                severity="warning",
+                method=str(method or "").upper(),
+                target=str(url or "")[:300],
+                duration_ms=round((time.perf_counter() - started) * 1000, 2),
+                error=str(exc),
+            )
+            raise
+
+    requests.sessions.Session.request = _wrapped_request  # type: ignore[assignment]
+    setattr(requests.sessions.Session, "_paperx_security_wrapped", True)
+
+
+_install_requests_outbound_telemetry()
 
 # --- youtube_video.py content ---
 
@@ -931,15 +1276,20 @@ def _supabase_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 # --- Auth helpers ---
 def _bearer_token_from_header(authorization: Optional[str]) -> Optional[str]:
-    if not authorization:
-        return None
-    try:
-        parts = str(authorization).split()
-        if len(parts) >= 2 and parts[0].lower() == 'bearer':
-            return parts[1]
-        return str(authorization)
-    except Exception:
-        return None
+    header_token: Optional[str] = None
+    if authorization:
+        try:
+            parts = str(authorization).split()
+            if len(parts) >= 2 and parts[0].lower() == 'bearer':
+                header_token = _normalize_possible_token(parts[1])
+            else:
+                header_token = _normalize_possible_token(str(authorization))
+        except Exception:
+            header_token = None
+    if header_token:
+        return header_token
+    req = _resolve_request_for_auth()
+    return _token_from_cookie(req, AUTH_ACCESS_COOKIE_NAME)
 
 # --- Resiliency helpers for Supabase/httpx transient protocol errors ---
 # Some users have observed intermittent httpcore.RemoteProtocolError("Server disconnected") coming
@@ -4080,7 +4430,232 @@ def _pdf_bytes_to_text(data: bytes) -> str:
 # NOTE: The /api/syllabus/upload route is registered later, after academics_router is created.
 
 
-def signup_user(user):
+def _auth_effective_hash_secret() -> str:
+    return AUTH_REFRESH_HASH_SECRET or (SUPABASE_SERVICE_ROLE_KEY or "")
+
+
+def _normalize_possible_token(value: Optional[str]) -> Optional[str]:
+    token = (value or "").strip()
+    if not token:
+        return None
+    if token.lower() in AUTH_SENTINEL_VALUES:
+        return None
+    return token
+
+
+def _auth_cookie_secure_for_request(request: Optional[Request]) -> bool:
+    # Localhost development commonly runs over plain HTTP (e.g. :5500 + :8000).
+    # Forcing Secure cookies there can prevent auth cookies from persisting.
+    if request is not None:
+        try:
+            host = (request.url.hostname or "").lower()
+            if host in {"localhost", "127.0.0.1", "::1"}:
+                return False
+        except Exception:
+            pass
+    return AUTH_COOKIE_SECURE
+
+
+def _set_auth_cookies(
+    response: Response,
+    *,
+    access_token: str,
+    refresh_token: Optional[str],
+    request: Optional[Request],
+    access_ttl: Optional[int] = None,
+    refresh_ttl: Optional[int] = None,
+) -> None:
+    same_site = "none" if AUTH_COOKIE_SAMESITE == "none" else AUTH_COOKIE_SAMESITE
+    secure_cookie = _auth_cookie_secure_for_request(request)
+
+    response.set_cookie(
+        key=AUTH_ACCESS_COOKIE_NAME,
+        value=access_token,
+        max_age=int(access_ttl or AUTH_ACCESS_TTL_SECONDS),
+        httponly=True,
+        secure=secure_cookie,
+        samesite=same_site,
+        domain=AUTH_COOKIE_DOMAIN,
+        path="/",
+    )
+    if refresh_token:
+        response.set_cookie(
+            key=AUTH_REFRESH_COOKIE_NAME,
+            value=refresh_token,
+            max_age=int(refresh_ttl or AUTH_REFRESH_TTL_SECONDS),
+            httponly=True,
+            secure=secure_cookie,
+            samesite=same_site,
+            domain=AUTH_COOKIE_DOMAIN,
+            path="/",
+        )
+    # Non-sensitive state hint to avoid localStorage token checks in legacy pages.
+    response.set_cookie(
+        key=AUTH_STATE_COOKIE_NAME,
+        value="1",
+        max_age=int(refresh_ttl or AUTH_REFRESH_TTL_SECONDS),
+        httponly=False,
+        secure=secure_cookie,
+        samesite=same_site,
+        domain=AUTH_COOKIE_DOMAIN,
+        path="/",
+    )
+
+
+def _clear_auth_cookies(response: Response, *, request: Optional[Request]) -> None:
+    same_site = "none" if AUTH_COOKIE_SAMESITE == "none" else AUTH_COOKIE_SAMESITE
+    secure_cookie = _auth_cookie_secure_for_request(request)
+    for key, httponly in (
+        (AUTH_ACCESS_COOKIE_NAME, True),
+        (AUTH_REFRESH_COOKIE_NAME, True),
+        (AUTH_STATE_COOKIE_NAME, False),
+    ):
+        response.set_cookie(
+            key=key,
+            value="",
+            max_age=0,
+            expires=0,
+            httponly=httponly,
+            secure=secure_cookie,
+            samesite=same_site,
+            domain=AUTH_COOKIE_DOMAIN,
+            path="/",
+        )
+
+
+def _token_from_cookie(request: Optional[Request], cookie_name: str) -> Optional[str]:
+    if request is None:
+        return None
+    try:
+        return _normalize_possible_token(request.cookies.get(cookie_name))
+    except Exception:
+        return None
+
+
+def _resolve_request_for_auth(explicit_request: Optional[Request] = None) -> Optional[Request]:
+    if explicit_request is not None:
+        return explicit_request
+    try:
+        return AUTH_REQUEST_CTX.get()
+    except Exception:
+        return None
+
+
+def _hash_refresh_token(token: str) -> str:
+    secret = _auth_effective_hash_secret()
+    if secret:
+        return hmac.new(secret.encode("utf-8"), token.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _auth_rotation_insert(
+    *,
+    user_id: str,
+    token_hash: str,
+    family_id: str,
+    parent_hash: Optional[str],
+    request: Optional[Request],
+    expires_at: Optional[str],
+) -> None:
+    try:
+        supabase = get_service_client()
+        now_iso = datetime.utcnow().isoformat() + "Z"
+        ip = _extract_client_ip(request)
+        ua = (request.headers.get("user-agent") if request else None)
+        row = {
+            "user_id": user_id,
+            "token_hash": token_hash,
+            "family_id": family_id,
+            "parent_token_hash": parent_hash,
+            "status": "active",
+            "created_at": now_iso,
+            "expires_at": expires_at,
+            "last_ip": ip,
+            "user_agent": ua,
+        }
+        res = supabase.table(AUTH_ROTATION_TABLE).insert(row).execute()
+        if getattr(res, "error", None):
+            supabase_logger.warning("auth rotation insert failed: %s", res.error)
+    except Exception as exc:
+        supabase_logger.warning("auth rotation insert exception: %s", exc)
+
+
+def _auth_rotation_get(token_hash: str) -> Optional[Dict[str, Any]]:
+    try:
+        supabase = get_service_client()
+        res = (
+            supabase.table(AUTH_ROTATION_TABLE)
+            .select("id,user_id,token_hash,family_id,status,used_at,expires_at")
+            .eq("token_hash", token_hash)
+            .limit(1)
+            .execute()
+        )
+        if getattr(res, "error", None):
+            supabase_logger.warning("auth rotation lookup failed: %s", res.error)
+            return None
+        rows = getattr(res, "data", None) or []
+        return rows[0] if rows else None
+    except Exception as exc:
+        supabase_logger.warning("auth rotation lookup exception: %s", exc)
+        return None
+
+
+def _auth_rotation_mark_used(old_hash: str, new_hash: str, request: Optional[Request]) -> None:
+    try:
+        supabase = get_service_client()
+        now_iso = datetime.utcnow().isoformat() + "Z"
+        ip = _extract_client_ip(request)
+        ua = (request.headers.get("user-agent") if request else None)
+        res = (
+            supabase.table(AUTH_ROTATION_TABLE)
+            .update(
+                {
+                    "status": "rotated",
+                    "used_at": now_iso,
+                    "replaced_by_hash": new_hash,
+                    "last_ip": ip,
+                    "user_agent": ua,
+                }
+            )
+            .eq("token_hash", old_hash)
+            .execute()
+        )
+        if getattr(res, "error", None):
+            supabase_logger.warning("auth rotation mark-used failed: %s", res.error)
+    except Exception as exc:
+        supabase_logger.warning("auth rotation mark-used exception: %s", exc)
+
+
+def _auth_rotation_revoke_family(family_id: str, reason: str, request: Optional[Request]) -> None:
+    if not family_id:
+        return
+    try:
+        supabase = get_service_client()
+        now_iso = datetime.utcnow().isoformat() + "Z"
+        ip = _extract_client_ip(request)
+        ua = (request.headers.get("user-agent") if request else None)
+        res = (
+            supabase.table(AUTH_ROTATION_TABLE)
+            .update(
+                {
+                    "status": "revoked",
+                    "revoked_at": now_iso,
+                    "revoke_reason": reason,
+                    "last_ip": ip,
+                    "user_agent": ua,
+                }
+            )
+            .eq("family_id", family_id)
+            .neq("status", "revoked")
+            .execute()
+        )
+        if getattr(res, "error", None):
+            supabase_logger.warning("auth rotation revoke family failed: %s", res.error)
+    except Exception as exc:
+        supabase_logger.warning("auth rotation revoke family exception: %s", exc)
+
+
+def signup_user(user, request: Optional[Request] = None):
     anon_client = get_anon_client()
     if not anon_client:
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
@@ -4091,14 +4666,58 @@ def signup_user(user):
         access_token = getattr(session, "access_token", None) if session else None
         refresh_token = getattr(session, "refresh_token", None) if session else None
         expires_in = getattr(session, "expires_in", 3600) if session else 3600
-        return {
+        response_payload = {
             "message": "Signup initiated",
             "access_token": access_token,
             "refresh_token": refresh_token,
             "expires_in": expires_in,
+            "token_transport": "cookie",
         }
+        if access_token:
+            family_id = str(uuid.uuid4())
+            signup_user_id = _get_user_id_from_auth_response(res)
+            _security_emit(
+                "auth.signup.success",
+                request=request,
+                email=(getattr(user, "email", None) or "").strip().lower() or None,
+                user_id=signup_user_id,
+                token_transport="cookie",
+            )
+            if refresh_token and signup_user_id:
+                exp_iso = (datetime.utcnow() + timedelta(seconds=max(expires_in, AUTH_REFRESH_TTL_SECONDS))).isoformat() + "Z"
+                _auth_rotation_insert(
+                    user_id=signup_user_id,
+                    token_hash=_hash_refresh_token(refresh_token),
+                    family_id=family_id,
+                    parent_hash=None,
+                    request=request,
+                    expires_at=exp_iso,
+                )
+            http_response = JSONResponse(response_payload)
+            _set_auth_cookies(
+                http_response,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                request=request,
+                access_ttl=expires_in,
+            )
+            return http_response
+        _security_emit(
+            "auth.signup.partial",
+            request=request,
+            email=(getattr(user, "email", None) or "").strip().lower() or None,
+            token_transport="none",
+        )
+        return response_payload
     except Exception as e:
         supabase_logger.exception("Signup error")
+        _security_emit(
+            "auth.signup.failure",
+            request=request,
+            severity="warning",
+            email=(getattr(user, "email", None) or "").strip().lower() or None,
+            error=str(e),
+        )
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -4154,6 +4773,11 @@ def _resolve_turnstile_keys(request: Optional[Request] = None) -> Tuple[str, str
     test_site = "1x00000000000000000000AA"
     test_secret = "1x0000000000000000000000000000000AA"
 
+    # Always prefer test keys for localhost development to avoid hostname mismatch
+    # (e.g. Cloudflare error 110200) even if APP_ENV is set to production.
+    if _is_local_host(request):
+        return test_site, test_secret
+
     if _is_production_env():
         site_key = (os.getenv("CLOUDFLARE_SITE_KEY") or "").strip()
         secret = (os.getenv("CLOUDFLARE_SECRET_KEY") or "").strip()
@@ -4190,14 +4814,31 @@ def verify_turnstile_token(token: str, request: Optional[Request] = None, *, exp
         form_data["remoteip"] = remote_ip
 
     try:
+        start_ts = time.perf_counter()
         response = requests.post(
             "https://challenges.cloudflare.com/turnstile/v0/siteverify",
             data=form_data,
             timeout=10,
         )
         response.raise_for_status()
+        _security_emit(
+            "outbound_api.call",
+            request=request,
+            target="turnstile.siteverify",
+            method="POST",
+            status_code=response.status_code,
+            duration_ms=round((time.perf_counter() - start_ts) * 1000, 2),
+        )
         result = response.json()
-    except requests.RequestException:
+    except requests.RequestException as exc:
+        _security_emit(
+            "outbound_api.error",
+            request=request,
+            severity="warning",
+            target="turnstile.siteverify",
+            method="POST",
+            error=str(exc),
+        )
         raise HTTPException(status_code=503, detail="Turnstile verification service unavailable")
     except ValueError:
         raise HTTPException(status_code=503, detail="Invalid Turnstile verification response")
@@ -4217,7 +4858,7 @@ def verify_turnstile_token(token: str, request: Optional[Request] = None, *, exp
     return result
 
 
-def login_user(user):
+def login_user(user, request: Optional[Request] = None):
     anon_client = get_anon_client()
     if not anon_client:
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
@@ -4230,20 +4871,64 @@ def login_user(user):
         expires_in = getattr(session, "expires_in", 3600) if session else 3600
         if not access_token:
             raise HTTPException(status_code=401, detail="Login failed: no session returned")
-        return {
+        user_id = _get_user_id_from_auth_response(res)
+        _security_emit(
+            "auth.login.success",
+            request=request,
+            user_id=user_id,
+            email=(getattr(user, "email", None) or "").strip().lower() or None,
+            token_transport="cookie",
+        )
+        family_id = str(uuid.uuid4())
+        if user_id and refresh_token:
+            exp_iso = (datetime.utcnow() + timedelta(seconds=max(expires_in, AUTH_REFRESH_TTL_SECONDS))).isoformat() + "Z"
+            _auth_rotation_insert(
+                user_id=user_id,
+                token_hash=_hash_refresh_token(refresh_token),
+                family_id=family_id,
+                parent_hash=None,
+                request=request,
+                expires_at=exp_iso,
+            )
+
+        response_payload = {
             "message": "Login successful",
             "access_token": access_token,
             "refresh_token": refresh_token,
             "expires_in": expires_in,
+            "token_transport": "cookie",
         }
+        http_response = JSONResponse(response_payload)
+        _set_auth_cookies(
+            http_response,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            request=request,
+            access_ttl=expires_in,
+        )
+        return http_response
     except HTTPException:
+        _security_emit(
+            "auth.login.failure",
+            request=request,
+            severity="warning",
+            email=(getattr(user, "email", None) or "").strip().lower() or None,
+            reason="http_exception",
+        )
         raise
     except Exception:
         supabase_logger.exception("Login failed")
+        _security_emit(
+            "auth.login.failure",
+            request=request,
+            severity="warning",
+            email=(getattr(user, "email", None) or "").strip().lower() or None,
+            reason="invalid_credentials_or_exception",
+        )
         raise HTTPException(status_code=401, detail="Invalid credentials or login failed")
 
 
-def signup_full_user(payload):
+def signup_full_user(payload, request: Optional[Request] = None):
     anon_client = get_anon_client()
     if not anon_client:
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
@@ -4253,6 +4938,9 @@ def signup_full_user(payload):
         if not user_id:
             raise HTTPException(status_code=400, detail="Failed to create auth user")
         access_token = _extract_access_token(auth_res)
+        auth_session = getattr(auth_res, "session", None)
+        refresh_token = getattr(auth_session, "refresh_token", None) if auth_session else None
+        expires_in = getattr(auth_session, "expires_in", 3600) if auth_session else 3600
 
         college_id = _resolve_college_id_by_name(payload.college)
         department_id = _resolve_department_id(college_id, payload.department)
@@ -4290,16 +4978,62 @@ def signup_full_user(payload):
             .execute()
         )
         profile_id = prof_q.data[0]["id"] if prof_q.data else None
-        return {
+        response_payload = {
             "message": "Signup complete",
             "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": expires_in,
             "user_id": user_id,
             "profile_id": profile_id,
+            "token_transport": "cookie",
         }
-    except HTTPException:
+        _security_emit(
+            "auth.signup_full.success",
+            request=request,
+            user_id=user_id,
+            email=(getattr(payload, "email", None) or "").strip().lower() or None,
+            token_transport="cookie" if access_token else "none",
+        )
+        if access_token:
+            if refresh_token:
+                exp_iso = (datetime.utcnow() + timedelta(seconds=max(expires_in, AUTH_REFRESH_TTL_SECONDS))).isoformat() + "Z"
+                _auth_rotation_insert(
+                    user_id=user_id,
+                    token_hash=_hash_refresh_token(refresh_token),
+                    family_id=str(uuid.uuid4()),
+                    parent_hash=None,
+                    request=request,
+                    expires_at=exp_iso,
+                )
+            http_response = JSONResponse(response_payload)
+            _set_auth_cookies(
+                http_response,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                request=request,
+                access_ttl=expires_in,
+            )
+            return http_response
+        return response_payload
+    except HTTPException as exc:
+        _security_emit(
+            "auth.signup_full.failure",
+            request=request,
+            severity="warning",
+            email=(getattr(payload, "email", None) or "").strip().lower() or None,
+            status_code=getattr(exc, "status_code", None),
+            reason="http_exception",
+        )
         raise
     except Exception as e:
         supabase_logger.exception("Signup full error")
+        _security_emit(
+            "auth.signup_full.failure",
+            request=request,
+            severity="warning",
+            email=(getattr(payload, "email", None) or "").strip().lower() or None,
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
 
 
@@ -7309,23 +8043,75 @@ def list_admin_users(
         "profile_image_url,verification_score,updated_at,created_at,linkedin,github,leetcode,skills,technologies,specializations",
     ]
     res = None
-    scan_limit = max(2000, min(10000, offset + limit + 2000))
+    rows: List[dict] = []
+    sort_mode_req = (sort_by or "").strip().lower()
+    # Usage-days sort must consider a wider candidate set; otherwise users can disappear
+    # from grouped listing if they are outside the default updated_at scan window.
+    if sort_mode_req in ("usage_days_desc", "usage_days_asc"):
+        scan_limit = max(10000, min(100000, offset + limit + 50000))
+    else:
+        scan_limit = max(2000, min(10000, offset + limit + 2000))
     for base_cols in base_select_try:
         try:
+            qv = (q or "").strip() if q else ""
+
+            if sort_mode_req in ("usage_days_desc", "usage_days_asc"):
+                # Fetch all profile rows in pages for true global usage-days ranking.
+                page_size = 1000
+                page_offset = 0
+                collected_rows: List[dict] = []
+                missing_column_variant = False
+                page_guard = 0
+                max_pages = 2000
+
+                while page_guard < max_pages:
+                    query = supabase.table("user_profiles").select(base_cols)
+                    if qv:
+                        pattern = f"%{qv}%"
+                        query = query.or_(
+                            f"name.ilike.{pattern},email.ilike.{pattern},regno.ilike.{pattern}"
+                        )
+                    # Use stable unique ordering for pagination to avoid missing rows.
+                    candidate = query.order("id").range(page_offset, page_offset + page_size - 1).execute()
+                    if getattr(candidate, "error", None):
+                        msg = str(candidate.error).lower()
+                        if ("column" in msg and "does not exist" in msg) or ("schema cache" in msg and "column" in msg):
+                            missing_column_variant = True
+                            break
+                        raise HTTPException(status_code=500, detail=f"Supabase error (list users): {candidate.error}")
+
+                    chunk_rows = getattr(candidate, "data", []) or []
+                    if not chunk_rows:
+                        break
+                    collected_rows.extend(chunk_rows)
+                    if len(chunk_rows) < page_size:
+                        break
+                    page_offset += len(chunk_rows)
+                    page_guard += 1
+
+                if page_guard >= max_pages:
+                    raise HTTPException(status_code=500, detail="Supabase error (list users): exceeded safe pagination limit while building usage ranking")
+
+                if missing_column_variant:
+                    continue
+                rows = collected_rows
+                res = True
+                break
+
             query = supabase.table("user_profiles").select(base_cols)
-            if q:
-                qv = (q or "").strip()
-                if qv:
-                    # Search by name/email/regno (case-insensitive)
-                    pattern = f"%{qv}%"
-                    query = query.or_(
-                        f"name.ilike.{pattern},email.ilike.{pattern},regno.ilike.{pattern}"
-                    )
+            if qv:
+                # Search by name/email/regno (case-insensitive)
+                pattern = f"%{qv}%"
+                query = query.or_(
+                    f"name.ilike.{pattern},email.ilike.{pattern},regno.ilike.{pattern}"
+                )
             candidate = query.order("updated_at", desc=True).limit(scan_limit).execute()
             if getattr(candidate, "error", None):
                 msg = str(candidate.error).lower()
                 if ("column" in msg and "does not exist" in msg) or ("schema cache" in msg and "column" in msg):
                     continue
+                raise HTTPException(status_code=500, detail=f"Supabase error (list users): {candidate.error}")
+            rows = getattr(candidate, "data", []) or []
             res = candidate
             break
         except Exception as e:
@@ -7338,7 +8124,6 @@ def list_admin_users(
     err = getattr(res, "error", None)
     if err:
         raise HTTPException(status_code=500, detail=f"Supabase error (list users): {err}")
-    rows: List[dict] = getattr(res, "data", []) or []
 
     # Load roles for all involved auth_user_ids in one query
     auth_ids = [r.get("auth_user_id") for r in rows if r.get("auth_user_id")]
@@ -7732,7 +8517,7 @@ def list_admin_users(
     session_days_map: Dict[str, Set[str]] = {}  # auth_user_id -> distinct YYYY-MM-DD
     if uniq_ids:
         try:
-            session_page_size = 5000
+            session_page_size = 1000
             for chunk in _chunked_ids(uniq_ids, size=120):
                 page = 0
                 while True:
@@ -7790,7 +8575,7 @@ def list_admin_users(
     usage_days_map: Dict[str, Set[str]] = {}  # auth_user_id -> distinct YYYY-MM-DD from counters
     if uniq_ids:
         try:
-            usage_page_size = 5000
+            usage_page_size = 1000
             for chunk in _chunked_ids(uniq_ids, size=120):
                 page = 0
                 while True:
@@ -7831,7 +8616,7 @@ def list_admin_users(
     profile_days_map: Dict[str, Set[str]] = {}  # profile_id -> distinct YYYY-MM-DD
     if uniq_profile_ids:
         try:
-            profile_page_size = 5000
+            profile_page_size = 1000
             profile_activity_sources = [
                 ("notex_activity_logs", "activity_date"),
                 ("user_activity_logs", "activity_date"),
@@ -14102,21 +14887,21 @@ def resolve_or_create_batch(payload: BatchResolveIn):
 @academics_router.post("/signup")
 def signup(user: UserAuthWithTurnstile, request: Request):
     verify_turnstile_token(user.turnstile_token, request=request, expected_action="signup")
-    return signup_user(user)
+    return signup_user(user, request=request)
 
 
 @academics_router.post("/login")
 def login(user: UserAuthWithTurnstile, request: Request):
     verify_turnstile_token(user.turnstile_token, request=request, expected_action="login")
-    return login_user(user)
+    return login_user(user, request=request)
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str
+    refresh_token: Optional[str] = None
 
 
 @academics_router.post("/refresh", summary="Refresh access token using refresh token")
-def refresh_token(payload: RefreshTokenRequest):
+def refresh_token(request: Request, payload: Optional[RefreshTokenRequest] = Body(default=None)):
     """Refresh the access token using a valid refresh token.
     
     This endpoint allows clients to obtain a new access token without
@@ -14125,28 +14910,105 @@ def refresh_token(payload: RefreshTokenRequest):
     anon_client = get_anon_client()
     if not anon_client:
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
-    if not payload.refresh_token:
+    body_refresh = _normalize_possible_token(payload.refresh_token) if payload else None
+    cookie_refresh = _token_from_cookie(_resolve_request_for_auth(request), AUTH_REFRESH_COOKIE_NAME)
+    refresh_candidate = body_refresh or cookie_refresh
+    if not refresh_candidate:
         raise HTTPException(status_code=400, detail="refresh_token is required")
+
+    incoming_hash = _hash_refresh_token(refresh_candidate)
+    existing_rotation = _auth_rotation_get(incoming_hash)
+    if existing_rotation and (
+        str(existing_rotation.get("status") or "").strip().lower() != "active"
+        or bool(existing_rotation.get("used_at"))
+    ):
+        fam = str(existing_rotation.get("family_id") or "").strip()
+        _auth_rotation_revoke_family(fam, "reuse-detected", _resolve_request_for_auth(request))
+        _security_emit("auth.refresh.reuse_detected", request=request, severity="warning", family_id=fam or None)
+        deny_res = JSONResponse({"detail": "Refresh token reuse detected. Please log in again."}, status_code=401)
+        _clear_auth_cookies(deny_res, request=_resolve_request_for_auth(request))
+        return deny_res
+
     try:
         # Use Supabase's refresh_session method
-        res = anon_client.auth.refresh_session(payload.refresh_token)
+        res = anon_client.auth.refresh_session(refresh_candidate)
         session = getattr(res, "session", None)
         access_token = getattr(session, "access_token", None) if session else None
-        refresh_token = getattr(session, "refresh_token", None) if session else None
+        rotated_refresh_token = getattr(session, "refresh_token", None) if session else None
         expires_in = getattr(session, "expires_in", 3600) if session else 3600
         if not access_token:
             raise HTTPException(status_code=401, detail="Token refresh failed: invalid or expired refresh token")
-        return {
+
+        user_id = _get_user_id_from_auth_response(res)
+        request_obj = _resolve_request_for_auth(request)
+        _security_emit(
+            "auth.refresh.success",
+            request=request_obj,
+            user_id=user_id,
+            rotated=bool(rotated_refresh_token),
+        )
+        _security_track_refresh_fingerprint(user_id=user_id, request=request_obj, action="refresh")
+
+        if existing_rotation and rotated_refresh_token:
+            new_hash = _hash_refresh_token(rotated_refresh_token)
+            _auth_rotation_mark_used(incoming_hash, new_hash, request_obj)
+            next_user_id = str(existing_rotation.get("user_id") or user_id or "").strip()
+            if next_user_id:
+                _auth_rotation_insert(
+                    user_id=next_user_id,
+                    token_hash=new_hash,
+                    family_id=str(existing_rotation.get("family_id") or str(uuid.uuid4())),
+                    parent_hash=incoming_hash,
+                    request=request_obj,
+                    expires_at=(datetime.utcnow() + timedelta(seconds=max(expires_in, AUTH_REFRESH_TTL_SECONDS))).isoformat() + "Z",
+                )
+        elif user_id and rotated_refresh_token:
+            _auth_rotation_insert(
+                user_id=user_id,
+                token_hash=_hash_refresh_token(rotated_refresh_token),
+                family_id=str(uuid.uuid4()),
+                parent_hash=None,
+                request=request_obj,
+                expires_at=(datetime.utcnow() + timedelta(seconds=max(expires_in, AUTH_REFRESH_TTL_SECONDS))).isoformat() + "Z",
+            )
+
+        response_payload = {
             "message": "Token refreshed successfully",
             "access_token": access_token,
-            "refresh_token": refresh_token,
+            "refresh_token": rotated_refresh_token,
             "expires_in": expires_in,
+            "token_transport": "cookie",
         }
-    except HTTPException:
+        ok_res = JSONResponse(response_payload)
+        _set_auth_cookies(
+            ok_res,
+            access_token=access_token,
+            refresh_token=rotated_refresh_token,
+            request=request_obj,
+            access_ttl=expires_in,
+        )
+        return ok_res
+    except HTTPException as exc:
+        _security_emit("auth.refresh.failure", request=request, severity="warning", detail=str(exc.detail))
         raise
     except Exception as e:
         supabase_logger.exception("Token refresh failed")
+        _security_emit("auth.refresh.failure", request=request, severity="warning", error=str(e))
         raise HTTPException(status_code=401, detail="Token refresh failed: invalid or expired refresh token")
+
+
+@academics_router.post("/logout", summary="Invalidate local auth cookies")
+def logout(request: Request):
+    req = _resolve_request_for_auth(request)
+    refresh_token_value = _token_from_cookie(req, AUTH_REFRESH_COOKIE_NAME)
+    if refresh_token_value:
+        record = _auth_rotation_get(_hash_refresh_token(refresh_token_value))
+        if record:
+            _auth_rotation_revoke_family(str(record.get("family_id") or ""), "logout", req)
+    res = JSONResponse({"message": "Logged out"})
+    _clear_auth_cookies(res, request=req)
+    _security_emit("auth.logout", request=req)
+    return res
 
 
 @academics_router.get("/api/public/supabase", summary="Public Supabase client config")
@@ -14206,16 +15068,75 @@ def public_academic_meta():
 
 @academics_router.post("/api/signup/full")
 def signup_full(payload: SignupFullIn):
-    return signup_full_user(payload)
+    return signup_full_user(payload, request=_resolve_request_for_auth())
+
+
+@academics_router.get("/api/admin/security/events", summary="Admin: list persisted security telemetry events")
+def admin_list_security_events(
+    authorization: Optional[str] = Header(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    event_type: Optional[str] = Query(default=None),
+    severity: Optional[str] = Query(default=None),
+    only_alerts: bool = Query(default=False),
+    search: Optional[str] = Query(default=None),
+):
+    _require_admin_or_employee(authorization)
+    supabase = get_service_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase service client unavailable")
+
+    q = supabase.table(SECURITY_EVENTS_TABLE).select(
+        "id,event_type,severity,path,method,client_ip,user_agent,user_id,email,event_payload,event_ts,created_at",
+        count="exact",
+    )
+
+    if event_type and event_type.strip():
+        q = q.eq("event_type", event_type.strip())
+
+    if severity and severity.strip():
+        q = q.eq("severity", severity.strip().lower())
+
+    if only_alerts:
+        q = q.ilike("event_type", "alert.%")
+
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
+        q = q.or_(
+            ",".join(
+                [
+                    f"event_type.ilike.{pattern}",
+                    f"path.ilike.{pattern}",
+                    f"email.ilike.{pattern}",
+                    f"user_id.ilike.{pattern}",
+                    f"client_ip.ilike.{pattern}",
+                ]
+            )
+        )
+
+    res = q.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (security events): {res.error}")
+
+    items = getattr(res, "data", None) or []
+    total = getattr(res, "count", None)
+    return {
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 def _parse_bearer_token(authorization: Optional[str]) -> Optional[str]:
-    if not authorization:
-        return None
-    parts = authorization.split()
-    if len(parts) == 2 and parts[0].lower() == "bearer":
-        return parts[1]
-    return None
+    if authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = _normalize_possible_token(parts[1])
+            if token:
+                return token
+    req = _resolve_request_for_auth()
+    return _token_from_cookie(req, AUTH_ACCESS_COOKIE_NAME)
 
 
 @academics_router.get("/api/me")
@@ -23774,6 +24695,171 @@ def get_leaderboard(
 def create_app() -> FastAPI:
     app = FastAPI(title="PaperX Unified API", version="1.0.0")
 
+    global_limiter = _SlidingWindowLimiter(
+        window_seconds=RATE_LIMIT_GLOBAL_WINDOW_SECONDS,
+        max_requests=RATE_LIMIT_GLOBAL_MAX_REQUESTS,
+        max_buckets=RATE_LIMIT_MAX_BUCKETS,
+    )
+    auth_limiter = _SlidingWindowLimiter(
+        window_seconds=RATE_LIMIT_AUTH_WINDOW_SECONDS,
+        max_requests=RATE_LIMIT_AUTH_MAX_REQUESTS,
+        max_buckets=RATE_LIMIT_MAX_BUCKETS,
+    )
+    login_limiter = _SlidingWindowLimiter(
+        window_seconds=RATE_LIMIT_LOGIN_WINDOW_SECONDS,
+        max_requests=RATE_LIMIT_LOGIN_MAX_REQUESTS,
+        max_buckets=RATE_LIMIT_MAX_BUCKETS,
+    )
+
+    @app.middleware("http")
+    async def rate_limit_middleware(request: Request, call_next):  # type: ignore[override]
+        if not RATE_LIMIT_ENABLED:
+            return await call_next(request)
+
+        method = (request.method or "").upper()
+        path = _rl_norm_path(request.url.path)
+
+        # Skip static, docs, preflight, and health probes.
+        if method == "OPTIONS" or path in {"/health", "/docs", "/openapi.json", "/redoc"} or path.startswith("/ui/") or path.startswith("/assets/"):
+            return await call_next(request)
+
+        client_ip = _extract_client_ip(request) or "unknown"
+        now_ts = time.time()
+
+        def _deny(limit_value: int, retry_after: int, scope_name: str):
+            _security_emit(
+                "rate_limit.block",
+                request=request,
+                severity="warning",
+                scope=scope_name,
+                limit=limit_value,
+                retry_after_seconds=retry_after,
+            )
+            _security_track_status_pattern(429, request)
+            return JSONResponse(
+                {
+                    "detail": "Rate limit exceeded",
+                    "scope": scope_name,
+                    "limit": limit_value,
+                    "retry_after_seconds": retry_after,
+                },
+                status_code=429,
+                headers={
+                    "Retry-After": str(retry_after),
+                    "X-RateLimit-Limit": str(limit_value),
+                    "X-RateLimit-Scope": scope_name,
+                },
+            )
+
+        # Global limiter applies to all API traffic.
+        global_key = f"g:{client_ip}"
+        allowed, retry_after, _ = global_limiter.allow(global_key, now_ts=now_ts)
+        if not allowed:
+            return _deny(RATE_LIMIT_GLOBAL_MAX_REQUESTS, retry_after, "global")
+
+        # Auth-sensitive endpoints receive stricter limits.
+        scoped_limiter = None
+        scoped_limit_value = 0
+        scoped_name = ""
+        if _rl_is_login_route(path):
+            scoped_limiter = login_limiter
+            scoped_limit_value = RATE_LIMIT_LOGIN_MAX_REQUESTS
+            scoped_name = "login"
+        elif _rl_is_auth_route(path):
+            scoped_limiter = auth_limiter
+            scoped_limit_value = RATE_LIMIT_AUTH_MAX_REQUESTS
+            scoped_name = "auth"
+
+        if scoped_limiter is not None:
+            scoped_key = f"{scoped_name}:{client_ip}:{path}"
+            allowed, retry_after, _ = scoped_limiter.allow(scoped_key, now_ts=now_ts)
+            if not allowed:
+                return _deny(scoped_limit_value, retry_after, scoped_name)
+
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def auth_request_context_and_cookie_bridge(request: Request, call_next):  # type: ignore[override]
+        token = AUTH_REQUEST_CTX.set(request)
+        try:
+            ctype = (request.headers.get("content-type") or "").lower()
+            if request.method.upper() in {"POST", "PUT", "PATCH"} and "multipart/form-data" in ctype:
+                clen = request.headers.get("content-length")
+                size_hint = int(clen) if (clen and str(clen).isdigit()) else None
+                _security_emit(
+                    "file_upload.metadata",
+                    request=request,
+                    category="multipart_generic",
+                    content_length=size_hint,
+                )
+                _security_track_upload_spike(request=request, category="multipart_generic")
+
+            auth_header = request.headers.get("authorization")
+            auth_token = _normalize_possible_token(
+                auth_header.split(" ", 1)[1] if auth_header and auth_header.lower().startswith("bearer ") else None
+            )
+            cookie_token = _token_from_cookie(request, AUTH_ACCESS_COOKIE_NAME)
+            if cookie_token and not auth_token:
+                headers = list(request.scope.get("headers") or [])
+                headers = [(k, v) for (k, v) in headers if k.lower() != b"authorization"]
+                headers.append((b"authorization", f"Bearer {cookie_token}".encode("utf-8")))
+                request.scope["headers"] = headers
+
+            response = await call_next(request)
+
+            # Security headers for all responses.
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+            response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains; preload",
+            )
+
+            csp = "; ".join([
+                "default-src 'self'",
+                "base-uri 'self'",
+                "object-src 'none'",
+                "frame-ancestors 'none'",
+                "img-src 'self' data: blob: https:",
+                "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+                "script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://challenges.cloudflare.com",
+                "connect-src 'self' https://*.paperx.tech https://*.ondigitalocean.app https://*.supabase.co https://api.openai.com https://generativelanguage.googleapis.com https://www.googleapis.com",
+                "frame-src 'self' https://challenges.cloudflare.com https://www.google.com",
+                "worker-src 'self' blob:",
+                "form-action 'self'",
+                "upgrade-insecure-requests",
+            ])
+            response.headers.setdefault("Content-Security-Policy", csp)
+
+            # Detection telemetry for repeated authz/rl failures.
+            _security_track_status_pattern(int(response.status_code), request)
+
+            # Admin action monitoring for mutable admin endpoints.
+            path_norm = _rl_norm_path(request.url.path)
+            method_norm = (request.method or "").upper()
+            if path_norm.startswith("/api/admin") and method_norm in {"POST", "PUT", "PATCH", "DELETE"}:
+                admin_uid = None
+                admin_email = None
+                try:
+                    admin_uid, admin_email = _get_auth_user(request.headers.get("authorization"))
+                except Exception:
+                    pass
+                _security_emit(
+                    "admin.action",
+                    request=request,
+                    user_id=admin_uid,
+                    email=admin_email,
+                    action_path=path_norm,
+                    action_method=method_norm,
+                    status_code=int(response.status_code),
+                )
+            return response
+        finally:
+            AUTH_REQUEST_CTX.reset(token)
+
     # Compress large HTML/CSS/JS/JSON responses to reduce bandwidth
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
@@ -24483,6 +25569,342 @@ async def analytics_active_users_last_24h(limit: int = Query(200, ge=1, le=2000)
         "today_start": today_start,
         "timezone": str(local_tz),
         "users": rows,
+    }
+
+
+@analytics_router.get("/engineer-profile", summary="Admin: deep profile analytics by email")
+async def analytics_engineer_profile(
+    email: str = Query(..., min_length=3, max_length=320),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Auth disabled (no anon client)")
+
+    try:
+        auth_user = anon_client.auth.get_user(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user_obj = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+    admin_user_id = None
+    admin_email = None
+    if user_obj:
+        admin_user_id = getattr(user_obj, "id", None) or (user_obj.get("id") if isinstance(user_obj, dict) else None)
+        admin_email = getattr(user_obj, "email", None) or (user_obj.get("email") if isinstance(user_obj, dict) else None)
+
+    if not _is_admin_user(admin_user_id, admin_email):
+        raise HTTPException(status_code=403, detail="Not an admin user")
+
+    supabase = get_service_client()
+    email_norm = (email or "").strip().lower()
+    if not email_norm:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    def _id_norm(v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s if s else None
+
+    def _to_day(v: Any) -> Optional[str]:
+        if not v:
+            return None
+        try:
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00")).date().isoformat()
+        except Exception:
+            s = str(v)
+            return s[:10] if len(s) >= 10 else None
+
+    def _browser_family(ua: Optional[str]) -> str:
+        s = (ua or "").lower()
+        if not s:
+            return "Unknown"
+        if "edg/" in s:
+            return "Edge"
+        if "opr/" in s or "opera" in s:
+            return "Opera"
+        if "firefox/" in s:
+            return "Firefox"
+        if "safari/" in s and "chrome/" not in s and "chromium/" not in s:
+            return "Safari"
+        if "chrome/" in s or "chromium/" in s:
+            return "Chrome"
+        return "Other"
+
+    def _safe_select_one(table: str, cols: str, key: str, value: Any, op: str = "eq") -> Optional[dict]:
+        try:
+            q = supabase.table(table).select(cols)
+            if op == "ilike":
+                q = q.ilike(key, value)
+            else:
+                q = q.eq(key, value)
+            res = q.limit(1).execute()
+            rows = getattr(res, "data", []) or []
+            return rows[0] if rows else None
+        except Exception:
+            return None
+
+    profile = _safe_select_one(
+        "user_profiles",
+        "id,auth_user_id,name,email,gender,phone,semester,regno,batch_from,batch_to,section,college_id,department_id,batch_id,"
+        "profile_image_url,verification_score,updated_at,created_at,linkedin,github,leetcode,skills,technologies,specializations",
+        "email",
+        email_norm,
+        op="ilike",
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="User profile not found for this email")
+
+    profile_id = _id_norm(profile.get("id"))
+    auth_user_id = _id_norm(profile.get("auth_user_id"))
+
+    education_rows: List[dict] = []
+    try:
+        if profile_id:
+            er = supabase.table("user_education").select("*").eq("user_profile_id", profile_id).order("created_at", desc=True).limit(50).execute()
+            education_rows = getattr(er, "data", []) or []
+    except Exception:
+        education_rows = []
+
+    if not education_rows and auth_user_id:
+        try:
+            er2 = supabase.table("user_education").select("*").eq("auth_user_id", auth_user_id).order("created_at", desc=True).limit(50).execute()
+            education_rows = getattr(er2, "data", []) or []
+        except Exception:
+            education_rows = []
+
+    primary_edu = education_rows[0] if education_rows else {}
+
+    college_id = _id_norm(primary_edu.get("college_id") if primary_edu else None) or _id_norm(profile.get("college_id"))
+    dept_id = _id_norm(primary_edu.get("department_id") if primary_edu else None) or _id_norm(profile.get("department_id"))
+    degree_id = _id_norm(primary_edu.get("degree_id") if primary_edu else None)
+    batch_id = _id_norm(primary_edu.get("batch_id") if primary_edu else None) or _id_norm(profile.get("batch_id"))
+
+    college = _safe_select_one("colleges", "id,name", "id", college_id) if college_id else None
+    department = _safe_select_one("departments", "id,name", "id", dept_id) if dept_id else None
+    degree = _safe_select_one("degrees", "id,name", "id", degree_id) if degree_id else None
+    batch = _safe_select_one("batches", "id,from_year,to_year", "id", batch_id) if batch_id else None
+
+    streak_data = None
+    if profile_id:
+        streak_data = _safe_select_one("notex_streak", "user_profile_id,current_streak,longest_streak,last_activity_date,updated_at", "user_profile_id", profile_id)
+        if not streak_data:
+            streak_data = _safe_select_one("user_streaks", "user_profile_id,current_streak,longest_streak,last_activity_date,updated_at", "user_profile_id", profile_id)
+
+    if not streak_data and auth_user_id:
+        streak_data = _safe_select_one("notex_streak", "auth_user_id,user_id,current_streak,longest_streak,last_activity_date,updated_at", "auth_user_id", auth_user_id)
+        if not streak_data:
+            streak_data = _safe_select_one("notex_streak", "auth_user_id,user_id,current_streak,longest_streak,last_activity_date,updated_at", "user_id", auth_user_id)
+
+    sessions: List[dict] = []
+    if auth_user_id:
+        try:
+            page_size = 1000
+            page = 0
+            while True:
+                start = page * page_size
+                end = start + page_size - 1
+                sr = (
+                    supabase.table("user_sessions")
+                    .select("id,user_id,user_agent,ip,started_at,last_seen_at")
+                    .eq("user_id", auth_user_id)
+                    .order("started_at", desc=True)
+                    .range(start, end)
+                    .execute()
+                )
+                srows = getattr(sr, "data", []) or []
+                if not srows:
+                    break
+                sessions.extend(srows)
+                if len(srows) < page_size or len(sessions) >= 5000:
+                    break
+                page += 1
+        except Exception:
+            sessions = []
+
+    session_days: Set[str] = set()
+    browser_breakdown: Dict[str, int] = {}
+    ip_breakdown: Dict[str, int] = {}
+    signins_by_day: Dict[str, int] = {}
+
+    for s in sessions:
+        d1 = _to_day(s.get("started_at"))
+        d2 = _to_day(s.get("last_seen_at"))
+        if d1:
+            session_days.add(d1)
+            signins_by_day[d1] = signins_by_day.get(d1, 0) + 1
+        if d2:
+            session_days.add(d2)
+
+        b = _browser_family(s.get("user_agent"))
+        browser_breakdown[b] = browser_breakdown.get(b, 0) + 1
+
+        ip_val = str(s.get("ip") or "").strip() or "Unknown"
+        ip_breakdown[ip_val] = ip_breakdown.get(ip_val, 0) + 1
+
+    events: List[dict] = []
+    if auth_user_id:
+        try:
+            page_size = 1000
+            page = 0
+            while True:
+                start = page * page_size
+                end = start + page_size - 1
+                er = (
+                    supabase.table("analytics_events")
+                    .select("id,event_type,event_data,created_at,session_id")
+                    .eq("user_id", auth_user_id)
+                    .order("created_at", desc=True)
+                    .range(start, end)
+                    .execute()
+                )
+                erows = getattr(er, "data", []) or []
+                if not erows:
+                    break
+                events.extend(erows)
+                if len(erows) < page_size or len(events) >= 5000:
+                    break
+                page += 1
+        except Exception:
+            events = []
+
+    interaction_breakdown: Dict[str, int] = {}
+    interactions_by_day: Dict[str, int] = {}
+    for e in events:
+        et = str(e.get("event_type") or "unknown").strip() or "unknown"
+        interaction_breakdown[et] = interaction_breakdown.get(et, 0) + 1
+        day = _to_day(e.get("created_at"))
+        if day:
+            interactions_by_day[day] = interactions_by_day.get(day, 0) + 1
+
+    usage_days: Set[str] = set(session_days)
+    if auth_user_id:
+        try:
+            ur = supabase.table(USAGE_DAILY_COUNTERS_TABLE).select("usage_date").eq("auth_user_id", auth_user_id).limit(5000).execute()
+            for row in (getattr(ur, "data", []) or []):
+                day = _to_day(row.get("usage_date"))
+                if day:
+                    usage_days.add(day)
+        except Exception:
+            pass
+
+    if profile_id:
+        for table_name, date_col in (("notex_activity_logs", "activity_date"), ("user_activity_logs", "activity_date"), ("user_topic_history", "viewed_at")):
+            try:
+                pr = supabase.table(table_name).select(date_col).eq("user_profile_id", profile_id).limit(5000).execute()
+                for row in (getattr(pr, "data", []) or []):
+                    day = _to_day(row.get(date_col))
+                    if day:
+                        usage_days.add(day)
+            except Exception:
+                continue
+
+    if streak_data and streak_data.get("last_activity_date"):
+        day = _to_day(streak_data.get("last_activity_date"))
+        if day:
+            usage_days.add(day)
+
+    interactions_sorted = sorted(
+        ({"event_type": k, "count": int(v)} for k, v in interaction_breakdown.items()),
+        key=lambda x: x["count"],
+        reverse=True,
+    )
+    browsers_sorted = sorted(
+        ({"browser": k, "count": int(v)} for k, v in browser_breakdown.items()),
+        key=lambda x: x["count"],
+        reverse=True,
+    )
+    ips_sorted = sorted(
+        ({"ip": k, "count": int(v)} for k, v in ip_breakdown.items()),
+        key=lambda x: x["count"],
+        reverse=True,
+    )
+    signins_by_day_sorted = sorted(
+        ({"day": k, "count": int(v)} for k, v in signins_by_day.items()),
+        key=lambda x: x["day"],
+        reverse=True,
+    )
+    interactions_by_day_sorted = sorted(
+        ({"day": k, "count": int(v)} for k, v in interactions_by_day.items()),
+        key=lambda x: x["day"],
+        reverse=True,
+    )
+
+    semester_val = profile.get("semester") if profile.get("semester") is not None else primary_edu.get("current_semester")
+    regno_val = profile.get("regno") if profile.get("regno") else primary_edu.get("regno")
+    section_val = (primary_edu.get("section") if isinstance(primary_edu, dict) else None) or profile.get("section")
+    batch_from_val = (batch or {}).get("from_year") if batch else profile.get("batch_from")
+    batch_to_val = (batch or {}).get("to_year") if batch else profile.get("batch_to")
+
+    return {
+        "email": email_norm,
+        "profile": {
+            "profile_id": profile_id,
+            "auth_user_id": auth_user_id,
+            "name": profile.get("name"),
+            "email": profile.get("email"),
+            "gender": profile.get("gender"),
+            "phone": profile.get("phone"),
+            "regno": regno_val,
+            "semester": semester_val,
+            "section": section_val,
+            "profile_image_url": profile.get("profile_image_url"),
+            "verification_score": profile.get("verification_score"),
+            "linkedin": profile.get("linkedin"),
+            "github": profile.get("github"),
+            "leetcode": profile.get("leetcode"),
+            "skills": profile.get("skills") or [],
+            "technologies": profile.get("technologies") or [],
+            "specializations": profile.get("specializations") or [],
+            "created_at": profile.get("created_at"),
+            "updated_at": profile.get("updated_at"),
+        },
+        "college_details": {
+            "college_id": college_id,
+            "college_name": (college or {}).get("name") or primary_edu.get("school"),
+            "degree_id": degree_id,
+            "degree_name": (degree or {}).get("name") or primary_edu.get("degree"),
+            "department_id": dept_id,
+            "department_name": (department or {}).get("name") or primary_edu.get("department"),
+            "batch_id": batch_id,
+            "batch_from": batch_from_val,
+            "batch_to": batch_to_val,
+            "batch_range": (f"{batch_from_val}-{batch_to_val}" if batch_from_val and batch_to_val else primary_edu.get("batch_range")),
+        },
+        "academic_details": {
+            "education_count": len(education_rows),
+            "primary_education": primary_edu,
+            "education_rows": education_rows,
+        },
+        "streaks": {
+            "current_streak": int((streak_data or {}).get("current_streak") or 0),
+            "longest_streak": int((streak_data or {}).get("longest_streak") or 0),
+            "last_activity_date": (streak_data or {}).get("last_activity_date"),
+            "updated_at": (streak_data or {}).get("updated_at"),
+        },
+        "usage": {
+            "total_usage_days": len(usage_days),
+            "usage_days": sorted(list(usage_days), reverse=True),
+        },
+        "sign_in": {
+            "sign_in_count": len(sessions),
+            "total_sign_in_days": len(session_days),
+            "browsers": browsers_sorted,
+            "ips": ips_sorted,
+            "by_day": signins_by_day_sorted,
+            "recent_sessions": sessions[:50],
+        },
+        "interactions": {
+            "total_interactions": len(events),
+            "breakdown": interactions_sorted,
+            "by_day": interactions_by_day_sorted,
+            "recent_events": events[:100],
+        },
     }
 
 app.include_router(analytics_router)
@@ -31423,6 +32845,9 @@ async def innovatex_make_unique(
     if not proj or not proj.data:
         raise HTTPException(status_code=404, detail="Project not found")
     project = proj.data[0]
+    req_obj = _resolve_request_for_auth()
+    _security_emit("model.tool_call", request=req_obj, tool_name="innovatex_make_unique", project_id=body.project_id, user_id=user_id)
+    _security_track_tool_chain(chain_key=f"innovatex:{body.project_id}", tool_name="innovatex_make_unique", request=req_obj)
 
     prompt = f"""You are an expert project uniqueness analyzer.
 
@@ -31474,6 +32899,9 @@ async def innovatex_eval_metrics(
     if not proj or not proj.data:
         raise HTTPException(status_code=404, detail="Project not found")
     project = proj.data[0]
+    req_obj = _resolve_request_for_auth()
+    _security_emit("model.tool_call", request=req_obj, tool_name="innovatex_eval_metrics", project_id=body.project_id, user_id=user_id)
+    _security_track_tool_chain(chain_key=f"innovatex:{body.project_id}", tool_name="innovatex_eval_metrics", request=req_obj)
 
     prompt = f"""You are an expert academic project evaluator.
 
@@ -31523,6 +32951,9 @@ async def innovatex_viva_sim(
     if not proj or not proj.data:
         raise HTTPException(status_code=404, detail="Project not found")
     project = proj.data[0]
+    req_obj = _resolve_request_for_auth()
+    _security_emit("model.tool_call", request=req_obj, tool_name="innovatex_viva_sim", project_id=body.project_id, user_id=user_id)
+    _security_track_tool_chain(chain_key=f"innovatex:{body.project_id}", tool_name="innovatex_viva_sim", request=req_obj)
 
     student_answers = (body.extra or {}).get("answers", None)
 
@@ -31604,6 +33035,9 @@ async def innovatex_explore_features(
     if not proj or not proj.data:
         raise HTTPException(status_code=404, detail="Project not found")
     project = proj.data[0]
+    req_obj = _resolve_request_for_auth()
+    _security_emit("model.tool_call", request=req_obj, tool_name="innovatex_explore_features", project_id=body.project_id, user_id=user_id)
+    _security_track_tool_chain(chain_key=f"innovatex:{body.project_id}", tool_name="innovatex_explore_features", request=req_obj)
 
     prompt = f"""You are a creative product strategist helping a student enhance their project with unique features.
 
@@ -32163,6 +33597,8 @@ MEDIX_SECTION_PARALLELISM = max(1, int(os.getenv("MEDIX_RAG_SECTION_PARALLELISM"
 MEDIX_UPLOAD_PARALLELISM = max(1, int(os.getenv("MEDIX_RAG_UPLOAD_PARALLELISM", "3")))
 MEDIX_EMBED_PARALLELISM = max(1, int(os.getenv("MEDIX_RAG_EMBED_PARALLELISM", "2")))
 MEDIX_EMBED_BATCH_SIZE = max(1, int(os.getenv("MEDIX_RAG_EMBED_BATCH_SIZE", "16")))
+MEDIX_RAG_AUDIT_TABLE = os.getenv("MEDIX_RAG_AUDIT_TABLE", "medix_rag_audit_logs")
+MEDIX_RAG_AUDIT_SECRET = (os.getenv("MEDIX_RAG_AUDIT_SECRET") or SUPABASE_SERVICE_ROLE_KEY or "").strip()
 
 _MEDIX_SEMANTIC_ENABLED = True
 _MEDIX_SEMANTIC_DISABLED_REASON: Optional[str] = None
@@ -32246,6 +33682,162 @@ class MedixRagChatResponse(BaseModel):
     retrieval_count: int
     model: str
     retrieval_debug: Optional[Dict[str, Any]] = None
+
+
+def _medix_require_actor(authorization: Optional[str]) -> Dict[str, Any]:
+    user_id, email = _get_auth_user(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid auth context")
+    return {
+        "user_id": str(user_id),
+        "email": (email or "").strip().lower() or None,
+        "is_admin": _is_admin_or_employee(user_id, email),
+    }
+
+
+def _medix_sign_audit_payload(payload: Dict[str, Any]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    if not MEDIX_RAG_AUDIT_SECRET:
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return hmac.new(
+        MEDIX_RAG_AUDIT_SECRET.encode("utf-8"),
+        canonical.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _medix_audit_source_mutation(
+    *,
+    action: str,
+    actor_user_id: Optional[str],
+    actor_email: Optional[str],
+    source_id: Optional[str],
+    payload: Dict[str, Any],
+) -> None:
+    _security_emit(
+        "rag.source.mutation",
+        action=action,
+        actor_user_id=actor_user_id,
+        actor_email=actor_email,
+        source_id=source_id,
+        payload=payload,
+    )
+    _security_track_rag_mutation_burst(request=None, action=action)
+
+    signed_at = datetime.utcnow().isoformat() + "Z"
+    signed_payload = {
+        "event_type": action,
+        "actor_user_id": actor_user_id,
+        "actor_email": actor_email,
+        "target_type": "medix_rag_source",
+        "target_id": source_id,
+        "payload": payload,
+        "signed_at": signed_at,
+        "signature_alg": "hmac-sha256" if MEDIX_RAG_AUDIT_SECRET else "sha256",
+    }
+    signature = _medix_sign_audit_payload(signed_payload)
+    audit_row = {**signed_payload, "signature": signature}
+
+    try:
+        supabase = get_service_client()
+        res = supabase.table(MEDIX_RAG_AUDIT_TABLE).insert(audit_row).execute()
+        if getattr(res, "error", None):
+            supabase_logger.warning(
+                "MEDIX audit insert failed",
+                extra={
+                    "table": MEDIX_RAG_AUDIT_TABLE,
+                    "error": str(res.error),
+                    "audit": audit_row,
+                },
+            )
+    except Exception as exc:
+        supabase_logger.warning(
+            "MEDIX audit logging exception",
+            extra={"table": MEDIX_RAG_AUDIT_TABLE, "error": str(exc), "audit": audit_row},
+        )
+
+
+def _medix_assert_source_access(supabase: Client, source_id: str, actor: Dict[str, Any]) -> Dict[str, Any]:
+    res = (
+        supabase.table(MEDIX_RAG_SOURCES_TABLE)
+        .select("id, source_name, file_name, uploaded_by, chunk_count, metadata")
+        .eq("id", source_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (read source): {res.error}")
+    rows = getattr(res, "data", None) or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    row = rows[0]
+    owner_id = (row.get("uploaded_by") or "").strip()
+    if actor.get("is_admin"):
+        return row
+    if not owner_id or owner_id != actor.get("user_id"):
+        raise HTTPException(status_code=403, detail="Not allowed to access this source")
+    return row
+
+
+def _medix_filter_source_ids_for_actor(
+    *,
+    supabase: Client,
+    actor: Dict[str, Any],
+    source_ids: Optional[List[str]],
+) -> Optional[List[str]]:
+    if actor.get("is_admin"):
+        return source_ids
+
+    if not source_ids:
+        own = (
+            supabase.table(MEDIX_RAG_SOURCES_TABLE)
+            .select("id")
+            .eq("uploaded_by", actor["user_id"])
+            .limit(5000)
+            .execute()
+        )
+        if getattr(own, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (list owned sources): {own.error}")
+        return [str(r.get("id") or "") for r in (getattr(own, "data", None) or []) if str(r.get("id") or "")]
+
+    res = (
+        supabase.table(MEDIX_RAG_SOURCES_TABLE)
+        .select("id")
+        .in_("id", source_ids)
+        .eq("uploaded_by", actor["user_id"])
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (authorize sources): {res.error}")
+
+    allowed_ids = {str(r.get("id") or "") for r in (getattr(res, "data", None) or []) if str(r.get("id") or "")}
+    if len(allowed_ids) != len(source_ids):
+        raise HTTPException(status_code=403, detail="One or more sources are not owned by this user")
+    return list(allowed_ids)
+
+
+def _medix_assert_session_access(supabase: Client, session_id: str, actor: Dict[str, Any]) -> Dict[str, Any]:
+    res = (
+        supabase.table(MEDIX_RAG_SESSIONS_TABLE)
+        .select("id, user_id")
+        .eq("id", session_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (read session): {res.error}")
+    rows = getattr(res, "data", None) or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    row = rows[0]
+    owner_id = (row.get("user_id") or "").strip()
+    if actor.get("is_admin"):
+        return row
+    if not owner_id or owner_id != actor.get("user_id"):
+        raise HTTPException(status_code=403, detail="Not allowed to access this session")
+    return row
 
 
 def _medix_norm_embed_model(model: str) -> str:
@@ -32696,7 +34288,9 @@ def _medix_index_pdf_source(
     file_name: str,
     raw: bytes,
     source_name: Optional[str],
-    user_id: Optional[str],
+    actor_user_id: str,
+    actor_email: Optional[str],
+    actor_is_admin: bool,
     parsed_tags: Optional[List[str]],
     force_reindex: bool = True,
 ) -> Dict[str, Any]:
@@ -32736,7 +34330,7 @@ def _medix_index_pdf_source(
 
     check_hash = (
         supabase.table(MEDIX_RAG_SOURCES_TABLE)
-        .select("id, source_name, chunk_count")
+        .select("id, source_name, chunk_count, uploaded_by")
         .eq("file_hash", digest)
         .limit(1)
         .execute()
@@ -32747,6 +34341,11 @@ def _medix_index_pdf_source(
     existing_row = existing[0] if existing else None
     existing_source_id = str(existing_row.get("id")) if existing_row and existing_row.get("id") else None
     existing_chunk_count = int(existing_row.get("chunk_count") or 0) if existing_row else 0
+    existing_uploaded_by = str(existing_row.get("uploaded_by") or "").strip() if existing_row else ""
+
+    if existing_row and not actor_is_admin:
+        if not existing_uploaded_by or existing_uploaded_by != actor_user_id:
+            raise HTTPException(status_code=403, detail="Not allowed to reindex a source owned by another user")
 
     if existing_row and not force_reindex:
         _medix_progress(
@@ -32772,7 +34371,7 @@ def _medix_index_pdf_source(
         "source_name": safe_source_name,
         "file_name": file_name,
         "file_hash": digest,
-        "uploaded_by": (user_id or "").strip() or None,
+        "uploaded_by": actor_user_id,
         "chunk_count": len(chunk_items),
         "metadata": {
             "tags": tags_value,
@@ -32857,6 +34456,24 @@ def _medix_index_pdf_source(
     elapsed = time.perf_counter() - started_at
     _medix_progress(f"Indexing completed: file={file_name}, chunks={inserted_count}, elapsed_sec={elapsed:.1f}")
 
+    _medix_audit_source_mutation(
+        action="medix_rag_source_reindexed" if reindexed_existing else "medix_rag_source_uploaded",
+        actor_user_id=actor_user_id,
+        actor_email=actor_email,
+        source_id=source_id,
+        payload={
+            "file_name": file_name,
+            "source_name": safe_source_name,
+            "chunks_indexed": inserted_count,
+            "reindexed_existing": reindexed_existing,
+            "previous_chunk_count": previous_chunk_count,
+            "force_reindex": bool(force_reindex),
+            "section_count": len({int(c.get("section_index") or 0) for c in chunk_items}),
+            "file_hash": digest,
+            "tags": tags_value,
+        },
+    )
+
     return {
         "ok": True,
         "source_id": source_id,
@@ -32894,6 +34511,14 @@ def _medix_llm_answer_with_langchain(
     strict_citation_mode: bool = True,
     stateless_mode: bool = False,
 ) -> str:
+    _security_emit(
+        "model.call",
+        model=MEDIX_CHAT_MODEL,
+        provider="langchain_google_genai_or_google_genai",
+        context_blocks=len(context_blocks),
+        history_messages=len(history or []),
+        strict_citation_mode=bool(strict_citation_mode),
+    )
     context_text = []
     for item in context_blocks:
         context_text.append(
@@ -33065,21 +34690,36 @@ def _medix_save_chat_message(session_id: str, role: str, content: str, citations
     supabase.table(MEDIX_RAG_SESSIONS_TABLE).update({"updated_at": datetime.utcnow().isoformat()}).eq("id", session_id).execute()
 
 
-def _medix_ensure_session(session_id: Optional[str], user_id: Optional[str], first_message: Optional[str]) -> str:
+def _medix_ensure_session(
+    session_id: Optional[str],
+    user_id: Optional[str],
+    first_message: Optional[str],
+    *,
+    is_admin: bool = False,
+) -> str:
     supabase = get_service_client()
 
     if session_id:
-        existing = supabase.table(MEDIX_RAG_SESSIONS_TABLE).select("id").eq("id", session_id).limit(1).execute()
+        existing = supabase.table(MEDIX_RAG_SESSIONS_TABLE).select("id, user_id").eq("id", session_id).limit(1).execute()
         if getattr(existing, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (read session): {existing.error}")
-        if getattr(existing, "data", None):
+        rows = getattr(existing, "data", None) or []
+        if rows:
+            row_owner = (rows[0].get("user_id") or "").strip()
+            if is_admin:
+                return session_id
+            if not user_id or not row_owner or row_owner != user_id:
+                raise HTTPException(status_code=403, detail="Not allowed to access this session")
             return session_id
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authenticated user required")
 
     new_id = str(uuid.uuid4())
     title = (first_message or "New Medix Chat").strip()[:120] or "New Medix Chat"
     payload = {
         "id": new_id,
-        "user_id": (user_id or "").strip() or None,
+        "user_id": user_id.strip(),
         "title": title,
         "metadata": {},
     }
@@ -33496,7 +35136,7 @@ def _medix_keyword_retrieve_chunks(
                 .ilike("chunk_text", f"%{safe_term}%")
                 .limit(per_term_limit)
             )
-            if source_ids:
+            if source_ids is not None:
                 q = q.in_("source_id", source_ids)
             res = q.execute()
             if getattr(res, "error", None):
@@ -33554,7 +35194,7 @@ def _medix_fetch_neighbor_chunks(
                 .eq("source_id", sid)
                 .in_("chunk_index", sorted(indices))
             )
-            if source_ids:
+            if source_ids is not None:
                 q = q.in_("source_id", source_ids)
             res = q.execute()
             if getattr(res, "error", None):
@@ -33579,28 +35219,37 @@ def _medix_fetch_neighbor_chunks(
 
 
 @app.get("/api/medix/rag/sources")
-def medix_rag_sources(limit: int = Query(default=100, ge=1, le=500)):
+def medix_rag_sources(
+    limit: int = Query(default=100, ge=1, le=500),
+    authorization: Optional[str] = Header(default=None),
+):
+    actor = _medix_require_actor(authorization)
     supabase = get_service_client()
-    res = (
+    q = (
         supabase.table(MEDIX_RAG_SOURCES_TABLE)
         .select("id, source_name, file_name, chunk_count, uploaded_by, created_at, metadata")
         .order("created_at", desc=True)
         .limit(limit)
-        .execute()
     )
+    if not actor.get("is_admin"):
+        q = q.eq("uploaded_by", actor["user_id"])
+    res = q.execute()
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (list sources): {res.error}")
     return {"items": getattr(res, "data", None) or []}
 
 
 @app.delete("/api/medix/rag/sources/{source_id}")
-def medix_rag_delete_source(source_id: str):
+def medix_rag_delete_source(source_id: str, authorization: Optional[str] = Header(default=None)):
+    actor = _medix_require_actor(authorization)
     supabase = get_service_client()
 
     try:
         _ = uuid.UUID(source_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid source_id")
+
+    source_row = _medix_assert_source_access(supabase, source_id, actor)
 
     del_chunks = supabase.table(MEDIX_RAG_CHUNKS_TABLE).delete().eq("source_id", source_id).execute()
     if getattr(del_chunks, "error", None):
@@ -33609,6 +35258,19 @@ def medix_rag_delete_source(source_id: str):
     del_source = supabase.table(MEDIX_RAG_SOURCES_TABLE).delete().eq("id", source_id).execute()
     if getattr(del_source, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (delete source): {del_source.error}")
+
+    _medix_audit_source_mutation(
+        action="medix_rag_source_deleted",
+        actor_user_id=actor["user_id"],
+        actor_email=actor.get("email"),
+        source_id=source_id,
+        payload={
+            "source_name": source_row.get("source_name"),
+            "file_name": source_row.get("file_name"),
+            "chunk_count": int(source_row.get("chunk_count") or 0),
+            "deleted_chunks": True,
+        },
+    )
 
     return {"ok": True, "source_id": source_id}
 
@@ -33620,9 +35282,25 @@ async def medix_rag_upload_pdf(
     user_id: Optional[str] = Form(default=None),
     tags: Optional[str] = Form(default=None),
     force_reindex: bool = Form(default=True),
+    authorization: Optional[str] = Header(default=None),
 ):
+    actor = _medix_require_actor(authorization)
+    if user_id and user_id.strip() and user_id.strip() != actor["user_id"]:
+        raise HTTPException(status_code=403, detail="user_id in form must match authenticated user")
+
     file_name = (file.filename or "document.pdf").strip()
     raw = await file.read()
+    req_obj = _resolve_request_for_auth()
+    _security_emit(
+        "file_upload.metadata",
+        request=req_obj,
+        category="medix_rag",
+        file_name=file_name,
+        size_bytes=len(raw),
+        actor_user_id=actor.get("user_id"),
+        actor_email=actor.get("email"),
+    )
+    _security_track_upload_spike(request=req_obj, category="medix_rag")
 
     parsed_tags: List[str] = []
     if tags:
@@ -33640,7 +35318,9 @@ async def medix_rag_upload_pdf(
         file_name=file_name,
         raw=raw,
         source_name=source_name,
-        user_id=user_id,
+        actor_user_id=actor["user_id"],
+        actor_email=actor.get("email"),
+        actor_is_admin=bool(actor.get("is_admin")),
         parsed_tags=parsed_tags,
         force_reindex=force_reindex,
     )
@@ -33653,7 +35333,12 @@ async def medix_rag_upload_bulk_pdf(
     user_id: Optional[str] = Form(default=None),
     tags: Optional[str] = Form(default=None),
     force_reindex: bool = Form(default=True),
+    authorization: Optional[str] = Header(default=None),
 ):
+    actor = _medix_require_actor(authorization)
+    if user_id and user_id.strip() and user_id.strip() != actor["user_id"]:
+        raise HTTPException(status_code=403, detail="user_id in form must match authenticated user")
+
     if not files:
         raise HTTPException(status_code=400, detail="At least one PDF is required")
 
@@ -33681,6 +35366,19 @@ async def medix_rag_upload_bulk_pdf(
             }
         )
 
+    req_obj = _resolve_request_for_auth()
+    total_size = sum(len(it.get("raw") or b"") for it in prepared)
+    _security_emit(
+        "file_upload.metadata",
+        request=req_obj,
+        category="medix_rag_bulk",
+        file_count=len(prepared),
+        total_size_bytes=total_size,
+        actor_user_id=actor.get("user_id"),
+        actor_email=actor.get("email"),
+    )
+    _security_track_upload_spike(request=req_obj, category="medix_rag_bulk")
+
     semaphore = asyncio.Semaphore(min(MEDIX_UPLOAD_PARALLELISM, max(1, len(prepared))))
 
     async def _worker(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -33691,7 +35389,9 @@ async def medix_rag_upload_bulk_pdf(
                     file_name=item["file_name"],
                     raw=item["raw"],
                     source_name=item.get("source_name"),
-                    user_id=user_id,
+                    actor_user_id=actor["user_id"],
+                    actor_email=actor.get("email"),
+                    actor_is_admin=bool(actor.get("is_admin")),
                     parsed_tags=parsed_tags,
                     force_reindex=force_reindex,
                 )
@@ -33729,14 +35429,32 @@ async def medix_rag_upload_bulk_pdf(
 
 
 @app.post("/api/medix/rag/chat", response_model=MedixRagChatResponse)
-def medix_rag_chat(req: MedixRagChatRequest):
+def medix_rag_chat(req: MedixRagChatRequest, authorization: Optional[str] = Header(default=None)):
+    actor = _medix_require_actor(authorization)
     question = (req.message or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="message is required")
 
-    source_ids = _medix_parse_source_ids(req.source_ids)
-    session_id = _medix_ensure_session(req.session_id, req.user_id, question)
     supabase = get_service_client()
+    source_ids = _medix_parse_source_ids(req.source_ids)
+    source_ids = _medix_filter_source_ids_for_actor(supabase=supabase, actor=actor, source_ids=source_ids)
+    session_id = _medix_ensure_session(
+        req.session_id,
+        actor["user_id"],
+        question,
+        is_admin=bool(actor.get("is_admin")),
+    )
+    request_obj = _resolve_request_for_auth()
+    _security_emit(
+        "model.tool_call",
+        request=request_obj,
+        tool_name="medix_rag_chat",
+        model=MEDIX_CHAT_MODEL,
+        session_id=session_id,
+        actor_user_id=actor.get("user_id"),
+        source_id_count=len(source_ids or []),
+    )
+    _security_track_tool_chain(chain_key=f"medix:{session_id}", tool_name="medix_rag_chat", request=request_obj)
 
     try:
         history_res = _supabase_retry(
@@ -34117,13 +35835,19 @@ def medix_rag_chat(req: MedixRagChatRequest):
 
 
 @app.get("/api/medix/rag/sessions/{session_id}/messages")
-def medix_rag_session_messages(session_id: str, limit: int = Query(default=120, ge=1, le=500)):
+def medix_rag_session_messages(
+    session_id: str,
+    limit: int = Query(default=120, ge=1, le=500),
+    authorization: Optional[str] = Header(default=None),
+):
+    actor = _medix_require_actor(authorization)
     try:
         _ = uuid.UUID(session_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid session_id")
 
     supabase = get_service_client()
+    _medix_assert_session_access(supabase, session_id, actor)
     res = (
         supabase.table(MEDIX_RAG_MESSAGES_TABLE)
         .select("id, session_id, role, content, citations, created_at")

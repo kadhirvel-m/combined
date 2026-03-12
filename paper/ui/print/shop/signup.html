@@ -394,7 +394,11 @@
         }
         const token = j1.access_token || '';
         if (!token) { statusEl.textContent = 'Missing token from signup'; toast('Missing token from signup'); return; }
-        localStorage.setItem('px_token', token);
+        try {
+          localStorage.removeItem('px_token');
+          localStorage.removeItem('px_refresh_token');
+          localStorage.removeItem('px_token_expires_at');
+        } catch (_) { }
 
         // 2) Create shop
         const r2 = await fetch(`${API}/api/shop/signup`, {

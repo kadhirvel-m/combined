@@ -1641,3 +1641,49 @@ CREATE TABLE public.youtube_ai_notes (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT youtube_ai_notes_pkey PRIMARY KEY (id)
 );
+
+CREATE TABLE IF NOT EXISTS public.auth_refresh_tokens (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  token_hash text NOT NULL UNIQUE,
+  family_id uuid NOT NULL,
+  parent_token_hash text,
+  status text NOT NULL DEFAULT 'active'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  expires_at timestamp with time zone,
+  used_at timestamp with time zone,
+  replaced_by_hash text,
+  revoked_at timestamp with time zone,
+  revoke_reason text,
+  last_ip text,
+  user_agent text,
+  CONSTRAINT auth_refresh_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT auth_refresh_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT auth_refresh_tokens_status_check CHECK (status = ANY (ARRAY['active'::text, 'rotated'::text, 'revoked'::text]))
+);
+
+CREATE INDEX IF NOT EXISTS auth_refresh_tokens_user_idx ON public.auth_refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS auth_refresh_tokens_family_idx ON public.auth_refresh_tokens(family_id);
+CREATE INDEX IF NOT EXISTS auth_refresh_tokens_status_idx ON public.auth_refresh_tokens(status);
+
+CREATE TABLE IF NOT EXISTS public.security_events (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  event_type text NOT NULL,
+  severity text NOT NULL DEFAULT 'info'::text,
+  path text,
+  method text,
+  client_ip text,
+  user_agent text,
+  user_id text,
+  email text,
+  event_ts timestamp with time zone,
+  event_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT security_events_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS security_events_created_idx ON public.security_events(created_at);
+CREATE INDEX IF NOT EXISTS security_events_type_idx ON public.security_events(event_type);
+CREATE INDEX IF NOT EXISTS security_events_severity_idx ON public.security_events(severity);
+CREATE INDEX IF NOT EXISTS security_events_user_idx ON public.security_events(user_id);
+CREATE INDEX IF NOT EXISTS security_events_email_idx ON public.security_events(email);

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Security Logs - Paper X Admin</title>
+  <link rel="stylesheet" href="assets/css/tailwind.css" />
+  <script src="config.js"></script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <main class="max-w-7xl mx-auto p-4 md:p-6">
+    <header class="mb-4 md:mb-6">
+      <h1 class="text-2xl md:text-3xl font-bold">Security Logs</h1>
+      <p class="text-slate-400 text-sm mt-1">Persisted auth/upload/RAG/tool/admin/alert telemetry from <code class="mono">security_events</code>.</p>
+    </header>
+
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4 grid grid-cols-1 md:grid-cols-6 gap-3">
+      <label class="text-xs text-slate-300 md:col-span-2">
+        Search
+        <input id="search" class="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2" placeholder="event type, email, user id, path, ip" />
+      </label>
+      <label class="text-xs text-slate-300">
+        Severity
+        <select id="severity" class="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2">
+          <option value="">All</option>
+          <option value="info">info</option>
+          <option value="warning">warning</option>
+          <option value="error">error</option>
+        </select>
+      </label>
+      <label class="text-xs text-slate-300">
+        Event Type
+        <input id="eventType" class="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2" placeholder="e.g. auth.login.success" />
+      </label>
+      <label class="text-xs text-slate-300 flex items-end gap-2">
+        <input id="onlyAlerts" type="checkbox" class="accent-cyan-400" />
+        <span>Only alerts</span>
+      </label>
+      <div class="flex items-end gap-2">
+        <button id="applyBtn" class="px-4 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold">Apply</button>
+        <button id="refreshBtn" class="px-4 py-2 rounded bg-slate-700 hover:bg-slate-600">Refresh</button>
+      </div>
+    </section>
+
+    <section class="flex items-center justify-between mb-3">
+      <div id="status" class="text-sm text-slate-400">Ready</div>
+      <div class="flex items-center gap-2 text-sm">
+        <button id="prevBtn" class="px-3 py-1 rounded border border-slate-700 disabled:opacity-40">Prev</button>
+        <span id="pageInfo" class="text-slate-300">Page 1</span>
+        <button id="nextBtn" class="px-3 py-1 rounded border border-slate-700 disabled:opacity-40">Next</button>
+      </div>
+    </section>
+
+    <section class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="overflow-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-800 text-slate-200">
+            <tr>
+              <th class="text-left px-3 py-2">Time</th>
+              <th class="text-left px-3 py-2">Event</th>
+              <th class="text-left px-3 py-2">Severity</th>
+              <th class="text-left px-3 py-2">Path</th>
+              <th class="text-left px-3 py-2">User</th>
+              <th class="text-left px-3 py-2">IP</th>
+              <th class="text-left px-3 py-2">Payload</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const PAGE_SIZE = 50;
+    let offset = 0;
+    let total = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function authToken() {
+      const sentinel = '__COOKIE_AUTH__';
+      const userToken = localStorage.getItem('px_token');
+      const teacherToken = localStorage.getItem('teacherToken');
+      if (userToken && userToken !== sentinel) return userToken;
+      if (teacherToken && teacherToken !== sentinel) return teacherToken;
+      return null;
+    }
+
+    function buildUrl() {
+      const base = (window.API_BASE || location.origin).replace(/\/$/, '');
+      const q = new URLSearchParams();
+      q.set('limit', String(PAGE_SIZE));
+      q.set('offset', String(offset));
+      const sev = $('severity').value.trim();
+      const evt = $('eventType').value.trim();
+      const search = $('search').value.trim();
+      if (sev) q.set('severity', sev);
+      if (evt) q.set('event_type', evt);
+      if (search) q.set('search', search);
+      if ($('onlyAlerts').checked) q.set('only_alerts', 'true');
+      return `${base}/api/admin/security/events?${q.toString()}`;
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function fmtTime(ts) {
+      if (!ts) return '-';
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())) return ts;
+      return d.toLocaleString();
+    }
+
+    function renderRows(items) {
+      const tbody = $('rows');
+      if (!items || !items.length) {
+        tbody.innerHTML = '<tr><td class="px-3 py-3 text-slate-400" colspan="7">No events found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = items.map((it) => {
+        const payload = JSON.stringify(it.event_payload || {}).slice(0, 260);
+        return `<tr class="border-t border-slate-800 align-top">
+          <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(fmtTime(it.created_at || it.event_ts))}</td>
+          <td class="px-3 py-2 mono">${escapeHtml(it.event_type || '-')}</td>
+          <td class="px-3 py-2">${escapeHtml(it.severity || '-')}</td>
+          <td class="px-3 py-2 mono">${escapeHtml(it.method || '')} ${escapeHtml(it.path || '')}</td>
+          <td class="px-3 py-2 mono">${escapeHtml(it.email || it.user_id || '-')}</td>
+          <td class="px-3 py-2 mono">${escapeHtml(it.client_ip || '-')}</td>
+          <td class="px-3 py-2 mono text-xs text-slate-300">${escapeHtml(payload)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function updatePager() {
+      const page = Math.floor(offset / PAGE_SIZE) + 1;
+      $('pageInfo').textContent = total == null ? `Page ${page}` : `Page ${page} (${total} total)`;
+      $('prevBtn').disabled = offset <= 0;
+      $('nextBtn').disabled = total != null && offset + PAGE_SIZE >= total;
+    }
+
+    async function loadEvents() {
+      $('status').textContent = 'Loading...';
+      try {
+        const token = authToken();
+        const headers = { 'Accept': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(buildUrl(), { headers, credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.detail || `Request failed (${res.status})`);
+        }
+        total = typeof data.total === 'number' ? data.total : null;
+        renderRows(data.items || []);
+        $('status').textContent = 'Loaded';
+      } catch (err) {
+        $('status').textContent = `Error: ${err.message || err}`;
+        renderRows([]);
+      }
+      updatePager();
+    }
+
+    $('applyBtn').addEventListener('click', () => {
+      offset = 0;
+      loadEvents();
+    });
+    $('refreshBtn').addEventListener('click', loadEvents);
+    $('prevBtn').addEventListener('click', () => {
+      if (offset <= 0) return;
+      offset = Math.max(0, offset - PAGE_SIZE);
+      loadEvents();
+    });
+    $('nextBtn').addEventListener('click', () => {
+      offset += PAGE_SIZE;
+      loadEvents();
+    });
+
+    loadEvents();
+  </script>
+</body>
+</html>

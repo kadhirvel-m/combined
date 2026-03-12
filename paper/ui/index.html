@@ -2201,8 +2201,12 @@
             let isTeacher = false;
             let isStudent = false;
             try {
-                isTeacher = !!localStorage.getItem('teacherToken');
-                isStudent = !!localStorage.getItem('px_token');
+                const AUTH_SENTINEL = '__COOKIE_AUTH__';
+                const tTeach = localStorage.getItem('teacherToken');
+                const tUser = localStorage.getItem('px_token');
+                const hasCookieAuth = document.cookie.indexOf('paperx_auth=') !== -1;
+                isTeacher = !!(tTeach && tTeach !== AUTH_SENTINEL);
+                isStudent = !!((tUser && tUser !== AUTH_SENTINEL) || hasCookieAuth);
             } catch (_) { }
 
             if (isTeacher) {

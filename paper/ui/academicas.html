@@ -1726,7 +1726,16 @@
         const $ = (id) => document.getElementById(id);
         const setText = (id, val) => { const n = $(id); if (n) n.textContent = val ?? '-'; };
         function initials(name) { if (!name) return 'U'; return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase()).join('') || 'U'; }
-        function getToken() { try { return localStorage.getItem('px_token'); } catch { return null; } }
+        function hasCookieAuthState() {
+            try { return document.cookie.indexOf('paperx_auth=') !== -1; } catch { return false; }
+        }
+        function getToken() {
+            try {
+                const t = localStorage.getItem('px_token');
+                if (t) return t;
+            } catch { }
+            return hasCookieAuthState() ? '__COOKIE_AUTH__' : null;
+        }
         function authHeaders() { const t = getToken(); return t ? { Authorization: `Bearer ${t}` } : {}; }
         function ensureAccessModal() {
             let modal = document.getElementById('pxAccessModal');
@@ -1899,8 +1908,9 @@
             const expiresAt = localStorage.getItem(TOKEN_EXPIRES_KEY);
             const accessToken = localStorage.getItem(USER_TOKEN_KEY);
 
-            // If no refresh token, can't refresh
-            if (!refreshToken) return false;
+            // If no stored refresh token but cookie session exists, let backend refresh via cookie fallback.
+            const hasCookieSession = hasCookieAuthState();
+            if (!refreshToken && !hasCookieSession) return false;
 
             // If access token exists and not expired (with 5 min buffer), no refresh needed
             if (accessToken && expiresAt) {
@@ -1917,7 +1927,8 @@
                 const res = await fetch(`${API_BASE}/refresh`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refresh_token: refreshToken })
+                    credentials: 'include',
+                    body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {})
                 });
                 if (!res.ok) {
                     console.warn('[Academics] Refresh failed:', res.status);
@@ -1948,7 +1959,9 @@
             setLoaderStatus('Verifying session...');
             await refreshTokenIfNeeded();
 
-            if (!getToken()) { window.location.href = 'login.html'; return; }
+            // Cookie-based auth is authoritative. Probe backend before redirecting.
+            const sessionProbe = await fetchJson(`${API_BASE}/api/me`, { headers: authHeaders(), credentials: 'include' });
+            if (sessionProbe.unauthorized) { window.location.href = 'login.html'; return; }
             clearProgressError();
             const maxAttempts = 3;
             for (let attempt = 0; attempt < maxAttempts; attempt++) {
