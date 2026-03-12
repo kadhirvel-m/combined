@@ -10,7 +10,7 @@ CREATE TABLE public.active_subjects (
 );
 CREATE TABLE public.admin_roles (
   auth_user_id uuid NOT NULL,
-  role text NOT NULL DEFAULT 'student'::text,
+  role text NOT NULL DEFAULT 'student'::text CHECK (role = ANY (ARRAY['student'::text, 'teacher'::text, 'hod'::text, 'employee'::text, 'moderator'::text, 'admin'::text])),
   permissions jsonb DEFAULT '{}'::jsonb,
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -1687,3 +1687,150 @@ CREATE INDEX IF NOT EXISTS security_events_type_idx ON public.security_events(ev
 CREATE INDEX IF NOT EXISTS security_events_severity_idx ON public.security_events(severity);
 CREATE INDEX IF NOT EXISTS security_events_user_idx ON public.security_events(user_id);
 CREATE INDEX IF NOT EXISTS security_events_email_idx ON public.security_events(email);
+
+CREATE TABLE IF NOT EXISTS public.security_incidents (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  alert_type text NOT NULL,
+  severity text NOT NULL DEFAULT 'warning'::text,
+  status text NOT NULL DEFAULT 'open'::text,
+  path text,
+  method text,
+  client_ip text,
+  event_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  detected_at timestamp with time zone NOT NULL DEFAULT now(),
+  acknowledged_at timestamp with time zone,
+  resolved_at timestamp with time zone,
+  assignee text,
+  response_note text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT security_incidents_pkey PRIMARY KEY (id),
+  CONSTRAINT security_incidents_status_check CHECK (status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'resolved'::text, 'false_positive'::text]))
+);
+
+CREATE INDEX IF NOT EXISTS security_incidents_detected_idx ON public.security_incidents(detected_at);
+CREATE INDEX IF NOT EXISTS security_incidents_status_idx ON public.security_incidents(status);
+CREATE INDEX IF NOT EXISTS security_incidents_severity_idx ON public.security_incidents(severity);
+CREATE INDEX IF NOT EXISTS security_incidents_alert_type_idx ON public.security_incidents(alert_type);
+
+-- College hierarchy RLS hardening: only admin/employee can mutate core academic structure tables.
+ALTER TABLE public.colleges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.degrees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS colleges_select_all ON public.colleges;
+CREATE POLICY colleges_select_all
+ON public.colleges
+FOR SELECT
+TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS colleges_mutate_admin_employee ON public.colleges;
+CREATE POLICY colleges_mutate_admin_employee
+ON public.colleges
+FOR ALL
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.admin_roles ar
+    WHERE ar.auth_user_id = auth.uid()
+      AND lower(coalesce(ar.role, '')) IN ('admin', 'employee')
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM public.admin_roles ar
+    WHERE ar.auth_user_id = auth.uid()
+      AND lower(coalesce(ar.role, '')) IN ('admin', 'employee')
+  )
+);
+
+DROP POLICY IF EXISTS degrees_select_all ON public.degrees;
+CREATE POLICY degrees_select_all
+ON public.degrees
+FOR SELECT
+TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS degrees_mutate_admin_employee ON public.degrees;
+CREATE POLICY degrees_mutate_admin_employee
+ON public.degrees
+FOR ALL
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.admin_roles ar
+    WHERE ar.auth_user_id = auth.uid()
+      AND lower(coalesce(ar.role, '')) IN ('admin', 'employee')
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM public.admin_roles ar
+    WHERE ar.auth_user_id = auth.uid()
+      AND lower(coalesce(ar.role, '')) IN ('admin', 'employee')
+  )
+);
+
+DROP POLICY IF EXISTS departments_select_all ON public.departments;
+CREATE POLICY departments_select_all
+ON public.departments
+FOR SELECT
+TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS departments_mutate_admin_employee ON public.departments;
+CREATE POLICY departments_mutate_admin_employee
+ON public.departments
+FOR ALL
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.admin_roles ar
+    WHERE ar.auth_user_id = auth.uid()
+      AND lower(coalesce(ar.role, '')) IN ('admin', 'employee')
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM public.admin_roles ar
+    WHERE ar.auth_user_id = auth.uid()
+      AND lower(coalesce(ar.role, '')) IN ('admin', 'employee')
+  )
+);
+
+DROP POLICY IF EXISTS batches_select_all ON public.batches;
+CREATE POLICY batches_select_all
+ON public.batches
+FOR SELECT
+TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS batches_mutate_admin_employee ON public.batches;
+CREATE POLICY batches_mutate_admin_employee
+ON public.batches
+FOR ALL
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.admin_roles ar
+    WHERE ar.auth_user_id = auth.uid()
+      AND lower(coalesce(ar.role, '')) IN ('admin', 'employee')
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM public.admin_roles ar
+    WHERE ar.auth_user_id = auth.uid()
+      AND lower(coalesce(ar.role, '')) IN ('admin', 'employee')
+  )
+);
