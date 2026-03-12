@@ -152,7 +152,7 @@
     </script>
 
     <script src="../config.js" defer></script>
-    <script src="helpers.js" defer></script>
+    <script src="helpers.js"></script>
 </head>
 
 <body
@@ -746,7 +746,7 @@
 
             try {
                 // Must pass force=true
-                await Collage.fetchJson(`/api/degrees/${editingDegreeId}?force=true`, { method: 'DELETE', skipAuth: true });
+                await Collage.fetchJson(`/api/degrees/${editingDegreeId}?force=true`, { method: 'DELETE', skipAuth: false });
                 closeForceDeleteModal();
                 closeDegreeModal(); // Close the parent modal too
                 await loadDegrees();
@@ -836,7 +836,7 @@
                     await Collage.fetchJson(`/api/degrees/${editingDegreeId}`, {
                         method: 'PUT',
                         body: payload,
-                        skipAuth: true
+                        skipAuth: false
                     });
                 } else {
                     const createPayload = { ...payload };
@@ -845,7 +845,7 @@
                     await Collage.fetchJson(`/api/colleges/${collegeId}/degrees`, {
                         method: 'POST',
                         body: createPayload,
-                        skipAuth: true
+                        skipAuth: false
                     });
                 }
                 closeDegreeModal();
@@ -918,7 +918,7 @@
             }
             showLoader();
             try {
-                const data = await Collage.fetchJson(`/api/colleges/${collegeId}`, { skipAuth: true });
+                const data = await Collage.fetchJson(`/api/colleges/${collegeId}`, { skipAuth: false });
                 const collegeLabel = data?.name || collegeName || 'Selected college';
                 currentCollegeLabel = collegeLabel;
                 const degrees = Array.isArray(data?.degrees) ? data.degrees : [];

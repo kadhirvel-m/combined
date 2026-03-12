@@ -21,7 +21,8 @@
     <!-- Tailwind (CDN for demo) -->
     <link rel="stylesheet" href="assets/css/tailwind.css" />
     <script>
-        tailwind.config = {
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
             darkMode: 'class',
             theme: {
                 container: { center: true, padding: '1rem' },
@@ -1890,6 +1891,15 @@
             }
         }
 
+        function normalizeStoredAuthValue(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return null;
+            if (raw === '__COOKIE_AUTH__' || raw === '__cookie__' || raw === 'cookie' || raw === 'null' || raw === 'undefined' || raw === 'none') {
+                return null;
+            }
+            return raw;
+        }
+
         async function fetchJson(url, opts = {}) {
             try {
                 const r = await fetch(url, opts);
@@ -1904,9 +1914,9 @@
             const TOKEN_EXPIRES_KEY = 'px_token_expires_at';
             const USER_TOKEN_KEY = 'px_token';
 
-            const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-            const expiresAt = localStorage.getItem(TOKEN_EXPIRES_KEY);
-            const accessToken = localStorage.getItem(USER_TOKEN_KEY);
+            const refreshToken = normalizeStoredAuthValue(localStorage.getItem(REFRESH_TOKEN_KEY));
+            const expiresAt = normalizeStoredAuthValue(localStorage.getItem(TOKEN_EXPIRES_KEY));
+            const accessToken = normalizeStoredAuthValue(localStorage.getItem(USER_TOKEN_KEY));
 
             // If no stored refresh token but cookie session exists, let backend refresh via cookie fallback.
             const hasCookieSession = hasCookieAuthState();
@@ -1937,14 +1947,11 @@
                 const data = await res.json();
                 if (data.access_token) {
                     console.log('[Academics] Token refreshed successfully.');
-                    localStorage.setItem(USER_TOKEN_KEY, data.access_token);
-                    if (data.refresh_token) {
-                        localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
-                    }
-                    if (data.expires_in) {
-                        const newExpiresAt = Date.now() + (data.expires_in * 1000);
-                        localStorage.setItem(TOKEN_EXPIRES_KEY, newExpiresAt.toString());
-                    }
+                    try {
+                        localStorage.removeItem(USER_TOKEN_KEY);
+                        localStorage.removeItem(REFRESH_TOKEN_KEY);
+                        localStorage.removeItem(TOKEN_EXPIRES_KEY);
+                    } catch { }
                     return true;
                 }
                 return false;
@@ -1987,6 +1994,12 @@
 
             // Keep spinner visible when required data is not fully ready.
             showProgressError('We could not load your progress right now. Please refresh or try again in a moment.');
+            setLoaderStatus('Unable to finish loading');
+            document.body.classList.add('loaded');
+            const loader = document.getElementById('pageLoader');
+            if (loader) {
+                setTimeout(() => { loader.style.display = 'none'; }, 250);
+            }
         }
 
         async function attemptProfileAndProgressLoad() {

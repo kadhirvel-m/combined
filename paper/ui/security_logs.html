@@ -1,64 +1,314 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Security Logs - Paper X Admin</title>
+  <meta name="description" content="Admin security telemetry explorer for auth, alerts, uploads, RAG, and model tool calls." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0&display=swap" rel="stylesheet" />
+
   <link rel="stylesheet" href="assets/css/tailwind.css" />
   <script src="config.js"></script>
+
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    :root {
+      --ink: #1e1e2f;
+      --ink-soft: #3f455f;
+      --paper: #ffffff;
+      --line: #e7e9f2;
+      --brand-900: #1e1e2f;
+      --brand-700: #4c2a59;
+      --brand-500: #9e4b8a;
+      --ok: #0f766e;
+      --warn: #a16207;
+      --err: #b91c1c;
+    }
+
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1100px 600px at 55% -20%, rgba(158, 75, 138, 0.18), transparent 65%),
+        linear-gradient(180deg, #ffffff 0%, #faf7fc 55%, #f5eef8 100%);
+      min-height: 100vh;
+    }
+
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    .material-symbols-rounded {
+      vertical-align: -5px;
+      font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+    }
+
+    .glass {
+      background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,255,255,0.72));
+      border: 1px solid var(--line);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 14px 40px -16px rgba(30, 30, 47, 0.22);
+    }
+
+    .pill {
+      border: 1px solid #dcc6df;
+      background: #f8eef7;
+      color: #5f326a;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      padding: 0.33rem 0.65rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .field {
+      border: 1px solid #d6dbeb;
+      background: #ffffff;
+      color: #1e1e2f;
+      border-radius: 12px;
+      padding: 0.58rem 0.74rem;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .field:focus {
+      border-color: #9e4b8a;
+      box-shadow: 0 0 0 3px rgba(158, 75, 138, 0.17);
+    }
+
+    .btn {
+      border-radius: 12px;
+      padding: 0.58rem 0.95rem;
+      font-weight: 700;
+      font-size: 14px;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+
+    .btn:active { transform: translateY(1px); }
+
+    .btn-primary {
+      background: linear-gradient(130deg, var(--brand-700), var(--brand-500));
+      color: #ffffff;
+      box-shadow: 0 10px 24px -12px rgba(76, 42, 89, 0.65);
+    }
+
+    .btn-primary:hover { filter: brightness(1.06); }
+
+    .btn-ghost {
+      background: #f3f4fb;
+      color: #29304b;
+      border: 1px solid #d6dbeb;
+    }
+
+    .btn-ghost:hover { background: #eceff8; }
+
+    .sev {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.52rem;
+      border: 1px solid transparent;
+    }
+
+    .sev-info { color: #1d4ed8; background: #dbeafe; border-color: #bfdbfe; }
+    .sev-warning { color: #92400e; background: #fef3c7; border-color: #fde68a; }
+    .sev-error { color: #991b1b; background: #fee2e2; border-color: #fecaca; }
+
+    .table-head {
+      background: linear-gradient(180deg, #f8f2fa, #f4eff9);
+      color: #4b2d57;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.035em;
+      text-transform: uppercase;
+    }
+
+    .row-item { border-top: 1px solid #eceff8; }
+    .row-item:hover { background: #fafbff; }
+
+    .payload-box {
+      max-width: 860px;
+      color: #3b4260;
+      background: #f7f9ff;
+      border: 1px solid #e4e9f7;
+      border-radius: 10px;
+      padding: 0.45rem 0.55rem;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      line-height: 1.35;
+    }
+
+    .mobile-cards { display: none; }
+
+    @media (max-width: 1024px) {
+      .desktop-table { display: none; }
+      .mobile-cards { display: grid; gap: 0.75rem; }
+    }
+
+    .event-card {
+      border: 1px solid #e5e9f5;
+      border-radius: 14px;
+      background: #ffffff;
+      padding: 0.85rem;
+      box-shadow: 0 6px 20px -14px rgba(31, 41, 55, 0.35);
+    }
+
+    .kpi {
+      border: 1px solid #e2d7e7;
+      border-radius: 14px;
+      background: linear-gradient(145deg, #ffffff, #f9f4fb);
+      padding: 0.8rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      html.dark body {
+        color: #eff2ff;
+        background:
+          radial-gradient(1200px 620px at 55% -20%, rgba(158, 75, 138, 0.35), transparent 62%),
+          linear-gradient(180deg, #1e1e2f 0%, #1f1a33 55%, #141321 100%);
+      }
+
+      html.dark .glass {
+        background: linear-gradient(180deg, rgba(30,30,47,0.82), rgba(30,30,47,0.58));
+        border-color: rgba(255,255,255,0.12);
+      }
+
+      html.dark .field {
+        background: #1a1d31;
+        border-color: #373b57;
+        color: #edf0ff;
+      }
+
+      html.dark .field:focus {
+        border-color: #b46cab;
+        box-shadow: 0 0 0 3px rgba(180, 108, 171, 0.25);
+      }
+
+      html.dark .pill {
+        background: rgba(158, 75, 138, 0.2);
+        border-color: rgba(158, 75, 138, 0.5);
+        color: #f3cced;
+      }
+
+      html.dark .btn-ghost {
+        background: #252942;
+        border-color: #3f4565;
+        color: #e6ebff;
+      }
+
+      html.dark .btn-ghost:hover { background: #2c3150; }
+
+      html.dark .table-head {
+        background: linear-gradient(180deg, #2d2b45, #29273f);
+        color: #e9defa;
+      }
+
+      html.dark .row-item { border-top-color: #363a55; }
+      html.dark .row-item:hover { background: #242841; }
+
+      html.dark .payload-box {
+        color: #dce3ff;
+        background: #242945;
+        border-color: #3c4264;
+      }
+
+      html.dark .event-card {
+        background: #21253d;
+        border-color: #393f60;
+      }
+
+      html.dark .kpi {
+        background: linear-gradient(145deg, #25263f, #1f2034);
+        border-color: #3a3d5b;
+      }
+    }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <main class="max-w-7xl mx-auto p-4 md:p-6">
-    <header class="mb-4 md:mb-6">
-      <h1 class="text-2xl md:text-3xl font-bold">Security Logs</h1>
-      <p class="text-slate-400 text-sm mt-1">Persisted auth/upload/RAG/tool/admin/alert telemetry from <code class="mono">security_events</code>.</p>
-    </header>
+<body>
+  <main class="max-w-7xl mx-auto px-4 md:px-6 py-5 md:py-7">
+    <section class="glass rounded-2xl md:rounded-3xl p-4 md:p-6 mb-4">
+      <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <span class="pill"><span class="material-symbols-rounded text-[15px]">security</span>Security Telemetry</span>
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight mt-2">Security Logs Console</h1>
+          <p class="text-sm md:text-[15px] opacity-85 mt-1">Auth, uploads, RAG, tool-chain, outbound API, admin actions, and alert events from <code class="mono">security_events</code>.</p>
+        </div>
+        <div class="text-xs md:text-sm opacity-80" id="status">Ready</div>
+      </div>
 
-    <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4 grid grid-cols-1 md:grid-cols-6 gap-3">
-      <label class="text-xs text-slate-300 md:col-span-2">
-        Search
-        <input id="search" class="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2" placeholder="event type, email, user id, path, ip" />
-      </label>
-      <label class="text-xs text-slate-300">
-        Severity
-        <select id="severity" class="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2">
-          <option value="">All</option>
-          <option value="info">info</option>
-          <option value="warning">warning</option>
-          <option value="error">error</option>
-        </select>
-      </label>
-      <label class="text-xs text-slate-300">
-        Event Type
-        <input id="eventType" class="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2" placeholder="e.g. auth.login.success" />
-      </label>
-      <label class="text-xs text-slate-300 flex items-end gap-2">
-        <input id="onlyAlerts" type="checkbox" class="accent-cyan-400" />
-        <span>Only alerts</span>
-      </label>
-      <div class="flex items-end gap-2">
-        <button id="applyBtn" class="px-4 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold">Apply</button>
-        <button id="refreshBtn" class="px-4 py-2 rounded bg-slate-700 hover:bg-slate-600">Refresh</button>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mt-5">
+        <label class="text-xs font-semibold tracking-wide opacity-80 xl:col-span-2">Search
+          <input id="search" class="field mt-1 text-sm" placeholder="event, email, user id, path, ip" />
+        </label>
+
+        <label class="text-xs font-semibold tracking-wide opacity-80">Severity
+          <select id="severity" class="field mt-1 text-sm">
+            <option value="">All</option>
+            <option value="info">info</option>
+            <option value="warning">warning</option>
+            <option value="error">error</option>
+          </select>
+        </label>
+
+        <label class="text-xs font-semibold tracking-wide opacity-80 xl:col-span-2">Event Type
+          <input id="eventType" class="field mt-1 text-sm" placeholder="e.g. alert.status_pattern" />
+        </label>
+
+        <label class="text-xs font-semibold tracking-wide opacity-80 flex items-end pb-2">
+          <span class="inline-flex items-center gap-2">
+            <input id="onlyAlerts" type="checkbox" class="accent-fuchsia-600" />
+            <span>Only alerts</span>
+          </span>
+        </label>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 mt-4">
+        <button id="applyBtn" class="btn btn-primary">Apply Filters</button>
+        <button id="refreshBtn" class="btn btn-ghost">Refresh</button>
       </div>
     </section>
 
-    <section class="flex items-center justify-between mb-3">
-      <div id="status" class="text-sm text-slate-400">Ready</div>
-      <div class="flex items-center gap-2 text-sm">
-        <button id="prevBtn" class="px-3 py-1 rounded border border-slate-700 disabled:opacity-40">Prev</button>
-        <span id="pageInfo" class="text-slate-300">Page 1</span>
-        <button id="nextBtn" class="px-3 py-1 rounded border border-slate-700 disabled:opacity-40">Next</button>
-      </div>
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="kpiWrap">
+      <article class="kpi">
+        <p class="text-[11px] uppercase tracking-wider opacity-70">Visible Events</p>
+        <p class="text-xl font-extrabold mt-1" id="kpiVisible">0</p>
+      </article>
+      <article class="kpi">
+        <p class="text-[11px] uppercase tracking-wider opacity-70">Total Events</p>
+        <p class="text-xl font-extrabold mt-1" id="kpiTotal">-</p>
+      </article>
+      <article class="kpi">
+        <p class="text-[11px] uppercase tracking-wider opacity-70">Warnings</p>
+        <p class="text-xl font-extrabold mt-1" id="kpiWarn">0</p>
+      </article>
+      <article class="kpi">
+        <p class="text-[11px] uppercase tracking-wider opacity-70">Errors</p>
+        <p class="text-xl font-extrabold mt-1" id="kpiErr">0</p>
+      </article>
     </section>
 
-    <section class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-      <div class="overflow-auto">
+    <section class="glass rounded-2xl overflow-hidden">
+      <div class="px-4 py-3 border-b border-black/10 dark:border-white/10 flex items-center justify-between">
+        <h2 class="font-bold">Event Stream</h2>
+        <div class="flex items-center gap-2 text-sm">
+          <button id="prevBtn" class="btn btn-ghost !py-1.5 !px-3 disabled:opacity-45">Prev</button>
+          <span id="pageInfo" class="text-xs md:text-sm font-semibold opacity-80">Page 1</span>
+          <button id="nextBtn" class="btn btn-ghost !py-1.5 !px-3 disabled:opacity-45">Next</button>
+        </div>
+      </div>
+
+      <div class="desktop-table overflow-auto">
         <table class="w-full text-sm">
-          <thead class="bg-slate-800 text-slate-200">
+          <thead class="table-head">
             <tr>
               <th class="text-left px-3 py-2">Time</th>
               <th class="text-left px-3 py-2">Event</th>
@@ -72,6 +322,8 @@
           <tbody id="rows"></tbody>
         </table>
       </div>
+
+      <div class="mobile-cards p-3" id="mobileRows"></div>
     </section>
   </main>
 
@@ -96,13 +348,16 @@
       const q = new URLSearchParams();
       q.set('limit', String(PAGE_SIZE));
       q.set('offset', String(offset));
+
       const sev = $('severity').value.trim();
       const evt = $('eventType').value.trim();
       const search = $('search').value.trim();
+
       if (sev) q.set('severity', sev);
       if (evt) q.set('event_type', evt);
       if (search) q.set('search', search);
       if ($('onlyAlerts').checked) q.set('only_alerts', 'true');
+
       return `${base}/api/admin/security/events?${q.toString()}`;
     }
 
@@ -117,35 +372,85 @@
       return d.toLocaleString();
     }
 
+    function sevClass(v) {
+      const s = String(v || '').toLowerCase();
+      if (s === 'warning') return 'sev sev-warning';
+      if (s === 'error') return 'sev sev-error';
+      return 'sev sev-info';
+    }
+
+    function formatPayload(payload) {
+      try {
+        return JSON.stringify(payload || {}, null, 2);
+      } catch (_) {
+        return String(payload || '');
+      }
+    }
+
+    function updateKpi(items) {
+      const arr = items || [];
+      const warn = arr.filter((x) => String(x.severity || '').toLowerCase() === 'warning').length;
+      const err = arr.filter((x) => String(x.severity || '').toLowerCase() === 'error').length;
+
+      $('kpiVisible').textContent = String(arr.length);
+      $('kpiTotal').textContent = total == null ? '-' : String(total);
+      $('kpiWarn').textContent = String(warn);
+      $('kpiErr').textContent = String(err);
+    }
+
     function renderRows(items) {
       const tbody = $('rows');
+      const mobile = $('mobileRows');
+
       if (!items || !items.length) {
-        tbody.innerHTML = '<tr><td class="px-3 py-3 text-slate-400" colspan="7">No events found.</td></tr>';
+        tbody.innerHTML = '<tr><td class="px-3 py-5 text-center opacity-70" colspan="7">No events found for this filter.</td></tr>';
+        mobile.innerHTML = '<div class="event-card text-sm opacity-80">No events found for this filter.</div>';
+        updateKpi([]);
         return;
       }
+
       tbody.innerHTML = items.map((it) => {
-        const payload = JSON.stringify(it.event_payload || {}).slice(0, 260);
-        return `<tr class="border-t border-slate-800 align-top">
-          <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(fmtTime(it.created_at || it.event_ts))}</td>
-          <td class="px-3 py-2 mono">${escapeHtml(it.event_type || '-')}</td>
-          <td class="px-3 py-2">${escapeHtml(it.severity || '-')}</td>
-          <td class="px-3 py-2 mono">${escapeHtml(it.method || '')} ${escapeHtml(it.path || '')}</td>
-          <td class="px-3 py-2 mono">${escapeHtml(it.email || it.user_id || '-')}</td>
-          <td class="px-3 py-2 mono">${escapeHtml(it.client_ip || '-')}</td>
-          <td class="px-3 py-2 mono text-xs text-slate-300">${escapeHtml(payload)}</td>
+        const payload = formatPayload(it.event_payload);
+        return `<tr class="row-item align-top">
+          <td class="px-3 py-2.5 whitespace-nowrap">${escapeHtml(fmtTime(it.created_at || it.event_ts))}</td>
+          <td class="px-3 py-2.5 mono">${escapeHtml(it.event_type || '-')}</td>
+          <td class="px-3 py-2.5"><span class="${sevClass(it.severity)}">${escapeHtml(it.severity || 'info')}</span></td>
+          <td class="px-3 py-2.5 mono">${escapeHtml(it.method || '')} ${escapeHtml(it.path || '')}</td>
+          <td class="px-3 py-2.5 mono">${escapeHtml(it.email || it.user_id || '-')}</td>
+          <td class="px-3 py-2.5 mono">${escapeHtml(it.client_ip || '-')}</td>
+          <td class="px-3 py-2.5"><pre class="payload-box mono text-xs">${escapeHtml(payload)}</pre></td>
         </tr>`;
       }).join('');
+
+      mobile.innerHTML = items.map((it) => {
+        const payload = formatPayload(it.event_payload);
+        return `<article class="event-card">
+          <div class="flex items-start justify-between gap-2">
+            <p class="mono text-xs opacity-85">${escapeHtml(fmtTime(it.created_at || it.event_ts))}</p>
+            <span class="${sevClass(it.severity)}">${escapeHtml(it.severity || 'info')}</span>
+          </div>
+          <p class="mono text-sm font-semibold mt-1">${escapeHtml(it.event_type || '-')}</p>
+          <p class="mono text-xs mt-1 opacity-85">${escapeHtml(it.method || '')} ${escapeHtml(it.path || '')}</p>
+          <div class="grid grid-cols-2 gap-2 mt-2 text-xs">
+            <p><span class="opacity-70">User:</span> <span class="mono">${escapeHtml(it.email || it.user_id || '-')}</span></p>
+            <p><span class="opacity-70">IP:</span> <span class="mono">${escapeHtml(it.client_ip || '-')}</span></p>
+          </div>
+          <pre class="payload-box mono text-xs mt-2">${escapeHtml(payload)}</pre>
+        </article>`;
+      }).join('');
+
+      updateKpi(items);
     }
 
     function updatePager() {
       const page = Math.floor(offset / PAGE_SIZE) + 1;
-      $('pageInfo').textContent = total == null ? `Page ${page}` : `Page ${page} (${total} total)`;
+      $('pageInfo').textContent = total == null ? `Page ${page}` : `Page ${page} of ${Math.max(1, Math.ceil(total / PAGE_SIZE))} (${total})`;
       $('prevBtn').disabled = offset <= 0;
       $('nextBtn').disabled = total != null && offset + PAGE_SIZE >= total;
     }
 
     async function loadEvents() {
-      $('status').textContent = 'Loading...';
+      $('status').textContent = 'Loading events...';
       try {
         const token = authToken();
         const headers = { 'Accept': 'application/json' };
@@ -153,9 +458,8 @@
 
         const res = await fetch(buildUrl(), { headers, credentials: 'include' });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.detail || `Request failed (${res.status})`);
-        }
+        if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+
         total = typeof data.total === 'number' ? data.total : null;
         renderRows(data.items || []);
         $('status').textContent = 'Loaded';
@@ -170,15 +474,27 @@
       offset = 0;
       loadEvents();
     });
+
     $('refreshBtn').addEventListener('click', loadEvents);
+
     $('prevBtn').addEventListener('click', () => {
       if (offset <= 0) return;
       offset = Math.max(0, offset - PAGE_SIZE);
       loadEvents();
     });
+
     $('nextBtn').addEventListener('click', () => {
       offset += PAGE_SIZE;
       loadEvents();
+    });
+
+    ['search', 'eventType'].forEach((id) => {
+      $(id).addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          offset = 0;
+          loadEvents();
+        }
+      });
     });
 
     loadEvents();

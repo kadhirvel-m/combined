@@ -123,7 +123,7 @@
     </style>
     <script>(() => { const s = localStorage.getItem('px_theme'); const p = window.matchMedia('(prefers-color-scheme: dark)').matches; const d = s ? s === 'dark' : p; if (d) document.documentElement.classList.add('dark'); })();</script>
     <script src="../config.js" defer></script>
-    <script src="helpers.js" defer></script>
+    <script src="helpers.js"></script>
 </head>
 
 <body
@@ -403,7 +403,7 @@
             setTimeout(() => { (mode === 'edit' ? batchFromYearInput : batchFromYearInput)?.focus(); }, 80);
         }
         function validateBatchYears(fromYear, toYear) { if (!Number.isInteger(fromYear) || !Number.isInteger(toYear)) return 'Enter both from and to years.'; if (fromYear < 1950 || fromYear > 2100 || toYear < 1950 || toYear > 2100) return 'Year range must be between 1950 and 2100.'; if (toYear < fromYear) return 'Ending year must be greater than or equal to the starting year.'; return ''; }
-        async function handleBatchSubmit(e) { e.preventDefault(); if (!departmentId) { batchModalMessage.textContent = 'Missing department context. Please navigate from the departments page again.'; batchModalMessage.classList.remove('hidden'); return; } const fromYear = Number.parseInt(batchFromYearInput.value, 10); const toYear = Number.parseInt(batchToYearInput.value, 10); const v = validateBatchYears(fromYear, toYear); if (v) { batchModalMessage.textContent = v; batchModalMessage.classList.remove('hidden'); (Number.isInteger(fromYear) ? batchToYearInput : batchFromYearInput).focus(); return; } batchModalMessage.classList.add('hidden'); setBatchModalLoading(true); const payload = { from: fromYear, to: toYear }; try { if (batchModalMode === 'edit' && editingBatchId) { await Collage.fetchJson(`/api/batches/${editingBatchId}`, { method: 'PUT', body: payload, skipAuth: true }); } else { await Collage.fetchJson(`/api/departments/${departmentId}/batches`, { method: 'POST', body: payload, skipAuth: true }); } closeBatchModal(); await loadBatches(); } catch (error) { let message = error?.message ?? 'Unable to save batch. Please try again.'; if (typeof message !== 'string') { try { message = JSON.stringify(message); } catch (_) { message = 'Unable to save batch. Please try again.'; } } if (message === '[object Object]') message = 'Unexpected response from server. Please try again.'; batchModalMessage.textContent = message; batchModalMessage.classList.remove('hidden'); console.error(error); } finally { setBatchModalLoading(false); } }
+        async function handleBatchSubmit(e) { e.preventDefault(); if (!departmentId) { batchModalMessage.textContent = 'Missing department context. Please navigate from the departments page again.'; batchModalMessage.classList.remove('hidden'); return; } const fromYear = Number.parseInt(batchFromYearInput.value, 10); const toYear = Number.parseInt(batchToYearInput.value, 10); const v = validateBatchYears(fromYear, toYear); if (v) { batchModalMessage.textContent = v; batchModalMessage.classList.remove('hidden'); (Number.isInteger(fromYear) ? batchToYearInput : batchFromYearInput).focus(); return; } batchModalMessage.classList.add('hidden'); setBatchModalLoading(true); const payload = { from: fromYear, to: toYear }; try { if (batchModalMode === 'edit' && editingBatchId) { await Collage.fetchJson(`/api/batches/${editingBatchId}`, { method: 'PUT', body: payload, skipAuth: false }); } else { await Collage.fetchJson(`/api/departments/${departmentId}/batches`, { method: 'POST', body: payload, skipAuth: false }); } closeBatchModal(); await loadBatches(); } catch (error) { let message = error?.message ?? 'Unable to save batch. Please try again.'; if (typeof message !== 'string') { try { message = JSON.stringify(message); } catch (_) { message = 'Unable to save batch. Please try again.'; } } if (message === '[object Object]') message = 'Unexpected response from server. Please try again.'; batchModalMessage.textContent = message; batchModalMessage.classList.remove('hidden'); console.error(error); } finally { setBatchModalLoading(false); } }
 
         async function handleBatchDelete() {
             if (!editingBatchId) return;
@@ -412,7 +412,7 @@
             setBatchDeleteLoading(true);
             batchModalMessage.classList.add('hidden');
             try {
-                await Collage.fetchJson(`/api/batches/${editingBatchId}`, { method: 'DELETE', skipAuth: true });
+                await Collage.fetchJson(`/api/batches/${editingBatchId}`, { method: 'DELETE', skipAuth: false });
                 closeBatchModal();
                 await loadBatches();
             } catch (error) {
@@ -440,11 +440,11 @@
             document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !batchModal.classList.contains('hidden')) closeBatchModal(); });
         }
         function attachBatchEditHandlers() { results.querySelectorAll('[data-batch-edit]').forEach(btn => { btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const id = btn.getAttribute('data-batch-edit'); const batch = batchesCache.find(b => String(b.id) === String(id)); if (batch) openBatchModal('edit', batch); }); }); }
-        function attachBatchCardNavigation() { results.querySelectorAll('[data-batch-card]').forEach(card => { const href = card.getAttribute('data-batch-card'); if (!href) return; card.addEventListener('click', e => { if (e.target.closest('[data-batch-edit]')) return; if (e.target.closest('a')) return; window.location.href = href; }); card.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-batch-edit]')) { e.preventDefault(); window.location.href = href; } }); }); }
+        function attachBatchCardNavigation() { results.querySelectorAll('[data-batch-card]').forEach(card => { const href = card.getAttribute('data-batch-card'); if (!href) return; card.addEventListener('click', e => { if (e.target.closest('[data-batch-edit]')) return; if (e.target.closest('a')) return; Collage.navigate(href); }); card.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-batch-edit]')) { e.preventDefault(); Collage.navigate(href); } }); }); }
         async function loadBatches() {
             if (!collegeId || !departmentId) { showError('Missing collegeId or departmentId in URL.'); return; } showLoader(); try {
                 const deptKey = encodeURIComponent(departmentId);
-                const batches = await Collage.fetchJson(`/api/departments/${deptKey}/batches/full`, { skipAuth: true }); const label = departmentName || 'Selected department'; titleEl.innerHTML = `Batches · <span class=\"opacity-80\">${Collage.escapeHtml(label)}</span>`; const list = Array.isArray(batches) ? batches : []; batchesCache = list.map(i => ({ id: i.id, from_year: Number(i.from_year), to_year: Number(i.to_year) })); subtitleEl.textContent = `${list.length} batch${list.length === 1 ? '' : 'es'} recorded for this department.`; breadcrumbsEl.innerHTML = makeBreadcrumb([
+                const batches = await Collage.fetchJson(`/api/departments/${deptKey}/batches/full`, { skipAuth: false }); const label = departmentName || 'Selected department'; titleEl.innerHTML = `Batches · <span class=\"opacity-80\">${Collage.escapeHtml(label)}</span>`; const list = Array.isArray(batches) ? batches : []; batchesCache = list.map(i => ({ id: i.id, from_year: Number(i.from_year), to_year: Number(i.to_year) })); subtitleEl.textContent = `${list.length} batch${list.length === 1 ? '' : 'es'} recorded for this department.`; breadcrumbsEl.innerHTML = makeBreadcrumb([
                     { label: 'Colleges', href: 'clg_info.html' },
                     { label: collegeName || 'College', href: `degrees.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}` },
                     { label: degreeName || 'Degree', href: `departments.html?collegeId=${encodeURIComponent(collegeId)}&collegeName=${encodeURIComponent(collegeName || '')}&degreeId=${encodeURIComponent(degreeId || '')}&degreeName=${encodeURIComponent(degreeName || '')}` },

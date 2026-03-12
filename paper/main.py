@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import io
+import ipaddress
 import json
 import logging
 import hmac
@@ -161,13 +162,14 @@ AUTH_REFRESH_COOKIE_NAME = os.getenv("AUTH_REFRESH_COOKIE_NAME", "paperx_rt")
 AUTH_STATE_COOKIE_NAME = os.getenv("AUTH_STATE_COOKIE_NAME", "paperx_auth")
 AUTH_COOKIE_DOMAIN = (os.getenv("AUTH_COOKIE_DOMAIN") or "").strip() or None
 AUTH_COOKIE_SECURE = (os.getenv("AUTH_COOKIE_SECURE", "true").strip().lower() in {"1", "true", "yes", "on"})
-AUTH_COOKIE_SAMESITE = (os.getenv("AUTH_COOKIE_SAMESITE", "lax") or "lax").strip().lower()
+AUTH_COOKIE_SAMESITE = (os.getenv("AUTH_COOKIE_SAMESITE", "strict") or "strict").strip().lower()
 if AUTH_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
-    AUTH_COOKIE_SAMESITE = "lax"
+    AUTH_COOKIE_SAMESITE = "strict"
 AUTH_ACCESS_TTL_SECONDS = max(300, int(os.getenv("AUTH_ACCESS_TTL_SECONDS", "900")))
 AUTH_REFRESH_TTL_SECONDS = max(3600, int(os.getenv("AUTH_REFRESH_TTL_SECONDS", "2592000")))
 AUTH_ROTATION_TABLE = os.getenv("AUTH_ROTATION_TABLE", "auth_refresh_tokens")
 AUTH_REFRESH_HASH_SECRET = (os.getenv("AUTH_REFRESH_HASH_SECRET") or "").strip()
+PRINT_OTP_HASH_SECRET = (os.getenv("PRINT_OTP_HASH_SECRET") or AUTH_REFRESH_HASH_SECRET or "paperx-print-otp").strip()
 AUTH_REQUEST_CTX: contextvars.ContextVar[Optional[Request]] = contextvars.ContextVar("auth_request_ctx", default=None)
 AUTH_SENTINEL_VALUES = {"__COOKIE_AUTH__", "__cookie__", "cookie", "null", "undefined", "none"}
 
@@ -178,6 +180,8 @@ RATE_LIMIT_AUTH_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_AUTH_WINDOW_SE
 RATE_LIMIT_AUTH_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_AUTH_MAX_REQUESTS", "40")))
 RATE_LIMIT_LOGIN_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_LOGIN_WINDOW_SECONDS", "60")))
 RATE_LIMIT_LOGIN_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_LOGIN_MAX_REQUESTS", "12")))
+RATE_LIMIT_AI_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_AI_WINDOW_SECONDS", "60")))
+RATE_LIMIT_AI_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_AI_MAX_REQUESTS", "20")))
 RATE_LIMIT_MAX_BUCKETS = max(500, int(os.getenv("RATE_LIMIT_MAX_BUCKETS", "20000")))
 
 RATE_LIMIT_LOGIN_ROUTES: Set[str] = {
@@ -192,6 +196,18 @@ RATE_LIMIT_AUTH_ROUTES: Set[str] = {
     "/api/teacher/signup",
     "/api/hod/signup",
 }
+
+RATE_LIMIT_AI_PREFIXES: Tuple[str, ...] = (
+    "/api/innovatex/",
+    "/api/hod/ai/",
+    "/api/maths-notes/",
+    "/api/notes/caseflow",
+    "/api/notes/flashcards",
+    "/api/notes/mcq",
+    "/api/notes/selection-assist",
+    "/api/notes/transform",
+    "/api/medix/rag/chat",
+)
 
 
 def _rl_norm_path(path: str) -> str:
@@ -209,6 +225,11 @@ def _rl_is_login_route(path: str) -> bool:
 
 def _rl_is_auth_route(path: str) -> bool:
     return _rl_norm_path(path) in RATE_LIMIT_AUTH_ROUTES or _rl_is_login_route(path)
+
+
+def _rl_is_ai_route(path: str) -> bool:
+    p = _rl_norm_path(path)
+    return any(p.startswith(prefix) for prefix in RATE_LIMIT_AI_PREFIXES)
 
 
 class _SlidingWindowLimiter:
@@ -269,6 +290,30 @@ _SECURITY_REFRESH_FINGERPRINT: Dict[str, Dict[str, Any]] = {}
 OUTBOUND_API_TELEMETRY_ENABLED = (os.getenv("OUTBOUND_API_TELEMETRY_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
 SECURITY_DB_LOGGING_ENABLED = (os.getenv("SECURITY_DB_LOGGING_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
 SECURITY_EVENTS_TABLE = os.getenv("SECURITY_EVENTS_TABLE", "security_events")
+SECURITY_INCIDENTS_TABLE = os.getenv("SECURITY_INCIDENTS_TABLE", "security_incidents")
+
+ABUSE_SCORING_ENABLED = (os.getenv("ABUSE_SCORING_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+ABUSE_SCORE_WINDOW_SECONDS = max(30, int(os.getenv("ABUSE_SCORE_WINDOW_SECONDS", "600")))
+ABUSE_SCORE_BLOCK_THRESHOLD = max(30, int(os.getenv("ABUSE_SCORE_BLOCK_THRESHOLD", "100")))
+ABUSE_SCORE_DECAY_PER_WINDOW = max(1, int(os.getenv("ABUSE_SCORE_DECAY_PER_WINDOW", "15")))
+ABUSE_SCORE_401 = max(1, int(os.getenv("ABUSE_SCORE_401", "4")))
+ABUSE_SCORE_403 = max(1, int(os.getenv("ABUSE_SCORE_403", "6")))
+ABUSE_SCORE_429 = max(1, int(os.getenv("ABUSE_SCORE_429", "8")))
+ABUSE_SCORE_5XX = max(1, int(os.getenv("ABUSE_SCORE_5XX", "2")))
+ABUSE_SCORE_ADMIN_MUTATION = max(1, int(os.getenv("ABUSE_SCORE_ADMIN_MUTATION", "3")))
+
+COMPILER_ISOLATION_MODE = (os.getenv("COMPILER_ISOLATION_MODE", "strict") or "strict").strip().lower()
+COMPILER_WORKER_BASE_URL = (os.getenv("COMPILER_WORKER_BASE_URL") or "").strip().rstrip("/")
+COMPILER_INLINE_EXECUTION_ENABLED = (os.getenv("COMPILER_INLINE_EXECUTION_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
+
+RAG_MAX_UPLOAD_BYTES = max(1024 * 1024, int(os.getenv("RAG_MAX_UPLOAD_BYTES", str(20 * 1024 * 1024))))
+RAG_AV_SCAN_ENABLED = (os.getenv("RAG_AV_SCAN_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
+RAG_AV_SCAN_URL = (os.getenv("RAG_AV_SCAN_URL") or "").strip()
+RAG_AV_SCAN_TIMEOUT_SECONDS = max(1, int(os.getenv("RAG_AV_SCAN_TIMEOUT_SECONDS", "12")))
+
+LLM_GUARDRAILS_ENABLED = (os.getenv("LLM_GUARDRAILS_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+LLM_GUARDRAILS_ENFORCE = (os.getenv("LLM_GUARDRAILS_ENFORCE", "true").strip().lower() in {"1", "true", "yes", "on"})
+LLM_TOOL_POLICY_ENABLED = (os.getenv("LLM_TOOL_POLICY_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
 
 
 def _security_extract_ip(request: Optional[Request]) -> Optional[str]:
@@ -349,6 +394,195 @@ def _security_persist_event(event: Dict[str, Any], *, severity: str) -> None:
         security_logger.warning("security event db insert exception: %s", exc)
 
 
+_ABUSE_SCORE_LOCK = threading.Lock()
+_ABUSE_SCORE_STATE: Dict[str, Dict[str, float]] = {}
+
+
+def _abuse_apply_and_check(ip: str, *, delta: int = 0, now_ts: Optional[float] = None) -> Tuple[int, bool]:
+    ts = float(now_ts if now_ts is not None else time.time())
+    key = (ip or "unknown").strip() or "unknown"
+    with _ABUSE_SCORE_LOCK:
+        state = _ABUSE_SCORE_STATE.get(key)
+        if state is None:
+            state = {"score": 0.0, "updated": ts}
+            _ABUSE_SCORE_STATE[key] = state
+
+        elapsed = max(0.0, ts - float(state.get("updated") or ts))
+        if elapsed > ABUSE_SCORE_WINDOW_SECONDS:
+            windows = int(elapsed // ABUSE_SCORE_WINDOW_SECONDS)
+            decay = windows * ABUSE_SCORE_DECAY_PER_WINDOW
+            state["score"] = max(0.0, float(state.get("score") or 0.0) - decay)
+
+        if delta:
+            state["score"] = max(0.0, float(state.get("score") or 0.0) + int(delta))
+
+        state["updated"] = ts
+        score = int(round(float(state.get("score") or 0.0)))
+        blocked = score >= ABUSE_SCORE_BLOCK_THRESHOLD
+        return score, blocked
+
+
+def _abuse_delta_for_response(*, status_code: int, path: str, method: str) -> int:
+    delta = 0
+    if status_code == 401:
+        delta += ABUSE_SCORE_401
+    elif status_code == 403:
+        delta += ABUSE_SCORE_403
+    elif status_code == 429:
+        delta += ABUSE_SCORE_429
+    elif status_code >= 500:
+        delta += ABUSE_SCORE_5XX
+
+    if path.startswith("/api/admin") and method in {"POST", "PUT", "PATCH", "DELETE"}:
+        delta += ABUSE_SCORE_ADMIN_MUTATION
+    return delta
+
+
+def _security_create_incident(*, alert_type: str, severity: str, event_payload: Dict[str, Any], request: Optional[Request]) -> None:
+    if not SECURITY_DB_LOGGING_ENABLED:
+        return
+    try:
+        supabase = get_service_client()
+        if not supabase:
+            return
+        row = {
+            "alert_type": alert_type,
+            "severity": (severity or "warning").lower(),
+            "status": "open",
+            "detected_at": datetime.utcnow().isoformat() + "Z",
+            "path": event_payload.get("path") or (request.url.path if request else None),
+            "method": event_payload.get("method") or (request.method if request else None),
+            "client_ip": event_payload.get("client_ip") or _security_extract_ip(request),
+            "event_payload": event_payload,
+        }
+        res = supabase.table(SECURITY_INCIDENTS_TABLE).insert(row).execute()
+        if getattr(res, "error", None):
+            security_logger.warning("security incident insert failed: %s", res.error)
+    except Exception as exc:
+        security_logger.warning("security incident insert exception: %s", exc)
+
+
+def _llm_guardrails_check(prompt: str) -> Tuple[bool, Optional[str]]:
+    text = (prompt or "").strip()
+    if not text:
+        return True, None
+
+    patterns = [
+        r"ignore\s+previous\s+instructions",
+        r"reveal\s+system\s+prompt",
+        r"print\s+all\s+secrets",
+        r"exfiltrat(e|ion)",
+        r"bypass\s+security",
+        r"disable\s+guardrails",
+        r"tool\s*:\s*shell",
+        r"curl\s+http",
+        r"wget\s+http",
+    ]
+    low = text.lower()
+    for pat in patterns:
+        if re.search(pat, low):
+            return False, pat
+    return True, None
+
+
+def _llm_tool_policy_enforce(*, tool_name: str, request: Optional[Request], user_id: Optional[str], is_admin: bool = False) -> None:
+    if not LLM_TOOL_POLICY_ENABLED:
+        return
+
+    safe_tools = {
+        "innovatex_make_unique",
+        "innovatex_eval_metrics",
+        "innovatex_viva_sim",
+        "innovatex_explore_features",
+        "medix_rag_chat",
+    }
+    if tool_name not in safe_tools:
+        _security_emit(
+            "model.tool_policy.block",
+            request=request,
+            severity="warning",
+            tool_name=tool_name,
+            user_id=user_id,
+        )
+        raise HTTPException(status_code=403, detail="Tool not allowed by policy")
+
+    if tool_name == "medix_rag_chat" and not user_id and not is_admin:
+        _security_emit(
+            "model.tool_policy.block",
+            request=request,
+            severity="warning",
+            tool_name=tool_name,
+            reason="anonymous_disallowed",
+        )
+        raise HTTPException(status_code=401, detail="Authenticated user required")
+
+
+def _rag_trust_validate_payload(*, file_name: str, raw: bytes) -> Dict[str, Any]:
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if len(raw) > RAG_MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File exceeds max size ({RAG_MAX_UPLOAD_BYTES} bytes)")
+
+    lower = (file_name or "").strip().lower()
+    if not lower.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
+
+    # PDF magic number guard.
+    if not raw.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="Invalid PDF signature")
+
+    sha256 = hashlib.sha256(raw).hexdigest()
+    av_result = "skipped"
+
+    if RAG_AV_SCAN_ENABLED and RAG_AV_SCAN_URL:
+        try:
+            scan_res = requests.post(
+                RAG_AV_SCAN_URL,
+                files={"file": (file_name, raw, "application/pdf")},
+                timeout=RAG_AV_SCAN_TIMEOUT_SECONDS,
+            )
+            scan_res.raise_for_status()
+            payload = scan_res.json() if scan_res.headers.get("content-type", "").lower().startswith("application/json") else {}
+            infected = bool(payload.get("infected") or payload.get("malicious"))
+            if infected:
+                raise HTTPException(status_code=400, detail="Malware detected in upload")
+            av_result = str(payload.get("result") or "clean")
+        except HTTPException:
+            raise
+        except Exception as exc:
+            _security_emit(
+                "rag.ingestion.av_scan_error",
+                severity="warning",
+                file_name=file_name,
+                error=str(exc),
+            )
+            if LLM_GUARDRAILS_ENFORCE:
+                raise HTTPException(status_code=503, detail="AV scan unavailable")
+            av_result = "unavailable"
+
+    return {
+        "sha256": sha256,
+        "size_bytes": len(raw),
+        "av_result": av_result,
+    }
+
+
+def _compiler_worker_request(path: str, *, code: str, timeout_seconds: int = 10) -> Optional[Dict[str, Any]]:
+    if not COMPILER_WORKER_BASE_URL:
+        return None
+    try:
+        response = requests.post(
+            f"{COMPILER_WORKER_BASE_URL}{path}",
+            json={"code": code},
+            timeout=max(1, int(timeout_seconds)),
+        )
+        response.raise_for_status()
+        return response.json() if response.headers.get("content-type", "").lower().startswith("application/json") else {"output": response.text, "error": "", "status": "success"}
+    except Exception as exc:
+        _security_emit("compiler.worker.error", severity="warning", path=path, error=str(exc))
+        return None
+
+
 def _security_track_window(key: str, *, window_seconds: int, now_ts: Optional[float] = None) -> int:
     ts = float(now_ts if now_ts is not None else time.time())
     with _SECURITY_LOCK:
@@ -364,7 +598,12 @@ def _security_track_window(key: str, *, window_seconds: int, now_ts: Optional[fl
 
 
 def _security_alert(alert_type: str, *, request: Optional[Request] = None, severity: str = "warning", **payload: Any) -> None:
-    _security_emit(f"alert.{alert_type}", request=request, severity=severity, **payload)
+    event_payload = {
+        "alert_type": alert_type,
+        **payload,
+    }
+    _security_emit(f"alert.{alert_type}", request=request, severity=severity, **event_payload)
+    _security_create_incident(alert_type=alert_type, severity=severity, event_payload=event_payload, request=request)
 
 
 def _security_track_status_pattern(status_code: int, request: Optional[Request]) -> None:
@@ -1626,7 +1865,15 @@ def _note_id(topic: str) -> str:
 
 
 def _note_path(note_id: str) -> str:
-    return os.path.join(NOTES_DIR, f"{note_id}.md")
+    safe_note_id = str(note_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", safe_note_id):
+        raise ValueError("Invalid note id")
+
+    base_dir = os.path.realpath(NOTES_DIR)
+    full_path = os.path.realpath(os.path.join(base_dir, f"{safe_note_id}.md"))
+    if os.path.commonpath([base_dir, full_path]) != base_dir:
+        raise ValueError("Invalid note path")
+    return full_path
 
 
 def save_note(topic: str, markdown: str) -> Dict[str, str]:
@@ -2323,7 +2570,61 @@ def fetch(url: str) -> str:
     (PAPERX_FETCH_MAX_BYTES, default 5 MB). Raises RuntimeError on size
     overflow so callers can treat it as a fetch failure.
     """
-    with requests.get(url, headers=HEADERS, timeout=REQ_TIMEOUT, stream=True) as r:
+    def _is_public_ip(addr: str) -> bool:
+        try:
+            ip = ipaddress.ip_address(addr)
+            return not (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_unspecified
+            )
+        except Exception:
+            return False
+
+    def _validate_fetch_url(candidate: str) -> str:
+        parsed = urlparse(candidate)
+        if parsed.scheme not in {"http", "https"}:
+            raise RuntimeError("Blocked URL scheme")
+        if parsed.username or parsed.password:
+            raise RuntimeError("Blocked credentialed URL")
+        host = (parsed.hostname or "").strip().lower()
+        if not host:
+            raise RuntimeError("Blocked invalid URL host")
+        if host in {"localhost", "127.0.0.1", "::1"}:
+            raise RuntimeError("Blocked local address")
+
+        try:
+            infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        except Exception:
+            raise RuntimeError("Blocked unresolved host")
+        ips = {info[4][0] for info in infos if info and len(info) > 4 and info[4]}
+        if not ips:
+            raise RuntimeError("Blocked unresolved host")
+        if any(not _is_public_ip(ip) for ip in ips):
+            raise RuntimeError("Blocked private/internal target")
+        return candidate
+
+    current_url = _validate_fetch_url(url)
+    redirect_count = 0
+    while True:
+        r = requests.get(current_url, headers=HEADERS, timeout=REQ_TIMEOUT, stream=True, allow_redirects=False)
+        if 300 <= r.status_code < 400:
+            location = r.headers.get("Location")
+            if not location:
+                r.close()
+                raise RuntimeError("Blocked malformed redirect")
+            current_url = _validate_fetch_url(requests.compat.urljoin(current_url, location))
+            redirect_count += 1
+            r.close()
+            if redirect_count > 4:
+                raise RuntimeError("Too many redirects")
+            continue
+        break
+
+    with r:
         r.raise_for_status()
 
         # Fast reject if Content-Length header is present and too large
@@ -4558,6 +4859,8 @@ def _auth_rotation_insert(
     expires_at: Optional[str],
 ) -> None:
     try:
+        if _auth_rotation_get(token_hash):
+            return
         supabase = get_service_client()
         now_iso = datetime.utcnow().isoformat() + "Z"
         ip = _extract_client_ip(request)
@@ -4575,8 +4878,13 @@ def _auth_rotation_insert(
         }
         res = supabase.table(AUTH_ROTATION_TABLE).insert(row).execute()
         if getattr(res, "error", None):
+            error_text = str(res.error)
+            if "duplicate key value" in error_text.lower() or "token_hash" in error_text.lower():
+                return
             supabase_logger.warning("auth rotation insert failed: %s", res.error)
     except Exception as exc:
+        if "duplicate key value" in str(exc).lower() or "token_hash" in str(exc).lower():
+            return
         supabase_logger.warning("auth rotation insert exception: %s", exc)
 
 
@@ -4718,7 +5026,7 @@ def signup_user(user, request: Optional[Request] = None):
             email=(getattr(user, "email", None) or "").strip().lower() or None,
             error=str(e),
         )
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Signup failed")
 
 
 def _extract_client_ip(request: Optional[Request]) -> Optional[str]:
@@ -4767,6 +5075,14 @@ def _is_production_env() -> bool:
     )
     env_value = raw.strip().lower()
     return env_value in {"production", "prod"}
+
+
+def _should_expose_api_docs() -> bool:
+    """Expose docs in non-production by default, with explicit env override."""
+    raw = os.getenv("API_DOCS_ENABLED")
+    if raw is not None and raw.strip() != "":
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return not _is_production_env()
 
 
 def _resolve_turnstile_keys(request: Optional[Request] = None) -> Tuple[str, str]:
@@ -5034,7 +5350,7 @@ def signup_full_user(payload, request: Optional[Request] = None):
             email=(getattr(payload, "email", None) or "").strip().lower() or None,
             error=str(e),
         )
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def get_current_user_profile(token: Optional[str]):
@@ -5342,7 +5658,7 @@ def get_current_user_profile(token: Optional[str]):
         if "invalid jwt" in msg or "token is malformed" in msg or "unable to parse" in msg:
             raise HTTPException(status_code=401, detail="Invalid or malformed token")
         supabase_logger.exception("/api/me error")
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def upsert_syllabus_course(payload: SyllabusCourseIn) -> SyllabusCourseOut:
@@ -8924,6 +9240,42 @@ def _get_auth_user(authorization: Optional[str]) -> Tuple[Optional[str], Optiona
     return user_id, email
 
 
+def _get_ws_auth_user(websocket: WebSocket) -> Tuple[str, Optional[str]]:
+    """Validate websocket bearer token from header or query params.
+
+    Token must be verified before calling websocket.accept().
+    """
+    auth_header = websocket.headers.get("authorization")
+    token = _parse_bearer_token(auth_header)
+    if not token:
+        token = _normalize_possible_token(
+            websocket.query_params.get("token")
+            or websocket.query_params.get("access_token")
+            or websocket.query_params.get("auth_token")
+        )
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Auth disabled")
+
+    try:
+        auth_user = anon_client.auth.get_user(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user_obj = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+    if not user_obj:
+        raise HTTPException(status_code=401, detail="Invalid auth context")
+
+    user_id = getattr(user_obj, "id", None) or (user_obj.get("id") if isinstance(user_obj, dict) else None)
+    email = getattr(user_obj, "email", None) or (user_obj.get("email") if isinstance(user_obj, dict) else None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid auth context")
+    return str(user_id), email
+
+
 def _require_admin(authorization: Optional[str]):
     uid, em = _get_auth_user(authorization)
     if not _is_admin_user(uid, em):
@@ -10602,7 +10954,6 @@ class TeacherChatManager:
         self.active: dict[str, dict[str, WebSocket]] = {}
 
     async def connect(self, connection_id: str, user_id: str, websocket: WebSocket):
-        await websocket.accept()
         self.active.setdefault(connection_id, {})[user_id] = websocket
 
     def disconnect(self, connection_id: str, user_id: str):
@@ -13584,7 +13935,8 @@ def debug_list_college_logos(college_id: uuid.UUID):  # pragma: no cover - debug
 
 
 @academics_router.post("/api/colleges", response_model=CollegeFullOut, summary="Create or update a college with departments & batches")
-def create_college(payload: CollegeCreateIn):
+def create_college(payload: CollegeCreateIn, authorization: Optional[str] = Header(default=None)):
+    _require_admin_or_employee(authorization)
     college_id = upsert_college(payload.college_name)
     sync_degree_hierarchy(college_id, payload.degrees or [])
     data = get_college_full(college_id)
@@ -13596,7 +13948,8 @@ def create_college(payload: CollegeCreateIn):
     response_model=CollegeFullOut,
     summary="Create a college by name with no academic structure",
 )
-def create_college_simple(payload: CollegeNameOnlyIn):
+def create_college_simple(payload: CollegeNameOnlyIn, authorization: Optional[str] = Header(default=None)):
+    _require_admin_or_employee(authorization)
     college_id = upsert_college(payload.name)
     data = get_college_full(college_id)
     return CollegeFullOut(**data)
@@ -13665,7 +14018,12 @@ def list_degrees_for_college(college_id: uuid.UUID):
     response_model=DegreeOut,
     summary="Create a degree for a college",
 )
-def create_degree_simple(college_id: uuid.UUID, payload: DegreeSimpleCreateIn):
+def create_degree_simple(
+    college_id: uuid.UUID,
+    payload: DegreeSimpleCreateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
 
     existing = (
@@ -13724,7 +14082,12 @@ def create_degree_simple(college_id: uuid.UUID, payload: DegreeSimpleCreateIn):
     response_model=DegreeOut,
     summary="Update degree metadata",
 )
-def update_degree(degree_id: uuid.UUID, payload: DegreeSimpleCreateIn):
+def update_degree(
+    degree_id: uuid.UUID,
+    payload: DegreeSimpleCreateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
 
     existing = (
@@ -13800,7 +14163,12 @@ def _check_department_delete_blockers(supabase: Client, department_id: str) -> L
     "/api/degrees/{degree_id}",
     summary="Delete a degree, its departments, batches, and related syllabus data",
 )
-def delete_degree(degree_id: uuid.UUID, force: bool = False):
+def delete_degree(
+    degree_id: uuid.UUID,
+    force: bool = False,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
 
     deg_res = (
@@ -13926,7 +14294,12 @@ def delete_degree(degree_id: uuid.UUID, force: bool = False):
     response_model=DepartmentWithBatchesOut,
     summary="Create a department for a degree",
 )
-def create_department_simple(degree_id: uuid.UUID, payload: DepartmentSimpleCreateIn):
+def create_department_simple(
+    degree_id: uuid.UUID,
+    payload: DepartmentSimpleCreateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
 
     degree_res = (
@@ -14005,7 +14378,12 @@ def create_department_simple(degree_id: uuid.UUID, payload: DepartmentSimpleCrea
     response_model=DepartmentWithBatchesOut,
     summary="Update department metadata",
 )
-def update_department_simple(department_id: uuid.UUID, payload: DepartmentSimpleUpdateIn):
+def update_department_simple(
+    department_id: uuid.UUID,
+    payload: DepartmentSimpleUpdateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
 
     dept_res = (
@@ -14151,7 +14529,11 @@ def _detach_subscription_plans_from_degree(supabase: Client, degree_id: str) -> 
     "/api/departments/{department_id}",
     summary="Delete a department, its batches, and related syllabus data",
 )
-def delete_department(department_id: uuid.UUID):
+def delete_department(
+    department_id: uuid.UUID,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
 
     dept_res = (
@@ -14217,7 +14599,12 @@ def delete_department(department_id: uuid.UUID):
     response_model=College,
     summary="Rename a college",
 )
-def rename_college(college_id: uuid.UUID, payload: CollegeNameOnlyIn):
+def rename_college(
+    college_id: uuid.UUID,
+    payload: CollegeNameOnlyIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
     upd = (
         supabase.table("colleges")
@@ -14247,16 +14634,34 @@ def rename_college(college_id: uuid.UUID, payload: CollegeNameOnlyIn):
     "/api/colleges/{college_id}",
     summary="Delete a college, its degrees/departments/batches, and related syllabus data",
 )
-def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
+def delete_college(
+    college_id: uuid.UUID,
+    force: bool = Query(default=False),
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
+
+    def _exec(builder, op_label: str):
+        try:
+            return _supabase_retry(
+                lambda: builder.execute(),
+                retries=3,
+                base_delay=0.35,
+            )
+        except RETRYABLE_EXCEPTIONS as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Transient Supabase disconnect during {op_label}. Please retry.",
+            ) from exc
 
     col_res = (
         supabase.table("colleges")
         .select("id,name")
         .eq("id", str(college_id))
         .limit(1)
-        .execute()
     )
+    col_res = _exec(col_res, "find college")
     if getattr(col_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (find college): {col_res.error}")
     if not col_res.data:
@@ -14280,7 +14685,7 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
             return 0
         deleted = 0
         for chunk in _chunked(_as_id_list(ids_list)):
-            res = supabase.table(table).delete().in_(key, chunk).execute()
+            res = _exec(supabase.table(table).delete().in_(key, chunk), f"delete {table}")
             if getattr(res, "error", None):
                 raise HTTPException(status_code=500, detail=f"Supabase error (delete {table}): {res.error}")
             deleted += len(getattr(res, "data", None) or [])
@@ -14291,7 +14696,7 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
             return 0
         updated = 0
         for chunk in _chunked(_as_id_list(ids_list)):
-            res = supabase.table(table).update(updates).in_(key, chunk).execute()
+            res = _exec(supabase.table(table).update(updates).in_(key, chunk), f"update {table}")
             if getattr(res, "error", None):
                 raise HTTPException(status_code=500, detail=f"Supabase error (update {table}): {res.error}")
             updated += len(getattr(res, "data", None) or [])
@@ -14309,7 +14714,10 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
             ("marketplace_notes", "marketplace notes", "college_id"),
             ("hod_role_applications", "hod role applications", "college_id"),
         ):
-            check = supabase.table(table_name).select(column).eq(column, str(college_id)).limit(1).execute()
+            check = _exec(
+                supabase.table(table_name).select(column).eq(column, str(college_id)).limit(1),
+                f"check {label} for college",
+            )
             if getattr(check, "error", None):
                 raise HTTPException(status_code=500, detail=f"Supabase error (check {label} for college): {check.error}")
             if check.data:
@@ -14326,8 +14734,8 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
         supabase.table("degrees")
         .select("id")
         .eq("college_id", str(college_id))
-        .execute()
     )
+    deg_res = _exec(deg_res, "list degrees for college")
     if getattr(deg_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (list degrees for college): {deg_res.error}")
 
@@ -14336,18 +14744,27 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
     if force:
         # Identify hierarchy ids first.
         deg_ids = [r.get("id") for r in (deg_res.data or []) if isinstance(r, dict) and r.get("id")]
-        dept_q = supabase.table("departments").select("id").eq("college_id", str(college_id)).execute()
+        dept_q = _exec(
+            supabase.table("departments").select("id").eq("college_id", str(college_id)),
+            "list departments for college",
+        )
         if getattr(dept_q, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (list departments for college): {dept_q.error}")
         dept_ids = [r.get("id") for r in (dept_q.data or []) if isinstance(r, dict) and r.get("id")]
 
-        batch_q = supabase.table("batches").select("id").eq("college_id", str(college_id)).execute()
+        batch_q = _exec(
+            supabase.table("batches").select("id").eq("college_id", str(college_id)),
+            "list batches for college",
+        )
         if getattr(batch_q, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (list batches for college): {batch_q.error}")
         batch_ids = [r.get("id") for r in (batch_q.data or []) if isinstance(r, dict) and r.get("id")]
 
         # Marketplace notes (delete reviews/purchases first to satisfy FKs)
-        note_q = supabase.table("marketplace_notes").select("id").eq("college_id", str(college_id)).execute()
+        note_q = _exec(
+            supabase.table("marketplace_notes").select("id").eq("college_id", str(college_id)),
+            "list marketplace notes for college",
+        )
         if getattr(note_q, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (list marketplace notes for college): {note_q.error}")
         note_ids = [r.get("id") for r in (note_q.data or []) if isinstance(r, dict) and r.get("id")]
@@ -14357,14 +14774,20 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
             force_stats["marketplace_notes_deleted"] = _try_delete_in("marketplace_notes", "id", note_ids)
 
         # Teacher applications and related HOD role applications (safe to delete)
-        del_apps = supabase.table("teacher_applications").delete().eq("college_id", str(college_id)).execute()
+        del_apps = _exec(
+            supabase.table("teacher_applications").delete().eq("college_id", str(college_id)),
+            "delete teacher applications for college",
+        )
         if getattr(del_apps, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (delete teacher applications for college): {del_apps.error}")
         force_stats["teacher_applications_deleted"] = len(getattr(del_apps, "data", None) or [])
         if dept_ids:
             force_stats["teacher_applications_deleted"] += _try_delete_in("teacher_applications", "department_id", dept_ids)
 
-        hod_role_del = supabase.table("hod_role_applications").delete().eq("college_id", str(college_id)).execute()
+        hod_role_del = _exec(
+            supabase.table("hod_role_applications").delete().eq("college_id", str(college_id)),
+            "delete hod role applications for college",
+        )
         if getattr(hod_role_del, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (delete hod role applications for college): {hod_role_del.error}")
         force_stats["hod_role_applications_deleted"] = len(getattr(hod_role_del, "data", None) or [])
@@ -14372,7 +14795,10 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
             force_stats["hod_role_applications_deleted"] += _try_delete_in("hod_role_applications", "department_id", dept_ids)
 
         # Teacher classes: delete (these are college-scoped operational rows)
-        del_cls = supabase.table("teacher_classes").delete().eq("college_id", str(college_id)).execute()
+        del_cls = _exec(
+            supabase.table("teacher_classes").delete().eq("college_id", str(college_id)),
+            "delete teacher classes for college",
+        )
         if getattr(del_cls, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (delete teacher classes for college): {del_cls.error}")
         force_stats["teacher_classes_deleted"] = len(getattr(del_cls, "data", None) or [])
@@ -14381,7 +14807,10 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
         force_stats["teacher_classes_deleted"] += _try_delete_in("teacher_classes", "batch_id", batch_ids)
 
         # Teacher profiles: detach (avoid deleting user identity)
-        upd_tp = supabase.table("teacher_profiles").update({"college_id": None, "department_id": None}).eq("college_id", str(college_id)).execute()
+        upd_tp = _exec(
+            supabase.table("teacher_profiles").update({"college_id": None, "department_id": None}).eq("college_id", str(college_id)),
+            "detach teacher profiles",
+        )
         if getattr(upd_tp, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (detach teacher profiles): {upd_tp.error}")
         force_stats["teacher_profiles_detached"] = len(getattr(upd_tp, "data", None) or [])
@@ -14389,19 +14818,28 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
             force_stats["teacher_profiles_detached"] += _try_update_in("teacher_profiles", "department_id", dept_ids, {"department_id": None, "college_id": None})
 
         # User education: delete records (aligns with delete_degree behavior)
-        del_ue = supabase.table("user_education").delete().eq("college_id", str(college_id)).execute()
+        del_ue = _exec(
+            supabase.table("user_education").delete().eq("college_id", str(college_id)),
+            "delete user education",
+        )
         if getattr(del_ue, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (delete user education): {del_ue.error}")
         force_stats["user_education_deleted"] = len(getattr(del_ue, "data", None) or [])
 
-        upd_up = supabase.table("user_profiles").update({"college_id": None}).eq("college_id", str(college_id)).execute()
+        upd_up = _exec(
+            supabase.table("user_profiles").update({"college_id": None}).eq("college_id", str(college_id)),
+            "detach user profiles college",
+        )
         if getattr(upd_up, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (detach user profiles college): {upd_up.error}")
         force_stats["user_profiles_detached"] = len(getattr(upd_up, "data", None) or [])
         force_stats["user_profiles_detached"] += _try_update_in("user_profiles", "department_id", dept_ids, {"department_id": None})
         force_stats["user_profiles_detached"] += _try_update_in("user_profiles", "batch_id", batch_ids, {"batch_id": None})
 
-        upd_ux = supabase.table("user_experiences").update({"batch_id": None}).in_("batch_id", _as_id_list(batch_ids) or ["00000000-0000-0000-0000-000000000000"]).execute()
+        upd_ux = _exec(
+            supabase.table("user_experiences").update({"batch_id": None}).in_("batch_id", _as_id_list(batch_ids) or ["00000000-0000-0000-0000-000000000000"]),
+            "detach user experiences batch",
+        )
         if getattr(upd_ux, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (detach user experiences batch): {upd_ux.error}")
         force_stats["user_experiences_detached"] = len(getattr(upd_ux, "data", None) or [])
@@ -14426,8 +14864,8 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
             supabase.table("departments")
             .select("id")
             .eq("degree_id", deg_id_str)
-            .execute()
         )
+        dept_res = _exec(dept_res, "list departments for degree")
         if getattr(dept_res, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (list departments for degree): {dept_res.error}")
 
@@ -14453,17 +14891,26 @@ def delete_college(college_id: uuid.UUID, force: bool = Query(default=False)):
             batch_stats = _cascade_delete_department_batches(supabase, dept_uuid)
             stats["batches"] += int(batch_stats.get("batches", 0))
             stats["courses"] += int(batch_stats.get("courses", 0))
-            del_dept = supabase.table("departments").delete().eq("id", did).execute()
+            del_dept = _exec(
+                supabase.table("departments").delete().eq("id", did),
+                "delete department",
+            )
             if getattr(del_dept, "error", None):
                 raise HTTPException(status_code=500, detail=f"Supabase error (delete department): {del_dept.error}")
             stats["departments"] += 1
 
-        del_deg = supabase.table("degrees").delete().eq("id", deg_id_str).execute()
+        del_deg = _exec(
+            supabase.table("degrees").delete().eq("id", deg_id_str),
+            "delete degree",
+        )
         if getattr(del_deg, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (delete degree): {del_deg.error}")
         stats["degrees"] += 1
 
-    del_col = supabase.table("colleges").delete().eq("id", str(college_id)).execute()
+    del_col = _exec(
+        supabase.table("colleges").delete().eq("id", str(college_id)),
+        "delete college",
+    )
     if getattr(del_col, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (delete college): {del_col.error}")
 
@@ -14626,7 +15073,12 @@ def list_batches_for_department_with_ids_by_id(department_id: uuid.UUID):
     response_model=BatchWithIdOut,
     summary="Create a batch for a department",
 )
-def create_batch_for_department(department_id: uuid.UUID, payload: BatchIn):
+def create_batch_for_department(
+    department_id: uuid.UUID,
+    payload: BatchIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
 
     dept_res = (
@@ -14701,7 +15153,12 @@ def create_batch_for_department(department_id: uuid.UUID, payload: BatchIn):
     response_model=BatchWithIdOut,
     summary="Update batch years",
 )
-def update_batch(batch_id: uuid.UUID, payload: BatchIn):
+def update_batch(
+    batch_id: uuid.UUID,
+    payload: BatchIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
 
     batch_res = (
@@ -14755,7 +15212,11 @@ def update_batch(batch_id: uuid.UUID, payload: BatchIn):
     "/api/batches/{batch_id}",
     summary="Delete a batch and related syllabus data",
 )
-def delete_batch(batch_id: uuid.UUID):
+def delete_batch(
+    batch_id: uuid.UUID,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
     supabase = get_service_client()
 
     batch_res = (
@@ -15125,6 +15586,222 @@ def admin_list_security_events(
         "total": total,
         "limit": limit,
         "offset": offset,
+    }
+
+
+@academics_router.get("/api/admin/security/incidents", summary="Admin: list security incidents")
+def admin_list_security_incidents(
+    authorization: Optional[str] = Header(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    status: Optional[str] = Query(default=None),
+    severity: Optional[str] = Query(default=None),
+    alert_type: Optional[str] = Query(default=None),
+):
+    _require_admin_or_employee(authorization)
+    supabase = get_service_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase service client unavailable")
+
+    q = supabase.table(SECURITY_INCIDENTS_TABLE).select(
+        "id,alert_type,severity,status,path,method,client_ip,event_payload,detected_at,acknowledged_at,resolved_at,assignee,response_note,created_at,updated_at",
+        count="exact",
+    )
+
+    if status and status.strip():
+        q = q.eq("status", status.strip().lower())
+    if severity and severity.strip():
+        q = q.eq("severity", severity.strip().lower())
+    if alert_type and alert_type.strip():
+        q = q.eq("alert_type", alert_type.strip())
+
+    res = q.order("detected_at", desc=True).range(offset, offset + limit - 1).execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (security incidents): {res.error}")
+
+    return {
+        "items": getattr(res, "data", None) or [],
+        "total": getattr(res, "count", None),
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+class SecurityIncidentUpdateIn(BaseModel):
+    status: str
+    assignee: Optional[str] = None
+    response_note: Optional[str] = None
+
+
+@academics_router.patch("/api/admin/security/incidents/{incident_id}", summary="Admin: update incident state")
+def admin_update_security_incident(
+    incident_id: uuid.UUID,
+    payload: SecurityIncidentUpdateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin_or_employee(authorization)
+    supabase = get_service_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase service client unavailable")
+
+    next_status = (payload.status or "").strip().lower()
+    allowed_status = {"open", "acknowledged", "resolved", "false_positive"}
+    if next_status not in allowed_status:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {sorted(allowed_status)}")
+
+    updates: Dict[str, Any] = {
+        "status": next_status,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+    if payload.assignee is not None:
+        updates["assignee"] = payload.assignee.strip() or None
+    if payload.response_note is not None:
+        updates["response_note"] = payload.response_note.strip() or None
+
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    if next_status == "acknowledged":
+        updates["acknowledged_at"] = now_iso
+    elif next_status in {"resolved", "false_positive"}:
+        updates["resolved_at"] = now_iso
+        updates["acknowledged_at"] = now_iso
+
+    res = (
+        supabase.table(SECURITY_INCIDENTS_TABLE)
+        .update(updates)
+        .eq("id", str(incident_id))
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update incident): {res.error}")
+
+    if not (getattr(res, "data", None) or []):
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    return {"ok": True, "id": str(incident_id), "status": next_status}
+
+
+def _parse_iso_ts(raw: Any) -> Optional[datetime]:
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+@academics_router.get("/api/admin/security/metrics", summary="Admin: security KPI metrics")
+def admin_security_metrics(
+    authorization: Optional[str] = Header(default=None),
+    window_days: int = Query(default=30, ge=1, le=180),
+):
+    _require_admin_or_employee(authorization)
+    supabase = get_service_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase service client unavailable")
+
+    since_dt = datetime.utcnow() - timedelta(days=window_days)
+    since_iso = since_dt.isoformat() + "Z"
+
+    inc_res = (
+        supabase.table(SECURITY_INCIDENTS_TABLE)
+        .select("id,alert_type,severity,status,detected_at,acknowledged_at,resolved_at")
+        .gte("detected_at", since_iso)
+        .execute()
+    )
+    if getattr(inc_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (security metrics incidents): {inc_res.error}")
+
+    incidents = getattr(inc_res, "data", None) or []
+    total = len(incidents)
+    open_count = 0
+    acknowledged_count = 0
+    resolved_count = 0
+    false_positive_count = 0
+    by_severity: Dict[str, int] = {}
+    by_alert_type: Dict[str, int] = {}
+    mttd_samples: List[float] = []
+    mttr_samples: List[float] = []
+
+    for row in incidents:
+        status = str(row.get("status") or "open").strip().lower()
+        severity = str(row.get("severity") or "unknown").strip().lower()
+        alert_type = str(row.get("alert_type") or "unknown").strip()
+        by_severity[severity] = by_severity.get(severity, 0) + 1
+        by_alert_type[alert_type] = by_alert_type.get(alert_type, 0) + 1
+
+        if status == "open":
+            open_count += 1
+        elif status == "acknowledged":
+            acknowledged_count += 1
+        elif status == "resolved":
+            resolved_count += 1
+        elif status == "false_positive":
+            false_positive_count += 1
+
+        detected_at = _parse_iso_ts(row.get("detected_at"))
+        acknowledged_at = _parse_iso_ts(row.get("acknowledged_at"))
+        resolved_at = _parse_iso_ts(row.get("resolved_at"))
+
+        if detected_at and acknowledged_at and acknowledged_at >= detected_at:
+            mttd_samples.append((acknowledged_at - detected_at).total_seconds())
+        if detected_at and resolved_at and resolved_at >= detected_at:
+            mttr_samples.append((resolved_at - detected_at).total_seconds())
+
+    events_res = (
+        supabase.table(SECURITY_EVENTS_TABLE)
+        .select("id", count="exact")
+        .gte("created_at", since_iso)
+        .execute()
+    )
+    if getattr(events_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (security metrics events): {events_res.error}")
+
+    alerts_res = (
+        supabase.table(SECURITY_EVENTS_TABLE)
+        .select("id", count="exact")
+        .gte("created_at", since_iso)
+        .ilike("event_type", "alert.%")
+        .execute()
+    )
+    if getattr(alerts_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (security metrics alerts): {alerts_res.error}")
+
+    mttd_seconds = round(sum(mttd_samples) / len(mttd_samples), 2) if mttd_samples else None
+    mttr_seconds = round(sum(mttr_samples) / len(mttr_samples), 2) if mttr_samples else None
+    top_alert_types = sorted(by_alert_type.items(), key=lambda kv: kv[1], reverse=True)[:10]
+
+    return {
+        "window_days": window_days,
+        "since": since_iso,
+        "incident_counts": {
+            "total": total,
+            "open": open_count,
+            "acknowledged": acknowledged_count,
+            "resolved": resolved_count,
+            "false_positive": false_positive_count,
+        },
+        "events": {
+            "total": int(getattr(events_res, "count", 0) or 0),
+            "alerts": int(getattr(alerts_res, "count", 0) or 0),
+        },
+        "sla": {
+            "mttd_seconds": mttd_seconds,
+            "mttd_minutes": round(mttd_seconds / 60.0, 2) if mttd_seconds is not None else None,
+            "mttr_seconds": mttr_seconds,
+            "mttr_minutes": round(mttr_seconds / 60.0, 2) if mttr_seconds is not None else None,
+            "sample_sizes": {
+                "mttd": len(mttd_samples),
+                "mttr": len(mttr_samples),
+            },
+        },
+        "by_severity": by_severity,
+        "top_alert_types": [
+            {"alert_type": k, "count": v} for k, v in top_alert_types
+        ],
     }
 
 
@@ -17192,6 +17869,25 @@ def _random_otp() -> str:
     return f"{random.randint(0, 999999):06d}"
 
 
+def _hash_print_otp(otp: str) -> str:
+    token = (otp or "").strip()
+    if not token:
+        return ""
+    return hmac.new(PRINT_OTP_HASH_SECRET.encode("utf-8"), token.encode("utf-8"), "sha256").hexdigest()
+
+
+def _verify_print_otp(candidate: str, *, otp_hash: Optional[str], legacy_plain_otp: Optional[str]) -> bool:
+    provided = (candidate or "").strip()
+    if not provided:
+        return False
+    stored_hash = (otp_hash or "").strip()
+    if stored_hash:
+        computed = _hash_print_otp(provided)
+        return bool(computed and hmac.compare_digest(stored_hash, computed))
+    # Backward compatibility for existing rows that still have plaintext OTP.
+    return (legacy_plain_otp or "").strip() == provided
+
+
 def _now_iso() -> str:
     return datetime.utcnow().isoformat()
 
@@ -17256,13 +17952,15 @@ def create_print_job(payload: CreateJobIn, authorization: Optional[str] = Header
     supabase = get_service_client()
     job_id = str(uuid.uuid4())
     otp = _random_otp()
+    otp_hash = _hash_print_otp(otp)
     now = _now_iso()
     row = {
         "id": job_id,
         "user_id": user_id,
         "shop_id": payload.shop_id,
         "status": "submitted",
-        "otp": otp,
+        "otp": None,
+        "otp_hash": otp_hash,
         "settings": _supabase_payload(payload.settings.dict()),
         "estimated_pages": payload.estimated_pages,
         "estimated_price": payload.estimated_price,
@@ -17319,6 +18017,7 @@ def get_order(job_id: str, authorization: Optional[str] = Header(default=None)):
         raise HTTPException(status_code=500, detail=f"Failed: {e}")
     if not job_row:
         raise HTTPException(status_code=404, detail="Not found")
+    job_row.pop("otp_hash", None)
     return {"job": job_row, "events": events}
 
 
@@ -17348,8 +18047,9 @@ def resend_otp(job_id: str, authorization: Optional[str] = Header(default=None))
     user_id, _ = _get_auth_user(authorization)
     supabase = get_service_client()
     otp = _random_otp()
+    otp_hash = _hash_print_otp(otp)
     now = _now_iso()
-    supabase.table(PRINT_JOBS_TABLE).update({"otp": otp, "updated_at": now}).eq("id", job_id).execute()
+    supabase.table(PRINT_JOBS_TABLE).update({"otp": None, "otp_hash": otp_hash, "updated_at": now}).eq("id", job_id).execute()
     supabase.table(PRINT_JOB_EVENTS_TABLE).insert({"job_id": job_id, "status": "otp", "note": "OTP regenerated", "created_at": now}).execute()
     return {"ok": True, "otp": otp}
 
@@ -17613,7 +18313,7 @@ def shop_jobs(
 def _set_status(job_id: str, new_status: str, note: str, authorization: Optional[str]):
     supabase = get_service_client()
     # Fetch job + verify ownership
-    job_q = supabase.table(PRINT_JOBS_TABLE).select("id,shop_id,status,otp").eq("id", job_id).limit(1).execute()
+    job_q = supabase.table(PRINT_JOBS_TABLE).select("id,shop_id,status,otp,otp_hash").eq("id", job_id).limit(1).execute()
     job = (getattr(job_q, 'data', []) or [{}])[0]
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -17651,12 +18351,12 @@ class ReleaseIn(BaseModel):
 @print_router.post("/api/shop/jobs/{job_id}/release")
 def shop_release(job_id: str, body: ReleaseIn, authorization: Optional[str] = Header(default=None)):
     supabase = get_service_client()
-    job_q = supabase.table(PRINT_JOBS_TABLE).select("id,shop_id,status,otp").eq("id", job_id).limit(1).execute()
+    job_q = supabase.table(PRINT_JOBS_TABLE).select("id,shop_id,status,otp,otp_hash").eq("id", job_id).limit(1).execute()
     job = (getattr(job_q, 'data', []) or [{}])[0]
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     _require_shop_owner(job.get("shop_id"), authorization)
-    if (job.get("otp") or "").strip() != (body.otp or "").strip():
+    if not _verify_print_otp(body.otp, otp_hash=job.get("otp_hash"), legacy_plain_otp=job.get("otp")):
         raise HTTPException(status_code=400, detail="Invalid OTP")
     return _set_status(job_id, "completed", "Released with OTP", authorization)
 
@@ -24693,7 +25393,34 @@ def get_leaderboard(
 # --- FastAPI app ---
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="PaperX Unified API", version="1.0.0")
+    expose_docs = _should_expose_api_docs()
+    app = FastAPI(
+        title="PaperX Unified API",
+        version="1.0.0",
+        docs_url="/docs" if expose_docs else None,
+        redoc_url="/redoc" if expose_docs else None,
+        openapi_url="/openapi.json" if expose_docs else None,
+    )
+
+    @app.exception_handler(HTTPException)
+    async def sanitized_http_exception_handler(request: Request, exc: HTTPException):
+        status_code = int(getattr(exc, "status_code", 500) or 500)
+        detail: Any = exc.detail
+        if status_code >= 500:
+            # Never expose internal exception details to clients.
+            detail = "Internal server error"
+        elif not isinstance(detail, (str, dict, list)):
+            detail = "Request failed"
+        return JSONResponse(
+            {"detail": detail},
+            status_code=status_code,
+            headers=getattr(exc, "headers", None),
+        )
+
+    @app.exception_handler(Exception)
+    async def sanitized_unhandled_exception_handler(request: Request, exc: Exception):
+        supabase_logger.exception("Unhandled server exception")
+        return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
     global_limiter = _SlidingWindowLimiter(
         window_seconds=RATE_LIMIT_GLOBAL_WINDOW_SECONDS,
@@ -24708,6 +25435,11 @@ def create_app() -> FastAPI:
     login_limiter = _SlidingWindowLimiter(
         window_seconds=RATE_LIMIT_LOGIN_WINDOW_SECONDS,
         max_requests=RATE_LIMIT_LOGIN_MAX_REQUESTS,
+        max_buckets=RATE_LIMIT_MAX_BUCKETS,
+    )
+    ai_limiter = _SlidingWindowLimiter(
+        window_seconds=RATE_LIMIT_AI_WINDOW_SECONDS,
+        max_requests=RATE_LIMIT_AI_MAX_REQUESTS,
         max_buckets=RATE_LIMIT_MAX_BUCKETS,
     )
 
@@ -24765,6 +25497,10 @@ def create_app() -> FastAPI:
             scoped_limiter = login_limiter
             scoped_limit_value = RATE_LIMIT_LOGIN_MAX_REQUESTS
             scoped_name = "login"
+        elif _rl_is_ai_route(path):
+            scoped_limiter = ai_limiter
+            scoped_limit_value = RATE_LIMIT_AI_MAX_REQUESTS
+            scoped_name = "ai"
         elif _rl_is_auth_route(path):
             scoped_limiter = auth_limiter
             scoped_limit_value = RATE_LIMIT_AUTH_MAX_REQUESTS
@@ -24782,6 +25518,27 @@ def create_app() -> FastAPI:
     async def auth_request_context_and_cookie_bridge(request: Request, call_next):  # type: ignore[override]
         token = AUTH_REQUEST_CTX.set(request)
         try:
+            if ABUSE_SCORING_ENABLED:
+                ip = _extract_client_ip(request) or "unknown"
+                score, blocked = _abuse_apply_and_check(ip, delta=0)
+                if blocked:
+                    _security_alert(
+                        "abuse_score_block",
+                        request=request,
+                        severity="warning",
+                        client_ip=ip,
+                        score=score,
+                        threshold=ABUSE_SCORE_BLOCK_THRESHOLD,
+                    )
+                    return JSONResponse(
+                        {
+                            "detail": "Request blocked due to abuse risk score",
+                            "score": score,
+                            "threshold": ABUSE_SCORE_BLOCK_THRESHOLD,
+                        },
+                        status_code=403,
+                    )
+
             ctype = (request.headers.get("content-type") or "").lower()
             if request.method.upper() in {"POST", "PUT", "PATCH"} and "multipart/form-data" in ctype:
                 clen = request.headers.get("content-length")
@@ -24856,6 +25613,29 @@ def create_app() -> FastAPI:
                     action_method=method_norm,
                     status_code=int(response.status_code),
                 )
+
+            if ABUSE_SCORING_ENABLED:
+                ip = _extract_client_ip(request) or "unknown"
+                delta = _abuse_delta_for_response(status_code=int(response.status_code), path=path_norm, method=method_norm)
+                score, blocked = _abuse_apply_and_check(ip, delta=delta)
+                if delta > 0:
+                    _security_emit(
+                        "abuse.score.updated",
+                        request=request,
+                        severity="warning" if delta >= ABUSE_SCORE_429 else "info",
+                        client_ip=ip,
+                        delta=delta,
+                        score=score,
+                    )
+                if blocked:
+                    _security_alert(
+                        "abuse_score_threshold_crossed",
+                        request=request,
+                        severity="warning",
+                        client_ip=ip,
+                        score=score,
+                        threshold=ABUSE_SCORE_BLOCK_THRESHOLD,
+                    )
             return response
         finally:
             AUTH_REQUEST_CTX.reset(token)
@@ -26210,18 +26990,59 @@ from packages.java_compiler import execute_java_code
 class CompilerRequest(BaseModel):
     code: str
 
+
+def _require_compiler_auth(request: Optional[Request]) -> Optional[str]:
+    req = _resolve_request_for_auth(request)
+    token = None
+    if req is not None:
+        token = _bearer_token_from_header(req.headers.get("authorization"))
+    if not token:
+        raise HTTPException(status_code=401, detail="Compiler access requires authentication")
+    try:
+        return _get_user_id_with_retry(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+
 @app.post("/api/tunex/compiler/run")
-async def run_python_compiler(request: CompilerRequest):
+async def run_python_compiler(request: CompilerRequest, http_request: Request):
     """
     Executes python code sent from the frontend.
     """
+    user_id = _require_compiler_auth(http_request)
+    req_obj = _resolve_request_for_auth(http_request)
+    _security_emit("compiler.request", request=req_obj, language="python", user_id=user_id, code_len=len(request.code or ""))
+
+    if COMPILER_WORKER_BASE_URL:
+        worker_res = _compiler_worker_request("/python/run", code=request.code, timeout_seconds=12)
+        if worker_res is not None:
+            return worker_res
+        if COMPILER_ISOLATION_MODE == "strict":
+            raise HTTPException(status_code=503, detail="Compiler worker unavailable")
+
+    if not COMPILER_INLINE_EXECUTION_ENABLED:
+        raise HTTPException(status_code=503, detail="Inline compiler execution disabled; use isolated worker")
+
     result = execute_python_code(request.code)
     return result
 
 
 @app.post("/api/tunex/compiler/java/run")
-async def run_java_compiler(request: CompilerRequest):
+async def run_java_compiler(request: CompilerRequest, http_request: Request):
     """Compiles and runs Java code sent from the frontend."""
+    user_id = _require_compiler_auth(http_request)
+    req_obj = _resolve_request_for_auth(http_request)
+    _security_emit("compiler.request", request=req_obj, language="java", user_id=user_id, code_len=len(request.code or ""))
+
+    if COMPILER_WORKER_BASE_URL:
+        worker_res = _compiler_worker_request("/java/run", code=request.code, timeout_seconds=15)
+        if worker_res is not None:
+            return worker_res
+        if COMPILER_ISOLATION_MODE == "strict":
+            raise HTTPException(status_code=503, detail="Compiler worker unavailable")
+
+    if not COMPILER_INLINE_EXECUTION_ENABLED:
+        raise HTTPException(status_code=503, detail="Inline compiler execution disabled; use isolated worker")
+
     result = execute_java_code(request.code)
     return result
 
@@ -28340,6 +29161,12 @@ async def send_to_user(room_id: str, target_user_id: str, message: dict):
 @app.websocket("/ws/group-chat/{room_id}")
 async def group_chat_websocket(websocket: WebSocket, room_id: str):
     """WebSocket endpoint for group chat signaling."""
+    try:
+        ws_auth_user_id, _ = _get_ws_auth_user(websocket)
+    except HTTPException:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     
     room = group_chat_rooms.get(room_id)
@@ -28408,7 +29235,7 @@ async def group_chat_websocket(websocket: WebSocket, room_id: str):
         await websocket.close()
         return
     
-    user_id = None
+    user_id = ws_auth_user_id
     user_name = "Anonymous"
     
     try:
@@ -28420,27 +29247,17 @@ async def group_chat_websocket(websocket: WebSocket, room_id: str):
             await websocket.close()
             return
         
-        user_id = join_data.get("data", {}).get("user_id") or generate_user_id()
+        user_id = ws_auth_user_id
         user_name = join_data.get("data", {}).get("name") or "Anonymous"
 
-        # If a token is provided, trust auth-derived identity over client-provided fields.
-        join_token = join_data.get("data", {}).get("token")
-        if join_token and isinstance(join_token, str) and join_token.strip():
-            try:
-                supabase = get_service_client()
-                user_resp = supabase.auth.get_user(join_token.strip())
-                if user_resp and user_resp.user:
-                    user_id = str(user_resp.user.id)
-                    # prefer profile name
-                    try:
-                        p = supabase.table("profiles").select("name").eq("user_id", user_id).maybe_single().execute()
-                        if p.data and p.data.get("name"):
-                            user_name = p.data["name"]
-                    except Exception:
-                        pass
-            except Exception:
-                # Token invalid -> keep client-supplied identity
-                pass
+        # Prefer verified profile name when available.
+        try:
+            supabase = get_service_client()
+            p = supabase.table("profiles").select("name").eq("user_id", user_id).maybe_single().execute()
+            if p.data and p.data.get("name"):
+                user_name = p.data["name"]
+        except Exception:
+            pass
 
         # Enforce bans for authenticated users
         if _is_uuid(user_id):
@@ -32846,6 +33663,7 @@ async def innovatex_make_unique(
         raise HTTPException(status_code=404, detail="Project not found")
     project = proj.data[0]
     req_obj = _resolve_request_for_auth()
+    _llm_tool_policy_enforce(tool_name="innovatex_make_unique", request=req_obj, user_id=user_id, is_admin=False)
     _security_emit("model.tool_call", request=req_obj, tool_name="innovatex_make_unique", project_id=body.project_id, user_id=user_id)
     _security_track_tool_chain(chain_key=f"innovatex:{body.project_id}", tool_name="innovatex_make_unique", request=req_obj)
 
@@ -32871,6 +33689,13 @@ Provide:
 
 Return ONLY valid JSON. No markdown.
 """
+
+    if LLM_GUARDRAILS_ENABLED:
+        ok_prompt, matched = _llm_guardrails_check(prompt)
+        if not ok_prompt:
+            _security_emit("model.prompt_injection.detected", request=req_obj, severity="warning", tool_name="innovatex_make_unique", user_id=user_id, pattern=matched)
+            if LLM_GUARDRAILS_ENFORCE:
+                raise HTTPException(status_code=400, detail="Prompt blocked by security guardrails")
 
     try:
         result = await run_in_threadpool(_run_refinement_ai, prompt)
@@ -32900,6 +33725,7 @@ async def innovatex_eval_metrics(
         raise HTTPException(status_code=404, detail="Project not found")
     project = proj.data[0]
     req_obj = _resolve_request_for_auth()
+    _llm_tool_policy_enforce(tool_name="innovatex_eval_metrics", request=req_obj, user_id=user_id, is_admin=False)
     _security_emit("model.tool_call", request=req_obj, tool_name="innovatex_eval_metrics", project_id=body.project_id, user_id=user_id)
     _security_track_tool_chain(chain_key=f"innovatex:{body.project_id}", tool_name="innovatex_eval_metrics", request=req_obj)
 
@@ -32923,6 +33749,13 @@ Provide:
 
 Return ONLY valid JSON. No markdown.
 """
+
+    if LLM_GUARDRAILS_ENABLED:
+        ok_prompt, matched = _llm_guardrails_check(prompt)
+        if not ok_prompt:
+            _security_emit("model.prompt_injection.detected", request=req_obj, severity="warning", tool_name="innovatex_eval_metrics", user_id=user_id, pattern=matched)
+            if LLM_GUARDRAILS_ENFORCE:
+                raise HTTPException(status_code=400, detail="Prompt blocked by security guardrails")
 
     try:
         result = await run_in_threadpool(_run_refinement_ai, prompt)
@@ -32952,6 +33785,7 @@ async def innovatex_viva_sim(
         raise HTTPException(status_code=404, detail="Project not found")
     project = proj.data[0]
     req_obj = _resolve_request_for_auth()
+    _llm_tool_policy_enforce(tool_name="innovatex_viva_sim", request=req_obj, user_id=user_id, is_admin=False)
     _security_emit("model.tool_call", request=req_obj, tool_name="innovatex_viva_sim", project_id=body.project_id, user_id=user_id)
     _security_track_tool_chain(chain_key=f"innovatex:{body.project_id}", tool_name="innovatex_viva_sim", request=req_obj)
 
@@ -32978,6 +33812,13 @@ Provide:
 
 Return ONLY valid JSON. No markdown.
 """
+
+        if LLM_GUARDRAILS_ENABLED:
+            ok_prompt, matched = _llm_guardrails_check(prompt)
+            if not ok_prompt:
+                _security_emit("model.prompt_injection.detected", request=req_obj, severity="warning", tool_name="innovatex_viva_sim", user_id=user_id, pattern=matched)
+                if LLM_GUARDRAILS_ENFORCE:
+                    raise HTTPException(status_code=400, detail="Prompt blocked by security guardrails")
     else:
         # Evaluate answers
         qa_pairs = ""
@@ -33036,6 +33877,7 @@ async def innovatex_explore_features(
         raise HTTPException(status_code=404, detail="Project not found")
     project = proj.data[0]
     req_obj = _resolve_request_for_auth()
+    _llm_tool_policy_enforce(tool_name="innovatex_explore_features", request=req_obj, user_id=user_id, is_admin=False)
     _security_emit("model.tool_call", request=req_obj, tool_name="innovatex_explore_features", project_id=body.project_id, user_id=user_id)
     _security_track_tool_chain(chain_key=f"innovatex:{body.project_id}", tool_name="innovatex_explore_features", request=req_obj)
 
@@ -33068,6 +33910,13 @@ Return a JSON object with:
 
 Return ONLY valid JSON. No markdown.
 """
+
+    if LLM_GUARDRAILS_ENABLED:
+        ok_prompt, matched = _llm_guardrails_check(prompt)
+        if not ok_prompt:
+            _security_emit("model.prompt_injection.detected", request=req_obj, severity="warning", tool_name="innovatex_explore_features", user_id=user_id, pattern=matched)
+            if LLM_GUARDRAILS_ENFORCE:
+                raise HTTPException(status_code=400, detail="Prompt blocked by security guardrails")
 
     try:
         result = await run_in_threadpool(_run_refinement_ai, prompt)
@@ -34305,6 +35154,8 @@ def _medix_index_pdf_source(
     if len(raw) > max_size:
         raise HTTPException(status_code=413, detail=f"File too large ({file_name}). Max {MEDIX_MAX_UPLOAD_MB} MB")
 
+    trust_info = _rag_trust_validate_payload(file_name=file_name, raw=raw)
+
     _medix_progress(f"Indexing started: file={file_name}, size_mb={len(raw) / (1024 * 1024):.2f}")
 
     text = _medix_extract_pdf_text(raw)
@@ -34377,6 +35228,15 @@ def _medix_index_pdf_source(
             "tags": tags_value,
             "chars": len(text),
             "pharma_tags": source_pharma_tags,
+            "provenance": {
+                "ingested_at": datetime.utcnow().isoformat() + "Z",
+                "sha256": trust_info.get("sha256"),
+                "size_bytes": trust_info.get("size_bytes"),
+                "av_result": trust_info.get("av_result"),
+                "source_type": "pdf_upload",
+                "uploader_user_id": actor_user_id,
+                "uploader_email": actor_email,
+            },
             "semantic_chunking": True,
             "overlap_windows": True,
             "section_based_chunking": True,
@@ -34471,6 +35331,11 @@ def _medix_index_pdf_source(
             "section_count": len({int(c.get("section_index") or 0) for c in chunk_items}),
             "file_hash": digest,
             "tags": tags_value,
+            "provenance": {
+                "sha256": trust_info.get("sha256"),
+                "size_bytes": trust_info.get("size_bytes"),
+                "av_result": trust_info.get("av_result"),
+            },
         },
     )
 
@@ -35435,6 +36300,27 @@ def medix_rag_chat(req: MedixRagChatRequest, authorization: Optional[str] = Head
     if not question:
         raise HTTPException(status_code=400, detail="message is required")
 
+    request_obj = _resolve_request_for_auth()
+    _llm_tool_policy_enforce(
+        tool_name="medix_rag_chat",
+        request=request_obj,
+        user_id=actor.get("user_id"),
+        is_admin=bool(actor.get("is_admin")),
+    )
+    if LLM_GUARDRAILS_ENABLED:
+        ok_prompt, matched = _llm_guardrails_check(question)
+        if not ok_prompt:
+            _security_emit(
+                "model.prompt_injection.detected",
+                request=request_obj,
+                severity="warning",
+                tool_name="medix_rag_chat",
+                user_id=actor.get("user_id"),
+                pattern=matched,
+            )
+            if LLM_GUARDRAILS_ENFORCE:
+                raise HTTPException(status_code=400, detail="Prompt blocked by security guardrails")
+
     supabase = get_service_client()
     source_ids = _medix_parse_source_ids(req.source_ids)
     source_ids = _medix_filter_source_ids_for_actor(supabase=supabase, actor=actor, source_ids=source_ids)
@@ -35444,7 +36330,6 @@ def medix_rag_chat(req: MedixRagChatRequest, authorization: Optional[str] = Head
         question,
         is_admin=bool(actor.get("is_admin")),
     )
-    request_obj = _resolve_request_for_auth()
     _security_emit(
         "model.tool_call",
         request=request_obj,

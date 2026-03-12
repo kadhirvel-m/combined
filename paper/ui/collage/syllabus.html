@@ -203,7 +203,7 @@
         })();
     </script>
     <script src="../config.js" defer></script>
-    <script src="helpers.js" defer></script>
+    <script src="helpers.js"></script>
 </head>
 
 <body
@@ -992,9 +992,9 @@
             unitModalMessage.classList.add('hidden');
             try {
                 if (unitModalMode === 'edit' && syllabusCourse && syllabusCourse.editingUnitId) {
-                    await Collage.fetchJson(`/api/syllabus/units/${syllabusCourse.editingUnitId}`, { method: 'PUT', body: payload, skipAuth: true });
+                    await Collage.fetchJson(`/api/syllabus/units/${syllabusCourse.editingUnitId}`, { method: 'PUT', body: payload, skipAuth: false });
                 } else {
-                    await Collage.fetchJson(`/api/syllabus/courses/${courseId}/units`, { method: 'POST', body: payload, skipAuth: true });
+                    await Collage.fetchJson(`/api/syllabus/courses/${courseId}/units`, { method: 'POST', body: payload, skipAuth: false });
                 }
                 closeUnitModal();
                 await loadSyllabus();
@@ -1035,7 +1035,7 @@
             setUnitDeleteLoading(true);
             unitModalMessage.classList.add('hidden');
             try {
-                await Collage.fetchJson(`/api/syllabus/units/${syllabusCourse.editingUnitId}`, { method: 'DELETE', skipAuth: true });
+                await Collage.fetchJson(`/api/syllabus/units/${syllabusCourse.editingUnitId}`, { method: 'DELETE', skipAuth: false });
                 closeUnitModal();
                 await loadSyllabus();
             } catch (error) {
@@ -1238,7 +1238,7 @@
                         await Collage.fetchJson(`/api/syllabus/topics/${topicId}/video`, {
                             method: 'PUT',
                             body: { video_url: trimmed },
-                            skipAuth: true,
+                            skipAuth: false,
                         });
                         await loadSyllabus();
                     } catch (err) {
@@ -1259,7 +1259,7 @@
                     try {
                         await Collage.fetchJson(`/api/syllabus/topics/${topicId}/video`, {
                             method: 'DELETE',
-                            skipAuth: true,
+                            skipAuth: false,
                         });
                         await loadSyllabus();
                     } catch (err) {
@@ -1287,7 +1287,7 @@
                         await Collage.fetchJson(`/api/syllabus/topics/${topicId}/ppt`, {
                             method: 'PUT',
                             body: { ppt_url: trimmed },
-                            skipAuth: true,
+                            skipAuth: false,
                         });
                         await loadSyllabus();
                     } catch (err) {
@@ -1308,7 +1308,7 @@
                     try {
                         await Collage.fetchJson(`/api/syllabus/topics/${topicId}/ppt`, {
                             method: 'DELETE',
-                            skipAuth: true,
+                            skipAuth: false,
                         });
                         await loadSyllabus();
                     } catch (err) {
@@ -1835,7 +1835,7 @@
             showLoader();
             try {
                 // Correct endpoint: backend provides full course (with units & topics) at /api/syllabus/courses/{course_id}
-                const data = await Collage.fetchJson(`/api/syllabus/courses/${courseId}`, { skipAuth: true });
+                const data = await Collage.fetchJson(`/api/syllabus/courses/${courseId}`, { skipAuth: false });
                 // Expected shape (SyllabusCourseOut): { id, batch_id, semester, course_code, title, units:[{id,unit_title,topics:[{id,topic_title,...}]}] }
                 if (!data || data.detail === 'Course not found') {
                     showError('Syllabus course not found.');

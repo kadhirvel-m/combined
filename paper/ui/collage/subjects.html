@@ -132,7 +132,7 @@
         })();
     </script>
     <script src="../config.js" defer></script>
-    <script src="helpers.js" defer></script>
+    <script src="helpers.js"></script>
 </head>
 
 <body
@@ -583,13 +583,13 @@
                     await Collage.fetchJson(`/api/courses/${editingSubjectId}`, {
                         method: 'PUT',
                         body: payload,
-                        skipAuth: true
+                        skipAuth: false
                     });
                 } else {
                     await Collage.fetchJson(`/api/batches/${batchId}/courses`, {
                         method: 'POST',
                         body: payload,
-                        skipAuth: true
+                        skipAuth: false
                     });
                 }
                 closeSubjectModal();
@@ -620,7 +620,7 @@
                 setSubjectModalLoading(true);
                 await Collage.fetchJson(`/api/courses/${editingSubjectId}`, {
                     method: 'DELETE',
-                    skipAuth: true
+                    skipAuth: false
                 });
                 closeSubjectModal();
                 await loadSubjects();
@@ -676,12 +676,12 @@
                 card.addEventListener('click', e => {
                     if (e.target.closest('[data-subject-edit]')) return;
                     if (e.target.closest('a')) return;
-                    window.location.href = href;
+                    Collage.navigate(href);
                 });
                 card.addEventListener('keydown', e => {
                     if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-subject-edit]')) {
                         e.preventDefault();
-                        window.location.href = href;
+                        Collage.navigate(href);
                     }
                 });
             });
@@ -726,7 +726,7 @@
                 // If server-side filtering desired, append `?semester=${semesterFilter.value}` when a value is selected.
                 const baseUrl = `/api/batches/${batchId}/courses`;
                 const url = baseUrl; // could be `${baseUrl}?semester=${semesterFilter.value}` if we want server filtering
-                const data = await Collage.fetchJson(url, { skipAuth: true });
+                const data = await Collage.fetchJson(url, { skipAuth: false });
                 const list = Array.isArray(data) ? data : [];
                 subjectsCache = list.map(s => ({
                     id: s.id,
@@ -796,7 +796,7 @@
             document.body.classList.add('overflow-hidden');
             // Load colleges
             try {
-                const colleges = await Collage.fetchJson('/api/colleges', { skipAuth: true });
+                const colleges = await Collage.fetchJson('/api/colleges', { skipAuth: false });
                 const list = Array.isArray(colleges) ? colleges : [];
                 importCollegeSel.innerHTML = '<option value="">— Select college —</option>' +
                     list.map(c => `<option value="${c.id}">${Collage.escapeHtml(c.name || 'Unnamed')}</option>`).join('');
@@ -828,7 +828,7 @@
             importCollegeCache = null;
             if (!cId) return;
             try {
-                const data = await Collage.fetchJson(`/api/colleges/${cId}`, { skipAuth: true });
+                const data = await Collage.fetchJson(`/api/colleges/${cId}`, { skipAuth: false });
                 importCollegeCache = data;
                 const degrees = Array.isArray(data?.degrees) ? data.degrees : [];
                 importDegreeSel.innerHTML = '<option value="">— Select degree —</option>' +
@@ -871,7 +871,7 @@
             importSelectedCount.textContent = '';
             if (!dpId) return;
             try {
-                const batches = await Collage.fetchJson(`/api/departments/${dpId}/batches/full`, { skipAuth: true });
+                const batches = await Collage.fetchJson(`/api/departments/${dpId}/batches/full`, { skipAuth: false });
                 const list = Array.isArray(batches) ? batches : [];
                 importBatchSel.innerHTML = '<option value="">— Select batch —</option>' +
                     list.map(b => {
@@ -906,7 +906,7 @@
             }
             importSubjectsList.innerHTML = '<div class="flex justify-center py-4"><div class="h-8 w-8 animate-spin rounded-full border-2 border-brand-500/30 border-t-transparent"></div></div>';
             try {
-                const data = await Collage.fetchJson(`/api/batches/${bId}/courses`, { skipAuth: true });
+                const data = await Collage.fetchJson(`/api/batches/${bId}/courses`, { skipAuth: false });
                 const all = Array.isArray(data) ? data : [];
                 const filtered = all.filter(s => String(s.semester) === String(sem));
                 importSubjectsPool = filtered;
@@ -1010,7 +1010,7 @@
                     const newCourse = await Collage.fetchJson(`/api/batches/${batchId}/courses`, {
                         method: 'POST',
                         body: payload,
-                        skipAuth: true
+                        skipAuth: false
                     });
                     const newCourseId = newCourse?.id;
 
@@ -1018,7 +1018,7 @@
                     if (newCourseId && subj.id) {
                         try {
                             updateProgress(`Copying syllabus ${current}/${total}…`);
-                            const sourceSyllabus = await Collage.fetchJson(`/api/syllabus/courses/${subj.id}`, { skipAuth: true });
+                            const sourceSyllabus = await Collage.fetchJson(`/api/syllabus/courses/${subj.id}`, { skipAuth: false });
                             const units = Array.isArray(sourceSyllabus?.units) ? sourceSyllabus.units : [];
 
                             // 3. Recreate each unit (with its topics) under the new course
@@ -1034,7 +1034,7 @@
                                     await Collage.fetchJson(`/api/syllabus/courses/${newCourseId}/units`, {
                                         method: 'POST',
                                         body: unitPayload,
-                                        skipAuth: true
+                                        skipAuth: false
                                     });
                                 } catch (unitErr) {
                                     console.warn('Failed to import unit', unit.unit_title, unitErr);
@@ -1136,7 +1136,7 @@
                         batchRange: batchRange || ''
                     }).toString();
                     uploadBtn.addEventListener('click', () => {
-                        window.location.href = `upload_syllabus.html?${q}`;
+                        Collage.navigate(`upload_syllabus.html?${q}`);
                     });
                     if (!batchId) {
                         uploadBtn.disabled = true;

@@ -171,6 +171,14 @@
         if (isDark) document.documentElement.classList.add('dark');
       })();
 
+      (() => {
+        try {
+          if (sessionStorage.getItem('paperx_oauth_pending') === 'google') {
+            document.documentElement.classList.add('oauth-pending');
+          }
+        } catch (_) { }
+      })();
+
   </script>
   <style>
     #pageLoader {
@@ -190,6 +198,12 @@
     }
 
     #pageLoader.active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    html.oauth-pending #pageLoader {
       opacity: 1;
       visibility: visible;
       pointer-events: auto;
@@ -516,6 +530,21 @@
     let turnstileReady = false;
     let submitting = false;
     const __scriptCache = new Map();
+    const OAUTH_PENDING_KEY = 'paperx_oauth_pending';
+
+    function setOAuthPending(enabled) {
+      try {
+        if (enabled) {
+          sessionStorage.setItem(OAUTH_PENDING_KEY, 'google');
+          root.classList.add('oauth-pending');
+        } else {
+          sessionStorage.removeItem(OAUTH_PENDING_KEY);
+          root.classList.remove('oauth-pending');
+        }
+      } catch (_) {
+        if (!enabled) root.classList.remove('oauth-pending');
+      }
+    }
 
     function getSafeNextPath() {
       try {
@@ -655,7 +684,11 @@
     }
 
     async function handleHashSession() {
-      if (!location.hash.includes('access_token')) return;
+      if (!location.hash.includes('access_token')) {
+        setOAuthPending(false);
+        hideLoader();
+        return;
+      }
       showLoader();
       const hash = new URLSearchParams(location.hash.slice(1));
       const token = hash.get('access_token');
@@ -680,8 +713,10 @@
           }
         } catch { }
         const nextPath = getSafeNextPath();
+        setOAuthPending(false);
         location.href = nextPath || 'academicas.html';
       }
+      setOAuthPending(false);
     }
 
     handleHashSession();
@@ -742,6 +777,7 @@
     });
 
     googleBtn?.addEventListener('click', async () => {
+      setOAuthPending(true);
       showLoader();
       status.classList.remove('hidden');
       status.textContent = 'Redirecting to Google…';
@@ -756,6 +792,7 @@
         if (error) throw error;
       } catch (err) {
         console.error(err);
+        setOAuthPending(false);
         status.textContent = '❌ Google sign-in failed.';
         hideLoader();
       }

@@ -57,6 +57,136 @@
   }
 })();
 
+// Production log hygiene:
+// - Keep console noise out of production by default.
+// - Local/dev can opt in with localStorage.DEBUG_CONSOLE = '1'.
+(function () {
+  try {
+    var host = (typeof location !== 'undefined' && location.hostname) ? location.hostname : '';
+    var isLocalHost = /^(localhost|127\.0\.0\.1|::1)$/i.test(host);
+    var debugEnabled = false;
+    try {
+      debugEnabled = String(localStorage.getItem('DEBUG_CONSOLE') || '').trim() === '1';
+    } catch (_) { }
+    if (isLocalHost || debugEnabled || !window.console) return;
+
+    var noop = function () { };
+    try { window.console.log = noop; } catch (_) { }
+    try { window.console.info = noop; } catch (_) { }
+    try { window.console.debug = noop; } catch (_) { }
+  } catch (_) { }
+})();
+
+// Global HTML hardening:
+// - Exposes `window.escapeHtml` for explicit escaping.
+// - Sanitizes all string assignments to `element.innerHTML` by default.
+// - Opt out only for trusted static markup via `data-trusted-html="true"`.
+(function () {
+  try {
+    var proto = Element && Element.prototype;
+    var originalDescriptor = proto ? Object.getOwnPropertyDescriptor(proto, 'innerHTML') : null;
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+      });
+    }
+
+    function _setRawInnerHTML(el, html) {
+      if (originalDescriptor && typeof originalDescriptor.set === 'function') {
+        return originalDescriptor.set.call(el, html);
+      }
+      el.innerHTML = html;
+    }
+
+    function _getRawInnerHTML(el) {
+      if (originalDescriptor && typeof originalDescriptor.get === 'function') {
+        return originalDescriptor.get.call(el);
+      }
+      return el.innerHTML;
+    }
+
+    function sanitizeHtml(raw) {
+      var template = document.createElement('template');
+      _setRawInnerHTML(template, String(raw == null ? '' : raw));
+
+      var blockedTags = new Set(['script', 'iframe', 'object', 'embed', 'meta', 'link', 'base']);
+      var urlAttrs = new Set(['href', 'src', 'xlink:href', 'formaction', 'poster', 'action']);
+      var toRemove = [];
+      var walker = document.createTreeWalker(template.content, NodeFilter.SHOW_ELEMENT, null);
+      var node;
+
+      while ((node = walker.nextNode())) {
+        var tag = String(node.tagName || '').toLowerCase();
+        if (blockedTags.has(tag)) {
+          toRemove.push(node);
+          continue;
+        }
+
+        var attrs = Array.from(node.attributes || []);
+        for (var i = 0; i < attrs.length; i++) {
+          var attr = attrs[i];
+          var name = String(attr.name || '').toLowerCase();
+          var value = String(attr.value || '');
+
+          if (name.indexOf('on') === 0) {
+            node.removeAttribute(attr.name);
+            continue;
+          }
+          if (name === 'srcdoc') {
+            node.removeAttribute(attr.name);
+            continue;
+          }
+          if (urlAttrs.has(name) && /^\s*javascript:/i.test(value)) {
+            node.removeAttribute(attr.name);
+            continue;
+          }
+          if (name === 'style' && /expression\s*\(|url\s*\(\s*['"]?\s*javascript:/i.test(value)) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      }
+
+      for (var j = 0; j < toRemove.length; j++) {
+        try { toRemove[j].remove(); } catch (_) { }
+      }
+      return _getRawInnerHTML(template);
+    }
+
+    if (typeof window.escapeHtml !== 'function') {
+      window.escapeHtml = escapeHtml;
+    }
+    if (typeof window.sanitizeHtml !== 'function') {
+      window.sanitizeHtml = sanitizeHtml;
+    }
+
+    if (!proto || proto.__paperxInnerHtmlSanitized) return;
+
+    if (!originalDescriptor || typeof originalDescriptor.set !== 'function' || typeof originalDescriptor.get !== 'function') return;
+
+    Object.defineProperty(proto, '__paperxInnerHtmlSanitized', {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false
+    });
+
+    Object.defineProperty(proto, 'innerHTML', {
+      configurable: true,
+      enumerable: originalDescriptor.enumerable,
+      get: function () {
+        return originalDescriptor.get.call(this);
+      },
+      set: function (value) {
+        if (typeof value === 'string' && !(this && this.getAttribute && this.getAttribute('data-trusted-html') === 'true')) {
+          return originalDescriptor.set.call(this, sanitizeHtml(value));
+        }
+        return originalDescriptor.set.call(this, value);
+      }
+    });
+  } catch (_) { }
+})();
+
 // Global auth hardening shim:
 // - Blocks persistent storage of bearer/refresh tokens in localStorage.
 // - Provides a cookie-backed auth sentinel for legacy pages that gate on localStorage token presence.

@@ -8,6 +8,8 @@
   <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
   <link rel="stylesheet" href="../../assets/css/tailwind.css" />
   <script src="../../config.js"></script>
+  <link rel="preconnect" href="https://challenges.cloudflare.com">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
   <style>
     .glass {
       background: rgba(255, 255, 255, .82);
@@ -40,6 +42,7 @@
             class="mt-1 w-full px-3 py-2 rounded-md ring-1 ring-black/10 dark:ring-white/15 bg-white/90 dark:bg-white/5"></label>
         <label>Password <input name="password" type="password" required
             class="mt-1 w-full px-3 py-2 rounded-md ring-1 ring-black/10 dark:ring-white/15 bg-white/90 dark:bg-white/5"></label>
+        <div id="turnstileContainer" class="mt-1"></div>
         <label class="inline-flex items-center gap-2"><input type="checkbox" id="remember" checked> Remember this
           device</label>
         <button id="submit" type="submit"
@@ -51,15 +54,82 @@
   </main>
   <script>
     const API = (window.API_BASE || '').replace(/\/$/, '');
+    const status = document.getElementById('status');
+    const submitBtn = document.getElementById('submit');
+    let turnstileWidgetId = null;
+    let turnstileToken = '';
+
+    function syncSubmit() {
+      if (!submitBtn) return;
+      submitBtn.disabled = !turnstileToken;
+    }
+
+    async function waitForTurnstile(maxWaitMs = 8000) {
+      const start = Date.now();
+      while (Date.now() - start < maxWaitMs) {
+        if (window.turnstile && typeof window.turnstile.render === 'function') return;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Turnstile failed to load');
+    }
+
+    function resetTurnstile() {
+      turnstileToken = '';
+      if (window.turnstile && turnstileWidgetId !== null) {
+        try { window.turnstile.reset(turnstileWidgetId); } catch (_) { }
+      }
+      syncSubmit();
+    }
+
+    async function initTurnstile() {
+      try {
+        const cfgRes = await fetch(`${API}/api/public/turnstile`);
+        const cfg = await cfgRes.json().catch(() => ({}));
+        if (!cfgRes.ok || !cfg.siteKey) throw new Error('Turnstile config unavailable');
+        await waitForTurnstile();
+        turnstileWidgetId = window.turnstile.render('#turnstileContainer', {
+          sitekey: cfg.siteKey,
+          action: 'login',
+          callback: (token) => {
+            turnstileToken = token || '';
+            syncSubmit();
+          },
+          'expired-callback': () => {
+            turnstileToken = '';
+            syncSubmit();
+            status.textContent = 'Verification expired. Please complete Turnstile again.';
+          },
+          'error-callback': () => {
+            turnstileToken = '';
+            syncSubmit();
+            status.textContent = 'Verification failed to load. Refresh and try again.';
+          },
+          theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+        });
+        syncSubmit();
+      } catch (_) {
+        status.textContent = 'Unable to initialize verification. Please refresh.';
+      }
+    }
+
     document.getElementById('form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.currentTarget);
-      const payload = { email: fd.get('email'), password: fd.get('password') };
-      const status = document.getElementById('status'); status.textContent = '';
+      const tokenFromWidget = (window.turnstile && turnstileWidgetId !== null)
+        ? (window.turnstile.getResponse(turnstileWidgetId) || '')
+        : '';
+      turnstileToken = tokenFromWidget || turnstileToken;
+      if (!turnstileToken) {
+        status.textContent = 'Please complete verification before signing in.';
+        syncSubmit();
+        return;
+      }
+      const payload = { email: fd.get('email'), password: fd.get('password'), turnstile_token: turnstileToken };
+      status.textContent = '';
       try {
         const r = await fetch(`${API}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const j = await r.json().catch(() => ({}));
-        if (!r.ok) { status.textContent = j.detail || 'Login failed'; return; }
+        if (!r.ok) { status.textContent = j.detail || 'Login failed'; resetTurnstile(); return; }
         const token = j.access_token; if (!token) { status.textContent = 'Missing token'; return; }
         try {
           localStorage.removeItem('px_token');
@@ -71,8 +141,14 @@
         if (r2.ok) { location.href = './jobs.html'; return; }
         // No shop yet
         location.href = './signup.html';
-      } catch { status.textContent = 'Network error'; }
+      } catch {
+        status.textContent = 'Network error';
+        resetTurnstile();
+      }
     });
+
+    syncSubmit();
+    initTurnstile();
   </script>
 </body>
 
