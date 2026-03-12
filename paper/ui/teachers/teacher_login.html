@@ -382,9 +382,13 @@
           throw new Error(message);
         }
         if (!data.access_token) { throw new Error('No access token returned'); }
-        // Enforce single active session (teacher wins here)
-        localStorage.setItem('teacherToken', data.access_token || '');
-        try { localStorage.removeItem('px_token'); } catch { }
+        // Cookie session is authoritative; clear any stale legacy token keys.
+        try {
+          localStorage.removeItem('teacherToken');
+          localStorage.removeItem('px_token');
+          localStorage.removeItem('px_refresh_token');
+          localStorage.removeItem('px_token_expires_at');
+        } catch { }
         statusEl.classList.remove('hidden');
         statusEl.textContent = 'Signed in. Checking role...';
         const st = await fetch(base + '/api/teacher/me/status', { headers: { 'Authorization': 'Bearer ' + data.access_token } });

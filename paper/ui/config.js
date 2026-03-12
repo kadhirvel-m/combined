@@ -5,25 +5,173 @@
 // 3) Fallback to current origin
 (function () {
   try {
+    var pageHost = (typeof location !== 'undefined' && location.hostname) ? location.hostname : '';
+    var isLocalPageHost = /^(localhost|127\.0\.0\.1|::1)$/i.test(pageHost);
+
+    function normalizeLocalApiBase(urlLike) {
+      try {
+        if (!urlLike) return null;
+        var u = new URL(String(urlLike));
+        var localHost = /^(localhost|127\.0\.0\.1|::1)$/i.test(u.hostname || '');
+        if (!localHost) return u.toString().replace(/\/$/, '');
+        var targetHost = isLocalPageHost ? pageHost : (u.hostname || '127.0.0.1');
+        var port = String(u.port || '');
+        if (port === '8001') port = '8000';
+        if (!port) port = '8000';
+        return (u.protocol || 'http:') + '//' + targetHost + ':' + port;
+      } catch (_) {
+        return null;
+      }
+    }
+
     var preset = (typeof window.API_BASE === 'string' && window.API_BASE.trim()) || null;
     var saved = !preset && localStorage.getItem('API_BASE');
-    if (!preset && saved && /^https?:\/\/(localhost|127\.0\.0\.1):8001$/i.test(saved)) {
-      saved = saved.replace(':8001', ':8000');
-      try { localStorage.setItem('API_BASE', saved); } catch (_) { }
+    if (!preset && saved) {
+      var normalizedSaved = normalizeLocalApiBase(saved);
+      if (normalizedSaved) {
+        saved = normalizedSaved;
+        try { localStorage.setItem('API_BASE', saved); } catch (_) { }
+      }
     }
+
     var resolved = preset || (saved && /^https?:\/\//i.test(saved) ? saved : null);
     if (!resolved) {
       var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
-      resolved = /localhost|127\.0\.0\.1/.test(origin) ? 'http://127.0.0.1:8000' : (origin || 'http://127.0.0.1:8000');
+      if (/localhost|127\.0\.0\.1|\[::1\]/i.test(origin) || isLocalPageHost) {
+        var h = isLocalPageHost ? pageHost : '127.0.0.1';
+        resolved = 'http://' + h + ':8000';
+      } else {
+        resolved = origin || 'http://127.0.0.1:8000';
+      }
     }
     resolved = resolved.replace(/\/$/, '');
     window.API_BASE = resolved;
     window.__API_BASE = resolved;
   } catch (_) {
-    var fallback = 'http://127.0.0.1:8000';
+    var fallbackHost = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname || ''))
+      ? location.hostname
+      : '127.0.0.1';
+    var fallback = 'http://' + fallbackHost + ':8000';
     window.API_BASE = fallback;
     window.__API_BASE = fallback;
   }
+})();
+
+// Global auth hardening shim:
+// - Blocks persistent storage of bearer/refresh tokens in localStorage.
+// - Provides a cookie-backed auth sentinel for legacy pages that gate on localStorage token presence.
+// - Forces fetch requests to include cookies and strips placeholder Authorization headers.
+(function () {
+  try {
+    var TOKEN_KEYS = new Set([
+      'px_token',
+      'teacherToken',
+      'px_refresh_token',
+      'px_token_expires_at',
+      'px_auth_token',
+      'access_token',
+      'refresh_token',
+      'auth_token',
+      'sb-access-token',
+      'supabase.auth.token',
+      'gatex-access-token',
+      'userToken',
+      'token'
+    ]);
+    var AUTH_SENTINEL = '__COOKIE_AUTH__';
+    var stateCookieName = 'paperx_auth=';
+
+    function hasAuthStateCookie() {
+      try {
+        return document.cookie.indexOf(stateCookieName) !== -1;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function isTokenLikeKey(k) {
+      if (!k) return false;
+      if (TOKEN_KEYS.has(k)) return true;
+      // Supabase browser storage keys commonly look like: sb-<project>-auth-token
+      if (/^sb-.*-auth-token$/i.test(k)) return true;
+      return false;
+    }
+
+    var storageProto = Object.getPrototypeOf(localStorage);
+    var _getItem = storageProto.getItem;
+    var _setItem = storageProto.setItem;
+    var _removeItem = storageProto.removeItem;
+    var _key = storageProto.key;
+
+    // One-time cleanup of any legacy auth tokens persisted before cookie migration.
+    try {
+      var keysToRemove = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var keyName = _key.call(localStorage, i);
+        var keyText = String(keyName || '');
+        if (isTokenLikeKey(keyText) || keyText === 'getItem' || keyText === 'setItem' || keyText === 'removeItem') {
+          keysToRemove.push(keyText);
+        }
+      }
+      for (var j = 0; j < keysToRemove.length; j++) {
+        try { _removeItem.call(localStorage, keysToRemove[j]); } catch (_) { }
+      }
+    } catch (_) { }
+
+    if (!storageProto.__paperxAuthShimPatched) {
+      Object.defineProperty(storageProto, '__paperxAuthShimPatched', {
+        value: true,
+        configurable: false,
+        enumerable: false,
+        writable: false
+      });
+
+      storageProto.getItem = function (key) {
+        var k = String(key || '');
+        if (this === localStorage && isTokenLikeKey(k)) {
+          // Never expose persisted token values through localStorage reads.
+          return hasAuthStateCookie() ? AUTH_SENTINEL : null;
+        }
+        return _getItem.call(this, k);
+      };
+
+      storageProto.setItem = function (key, value) {
+        var k = String(key || '');
+        if (this === localStorage && isTokenLikeKey(k)) {
+          // Never persist auth tokens in localStorage.
+          return;
+        }
+        return _setItem.call(this, k, value);
+      };
+
+      storageProto.removeItem = function (key) {
+        var k = String(key || '');
+        // Do not auto-call /logout here; many pages remove legacy token keys
+        // during normal initialization/login cleanup. Explicit signout flows
+        // should call /logout directly.
+        return _removeItem.call(this, k);
+      };
+    }
+
+    var _fetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      init = init || {};
+      var req = Object.assign({}, init);
+      req.credentials = req.credentials || 'include';
+
+      var headers = new Headers(req.headers || {});
+      var authHeader = headers.get('Authorization') || headers.get('authorization');
+      if (authHeader) {
+        var m = authHeader.match(/^\s*Bearer\s+(.+)\s*$/i);
+        if (m && m[1] && String(m[1]).trim() === AUTH_SENTINEL) {
+          headers.delete('Authorization');
+          headers.delete('authorization');
+        }
+      }
+      req.headers = headers;
+      return _fetch(input, req);
+    };
+  } catch (_) { }
 })();
 
 // Global Theme manager: keep theme consistent across pages
