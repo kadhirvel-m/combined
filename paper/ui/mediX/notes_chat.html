@@ -290,6 +290,101 @@
       background: color-mix(in oklab, var(--brand-soft) 60%, transparent);
     }
 
+    .rag-cite-btn {
+      cursor: pointer;
+      border: 1px solid var(--outline);
+      background: var(--chip);
+      color: inherit;
+      border-radius: 9999px;
+      padding: 0 .55rem;
+      height: 22px;
+      line-height: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      vertical-align: text-bottom;
+    }
+
+    .rag-cite-btn:hover {
+      background: color-mix(in oklab, var(--brand-soft) 75%, transparent);
+    }
+
+    .rag-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      background: rgba(0, 0, 0, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .rag-modal-backdrop.open {
+      display: flex;
+    }
+
+    .rag-modal-card {
+      width: min(840px, 96vw);
+      max-height: 86vh;
+      border-radius: 1rem;
+      border: 1px solid var(--outline);
+      background: var(--surface);
+      color: var(--surface-contrast);
+      box-shadow: 0 20px 48px rgba(15, 23, 42, 0.32);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .rag-modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
+      padding: .8rem 1rem;
+      border-bottom: 1px solid var(--outline);
+      background: color-mix(in oklab, var(--surface) 88%, var(--brand-soft));
+    }
+
+    .rag-modal-title {
+      font-size: .95rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin: 0;
+    }
+
+    .rag-modal-subtitle {
+      font-size: .78rem;
+      color: var(--muted);
+      margin-top: .12rem;
+    }
+
+    .rag-modal-close {
+      border: 1px solid var(--outline);
+      background: var(--surface);
+      color: inherit;
+      border-radius: .6rem;
+      padding: .35rem .6rem;
+      cursor: pointer;
+      font-size: .78rem;
+      font-weight: 600;
+    }
+
+    .rag-modal-body {
+      padding: .9rem 1rem 1rem;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-size: .88rem;
+      line-height: 1.55;
+    }
+
+    .rag-modal-empty {
+      color: var(--muted);
+      font-style: italic;
+    }
+
     /* Related videos carousel */
     .yt-carousel {
       display: flex;
@@ -3061,6 +3156,7 @@
     let generationInFlightKey = '';
     let generationRunToken = 0;
     const ragRequestCache = { key: '', ts: 0, value: null };
+    let currentRagCitationLookup = {};
     let lastMarkdown = '';
     let lastImageUrls = [];
     const VARIANTS = ['detailed', 'cheatsheet'];
@@ -4845,6 +4941,9 @@
       // Render CITATIONS section as one-line clickable list
       try { renderCitationsSection(); } catch { }
 
+      // Convert RAG citation labels into clickable chunk-preview controls
+      try { applyRagCitationInteractions(); } catch { }
+
       postprocessLinks();
       buildTOC();
       // Update 'My note' visibility when content/title changes
@@ -4979,13 +5078,131 @@
       }
     }
 
+    function _ragShortLabel(sourceName, used) {
+      const raw = String(sourceName || '').trim() || 'SOURCE';
+      const stem = raw
+        .split(/[\\/]/)
+        .pop()
+        .replace(/\.[A-Za-z0-9]{1,8}$/i, '');
+      const compact = stem.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      const base = (compact || 'SOURCE').slice(0, 7);
+      let label = base;
+      let n = 2;
+      while (used.has(label)) {
+        const suffix = String(n++);
+        label = `${base.slice(0, Math.max(1, 7 - suffix.length))}${suffix}`;
+      }
+      used.add(label);
+      return label;
+    }
+
+    function _ensureRagChunkModal() {
+      let el = document.getElementById('ragChunkModal');
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'ragChunkModal';
+      el.className = 'rag-modal-backdrop';
+      el.innerHTML = `
+        <div class="rag-modal-card" role="dialog" aria-modal="true" aria-labelledby="ragChunkModalTitle">
+          <div class="rag-modal-head">
+            <div>
+              <h3 id="ragChunkModalTitle" class="rag-modal-title">Citation chunk</h3>
+              <div id="ragChunkModalSubtitle" class="rag-modal-subtitle"></div>
+            </div>
+            <button type="button" id="ragChunkModalClose" class="rag-modal-close">Close</button>
+          </div>
+          <div id="ragChunkModalBody" class="rag-modal-body"></div>
+        </div>
+      `;
+      document.body.appendChild(el);
+      const closeBtn = document.getElementById('ragChunkModalClose');
+      const close = () => el.classList.remove('open');
+      closeBtn?.addEventListener('click', close);
+      el.addEventListener('click', (ev) => {
+        if (ev.target === el) close();
+      });
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') close();
+      });
+      return el;
+    }
+
+    function _openRagChunkModal(label) {
+      const data = currentRagCitationLookup && currentRagCitationLookup[label];
+      if (!data) return;
+      const modal = _ensureRagChunkModal();
+      const title = document.getElementById('ragChunkModalTitle');
+      const subtitle = document.getElementById('ragChunkModalSubtitle');
+      const body = document.getElementById('ragChunkModalBody');
+      if (title) title.textContent = `${label} • ${data.source_name || 'Source'}`;
+      if (subtitle) {
+        subtitle.textContent = `${data.section_title ? `${data.section_title} • ` : ''}Chunk ${data.chunk_index ?? '-'}${typeof data.similarity === 'number' ? ` • score ${Number(data.similarity).toFixed(3)}` : ''}`;
+      }
+      if (body) {
+        body.textContent = String(data.chunk_text || '').trim();
+        if (!body.textContent) {
+          body.textContent = 'Chunk text is unavailable for this citation.';
+          body.classList.add('rag-modal-empty');
+        } else {
+          body.classList.remove('rag-modal-empty');
+        }
+      }
+      modal.classList.add('open');
+    }
+
+    function applyRagCitationInteractions() {
+      const h2s = $output.querySelectorAll('h2');
+      let ragHeader = null;
+      for (const h of h2s) {
+        if ((h.textContent || '').trim().toUpperCase() === 'RAG CITATIONS') {
+          ragHeader = h;
+          break;
+        }
+      }
+      if (!ragHeader) return;
+      let cur = ragHeader.nextElementSibling;
+      while (cur && !/^(H1|H2)$/i.test(cur.tagName)) {
+        if (cur.tagName === 'UL' || cur.tagName === 'OL') {
+          cur.querySelectorAll('li').forEach((li) => {
+            const raw = (li.textContent || '').trim();
+            const m = raw.match(/^\[([A-Z0-9]{2,10})\]\s*(.*)$/i);
+            if (!m) return;
+            const label = m[1].toUpperCase();
+            const rest = m[2] || '';
+            const chunk = currentRagCitationLookup && currentRagCitationLookup[label];
+            if (!chunk) return;
+            li.innerHTML = '';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'rag-cite-btn';
+            btn.textContent = label;
+            btn.title = 'Open source chunk';
+            btn.addEventListener('click', () => _openRagChunkModal(label));
+            li.appendChild(btn);
+            li.appendChild(document.createTextNode(` ${rest}`));
+          });
+        }
+        cur = cur.nextElementSibling;
+      }
+    }
+
     function appendRagCitations(markdown, ragContext) {
       const md = String(markdown || '');
+      currentRagCitationLookup = {};
       if (!ragContext || !Array.isArray(ragContext.citations) || !ragContext.citations.length) return md;
-      const lines = ragContext.citations.slice(0, 8).map((c, idx) => {
-        const label = `[RAG${idx + 1}]`;
+      const used = new Set();
+      const lines = ragContext.citations.slice(0, 8).map((c) => {
         const source = String(c?.source_name || 'Source').trim();
+        const shortLabel = _ragShortLabel(source, used);
+        const label = `[${shortLabel}]`;
         const chunkIndex = String(c?.chunk_index ?? '').trim();
+        currentRagCitationLookup[shortLabel] = {
+          source_name: source,
+          chunk_index: chunkIndex,
+          section_title: String(c?.section_title || '').trim(),
+          similarity: Number(c?.similarity || 0),
+          chunk_text: String(c?.chunk_text || '').trim(),
+        };
         return `- ${label} ${source}${chunkIndex ? ` (chunk ${chunkIndex})` : ''}`;
       });
       return `${md}\n\n## RAG CITATIONS\n${lines.join('\n')}\n`;

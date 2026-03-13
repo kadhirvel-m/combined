@@ -788,6 +788,19 @@ def _format_views(views: Optional[int]) -> str:
 _channel_logo_cache: Dict[str, str] = {}
 _channel_logo_lock = Lock()
 _DEFAULT_CHANNEL_LOGO = "https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png"
+YTDLP_DISABLE_CERT_CHECK = (os.getenv("YTDLP_DISABLE_CERT_CHECK", "true").strip().lower() in {"1", "true", "yes", "on"})
+YOUTUBE_SEARCH_PREFER_SERPAPI = (os.getenv("YOUTUBE_SEARCH_PREFER_SERPAPI", "true").strip().lower() in {"1", "true", "yes", "on"})
+
+
+def _with_ytdlp_network_options(opts: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply common yt-dlp network options to reduce flaky failures and noisy retries."""
+    out = dict(opts or {})
+    out.setdefault("socket_timeout", 8)
+    # Keep retries low to avoid long stalls/noisy repeated SSL failures.
+    out.setdefault("extractor_retries", 0)
+    if YTDLP_DISABLE_CERT_CHECK:
+        out.setdefault("nocheckcertificate", True)
+    return out
 
 
 def _normalize_channel_logo(logo_url: str) -> str:
@@ -858,6 +871,57 @@ def get_default_channel_logo() -> str:
     return _DEFAULT_CHANNEL_LOGO
 
 
+def _search_youtube_videos_serpapi(query: str, num: int = 8) -> List[Dict[str, str]]:
+    """Fallback YouTube search using SerpAPI Google results when yt-dlp cannot reach YouTube."""
+    if not SERPAPI_ENABLED or not SERPAPI_API_KEY:
+        return []
+
+    safe_num = max(1, min(num, 20))
+    params = {
+        "engine": "google",
+        "q": f"site:youtube.com/watch {query}",
+        "num": min(20, max(5, safe_num)),
+        "hl": "en",
+        "safe": "active",
+        "api_key": SERPAPI_API_KEY,
+    }
+
+    try:
+        result = GoogleSearch(params).get_dict()
+    except Exception:
+        return []
+
+    out: List[Dict[str, str]] = []
+    seen_ids: Set[str] = set()
+    for item in (result.get("organic_results") or []):
+        link = (item.get("link") or "").strip()
+        video_id = _parse_video_id(link)
+        if not video_id or video_id in seen_ids:
+            continue
+        seen_ids.add(video_id)
+
+        title = (item.get("title") or "").strip() or f"YouTube Video {len(out) + 1}"
+        channel = (item.get("source") or "YouTube").strip() or "YouTube"
+        thumb = (item.get("thumbnail") or "").strip()
+        if not thumb and video_id:
+            thumb = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+        out.append({
+            "title": title,
+            "link": link if link else f"https://www.youtube.com/watch?v={video_id}",
+            "channel": channel,
+            "views": "",
+            "duration": "",
+            "thumbnail": thumb,
+            "channel_logo": _DEFAULT_CHANNEL_LOGO,
+            "channel_logo_is_default": True,
+            "channel_page": "",
+        })
+        if len(out) >= safe_num:
+            break
+
+    return out
+
+
 def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = False) -> List[Dict[str, str]]:
     """
     Search YouTube videos using yt-dlp.
@@ -878,8 +942,14 @@ def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = Fa
     # Limit results
     num = max(1, min(num, 20))
 
+    # Prefer SerpAPI first when available to avoid direct YouTube SSL/certificate issues.
+    if YOUTUBE_SEARCH_PREFER_SERPAPI:
+        serp_first = _search_youtube_videos_serpapi(query, num)
+        if serp_first:
+            return serp_first
+
     # yt-dlp options for searching
-    ydl_opts = {
+    ydl_opts = _with_ytdlp_network_options({
         'quiet': True,
         'no_warnings': True,
         'extract_flat': True,  # Don't download, just extract metadata
@@ -889,7 +959,7 @@ def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = Fa
         'noplaylist': True,
         'playlistend': num,
         'cachedir': False,
-    }
+    })
 
     videos: List[Dict[str, str]] = []
 
@@ -975,11 +1045,16 @@ def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = Fa
                     })
 
     except Exception as e:
-        # Log error but return empty list instead of raising
+        # Log error and try SerpAPI fallback when available.
         print(f"Error searching YouTube videos: {e}")
-        return []
+        fallback_videos = _search_youtube_videos_serpapi(query, num)
+        return fallback_videos or []
 
-    return videos
+    if videos:
+        return videos
+
+    fallback_videos = _search_youtube_videos_serpapi(query, num)
+    return fallback_videos or []
 
 # --- yt_transcript.py content ---
 
@@ -1268,7 +1343,7 @@ def try_youtube_transcript_api(video_id: str, langs: List[str]) -> Tuple[Optiona
 def try_yt_dlp_captions(video_id: str, langs: List[str]) -> Tuple[Optional[str], Optional[str]]:
     tempdir = tempfile.mkdtemp(prefix="ytcapt_")
     outtmpl = os.path.join(tempdir, "%(id)s.%(ext)s")
-    ydl_opts = {
+    ydl_opts = _with_ytdlp_network_options({
         "skip_download": True,
         "writesubtitles": True,
         "writeautomaticsub": True,
@@ -1277,7 +1352,7 @@ def try_yt_dlp_captions(video_id: str, langs: List[str]) -> Tuple[Optional[str],
         "outtmpl": outtmpl,
         "quiet": True,
         "no_warnings": True,
-    }
+    })
     url = f"https://www.youtube.com/watch?v={video_id}"
     with YoutubeDL(ydl_opts) as ydl:
         try:
@@ -1415,14 +1490,14 @@ def transcribe_with_whisper(video_id: str, lang_hint: Optional[str] = None) -> s
 
     tmp = tempfile.mkdtemp(prefix="whisp_")
     url = f"https://www.youtube.com/watch?v={video_id}"
-    ydl_opts = {
+    ydl_opts = _with_ytdlp_network_options({
         "format": "bestaudio/best",
         "outtmpl": os.path.join(tmp, "%(id)s.%(ext)s"),
         "quiet": True, "no_warnings": True,
         "postprocessors": [
             {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
         ],
-    }
+    })
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         base = ydl.prepare_filename(info)
@@ -24024,12 +24099,12 @@ def _cached_youtube_meta(video_key: str) -> Dict[str, Any]:
     if YoutubeDL is None:  # pragma: no cover - optional dependency missing
         raise HTTPException(status_code=501, detail="yt-dlp is not available on the server.")
 
-    ydl_opts = {
+    ydl_opts = _with_ytdlp_network_options({
         "skip_download": True,
         "quiet": True,
         "no_warnings": True,
         "extract_flat": False,  # get full metadata for a single video
-    }
+    })
 
     target_url = video_key
     if re.fullmatch(r"[A-Za-z0-9_-]{11}", video_key):
@@ -34522,6 +34597,7 @@ class MedixRagCitation(BaseModel):
     chunk_index: int
     similarity: float
     section_title: Optional[str] = None
+    chunk_text: Optional[str] = None
 
 
 class MedixRagChatResponse(BaseModel):
@@ -36586,6 +36662,7 @@ def medix_rag_chat(req: MedixRagChatRequest, authorization: Optional[str] = Head
 
     citations: List[Dict[str, Any]] = []
     for row in context_rows:
+        raw_chunk_text = str(row.get("chunk_text") or "").strip()
         citations.append(
             {
                 "chunk_id": int(row.get("chunk_id") or 0),
@@ -36594,6 +36671,7 @@ def medix_rag_chat(req: MedixRagChatRequest, authorization: Optional[str] = Head
                 "chunk_index": int(row.get("chunk_index") or 0),
                 "similarity": float(row.get("similarity") or 0.0),
                 "section_title": row.get("section_title"),
+                "chunk_text": raw_chunk_text[:5000] if raw_chunk_text else None,
             }
         )
 
