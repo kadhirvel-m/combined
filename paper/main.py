@@ -169,7 +169,16 @@ AUTH_ACCESS_TTL_SECONDS = max(300, int(os.getenv("AUTH_ACCESS_TTL_SECONDS", "900
 AUTH_REFRESH_TTL_SECONDS = max(3600, int(os.getenv("AUTH_REFRESH_TTL_SECONDS", "2592000")))
 AUTH_ROTATION_TABLE = os.getenv("AUTH_ROTATION_TABLE", "auth_refresh_tokens")
 AUTH_REFRESH_HASH_SECRET = (os.getenv("AUTH_REFRESH_HASH_SECRET") or "").strip()
-PRINT_OTP_HASH_SECRET = (os.getenv("PRINT_OTP_HASH_SECRET") or AUTH_REFRESH_HASH_SECRET or "paperx-print-otp").strip()
+_PRINT_OTP_RAW = (os.getenv("PRINT_OTP_HASH_SECRET") or AUTH_REFRESH_HASH_SECRET or "").strip()
+if not _PRINT_OTP_RAW:
+    import warnings as _warnings
+    _warnings.warn(
+        "PRINT_OTP_HASH_SECRET is not set. Set a strong random value in your .env file.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+    _PRINT_OTP_RAW = secrets.token_hex(32)
+PRINT_OTP_HASH_SECRET = _PRINT_OTP_RAW
 AUTH_REQUEST_CTX: contextvars.ContextVar[Optional[Request]] = contextvars.ContextVar("auth_request_ctx", default=None)
 AUTH_SENTINEL_VALUES = {"__COOKIE_AUTH__", "__cookie__", "cookie", "null", "undefined", "none"}
 
@@ -6890,6 +6899,14 @@ def _read_upload_bytes(file_obj) -> bytes:
 def _upload_profile_asset(token: Optional[str], kind: str, file):
     from uuid import uuid4
 
+    # Magic-byte signatures for accepted upload formats.
+    _IMAGE_SIGNATURES: Dict[str, bytes] = {
+        ".png": b"\x89PNG",
+        ".jpg": b"\xff\xd8\xff",
+        ".jpeg": b"\xff\xd8\xff",
+        ".webp": b"RIFF",
+    }
+
     # Ensure a profile exists (creates a minimal one for OAuth users)
     _, profile_id = _ensure_user_and_profile(token)
     supabase = get_service_client()
@@ -6908,6 +6925,16 @@ def _upload_profile_asset(token: Optional[str], kind: str, file):
     blob = _read_upload_bytes(file)
     if not blob:
         raise HTTPException(status_code=400, detail="Empty upload")
+
+    # Validate magic bytes for image uploads to prevent disguised executables.
+    if media_kind == "image":
+        expected_sig = _IMAGE_SIGNATURES.get(ext)
+        if expected_sig and not blob.startswith(expected_sig):
+            raise HTTPException(status_code=400, detail="File content does not match the declared image type")
+
+    # Validate PDF magic bytes for resume uploads.
+    if media_kind == "resume" and ext == ".pdf" and not blob.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="File content does not match the declared PDF type")
 
     safe_ext = ext if ext else (".png" if media_kind == "image" else ".pdf")
     dest_folder = f"profiles/{profile_id}"
@@ -25816,9 +25843,10 @@ def create_app() -> FastAPI:
             "http://localhost:8000",
             "http://localhost:8001",
             "http://localhost",
-            "null",
+            # NOTE: "null" origin is intentionally excluded – allowing it enables
+            # CSRF attacks from sandboxed iframes / data-URI contexts.
         ],
-        allow_origin_regex=r"^(https://([a-z0-9-]+\.)*paperx\.tech|https?://(localhost|127\.0\.0\.1)(:\d+)?|vscode-webview://.*|null)$",
+        allow_origin_regex=r"^(https://([a-z0-9-]+\.)*paperx\.tech|https?://(localhost|127\.0\.0\.1)(:\d+)?)$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -29883,7 +29911,7 @@ def get_user_id_from_token(authorization: Optional[str]) -> Optional[str]:
         user = supabase.auth.get_user(token)
         return user.user.id if user and user.user else None
     except Exception as e:
-        print(f"[Auth] Error validating token: {e}")
+        supabase_logger.warning("Error validating auth token: %s", type(e).__name__)
         return None
 
 
