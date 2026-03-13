@@ -169,7 +169,16 @@ AUTH_ACCESS_TTL_SECONDS = max(300, int(os.getenv("AUTH_ACCESS_TTL_SECONDS", "900
 AUTH_REFRESH_TTL_SECONDS = max(3600, int(os.getenv("AUTH_REFRESH_TTL_SECONDS", "2592000")))
 AUTH_ROTATION_TABLE = os.getenv("AUTH_ROTATION_TABLE", "auth_refresh_tokens")
 AUTH_REFRESH_HASH_SECRET = (os.getenv("AUTH_REFRESH_HASH_SECRET") or "").strip()
-PRINT_OTP_HASH_SECRET = (os.getenv("PRINT_OTP_HASH_SECRET") or AUTH_REFRESH_HASH_SECRET or "paperx-print-otp").strip()
+PRINT_OTP_HASH_SECRET = (os.getenv("PRINT_OTP_HASH_SECRET") or AUTH_REFRESH_HASH_SECRET or "").strip()
+if not PRINT_OTP_HASH_SECRET:
+    import warnings
+    warnings.warn(
+        "PRINT_OTP_HASH_SECRET (or AUTH_REFRESH_HASH_SECRET) is not set. "
+        "Print OTP tokens will be insecure. Set a strong random value via the environment.",
+        RuntimeWarning,
+        stacklevel=1,
+    )
+    PRINT_OTP_HASH_SECRET = secrets.token_hex(32)
 AUTH_REQUEST_CTX: contextvars.ContextVar[Optional[Request]] = contextvars.ContextVar("auth_request_ctx", default=None)
 AUTH_SENTINEL_VALUES = {"__COOKIE_AUTH__", "__cookie__", "cookie", "null", "undefined", "none"}
 
@@ -25803,25 +25812,43 @@ def create_app() -> FastAPI:
 
     # CORS should be registered last so it wraps all other middleware and adds
     # CORS headers even for error responses generated deeper in the stack.
+    #
+    # Security notes:
+    # - "null" origin is intentionally excluded: browsers send Origin: null for
+    #   file:// pages and sandboxed iframes; allowing it with credentials=True
+    #   would let an attacker's local HTML file make authenticated requests.
+    # - localhost origins are only included in non-production environments.
+    # - allow_methods and allow_headers are explicitly enumerated to avoid
+    #   accidentally enabling TRACE (which echoes request bodies) or other
+    #   dangerous methods.
+    _cors_prod_origins = [
+        "https://paperx.tech",
+        "https://www.paperx.tech",
+        "https://starfish-app-mu3b8.ondigitalocean.app",
+        "https://uppzpkmpxgyipjzcskva.supabase.co",
+    ]
+    _cors_dev_origins = [
+        "http://127.0.0.1:5500",
+        "http://127.0.0.1:8000",
+        "http://localhost:5500",
+        "http://localhost:8000",
+        "http://localhost:8001",
+        "http://localhost",
+    ]
+    _cors_origins = _cors_prod_origins if _is_production_env() else (_cors_prod_origins + _cors_dev_origins)
+    # Regex only matches paperx.tech subdomains (+ localhost in dev); never "null"
+    _cors_regex = (
+        r"^https://([a-z0-9-]+\.)*paperx\.tech$"
+        if _is_production_env()
+        else r"^(https://([a-z0-9-]+\.)*paperx\.tech|https?://(localhost|127\.0\.0\.1)(:\d+)?)$"
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "https://paperx.tech",
-            "https://www.paperx.tech",
-            "https://starfish-app-mu3b8.ondigitalocean.app",
-            "https://uppzpkmpxgyipjzcskva.supabase.co",
-            "http://127.0.0.1:5500",
-            "http://127.0.0.1:8000",
-            "http://localhost:5500",
-            "http://localhost:8000",
-            "http://localhost:8001",
-            "http://localhost",
-            "null",
-        ],
-        allow_origin_regex=r"^(https://([a-z0-9-]+\.)*paperx\.tech|https?://(localhost|127\.0\.0\.1)(:\d+)?|vscode-webview://.*|null)$",
+        allow_origins=_cors_origins,
+        allow_origin_regex=_cors_regex,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
     )
 
     return app
@@ -27531,12 +27558,16 @@ async def get_blink_links(
 
 @app.post("/api/blink/generate")
 async def generate_blink_endpoint(
-    req: BlinkRequest, 
-    user_id: str = "00000000-0000-0000-0000-000000000000" 
+    req: BlinkRequest,
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Generate a 'Blink' (landscape illustration) for a given topic or note content.
+    Requires authentication.
     """
+    user_id = get_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     
     # 1. Get content
     content_to_illustrate = req.note_content
@@ -27580,7 +27611,16 @@ async def generate_blink_endpoint(
          # raise HTTPException(status_code=500, detail="google-genai library not installed.")
          print("Warning: google-genai not imported. Simulating or failing.")
 
-    prompt = f"""now,create me an one landscape illustration for the below notes so that just by looking this one illustration, they can understand the entire notes completely i want the ilustratio to be professional and white bg, content ={content_to_illustrate[:8000]}"""  
+    # Use XML-style delimiters to clearly separate instruction from user-supplied
+    # content, which limits prompt-injection attacks where an attacker embeds
+    # "ignore previous instructions" text inside their notes.
+    _safe_content = content_to_illustrate[:8000]
+    prompt = (
+        "Create one landscape illustration for the educational notes enclosed in "
+        "<notes> tags below. The illustration should be professional with a white "
+        "background, and convey the key concepts at a glance.\n"
+        f"<notes>\n{_safe_content}\n</notes>"
+    )
 
     print(f"Generating Blink for topic '{req.topic or req.topic_id}'...")
     
@@ -28243,18 +28283,27 @@ def _generate_share_code() -> str:
 
 
 def _build_study_mode_prompt(mode: str, content: str) -> str:
-    """Build a prompt based on the study mode."""
-    mode_prompts = {
-        "explain": f"Please explain the following concept in detail with examples:\n\n{content}",
-        "summarize": f"Please summarize the following content into key points:\n\n{content}",
-        "quiz": f"Please generate 5 multiple choice quiz questions based on the following topic. Include the correct answer and brief explanation for each:\n\n{content}",
-        "solve": f"Please solve the following problem step by step, showing all work:\n\n{content}",
-        "compare": f"Please compare and contrast the following concepts, highlighting similarities and differences:\n\n{content}",
-        "outline": f"Please create a detailed study outline for the following topic:\n\n{content}",
-        "flashcards": f"Please create 10 flashcards (Q&A pairs) for studying the following topic:\n\n{content}",
-        "cite": f"Please help format a proper citation for the following source. Ask clarifying questions if needed:\n\n{content}",
+    """Build a prompt based on the study mode.
+
+    User-supplied content is placed inside <content> XML delimiters to reduce
+    prompt-injection risk (where an attacker embeds override instructions inside
+    their own notes/text).
+    """
+    # Instruction text is kept outside the delimiters; user content is fenced.
+    _instructions: dict[str, str] = {
+        "explain": "Please explain the following concept in detail with examples.",
+        "summarize": "Please summarize the following content into key points.",
+        "quiz": "Please generate 5 multiple choice quiz questions based on the following topic. Include the correct answer and brief explanation for each.",
+        "solve": "Please solve the following problem step by step, showing all work.",
+        "compare": "Please compare and contrast the following concepts, highlighting similarities and differences.",
+        "outline": "Please create a detailed study outline for the following topic.",
+        "flashcards": "Please create 10 flashcards (Q&A pairs) for studying the following topic.",
+        "cite": "Please help format a proper citation for the following source. Ask clarifying questions if needed.",
     }
-    return mode_prompts.get(mode, content)
+    instruction = _instructions.get(mode)
+    if not instruction:
+        return content
+    return f"{instruction}\n\n<content>\n{content}\n</content>"
 
 
 async def _generate_ai_response(messages: List[Dict[str, str]], study_mode: Optional[str] = None) -> str:
@@ -30508,8 +30557,20 @@ async def upload_assignment_file(
         except Exception as e:
             print(f"[Duplicate Check] Text extraction failed: {e}, falling back to binary hash")
     
-    # Generate unique filename
-    ext = os.path.splitext(file.filename)[1] if file.filename else ""
+    # Validate and whitelist file extension to prevent upload of executable files
+    _ALLOWED_ASSIGNMENT_EXTENSIONS = {
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+        ".ppt", ".pptx", ".txt", ".csv",
+        ".jpg", ".jpeg", ".png", ".gif", ".webp",
+        ".zip", ".tar", ".gz",
+    }
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _ALLOWED_ASSIGNMENT_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type '{ext or '(none)'}' is not allowed. "
+                   f"Accepted types: {', '.join(sorted(_ALLOWED_ASSIGNMENT_EXTENSIONS))}",
+        )
     unique_name = f"{assignment_id}/{user_id}/{uuid.uuid4()}{ext}"
     
     # Upload to Supabase bucket
