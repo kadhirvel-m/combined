@@ -245,12 +245,23 @@ if APP_DEBUG:
     logger.debug("APP_DEBUG enabled")
 
 app = FastAPI()
+
+# CORS – restrict to known origins; never combine allow_origins=["*"] with
+# allow_credentials=True (browsers block such responses).
+_TUNEX_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "https://tunex.tech,http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000",
+    ).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_TUNEX_ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
 )
 
 # Mount TuNe AI endpoints
@@ -262,6 +273,15 @@ async def log_requests(request, call_next):
     response = await call_next(request)
     duration_ms = (time.time() - start) * 1000
     logger.info("REQ %s %s %.1fms", request.method, request.url.path, duration_ms)
+    # Security headers
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.url.scheme == "https":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload"
+        )
     return response
 
 
@@ -424,12 +444,13 @@ class ProjectOut(ProjectIn):
 
 security = HTTPBearer(auto_error=False)
 
+# JWT_SECRET must be a dedicated secret, not reused from Supabase keys.
+# Falling back to SUPABASE_SERVICE_ROLE_KEY would allow anyone who learns
+# the service-role key to forge valid JWTs, and vice-versa.
 JWT_SECRET = (
     os.getenv("JWT_SECRET")
     or os.getenv("JWT_SECRET_KEY")
-    or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     or os.getenv("SUPABASE_JWT_SECRET")
-    or os.getenv("SUPABASE_ANON_KEY")
 )
 if not JWT_SECRET:
     raise RuntimeError("Missing JWT secret for token signing")
