@@ -7,6 +7,7 @@ import enum
 import io
 import ipaddress
 import json
+import base64
 import logging
 import hmac
 import mimetypes
@@ -179,7 +180,7 @@ RATE_LIMIT_GLOBAL_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_GLOBAL_MAX_REQ
 RATE_LIMIT_AUTH_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_AUTH_WINDOW_SECONDS", "60")))
 RATE_LIMIT_AUTH_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_AUTH_MAX_REQUESTS", "40")))
 RATE_LIMIT_LOGIN_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_LOGIN_WINDOW_SECONDS", "60")))
-RATE_LIMIT_LOGIN_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_LOGIN_MAX_REQUESTS", "12")))
+RATE_LIMIT_LOGIN_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_LOGIN_MAX_REQUESTS", "5")))
 RATE_LIMIT_AI_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_AI_WINDOW_SECONDS", "60")))
 RATE_LIMIT_AI_MAX_REQUESTS = max(1, int(os.getenv("RATE_LIMIT_AI_MAX_REQUESTS", "20")))
 RATE_LIMIT_MAX_BUCKETS = max(500, int(os.getenv("RATE_LIMIT_MAX_BUCKETS", "20000")))
@@ -196,6 +197,37 @@ RATE_LIMIT_AUTH_ROUTES: Set[str] = {
     "/api/teacher/signup",
     "/api/hod/signup",
 }
+
+AUTH_ENFORCEMENT_ENABLED = (os.getenv("AUTH_ENFORCEMENT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+AUTH_PUBLIC_EXACT_ROUTES: Set[str] = {
+    "/health",
+    "/signup",
+    "/login",
+    "/refresh",
+    "/logout",
+    "/api/signup/full",
+    "/api/teacher/signup",
+    "/api/hod/signup",
+}
+AUTH_PUBLIC_PREFIX_ROUTES: Tuple[str, ...] = (
+    "/ui/",
+    "/assets/",
+)
+_auth_issuer_base = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
+AUTH_TOKEN_EXPECTED_ISSUER = (os.getenv("AUTH_TOKEN_EXPECTED_ISSUER") or (f"{_auth_issuer_base}/auth/v1" if _auth_issuer_base else "")).strip()
+AUTH_TOKEN_EXPECTED_AUDIENCE = (os.getenv("AUTH_TOKEN_EXPECTED_AUDIENCE", "authenticated") or "").strip()
+AUTH_VALIDATE_ISSUER = (os.getenv("AUTH_VALIDATE_ISSUER", "true").strip().lower() in {"1", "true", "yes", "on"})
+AUTH_VALIDATE_AUDIENCE = (os.getenv("AUTH_VALIDATE_AUDIENCE", "true").strip().lower() in {"1", "true", "yes", "on"})
+RBAC_ENFORCEMENT_ENABLED = (os.getenv("RBAC_ENFORCEMENT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+RBAC_ADMIN_PREFIXES: Tuple[str, ...] = (
+    "/api/admin",
+)
+RBAC_TEACHER_PREFIXES: Tuple[str, ...] = (
+    "/api/teacher",
+)
+RBAC_HOD_PREFIXES: Tuple[str, ...] = (
+    "/api/hod",
+)
 
 RATE_LIMIT_AI_PREFIXES: Tuple[str, ...] = (
     "/api/innovatex/",
@@ -230,6 +262,115 @@ def _rl_is_auth_route(path: str) -> bool:
 def _rl_is_ai_route(path: str) -> bool:
     p = _rl_norm_path(path)
     return any(p.startswith(prefix) for prefix in RATE_LIMIT_AI_PREFIXES)
+
+
+def _auth_is_public_route(path: str, *, expose_docs: bool = False) -> bool:
+    p = _rl_norm_path(path)
+    if p in AUTH_PUBLIC_EXACT_ROUTES:
+        return True
+    if any(p.startswith(prefix) for prefix in AUTH_PUBLIC_PREFIX_ROUTES):
+        return True
+    if expose_docs and p in {"/docs", "/redoc", "/openapi.json"}:
+        return True
+    return False
+
+
+def _decode_jwt_claims_unverified(token: str) -> Dict[str, Any]:
+    parts = (token or "").split(".")
+    if len(parts) != 3:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    payload_b64 = parts[1]
+    padding = "=" * ((4 - (len(payload_b64) % 4)) % 4)
+    try:
+        payload_raw = base64.urlsafe_b64decode(payload_b64 + padding)
+        claims = json.loads(payload_raw.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    if not isinstance(claims, dict):
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    return claims
+
+
+def _validate_token_claims(token: str) -> Dict[str, Any]:
+    claims = _decode_jwt_claims_unverified(token)
+    now_ts = int(time.time())
+
+    exp_raw = claims.get("exp")
+    try:
+        exp_ts = int(exp_raw)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired authentication")
+    if exp_ts <= now_ts:
+        raise HTTPException(status_code=401, detail="Invalid or expired authentication")
+
+    nbf_raw = claims.get("nbf")
+    if nbf_raw is not None:
+        try:
+            nbf_ts = int(nbf_raw)
+            if nbf_ts > now_ts:
+                raise HTTPException(status_code=401, detail="Invalid auth token")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    if AUTH_VALIDATE_ISSUER and AUTH_TOKEN_EXPECTED_ISSUER:
+        iss = str(claims.get("iss") or "").strip()
+        if iss != AUTH_TOKEN_EXPECTED_ISSUER:
+            raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    if AUTH_VALIDATE_AUDIENCE and AUTH_TOKEN_EXPECTED_AUDIENCE:
+        aud = claims.get("aud")
+        expected_aud = AUTH_TOKEN_EXPECTED_AUDIENCE
+        if isinstance(aud, list):
+            if expected_aud not in [str(v) for v in aud]:
+                raise HTTPException(status_code=401, detail="Invalid auth token")
+        else:
+            if str(aud or "").strip() != expected_aud:
+                raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    return claims
+
+
+def _path_in_prefixes(path: str, prefixes: Tuple[str, ...]) -> bool:
+    p = _rl_norm_path(path)
+    for prefix in prefixes:
+        pre = _rl_norm_path(prefix)
+        if p == pre or p.startswith(pre + "/"):
+            return True
+    return False
+
+
+def _rbac_required_roles_for_path(path: str) -> Optional[Set[str]]:
+    if _path_in_prefixes(path, RBAC_ADMIN_PREFIXES):
+        return {"admin"}
+    if _path_in_prefixes(path, RBAC_HOD_PREFIXES):
+        return {"hod", "admin"}
+    if _path_in_prefixes(path, RBAC_TEACHER_PREFIXES):
+        return {"teacher", "hod", "admin", "employee"}
+    return None
+
+
+def _resolve_user_role(user_id: Optional[str], email: Optional[str]) -> str:
+    if _is_admin_user(user_id, email):
+        return "admin"
+    if not user_id:
+        return "student"
+    try:
+        supabase = get_service_client()
+        if not supabase:
+            return "student"
+        role_q = supabase.table("admin_roles").select("role").eq("auth_user_id", user_id).limit(1).execute()
+        if getattr(role_q, "error", None):
+            return "student"
+        role_data = role_q.data or []
+        role_val = (role_data[0].get("role") if role_data else None) or "student"
+        role_txt = str(role_val).strip().lower()
+        if role_txt in {"student", "employee", "teacher", "hod", "admin"}:
+            return role_txt
+    except Exception:
+        return "student"
+    return "student"
 
 
 class _SlidingWindowLimiter:
@@ -25714,6 +25855,47 @@ def create_app() -> FastAPI:
             return response
         finally:
             AUTH_REQUEST_CTX.reset(token)
+
+    @app.middleware("http")
+    async def enforce_authenticated_api_access(request: Request, call_next):  # type: ignore[override]
+        if not AUTH_ENFORCEMENT_ENABLED:
+            return await call_next(request)
+
+        method = (request.method or "").upper()
+        path = _rl_norm_path(request.url.path)
+
+        # Keep CORS preflight and explicit bootstrap/static routes reachable.
+        if method == "OPTIONS" or _auth_is_public_route(path, expose_docs=expose_docs):
+            return await call_next(request)
+
+        token = _bearer_token_from_header(request.headers.get("authorization"))
+        if not token:
+            token = _token_from_cookie(request, AUTH_ACCESS_COOKIE_NAME)
+        if not token:
+            return JSONResponse({"detail": "Authentication required"}, status_code=401)
+
+        try:
+            claims = _validate_token_claims(token)
+            user_id = _get_user_id_with_retry(token)
+            email = (claims.get("email") if isinstance(claims, dict) else None) or None
+        except HTTPException as exc:
+            status_code = int(getattr(exc, "status_code", 401) or 401)
+            if status_code == 503:
+                return JSONResponse({"detail": "Authentication service temporarily unavailable"}, status_code=503)
+            if status_code == 403:
+                return JSONResponse({"detail": "Forbidden"}, status_code=403)
+            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        except Exception:
+            return JSONResponse({"detail": "Authentication service temporarily unavailable"}, status_code=503)
+
+        if RBAC_ENFORCEMENT_ENABLED:
+            required_roles = _rbac_required_roles_for_path(path)
+            if required_roles:
+                user_role = _resolve_user_role(user_id, str(email) if email else None)
+                if user_role not in required_roles:
+                    return JSONResponse({"detail": "Forbidden"}, status_code=403)
+
+        return await call_next(request)
 
     # Compress large HTML/CSS/JS/JSON responses to reduce bandwidth
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
