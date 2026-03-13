@@ -284,10 +284,37 @@
     }
 
     var _fetch = window.fetch.bind(window);
+    function _originFromUrl(urlLike) {
+      try {
+        return new URL(String(urlLike || ''), window.location.href).origin;
+      } catch (_) {
+        return '';
+      }
+    }
+    function _requestTarget(input) {
+      try {
+        if (typeof input === 'string') return input;
+        if (input && typeof input.url === 'string') return input.url;
+      } catch (_) { }
+      return '';
+    }
+    function _isSameOriginUrl(urlLike) {
+      var targetOrigin = _originFromUrl(urlLike);
+      if (!targetOrigin) return true;
+      try {
+        var pageOrigin = window.location.origin;
+        var apiOrigin = _originFromUrl(window.API_BASE || window.__API_BASE || pageOrigin);
+        return targetOrigin === pageOrigin || (apiOrigin && targetOrigin === apiOrigin);
+      } catch (_) {
+        return true;
+      }
+    }
     window.fetch = function (input, init) {
       init = init || {};
       var req = Object.assign({}, init);
-      req.credentials = req.credentials || 'include';
+      if (!req.credentials) {
+        req.credentials = _isSameOriginUrl(_requestTarget(input)) ? 'include' : 'omit';
+      }
 
       var headers = new Headers(req.headers || {});
       var authHeader = headers.get('Authorization') || headers.get('authorization');

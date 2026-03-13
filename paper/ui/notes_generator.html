@@ -1105,7 +1105,7 @@
       __styleCache.add(href);
     }
 
-    const LOTTIE_SRC = 'https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.5/dist/dotlottie-wc.js';
+    const LOTTIE_SRC = 'https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js';
     async function ensureLottie() {
       if (window.customElements && window.customElements.get('dotlottie-wc')) return;
       try { await loadScriptOnce(LOTTIE_SRC, { module: true }); } catch { }
@@ -1195,6 +1195,8 @@
     // inline panel action buttons are wired inside the inline IIFE
 
     const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
+    const fallbackChannelLogoLocal = '/ui/assets/img/favicon.svg';
+    const fallbackVideoThumb = '/ui/assets/img/logo-light.svg';
     const channelLogoCache = new Map();
     let relatedVideosAbort = null;
     let relatedVideosTopic = '';
@@ -2306,13 +2308,38 @@
       const thumb = document.createElement('div');
       thumb.className = 'yt-thumb';
       const thumbImg = document.createElement('img');
-      const videoId = typeof video.id === 'string' ? video.id.trim() : '';
-      const thumbSrc = (typeof video.thumbnail === 'string' && video.thumbnail.trim())
-        || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
-      thumbImg.src = thumbSrc || fallbackChannelLogo;
+      let videoId = typeof video.id === 'string' ? video.id.trim() : '';
+      if (!videoId && link) {
+        const m = link.match(/[?&]v=([^&#]+)/) || link.match(/youtu\.be\/([^?#]+)/) || link.match(/\/embed\/([^?#/]+)/);
+        videoId = m && m[1] ? m[1] : '';
+      }
+      const thumbCandidates = [];
+      const apiThumb = (typeof video.thumbnail === 'string' && video.thumbnail.trim()) || '';
+      if (apiThumb) thumbCandidates.push(apiThumb);
+      if (videoId) {
+        thumbCandidates.push(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`);
+        thumbCandidates.push(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
+        thumbCandidates.push(`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`);
+        thumbCandidates.push(`https://i3.ytimg.com/vi/${videoId}/hqdefault.jpg`);
+      }
+      thumbCandidates.push(fallbackVideoThumb);
+      thumbImg.dataset.thumbCandidates = JSON.stringify(thumbCandidates);
+      thumbImg.dataset.thumbIndex = '0';
+      thumbImg.src = thumbCandidates[0] || fallbackVideoThumb;
       thumbImg.alt = (video.title || 'YouTube video').toString();
       thumbImg.loading = 'lazy';
       thumbImg.decoding = 'async';
+      thumbImg.referrerPolicy = 'no-referrer';
+      thumbImg.onerror = () => {
+        let list = [];
+        try { list = JSON.parse(thumbImg.dataset.thumbCandidates || '[]'); } catch { }
+        let idx = Number(thumbImg.dataset.thumbIndex || '0');
+        idx += 1;
+        thumbImg.dataset.thumbIndex = String(idx);
+        if (idx < list.length) {
+          thumbImg.src = list[idx];
+        }
+      };
       thumb.appendChild(thumbImg);
       if (video.duration) {
         const badge = document.createElement('span');
@@ -2355,6 +2382,11 @@
       logoImg.alt = (video.channel || 'Channel').toString();
       logoImg.loading = 'lazy';
       logoImg.referrerPolicy = 'no-referrer';
+      logoImg.onerror = () => {
+        if (logoImg.src !== fallbackChannelLogoLocal) {
+          logoImg.src = fallbackChannelLogoLocal;
+        }
+      };
       meta.appendChild(logoImg);
 
       const channelName = document.createElement('span');
@@ -2463,6 +2495,7 @@
       const force = Boolean(options.force);
       const requestedLanguage = normalizeVideoLanguage(options.language ?? relatedVideosLanguage);
       const searchQuery = buildRelatedVideosQuery(baseQuery, requestedLanguage);
+      const previousQuery = (relatedVideosFullQuery || '').trim();
 
       if (!baseQuery) {
         relatedVideosTopic = '';
@@ -2500,7 +2533,11 @@
       }
       relatedVideosAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
 
-      const hasExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+      const isSameQueryAsPrevious = previousQuery && previousQuery.toLowerCase() === searchQuery.toLowerCase();
+      if (!isSameQueryAsPrevious && $relatedVideosCarousel) {
+        $relatedVideosCarousel.innerHTML = '';
+      }
+      const hasExisting = isSameQueryAsPrevious && $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
       if (hasExisting) {
         $relatedVideosSkeleton?.classList.add('hidden');
         $relatedVideosWrap?.classList.remove('hidden');
@@ -2511,87 +2548,87 @@
       $relatedVideosEmpty?.classList.add('hidden');
 
       try {
-        // First, try to fetch a syllabus-linked video_url for this topic
-        let recommended = null;
-        try {
-          const recRes = await fetch(`${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(baseQuery)}`);
-          if (recRes.ok) {
-            const recData = await recRes.json();
-            if (Array.isArray(recData) && recData.length) {
-              const first = recData.find(t => typeof t.video_url === 'string' && t.video_url.trim());
-              if (first && first.video_url) {
-                const vurl = first.video_url.trim();
-                // extract YouTube id if possible
-                let vidId = '';
-                const ytMatch = vurl.match(/[?&]v=([^&#]+)/) || vurl.match(/youtu\.be\/([^?#]+)/);
-                if (ytMatch && ytMatch[1]) {
-                  vidId = ytMatch[1];
-                }
-                recommended = {
-                  id: vidId || '',
-                  link: vurl,
-                  title: (first.topic || baseQuery || '').toString(),
-                  channel: 'Syllabus recommended',
-                  channel_page: '',
-                  thumbnail: '',
-                  views: '',
-                  channel_logo: '',
-                  channel_logo_is_default: true,
-                  duration: '',
-                  recommended: true,
-                };
+        // Run recommendation lookup in parallel so YouTube search is not blocked by slow metadata APIs.
+        const recommendedPromise = (async () => {
+          try {
+            const recLookup = await fetchJsonWithTimeout(
+              `${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(baseQuery)}`,
+              { timeoutMs: 6000 }
+            );
+            const recData = recLookup?.data;
+            if (!Array.isArray(recData) || !recData.length) return null;
 
-                // Attempt to hydrate channel metadata from backend so logo/name show like other videos
-                try {
-                  const metaRes = await fetch(`${apiBase}/api/transcripts/meta`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: vurl }),
-                  });
-                  if (metaRes.ok) {
-                    const meta = await metaRes.json();
-                    if (meta && typeof meta === 'object') {
-                      if (meta.channel_name) {
-                        recommended.channel = meta.channel_name;
-                      }
-                      if (meta.channel_logo) {
-                        recommended.channel_logo = meta.channel_logo;
-                        recommended.channel_logo_is_default = false;
-                      }
-                      if (meta.channel_url) {
-                        recommended.channel_page = meta.channel_url;
-                      }
-                    }
-                  }
-                } catch (metaErr) {
-                  console.warn('Recommended video metadata lookup failed:', metaErr);
-                }
+            const first = recData.find(t => typeof t.video_url === 'string' && t.video_url.trim());
+            if (!first || !first.video_url) return null;
 
-                // Fallback to YouTube oEmbed for channel name + URL if backend metadata unavailable
-                if (!recommended.channel_page || recommended.channel === 'Syllabus recommended') {
-                  try {
-                    const oembedRes = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(vurl)}`);
-                    if (oembedRes.ok) {
-                      const oembed = await oembedRes.json();
-                      if (oembed && typeof oembed === 'object') {
-                        if (oembed.author_name) {
-                          recommended.channel = oembed.author_name;
-                        }
-                        if (oembed.author_url) {
-                          recommended.channel_page = oembed.author_url;
-                        }
-                      }
-                    }
-                  } catch (oembedErr) {
-                    console.warn('YouTube oEmbed lookup failed:', oembedErr);
+            const vurl = first.video_url.trim();
+            let vidId = '';
+            const ytMatch = vurl.match(/[?&]v=([^&#]+)/) || vurl.match(/youtu\.be\/([^?#]+)/);
+            if (ytMatch && ytMatch[1]) vidId = ytMatch[1];
+
+            const recommended = {
+              id: vidId || '',
+              link: vurl,
+              title: (first.topic || baseQuery || '').toString(),
+              channel: 'Syllabus recommended',
+              channel_page: '',
+              thumbnail: '',
+              views: '',
+              channel_logo: '',
+              channel_logo_is_default: true,
+              duration: '',
+              recommended: true,
+            };
+
+            // Attempt backend metadata lookup with a strict timeout.
+            try {
+              const metaController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+              const metaTimer = metaController ? setTimeout(() => metaController.abort(), 7000) : null;
+              const metaRes = await fetch(`${apiBase}/api/transcripts/meta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: vurl }),
+                ...(metaController ? { signal: metaController.signal } : {}),
+              });
+              if (metaTimer) clearTimeout(metaTimer);
+              if (metaRes.ok) {
+                const meta = await metaRes.json();
+                if (meta && typeof meta === 'object') {
+                  if (meta.channel_name) recommended.channel = meta.channel_name;
+                  if (meta.channel_logo) {
+                    recommended.channel_logo = meta.channel_logo;
+                    recommended.channel_logo_is_default = false;
                   }
+                  if (meta.channel_url) recommended.channel_page = meta.channel_url;
                 }
               }
+            } catch (metaErr) {
+              console.warn('Recommended video metadata lookup failed:', metaErr);
             }
+
+            // Fallback to YouTube oEmbed for channel name + URL if backend metadata unavailable.
+            if (!recommended.channel_page || recommended.channel === 'Syllabus recommended') {
+              try {
+                const oembedRes = await fetchJsonWithTimeout(
+                  `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(vurl)}`,
+                  { timeoutMs: 4000 }
+                );
+                const oembed = oembedRes?.data;
+                if (oembed && typeof oembed === 'object') {
+                  if (oembed.author_name) recommended.channel = oembed.author_name;
+                  if (oembed.author_url) recommended.channel_page = oembed.author_url;
+                }
+              } catch (oembedErr) {
+                console.warn('YouTube oEmbed lookup failed:', oembedErr);
+              }
+            }
+
+            return recommended;
+          } catch (e) {
+            console.warn('Recommended topic video lookup failed:', e);
+            return null;
           }
-        } catch (e) {
-          console.warn('Recommended topic video lookup failed:', e);
-        }
+        })();
 
         const fetchOptions = relatedVideosAbort ? { signal: relatedVideosAbort.signal } : undefined;
         const response = await fetch(`${apiBase}/api/youtube/search?query=${encodeURIComponent(searchQuery)}&num=8`, fetchOptions);
@@ -2599,25 +2636,25 @@
           throw new Error(`Search failed with status ${response.status}`);
         }
         const videos = await response.json();
+        const recommended = await Promise.race([
+          recommendedPromise,
+          sleep(1500).then(() => null)
+        ]);
+
         if (!Array.isArray(videos) || videos.length === 0) {
-          const hadExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
-          if (hadExisting) {
-            $relatedVideosSkeleton?.classList.add('hidden');
-            $relatedVideosWrap?.classList.remove('hidden');
-            $relatedVideosEmpty?.classList.add('hidden');
-            if ($relatedVideosSummary) {
-              $relatedVideosSummary.textContent = `Showing saved videos for "${searchQuery}".`;
-            }
-          } else {
-            $relatedVideosSkeleton?.classList.add('hidden');
-            $relatedVideosWrap?.classList.add('hidden');
-            if ($relatedVideosEmpty) {
-              $relatedVideosEmpty.textContent = 'No related videos found. Try a more specific topic.';
-              $relatedVideosEmpty.classList.remove('hidden');
-            }
-            if ($relatedVideosSummary) {
-              $relatedVideosSummary.textContent = `No videos found for "${searchQuery}".`;
-            }
+          if (recommended) {
+            renderRelatedVideos([recommended], searchQuery, baseQuery, relatedVideosLanguage);
+            return;
+          }
+          if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = '';
+          $relatedVideosSkeleton?.classList.add('hidden');
+          $relatedVideosWrap?.classList.add('hidden');
+          if ($relatedVideosEmpty) {
+            $relatedVideosEmpty.textContent = 'No related videos found. Try a more specific topic.';
+            $relatedVideosEmpty.classList.remove('hidden');
+          }
+          if ($relatedVideosSummary) {
+            $relatedVideosSummary.textContent = `No videos found for "${searchQuery}".`;
           }
           return;
         }
@@ -2627,24 +2664,15 @@
       } catch (error) {
         if (error?.name === 'AbortError') return;
         console.error('Related videos error:', error);
-        const hadExisting = $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
-        if (hadExisting) {
-          $relatedVideosSkeleton?.classList.add('hidden');
-          $relatedVideosWrap?.classList.remove('hidden');
-          $relatedVideosEmpty?.classList.add('hidden');
-          if ($relatedVideosSummary) {
-            $relatedVideosSummary.textContent = `Showing saved videos for "${searchQuery}".`;
-          }
-        } else {
-          $relatedVideosSkeleton?.classList.add('hidden');
-          $relatedVideosWrap?.classList.add('hidden');
-          if ($relatedVideosEmpty) {
-            $relatedVideosEmpty.textContent = 'Unable to load videos right now.';
-            $relatedVideosEmpty.classList.remove('hidden');
-          }
-          if ($relatedVideosSummary) {
-            $relatedVideosSummary.textContent = `Unable to load videos for "${searchQuery}".`;
-          }
+        if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = '';
+        $relatedVideosSkeleton?.classList.add('hidden');
+        $relatedVideosWrap?.classList.add('hidden');
+        if ($relatedVideosEmpty) {
+          $relatedVideosEmpty.textContent = 'Unable to load videos right now.';
+          $relatedVideosEmpty.classList.remove('hidden');
+        }
+        if ($relatedVideosSummary) {
+          $relatedVideosSummary.textContent = `Unable to load videos for "${searchQuery}".`;
         }
       } finally {
         relatedVideosAbort = null;
