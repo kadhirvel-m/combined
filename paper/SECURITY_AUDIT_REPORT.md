@@ -557,7 +557,7 @@ While many security headers are set, consider adding:
 ### LOW-03: Email Validation Could Be Stronger
 **Location:** `paper/main.py`, `UserAuth` model
 
-The `email` field is a plain `str` without email format validation. Use `pydantic[email]` (which is in requirements) with `EmailStr`.
+The `email` field is a plain `str` without email format validation. Use `pydantic[email-validator]` with Pydantic's `EmailStr` type for proper email validation.
 
 ---
 
