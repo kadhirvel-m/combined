@@ -80,11 +80,14 @@
 // Global HTML hardening:
 // - Exposes `window.escapeHtml` for explicit escaping.
 // - Sanitizes all string assignments to `element.innerHTML` by default.
+// - Sanitizes `insertAdjacentHTML` and `outerHTML` string writes as well.
 // - Opt out only for trusted static markup via `data-trusted-html="true"`.
 (function () {
   try {
     var proto = Element && Element.prototype;
     var originalDescriptor = proto ? Object.getOwnPropertyDescriptor(proto, 'innerHTML') : null;
+    var outerDescriptor = proto ? Object.getOwnPropertyDescriptor(proto, 'outerHTML') : null;
+    var originalInsertAdjacentHTML = proto && proto.insertAdjacentHTML;
 
     function escapeHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
@@ -184,6 +187,31 @@
         return originalDescriptor.set.call(this, value);
       }
     });
+
+    if (outerDescriptor && typeof outerDescriptor.set === 'function' && typeof outerDescriptor.get === 'function') {
+      Object.defineProperty(proto, 'outerHTML', {
+        configurable: true,
+        enumerable: outerDescriptor.enumerable,
+        get: function () {
+          return outerDescriptor.get.call(this);
+        },
+        set: function (value) {
+          if (typeof value === 'string' && !(this && this.getAttribute && this.getAttribute('data-trusted-html') === 'true')) {
+            return outerDescriptor.set.call(this, sanitizeHtml(value));
+          }
+          return outerDescriptor.set.call(this, value);
+        }
+      });
+    }
+
+    if (typeof originalInsertAdjacentHTML === 'function') {
+      proto.insertAdjacentHTML = function (position, text) {
+        if (typeof text === 'string' && !(this && this.getAttribute && this.getAttribute('data-trusted-html') === 'true')) {
+          return originalInsertAdjacentHTML.call(this, position, sanitizeHtml(text));
+        }
+        return originalInsertAdjacentHTML.call(this, position, text);
+      };
+    }
   } catch (_) { }
 })();
 
@@ -309,6 +337,25 @@
         return true;
       }
     }
+    function _isUnsafeMethod(method) {
+      var m = String(method || 'GET').toUpperCase();
+      return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
+    }
+    function _readCookie(name) {
+      var key = String(name || '').trim();
+      if (!key) return '';
+      try {
+        var escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var m = document.cookie.match(new RegExp('(?:^|;\\s*)' + escaped + '=([^;]*)'));
+        return m ? decodeURIComponent(m[1] || '') : '';
+      } catch (_) {
+        return '';
+      }
+    }
+    function _csrfCookieName() {
+      var name = String(window.AUTH_CSRF_COOKIE_NAME || '').trim();
+      return name || 'paperx_csrf';
+    }
     window.fetch = function (input, init) {
       init = init || {};
       var req = Object.assign({}, init);
@@ -325,6 +372,15 @@
           headers.delete('authorization');
         }
       }
+
+      var method = String(req.method || (input && input.method) || 'GET').toUpperCase();
+      if (_isUnsafeMethod(method) && _isSameOriginUrl(_requestTarget(input))) {
+        var csrfToken = _readCookie(_csrfCookieName());
+        if (csrfToken && !headers.has('X-CSRF-Token') && !headers.has('x-csrf-token')) {
+          headers.set('X-CSRF-Token', csrfToken);
+        }
+      }
+
       req.headers = headers;
       return _fetch(input, req);
     };

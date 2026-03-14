@@ -2353,18 +2353,26 @@
                 const courseId = c.id || c.course_id || c.subject_id;
                 const courseKey = courseId ? String(courseId) : null;
                 header.addEventListener('click', async () => {
-                    const isCurrentlyCollapsed = unitsWrap.classList.contains('hidden');
-                    if (isCurrentlyCollapsed && courseKey && !consumedSubjectOpenIds.has(courseKey)) {
-                        const ok = await canUseAction('subject_open', true);
-                        if (!ok) return;
-                        consumedSubjectOpenIds.add(courseKey);
-                        persistDailySet(consumedSubjectOpenStorageKey, consumedSubjectOpenIds);
-                    }
+                    const wasCollapsed = unitsWrap.classList.contains('hidden');
                     const collapsed = unitsWrap.classList.toggle('hidden');
                     const expanded = !collapsed;
                     header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
                     caret.classList.toggle('-rotate-90', !expanded ? true : false);
                     caret.classList.toggle('rotate-0', expanded ? true : false);
+
+                    // Keep expand/collapse snappy; run plan check after UI updates.
+                    if (wasCollapsed && expanded && courseKey && !consumedSubjectOpenIds.has(courseKey)) {
+                        const ok = await canUseAction('subject_open', true);
+                        if (!ok) {
+                            unitsWrap.classList.add('hidden');
+                            header.setAttribute('aria-expanded', 'false');
+                            caret.classList.add('-rotate-90');
+                            caret.classList.remove('rotate-0');
+                            return;
+                        }
+                        consumedSubjectOpenIds.add(courseKey);
+                        persistDailySet(consumedSubjectOpenStorageKey, consumedSubjectOpenIds);
+                    }
                 });
                 const courseCounts = { done: 0, total: 0 };
                 (c.units || []).forEach(u => {

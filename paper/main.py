@@ -90,6 +90,15 @@ except Exception:  # pragma: no cover
         pass
 
 try:
+    import jwt as pyjwt  # PyJWT
+    from jwt import InvalidTokenError as PyJWTInvalidTokenError
+except Exception:  # pragma: no cover
+    pyjwt = None  # type: ignore
+
+    class PyJWTInvalidTokenError(Exception):
+        pass
+
+try:
     import fitz  # type: ignore
 except Exception:  # pragma: no cover
     fitz = None  # type: ignore
@@ -161,6 +170,10 @@ except Exception:
 AUTH_ACCESS_COOKIE_NAME = os.getenv("AUTH_ACCESS_COOKIE_NAME", "paperx_at")
 AUTH_REFRESH_COOKIE_NAME = os.getenv("AUTH_REFRESH_COOKIE_NAME", "paperx_rt")
 AUTH_STATE_COOKIE_NAME = os.getenv("AUTH_STATE_COOKIE_NAME", "paperx_auth")
+AUTH_CSRF_COOKIE_NAME = os.getenv("AUTH_CSRF_COOKIE_NAME", "paperx_csrf")
+AUTH_CSRF_HEADER_NAME = (os.getenv("AUTH_CSRF_HEADER_NAME", "x-csrf-token") or "x-csrf-token").strip().lower()
+AUTH_CSRF_ENFORCEMENT_ENABLED = (os.getenv("AUTH_CSRF_ENFORCEMENT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+AUTH_CSRF_STRICT_MODE = (os.getenv("AUTH_CSRF_STRICT_MODE", "true").strip().lower() in {"1", "true", "yes", "on"})
 AUTH_COOKIE_DOMAIN = (os.getenv("AUTH_COOKIE_DOMAIN") or "").strip() or None
 AUTH_COOKIE_SECURE = (os.getenv("AUTH_COOKIE_SECURE", "true").strip().lower() in {"1", "true", "yes", "on"})
 AUTH_COOKIE_SAMESITE = (os.getenv("AUTH_COOKIE_SAMESITE", "strict") or "strict").strip().lower()
@@ -212,12 +225,15 @@ AUTH_PUBLIC_EXACT_ROUTES: Set[str] = {
 AUTH_PUBLIC_PREFIX_ROUTES: Tuple[str, ...] = (
     "/ui/",
     "/assets/",
+    "/api/public/",
 )
 _auth_issuer_base = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
 AUTH_TOKEN_EXPECTED_ISSUER = (os.getenv("AUTH_TOKEN_EXPECTED_ISSUER") or (f"{_auth_issuer_base}/auth/v1" if _auth_issuer_base else "")).strip()
 AUTH_TOKEN_EXPECTED_AUDIENCE = (os.getenv("AUTH_TOKEN_EXPECTED_AUDIENCE", "authenticated") or "").strip()
 AUTH_VALIDATE_ISSUER = (os.getenv("AUTH_VALIDATE_ISSUER", "true").strip().lower() in {"1", "true", "yes", "on"})
 AUTH_VALIDATE_AUDIENCE = (os.getenv("AUTH_VALIDATE_AUDIENCE", "true").strip().lower() in {"1", "true", "yes", "on"})
+AUTH_JWT_SECRET = (os.getenv("AUTH_JWT_SECRET") or os.getenv("SUPABASE_JWT_SECRET") or "").strip()
+AUTH_VERIFY_SIGNATURE = (os.getenv("AUTH_VERIFY_SIGNATURE", "true").strip().lower() in {"1", "true", "yes", "on"})
 RBAC_ENFORCEMENT_ENABLED = (os.getenv("RBAC_ENFORCEMENT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
 RBAC_ADMIN_PREFIXES: Tuple[str, ...] = (
     "/api/admin",
@@ -275,44 +291,171 @@ def _auth_is_public_route(path: str, *, expose_docs: bool = False) -> bool:
     return False
 
 
-def _decode_jwt_claims_unverified(token: str) -> Dict[str, Any]:
-    parts = (token or "").split(".")
-    if len(parts) != 3:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    payload_b64 = parts[1]
-    padding = "=" * ((4 - (len(payload_b64) % 4)) % 4)
-    try:
-        payload_raw = base64.urlsafe_b64decode(payload_b64 + padding)
-        claims = json.loads(payload_raw.decode("utf-8"))
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    if not isinstance(claims, dict):
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    return claims
+CSRF_UNSAFE_METHODS: Set[str] = {"POST", "PUT", "PATCH", "DELETE"}
+CSRF_ORIGIN_TRUSTED_HOST_SUFFIXES: Tuple[str, ...] = (
+    "paperx.tech",
+    "ondigitalocean.app",
+    "supabase.co",
+)
+
+
+def _normalize_external_query(value: str, *, label: str = "query", min_len: int = 1, max_len: int = 180) -> str:
+    text = re.sub(r"\s+", " ", (value or "")).strip()
+    if not text:
+        raise HTTPException(status_code=400, detail=f"{label} is required")
+    if len(text) < min_len:
+        raise HTTPException(status_code=400, detail=f"{label} is too short")
+    if len(text) > max_len:
+        raise HTTPException(status_code=400, detail=f"{label} is too long")
+    if re.search(r"[\x00-\x1f\x7f]", text):
+        raise HTTPException(status_code=400, detail=f"{label} contains invalid characters")
+    return text
+
+
+def _validate_https_url(raw_url: str, *, label: str = "url", allowed_hosts: Optional[Set[str]] = None) -> str:
+    candidate = (raw_url or "").strip()
+    if not candidate:
+        raise HTTPException(status_code=400, detail=f"{label} is required")
+    if len(candidate) > 2048:
+        raise HTTPException(status_code=400, detail=f"{label} is too long")
+
+    parsed = urlparse(candidate)
+    if parsed.scheme != "https":
+        raise HTTPException(status_code=400, detail=f"{label} must use https")
+    if parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail=f"{label} must not include credentials")
+
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise HTTPException(status_code=400, detail=f"{label} host is invalid")
+    if allowed_hosts and host not in allowed_hosts:
+        raise HTTPException(status_code=400, detail=f"{label} host is not allowed")
+    return candidate
+
+
+def _request_origin_is_trusted(request: Request) -> bool:
+    origin = (request.headers.get("origin") or "").strip()
+    if not origin:
+        referer = (request.headers.get("referer") or "").strip()
+        if referer:
+            p = urlparse(referer)
+            if p.scheme and p.netloc:
+                origin = f"{p.scheme}://{p.netloc}"
+    if not origin:
+        return False
+
+    origin_parsed = urlparse(origin)
+    if origin_parsed.scheme not in {"http", "https"}:
+        return False
+    origin_host = (origin_parsed.hostname or "").strip().lower()
+    if not origin_host:
+        return False
+
+    req_host = (request.url.hostname or "").strip().lower()
+    if req_host and origin_host == req_host:
+        return True
+    if origin_host in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    return any(
+        origin_host == suffix or origin_host.endswith(f".{suffix}")
+        for suffix in CSRF_ORIGIN_TRUSTED_HOST_SUFFIXES
+    )
+
+
+def _csrf_token_valid(request: Request) -> bool:
+    cookie_token = (request.cookies.get(AUTH_CSRF_COOKIE_NAME) or "").strip()
+    header_token = (request.headers.get(AUTH_CSRF_HEADER_NAME) or "").strip()
+    if not cookie_token or not header_token:
+        return False
+    return secrets.compare_digest(cookie_token, header_token)
+
+
+def _enforce_csrf_for_request(request: Request) -> Optional[JSONResponse]:
+    if not AUTH_CSRF_ENFORCEMENT_ENABLED:
+        return None
+    method = (request.method or "").upper()
+    if method not in CSRF_UNSAFE_METHODS:
+        return None
+
+    path = _rl_norm_path(request.url.path)
+    if _auth_is_public_route(path):
+        return None
+
+    # CSRF is relevant for browser-cookie authenticated calls.
+    access_cookie = _token_from_cookie(request, AUTH_ACCESS_COOKIE_NAME)
+    if not access_cookie:
+        return None
+
+    token_ok = _csrf_token_valid(request)
+    if token_ok:
+        return None
+
+    if not AUTH_CSRF_STRICT_MODE and _request_origin_is_trusted(request):
+        return None
+
+    _security_emit(
+        "csrf.block",
+        request=request,
+        severity="warning",
+        method=method,
+        path=path,
+        strict_mode=AUTH_CSRF_STRICT_MODE,
+        token_valid=token_ok,
+    )
+    return JSONResponse({"detail": "CSRF token missing or invalid"}, status_code=403)
 
 
 def _validate_token_claims(token: str) -> Dict[str, Any]:
-    claims = _decode_jwt_claims_unverified(token)
-    now_ts = int(time.time())
+    token_str = (token or "").strip()
+    if not token_str:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
 
-    exp_raw = claims.get("exp")
-    try:
-        exp_ts = int(exp_raw)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired authentication")
-    if exp_ts <= now_ts:
-        raise HTTPException(status_code=401, detail="Invalid or expired authentication")
-
-    nbf_raw = claims.get("nbf")
-    if nbf_raw is not None:
+    # Primary path: verify cryptographic signature locally using configured JWT secret.
+    if AUTH_VERIFY_SIGNATURE and AUTH_JWT_SECRET and pyjwt is not None:
+        options = {
+            "verify_signature": True,
+            "verify_exp": True,
+            "verify_nbf": True,
+            "verify_iss": bool(AUTH_VALIDATE_ISSUER and AUTH_TOKEN_EXPECTED_ISSUER),
+            "verify_aud": bool(AUTH_VALIDATE_AUDIENCE and AUTH_TOKEN_EXPECTED_AUDIENCE),
+        }
         try:
-            nbf_ts = int(nbf_raw)
-            if nbf_ts > now_ts:
+            claims = pyjwt.decode(
+                token_str,
+                AUTH_JWT_SECRET,
+                algorithms=["HS256"],
+                audience=(AUTH_TOKEN_EXPECTED_AUDIENCE if AUTH_VALIDATE_AUDIENCE and AUTH_TOKEN_EXPECTED_AUDIENCE else None),
+                issuer=(AUTH_TOKEN_EXPECTED_ISSUER if AUTH_VALIDATE_ISSUER and AUTH_TOKEN_EXPECTED_ISSUER else None),
+                options=options,
+            )
+            if not isinstance(claims, dict):
                 raise HTTPException(status_code=401, detail="Invalid auth token")
+            return claims
+        except PyJWTInvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid auth token")
         except HTTPException:
             raise
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    # Secondary path: if local secret/JWT library is unavailable, rely on Supabase Auth API to
+    # verify token validity/signature server-side, then enforce issuer/audience claims locally.
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
+
+    try:
+        auth_user = anon_client.auth.get_user(token_str)
+        user = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid auth token")
+        claims = getattr(user, "__dict__", None)
+        if not isinstance(claims, dict):
+            claims = user if isinstance(user, dict) else {}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
 
     if AUTH_VALIDATE_ISSUER and AUTH_TOKEN_EXPECTED_ISSUER:
         iss = str(claims.get("iss") or "").strip()
@@ -443,9 +586,7 @@ ABUSE_SCORE_429 = max(1, int(os.getenv("ABUSE_SCORE_429", "8")))
 ABUSE_SCORE_5XX = max(1, int(os.getenv("ABUSE_SCORE_5XX", "2")))
 ABUSE_SCORE_ADMIN_MUTATION = max(1, int(os.getenv("ABUSE_SCORE_ADMIN_MUTATION", "3")))
 
-COMPILER_ISOLATION_MODE = (os.getenv("COMPILER_ISOLATION_MODE", "strict") or "strict").strip().lower()
 COMPILER_WORKER_BASE_URL = (os.getenv("COMPILER_WORKER_BASE_URL") or "").strip().rstrip("/")
-COMPILER_INLINE_EXECUTION_ENABLED = (os.getenv("COMPILER_INLINE_EXECUTION_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
 
 RAG_MAX_UPLOAD_BYTES = max(1024 * 1024, int(os.getenv("RAG_MAX_UPLOAD_BYTES", str(20 * 1024 * 1024))))
 RAG_AV_SCAN_ENABLED = (os.getenv("RAG_AV_SCAN_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
@@ -929,6 +1070,11 @@ def _format_views(views: Optional[int]) -> str:
 _channel_logo_cache: Dict[str, str] = {}
 _channel_logo_lock = Lock()
 _DEFAULT_CHANNEL_LOGO = "https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png"
+YOUTUBE_ALLOWED_CHANNEL_HOSTS: Set[str] = {
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+}
 YTDLP_DISABLE_CERT_CHECK = (os.getenv("YTDLP_DISABLE_CERT_CHECK", "true").strip().lower() in {"1", "true", "yes", "on"})
 YOUTUBE_SEARCH_PREFER_SERPAPI = (os.getenv("YOUTUBE_SEARCH_PREFER_SERPAPI", "true").strip().lower() in {"1", "true", "yes", "on"})
 
@@ -961,6 +1107,15 @@ def _fetch_channel_logo(channel_page_url: Optional[str]) -> str:
 
     channel_page_url = channel_page_url.strip()
     if not channel_page_url:
+        return ""
+
+    try:
+        channel_page_url = _validate_https_url(
+            channel_page_url,
+            label="channel_url",
+            allowed_hosts=YOUTUBE_ALLOWED_CHANNEL_HOSTS,
+        )
+    except HTTPException:
         return ""
 
     with _channel_logo_lock:
@@ -1016,6 +1171,8 @@ def _search_youtube_videos_serpapi(query: str, num: int = 8) -> List[Dict[str, s
     """Fallback YouTube search using SerpAPI Google results when yt-dlp cannot reach YouTube."""
     if not SERPAPI_ENABLED or not SERPAPI_API_KEY:
         return []
+
+    query = _normalize_external_query(query, label="query", min_len=2, max_len=180)
 
     safe_num = max(1, min(num, 20))
     params = {
@@ -1077,8 +1234,7 @@ def search_youtube_videos(query: str, num: int = 8, *, prefetch_logos: bool = Fa
     if not YoutubeDL:
         raise ImportError("yt-dlp is not installed. Install it with: pip install yt-dlp")
 
-    if not query or not query.strip():
-        return []
+    query = _normalize_external_query(query, label="query", min_len=2, max_len=180)
 
     # Limit results
     num = max(1, min(num, 20))
@@ -1684,6 +1840,40 @@ uvicorn_access_logger.addFilter(TruncateLogFilter())
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
+SUPABASE_USER_SCOPED_DB_ENABLED = (os.getenv("SUPABASE_USER_SCOPED_DB_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
+SUPABASE_USER_SCOPED_DB_ALLOW_FALLBACK = (os.getenv("SUPABASE_USER_SCOPED_DB_ALLOW_FALLBACK", "true").strip().lower() in {"1", "true", "yes", "on"})
+SUPABASE_SERVICE_ROLE_AUDIT_ENABLED = (os.getenv("SUPABASE_SERVICE_ROLE_AUDIT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+SUPABASE_SERVICE_ROLE_ENFORCE_ENABLED = (os.getenv("SUPABASE_SERVICE_ROLE_ENFORCE_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
+
+
+def _parse_csv_set(raw: str) -> Set[str]:
+    values: Set[str] = set()
+    for item in (raw or "").split(","):
+        val = item.strip()
+        if val:
+            values.add(val)
+    return values
+
+
+SUPABASE_USER_SCOPED_DB_CANARY_ENDPOINTS = _parse_csv_set(
+    os.getenv(
+        "SUPABASE_USER_SCOPED_DB_CANARY_ENDPOINTS",
+        "/api/projects*,/api/teacher/profile/me,/api/teacher/me/status,/api/teacher/connections*,/api/teacher/notes/mine,/api/teacher/academics/mine",
+    )
+)
+
+
+def _path_matches_canary(path: str, canary_values: Set[str]) -> bool:
+    normalized = _rl_norm_path(path)
+    if not canary_values:
+        return True
+    for item in canary_values:
+        if item.endswith("*"):
+            if normalized.startswith(item[:-1]):
+                return True
+        elif normalized == _rl_norm_path(item):
+            return True
+    return False
 
 if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
     raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment.")
@@ -1700,6 +1890,63 @@ def get_anon_client() -> Optional[Client]:
         supabase_logger.warning("Missing SUPABASE_ANON_KEY; auth-dependent routes will be disabled.")
         return None
     return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+
+def _build_user_scoped_client(token: Optional[str]) -> Optional[Client]:
+    token_str = (token or "").strip()
+    if not token_str or not SUPABASE_ANON_KEY:
+        return None
+    try:
+        client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        postgrest = getattr(client, "postgrest", None)
+        if postgrest is not None and hasattr(postgrest, "auth"):
+            postgrest.auth(token_str)
+        return client
+    except Exception as exc:
+        supabase_logger.warning("failed to create user-scoped supabase client: %s", exc)
+        return None
+
+
+def _db_client_for_user_route(
+    *,
+    token: Optional[str],
+    request: Optional[Request],
+    endpoint_name: str,
+    service_role_allowed: bool = False,
+) -> Client:
+    path = _rl_norm_path(request.url.path if request else "")
+    canary_match = _path_matches_canary(path, SUPABASE_USER_SCOPED_DB_CANARY_ENDPOINTS)
+
+    if SUPABASE_USER_SCOPED_DB_ENABLED and canary_match:
+        scoped_client = _build_user_scoped_client(token)
+        if scoped_client is not None:
+            return scoped_client
+        _security_emit(
+            "supabase.user_scoped.fallback",
+            request=request,
+            severity="warning",
+            endpoint=endpoint_name,
+            path=path,
+            reason="user_scoped_client_unavailable",
+        )
+        if not SUPABASE_USER_SCOPED_DB_ALLOW_FALLBACK:
+            raise HTTPException(status_code=503, detail="Database user-scoped mode unavailable")
+
+    if SUPABASE_SERVICE_ROLE_AUDIT_ENABLED and token and not service_role_allowed:
+        _security_emit(
+            "supabase.service_role.used_in_user_route",
+            request=request,
+            severity="warning",
+            endpoint=endpoint_name,
+            path=path,
+            canary_match=canary_match,
+            user_scoped_enabled=SUPABASE_USER_SCOPED_DB_ENABLED,
+        )
+
+    if SUPABASE_SERVICE_ROLE_ENFORCE_ENABLED and token and canary_match and not service_role_allowed:
+        raise HTTPException(status_code=503, detail="Service-role usage blocked for this endpoint")
+
+    return get_service_client()
 
 
 def _to_supabase_json(value: Any) -> Any:
@@ -2671,6 +2918,9 @@ def serpapi_search(topic: str, num: int = 10, *, degree: Optional[str] = None, a
     if not SERPAPI_API_KEY:
         notes_logger.warning("SerpAPI key missing; skipping search", extra={"topic": topic})
         return []
+
+    topic = _normalize_external_query(topic, label="topic", min_len=2, max_len=220)
+    num = max(1, min(int(num), 20))
     # Resolve domains according to priority
     domains: List[str] = []
     if allowed_domains:
@@ -2893,6 +3143,8 @@ def is_reasonable_image_url(url: str) -> bool:
     return any(url.lower().endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"])
 
 def serpapi_image_urls(topic: str, num: int = 10) -> List[str]:
+    topic = _normalize_external_query(topic, label="topic", min_len=2, max_len=220)
+    num = max(1, min(int(num), 20))
     params = {
         "engine": "google",
         "q": topic,
@@ -4984,6 +5236,7 @@ def _set_auth_cookies(
 ) -> None:
     same_site = "none" if AUTH_COOKIE_SAMESITE == "none" else AUTH_COOKIE_SAMESITE
     secure_cookie = _auth_cookie_secure_for_request(request)
+    csrf_token = secrets.token_urlsafe(32)
 
     response.set_cookie(
         key=AUTH_ACCESS_COOKIE_NAME,
@@ -5017,6 +5270,16 @@ def _set_auth_cookies(
         domain=AUTH_COOKIE_DOMAIN,
         path="/",
     )
+    response.set_cookie(
+        key=AUTH_CSRF_COOKIE_NAME,
+        value=csrf_token,
+        max_age=int(refresh_ttl or AUTH_REFRESH_TTL_SECONDS),
+        httponly=False,
+        secure=secure_cookie,
+        samesite=same_site,
+        domain=AUTH_COOKIE_DOMAIN,
+        path="/",
+    )
 
 
 def _clear_auth_cookies(response: Response, *, request: Optional[Request]) -> None:
@@ -5026,6 +5289,7 @@ def _clear_auth_cookies(response: Response, *, request: Optional[Request]) -> No
         (AUTH_ACCESS_COOKIE_NAME, True),
         (AUTH_REFRESH_COOKIE_NAME, True),
         (AUTH_STATE_COOKIE_NAME, False),
+        (AUTH_CSRF_COOKIE_NAME, False),
     ):
         response.set_cookie(
             key=key,
@@ -7649,10 +7913,15 @@ projects_router = APIRouter()
 
 
 @projects_router.post("/api/projects", response_model=ProjectOut)
-def create_project(body: ProjectIn, authorization: Optional[str] = Header(default=None)):
+def create_project(body: ProjectIn, authorization: Optional[str] = Header(default=None), http_request: Request = None):
     token = _parse_bearer_token(authorization)
     user_id, _ = _require_user_and_profile(token)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="create_project",
+    )
     payload = _project_payload_from_body(body, user_id)
     res = supabase.table(PROJECTS_TABLE).insert(payload).execute()
     if getattr(res, "error", None):
@@ -7736,14 +8005,19 @@ async def upload_project_media(
 
 
 @projects_router.post("/api/projects/{project_id}/apply")
-def apply_to_project(project_id: str, body: ProjectApplicationIn = None, authorization: Optional[str] = Header(default=None)):
+def apply_to_project(project_id: str, body: ProjectApplicationIn = None, authorization: Optional[str] = Header(default=None), http_request: Request = None):
     token = _parse_bearer_token(authorization)
     user_id, _ = _require_user_and_profile(token)
     project = _ensure_project_exists(project_id)
     if str(project.get("user_id")) == str(user_id):
         raise HTTPException(status_code=400, detail="You cannot apply to your own project")
 
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="apply_to_project",
+    )
     existing = (
         supabase.table(PROJECT_APPLICATIONS_TABLE)
         .select("*")
@@ -7775,11 +8049,16 @@ def apply_to_project(project_id: str, body: ProjectApplicationIn = None, authori
 
 
 @projects_router.get("/api/projects/{project_id}/applications", response_model=List[ProjectApplicationOut])
-def list_project_applications(project_id: str, authorization: Optional[str] = Header(default=None)):
+def list_project_applications(project_id: str, authorization: Optional[str] = Header(default=None), http_request: Request = None):
     token = _parse_bearer_token(authorization)
     user_id, _ = _require_user_and_profile(token)
     _ensure_owner(project_id, user_id)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="list_project_applications",
+    )
     res = (
         supabase.table(PROJECT_APPLICATIONS_TABLE)
         .select("*")
@@ -7795,10 +8074,15 @@ def list_project_applications(project_id: str, authorization: Optional[str] = He
 
 
 @projects_router.get("/api/projects/{project_id}/applications/me")
-def get_my_project_application(project_id: str, authorization: Optional[str] = Header(default=None)):
+def get_my_project_application(project_id: str, authorization: Optional[str] = Header(default=None), http_request: Request = None):
     token = _parse_bearer_token(authorization)
     user_id, _ = _require_user_and_profile(token)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="get_my_project_application",
+    )
     res = (
         supabase.table(PROJECT_APPLICATIONS_TABLE)
         .select("*")
@@ -7814,11 +8098,16 @@ def get_my_project_application(project_id: str, authorization: Optional[str] = H
 
 
 @projects_router.get("/api/projects/{project_id}/applications/{application_id}", response_model=ProjectApplicationOut)
-def get_project_application(project_id: str, application_id: str, authorization: Optional[str] = Header(default=None)):
+def get_project_application(project_id: str, application_id: str, authorization: Optional[str] = Header(default=None), http_request: Request = None):
     token = _parse_bearer_token(authorization)
     user_id, _ = _require_user_and_profile(token)
     _ensure_owner(project_id, user_id)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="get_project_application",
+    )
     res = (
         supabase.table(PROJECT_APPLICATIONS_TABLE)
         .select("*")
@@ -7836,11 +8125,16 @@ def get_project_application(project_id: str, application_id: str, authorization:
 
 
 @projects_router.patch("/api/projects/{project_id}/applications/{application_id}")
-def update_project_application(project_id: str, application_id: str, body: ProjectApplicationUpdateIn, authorization: Optional[str] = Header(default=None)):
+def update_project_application(project_id: str, application_id: str, body: ProjectApplicationUpdateIn, authorization: Optional[str] = Header(default=None), http_request: Request = None):
     token = _parse_bearer_token(authorization)
     user_id, _ = _require_user_and_profile(token)
     _ensure_owner(project_id, user_id)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="update_project_application",
+    )
     supabase.table(PROJECT_APPLICATIONS_TABLE).update({"status": body.status}).eq("id", application_id).eq("project_id", project_id).execute()
     res = (
         supabase.table(PROJECT_APPLICATIONS_TABLE)
@@ -11673,9 +11967,15 @@ def review_teacher_application(application_id: str, payload: TeacherApproveIn, a
 
 
 @teacher_router.get("/api/teacher/me/status", summary="Teacher applicant status (self)")
-def teacher_me_status(authorization: Optional[str] = Header(default=None)):
+def teacher_me_status(authorization: Optional[str] = Header(default=None), http_request: Request = None):
+    token = _parse_bearer_token(authorization)
     uid, _ = _get_auth_user(authorization)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="teacher_me_status",
+    )
     app_q = supabase.table("teacher_applications").select("status").eq("auth_user_id", uid).limit(1).execute()
     if getattr(app_q, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (get teacher status): {app_q.error}")
@@ -11756,9 +12056,15 @@ def teacher_connect(other_user_id: str, authorization: Optional[str] = Header(de
 
 
 @teacher_router.get("/api/teacher/connections", summary="List my teacher connections")
-def list_my_connections(authorization: Optional[str] = Header(default=None)):
+def list_my_connections(authorization: Optional[str] = Header(default=None), http_request: Request = None):
+    token = _parse_bearer_token(authorization)
     uid = _require_teacher(authorization)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="list_my_connections",
+    )
     # union pattern via OR filter not supported; fetch both sides
     # Apply lightweight retry for transient httpx/httpcore protocol disconnects
     rows_a: List[Dict[str, Any]] = []
@@ -11838,9 +12144,15 @@ def list_my_connections(authorization: Optional[str] = Header(default=None)):
 
 
 @teacher_router.post("/api/teacher/connections/{connection_id}/messages", summary="Send message on a connection")
-def send_message(connection_id: str, payload: TeacherMessageIn, authorization: Optional[str] = Header(default=None)):
+def send_message(connection_id: str, payload: TeacherMessageIn, authorization: Optional[str] = Header(default=None), http_request: Request = None):
+    token = _parse_bearer_token(authorization)
     uid = _require_teacher(authorization)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="teacher_send_message",
+    )
     # verify membership
     c = supabase.table("teacher_connections").select("teacher_a,teacher_b").eq("id", connection_id).limit(1).execute()
     if getattr(c, "error", None):
@@ -11926,9 +12238,15 @@ def teacher_notes_meta(authorization: Optional[str] = Header(default=None)):
 # Integrate simple reuse of existing marketplace notes for teacher uploads: teacher uses existing /api/marketplace/notes routes.
 # Extra filtering endpoint for teacher's own notes.
 @teacher_router.get("/api/teacher/notes/mine", summary="List notes uploaded by the current teacher (marketplace integration)")
-def teacher_my_notes(authorization: Optional[str] = Header(default=None)):
+def teacher_my_notes(authorization: Optional[str] = Header(default=None), http_request: Request = None):
+    token = _parse_bearer_token(authorization)
     uid = _require_teacher(authorization)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="teacher_my_notes",
+    )
     res = (
         supabase.table("marketplace_notes")
         .select("id,title,description,subject,subject_id,semester,created_at,updated_at,price_cents,unit,exam_type,categories,original_filename")
@@ -12549,9 +12867,15 @@ def _map_teacher_class_row(row: Dict[str, Any]) -> TeacherClassOut:
     )
 
 @teacher_router.put("/api/teacher/profile/me", summary="Upsert my extended teacher profile")
-def upsert_teacher_profile(payload: TeacherProfileUpsertIn, authorization: Optional[str] = Header(default=None)):
+def upsert_teacher_profile(payload: TeacherProfileUpsertIn, authorization: Optional[str] = Header(default=None), http_request: Request = None):
+    token = _parse_bearer_token(authorization)
     uid = _require_teacher(authorization)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="upsert_teacher_profile",
+    )
     row = _supabase_payload(payload.dict(exclude_unset=True))
     if not row:
         return {"ok": True, "updated": False}
@@ -12669,9 +12993,15 @@ async def upload_teacher_avatar_alt(file: UploadFile = File(...), authorization:
 
 # ================= Teacher Academics Options (college/departments/batches) ==================
 @teacher_router.get("/api/teacher/academics/mine", summary="Return teacher's academic linkage and available departments + batches")
-def get_teacher_academics_mine(authorization: Optional[str] = Header(default=None)):
+def get_teacher_academics_mine(authorization: Optional[str] = Header(default=None), http_request: Request = None):
+    token = _parse_bearer_token(authorization)
     uid = _require_teacher(authorization)
-    supabase = get_service_client()
+    req_obj = _resolve_request_for_auth(http_request)
+    supabase = _db_client_for_user_route(
+        token=token,
+        request=req_obj,
+        endpoint_name="get_teacher_academics_mine",
+    )
     # Resolve college / department primarily from teacher_profiles then fallback application
     prof = supabase.table("teacher_profiles").select("college_id,department_id").eq("auth_user_id", uid).limit(1).execute()
     college_id = department_id = None
@@ -25257,12 +25587,13 @@ def api_youtube_search(
     num: int = Query(8, ge=1, le=20, description="Number of videos to return")
 ):
     """Search YouTube videos using SerpAPI and return metadata including thumbnails, views, channel info."""
-    if not query or not query.strip():
-        raise HTTPException(status_code=400, detail="Query parameter is required")
+    query = _normalize_external_query(query, label="query", min_len=2, max_len=180)
     
     try:
-        videos = search_youtube_videos(query.strip(), num=num)
+        videos = search_youtube_videos(query, num=num)
         return videos
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"YouTube search failed: {str(e)}")
 
@@ -25271,12 +25602,17 @@ def api_youtube_search(
 def api_youtube_channel_logo(
     channel_url: str = Query(..., description="Full YouTube channel URL")
 ):
-    if not channel_url or not channel_url.strip():
-        raise HTTPException(status_code=400, detail="channel_url is required")
+    channel_url = _validate_https_url(
+        channel_url,
+        label="channel_url",
+        allowed_hosts=YOUTUBE_ALLOWED_CHANNEL_HOSTS,
+    )
 
     try:
-        logo = get_channel_logo(channel_url.strip()) or get_default_channel_logo()
+        logo = get_channel_logo(channel_url) or get_default_channel_logo()
         return {"logo": logo}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Channel logo lookup failed: {str(e)}")
 
@@ -25777,6 +26113,10 @@ def create_app() -> FastAPI:
                 headers = [(k, v) for (k, v) in headers if k.lower() != b"authorization"]
                 headers.append((b"authorization", f"Bearer {cookie_token}".encode("utf-8")))
                 request.scope["headers"] = headers
+
+            csrf_block = _enforce_csrf_for_request(request)
+            if csrf_block is not None:
+                return csrf_block
 
             response = await call_next(request)
 
@@ -27241,11 +27581,25 @@ if __name__ == "__main__":
 # ... (existing code)
 
 # --- Python Compiler Endpoint ---
-from packages.python_compiler import execute_python_code
-from packages.java_compiler import execute_java_code
 
 class CompilerRequest(BaseModel):
     code: str
+
+
+def _run_compiler_in_isolated_worker(path: str, *, code: str, timeout_seconds: int) -> Dict[str, Any]:
+    if not COMPILER_WORKER_BASE_URL:
+        raise HTTPException(
+            status_code=503,
+            detail="Compiler worker not configured. Refusing unsandboxed code execution.",
+        )
+
+    worker_res = _compiler_worker_request(path, code=code, timeout_seconds=timeout_seconds)
+    if worker_res is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Compiler worker unavailable. Refusing unsandboxed code execution.",
+        )
+    return worker_res
 
 
 def _require_compiler_auth(request: Optional[Request]) -> Optional[str]:
@@ -27269,18 +27623,7 @@ async def run_python_compiler(request: CompilerRequest, http_request: Request):
     req_obj = _resolve_request_for_auth(http_request)
     _security_emit("compiler.request", request=req_obj, language="python", user_id=user_id, code_len=len(request.code or ""))
 
-    if COMPILER_WORKER_BASE_URL:
-        worker_res = _compiler_worker_request("/python/run", code=request.code, timeout_seconds=12)
-        if worker_res is not None:
-            return worker_res
-        if COMPILER_ISOLATION_MODE == "strict":
-            raise HTTPException(status_code=503, detail="Compiler worker unavailable")
-
-    if not COMPILER_INLINE_EXECUTION_ENABLED:
-        raise HTTPException(status_code=503, detail="Inline compiler execution disabled; use isolated worker")
-
-    result = execute_python_code(request.code)
-    return result
+    return _run_compiler_in_isolated_worker("/python/run", code=request.code, timeout_seconds=12)
 
 
 @app.post("/api/tunex/compiler/java/run")
@@ -27290,18 +27633,7 @@ async def run_java_compiler(request: CompilerRequest, http_request: Request):
     req_obj = _resolve_request_for_auth(http_request)
     _security_emit("compiler.request", request=req_obj, language="java", user_id=user_id, code_len=len(request.code or ""))
 
-    if COMPILER_WORKER_BASE_URL:
-        worker_res = _compiler_worker_request("/java/run", code=request.code, timeout_seconds=15)
-        if worker_res is not None:
-            return worker_res
-        if COMPILER_ISOLATION_MODE == "strict":
-            raise HTTPException(status_code=503, detail="Compiler worker unavailable")
-
-    if not COMPILER_INLINE_EXECUTION_ENABLED:
-        raise HTTPException(status_code=503, detail="Inline compiler execution disabled; use isolated worker")
-
-    result = execute_java_code(request.code)
-    return result
+    return _run_compiler_in_isolated_worker("/java/run", code=request.code, timeout_seconds=15)
 
 # ------------------------------------------------------------------------------
 # Blink Generation Endpoint (Gemini 3 Pro + Supabase)

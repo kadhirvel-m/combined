@@ -2012,17 +2012,26 @@
             <div style="display:flex; align-items:center; gap:.5rem; font-size:.75rem; color:var(--muted); margin-bottom:.5rem;">
               <span style="border:1px solid var(--outline); border-radius:999px; padding:.15rem .5rem;">Q${mcqState.idx + 1}</span>
             </div>
-            <h3 style="font-size:1.05rem; font-weight:600; margin:0 0 .75rem;">${q.question}</h3>
+            <h3 id="mcqQuestionText" style="font-size:1.05rem; font-weight:600; margin:0 0 .75rem;"></h3>
             <div id="mcqOptions" style="display:grid; gap:.5rem;"></div>
             <div id="mcqExplainBox" style="display:none; border:1px solid var(--outline); border-radius:.75rem; background:color-mix(in oklab, var(--surface) 88%, transparent); padding:.75rem; margin-top:.75rem; font-size:.85rem;"></div>
           </div>`;
+
+        const questionText = document.getElementById('mcqQuestionText');
+        if (questionText) questionText.textContent = q.question || '';
 
         const optContainer = document.getElementById('mcqOptions');
         q.options.forEach((opt, i) => {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.style.cssText = 'border:1px solid var(--outline); border-radius:.75rem; padding:.7rem .85rem; cursor:pointer; text-align:left; transition:background .15s ease, border-color .15s ease; background:transparent; color:inherit; font-size:.9rem;';
-          btn.innerHTML = `<span style="border:1px solid var(--outline); border-radius:999px; padding:.12rem .45rem; margin-right:.5rem; font-size:.75rem; font-weight:600;">${String.fromCharCode(65 + i)}</span>${opt}`;
+
+          const badge = document.createElement('span');
+          badge.style.cssText = 'border:1px solid var(--outline); border-radius:999px; padding:.12rem .45rem; margin-right:.5rem; font-size:.75rem; font-weight:600;';
+          badge.textContent = String.fromCharCode(65 + i);
+          btn.appendChild(badge);
+          btn.appendChild(document.createTextNode(opt || ''));
+
           btn.addEventListener('mouseenter', () => { if (!mcqState.touched.has(mcqState.idx)) btn.style.background = 'var(--brand-soft)'; });
           btn.addEventListener('mouseleave', () => { if (!mcqState.touched.has(mcqState.idx)) btn.style.background = 'transparent'; });
           btn.addEventListener('click', () => handleMCQAnswer(i, btn));
@@ -2045,7 +2054,7 @@
               opts[q.correct_index].style.background = 'rgba(16,185,129,.22)';
               const explBox = document.getElementById('mcqExplainBox');
               if (explBox) {
-                explBox.innerHTML = `<strong>Answer:</strong> ${q.options[q.correct_index]}<br/><span>${q.explanation || 'Based on the note content.'}</span>`;
+                renderMCQExplanation(explBox, q);
                 explBox.style.display = 'block';
               }
             }
@@ -2077,11 +2086,24 @@
           }
           const explBox = document.getElementById('mcqExplainBox');
           if (explBox) {
-            explBox.innerHTML = `<strong>Answer:</strong> ${q.options[q.correct_index]}<br/><span>${q.explanation || 'Based on the note content.'}</span>`;
+            renderMCQExplanation(explBox, q);
             explBox.style.display = 'block';
           }
         }
         mcqState.selections[mcqState.idx] = idx;
+      }
+
+      function renderMCQExplanation(explBox, q) {
+        explBox.textContent = '';
+        const answerLabel = document.createElement('strong');
+        answerLabel.textContent = 'Answer:';
+        explBox.appendChild(answerLabel);
+        explBox.appendChild(document.createTextNode(` ${q.options[q.correct_index] || ''}`));
+        explBox.appendChild(document.createElement('br'));
+
+        const why = document.createElement('span');
+        why.textContent = q.explanation || 'Based on the note content.';
+        explBox.appendChild(why);
       }
 
       function gotoMCQ(i) {
@@ -2100,32 +2122,90 @@
         const pct = Math.round((mcqState.score / total) * 100);
         const emoji = pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '📚';
 
-        let reviewHTML = '';
+        resultBox.textContent = '';
+        const shell = document.createElement('div');
+        shell.style.cssText = 'border:1px solid var(--outline); border-radius:1rem; padding:1.25rem; background:color-mix(in oklab, var(--surface) 85%, transparent);';
+
+        const heading = document.createElement('h3');
+        heading.style.cssText = 'font-size:1.15rem; font-weight:700; margin:0 0 .25rem;';
+        heading.textContent = `${emoji} Your Results`;
+
+        const scoreP = document.createElement('p');
+        scoreP.style.cssText = 'font-size:.9rem; margin:0 0 .75rem;';
+        scoreP.textContent = 'You scored ';
+        const scoreStrong = document.createElement('strong');
+        scoreStrong.textContent = `${mcqState.score} / ${total}`;
+        scoreP.appendChild(scoreStrong);
+        scoreP.appendChild(document.createTextNode(` (${pct}%)`));
+
+        const actionRow = document.createElement('div');
+        actionRow.style.cssText = 'display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem;';
+
+        const retakeBtn = document.createElement('button');
+        retakeBtn.id = 'mcqRetakeBtn';
+        retakeBtn.className = 'ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition';
+        retakeBtn.style.borderColor = 'var(--outline)';
+        retakeBtn.textContent = '🔄 Retake';
+
+        const shuffleBtn = document.createElement('button');
+        shuffleBtn.id = 'mcqShuffleBtn';
+        shuffleBtn.className = 'ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition';
+        shuffleBtn.style.borderColor = 'var(--outline)';
+        shuffleBtn.textContent = '🔀 Shuffle';
+
+        actionRow.append(retakeBtn, shuffleBtn);
+
+        const reviewGrid = document.createElement('div');
+        reviewGrid.style.cssText = 'display:grid; gap:.5rem;';
+
         mcqState.questions.forEach((q, i) => {
           const sel = mcqState.selections[i];
           const isCorrect = typeof sel === 'number' && sel === q.correct_index;
           const borderColor = isCorrect ? 'rgba(16,185,129,.65)' : 'rgba(239,68,68,.60)';
           const bgColor = isCorrect ? 'rgba(16,185,129,.08)' : 'rgba(239,68,68,.08)';
-          reviewHTML += `
-            <div style="border:1px solid var(--outline); border-radius:.75rem; padding:.85rem; border-left:3px solid ${borderColor}; background:${bgColor};">
-              <div style="font-size:.75rem; color:var(--muted); margin-bottom:.25rem;">Q${i + 1}</div>
-              <div style="font-weight:600; font-size:.9rem; margin-bottom:.35rem;">${q.question}</div>
-              <div style="font-size:.82rem;"><strong>Your answer:</strong> ${typeof sel === 'number' ? q.options[sel] : '—'}</div>
-              <div style="font-size:.82rem; color:rgba(16,185,129,.9);"><strong>Correct:</strong> ${q.options[q.correct_index]}</div>
-              ${q.explanation ? `<div style="font-size:.8rem; color:var(--muted); margin-top:.25rem;"><strong>Why:</strong> ${q.explanation}</div>` : ''}
-            </div>`;
+
+          const card = document.createElement('div');
+          card.style.cssText = `border:1px solid var(--outline); border-radius:.75rem; padding:.85rem; border-left:3px solid ${borderColor}; background:${bgColor};`;
+
+          const qLabel = document.createElement('div');
+          qLabel.style.cssText = 'font-size:.75rem; color:var(--muted); margin-bottom:.25rem;';
+          qLabel.textContent = `Q${i + 1}`;
+
+          const qText = document.createElement('div');
+          qText.style.cssText = 'font-weight:600; font-size:.9rem; margin-bottom:.35rem;';
+          qText.textContent = q.question || '';
+
+          const yourAnswer = document.createElement('div');
+          yourAnswer.style.cssText = 'font-size:.82rem;';
+          const yourLabel = document.createElement('strong');
+          yourLabel.textContent = 'Your answer:';
+          yourAnswer.appendChild(yourLabel);
+          yourAnswer.appendChild(document.createTextNode(` ${typeof sel === 'number' ? (q.options[sel] || '') : '—'}`));
+
+          const correct = document.createElement('div');
+          correct.style.cssText = 'font-size:.82rem; color:rgba(16,185,129,.9);';
+          const correctLabel = document.createElement('strong');
+          correctLabel.textContent = 'Correct:';
+          correct.appendChild(correctLabel);
+          correct.appendChild(document.createTextNode(` ${q.options[q.correct_index] || ''}`));
+
+          card.append(qLabel, qText, yourAnswer, correct);
+
+          if (q.explanation) {
+            const why = document.createElement('div');
+            why.style.cssText = 'font-size:.8rem; color:var(--muted); margin-top:.25rem;';
+            const whyLabel = document.createElement('strong');
+            whyLabel.textContent = 'Why:';
+            why.appendChild(whyLabel);
+            why.appendChild(document.createTextNode(` ${q.explanation}`));
+            card.appendChild(why);
+          }
+
+          reviewGrid.appendChild(card);
         });
 
-        resultBox.innerHTML = `
-          <div style="border:1px solid var(--outline); border-radius:1rem; padding:1.25rem; background:color-mix(in oklab, var(--surface) 85%, transparent);">
-            <h3 style="font-size:1.15rem; font-weight:700; margin:0 0 .25rem;">${emoji} Your Results</h3>
-            <p style="font-size:.9rem; margin:0 0 .75rem;">You scored <strong>${mcqState.score} / ${total}</strong> (${pct}%)</p>
-            <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem;">
-              <button id="mcqRetakeBtn" class="ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">🔄 Retake</button>
-              <button id="mcqShuffleBtn" class="ripple px-4 py-2 rounded-xl border text-sm font-semibold hover:bg-[var(--brand-soft)] transition" style="border-color:var(--outline);">🔀 Shuffle</button>
-            </div>
-            <div style="display:grid; gap:.5rem;">${reviewHTML}</div>
-          </div>`;
+        shell.append(heading, scoreP, actionRow, reviewGrid);
+        resultBox.appendChild(shell);
 
         document.getElementById('mcqRetakeBtn')?.addEventListener('click', () => {
           mcqState.idx = 0; mcqState.score = 0; mcqState.touched.clear();

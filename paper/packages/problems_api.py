@@ -4,11 +4,42 @@ from pydantic import BaseModel
 from typing import List, Any, Optional
 import json
 import logging
-from .python_compiler import execute_python_code
+import os
+import requests
 from .tunex_router import get_supabase
 
 router = APIRouter(prefix="/api/tunex", tags=["problems"])
 logger = logging.getLogger("problems_api")
+COMPILER_WORKER_BASE_URL = (os.getenv("COMPILER_WORKER_BASE_URL") or "").strip().rstrip("/")
+
+
+def _execute_python_harness_isolated(code: str, timeout: int = 10) -> dict:
+    if not COMPILER_WORKER_BASE_URL:
+        return {
+            "output": "",
+            "error": "Compiler worker not configured. Refusing unsandboxed code execution.",
+            "status": "blocked",
+        }
+
+    try:
+        res = requests.post(
+            f"{COMPILER_WORKER_BASE_URL}/python/run",
+            json={"code": code},
+            timeout=max(1, int(timeout)),
+        )
+        res.raise_for_status()
+        if (res.headers.get("content-type") or "").lower().startswith("application/json"):
+            payload = res.json()
+            if isinstance(payload, dict):
+                return payload
+        return {"output": res.text or "", "error": "", "status": "success"}
+    except Exception as exc:
+        logger.warning("isolated compiler worker error: %s", exc)
+        return {
+            "output": "",
+            "error": "Compiler worker unavailable. Refusing unsandboxed code execution.",
+            "status": "blocked",
+        }
 
 class Example(BaseModel):
     input: str           # Display string like "nums = [2,7,11,15], target = 9"
@@ -170,7 +201,7 @@ if __name__ == "__main__":
 """
 
     # 3. Execute
-    exec_res = execute_python_code(harness, timeout=5)
+    exec_res = _execute_python_harness_isolated(harness, timeout=10)
     
     if exec_res['status'] != 'success':
         return {
