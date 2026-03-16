@@ -15948,6 +15948,270 @@ def get_college(college_id: uuid.UUID):
     return CollegeFullOut(**data)
 
 
+PYQ_TABLE = (os.getenv("PYQ_TABLE") or "pyq_uploads").strip() or "pyq_uploads"
+PYQ_MAX_UPLOAD_BYTES = max(1024 * 1024, int(os.getenv("PYQ_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024))))
+
+
+class PYQCreateIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=300)
+    subject: str = Field(..., min_length=1, max_length=200)
+    exam_year: int = Field(..., ge=1950, le=2100)
+    semester: Optional[str] = Field(default=None, max_length=50)
+    exam_type: Optional[str] = Field(default=None, max_length=100)
+    college_id: Optional[uuid.UUID] = None
+    college_name: Optional[str] = Field(default=None, max_length=256)
+    degree_id: Optional[uuid.UUID] = None
+    degree_name: Optional[str] = Field(default=None, max_length=256)
+    department_id: Optional[uuid.UUID] = None
+    department_name: Optional[str] = Field(default=None, max_length=256)
+    file_name: Optional[str] = Field(default=None, max_length=512)
+    file_url: Optional[str] = Field(default=None, max_length=2048)
+    file_path: Optional[str] = Field(default=None, max_length=1024)
+    file_bucket: Optional[str] = Field(default=None, max_length=255)
+    file_size_bytes: Optional[int] = Field(default=None, ge=0)
+    content_type: Optional[str] = Field(default=None, max_length=150)
+    notes: Optional[str] = Field(default=None, max_length=4000)
+    uploaded_by: Optional[str] = Field(default=None, max_length=255)
+    status: Optional[str] = Field(default="active", max_length=40)
+
+
+class PYQUpdateIn(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=300)
+    subject: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    exam_year: Optional[int] = Field(default=None, ge=1950, le=2100)
+    semester: Optional[str] = Field(default=None, max_length=50)
+    exam_type: Optional[str] = Field(default=None, max_length=100)
+    college_id: Optional[uuid.UUID] = None
+    college_name: Optional[str] = Field(default=None, max_length=256)
+    degree_id: Optional[uuid.UUID] = None
+    degree_name: Optional[str] = Field(default=None, max_length=256)
+    department_id: Optional[uuid.UUID] = None
+    department_name: Optional[str] = Field(default=None, max_length=256)
+    file_name: Optional[str] = Field(default=None, max_length=512)
+    file_url: Optional[str] = Field(default=None, max_length=2048)
+    file_path: Optional[str] = Field(default=None, max_length=1024)
+    file_bucket: Optional[str] = Field(default=None, max_length=255)
+    file_size_bytes: Optional[int] = Field(default=None, ge=0)
+    content_type: Optional[str] = Field(default=None, max_length=150)
+    notes: Optional[str] = Field(default=None, max_length=4000)
+    uploaded_by: Optional[str] = Field(default=None, max_length=255)
+    status: Optional[str] = Field(default=None, max_length=40)
+
+
+def _pyq_clean_value(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return None
+    cleaned = str(v).strip()
+    return cleaned or None
+
+
+def _pyq_row_from_payload(payload: PYQCreateIn) -> Dict[str, Any]:
+    return {
+        "title": payload.title.strip(),
+        "subject": payload.subject.strip(),
+        "exam_year": int(payload.exam_year),
+        "semester": _pyq_clean_value(payload.semester),
+        "exam_type": _pyq_clean_value(payload.exam_type),
+        "college_id": str(payload.college_id) if payload.college_id else None,
+        "college_name": _pyq_clean_value(payload.college_name),
+        "degree_id": str(payload.degree_id) if payload.degree_id else None,
+        "degree_name": _pyq_clean_value(payload.degree_name),
+        "department_id": str(payload.department_id) if payload.department_id else None,
+        "department_name": _pyq_clean_value(payload.department_name),
+        "file_name": _pyq_clean_value(payload.file_name),
+        "file_url": _pyq_clean_value(payload.file_url),
+        "file_path": _pyq_clean_value(payload.file_path),
+        "file_bucket": _pyq_clean_value(payload.file_bucket),
+        "file_size_bytes": payload.file_size_bytes,
+        "content_type": _pyq_clean_value(payload.content_type),
+        "notes": _pyq_clean_value(payload.notes),
+        "uploaded_by": _pyq_clean_value(payload.uploaded_by),
+        "status": _pyq_clean_value(payload.status) or "active",
+    }
+
+
+@academics_router.get("/api/pyq", summary="List PYQ records")
+def list_pyq_records(
+    college_id: Optional[uuid.UUID] = Query(default=None),
+    degree_id: Optional[uuid.UUID] = Query(default=None),
+    department_id: Optional[uuid.UUID] = Query(default=None),
+    query: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=80, ge=1, le=300),
+):
+    supabase = get_service_client()
+    q = (
+        supabase.table(PYQ_TABLE)
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(limit)
+    )
+    if college_id:
+        q = q.eq("college_id", str(college_id))
+    if degree_id:
+        q = q.eq("degree_id", str(degree_id))
+    if department_id:
+        q = q.eq("department_id", str(department_id))
+    if status:
+        q = q.eq("status", status.strip())
+    if query and query.strip():
+        term = query.strip().replace("%", "")
+        q = q.or_(f"title.ilike.%{term}%,subject.ilike.%{term}%,department_name.ilike.%{term}%,exam_type.ilike.%{term}%")
+
+    res = q.execute()
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (list pyq): {res.error}")
+    return res.data or []
+
+
+@academics_router.get("/api/pyq/{record_id}", summary="Get PYQ record by id")
+def get_pyq_record(record_id: uuid.UUID):
+    supabase = get_service_client()
+    res = (
+        supabase.table(PYQ_TABLE)
+        .select("*")
+        .eq("id", str(record_id))
+        .limit(1)
+        .execute()
+    )
+    if getattr(res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get pyq): {res.error}")
+    if not res.data:
+        raise HTTPException(status_code=404, detail="PYQ record not found")
+    return res.data[0]
+
+
+@academics_router.post("/api/pyq", summary="Create PYQ metadata record")
+def create_pyq_record(payload: PYQCreateIn):
+    supabase = get_service_client()
+    row = _pyq_row_from_payload(payload)
+    ins = supabase.table(PYQ_TABLE).insert(row).execute()
+    if getattr(ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (create pyq): {ins.error}")
+    if ins.data:
+        return ins.data[0]
+
+    refetch = (
+        supabase.table(PYQ_TABLE)
+        .select("*")
+        .eq("title", row["title"])
+        .eq("subject", row["subject"])
+        .eq("exam_year", row["exam_year"])
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if getattr(refetch, "error", None) or not refetch.data:
+        raise HTTPException(status_code=500, detail="Failed to fetch created PYQ record")
+    return refetch.data[0]
+
+
+@academics_router.post("/api/pyq/upload", summary="Upload PYQ file to Google bucket and create record")
+async def upload_pyq_record(
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    subject: str = Form(...),
+    exam_year: int = Form(...),
+    semester: Optional[str] = Form(default=None),
+    exam_type: Optional[str] = Form(default=None),
+    college_id: Optional[str] = Form(default=None),
+    college_name: Optional[str] = Form(default=None),
+    degree_id: Optional[str] = Form(default=None),
+    degree_name: Optional[str] = Form(default=None),
+    department_id: Optional[str] = Form(default=None),
+    department_name: Optional[str] = Form(default=None),
+    notes: Optional[str] = Form(default=None),
+    uploaded_by: Optional[str] = Form(default=None),
+):
+    file_name = (file.filename or "pyq-upload.bin").strip() or "pyq-upload.bin"
+    blob = await file.read()
+    if not blob:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if len(blob) > PYQ_MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File exceeds max size ({PYQ_MAX_UPLOAD_BYTES} bytes)")
+
+    gcs_meta = _upload_pyq_file_to_gcs(blob, original_name=file_name)
+
+    payload = PYQCreateIn(
+        title=title,
+        subject=subject,
+        exam_year=exam_year,
+        semester=semester,
+        exam_type=exam_type,
+        college_id=uuid.UUID(college_id) if college_id else None,
+        college_name=college_name,
+        degree_id=uuid.UUID(degree_id) if degree_id else None,
+        degree_name=degree_name,
+        department_id=uuid.UUID(department_id) if department_id else None,
+        department_name=department_name,
+        file_name=file_name,
+        file_url=gcs_meta.get("public_url"),
+        file_path=gcs_meta.get("gcs_path"),
+        file_bucket=gcs_meta.get("bucket"),
+        file_size_bytes=len(blob),
+        content_type=gcs_meta.get("content_type") or (file.content_type or "application/octet-stream"),
+        notes=notes,
+        uploaded_by=uploaded_by,
+        status="active",
+    )
+
+    created = create_pyq_record(payload)
+    return {
+        "ok": True,
+        "record": created,
+        "upload": gcs_meta,
+    }
+
+
+@academics_router.put("/api/pyq/{record_id}", summary="Update PYQ record")
+def update_pyq_record(record_id: uuid.UUID, payload: PYQUpdateIn):
+    update_data = payload.dict(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields supplied for update")
+
+    if "college_id" in update_data and update_data["college_id"] is not None:
+        update_data["college_id"] = str(update_data["college_id"])
+    if "degree_id" in update_data and update_data["degree_id"] is not None:
+        update_data["degree_id"] = str(update_data["degree_id"])
+    if "department_id" in update_data and update_data["department_id"] is not None:
+        update_data["department_id"] = str(update_data["department_id"])
+
+    for key in (
+        "title", "subject", "semester", "exam_type", "college_name", "degree_name", "department_name",
+        "file_name", "file_url", "file_path", "file_bucket", "content_type", "notes", "uploaded_by", "status",
+    ):
+        if key in update_data and update_data[key] is not None:
+            update_data[key] = _pyq_clean_value(update_data[key])
+
+    update_data["updated_at"] = datetime.utcnow().isoformat()
+
+    supabase = get_service_client()
+    upd = (
+        supabase.table(PYQ_TABLE)
+        .update(update_data)
+        .eq("id", str(record_id))
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (update pyq): {upd.error}")
+
+    return get_pyq_record(record_id)
+
+
+@academics_router.delete("/api/pyq/{record_id}", summary="Delete PYQ record")
+def delete_pyq_record(record_id: uuid.UUID):
+    supabase = get_service_client()
+    del_res = (
+        supabase.table(PYQ_TABLE)
+        .delete()
+        .eq("id", str(record_id))
+        .execute()
+    )
+    if getattr(del_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (delete pyq): {del_res.error}")
+    return {"ok": True, "deleted_id": str(record_id)}
+
+
 @academics_router.get("/api/colleges/{college_id}/departments", response_model=List[str], summary="List departments for a college")
 def list_departments_for_college(college_id: uuid.UUID):
     supabase = get_service_client()
@@ -26800,7 +27064,7 @@ def create_app() -> FastAPI:
         allow_origins=[
             "https://paperx.tech",
             "https://www.paperx.tech",
-            "http://127.0.0.1:8000",
+            "https://starfish-app-mu3b8.ondigitalocean.app",
             "https://uppzpkmpxgyipjzcskva.supabase.co",
             "http://127.0.0.1:5500",
             "http://127.0.0.1:8000",
@@ -28362,6 +28626,71 @@ def _upload_generated_image_to_gcs(image_bytes: bytes, *, original_name: str = "
         return _gcs_upload_via_json_api(
             image_bytes,
             bucket_name=GCS_IMAGE_BUCKET,
+            object_path=object_path,
+            content_type=content_type,
+        )
+
+
+def _get_gcs_bucket_for_name(bucket_name: str):
+    client_cls = _resolve_gcs_client_class()
+    client = None
+
+    if service_account is not None:
+        info = _load_local_service_account_info()
+        if info:
+            credentials = service_account.Credentials.from_service_account_info(info)
+            project_id = (info.get("project_id") or "").strip() or None
+            try:
+                client = client_cls(credentials=credentials, project=project_id)
+            except TypeError:
+                client = client_cls(credentials=credentials)
+
+    if client is None:
+        _resolve_gcs_credentials_file()
+        client = client_cls()
+
+    return client.bucket(bucket_name)
+
+
+def _upload_pyq_file_to_gcs(file_bytes: bytes, *, original_name: str = "pyq.pdf") -> Dict[str, str]:
+    if not file_bytes:
+        raise RuntimeError("No file bytes to upload")
+
+    guessed_content_type, _ = mimetypes.guess_type(original_name)
+    content_type = guessed_content_type or "application/octet-stream"
+
+    raw_ext = os.path.splitext(original_name)[1].strip().lower()
+    if not raw_ext or len(raw_ext) > 8 or not re.match(r"^\.[a-z0-9]+$", raw_ext):
+        raw_ext = ".bin"
+
+    safe_base = re.sub(r"[^a-zA-Z0-9._-]+", "-", os.path.splitext(original_name)[0].strip())
+    safe_base = safe_base.strip("-._") or "pyq-file"
+
+    stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    bucket_name = (os.getenv("GCS_PYQ_BUCKET") or os.getenv("GCS_IMAGE_BUCKET") or "paperx-pro").strip() or "paperx-pro"
+    object_path = f"pyq/{datetime.utcnow().strftime('%Y/%m/%d')}/{stamp}_{uuid.uuid4().hex[:8]}_{safe_base}{raw_ext}"
+
+    try:
+        bucket = _get_gcs_bucket_for_name(bucket_name)
+        blob = bucket.blob(object_path)
+        blob.upload_from_string(file_bytes, content_type=content_type)
+        try:
+            blob.make_public()
+        except Exception as acl_err:
+            print(f"[PYQ] GCS make_public skipped/failed for {object_path}: {acl_err}")
+
+        public_url = blob.public_url or f"https://storage.googleapis.com/{bucket.name}/{object_path}"
+        return {
+            "bucket": bucket.name,
+            "gcs_path": object_path,
+            "public_url": public_url,
+            "content_type": content_type,
+        }
+    except Exception as lib_err:
+        print(f"[PYQ] google-cloud-storage path failed, trying JSON API fallback: {lib_err}")
+        return _gcs_upload_via_json_api(
+            file_bytes,
+            bucket_name=bucket_name,
             object_path=object_path,
             content_type=content_type,
         )

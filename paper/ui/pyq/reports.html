@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PYQ Reports - Paper X</title>
+  <link rel="icon" type="image/x-icon" href="../assets/img/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/tailwind.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../config.js"></script>
+  <script src="pyq-common.js"></script>
+  <link rel="stylesheet" href="pyq.css" />
+</head>
+<body class="min-h-screen bg-[radial-gradient(1100px_650px_at_50%_-10%,rgba(158,75,138,0.2),transparent_60%),linear-gradient(180deg,#ffffff_0%,#fbf8fc_50%,#f7f2f9_100%)] text-[#1E1E2F]">
+  <header class="sticky top-0 z-20 border-b border-black/10 bg-white/70 backdrop-blur-xl">
+    <div class="container mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+      <a href="index.html" class="text-lg font-extrabold">PYQ Reports</a>
+      <nav class="flex flex-wrap gap-2 text-sm">
+        <a href="index.html" class="rounded-full border border-black/10 px-4 py-2">Dashboard</a>
+        <a href="upload.html" class="rounded-full border border-black/10 px-4 py-2">Upload</a>
+        <a href="view.html" class="rounded-full border border-black/10 px-4 py-2">View</a>
+        <a href="manage.html" class="rounded-full border border-black/10 px-4 py-2">Manage</a>
+        <a href="reports.html" class="rounded-full bg-[#9E4B8A] px-4 py-2 font-semibold text-white">Reports</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container mx-auto px-4 py-8 space-y-4">
+    <section class="glass-card rounded-3xl border border-white/70 p-6">
+      <h1 class="text-2xl font-extrabold">Distribution Analytics</h1>
+      <p class="mt-1 text-sm text-black/60">Count of records by department and exam year.</p>
+      <div class="mt-4 grid gap-3 md:grid-cols-3">
+        <select id="collegeSel" class="rounded-xl border border-black/15 bg-white px-3 py-2 text-sm"></select>
+        <select id="degreeSel" class="rounded-xl border border-black/15 bg-white px-3 py-2 text-sm"></select>
+        <select id="departmentSel" class="rounded-xl border border-black/15 bg-white px-3 py-2 text-sm"></select>
+      </div>
+      <p id="status" class="mt-3 text-sm text-black/65"></p>
+    </section>
+
+    <section class="grid gap-4 md:grid-cols-2">
+      <article class="glass-card rounded-3xl border border-white/70 p-5">
+        <h2 class="text-lg font-bold">By Department</h2>
+        <div id="deptReport" class="mt-3 space-y-2"></div>
+      </article>
+      <article class="glass-card rounded-3xl border border-white/70 p-5">
+        <h2 class="text-lg font-bold">By Exam Year</h2>
+        <div id="yearReport" class="mt-3 space-y-2"></div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    (async function () {
+      const status = PYQ.qs('status');
+      const deptReport = PYQ.qs('deptReport');
+      const yearReport = PYQ.qs('yearReport');
+
+      function buckets(rows, key) {
+        const map = {};
+        rows.forEach((r) => {
+          const k = String(r[key] || 'Unknown');
+          map[k] = (map[k] || 0) + 1;
+        });
+        return Object.keys(map).sort((a, b) => map[b] - map[a]).map((name) => ({ name, count: map[name] }));
+      }
+
+      function renderBars(root, list) {
+        root.innerHTML = '';
+        if (!list.length) {
+          root.innerHTML = '<p class="text-sm text-black/55">No data for selected scope.</p>';
+          return;
+        }
+        const max = list[0].count || 1;
+        list.forEach((item) => {
+          const width = Math.max(4, Math.round((item.count / max) * 100));
+          const el = document.createElement('div');
+          el.innerHTML = '<div class="mb-1 flex items-center justify-between text-sm"><span>' + escapeHtml(item.name) + '</span><strong>' + item.count + '</strong></div><div class="h-2.5 rounded-full bg-black/10"><span class="block h-full rounded-full bg-gradient-to-r from-[#9E4B8A] to-[#4C2A59]" style="width:' + width + '%"></span></div>';
+          root.appendChild(el);
+        });
+      }
+
+      async function render() {
+        const out = await PYQ.listRecords({
+          college_id: PYQ.qs('collegeSel').value,
+          degree_id: PYQ.qs('degreeSel').value,
+          department_id: PYQ.qs('departmentSel').value
+        });
+        const rows = out.rows || [];
+        status.textContent = rows.length + ' records • ' + (out.source === 'api' ? 'API source' : 'local fallback');
+
+        renderBars(deptReport, buckets(rows, 'department_name'));
+        renderBars(yearReport, buckets(rows, 'exam_year'));
+      }
+
+      await PYQ.wireAcademicCascade({ collegeSelect: PYQ.qs('collegeSel'), degreeSelect: PYQ.qs('degreeSel'), departmentSelect: PYQ.qs('departmentSel'), onChange: render });
+      render();
+    })();
+  </script>
+</body>
+</html>
