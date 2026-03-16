@@ -1132,11 +1132,11 @@
     }
 
     // Central API base (supports file:// open or custom API_BASE)
-    let __defaultBase = 'http://localhost:8000';
+    let __defaultBase = 'http://127.0.0.1:8000';
     if (/^https?:/i.test(window.location.origin)) {
       const host = window.location.host;
       if (/localhost:5500|127\.0\.0\.1:5500/.test(host)) {
-        __defaultBase = 'http://localhost:8000';
+        __defaultBase = 'http://127.0.0.1:8000';
       } else {
         __defaultBase = window.location.origin;
       }
@@ -2383,9 +2383,13 @@
       logoImg.loading = 'lazy';
       logoImg.referrerPolicy = 'no-referrer';
       logoImg.onerror = () => {
-        if (logoImg.src !== fallbackChannelLogoLocal) {
+        if (!logoImg.dataset.fallbackTried) {
+          logoImg.dataset.fallbackTried = '1';
           logoImg.src = fallbackChannelLogoLocal;
+          return;
         }
+        logoImg.onerror = null;
+        logoImg.src = fallbackVideoThumb;
       };
       meta.appendChild(logoImg);
 
@@ -3322,7 +3326,7 @@
       const degree = getSelectedDegree();
       if (degree) url.searchParams.set('degree', degree);
       if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
-      es = new EventSource(url.toString());
+      es = new EventSource(url.toString(), { withCredentials: true });
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
       es.addEventListener('error', () => { logEvent('Stream error'); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });

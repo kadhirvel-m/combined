@@ -506,7 +506,7 @@
       closeMenu();
     })();
 
-    const apiBase = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
+    const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
     const togglePwd = document.getElementById('togglePwd');
     togglePwd?.addEventListener('click', () => {
       const pwd = document.getElementById('pwd');
@@ -714,6 +714,7 @@
               const out = await refreshRes.json().catch(() => ({}));
               throw new Error(out?.detail || out?.message || `Refresh failed (${refreshRes.status})`);
             }
+            try { localStorage.setItem('paperx_session_state', '1'); } catch { }
           }
 
           // Verify session cookie is active before navigating away to avoid login bounce loops.
@@ -722,6 +723,7 @@
             const out = await meRes.json().catch(() => ({}));
             throw new Error(out?.detail || out?.message || `Session verification failed (${meRes.status})`);
           }
+          try { localStorage.setItem('paperx_session_state', '1'); } catch { }
 
           const nextPath = getSafeNextPath();
           setOAuthPending(false);
@@ -765,7 +767,7 @@
       const payload = { email: fd.get('email'), password: fd.get('password'), turnstile_token: turnstileToken };
       try {
         const res = await fetch(`${apiBase}/login`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload)
         });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -782,6 +784,7 @@
             localStorage.removeItem('px_token_expires_at');
             // Enforce single active session: clear teacher session if any
             localStorage.removeItem('teacherToken');
+            localStorage.setItem('paperx_session_state', '1');
           } catch { }
         }
         console.info('[auth] login success, cookie-session mode active');

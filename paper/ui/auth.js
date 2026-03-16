@@ -26,7 +26,7 @@
  *    or call window.__PX_NAV_APPLY(profile) afterwards.
  */
 (function() {
-  const API = (window.API_BASE || 'http://localhost:8000').replace(/\/$/, '');
+  const API = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
   const USER_TOKEN_KEY = 'px_token';
   const TEACHER_TOKEN_KEY = 'teacherToken';
   const REFRESH_TOKEN_KEY = 'px_refresh_token';
@@ -39,6 +39,8 @@
   function safeSet(k,v){ try { localStorage.setItem(k,v); } catch(_) { } }
   function safeRemove(k){ try { localStorage.removeItem(k); } catch(_) { } }
   function hasAuthStateCookie(){ try { return document.cookie.indexOf('paperx_auth=') !== -1; } catch(_) { return false; } }
+  function hasAuthStateMarker(){ return safeGet('paperx_session_state') === '1'; }
+  function hasAuthState(){ return hasAuthStateMarker() || hasAuthStateCookie(); }
   function normalizeStoredToken(v){
     if (!v) return null;
     const t = String(v).trim();
@@ -77,6 +79,7 @@
     safeRemove(TEACHER_TOKEN_KEY);
     safeRemove(REFRESH_TOKEN_KEY);
     safeRemove(TOKEN_EXPIRES_KEY);
+    safeRemove('paperx_session_state');
     safeRemove('paperx_session_id'); // Clear analytics session
   }
 
@@ -87,8 +90,11 @@
       var p = location.pathname || '';
       var i = p.indexOf('/ui/');
       if (i >= 0) return p.slice(0, i + 4); // include '/ui/'
+      // Some deployments publish all UI files at the site root (no /ui prefix).
+      // In that case, use '/' so profile links resolve to '/profile.html'.
+      if (p === '/ui' || p.startsWith('/ui?') || p.startsWith('/ui#')) return '/ui/';
     } catch(_){ }
-    return '/ui/';
+    return '/';
   }
 
   function deriveInitials(name){
@@ -151,7 +157,7 @@
     }
     if (tTeach) return { kind: 'teacher', token: tTeach };
     if (tUser) return { kind: 'user', token: tUser };
-    if (hasAuthStateCookie()) return { kind: 'user', token: AUTH_SENTINEL };
+    if (hasAuthState()) return { kind: 'user', token: AUTH_SENTINEL };
     return { kind: null, token: null };
   }
 
@@ -285,7 +291,7 @@
 
   async function init(){
     // Auto-refresh token if needed (for persistent sessions)
-    const hasRefreshToken = safeGet(REFRESH_TOKEN_KEY) || document.cookie.indexOf('paperx_auth=') !== -1;
+    const hasRefreshToken = safeGet(REFRESH_TOKEN_KEY) || hasAuthState();
     if (hasRefreshToken) {
       const refreshed = await refreshTokensIfNeeded();
       if (!refreshed && !safeGet(USER_TOKEN_KEY)) {

@@ -2192,7 +2192,7 @@
             }
         }
 
-        (function toggleLandingCtasForSession() {
+        (async function toggleLandingCtasForSession() {
             const signedOut = document.getElementById('ctaSignedOut');
             const signedIn = document.getElementById('ctaSignedIn');
             const teacherSignedIn = document.getElementById('ctaTeacherSignedIn');
@@ -2204,10 +2204,17 @@
                 const AUTH_SENTINEL = '__COOKIE_AUTH__';
                 const tTeach = localStorage.getItem('teacherToken');
                 const tUser = localStorage.getItem('px_token');
-                const hasCookieAuth = document.cookie.indexOf('paperx_auth=') !== -1;
                 isTeacher = !!(tTeach && tTeach !== AUTH_SENTINEL);
-                isStudent = !!((tUser && tUser !== AUTH_SENTINEL) || hasCookieAuth);
+                isStudent = !!(tUser && tUser !== AUTH_SENTINEL);
             } catch (_) { }
+
+            if (!isTeacher && !isStudent) {
+                try {
+                    const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+                    const meRes = await fetch(`${apiBase}/api/me`, { credentials: 'include' });
+                    isStudent = meRes.ok;
+                } catch (_) { }
+            }
 
             if (isTeacher) {
                 signedOut.classList.add('hidden');
@@ -2228,7 +2235,7 @@
             const googleBtn = document.getElementById('googleBtn');
             if (!googleBtn) return;
 
-            const apiBase = (window.API_BASE || 'https://squid-app-6jvdq.ondigitalocean.app/').replace(/\/$/, '');
+            const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
             let supabaseClient = null;
 
             async function ensureSupabase() {

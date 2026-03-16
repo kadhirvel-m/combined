@@ -176,9 +176,9 @@ AUTH_CSRF_ENFORCEMENT_ENABLED = (os.getenv("AUTH_CSRF_ENFORCEMENT_ENABLED", "tru
 AUTH_CSRF_STRICT_MODE = (os.getenv("AUTH_CSRF_STRICT_MODE", "true").strip().lower() in {"1", "true", "yes", "on"})
 AUTH_COOKIE_DOMAIN = (os.getenv("AUTH_COOKIE_DOMAIN") or "").strip() or None
 AUTH_COOKIE_SECURE = (os.getenv("AUTH_COOKIE_SECURE", "true").strip().lower() in {"1", "true", "yes", "on"})
-AUTH_COOKIE_SAMESITE = (os.getenv("AUTH_COOKIE_SAMESITE", "strict") or "strict").strip().lower()
+AUTH_COOKIE_SAMESITE = (os.getenv("AUTH_COOKIE_SAMESITE", "lax") or "lax").strip().lower()
 if AUTH_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
-    AUTH_COOKIE_SAMESITE = "strict"
+    AUTH_COOKIE_SAMESITE = "lax"
 AUTH_ACCESS_TTL_SECONDS = max(300, int(os.getenv("AUTH_ACCESS_TTL_SECONDS", "900")))
 AUTH_REFRESH_TTL_SECONDS = max(3600, int(os.getenv("AUTH_REFRESH_TTL_SECONDS", "2592000")))
 AUTH_ROTATION_TABLE = os.getenv("AUTH_ROTATION_TABLE", "auth_refresh_tokens")
@@ -390,7 +390,21 @@ def _enforce_csrf_for_request(request: Request) -> Optional[JSONResponse]:
     if token_ok:
         return None
 
-    if not AUTH_CSRF_STRICT_MODE and _request_origin_is_trusted(request):
+    trusted_origin = _request_origin_is_trusted(request)
+    origin = (request.headers.get("origin") or "").strip()
+    origin_host = ""
+    if origin:
+        try:
+            origin_host = (urlparse(origin).hostname or "").strip().lower()
+        except Exception:
+            origin_host = ""
+    req_host = (request.url.hostname or "").strip().lower()
+    is_cross_site = bool(origin_host and req_host and origin_host != req_host)
+
+    # Strict double-submit CSRF cannot work when frontend and backend are on
+    # different sites because browser JS cannot read backend-domain CSRF cookie.
+    # In that deployment mode, rely on strict CORS allowlist + Origin checks.
+    if trusted_origin and (not AUTH_CSRF_STRICT_MODE or is_cross_site):
         return None
 
     _security_emit(
@@ -5285,6 +5299,37 @@ def _auth_cookie_domain_for_request(request: Optional[Request]) -> Optional[str]
     return configured
 
 
+def _auth_cookie_samesite_for_request(request: Optional[Request], secure_cookie: bool) -> str:
+    configured = "none" if AUTH_COOKIE_SAMESITE == "none" else AUTH_COOKIE_SAMESITE
+
+    # SameSite=None requires Secure. If we cannot set Secure (e.g. localhost HTTP),
+    # degrade to Lax so browsers do not reject the cookie outright.
+    if configured == "none" and not secure_cookie:
+        return "lax"
+
+    if request is None:
+        return configured
+
+    try:
+        req_host = (request.url.hostname or "").strip().lower()
+        origin = (request.headers.get("origin") or "").strip()
+        if not req_host or not origin:
+            return configured
+        origin_host = (urlparse(origin).hostname or "").strip().lower()
+        if not origin_host:
+            return configured
+
+        is_local = {"localhost", "127.0.0.1", "::1"}
+        cross_site = origin_host != req_host
+        if cross_site and origin_host not in is_local and req_host not in is_local and secure_cookie:
+            # Frontend/backed on different registrable domains requires SameSite=None.
+            return "none"
+    except Exception:
+        return configured
+
+    return configured
+
+
 def _set_auth_cookies(
     response: Response,
     *,
@@ -5294,8 +5339,8 @@ def _set_auth_cookies(
     access_ttl: Optional[int] = None,
     refresh_ttl: Optional[int] = None,
 ) -> None:
-    same_site = "none" if AUTH_COOKIE_SAMESITE == "none" else AUTH_COOKIE_SAMESITE
     secure_cookie = _auth_cookie_secure_for_request(request)
+    same_site = _auth_cookie_samesite_for_request(request, secure_cookie)
     cookie_domain = _auth_cookie_domain_for_request(request)
     csrf_token = secrets.token_urlsafe(32)
 
@@ -5344,8 +5389,8 @@ def _set_auth_cookies(
 
 
 def _clear_auth_cookies(response: Response, *, request: Optional[Request]) -> None:
-    same_site = "none" if AUTH_COOKIE_SAMESITE == "none" else AUTH_COOKIE_SAMESITE
     secure_cookie = _auth_cookie_secure_for_request(request)
+    same_site = _auth_cookie_samesite_for_request(request, secure_cookie)
     cookie_domain = _auth_cookie_domain_for_request(request)
     for key, httponly in (
         (AUTH_ACCESS_COOKIE_NAME, True),
@@ -26755,7 +26800,7 @@ def create_app() -> FastAPI:
         allow_origins=[
             "https://paperx.tech",
             "https://www.paperx.tech",
-            "https://starfish-app-mu3b8.ondigitalocean.app",
+            "http://127.0.0.1:8000",
             "https://uppzpkmpxgyipjzcskva.supabase.co",
             "http://127.0.0.1:5500",
             "http://127.0.0.1:8000",

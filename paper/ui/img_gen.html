@@ -1117,11 +1117,11 @@
     }
 
     // Central API base (supports file:// open or custom API_BASE)
-    let __defaultBase = 'http://localhost:8000';
+    let __defaultBase = 'http://127.0.0.1:8000';
     if (/^https?:/i.test(window.location.origin)) {
       const host = window.location.host;
       if (/localhost:5500|127\.0\.0\.1:5500/.test(host)) {
-        __defaultBase = 'http://localhost:8000';
+        __defaultBase = 'http://127.0.0.1:8000';
       } else {
         __defaultBase = window.location.origin;
       }
@@ -3282,7 +3282,7 @@
       const degree = getSelectedDegree();
       if (degree) url.searchParams.set('degree', degree);
       if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
-      es = new EventSource(url.toString());
+      es = new EventSource(url.toString(), { withCredentials: true });
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
       es.addEventListener('error', () => { logEvent('Stream error'); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });

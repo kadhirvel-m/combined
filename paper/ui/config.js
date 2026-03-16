@@ -2,7 +2,7 @@
 // Priority:
 // 1) LocalStorage key 'API_BASE'
 // 2) If running on localhost/127.0.0.1, use local FastAPI default http://127.0.0.1:8000
-// 3) Fallback to current origin
+// 3) Fallback to production backend
 (function () {
   try {
     var pageHost = (typeof location !== 'undefined' && location.hostname) ? location.hostname : '';
@@ -41,7 +41,7 @@
         var h = isLocalPageHost ? pageHost : '127.0.0.1';
         resolved = 'http://' + h + ':8000';
       } else {
-        resolved = origin || 'http://127.0.0.1:8000';
+        resolved = 'http://127.0.0.1:8000';
       }
     }
     resolved = resolved.replace(/\/$/, '');
@@ -237,6 +237,7 @@
       'token'
     ]);
     var AUTH_SENTINEL = '__COOKIE_AUTH__';
+    var AUTH_STATE_KEY = 'paperx_session_state';
     var stateCookieName = 'paperx_auth=';
 
     function hasAuthStateCookie() {
@@ -245,6 +246,28 @@
       } catch (_) {
         return false;
       }
+    }
+
+    function hasAuthStateMarker() {
+      try {
+        return String(localStorage.getItem(AUTH_STATE_KEY) || '').trim() === '1';
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function hasAuthState() {
+      return hasAuthStateMarker() || hasAuthStateCookie();
+    }
+
+    function setAuthStateMarker(enabled) {
+      try {
+        if (enabled) {
+          localStorage.setItem(AUTH_STATE_KEY, '1');
+        } else {
+          localStorage.removeItem(AUTH_STATE_KEY);
+        }
+      } catch (_) { }
     }
 
     function isTokenLikeKey(k) {
@@ -288,7 +311,7 @@
         var k = String(key || '');
         if (this === localStorage && isTokenLikeKey(k)) {
           // Never expose persisted token values through localStorage reads.
-          return hasAuthStateCookie() ? AUTH_SENTINEL : null;
+          return hasAuthState() ? AUTH_SENTINEL : null;
         }
         return _getItem.call(this, k);
       };
@@ -297,6 +320,8 @@
         var k = String(key || '');
         if (this === localStorage && isTokenLikeKey(k)) {
           // Never persist auth tokens in localStorage.
+          var v = String(value || '').trim();
+          if (v) setAuthStateMarker(true);
           return;
         }
         return _setItem.call(this, k, value);
@@ -341,6 +366,15 @@
       var m = String(method || 'GET').toUpperCase();
       return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
     }
+    function _pathFromRequest(input) {
+      try {
+        var target = _requestTarget(input);
+        if (!target) return '';
+        return new URL(String(target), window.location.href).pathname || '';
+      } catch (_) {
+        return '';
+      }
+    }
     function _readCookie(name) {
       var key = String(name || '').trim();
       if (!key) return '';
@@ -359,8 +393,10 @@
     window.fetch = function (input, init) {
       init = init || {};
       var req = Object.assign({}, init);
+      var isApiRequest = _isSameOriginUrl(_requestTarget(input));
+      var reqPath = _pathFromRequest(input);
       if (!req.credentials) {
-        req.credentials = _isSameOriginUrl(_requestTarget(input)) ? 'include' : 'omit';
+        req.credentials = isApiRequest ? 'include' : 'omit';
       }
 
       var headers = new Headers(req.headers || {});
@@ -374,7 +410,7 @@
       }
 
       var method = String(req.method || (input && input.method) || 'GET').toUpperCase();
-      if (_isUnsafeMethod(method) && _isSameOriginUrl(_requestTarget(input))) {
+      if (_isUnsafeMethod(method) && isApiRequest) {
         var csrfToken = _readCookie(_csrfCookieName());
         if (csrfToken && !headers.has('X-CSRF-Token') && !headers.has('x-csrf-token')) {
           headers.set('X-CSRF-Token', csrfToken);
@@ -382,7 +418,25 @@
       }
 
       req.headers = headers;
-      return _fetch(input, req);
+      return _fetch(input, req).then(function (response) {
+        try {
+          if (isApiRequest) {
+            if ((reqPath === '/login' || reqPath === '/refresh') && response.ok) {
+              setAuthStateMarker(true);
+            }
+            if (reqPath === '/api/me') {
+              if (response.ok) setAuthStateMarker(true);
+              if (response.status === 401) setAuthStateMarker(false);
+            }
+            if (reqPath === '/logout' && response.ok) {
+              setAuthStateMarker(false);
+            }
+          }
+        } catch (_) { }
+        return response;
+      }).catch(function (err) {
+        throw err;
+      });
     };
   } catch (_) { }
 })();
