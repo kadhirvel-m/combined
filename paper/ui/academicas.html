@@ -1908,8 +1908,9 @@
                 return { status: r.status, data };
             } catch (e) { return { error: true }; }
         }
-        // Token refresh helper - attempts to refresh access token if expired or about to expire
-        async function refreshTokenIfNeeded() {
+        // Token refresh helper. In cookie-session mode we avoid eager refresh on page load
+        // and only refresh on explicit auth failures to reduce startup latency.
+        async function refreshTokenIfNeeded(force = false) {
             const REFRESH_TOKEN_KEY = 'px_refresh_token';
             const TOKEN_EXPIRES_KEY = 'px_token_expires_at';
             const USER_TOKEN_KEY = 'px_token';
@@ -1921,6 +1922,12 @@
             // If no stored refresh token but cookie session exists, let backend refresh via cookie fallback.
             const hasCookieSession = hasCookieAuthState();
             if (!refreshToken && !hasCookieSession) return false;
+
+            if (!force && !refreshToken && hasCookieSession) {
+                // Cookie-backed sessions generally already carry a valid access cookie.
+                // Skip eager refresh to keep "Verifying session" fast.
+                return true;
+            }
 
             // If access token exists and not expired (with 5 min buffer), no refresh needed
             if (accessToken && expiresAt) {
@@ -1964,16 +1971,15 @@
         async function loadProfileAndProgress() {
             // First attempt to refresh token if needed
             setLoaderStatus('Verifying session...');
-            await refreshTokenIfNeeded();
+            await refreshTokenIfNeeded(false);
 
-            // Cookie-based auth is authoritative. Probe backend before redirecting.
-            const sessionProbe = await fetchJson(`${API_BASE}/api/me`, { headers: authHeaders(), credentials: 'include' });
-            if (sessionProbe.unauthorized) { window.location.href = 'login.html'; return; }
             clearProgressError();
             const maxAttempts = 3;
             for (let attempt = 0; attempt < maxAttempts; attempt++) {
                 setLoaderStatus('Loading profile and progress...');
-                const result = await attemptProfileAndProgressLoad();
+                const result = await attemptProfileAndProgressLoad({
+                    allowRefreshOnUnauthorized: attempt === 0
+                });
                 if (result.unauthorized) { window.location.href = 'login.html'; return; }
                 if (result.ok) {
                     clearProgressError();
@@ -2002,13 +2008,25 @@
             }
         }
 
-        async function attemptProfileAndProgressLoad() {
+        async function attemptProfileAndProgressLoad(options = {}) {
+            const allowRefreshOnUnauthorized = options.allowRefreshOnUnauthorized !== false;
             try {
                 setLoaderStatus('Loading profile and progress...');
-                const [meOut, progOut] = await Promise.all([
+                let [meOut, progOut] = await Promise.all([
                     fetchJson(`${API_BASE}/api/me`, { headers: authHeaders() }),
                     fetchJson(`${API_BASE}/api/progress/topics`, { headers: authHeaders() })
                 ]);
+
+                if ((meOut.unauthorized || progOut.unauthorized) && allowRefreshOnUnauthorized) {
+                    const refreshed = await refreshTokenIfNeeded(true);
+                    if (refreshed) {
+                        [meOut, progOut] = await Promise.all([
+                            fetchJson(`${API_BASE}/api/me`, { headers: authHeaders() }),
+                            fetchJson(`${API_BASE}/api/progress/topics`, { headers: authHeaders() })
+                        ]);
+                    }
+                }
+
                 if (meOut.unauthorized || progOut.unauthorized) {
                     return { unauthorized: true };
                 }

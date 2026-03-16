@@ -410,6 +410,8 @@ def _validate_token_claims(token: str) -> Dict[str, Any]:
     if not token_str:
         raise HTTPException(status_code=401, detail="Invalid auth token")
 
+    local_verify_failed = False
+
     # Primary path: verify cryptographic signature locally using configured JWT secret.
     if AUTH_VERIFY_SIGNATURE and AUTH_JWT_SECRET and pyjwt is not None:
         options = {
@@ -432,14 +434,17 @@ def _validate_token_claims(token: str) -> Dict[str, Any]:
                 raise HTTPException(status_code=401, detail="Invalid auth token")
             return claims
         except PyJWTInvalidTokenError:
-            raise HTTPException(status_code=401, detail="Invalid auth token")
+            # Fallback to Supabase verification to handle secret rotation/mismatch
+            # without locking out otherwise valid sessions.
+            local_verify_failed = True
         except HTTPException:
             raise
         except Exception:
-            raise HTTPException(status_code=401, detail="Invalid auth token")
+            local_verify_failed = True
 
-    # Secondary path: if local secret/JWT library is unavailable, rely on Supabase Auth API to
-    # verify token validity/signature server-side, then enforce issuer/audience claims locally.
+    # Secondary path: if local JWT verification is unavailable or failed, rely on
+    # Supabase Auth API to verify token validity/signature server-side, then
+    # enforce issuer/audience claims locally.
     anon_client = get_anon_client()
     if not anon_client:
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
@@ -449,12 +454,40 @@ def _validate_token_claims(token: str) -> Dict[str, Any]:
         user = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid auth token")
-        claims = getattr(user, "__dict__", None)
-        if not isinstance(claims, dict):
-            claims = user if isinstance(user, dict) else {}
+        # Supabase `get_user` validates token server-side, but returned user payload
+        # may not contain JWT claims (iss/aud). Decode payload (no signature check)
+        # only to read claims for local issuer/audience policy checks.
+        claims: Dict[str, Any] = {}
+        if pyjwt is not None:
+            try:
+                decoded_unverified = pyjwt.decode(
+                    token_str,
+                    options={
+                        "verify_signature": False,
+                        "verify_exp": False,
+                        "verify_nbf": False,
+                        "verify_iss": False,
+                        "verify_aud": False,
+                    },
+                )
+                if isinstance(decoded_unverified, dict):
+                    claims = decoded_unverified
+            except Exception:
+                claims = {}
+
+        if not claims:
+            user_claims = getattr(user, "__dict__", None)
+            if isinstance(user_claims, dict):
+                claims = user_claims
+            elif isinstance(user, dict):
+                claims = user
+            else:
+                claims = {}
     except HTTPException:
         raise
     except Exception:
+        if local_verify_failed:
+            supabase_logger.warning("JWT local verification failed and Supabase fallback rejected token")
         raise HTTPException(status_code=401, detail="Invalid auth token")
 
     if AUTH_VALIDATE_ISSUER and AUTH_TOKEN_EXPECTED_ISSUER:
@@ -5225,6 +5258,33 @@ def _auth_cookie_secure_for_request(request: Optional[Request]) -> bool:
     return AUTH_COOKIE_SECURE
 
 
+def _auth_cookie_domain_for_request(request: Optional[Request]) -> Optional[str]:
+    configured = (AUTH_COOKIE_DOMAIN or "").strip()
+    if not configured:
+        return None
+
+    # Browsers reject domain cookies on localhost / 127.0.0.1.
+    # In local dev we must issue host-only cookies.
+    if request is not None:
+        try:
+            host = (request.url.hostname or "").strip().lower()
+            if host in {"localhost", "127.0.0.1", "::1"}:
+                return None
+
+            normalized = configured.lstrip(".").lower()
+            if not normalized:
+                return None
+
+            # If configured domain does not match the request host, do not set it.
+            # Falling back to host-only cookies avoids silent Set-Cookie drops.
+            if host != normalized and not host.endswith("." + normalized):
+                return None
+        except Exception:
+            return None
+
+    return configured
+
+
 def _set_auth_cookies(
     response: Response,
     *,
@@ -5236,6 +5296,7 @@ def _set_auth_cookies(
 ) -> None:
     same_site = "none" if AUTH_COOKIE_SAMESITE == "none" else AUTH_COOKIE_SAMESITE
     secure_cookie = _auth_cookie_secure_for_request(request)
+    cookie_domain = _auth_cookie_domain_for_request(request)
     csrf_token = secrets.token_urlsafe(32)
 
     response.set_cookie(
@@ -5245,7 +5306,7 @@ def _set_auth_cookies(
         httponly=True,
         secure=secure_cookie,
         samesite=same_site,
-        domain=AUTH_COOKIE_DOMAIN,
+        domain=cookie_domain,
         path="/",
     )
     if refresh_token:
@@ -5256,7 +5317,7 @@ def _set_auth_cookies(
             httponly=True,
             secure=secure_cookie,
             samesite=same_site,
-            domain=AUTH_COOKIE_DOMAIN,
+            domain=cookie_domain,
             path="/",
         )
     # Non-sensitive state hint to avoid localStorage token checks in legacy pages.
@@ -5267,7 +5328,7 @@ def _set_auth_cookies(
         httponly=False,
         secure=secure_cookie,
         samesite=same_site,
-        domain=AUTH_COOKIE_DOMAIN,
+        domain=cookie_domain,
         path="/",
     )
     response.set_cookie(
@@ -5277,7 +5338,7 @@ def _set_auth_cookies(
         httponly=False,
         secure=secure_cookie,
         samesite=same_site,
-        domain=AUTH_COOKIE_DOMAIN,
+        domain=cookie_domain,
         path="/",
     )
 
@@ -5285,6 +5346,7 @@ def _set_auth_cookies(
 def _clear_auth_cookies(response: Response, *, request: Optional[Request]) -> None:
     same_site = "none" if AUTH_COOKIE_SAMESITE == "none" else AUTH_COOKIE_SAMESITE
     secure_cookie = _auth_cookie_secure_for_request(request)
+    cookie_domain = _auth_cookie_domain_for_request(request)
     for key, httponly in (
         (AUTH_ACCESS_COOKIE_NAME, True),
         (AUTH_REFRESH_COOKIE_NAME, True),
@@ -5299,7 +5361,7 @@ def _clear_auth_cookies(response: Response, *, request: Optional[Request]) -> No
             httponly=httponly,
             secure=secure_cookie,
             samesite=same_site,
-            domain=AUTH_COOKIE_DOMAIN,
+            domain=cookie_domain,
             path="/",
         )
 
@@ -6481,10 +6543,56 @@ def resolve_or_create_batch(
 
 # --------------------- Progress tracking services ---------------------------
 
-def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.25) -> str:
+def _auth_user_obj_from_token(token: str) -> Any:
+    """Resolve auth user using anon client first, then service client as fallback.
+
+    This avoids hard failures when SUPABASE_ANON_KEY is invalid but service key is valid.
+    """
+    token = (token or "").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    clients: List[Client] = []
     anon_client = get_anon_client()
-    if not anon_client:
-        raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
+    if anon_client is not None:
+        clients.append(anon_client)
+    try:
+        clients.append(get_service_client())
+    except Exception:
+        pass
+
+    if not clients:
+        raise HTTPException(status_code=500, detail="Auth disabled (no Supabase client)")
+
+    saw_invalid_api_key = False
+    last_exc: Optional[Exception] = None
+    for client in clients:
+        try:
+            auth_user = client.auth.get_user(token)
+            user_obj = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+            if user_obj:
+                return user_obj
+        except AuthApiError as e:
+            msg = (getattr(e, "message", None) or str(e) or "").strip()
+            if "invalid api key" in msg.lower():
+                saw_invalid_api_key = True
+                last_exc = e
+                continue
+            raise HTTPException(status_code=401, detail=msg or "Invalid or expired session")
+        except Exception as e:
+            msg = str(e or "")
+            if "invalid api key" in msg.lower():
+                saw_invalid_api_key = True
+                last_exc = e
+                continue
+            raise
+
+    if saw_invalid_api_key:
+        supabase_logger.error("Supabase auth key failure while resolving user: %s", last_exc)
+        raise HTTPException(status_code=500, detail="Supabase auth key is invalid in server configuration")
+    raise HTTPException(status_code=401, detail="Invalid token")
+
+def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.25) -> str:
     last_exc: Optional[Exception] = None
     retryable_auth_errors: tuple[Any, ...] = (AuthRetryableError,)
     if httpx is not None:
@@ -6496,8 +6604,7 @@ def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.
 
     for attempt in range(retries):
         try:
-            auth_user = anon_client.auth.get_user(token)
-            user = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+            user = _auth_user_obj_from_token(token)
             user_id = getattr(user, "id", None) or (user.get("id") if isinstance(user, dict) else None)
             if not user_id:
                 raise HTTPException(status_code=401, detail="Invalid token or user not found")
@@ -6516,9 +6623,6 @@ def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.
 
 
 def _require_user_and_profile(token: Optional[str]) -> tuple[str, str]:
-    anon_client = get_anon_client()
-    if not anon_client:
-        raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
     if not token:
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
     user_id = _get_user_id_with_retry(token)
@@ -6537,9 +6641,6 @@ def _ensure_user_and_profile(token: Optional[str]) -> tuple[str, str]:
 
     Returns (auth_user_id, profile_id). Creates a minimal row if missing.
     """
-    anon_client = get_anon_client()
-    if not anon_client:
-        raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
     if not token:
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
 
@@ -6559,8 +6660,7 @@ def _ensure_user_and_profile(token: Optional[str]) -> tuple[str, str]:
     email = None
     name = None
     try:
-        auth_user = anon_client.auth.get_user(token)
-        user_obj = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+        user_obj = _auth_user_obj_from_token(token)
         email = (getattr(user_obj, "email", None) or (user_obj.get("email") if isinstance(user_obj, dict) else None))
         meta = (getattr(user_obj, "user_metadata", None) or (user_obj.get("user_metadata") if isinstance(user_obj, dict) else None)) or {}
         try:
@@ -9672,6 +9772,338 @@ def list_admin_users(
     }
 
 
+def _admin_branch_is_student(user_row: Dict[str, Any]) -> bool:
+    role = str(user_row.get("role") or "").strip().lower()
+    if role in {"admin", "teacher", "employee", "moderator", "hod"}:
+        return False
+    if role in {"student", "", "user", "authenticated"}:
+        return True
+
+    # Unknown role: keep only if any academic signal exists.
+    return any(
+        str(user_row.get(k) or "").strip()
+        for k in (
+            "college",
+            "degree",
+            "department",
+            "batch_range",
+            "section",
+            "semester",
+            "college_id",
+            "department_id",
+            "batch_id",
+        )
+    )
+
+
+def _admin_branch_norm(value: Any, fallback: str) -> str:
+    txt = str(value or "").strip()
+    return txt if txt else fallback
+
+
+@academics_router.get("/api/admin/branch-hierarchy", summary="Admin: branch hierarchy with student counts")
+def admin_branch_hierarchy(
+    authorization: Optional[str] = Header(default=None),
+    q: Optional[str] = Query(default=None, max_length=120),
+):
+    _require_admin(authorization)
+    supabase = get_service_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase service is not configured")
+
+    def _chunked(values: List[str], size: int = 150) -> List[List[str]]:
+        values = [str(v).strip() for v in values if str(v).strip()]
+        return [values[i : i + size] for i in range(0, len(values), size)]
+
+    def _name_map_for(table: str, ids: List[str]) -> Dict[str, str]:
+        out: Dict[str, str] = {}
+        for chunk in _chunked(ids):
+            try:
+                resp = supabase.table(table).select("id,name").in_("id", chunk).execute()
+                for row in (getattr(resp, "data", None) or []):
+                    rid = str((row or {}).get("id") or "").strip()
+                    nm = str((row or {}).get("name") or "").strip()
+                    if rid:
+                        out[rid] = nm
+            except Exception:
+                continue
+        return out
+
+    def _norm_name(value: Any) -> str:
+        txt = str(value or "").strip().lower()
+        txt = re.sub(r"\s+", " ", txt)
+        return txt
+
+    # Pull the canonical hierarchy source directly from user_education rows.
+    # Keep page size below common PostgREST row caps so pagination is reliable.
+    limit = 500
+    offset = 0
+    all_education_rows: List[Dict[str, Any]] = []
+    while True:
+        try:
+            resp = (
+                supabase.table("user_education")
+                .select("id,college_id,degree_id,department_id,batch_id,school,degree,department,batch_range,section")
+                .range(offset, offset + limit - 1)
+                .execute()
+            )
+            rows = getattr(resp, "data", None) or []
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to load user_education rows: {exc}")
+
+        if not rows:
+            break
+        all_education_rows.extend(rows)
+        offset += len(rows)
+        if offset >= 500000:
+            break
+
+    college_ids = sorted({str(r.get("college_id") or "").strip() for r in all_education_rows if r.get("college_id")})
+    degree_ids = sorted({str(r.get("degree_id") or "").strip() for r in all_education_rows if r.get("degree_id")})
+    department_ids = sorted({str(r.get("department_id") or "").strip() for r in all_education_rows if r.get("department_id")})
+    batch_ids = sorted({str(r.get("batch_id") or "").strip() for r in all_education_rows if r.get("batch_id")})
+
+    college_name_by_id = _name_map_for("colleges", college_ids)
+    degree_name_by_id = _name_map_for("degrees", degree_ids)
+    department_name_by_id = _name_map_for("departments", department_ids)
+
+    # Build a canonical college identity map by normalized name.
+    # This collapses duplicate college rows (same visible name, different ids)
+    # and also lets null-college_id education rows attach to the same college bucket.
+    all_colleges: List[Dict[str, Any]] = []
+    c_limit = 1000
+    c_offset = 0
+    while True:
+        try:
+            cresp = (
+                supabase.table("colleges")
+                .select("id,name")
+                .order("name")
+                .range(c_offset, c_offset + c_limit - 1)
+                .execute()
+            )
+            crows = getattr(cresp, "data", None) or []
+        except Exception:
+            crows = []
+        if not crows:
+            break
+        all_colleges.extend(crows)
+        if len(crows) < c_limit:
+            break
+        c_offset += len(crows)
+
+    canonical_college_id_by_norm_name: Dict[str, str] = {}
+    canonical_college_name_by_norm_name: Dict[str, str] = {}
+    for crow in all_colleges:
+        cid = str((crow or {}).get("id") or "").strip()
+        cname = str((crow or {}).get("name") or "").strip()
+        if not cid or not cname:
+            continue
+        college_name_by_id[cid] = cname
+        nkey = _norm_name(cname)
+        if not nkey:
+            continue
+        prev = canonical_college_id_by_norm_name.get(nkey)
+        if not prev or cid < prev:
+            canonical_college_id_by_norm_name[nkey] = cid
+            canonical_college_name_by_norm_name[nkey] = cname
+
+    canonical_college_id_by_id: Dict[str, str] = {}
+    for cid, cname in college_name_by_id.items():
+        nkey = _norm_name(cname)
+        canonical_college_id_by_id[cid] = canonical_college_id_by_norm_name.get(nkey, cid)
+
+    batch_range_by_id: Dict[str, str] = {}
+    for chunk in _chunked(batch_ids):
+        try:
+            bresp = supabase.table("batches").select("id,from_year,to_year").in_("id", chunk).execute()
+            for row in (getattr(bresp, "data", None) or []):
+                bid = str((row or {}).get("id") or "").strip()
+                if not bid:
+                    continue
+                fy = (row or {}).get("from_year")
+                ty = (row or {}).get("to_year")
+                if fy is not None and ty is not None:
+                    batch_range_by_id[bid] = f"{fy}-{ty}"
+        except Exception:
+            continue
+
+    needle = str(q or "").strip().lower()
+    student_rows: List[Dict[str, Any]] = []
+    for row in all_education_rows:
+        raw_college_id = str(row.get("college_id") or "").strip()
+        degree_id = str(row.get("degree_id") or "").strip()
+        department_id = str(row.get("department_id") or "").strip()
+        batch_id = str(row.get("batch_id") or "").strip()
+
+        raw_school = str(row.get("school") or "").strip()
+        raw_college_name = college_name_by_id.get(raw_college_id) or raw_school
+        college_nkey = _norm_name(raw_college_name)
+
+        college_id = canonical_college_id_by_id.get(raw_college_id, "") if raw_college_id else ""
+        if not college_id and college_nkey:
+            college_id = canonical_college_id_by_norm_name.get(college_nkey, "")
+
+        canonical_college_name = ""
+        if college_id:
+            canonical_college_name = str(college_name_by_id.get(college_id) or "").strip()
+        if not canonical_college_name and college_nkey:
+            canonical_college_name = canonical_college_name_by_norm_name.get(college_nkey, "")
+
+        college = _admin_branch_norm(
+            canonical_college_name or raw_college_name,
+            "Unknown College",
+        )
+        degree = _admin_branch_norm(
+            degree_name_by_id.get(degree_id) or row.get("degree"),
+            "Unknown Degree",
+        )
+        department = _admin_branch_norm(
+            department_name_by_id.get(department_id) or row.get("department"),
+            "Unknown Department",
+        )
+        batch_range = _admin_branch_norm(
+            batch_range_by_id.get(batch_id) or row.get("batch_range"),
+            "Unknown Batch",
+        )
+        section = _admin_branch_norm(row.get("section"), "Unknown Section").upper()
+
+        if needle:
+            hay = f"{college}||{degree}||{department}||{batch_range}||{section}".lower()
+            if needle not in hay:
+                continue
+
+        student_rows.append(
+            {
+                "college_id": college_id or None,
+                "college": college,
+                "degree": degree,
+                "department": department,
+                "batch_range": batch_range,
+                "section": section,
+            }
+        )
+
+    tree: Dict[str, Any] = {}
+    degree_keys: Set[str] = set()
+    dept_keys: Set[str] = set()
+    batch_keys: Set[str] = set()
+
+    for row in student_rows:
+        college_id = str(row.get("college_id") or "").strip()
+        college = row["college"]
+        degree = row["degree"]
+        department = row["department"]
+        batch = row["batch_range"]
+        section = row["section"]
+
+        college_key = f"id:{college_id}" if college_id else f"name:{str(college).strip().lower()}"
+
+        degree_keys.add(f"{college_key}|||{degree}")
+        dept_keys.add(f"{college_key}|||{degree}|||{department}")
+        batch_keys.add(f"{college_key}|||{degree}|||{department}|||{batch}")
+
+        if college_key not in tree:
+            tree[college_key] = {
+                "id": college_id or None,
+                "name": college,
+                "count": 0,
+                "degrees": {},
+            }
+        cnode = tree[college_key]
+        if not cnode.get("id") and college_id:
+            cnode["id"] = college_id
+        if not str(cnode.get("name") or "").strip() and str(college).strip():
+            cnode["name"] = college
+        cnode["count"] += 1
+
+        if degree not in cnode["degrees"]:
+            cnode["degrees"][degree] = {"count": 0, "departments": {}}
+        dnode = cnode["degrees"][degree]
+        dnode["count"] += 1
+
+        if department not in dnode["departments"]:
+            dnode["departments"][department] = {"count": 0, "batches": {}}
+        depnode = dnode["departments"][department]
+        depnode["count"] += 1
+
+        if batch not in depnode["batches"]:
+            depnode["batches"][batch] = {"count": 0, "sections": {}}
+        bnode = depnode["batches"][batch]
+        bnode["count"] += 1
+        bnode["sections"][section] = int(bnode["sections"].get(section) or 0) + 1
+
+    def _batch_sort_key(name: str) -> Tuple[int, int, str]:
+        txt = str(name or "")
+        m = re.search(r"(\d{4})\D+(\d{4})", txt)
+        if m:
+            try:
+                return (int(m.group(1)), int(m.group(2)), txt)
+            except Exception:
+                pass
+        return (9999, 9999, txt)
+
+    hierarchy: List[Dict[str, Any]] = []
+    for college_key in sorted(tree.keys(), key=lambda key: str((tree.get(key) or {}).get("name") or "").lower()):
+        cnode = tree[college_key]
+        college_item: Dict[str, Any] = {
+            "id": cnode.get("id"),
+            "name": _admin_branch_norm(cnode.get("name"), "Unknown College"),
+            "count": int(cnode.get("count") or 0),
+            "degrees": [],
+        }
+
+        for degree_name in sorted(cnode["degrees"].keys(), key=lambda s: str(s).lower()):
+            dnode = cnode["degrees"][degree_name]
+            degree_item: Dict[str, Any] = {
+                "name": degree_name,
+                "count": int(dnode.get("count") or 0),
+                "departments": [],
+            }
+
+            for dept_name in sorted(dnode["departments"].keys(), key=lambda s: str(s).lower()):
+                depnode = dnode["departments"][dept_name]
+                dept_item: Dict[str, Any] = {
+                    "name": dept_name,
+                    "count": int(depnode.get("count") or 0),
+                    "batches": [],
+                }
+
+                for batch_name in sorted(depnode["batches"].keys(), key=_batch_sort_key):
+                    bnode = depnode["batches"][batch_name]
+                    sections = [
+                        {"name": sec_name, "count": int(sec_count or 0)}
+                        for sec_name, sec_count in sorted((bnode.get("sections") or {}).items(), key=lambda kv: str(kv[0]).lower())
+                    ]
+                    dept_item["batches"].append(
+                        {
+                            "name": batch_name,
+                            "count": int(bnode.get("count") or 0),
+                            "sections": sections,
+                        }
+                    )
+
+                degree_item["departments"].append(dept_item)
+
+            college_item["degrees"].append(degree_item)
+
+        hierarchy.append(college_item)
+
+    return {
+        "stats": {
+            "students": len(student_rows),
+            "colleges": len(tree),
+            "degrees": len(degree_keys),
+            "departments": len(dept_keys),
+            "batches": len(batch_keys),
+        },
+        "hierarchy": hierarchy,
+        "source_rows": len(all_education_rows),
+        "deduped_rows": len(all_education_rows),
+        "student_rows": len(student_rows),
+    }
+
+
 @academics_router.get("/api/admin/self-check", summary="Admin: verify current token admin status")
 def admin_self_check(authorization: Optional[str] = Header(default=None)):
     token = _parse_bearer_token(authorization)
@@ -9735,14 +10167,7 @@ def _get_auth_user(authorization: Optional[str]) -> Tuple[Optional[str], Optiona
     token = _parse_bearer_token(authorization)
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
-    anon_client = get_anon_client()
-    if not anon_client:
-        raise HTTPException(status_code=500, detail="Auth disabled (no anon client)")
-    try:
-        auth_user = anon_client.auth.get_user(token)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    user_obj = getattr(auth_user, "user", None) or (auth_user.get("user") if isinstance(auth_user, dict) else None)
+    user_obj = _auth_user_obj_from_token(token)
     if not user_obj:
         raise HTTPException(status_code=401, detail="Invalid auth context")
     user_id = getattr(user_obj, "id", None) or (user_obj.get("id") if isinstance(user_obj, dict) else None)

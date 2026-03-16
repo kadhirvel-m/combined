@@ -704,17 +704,38 @@
         try {
           // Exchange OAuth refresh token for first-party HttpOnly cookies.
           if (refreshToken) {
-            await fetch(`${apiBase}/refresh`, {
+            const refreshRes = await fetch(`${apiBase}/refresh`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
               body: JSON.stringify({ refresh_token: refreshToken })
             });
+            if (!refreshRes.ok) {
+              const out = await refreshRes.json().catch(() => ({}));
+              throw new Error(out?.detail || out?.message || `Refresh failed (${refreshRes.status})`);
+            }
           }
-        } catch { }
-        const nextPath = getSafeNextPath();
-        setOAuthPending(false);
-        location.href = nextPath || 'academicas.html';
+
+          // Verify session cookie is active before navigating away to avoid login bounce loops.
+          const meRes = await fetch(`${apiBase}/api/me`, { credentials: 'include' });
+          if (!meRes.ok) {
+            const out = await meRes.json().catch(() => ({}));
+            throw new Error(out?.detail || out?.message || `Session verification failed (${meRes.status})`);
+          }
+
+          const nextPath = getSafeNextPath();
+          setOAuthPending(false);
+          location.href = nextPath || 'academicas.html';
+          return;
+        } catch (err) {
+          console.error('[Auth] OAuth callback exchange failed:', err);
+          status.classList.remove('hidden');
+          status.textContent = '❌ Google sign-in could not complete. Please try again.';
+          setOAuthPending(false);
+          hideLoader();
+          resetTurnstile();
+          return;
+        }
       }
       setOAuthPending(false);
     }
