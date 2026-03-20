@@ -532,6 +532,9 @@ def _path_in_prefixes(path: str, prefixes: Tuple[str, ...]) -> bool:
 
 
 def _rbac_required_roles_for_path(path: str) -> Optional[Set[str]]:
+    # Allow authenticated users to resolve their own role for frontend UI gating.
+    if _rl_norm_path(path) == "/api/admin/roles/me":
+        return None
     if _path_in_prefixes(path, RBAC_ADMIN_PREFIXES):
         return {"admin"}
     if _path_in_prefixes(path, RBAC_HOD_PREFIXES):
@@ -28122,7 +28125,7 @@ class LcodingLanguage(LcodingLanguageBase):
     updated_at: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class LcodingLevelBase(BaseModel):
     title: str
@@ -28473,8 +28476,11 @@ _SELECTED_IMAGE_MODELS = [
 _SELECTED_IMAGE_USE_SEARCH_TOOL = (os.getenv("SELECTED_IMAGE_USE_SEARCH_TOOL", "false").strip().lower() in {"1", "true", "yes", "on"})
 _SELECTED_IMAGE_SIZE = (os.getenv("SELECTED_IMAGE_SIZE", "1K") or "1K").strip()
 _SELECTED_IMAGE_GATEWAY_BUDGET_S = max(8, int(os.getenv("SELECTED_IMAGE_GATEWAY_BUDGET_SECONDS", "90") or "90"))
+_SELECTED_IMAGE_MAX_CONCURRENT = max(1, int(os.getenv("SELECTED_IMAGE_MAX_CONCURRENT", "2") or "2"))
+_SELECTED_IMAGE_QUEUE_WAIT_S = max(1, int(os.getenv("SELECTED_IMAGE_QUEUE_WAIT_SECONDS", "15") or "15"))
 _blink_link_cache: Dict[str, Tuple[float, str, str]] = {}
 _blink_link_cache_lock = Lock()
+_selected_image_generation_semaphore = asyncio.Semaphore(_SELECTED_IMAGE_MAX_CONCURRENT)
 
 
 def _blink_cache_get(topic_ci: str) -> Optional[Tuple[str, str]]:
@@ -29120,6 +29126,27 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
     prompt = _build_prompt(trimmed)
     print(f"[SelImg][{req_id}] prompt_ready chars={len(prompt)}")
 
+    acquired_slot = False
+    queue_start = time.perf_counter()
+    try:
+        await asyncio.wait_for(
+            _selected_image_generation_semaphore.acquire(),
+            timeout=float(_SELECTED_IMAGE_QUEUE_WAIT_S),
+        )
+        acquired_slot = True
+        print(f"[SelImg][{req_id}] queue_acquired wait_ms={int((time.perf_counter()-queue_start)*1000)}")
+    except asyncio.TimeoutError:
+        waited_ms = int((time.perf_counter() - queue_start) * 1000)
+        print(f"[SelImg][{req_id}] queue_timeout wait_ms={waited_ms}")
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": "Image generator is busy. Please retry in a few seconds.",
+                "retry_after_seconds": 5,
+                "queue_wait_ms": waited_ms,
+            },
+        )
+
     try:
         def _generate_bytes_sync(generation_prompt: str):
             if not genai:
@@ -29262,6 +29289,10 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
         traceback.print_exc()
         print(f"[SelImg][{req_id}] error {e} elapsed_ms={int((time.perf_counter()-t0)*1000)}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if acquired_slot:
+            _selected_image_generation_semaphore.release()
+            print(f"[SelImg][{req_id}] queue_released")
 
 @app.post("/api/blink/selected-images")
 async def save_selected_image_endpoint(req: SelectedImageStoreRequest):

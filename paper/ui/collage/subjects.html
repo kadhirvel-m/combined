@@ -457,6 +457,7 @@
         let editingSubjectId = null;
         let currentRole = null;
         let isAdmin = false;
+        let canManageSubjects = false;
         const semesterOptions = [1, 2, 3, 4, 5, 6, 7, 8];
 
         function makeBreadcrumb(items) {
@@ -1094,15 +1095,22 @@
                 currentRole = (window.Collage && window.Collage.requireAdminOrEmployee)
                     ? await window.Collage.requireAdminOrEmployee()
                     : 'student';
-                isAdmin = String(currentRole || '').toLowerCase() === 'admin';
+                const roleLower = String(currentRole || '').toLowerCase();
+                isAdmin = roleLower === 'admin';
+                const isEmployee = roleLower === 'employee';
+                canManageSubjects = isAdmin || isEmployee;
                 populateSemesterFilter();
-                if (!isAdmin) {
+                if (!canManageSubjects) {
                     addSubjectBtn?.classList.add('hidden');
                     document.getElementById('uploadSyllabusBtn')?.classList.add('hidden');
                     document.getElementById('importSubjectsBtn')?.classList.add('hidden');
                 } else {
                     initSubjectModal();
-                    initImportModal();
+                    if (isAdmin) {
+                        initImportModal();
+                    } else {
+                        document.getElementById('importSubjectsBtn')?.classList.add('hidden');
+                    }
                 }
                 loadSubjects();
                 semesterFilter.addEventListener('change', filterAndRender);

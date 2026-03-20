@@ -768,7 +768,7 @@
           <button id="myNoteBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)] hidden"
             style="border-color: var(--outline)">My note</button>
           <button id="editToggle"
-            class="ripple hidden sm:inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
+            class="ripple px-privilege-hidden inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
             style="border-color: var(--outline)">Edit</button>
           <button id="downloadBtn"
             class="ripple hidden sm:inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
@@ -1765,17 +1765,43 @@
       (async function () {
         try {
           const token = getAuthToken();
-          if (!token) return;
-          const res = await fetch(`${apiBase}/api/admin/roles/me`, {
-            headers: { Authorization: `Bearer ${token}` }
+          const normToken = String(token || '').trim();
+          const lowerToken = normToken.toLowerCase();
+          const useBearer = !!normToken && !['__cookie_auth__', '__cookie__', 'cookie', 'null', 'undefined', 'none'].includes(lowerToken);
+          let res = await fetch(`${apiBase}/api/admin/roles/me`, {
+            headers: useBearer ? { Authorization: `Bearer ${normToken}` } : {},
+            credentials: 'include'
           });
+
+          // If localStorage bearer is stale but cookie auth is valid, retry without Authorization header.
+          if (!res.ok && useBearer && (res.status === 401 || res.status === 403)) {
+            res = await fetch(`${apiBase}/api/admin/roles/me`, {
+              headers: {},
+              credentials: 'include'
+            });
+          }
+
           if (!res.ok) return;
           const data = await res.json().catch(() => ({}));
           const primaryRole = String(data?.role || data?.user_role || data?.userRole || '').toLowerCase().trim();
           const rolesArr = Array.isArray(data?.roles) ? data.roles.map(r => String(r || '').toLowerCase().trim()) : [];
+          const staffRoles = new Set(['admin', 'employee', 'teacher', 'moderator', 'hod']);
+          const hasStaffRole = staffRoles.has(primaryRole) || rolesArr.some(r => staffRoles.has(r));
+          const perms = (data && typeof data.permissions === 'object' && data.permissions) ? data.permissions : {};
+          const hasStaffEditPermission = [
+            perms.edit,
+            perms.can_edit,
+            perms.edit_notes,
+            perms.can_edit_notes,
+            perms.notes_edit,
+            perms.manage_notes,
+            perms.is_employee,
+            perms.is_admin
+          ].some(v => v === true);
           const isAdmin = primaryRole === 'admin' || rolesArr.includes('admin') || data?.is_admin === true;
           const isEmployee = primaryRole === 'employee' || rolesArr.includes('employee') || data?.is_employee === true;
-          if (isAdmin || isEmployee) {
+          const allowed = !!(isAdmin || isEmployee || hasStaffRole || hasStaffEditPermission);
+          if (allowed) {
             setPrivilegedVisible(true);
           }
         } catch (_) {
