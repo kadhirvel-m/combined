@@ -68,9 +68,13 @@
     // If not logged in, redirect to login and return back to this page after login.
     (function () {
       try {
-        var token = localStorage.getItem('px_token');
-        var refresh = localStorage.getItem('px_refresh_token');
-        if (!token && !refresh) {
+        var token = String(localStorage.getItem('px_token') || '').trim();
+        var refresh = String(localStorage.getItem('px_refresh_token') || '').trim();
+        var marker = String(localStorage.getItem('paperx_session_state') || '').trim() === '1';
+        var fb = String(sessionStorage.getItem('paperx_bearer_fallback') || '').trim();
+        var hasCookie = false;
+        try { hasCookie = document.cookie.indexOf('paperx_auth=') !== -1; } catch (_) { }
+        if (!token && !refresh && !marker && !fb && !hasCookie) {
           var next = encodeURIComponent(location.pathname + (location.search || ''));
           location.replace('login.html?next=' + next);
         }
@@ -1294,7 +1298,7 @@
       if (!$degree) return;
       // Preserve any existing non-default options except 'custom'
       try {
-        const res = await fetch(`${apiBase}/api/notes/degrees`);
+        const res = await fetch(`${apiBase}/api/notes/degrees`, { headers: authHeadersIfAny() });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const arr = await res.json();
         const selected = getStoredDegree();
@@ -1352,7 +1356,7 @@
       const degree = getSelectedDegree();
       if (!degree) { $domainsHint.textContent = 'Sources: auto'; return; }
       try {
-        const res = await fetch(`${apiBase}/api/notes/allowed-domains?degree=${encodeURIComponent(degree)}`);
+        const res = await fetch(`${apiBase}/api/notes/allowed-domains?degree=${encodeURIComponent(degree)}`, { headers: authHeadersIfAny() });
         if (!res.ok) { $domainsHint.textContent = `Degree: ${degree}`; return; }
         const data = await res.json();
         const list = (data && Array.isArray(data.domains)) ? data.domains : [];
@@ -1538,15 +1542,51 @@
     resetMCQAccess();
 
     // ===== User auth token helper =====
+    function normalizeAuthCandidate(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      const lower = raw.toLowerCase();
+      if (raw === '__COOKIE_AUTH__' || raw === '__cookie__' || lower === 'cookie' || lower === 'null' || lower === 'undefined' || lower === 'none') {
+        return '';
+      }
+      return raw;
+    }
+
     function getAuthToken() {
       const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
       for (const k of keys) {
         try {
-          const v = localStorage.getItem(k);
+          const v = normalizeAuthCandidate(localStorage.getItem(k));
           if (v) return v;
         } catch { /* ignore */ }
       }
+      try {
+        const fb = normalizeAuthCandidate(sessionStorage.getItem('paperx_bearer_fallback'));
+        if (fb) return fb;
+      } catch { /* ignore */ }
+      try {
+        const fb2 = normalizeAuthCandidate(localStorage.getItem('paperx_bearer_fallback'));
+        if (fb2) return fb2;
+      } catch { /* ignore */ }
+      try {
+        if (document.cookie.indexOf('paperx_auth=') !== -1) return '__COOKIE_AUTH__';
+      } catch { /* ignore */ }
       return '';
+    }
+
+    function authHeadersIfAny(extra = {}) {
+      const token = getAuthToken();
+      if (token) return Object.assign({}, extra, { Authorization: `Bearer ${token}` });
+      return Object.assign({}, extra);
+    }
+
+    function isApiBaseRequest(url) {
+      try {
+        const abs = new URL(String(url), location.href).href;
+        return abs.startsWith(`${apiBase}/`);
+      } catch {
+        return false;
+      }
     }
 
     function renderLimitReachedState({ action = '', reason = 'Plan limit reached', remaining = null } = {}) {
@@ -1590,6 +1630,26 @@
       `;
     }
 
+    function isDefinitiveAccessDeny(data) {
+      const d = data && typeof data === 'object' ? data : {};
+      const allowed = !!d.allowed;
+      if (allowed) return false;
+
+      const reason = String(d.reason || d.detail || '').trim();
+      const reasonLc = reason.toLowerCase();
+      // Backend explicitly marks uncertain path like "Access check unavailable".
+      if (!reason || reasonLc.includes('unavailable') || reasonLc.includes('temporar')) return false;
+
+      const tier = String(d.tier || currentAccessSummary?.tier || '').toLowerCase();
+      // Enforce only when we are sure a paid policy is actually active for this user context.
+      if (tier !== 'paid') return false;
+
+      // Strong signal: concrete daily/quota limit wording or explicit limit fields.
+      if (reasonLc.includes('daily limit') || reasonLc.includes('limit reached') || reasonLc.includes('quota')) return true;
+      if (d.limit !== null && d.limit !== undefined) return true;
+      return false;
+    }
+
     async function ensureUserAccess(action, { consume = true, increment = 1, allowOnTransientFailure = true, renderInOutput = false } = {}) {
       const token = getAuthToken();
       if (!token) {
@@ -1611,6 +1671,11 @@
           return !!allowOnTransientFailure;
         }
         if (!data.allowed) {
+          const definitive = isDefinitiveAccessDeny(data);
+          if (!definitive) {
+            console.warn('Access check non-definitive deny; allowing fallback', data);
+            return true;
+          }
           const reason = data.reason || 'Plan limit reached';
           const remaining = (data.remaining === null || data.remaining === undefined) ? '' : ` (Remaining today: ${data.remaining})`;
           snack(`${reason}${remaining}`);
@@ -2635,7 +2700,10 @@
         })();
 
         const fetchOptions = relatedVideosAbort ? { signal: relatedVideosAbort.signal } : undefined;
-        const response = await fetch(`${apiBase}/api/youtube/search?query=${encodeURIComponent(searchQuery)}&num=8`, fetchOptions);
+        const response = await fetch(
+          `${apiBase}/api/youtube/search?query=${encodeURIComponent(searchQuery)}&num=8`,
+          Object.assign({}, fetchOptions || {}, { headers: authHeadersIfAny() })
+        );
         if (!response.ok) {
           throw new Error(`Search failed with status ${response.status}`);
         }
@@ -3201,7 +3269,7 @@
       const clean = (topic || '').trim();
       if (!clean) return '';
       try {
-        const res = await fetch(`${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(clean)}`);
+        const res = await fetch(`${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(clean)}`, { headers: authHeadersIfAny() });
         if (!res.ok) return '';
         const data = await res.json();
         if (!Array.isArray(data) || !data.length) return '';
@@ -3228,7 +3296,12 @@
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const res = await fetch(url, { signal: controller.signal });
+        const req = { signal: controller.signal };
+        if (isApiBaseRequest(url)) {
+          req.headers = authHeadersIfAny();
+          req.credentials = 'include';
+        }
+        const res = await fetch(url, req);
         let data = null;
         try { data = await res.json(); } catch { }
         return { ok: res.ok, status: res.status, data };
@@ -3326,6 +3399,10 @@
       const degree = getSelectedDegree();
       if (degree) url.searchParams.set('degree', degree);
       if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
+      const streamToken = getAuthToken();
+      if (streamToken && streamToken !== '__COOKIE_AUTH__') {
+        url.searchParams.set('access_token', streamToken);
+      }
       es = new EventSource(url.toString(), { withCredentials: true });
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });

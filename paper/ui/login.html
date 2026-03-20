@@ -695,6 +695,10 @@
       const refreshToken = hash.get('refresh_token');
       if (token) {
         try {
+          sessionStorage.setItem('paperx_bearer_fallback', token);
+          localStorage.setItem('paperx_bearer_fallback', token);
+        } catch { }
+        try {
           // Cookie session is authoritative; clear any stale legacy token keys.
           localStorage.removeItem('px_token');
           localStorage.removeItem('px_refresh_token');
@@ -721,7 +725,30 @@
           const meRes = await fetch(`${apiBase}/api/me`, { credentials: 'include' });
           if (!meRes.ok) {
             const out = await meRes.json().catch(() => ({}));
-            throw new Error(out?.detail || out?.message || `Session verification failed (${meRes.status})`);
+            const detail = String(out?.detail || out?.message || '').toLowerCase();
+            // Backward-compatible: older backend builds may return 404 before profile bootstrap.
+            // Do not fail login in that case.
+            const profileBootstrap404 = (meRes.status === 404 && detail.includes('profile not found'));
+            if (!profileBootstrap404) {
+              // Privacy/antivirus hardened browsers may block third-party cookies.
+              // Fallback: verify with OAuth access token and keep it in tab-scoped sessionStorage.
+              if (token && meRes.status === 401) {
+                const bearerRes = await fetch(`${apiBase}/api/me`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                if (bearerRes.ok) {
+                  try {
+                    sessionStorage.setItem('paperx_bearer_fallback', token);
+                    localStorage.setItem('paperx_bearer_fallback', token);
+                  } catch { }
+                } else {
+                  const bOut = await bearerRes.json().catch(() => ({}));
+                  throw new Error(bOut?.detail || bOut?.message || `Session verification failed (${bearerRes.status})`);
+                }
+              } else {
+                throw new Error(out?.detail || out?.message || `Session verification failed (${meRes.status})`);
+              }
+            }
           }
           try { localStorage.setItem('paperx_session_state', '1'); } catch { }
 
@@ -785,6 +812,9 @@
             // Enforce single active session: clear teacher session if any
             localStorage.removeItem('teacherToken');
             localStorage.setItem('paperx_session_state', '1');
+            // Fallback for browsers that block third-party cookies for API origin.
+            sessionStorage.setItem('paperx_bearer_fallback', out.access_token);
+            localStorage.setItem('paperx_bearer_fallback', out.access_token);
           } catch { }
         }
         console.info('[auth] login success, cookie-session mode active');

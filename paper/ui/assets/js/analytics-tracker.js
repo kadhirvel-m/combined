@@ -12,6 +12,37 @@ class PaperXAnalytics {
         this.heartbeatInterval = null;
     }
 
+    normalizeToken(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const lower = raw.toLowerCase();
+        if (raw === '__COOKIE_AUTH__' || raw === '__cookie__' || lower === 'cookie' || lower === 'null' || lower === 'undefined' || lower === 'none') {
+            return '';
+        }
+        return raw;
+    }
+
+    getAuthToken() {
+        const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+        for (const k of keys) {
+            try {
+                const v = this.normalizeToken(localStorage.getItem(k));
+                if (v) return v;
+            } catch (_) {}
+        }
+        try {
+            const fb = this.normalizeToken(sessionStorage.getItem('paperx_bearer_fallback'));
+            if (fb) return fb;
+        } catch (_) {}
+        return '';
+    }
+
+    authHeaders(extra = {}) {
+        const token = this.getAuthToken();
+        if (token) return Object.assign({}, extra, { Authorization: `Bearer ${token}` });
+        return Object.assign({}, extra);
+    }
+
     parseJwt(token) {
         try {
             const base64Url = token.split('.')[1];
@@ -27,7 +58,7 @@ class PaperXAnalytics {
     async init() {
         // Try to get user ID from JWT token
         try {
-            const token = localStorage.getItem('px_token');
+              const token = this.getAuthToken();
             if (token) {
                  this.userId = this.parseJwt(token);
             }
@@ -60,19 +91,24 @@ class PaperXAnalytics {
             
             const res = await fetch(`${this.apiBase}/session/start`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: this.authHeaders({ 'Content-Type': 'application/json' }),
+                credentials: 'include',
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
             if (data.session_id) {
                 this.sessionId = data.session_id;
-                localStorage.setItem('paperx_session_id', this.sessionId);
+                try {
+                    localStorage.setItem('paperx_session_id', this.sessionId);
+                } catch (storageErr) {
+                    console.warn('[Analytics] Session persistence unavailable', storageErr);
+                }
             }
         } catch (e) {
             console.error('[Analytics] Failed to start session', e);
             // If session start fails, clear local session to avoid polluting old ones
             this.sessionId = null;
-            localStorage.removeItem('paperx_session_id');
+            try { localStorage.removeItem('paperx_session_id'); } catch (_) {}
         }
     }
 
@@ -82,7 +118,8 @@ class PaperXAnalytics {
             if (!this.sessionId) return;
             fetch(`${this.apiBase}/session/heartbeat`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: this.authHeaders({ 'Content-Type': 'application/json' }),
+                credentials: 'include',
                 body: JSON.stringify({ session_id: this.sessionId })
             }).catch(() => {});
         }, 60000); // 1 min
@@ -100,7 +137,8 @@ class PaperXAnalytics {
 
             await fetch(`${this.apiBase}/event`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: this.authHeaders({ 'Content-Type': 'application/json' }),
+                credentials: 'include',
                 body: JSON.stringify(payload)
             });
         } catch (e) {
@@ -113,7 +151,8 @@ class PaperXAnalytics {
         try {
              await fetch(`${this.apiBase}/feedback/topic`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                     headers: this.authHeaders({ 'Content-Type': 'application/json' }),
+                     credentials: 'include',
                 body: JSON.stringify({
                     user_id: this.userId,
                     topic_id: topicId,

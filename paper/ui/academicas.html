@@ -1733,7 +1733,15 @@
         function getToken() {
             try {
                 const t = localStorage.getItem('px_token');
-                if (t) return t;
+                if (t && t !== '__COOKIE_AUTH__') return t;
+            } catch { }
+            try {
+                const fb = (sessionStorage.getItem('paperx_bearer_fallback') || '').trim();
+                if (fb) return fb;
+            } catch { }
+            try {
+                const fb2 = (localStorage.getItem('paperx_bearer_fallback') || '').trim();
+                if (fb2) return fb2;
             } catch { }
             return hasCookieAuthState() ? '__COOKIE_AUTH__' : null;
         }

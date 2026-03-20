@@ -7,6 +7,19 @@
   try {
     var pageHost = (typeof location !== 'undefined' && location.hostname) ? location.hostname : '';
     var isLocalPageHost = /^(localhost|127\.0\.0\.1|::1)$/i.test(pageHost);
+    var PROD_API_BASE = 'http://127.0.0.1:8000';
+
+    function isKnownBadProdApiBase(urlLike) {
+      try {
+        if (!urlLike) return false;
+        var u = new URL(String(urlLike));
+        var h = String(u.hostname || '').toLowerCase();
+        // paperx.tech serves UI pages; API is hosted on the backend app origin.
+        return /(^|\.)paperx\.tech$/i.test(h);
+      } catch (_) {
+        return false;
+      }
+    }
 
     function normalizeLocalApiBase(urlLike) {
       try {
@@ -35,18 +48,28 @@
     }
 
     var resolved = preset || (saved && /^https?:\/\//i.test(saved) ? saved : null);
+    if (!isLocalPageHost && isKnownBadProdApiBase(resolved)) {
+      resolved = null;
+    }
     if (!resolved) {
       var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
       if (/localhost|127\.0\.0\.1|\[::1\]/i.test(origin) || isLocalPageHost) {
         var h = isLocalPageHost ? pageHost : '127.0.0.1';
         resolved = 'http://' + h + ':8000';
       } else {
-        resolved = 'http://127.0.0.1:8000';
+        // In production, never fall back to localhost.
+        var host = String(pageHost || '').toLowerCase();
+        if (host && /ondigitalocean\.app$/.test(host)) {
+          resolved = origin || PROD_API_BASE;
+        } else {
+          resolved = PROD_API_BASE;
+        }
       }
     }
     resolved = resolved.replace(/\/$/, '');
     window.API_BASE = resolved;
     window.__API_BASE = resolved;
+    try { localStorage.setItem('API_BASE', resolved); } catch (_) { }
   } catch (_) {
     var fallbackHost = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname || ''))
       ? location.hostname
@@ -238,6 +261,7 @@
     ]);
     var AUTH_SENTINEL = '__COOKIE_AUTH__';
     var AUTH_STATE_KEY = 'paperx_session_state';
+    var BEARER_FALLBACK_KEY = 'paperx_bearer_fallback';
     var stateCookieName = 'paperx_auth=';
 
     function hasAuthStateCookie() {
@@ -268,6 +292,26 @@
           localStorage.removeItem(AUTH_STATE_KEY);
         }
       } catch (_) { }
+    }
+
+    function getBearerFallback() {
+      try {
+        var v = String(sessionStorage.getItem(BEARER_FALLBACK_KEY) || '').trim();
+        if (v && v !== AUTH_SENTINEL) return v;
+      } catch (_) {
+      }
+      try {
+        var v2 = String(localStorage.getItem(BEARER_FALLBACK_KEY) || '').trim();
+        if (!v2 || v2 === AUTH_SENTINEL) return '';
+        return v2;
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function clearBearerFallback() {
+      try { sessionStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
+      try { localStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
     }
 
     function isTokenLikeKey(k) {
@@ -409,6 +453,15 @@
         }
       }
 
+      // Cookie fallback for privacy/antivirus-restricted browsers:
+      // if no Authorization header is present, attach short-lived in-tab bearer token.
+      if (!headers.has('Authorization') && !headers.has('authorization') && isApiRequest) {
+        var fallbackToken = getBearerFallback();
+        if (fallbackToken) {
+          headers.set('Authorization', 'Bearer ' + fallbackToken);
+        }
+      }
+
       var method = String(req.method || (input && input.method) || 'GET').toUpperCase();
       if (_isUnsafeMethod(method) && isApiRequest) {
         var csrfToken = _readCookie(_csrfCookieName());
@@ -426,10 +479,14 @@
             }
             if (reqPath === '/api/me') {
               if (response.ok) setAuthStateMarker(true);
-              if (response.status === 401) setAuthStateMarker(false);
+              if (response.status === 401) {
+                setAuthStateMarker(false);
+                clearBearerFallback();
+              }
             }
             if (reqPath === '/logout' && response.ok) {
               setAuthStateMarker(false);
+              clearBearerFallback();
             }
           }
         } catch (_) { }

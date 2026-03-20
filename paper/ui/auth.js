@@ -32,6 +32,8 @@
   const REFRESH_TOKEN_KEY = 'px_refresh_token';
   const TOKEN_EXPIRES_KEY = 'px_token_expires_at';
   const AUTH_SENTINEL = '__COOKIE_AUTH__';
+  const BEARER_FALLBACK_KEY = 'paperx_bearer_fallback';
+  const REFRESH_SUPPRESS_UNTIL_KEY = 'paperx_refresh_suppress_until';
   const tokenUser = safeGet(USER_TOKEN_KEY);
   const tokenTeacher = safeGet(TEACHER_TOKEN_KEY);
 
@@ -48,12 +50,59 @@
     return t;
   }
 
+  function getUsableRefreshToken(){
+    const raw = safeGet(REFRESH_TOKEN_KEY);
+    if (!raw) return null;
+    const tok = String(raw).trim();
+    if (!tok || tok === AUTH_SENTINEL || tok === 'null' || tok === 'undefined') return null;
+    return tok;
+  }
+
+  function suppressRefreshTemporarily(ms){
+    try {
+      const until = Date.now() + Math.max(1000, Number(ms) || 0);
+      sessionStorage.setItem(REFRESH_SUPPRESS_UNTIL_KEY, String(until));
+    } catch (_) { }
+  }
+
+  function isRefreshSuppressed(){
+    try {
+      const raw = sessionStorage.getItem(REFRESH_SUPPRESS_UNTIL_KEY);
+      const until = raw ? Number(raw) : 0;
+      return Number.isFinite(until) && until > Date.now();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function getBearerFallbackToken(){
+    try {
+      const t = String(sessionStorage.getItem(BEARER_FALLBACK_KEY) || '').trim();
+      if (t && t !== AUTH_SENTINEL) return t;
+    } catch (_) {
+    }
+    try {
+      const t2 = String(localStorage.getItem(BEARER_FALLBACK_KEY) || '').trim();
+      return (!t2 || t2 === AUTH_SENTINEL) ? null : t2;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Auto-refresh using HttpOnly refresh cookie.
   async function refreshTokensIfNeeded() {
     console.log('[Auth] Attempting cookie-based token refresh...');
     try {
-      const refreshToken = safeGet(REFRESH_TOKEN_KEY);
-      const body = refreshToken && refreshToken !== '__COOKIE_AUTH__' ? JSON.stringify({ refresh_token: refreshToken }) : '{}';
+      const refreshToken = getUsableRefreshToken();
+      const fallback = getBearerFallbackToken();
+      // Never call /refresh without a real refresh token.
+      if (!refreshToken) {
+        return !!fallback || hasAuthState();
+      }
+      if (isRefreshSuppressed()) {
+        return !!fallback || hasAuthState();
+      }
+      const body = JSON.stringify({ refresh_token: refreshToken });
       const res = await fetch(`${API}/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,14 +111,31 @@
       });
       if (!res.ok) {
         console.error('[Auth] Refresh request failed:', res.status);
-        clearAllTokens();
+        // Stale/invalid refresh token should be dropped to avoid endless 400 loops.
+        if (res.status === 400) {
+          try { safeRemove(REFRESH_TOKEN_KEY); } catch (_) { }
+          suppressRefreshTemporarily(5 * 60 * 1000);
+        } else if (res.status === 401 || res.status === 403) {
+          suppressRefreshTemporarily(60 * 1000);
+        }
+        // Do not clear session markers/tokens here; this can cause auth bounce loops
+        // in privacy-hardened browsers where refresh cookies are blocked.
         return false;
       }
       const data = await res.json();
+      try {
+        const at = String((data && data.access_token) || '').trim();
+        if (at) {
+          sessionStorage.setItem(BEARER_FALLBACK_KEY, at);
+          localStorage.setItem(BEARER_FALLBACK_KEY, at);
+        }
+      } catch (_) { }
       console.log('[Auth] Token refreshed successfully.', data && data.message ? data.message : 'ok');
       return true;
     } catch (e) {
-      console.error('[Auth] Token refresh failed with exception:', e);
+      // Network/offline/CORS interruptions should not spam auth failures.
+      console.warn('[Auth] Token refresh skipped due to network error');
+      suppressRefreshTemporarily(30 * 1000);
       return false;
     }
   }
@@ -81,6 +147,8 @@
     safeRemove(TOKEN_EXPIRES_KEY);
     safeRemove('paperx_session_state');
     safeRemove('paperx_session_id'); // Clear analytics session
+    try { sessionStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
+    try { localStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
   }
 
   const el = (id) => document.getElementById(id);
@@ -157,6 +225,8 @@
     }
     if (tTeach) return { kind: 'teacher', token: tTeach };
     if (tUser) return { kind: 'user', token: tUser };
+    const fb = getBearerFallbackToken();
+    if (fb) return { kind: 'user', token: fb };
     if (hasAuthState()) return { kind: 'user', token: AUTH_SENTINEL };
     return { kind: null, token: null };
   }
@@ -290,13 +360,14 @@
   }
 
   async function init(){
+    if (window.__PX_AUTH_INIT_DONE) return;
+    window.__PX_AUTH_INIT_DONE = true;
     // Auto-refresh token if needed (for persistent sessions)
-    const hasRefreshToken = safeGet(REFRESH_TOKEN_KEY) || hasAuthState();
+    const hasRefreshToken = !!getUsableRefreshToken();
     if (hasRefreshToken) {
       const refreshed = await refreshTokensIfNeeded();
-      if (!refreshed && !safeGet(USER_TOKEN_KEY)) {
-        console.warn('[Auth] Init - Refresh failed and no active cookie session. Clearing local markers.');
-        clearAllTokens();
+      if (!refreshed && !safeGet(USER_TOKEN_KEY) && !getBearerFallbackToken()) {
+        console.warn('[Auth] Init - Refresh failed and no active cookie session. Keeping current auth markers.');
       }
     }
 

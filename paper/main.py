@@ -176,7 +176,7 @@ AUTH_CSRF_ENFORCEMENT_ENABLED = (os.getenv("AUTH_CSRF_ENFORCEMENT_ENABLED", "tru
 AUTH_CSRF_STRICT_MODE = (os.getenv("AUTH_CSRF_STRICT_MODE", "true").strip().lower() in {"1", "true", "yes", "on"})
 AUTH_COOKIE_DOMAIN = (os.getenv("AUTH_COOKIE_DOMAIN") or "").strip() or None
 AUTH_COOKIE_SECURE = (os.getenv("AUTH_COOKIE_SECURE", "true").strip().lower() in {"1", "true", "yes", "on"})
-AUTH_COOKIE_SAMESITE = (os.getenv("AUTH_COOKIE_SAMESITE", "lax") or "lax").strip().lower()
+AUTH_COOKIE_SAMESITE = (os.getenv("AUTH_COOKIE_SAMESITE", "none") or "none").strip().lower()
 if AUTH_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
     AUTH_COOKIE_SAMESITE = "lax"
 AUTH_ACCESS_TTL_SECONDS = max(300, int(os.getenv("AUTH_ACCESS_TTL_SECONDS", "900")))
@@ -5970,7 +5970,22 @@ def get_current_user_profile(token: Optional[str]):
         if getattr(prof_q, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (get profile): {prof_q.error}")
         if not prof_q.data:
-            raise HTTPException(status_code=404, detail="Profile not found")
+            # OAuth-only users may not have a profile row yet.
+            # Auto-create a minimal profile and re-read in the same joined shape.
+            _ensure_user_and_profile(token)
+            prof_q = _supabase_retry(
+                lambda: (
+                    supabase.table("user_profiles")
+                    .select("*, colleges(id,name), departments(id,name,degree_id), batches(id,from_year,to_year)")
+                    .eq("auth_user_id", user_id)
+                    .limit(1)
+                    .execute()
+                )
+            )
+            if getattr(prof_q, "error", None):
+                raise HTTPException(status_code=500, detail=f"Supabase error (get profile): {prof_q.error}")
+            if not prof_q.data:
+                raise HTTPException(status_code=404, detail="Profile not found")
         
         prof = prof_q.data[0]
         profile_id = prof.get("id")
@@ -6672,9 +6687,18 @@ def _require_user_and_profile(token: Optional[str]) -> tuple[str, str]:
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
     user_id = _get_user_id_with_retry(token)
     supabase = get_service_client()
-    prof_q = (
-        supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
-    )
+    try:
+        prof_q = _supabase_retry(
+            lambda: (
+                supabase.table("user_profiles")
+                .select("id")
+                .eq("auth_user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+        )
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network dependent
+        raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.") from exc
     if getattr(prof_q, "error", None) or not prof_q.data:
         raise HTTPException(status_code=404, detail="Profile not found")
     profile_id = prof_q.data[0]["id"]
@@ -6693,9 +6717,18 @@ def _ensure_user_and_profile(token: Optional[str]) -> tuple[str, str]:
     supabase = get_service_client()
 
     # Try existing profile first
-    prof_q = (
-        supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
-    )
+    try:
+        prof_q = _supabase_retry(
+            lambda: (
+                supabase.table("user_profiles")
+                .select("id")
+                .eq("auth_user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+        )
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network dependent
+        raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.") from exc
     if getattr(prof_q, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (get profile): {prof_q.error}")
     if prof_q.data:
@@ -6715,24 +6748,36 @@ def _ensure_user_and_profile(token: Optional[str]) -> tuple[str, str]:
     except Exception:
         pass
 
-    ins = (
-        supabase.table("user_profiles")
-        .insert({
-            "auth_user_id": user_id,
-            "email": email,
-            "name": name,
-        })
-        .execute()
-    )
+    try:
+        ins = (
+            supabase.table("user_profiles")
+            .insert({
+                "auth_user_id": user_id,
+                "email": email,
+                "name": name,
+            })
+            .execute()
+        )
+    except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+        raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.") from exc
     if getattr(ins, "error", None):
         # If a race created it already, proceed to refetch; otherwise fail
         err_txt = str(ins.error)
         if "duplicate" not in err_txt.lower():
             raise HTTPException(status_code=500, detail=f"Supabase error (create profile): {ins.error}")
 
-    prof_q2 = (
-        supabase.table("user_profiles").select("id").eq("auth_user_id", user_id).limit(1).execute()
-    )
+    try:
+        prof_q2 = _supabase_retry(
+            lambda: (
+                supabase.table("user_profiles")
+                .select("id")
+                .eq("auth_user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+        )
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network dependent
+        raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.") from exc
     if getattr(prof_q2, "error", None) or not prof_q2.data:
         raise HTTPException(status_code=500, detail=f"Supabase error (refetch profile): {getattr(prof_q2, 'error', None)}")
     return user_id, prof_q2.data[0]["id"]
@@ -17561,13 +17606,26 @@ def create_unit_for_course(course_id: uuid.UUID, payload: UnitTopicsIn):
 def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
     supabase = get_service_client()
 
+    def _safe_execute(builder, *, label: str, retry_transport: bool = False):
+        attempts = 3 if retry_transport else 1
+        for attempt in range(attempts):
+            try:
+                return builder.execute()
+            except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+                if attempt == attempts - 1:
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"Upstream temporarily unavailable while {label}. Please retry.",
+                    ) from exc
+                time.sleep(0.25 * (2 ** attempt))
+
     unit_res = (
         supabase.table("syllabus_units")
         .select("id,course_id")
         .eq("id", str(unit_id))
         .limit(1)
-        .execute()
     )
+    unit_res = _safe_execute(unit_res, label="finding unit", retry_transport=True)
     if getattr(unit_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (find unit): {unit_res.error}")
     if not unit_res.data:
@@ -17584,8 +17642,8 @@ def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
         .eq("unit_title", payload.unit_title)
         .neq("id", str(unit_id))
         .limit(1)
-        .execute()
     )
+    dup_res = _safe_execute(dup_res, label="checking duplicate unit", retry_transport=True)
     if getattr(dup_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (check duplicate unit): {dup_res.error}")
     if dup_res.data:
@@ -17595,8 +17653,8 @@ def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
         supabase.table("syllabus_units")
         .update({"unit_title": payload.unit_title})
         .eq("id", str(unit_id))
-        .execute()
     )
+    upd = _safe_execute(upd, label="updating unit", retry_transport=True)
     if getattr(upd, "error", None):
         error_text = str(upd.error)
         if "duplicate key value" in error_text:
@@ -17614,8 +17672,8 @@ def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
         .select("id,order_in_unit")
         .eq("unit_id", str(unit_id))
         .order("order_in_unit")
-        .execute()
     )
+    existing_q = _safe_execute(existing_q, label="listing existing topics", retry_transport=True)
     if getattr(existing_q, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (list existing topics): {existing_q.error}")
     existing_rows = existing_q.data or []
@@ -17636,12 +17694,13 @@ def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
                 supabase.table("user_topic_progress")
                 .delete()
                 .in_("topic_id", chunk)
-                .execute()
             )
+            prog_del = _safe_execute(prog_del, label="deleting progress", retry_transport=True)
             if getattr(prog_del, "error", None):
                 raise HTTPException(status_code=500, detail=f"Supabase error (delete progress): {prog_del.error}")
 
-        t_del = supabase.table("syllabus_topics").delete().in_("id", topic_ids).execute()
+        t_del = supabase.table("syllabus_topics").delete().in_("id", topic_ids)
+        t_del = _safe_execute(t_del, label="deleting topics", retry_transport=True)
         if getattr(t_del, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (delete topics): {t_del.error}")
 
@@ -17655,16 +17714,16 @@ def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
                     .update({"topic": topic.topic, "order_in_unit": index})
                     .eq("id", str(tid))
                     .eq("unit_id", str(unit_id))
-                    .execute()
                 )
+                upd_t = _safe_execute(upd_t, label="updating topic", retry_transport=True)
                 if getattr(upd_t, "error", None):
                     raise HTTPException(status_code=500, detail=f"Supabase error (update topic): {upd_t.error}")
             else:
                 ins_t = (
                     supabase.table("syllabus_topics")
                     .insert({"unit_id": str(unit_id), "topic": topic.topic, "order_in_unit": index})
-                    .execute()
                 )
+                ins_t = _safe_execute(ins_t, label="inserting topic", retry_transport=False)
                 if getattr(ins_t, "error", None):
                     raise HTTPException(status_code=500, detail=f"Supabase error (insert topic): {ins_t.error}")
 
@@ -17683,8 +17742,8 @@ def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
                 .update({"topic": topic.topic, "order_in_unit": index})
                 .eq("id", str(tid))
                 .eq("unit_id", str(unit_id))
-                .execute()
             )
+            upd_t = _safe_execute(upd_t, label="updating topic", retry_transport=True)
             if getattr(upd_t, "error", None):
                 raise HTTPException(status_code=500, detail=f"Supabase error (update topic): {upd_t.error}")
 
@@ -17693,8 +17752,8 @@ def update_unit_topics(unit_id: uuid.UUID, payload: UnitTopicsIn):
             ins_t = (
                 supabase.table("syllabus_topics")
                 .insert({"unit_id": str(unit_id), "topic": topic.topic, "order_in_unit": index})
-                .execute()
             )
+            ins_t = _safe_execute(ins_t, label="inserting topic", retry_transport=False)
             if getattr(ins_t, "error", None):
                 raise HTTPException(status_code=500, detail=f"Supabase error (insert topic): {ins_t.error}")
 
@@ -18211,37 +18270,46 @@ def get_course_topic_ratings(
         return {"ratings": {}}
 
     # Get all unit IDs for this course
-    units_q = (
-        supabase.table("syllabus_units")
-        .select("id")
-        .eq("course_id", str(course_id))
-        .execute()
-    )
+    try:
+        units_q = _supabase_retry(lambda: (
+            supabase.table("syllabus_units")
+            .select("id")
+            .eq("course_id", str(course_id))
+            .execute()
+        ))
+    except HTTPXRemoteProtocolError:
+        return {"ratings": {}}
     if getattr(units_q, "error", None) or not units_q.data:
         return {"ratings": {}}
 
     unit_ids = [u["id"] for u in units_q.data]
 
     # Get all topic IDs for these units
-    topics_q = (
-        supabase.table("syllabus_topics")
-        .select("id")
-        .in_("unit_id", unit_ids)
-        .execute()
-    )
+    try:
+        topics_q = _supabase_retry(lambda: (
+            supabase.table("syllabus_topics")
+            .select("id")
+            .in_("unit_id", unit_ids)
+            .execute()
+        ))
+    except HTTPXRemoteProtocolError:
+        return {"ratings": {}}
     if getattr(topics_q, "error", None) or not topics_q.data:
         return {"ratings": {}}
 
     topic_ids = [t["id"] for t in topics_q.data]
 
     # Get all ratings for these topics by this user
-    ratings_q = (
-        supabase.table("topic_ratings")
-        .select("topic_id,rating")
-        .eq("teacher_user_id", teacher_user_id)
-        .in_("topic_id", topic_ids)
-        .execute()
-    )
+    try:
+        ratings_q = _supabase_retry(lambda: (
+            supabase.table("topic_ratings")
+            .select("topic_id,rating")
+            .eq("teacher_user_id", teacher_user_id)
+            .in_("topic_id", topic_ids)
+            .execute()
+        ))
+    except HTTPXRemoteProtocolError:
+        return {"ratings": {}}
     if getattr(ratings_q, "error", None):
         return {"ratings": {}}
 
@@ -18271,12 +18339,15 @@ def get_topic_ratings_batch(
     topic_id_strs = [str(tid) for tid in topic_ids]
     
     # Get all ratings for these topics
-    ratings_q = (
-        supabase.table("topic_ratings")
-        .select("topic_id,rating")
-        .in_("topic_id", topic_id_strs)
-        .execute()
-    )
+    try:
+        ratings_q = _supabase_retry(lambda: (
+            supabase.table("topic_ratings")
+            .select("topic_id,rating")
+            .in_("topic_id", topic_id_strs)
+            .execute()
+        ))
+    except HTTPXRemoteProtocolError:
+        return {"ratings": {}}
     if getattr(ratings_q, "error", None):
         return {"ratings": {}}
 
@@ -18328,9 +18399,13 @@ def get_wishlist(authorization: Optional[str] = Header(default=None)):
     _, profile_id = _ensure_user_and_profile(token)
     supabase = get_service_client()
     try:
-        q = supabase.table("user_topic_wishlist").select(
-            "id,topic_id,created_at,syllabus_topics(id,topic,unit_id,syllabus_units(id,unit_title,course_id,syllabus_courses(id,course_code,title)))"
-        ).eq("user_profile_id", profile_id).order("created_at", desc=True).execute()
+        q = _supabase_retry(lambda: (
+            supabase.table("user_topic_wishlist").select(
+                "id,topic_id,created_at,syllabus_topics(id,topic,unit_id,syllabus_units(id,unit_title,course_id,syllabus_courses(id,course_code,title)))"
+            ).eq("user_profile_id", profile_id).order("created_at", desc=True).execute()
+        ))
+    except HTTPXRemoteProtocolError as exc:
+        raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error fetching wishlist: {exc}")
     if getattr(q, "error", None):
@@ -24176,14 +24251,14 @@ def api_resolve_note(
         select_cols += ",ppt_link"
 
     try:
-        res = (
+        res = _supabase_retry(lambda: (
             supabase.table(table)
             .select(select_cols)
             .eq("title", clean_title)
             .order("updated_at", desc=True)
             .limit(1)
             .execute()
-        )
+        ))
         rows = getattr(res, "data", None) or []
         if not rows:
             return JSONResponse({"error": "Not found"}, status_code=404)
@@ -24199,6 +24274,8 @@ def api_resolve_note(
         if table == AI_NOTES_TABLE:
             result["ppt_link"] = row.get("ppt_link") or None
         return result
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network dependent
+        raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.") from exc
     except HTTPException:
         raise
     except Exception as e:
@@ -26945,6 +27022,14 @@ def create_app() -> FastAPI:
         token = _bearer_token_from_header(request.headers.get("authorization"))
         if not token:
             token = _token_from_cookie(request, AUTH_ACCESS_COOKIE_NAME)
+        if not token and method == "GET" and path in {"/generate/stream", "/api/notes/generate/stream"}:
+            # EventSource does not reliably support custom Authorization headers.
+            # Allow explicit query-token fallback for stream endpoints only.
+            token = _normalize_possible_token(
+                request.query_params.get("access_token")
+                or request.query_params.get("token")
+                or request.query_params.get("auth_token")
+            )
         if not token:
             return JSONResponse({"detail": "Authentication required"}, status_code=401)
 
@@ -28376,10 +28461,16 @@ async def run_java_compiler(request: CompilerRequest, http_request: Request):
 _BLINK_LINK_CACHE_TTL_S = max(1, int(os.getenv("BLINK_LINK_CACHE_TTL_SECONDS", "45") or "45"))
 _BLINK_LINK_CACHE_MAX_ENTRIES = max(100, int(os.getenv("BLINK_LINK_CACHE_MAX_ENTRIES", "5000") or "5000"))
 _BLINK_LINK_FALLBACK_CONCURRENCY = max(1, int(os.getenv("BLINK_LINK_FALLBACK_CONCURRENCY", "6") or "6"))
-_SELECTED_IMAGE_GEN_TIMEOUT_S = max(20, int(os.getenv("SELECTED_IMAGE_GEN_TIMEOUT_SECONDS", "120") or "120"))
-_SELECTED_IMAGE_MAX_INPUT_CHARS = max(200, int(os.getenv("SELECTED_IMAGE_MAX_INPUT_CHARS", "1200") or "1200"))
-_SELECTED_IMAGE_MODEL = (os.getenv("SELECTED_IMAGE_MODEL", "gemini-3.1-flash-image-preview") or "gemini-3.1-flash-image-preview").strip()
+_SELECTED_IMAGE_GEN_TIMEOUT_S = max(20, int(os.getenv("SELECTED_IMAGE_GEN_TIMEOUT_SECONDS", "45") or "45"))
+_SELECTED_IMAGE_MAX_INPUT_CHARS = max(200, int(os.getenv("SELECTED_IMAGE_MAX_INPUT_CHARS", "800") or "800"))
+_SELECTED_IMAGE_MODEL = (os.getenv("SELECTED_IMAGE_MODEL", "gemini-3-pro-image-preview") or "gemini-3-pro-image-preview").strip()
+_SELECTED_IMAGE_MODELS = [
+    m.strip()
+    for m in (os.getenv("SELECTED_IMAGE_MODELS", "") or "").split(",")
+    if m.strip()
+] or [_SELECTED_IMAGE_MODEL]
 _SELECTED_IMAGE_SIZE = (os.getenv("SELECTED_IMAGE_SIZE", "1K") or "1K").strip()
+_SELECTED_IMAGE_GATEWAY_BUDGET_S = max(8, int(os.getenv("SELECTED_IMAGE_GATEWAY_BUDGET_SECONDS", "14") or "14"))
 _blink_link_cache: Dict[str, Tuple[float, str, str]] = {}
 _blink_link_cache_lock = Lock()
 
@@ -28421,6 +28512,7 @@ class BlinkRequest(BaseModel):
 
 class SelectedImageRequest(BaseModel):
     selected_text: str = Field(..., min_length=1, description="Selected text to illustrate")
+    topic: Optional[str] = Field(default=None, description="Current note topic for cache lookup")
 
 class SelectedImageStoreRequest(BaseModel):
     topic: str = Field(..., min_length=1, description="Topic name")
@@ -28907,7 +28999,7 @@ async def generate_blink_endpoint(
             
             # Using user-provided structure specifically:
             chat = client_g.chats.create(
-                model="gemini-3.1-flash-image-preview", 
+                model="gemini-3-pro-image-preview", 
                 config=types.GenerateContentConfig(
                     response_modalities=['TEXT', 'IMAGE'],
                     tools=[{"google_search": {}}]
@@ -28970,33 +29062,85 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
     Generate an illustration for selected note text and upload it to Google Cloud Storage.
     """
     selected_text = (req.selected_text or "").strip()
+    topic = (req.topic or "").strip()
+
+    def _fallback_image_url(text: str, topic_hint: str = "") -> str:
+        base = (topic_hint or text or "educational concept").strip()
+        compact = " ".join(base.split())[:220]
+        prompt_text = f"Educational diagram: {compact}"
+        return (
+            f"https://image.pollinations.ai/prompt/{quote(prompt_text)}"
+            "?width=1024&height=576&nologo=true&enhance=true&safe=true"
+        )
+
     if not selected_text:
         raise HTTPException(status_code=400, detail="selected_text is required")
 
-    if not os.getenv("GEMINI_API_KEY"):
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured.")
+    if not os.getenv("GEMINI_API_KEY") or genai is None:
+        return {
+            "success": True,
+            "url": _fallback_image_url(selected_text, topic),
+            "public_url": _fallback_image_url(selected_text, topic),
+            "fallback": True,
+            "fallback_reason": "gemini_unavailable",
+            "prompt": None,
+        }
 
-    if genai is None:
-        print("Warning: google-genai not imported. Simulating or failing.")
+    # Fast-path cache hit for same topic + same selected text
+    topic_ci = " ".join(topic.lower().split()) if topic else ""
+    selected_text_key = selected_text[:1200]
+    if topic_ci and selected_text_key:
+        try:
+            supabase = get_service_client()
+            cached = _supabase_retry(lambda: (
+                supabase.table(AI_SELECTED_IMAGES_TABLE)
+                .select("image_url,created_at")
+                .eq("topic_ci", topic_ci)
+                .eq("selected_text", selected_text_key)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            ))
+            cached_rows = getattr(cached, "data", None) or []
+            if cached_rows:
+                cached_url = str(cached_rows[0].get("image_url") or "").strip()
+                parsed = urlparse(cached_url)
+                if parsed.scheme in {"http", "https"} and parsed.netloc:
+                    return {
+                        "success": True,
+                        "url": cached_url,
+                        "public_url": cached_url,
+                        "cached": True,
+                        "prompt": None,
+                    }
+        except Exception:
+            pass
 
     trimmed = selected_text[:_SELECTED_IMAGE_MAX_INPUT_CHARS]
-    prompt = f"Create one clean educational illustration for: {trimmed}"
+
+    def _build_prompt(text: str) -> str:
+        return (
+            "Create a clean, simple educational diagram with white background for this concept: "
+            f"{text}"
+        )
+
+    prompt = _build_prompt(trimmed)
 
     try:
-        def _generate_bytes_sync():
+        def _generate_bytes_sync(prompt_text: str, model_name: str):
             if not genai:
                 raise RuntimeError("google-genai library not available")
 
             client_g = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
             chat = client_g.chats.create(
-                model=_SELECTED_IMAGE_MODEL,
+                model=model_name,
                 config=types.GenerateContentConfig(
                     response_modalities=['TEXT', 'IMAGE']
                 )
             )
 
             resp = chat.send_message(
-                prompt,
+                prompt_text,
                 config=types.GenerateContentConfig(
                     image_config=types.ImageConfig(
                         aspect_ratio="16:9",
@@ -29013,10 +29157,47 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
 
             raise RuntimeError(f"No image part in response. Response text: {resp.text if hasattr(resp, 'text') else 'Unknown'}")
 
-        image_bytes = await asyncio.wait_for(
-            run_in_threadpool(_generate_bytes_sync),
-            timeout=_SELECTED_IMAGE_GEN_TIMEOUT_S,
-        )
+        attempt_errors: List[str] = []
+        image_bytes = None
+
+        prompts = [prompt]
+        shorter = trimmed[: min(300, len(trimmed))]
+        short_prompt = _build_prompt(shorter)
+        if short_prompt != prompt:
+            prompts.append(short_prompt)
+
+        deadline = time.monotonic() + min(_SELECTED_IMAGE_GEN_TIMEOUT_S, _SELECTED_IMAGE_GATEWAY_BUDGET_S)
+        for prompt_text in prompts:
+            for model_name in _SELECTED_IMAGE_MODELS:
+                if image_bytes is not None:
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 3:
+                    break
+                per_attempt_timeout = max(5, min(9, int(remaining - 1)))
+                try:
+                    image_bytes = await asyncio.wait_for(
+                        run_in_threadpool(_generate_bytes_sync, prompt_text, model_name),
+                        timeout=per_attempt_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    attempt_errors.append(f"timeout:{model_name}:{per_attempt_timeout}s")
+                except Exception as exc:
+                    attempt_errors.append(f"error:{model_name}:{exc}")
+            if image_bytes is not None:
+                break
+
+        if image_bytes is None:
+            fallback_url = _fallback_image_url(selected_text, topic)
+            return {
+                "success": True,
+                "url": fallback_url,
+                "public_url": fallback_url,
+                "fallback": True,
+                "fallback_reason": "gemini_timeout_or_error",
+                "attempt_errors": attempt_errors[:6],
+                "prompt": prompt,
+            }
 
         gcs_upload = await run_in_threadpool(
             lambda: _upload_generated_image_to_gcs(
@@ -29038,13 +29219,15 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
         }
 
     except asyncio.TimeoutError:
-        raise HTTPException(
-            status_code=504,
-            detail=(
-                f"Image generation timed out after {_SELECTED_IMAGE_GEN_TIMEOUT_S}s. "
-                "Increase SELECTED_IMAGE_GEN_TIMEOUT_SECONDS if your deployment allows longer requests."
-            ),
-        )
+        fallback_url = _fallback_image_url(selected_text, topic)
+        return {
+            "success": True,
+            "url": fallback_url,
+            "public_url": fallback_url,
+            "fallback": True,
+            "fallback_reason": "timeout_exception",
+            "prompt": prompt,
+        }
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -29063,6 +29246,10 @@ async def save_selected_image_endpoint(req: SelectedImageStoreRequest):
         raise HTTPException(status_code=400, detail="topic is required")
     if not image_url:
         raise HTTPException(status_code=400, detail="image_url is required")
+
+    parsed = urlparse(image_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="image_url must be a valid http/https URL")
 
     try:
         supabase = get_service_client()
@@ -35679,7 +35866,7 @@ No markdown, no code blocks, no explanations — just JSON.
 
 @app.post("/api/ppt/generate-slide")
 async def ppt_generate_slide(body: PPTSlideRequest):
-    """Generate a single PPT slide image using gemini-3.1-flash-image-preview with reference designs."""
+    """Generate a single PPT slide image using gemini-3-pro-image-preview with reference designs."""
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="Gemini API key not configured")
     if not genai:
@@ -35762,7 +35949,7 @@ Generate this slide image now. Make it VISUALLY STUNNING with diagrams and infog
             contents = [prompt] + ref_images
 
             response = client_g.models.generate_content(
-                model="gemini-3.1-flash-image-preview",
+                model="gemini-3-pro-image-preview",
                 contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=['TEXT', 'IMAGE'],

@@ -77,7 +77,57 @@
       } catch (e) { }
     })();
   </script>
-  <script src="./auth.js" defer></script>
+  <script>
+    (function () {
+      async function loadAuthBootstrap() {
+        const v = Date.now();
+        const candidates = [`./auth.js?v=${v}`, `auth.js?v=${v}`, `/ui/auth.js?v=${v}`];
+        for (const url of candidates) {
+          try {
+            const res = await fetch(url, {
+              credentials: 'same-origin',
+              cache: 'no-store',
+              headers: { 'Accept': 'application/javascript, text/javascript, */*' }
+            });
+            if (!res.ok) continue;
+            const text = await res.text();
+            const trimmed = (text || '').trim();
+            if (!trimmed || /^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) {
+              continue;
+            }
+            const blob = new Blob([text], { type: 'text/javascript' });
+            const blobUrl = URL.createObjectURL(blob);
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script');
+              s.src = blobUrl;
+              s.defer = true;
+              s.onload = () => { try { URL.revokeObjectURL(blobUrl); } catch (_) { } resolve(); };
+              s.onerror = () => { try { URL.revokeObjectURL(blobUrl); } catch (_) { } reject(new Error('auth load failed')); };
+              document.head.appendChild(s);
+            });
+            return;
+          } catch (_) { }
+        }
+        console.warn('[Auth] Unable to load auth.js from known paths');
+      }
+
+      loadAuthBootstrap();
+    })();
+  </script>
+
+  <script>
+    // Some third-party script stacks throw this on failed SVG initialization;
+    // prevent noisy unhandled rejection crashes in production.
+    window.addEventListener('unhandledrejection', function (ev) {
+      try {
+        const msg = String((ev && ev.reason && ev.reason.message) || (ev && ev.reason) || '');
+        if (msg.includes('createElementNS')) {
+          ev.preventDefault();
+          console.warn('[UI] Ignored known SVG init rejection:', msg);
+        }
+      } catch (_) { }
+    });
+  </script>
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1539,7 +1589,7 @@
 
       const endpoint = `${apiBase}/api/notes/snippet-assist`;
       const selectionImageEndpoint = `${apiBase}/api/blink/generate-selected`;
-      const MAX_SELECTION_PAYLOAD = 2800;
+      const MAX_SELECTION_PAYLOAD = 800;
       const PREVIEW_MAX = 420;
       let selectionText = '';
       let selectionRect = null;
@@ -1548,6 +1598,29 @@
       let selectionFocusNode = null;
       let panelPinned = false;
       let busy = false;
+      let selectionImageInFlight = false;
+
+      function isValidImageUrl(url) {
+        const v = String(url || '').trim();
+        if (!v) return false;
+        try {
+          const u = new URL(v, window.location.origin);
+          if (!/^https?:$/i.test(u.protocol)) return false;
+          if (!u.hostname) return false;
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function cleanErrorMessage(input, fallback = 'Image generation failed') {
+        const raw = String(input || '').trim();
+        if (!raw) return fallback;
+        if (/^<!doctype html/i.test(raw) || /^<html[\s>]/i.test(raw)) {
+          return fallback;
+        }
+        return raw.slice(0, 220);
+      }
 
       function withinOutput(node) {
         if (!node) return false;
@@ -1832,6 +1905,11 @@
           snack('Select some text in the Final Output first');
           return;
         }
+        if (selectionImageInFlight) {
+          snack('Image generation already in progress');
+          return;
+        }
+        selectionImageInFlight = true;
 
         const payloadSelection = selectionText.slice(0, MAX_SELECTION_PAYLOAD);
         const promptText = 'Generate illustration';
@@ -1841,33 +1919,57 @@
         hidePanel();
 
         try {
-          const res = await fetch(selectionImageEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ selected_text: payloadSelection })
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            const detail = (data && (data.detail || data.error)) || `HTTP ${res.status}`;
-            throw new Error(detail);
-          }
-
-          const imageUrl = ((data && (data.url || data.public_url)) || '').toString().trim();
-          if (!imageUrl) throw new Error('Image URL missing in response');
-
           const activeTopic = (
             (typeof currentTopicOrHeading === 'function' ? currentTopicOrHeading() : '')
             || ($topic?.value || '')
             || (document.querySelector('#output h1')?.textContent || '')
           ).trim();
-          await saveSelectionImageForTopic(activeTopic, imageUrl, payloadSelection);
+
+          let requestPayload = { selected_text: payloadSelection, topic: activeTopic };
+          let res = await fetch(selectionImageEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload)
+          });
+
+          // Retry once on gateway timeout with much shorter selection to reduce model latency.
+          if (res.status === 504) {
+            const shortSelection = payloadSelection.slice(0, 280);
+            if (shortSelection && shortSelection.length < payloadSelection.length) {
+              requestPayload = { selected_text: shortSelection, topic: activeTopic };
+              res = await fetch(selectionImageEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestPayload)
+              });
+            }
+          }
+
+          const rawBody = await res.text().catch(() => '');
+          let data = {};
+          try { data = rawBody ? JSON.parse(rawBody) : {}; } catch { data = {}; }
+          let imageUrl = ((data && (data.url || data.public_url)) || '').toString().trim();
+          if (imageUrl && !isValidImageUrl(imageUrl)) {
+            imageUrl = '';
+          }
+          if (!res.ok || !imageUrl) {
+            const errMsg =
+              (data && (data.detail || data.message || data.error))
+              || cleanErrorMessage(rawBody, '')
+              || `Image generation failed (${res.status || 'unknown'})`;
+            throw new Error(cleanErrorMessage(String(errMsg), `Image generation failed (${res.status || 'unknown'})`));
+          }
+
+          await saveSelectionImageForTopic(activeTopic, imageUrl, requestPayload.selected_text || payloadSelection);
 
           finishSelectionImageJobCard(job, imageUrl);
           snack('Image generated');
         } catch (error) {
           console.error('Selection image generation failed', error);
-          failSelectionImageJobCard(job, error?.message || 'Image generation failed');
+          failSelectionImageJobCard(job, cleanErrorMessage(error?.message, 'Image generation failed'));
           snack('Image generation failed');
+        } finally {
+          selectionImageInFlight = false;
         }
       }
 
@@ -2816,6 +2918,17 @@
       setTimeout(() => $snack.classList.add('hidden'), 1500);
     }
 
+    function isValidImageUrl(url) {
+      const v = String(url || '').trim();
+      if (!v) return false;
+      try {
+        const u = new URL(v, window.location.origin);
+        return /^https?:$/i.test(u.protocol) && !!u.hostname;
+      } catch {
+        return false;
+      }
+    }
+
     function createSelectionImageJobCard(selectedText, promptText) {
       if (!$selectionImagesSection || !$selectionImagesList) return null;
 
@@ -2917,7 +3030,7 @@
     async function saveSelectionImageForTopic(topic, imageUrl, selectedText) {
       const cleanTopic = (topic || '').trim();
       const cleanUrl = (imageUrl || '').trim();
-      if (!cleanTopic || !cleanUrl) return;
+      if (!cleanTopic || !cleanUrl || !isValidImageUrl(cleanUrl)) return;
       try {
         await fetch(`${apiBase}/api/blink/selected-images`, {
           method: 'POST',
@@ -2954,14 +3067,22 @@
           return;
         }
 
+        let renderedCount = 0;
         items.forEach((item) => {
           const selectedLine = (item?.selected_text || cleanTopic || 'Generated image').toString();
           const job = createSelectionImageJobCard(selectedLine, 'Saved image');
           const imageUrl = (item?.image_url || '').toString().trim();
-          if (job && imageUrl) {
+          if (job && imageUrl && isValidImageUrl(imageUrl)) {
             finishSelectionImageJobCard(job, imageUrl);
+            renderedCount += 1;
+          } else if (job && job.card && job.card.parentNode) {
+            job.card.parentNode.removeChild(job.card);
           }
         });
+
+        if (!renderedCount) {
+          $selectionImagesList.innerHTML = '<p>No selected-text image requests yet.</p>';
+        }
       } catch (err) {
         console.warn('Failed to load selected images by topic', err);
       }
@@ -2988,7 +3109,6 @@
 
     // Loader controls scoped to the Final Output answer box
     function showOutputLoader() {
-      ensureLottie();
       if ($outputLoader) $outputLoader.style.display = 'flex';
       if ($wrap) $wrap.classList.add('loading');
     }
@@ -3282,6 +3402,10 @@
       const degree = getSelectedDegree();
       if (degree) url.searchParams.set('degree', degree);
       if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
+      const streamToken = getAuthToken();
+      if (streamToken && streamToken !== '__COOKIE_AUTH__') {
+        url.searchParams.set('access_token', streamToken);
+      }
       es = new EventSource(url.toString(), { withCredentials: true });
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
