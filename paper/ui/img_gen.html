@@ -1598,7 +1598,8 @@
       let selectionFocusNode = null;
       let panelPinned = false;
       let busy = false;
-      let selectionImageInFlight = false;
+      let selectionImageActiveCount = 0;
+      let selectionImageReqSeq = 0;
 
       function isValidImageUrl(url) {
         const v = String(url || '').trim();
@@ -1905,15 +1906,17 @@
           snack('Select some text in the Final Output first');
           return;
         }
-        if (selectionImageInFlight) {
-          snack('Image generation already in progress');
-          return;
-        }
-        selectionImageInFlight = true;
+        selectionImageActiveCount += 1;
+        const reqId = `selimg-${Date.now()}-${++selectionImageReqSeq}`;
+        const startedAt = performance.now();
+        console.log('[SelImg][UI] queued', { reqId, active: selectionImageActiveCount });
 
         const payloadSelection = selectionText.slice(0, MAX_SELECTION_PAYLOAD);
         const promptText = 'Generate illustration';
         const job = createSelectionImageJobCard(payloadSelection, promptText);
+        if (job && job.meta) {
+          job.meta.textContent = `Request ${reqId} started`;
+        }
 
         hideBtn();
         hidePanel();
@@ -1926,22 +1929,26 @@
           ).trim();
 
           let requestPayload = { selected_text: payloadSelection, topic: activeTopic };
+          console.log('[SelImg][UI] request_start', { reqId, topic: activeTopic, selectionChars: payloadSelection.length });
           let res = await fetch(selectionImageEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestPayload)
           });
+          console.log('[SelImg][UI] response_headers', { reqId, status: res.status });
 
           // Retry once on gateway timeout with much shorter selection to reduce model latency.
           if (res.status === 504) {
             const shortSelection = payloadSelection.slice(0, 280);
             if (shortSelection && shortSelection.length < payloadSelection.length) {
               requestPayload = { selected_text: shortSelection, topic: activeTopic };
+              console.log('[SelImg][UI] retry_short_selection', { reqId, shortChars: shortSelection.length });
               res = await fetch(selectionImageEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestPayload)
               });
+              console.log('[SelImg][UI] retry_response_headers', { reqId, status: res.status });
             }
           }
 
@@ -1953,23 +1960,40 @@
             imageUrl = '';
           }
           if (!res.ok || !imageUrl) {
+            const detail = data && data.detail;
+            const detailText = (() => {
+              if (!detail) return '';
+              if (typeof detail === 'string') return detail;
+              if (typeof detail === 'object') {
+                const msg = detail.message || detail.error || '';
+                const attempts = Array.isArray(detail.attempt_errors) ? detail.attempt_errors.join(' | ') : '';
+                return [msg, attempts].filter(Boolean).join(' :: ');
+              }
+              return String(detail);
+            })();
             const errMsg =
-              (data && (data.detail || data.message || data.error))
+              detailText
+              || (data && (data.message || data.error))
               || cleanErrorMessage(rawBody, '')
               || `Image generation failed (${res.status || 'unknown'})`;
             throw new Error(cleanErrorMessage(String(errMsg), `Image generation failed (${res.status || 'unknown'})`));
           }
 
-          await saveSelectionImageForTopic(activeTopic, imageUrl, requestPayload.selected_text || payloadSelection);
+          if (!data?.saved_in_db) {
+            console.log('[SelImg][UI] backend_not_saved_db_fallback', { reqId });
+            await saveSelectionImageForTopic(activeTopic, imageUrl, requestPayload.selected_text || payloadSelection);
+          }
 
           finishSelectionImageJobCard(job, imageUrl);
+          console.log('[SelImg][UI] request_success', { reqId, elapsedMs: Math.round(performance.now() - startedAt) });
           snack('Image generated');
         } catch (error) {
-          console.error('Selection image generation failed', error);
+          console.error('[SelImg][UI] request_failed', { reqId, elapsedMs: Math.round(performance.now() - startedAt), error });
           failSelectionImageJobCard(job, cleanErrorMessage(error?.message, 'Image generation failed'));
           snack('Image generation failed');
         } finally {
-          selectionImageInFlight = false;
+          selectionImageActiveCount = Math.max(0, selectionImageActiveCount - 1);
+          console.log('[SelImg][UI] request_end', { reqId, active: selectionImageActiveCount });
         }
       }
 
@@ -2402,10 +2426,13 @@
     }
 
     async function loadRelatedVideos(topic, options = {}) {
-      if ($relatedVideosSection) {
-        $relatedVideosSection.classList.add('hidden');
+      const relatedVideosDisabled = true;
+      if (relatedVideosDisabled) {
+        if ($relatedVideosSection) {
+          $relatedVideosSection.classList.add('hidden');
+        }
+        return;
       }
-      return;
 
       const baseQuery = (topic || '').trim();
       const force = Boolean(options.force);

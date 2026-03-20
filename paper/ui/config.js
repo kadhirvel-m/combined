@@ -29,7 +29,6 @@
         if (!localHost) return u.toString().replace(/\/$/, '');
         var targetHost = isLocalPageHost ? pageHost : (u.hostname || '127.0.0.1');
         var port = String(u.port || '');
-        if (port === '8001') port = '8000';
         if (!port) port = '8000';
         return (u.protocol || 'http:') + '//' + targetHost + ':' + port;
       } catch (_) {

@@ -26769,7 +26769,7 @@ def create_app() -> FastAPI:
     async def sanitized_http_exception_handler(request: Request, exc: HTTPException):
         status_code = int(getattr(exc, "status_code", 500) or 500)
         detail: Any = exc.detail
-        if status_code >= 500:
+        if status_code >= 500 and status_code not in {502, 504}:
             # Never expose internal exception details to clients.
             detail = "Internal server error"
         elif not isinstance(detail, (str, dict, list)):
@@ -28461,7 +28461,8 @@ async def run_java_compiler(request: CompilerRequest, http_request: Request):
 _BLINK_LINK_CACHE_TTL_S = max(1, int(os.getenv("BLINK_LINK_CACHE_TTL_SECONDS", "45") or "45"))
 _BLINK_LINK_CACHE_MAX_ENTRIES = max(100, int(os.getenv("BLINK_LINK_CACHE_MAX_ENTRIES", "5000") or "5000"))
 _BLINK_LINK_FALLBACK_CONCURRENCY = max(1, int(os.getenv("BLINK_LINK_FALLBACK_CONCURRENCY", "6") or "6"))
-_SELECTED_IMAGE_GEN_TIMEOUT_S = max(20, int(os.getenv("SELECTED_IMAGE_GEN_TIMEOUT_SECONDS", "45") or "45"))
+_SELECTED_IMAGE_GEN_TIMEOUT_S = max(30, int(os.getenv("SELECTED_IMAGE_GEN_TIMEOUT_SECONDS", "95") or "95"))
+_SELECTED_IMAGE_GEN_RETRY_TIMEOUT_S = max(20, int(os.getenv("SELECTED_IMAGE_GEN_RETRY_TIMEOUT_SECONDS", "70") or "70"))
 _SELECTED_IMAGE_MAX_INPUT_CHARS = max(200, int(os.getenv("SELECTED_IMAGE_MAX_INPUT_CHARS", "800") or "800"))
 _SELECTED_IMAGE_MODEL = (os.getenv("SELECTED_IMAGE_MODEL", "gemini-3-pro-image-preview") or "gemini-3-pro-image-preview").strip()
 _SELECTED_IMAGE_MODELS = [
@@ -28469,8 +28470,9 @@ _SELECTED_IMAGE_MODELS = [
     for m in (os.getenv("SELECTED_IMAGE_MODELS", "") or "").split(",")
     if m.strip()
 ] or [_SELECTED_IMAGE_MODEL]
+_SELECTED_IMAGE_USE_SEARCH_TOOL = (os.getenv("SELECTED_IMAGE_USE_SEARCH_TOOL", "false").strip().lower() in {"1", "true", "yes", "on"})
 _SELECTED_IMAGE_SIZE = (os.getenv("SELECTED_IMAGE_SIZE", "1K") or "1K").strip()
-_SELECTED_IMAGE_GATEWAY_BUDGET_S = max(8, int(os.getenv("SELECTED_IMAGE_GATEWAY_BUDGET_SECONDS", "14") or "14"))
+_SELECTED_IMAGE_GATEWAY_BUDGET_S = max(8, int(os.getenv("SELECTED_IMAGE_GATEWAY_BUDGET_SECONDS", "90") or "90"))
 _blink_link_cache: Dict[str, Tuple[float, str, str]] = {}
 _blink_link_cache_lock = Lock()
 
@@ -29022,7 +29024,10 @@ async def generate_blink_endpoint(
             
             raise RuntimeError(f"No image part in response. Response text: {resp.text if hasattr(resp, 'text') else 'Unknown'}")
 
-        image_bytes = await run_in_threadpool(_generate_bytes_sync)
+        image_bytes = await asyncio.wait_for(
+            run_in_threadpool(_generate_bytes_sync),
+            timeout=float(_SELECTED_IMAGE_GEN_TIMEOUT_S),
+        )
         
         # 3. Upload to Supabase
         filename = f"gen_blink_{uuid.uuid4().hex[:8]}.png"
@@ -29063,28 +29068,15 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
     """
     selected_text = (req.selected_text or "").strip()
     topic = (req.topic or "").strip()
-
-    def _fallback_image_url(text: str, topic_hint: str = "") -> str:
-        base = (topic_hint or text or "educational concept").strip()
-        compact = " ".join(base.split())[:220]
-        prompt_text = f"Educational diagram: {compact}"
-        return (
-            f"https://image.pollinations.ai/prompt/{quote(prompt_text)}"
-            "?width=1024&height=576&nologo=true&enhance=true&safe=true"
-        )
+    req_id = f"selimg-{uuid.uuid4().hex[:8]}"
+    t0 = time.perf_counter()
+    print(f"[SelImg][{req_id}] start topic='{topic[:120]}' selected_chars={len(selected_text)}")
 
     if not selected_text:
         raise HTTPException(status_code=400, detail="selected_text is required")
 
     if not os.getenv("GEMINI_API_KEY") or genai is None:
-        return {
-            "success": True,
-            "url": _fallback_image_url(selected_text, topic),
-            "public_url": _fallback_image_url(selected_text, topic),
-            "fallback": True,
-            "fallback_reason": "gemini_unavailable",
-            "prompt": None,
-        }
+        raise HTTPException(status_code=500, detail="Gemini image generation is not available on this server")
 
     # Fast-path cache hit for same topic + same selected text
     topic_ci = " ".join(topic.lower().split()) if topic else ""
@@ -29106,6 +29098,7 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
                 cached_url = str(cached_rows[0].get("image_url") or "").strip()
                 parsed = urlparse(cached_url)
                 if parsed.scheme in {"http", "https"} and parsed.netloc:
+                    print(f"[SelImg][{req_id}] cache_hit url='{cached_url[:120]}' elapsed_ms={int((time.perf_counter()-t0)*1000)}")
                     return {
                         "success": True,
                         "url": cached_url,
@@ -29125,22 +29118,26 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
         )
 
     prompt = _build_prompt(trimmed)
+    print(f"[SelImg][{req_id}] prompt_ready chars={len(prompt)}")
 
     try:
-        def _generate_bytes_sync(prompt_text: str, model_name: str):
+        def _generate_bytes_sync(generation_prompt: str):
             if not genai:
                 raise RuntimeError("google-genai library not available")
 
             client_g = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            tools_cfg = [{"google_search": {}}] if _SELECTED_IMAGE_USE_SEARCH_TOOL else None
+
             chat = client_g.chats.create(
-                model=model_name,
+                model=_SELECTED_IMAGE_MODEL,
                 config=types.GenerateContentConfig(
-                    response_modalities=['TEXT', 'IMAGE']
+                    response_modalities=['TEXT', 'IMAGE'],
+                    tools=tools_cfg
                 )
             )
 
             resp = chat.send_message(
-                prompt_text,
+                generation_prompt,
                 config=types.GenerateContentConfig(
                     image_config=types.ImageConfig(
                         aspect_ratio="16:9",
@@ -29157,48 +29154,59 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
 
             raise RuntimeError(f"No image part in response. Response text: {resp.text if hasattr(resp, 'text') else 'Unknown'}")
 
-        attempt_errors: List[str] = []
-        image_bytes = None
+        attempts: List[Tuple[str, str, float]] = [
+            ("primary", prompt, float(_SELECTED_IMAGE_GEN_TIMEOUT_S)),
+        ]
+        compact_trimmed = selected_text[: min(260, _SELECTED_IMAGE_MAX_INPUT_CHARS)]
+        compact_prompt = _build_prompt(compact_trimmed)
+        if compact_prompt != prompt:
+            attempts.append(("retry_compact", compact_prompt, float(_SELECTED_IMAGE_GEN_RETRY_TIMEOUT_S)))
 
-        prompts = [prompt]
-        shorter = trimmed[: min(300, len(trimmed))]
-        short_prompt = _build_prompt(shorter)
-        if short_prompt != prompt:
-            prompts.append(short_prompt)
+        image_bytes: Optional[bytes] = None
+        last_timeout_error: Optional[Exception] = None
+        last_error: Optional[Exception] = None
+        used_prompt = prompt
 
-        deadline = time.monotonic() + min(_SELECTED_IMAGE_GEN_TIMEOUT_S, _SELECTED_IMAGE_GATEWAY_BUDGET_S)
-        for prompt_text in prompts:
-            for model_name in _SELECTED_IMAGE_MODELS:
-                if image_bytes is not None:
-                    break
-                remaining = deadline - time.monotonic()
-                if remaining <= 3:
-                    break
-                per_attempt_timeout = max(5, min(9, int(remaining - 1)))
-                try:
-                    image_bytes = await asyncio.wait_for(
-                        run_in_threadpool(_generate_bytes_sync, prompt_text, model_name),
-                        timeout=per_attempt_timeout,
-                    )
-                except asyncio.TimeoutError:
-                    attempt_errors.append(f"timeout:{model_name}:{per_attempt_timeout}s")
-                except Exception as exc:
-                    attempt_errors.append(f"error:{model_name}:{exc}")
-            if image_bytes is not None:
+        for attempt_idx, (attempt_name, attempt_prompt, timeout_s) in enumerate(attempts, start=1):
+            used_prompt = attempt_prompt
+            attempt_start = time.perf_counter()
+            print(
+                f"[SelImg][{req_id}] gemini_generate_begin attempt={attempt_idx}/{len(attempts)} "
+                f"name={attempt_name} timeout_s={int(timeout_s)} prompt_chars={len(attempt_prompt)}"
+            )
+            try:
+                image_bytes = await asyncio.wait_for(
+                    run_in_threadpool(lambda p=attempt_prompt: _generate_bytes_sync(p)),
+                    timeout=timeout_s,
+                )
+                print(
+                    f"[SelImg][{req_id}] gemini_generate_ok attempt={attempt_idx} "
+                    f"elapsed_ms={int((time.perf_counter()-attempt_start)*1000)}"
+                )
                 break
+            except asyncio.TimeoutError as timeout_err:
+                last_timeout_error = timeout_err
+                print(
+                    f"[SelImg][{req_id}] gemini_generate_timeout attempt={attempt_idx} "
+                    f"elapsed_ms={int((time.perf_counter()-attempt_start)*1000)}"
+                )
+            except Exception as attempt_err:
+                last_error = attempt_err
+                print(
+                    f"[SelImg][{req_id}] gemini_generate_fail attempt={attempt_idx} "
+                    f"err={attempt_err} elapsed_ms={int((time.perf_counter()-attempt_start)*1000)}"
+                )
 
-        if image_bytes is None:
-            fallback_url = _fallback_image_url(selected_text, topic)
-            return {
-                "success": True,
-                "url": fallback_url,
-                "public_url": fallback_url,
-                "fallback": True,
-                "fallback_reason": "gemini_timeout_or_error",
-                "attempt_errors": attempt_errors[:6],
-                "prompt": prompt,
-            }
+        if not image_bytes:
+            if last_timeout_error is not None:
+                raise asyncio.TimeoutError()
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError("Gemini image generation returned no bytes")
 
+        print(f"[SelImg][{req_id}] gemini_generate_done bytes={len(image_bytes) if image_bytes else 0}")
+
+        print(f"[SelImg][{req_id}] gcs_upload_begin")
         gcs_upload = await run_in_threadpool(
             lambda: _upload_generated_image_to_gcs(
                 image_bytes,
@@ -29208,29 +29216,51 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
         public_url = (gcs_upload.get("public_url") or "").strip()
         if not public_url:
             raise RuntimeError("Failed to resolve public URL after GCS upload")
+        print(f"[SelImg][{req_id}] gcs_upload_done url='{public_url[:140]}'")
 
+        # Persist generated selected-image link so UI can load history without
+        # relying on a second client-side save request.
+        saved_in_db = False
+        topic_ci_for_save = " ".join(topic.lower().split()) if topic else ""
+        if topic_ci_for_save:
+            try:
+                save_payload = {
+                    "topic": topic,
+                    "topic_ci": topic_ci_for_save,
+                    "image_url": public_url,
+                    "selected_text": selected_text[:1200] if selected_text else None,
+                }
+                await run_in_threadpool(
+                    lambda: get_service_client().table(AI_SELECTED_IMAGES_TABLE).insert(save_payload).execute()
+                )
+                saved_in_db = True
+                print(f"[SelImg][{req_id}] db_save_done")
+            except Exception as save_err:
+                # Do not fail image generation response if DB persistence fails.
+                print(f"[SelImg] Inline save after generate failed: {save_err}")
+
+        print(f"[SelImg][{req_id}] success elapsed_ms={int((time.perf_counter()-t0)*1000)}")
         return {
             "success": True,
             "url": public_url,
             "public_url": public_url,
             "bucket": gcs_upload.get("bucket") or GCS_IMAGE_BUCKET,
             "gcs_path": gcs_upload.get("gcs_path"),
-            "prompt": prompt
+            "saved_in_db": saved_in_db,
+            "prompt": used_prompt
         }
 
+    except HTTPException:
+        # Preserve explicit status codes (e.g., 502 for model timeout/failure).
+        print(f"[SelImg][{req_id}] http_error elapsed_ms={int((time.perf_counter()-t0)*1000)}")
+        raise
     except asyncio.TimeoutError:
-        fallback_url = _fallback_image_url(selected_text, topic)
-        return {
-            "success": True,
-            "url": fallback_url,
-            "public_url": fallback_url,
-            "fallback": True,
-            "fallback_reason": "timeout_exception",
-            "prompt": prompt,
-        }
+        print(f"[SelImg][{req_id}] timeout elapsed_ms={int((time.perf_counter()-t0)*1000)}")
+        raise HTTPException(status_code=504, detail="Gemini image generation timed out")
     except Exception as e:
         import traceback
         traceback.print_exc()
+        print(f"[SelImg][{req_id}] error {e} elapsed_ms={int((time.perf_counter()-t0)*1000)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/blink/selected-images")
