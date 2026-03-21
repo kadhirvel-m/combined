@@ -28466,7 +28466,7 @@ _BLINK_LINK_CACHE_MAX_ENTRIES = max(100, int(os.getenv("BLINK_LINK_CACHE_MAX_ENT
 _BLINK_LINK_FALLBACK_CONCURRENCY = max(1, int(os.getenv("BLINK_LINK_FALLBACK_CONCURRENCY", "6") or "6"))
 _SELECTED_IMAGE_GEN_TIMEOUT_S = max(30, int(os.getenv("SELECTED_IMAGE_GEN_TIMEOUT_SECONDS", "95") or "95"))
 _SELECTED_IMAGE_GEN_RETRY_TIMEOUT_S = max(20, int(os.getenv("SELECTED_IMAGE_GEN_RETRY_TIMEOUT_SECONDS", "70") or "70"))
-_SELECTED_IMAGE_MAX_INPUT_CHARS = max(200, int(os.getenv("SELECTED_IMAGE_MAX_INPUT_CHARS", "800") or "800"))
+_SELECTED_IMAGE_MAX_INPUT_CHARS = max(500, int(os.getenv("SELECTED_IMAGE_MAX_INPUT_CHARS", "20000") or "20000"))
 _SELECTED_IMAGE_MODEL = (os.getenv("SELECTED_IMAGE_MODEL", "gemini-3-pro-image-preview") or "gemini-3-pro-image-preview").strip()
 _SELECTED_IMAGE_MODELS = [
     m.strip()
@@ -29119,7 +29119,7 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
 
     def _build_prompt(text: str) -> str:
         return (
-            "Create a clean, simple educational diagram with white background for this concept: "
+            "Create a clean, minimal, and visually appealing educational diagram on a white background using simple shapes, clear labels, balanced spacing, and a logical layout. Ensure the illustration is easy to understand at a glance, with well-organized elements, subtle color accents (if needed), and a professional, textbook-style design. Avoid clutter and unnecessary details while emphasizing clarity and visual hierarchy for: "
             f"{text}"
         )
 
@@ -29183,11 +29183,8 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
 
         attempts: List[Tuple[str, str, float]] = [
             ("primary", prompt, float(_SELECTED_IMAGE_GEN_TIMEOUT_S)),
+            ("retry_same_prompt", prompt, float(_SELECTED_IMAGE_GEN_RETRY_TIMEOUT_S)),
         ]
-        compact_trimmed = selected_text[: min(260, _SELECTED_IMAGE_MAX_INPUT_CHARS)]
-        compact_prompt = _build_prompt(compact_trimmed)
-        if compact_prompt != prompt:
-            attempts.append(("retry_compact", compact_prompt, float(_SELECTED_IMAGE_GEN_RETRY_TIMEOUT_S)))
 
         image_bytes: Optional[bytes] = None
         last_timeout_error: Optional[Exception] = None

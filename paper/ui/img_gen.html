@@ -1616,6 +1616,7 @@
       const endpoint = `${apiBase}/api/notes/snippet-assist`;
       const selectionImageEndpoint = `${apiBase}/api/blink/generate-selected`;
       const MAX_SELECTION_PAYLOAD = 800;
+      const MAX_SELECTION_IMAGE_PAYLOAD = 0; // 0 means no truncation for image generation payloads.
       const PREVIEW_MAX = 420;
       let selectionText = '';
       let selectionRect = null;
@@ -1937,7 +1938,9 @@
         const startedAt = performance.now();
         console.log('[SelImg][UI] queued', { reqId, active: selectionImageActiveCount });
 
-        const payloadSelection = selectionText.slice(0, MAX_SELECTION_PAYLOAD);
+        const payloadSelection = MAX_SELECTION_IMAGE_PAYLOAD > 0
+          ? selectionText.slice(0, MAX_SELECTION_IMAGE_PAYLOAD)
+          : selectionText;
         const promptText = 'Generate illustration';
         const job = createSelectionImageJobCard(payloadSelection, promptText);
         if (job && job.meta) {
@@ -1963,19 +1966,16 @@
           });
           console.log('[SelImg][UI] response_headers', { reqId, status: res.status });
 
-          // Retry once on gateway timeout with much shorter selection to reduce model latency.
+          // Retry once on gateway timeout with the same full selection payload.
           if (res.status === 504) {
-            const shortSelection = payloadSelection.slice(0, 280);
-            if (shortSelection && shortSelection.length < payloadSelection.length) {
-              requestPayload = { selected_text: shortSelection, topic: activeTopic };
-              console.log('[SelImg][UI] retry_short_selection', { reqId, shortChars: shortSelection.length });
-              res = await fetch(selectionImageEndpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestPayload)
-              });
-              console.log('[SelImg][UI] retry_response_headers', { reqId, status: res.status });
-            }
+            requestPayload = { selected_text: payloadSelection, topic: activeTopic };
+            console.log('[SelImg][UI] retry_same_selection', { reqId, chars: payloadSelection.length });
+            res = await fetch(selectionImageEndpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(requestPayload)
+            });
+            console.log('[SelImg][UI] retry_response_headers', { reqId, status: res.status });
           }
 
           // Retry once on backend busy signal after a short backoff.

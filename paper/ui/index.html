@@ -2198,8 +2198,15 @@
             const teacherSignedIn = document.getElementById('ctaTeacherSignedIn');
             if (!signedOut || !signedIn) return;
 
+            const navProfile = document.getElementById('navProfile');
+            const navProfileMobile = document.getElementById('navProfileMobile');
+            const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+
             let isTeacher = false;
             let isStudent = false;
+            let teacherProfile = null;
+            let resolvedRole = null;
+
             try {
                 const AUTH_SENTINEL = '__COOKIE_AUTH__';
                 const tTeach = localStorage.getItem('teacherToken');
@@ -2210,9 +2217,34 @@
 
             if (!isTeacher && !isStudent) {
                 try {
-                    const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+                    const statusRes = await fetch(`${apiBase}/api/teacher/me/status`, { credentials: 'include' });
+                    if (statusRes.ok) {
+                        const statusData = await statusRes.json();
+                        resolvedRole = String((statusData && statusData.role) || '').trim().toLowerCase();
+                        if (resolvedRole === 'teacher') {
+                            isTeacher = true;
+                        } else {
+                            // Any authenticated non-teacher role should use the student/admin CTA path (NoteX).
+                            isStudent = true;
+                        }
+                    }
+                } catch (_) { }
+            }
+
+            if (!isTeacher && !isStudent) {
+                try {
                     const meRes = await fetch(`${apiBase}/api/me`, { credentials: 'include' });
                     isStudent = meRes.ok;
+                } catch (_) { }
+            }
+
+            if (isTeacher) {
+                try {
+                    const tRes = await fetch(`${apiBase}/api/teacher/profile/me`, { credentials: 'include' });
+                    if (tRes.ok) {
+                        const tData = await tRes.json();
+                        teacherProfile = (tData && (tData.teacher || tData.profile || tData)) || null;
+                    }
                 } catch (_) { }
             }
 
@@ -2220,6 +2252,18 @@
                 signedOut.classList.add('hidden');
                 signedIn.classList.add('hidden');
                 if (teacherSignedIn) teacherSignedIn.classList.remove('hidden');
+
+                if (navProfile && navProfile.tagName === 'A') navProfile.href = 'teacher_profile.html?user=me';
+                if (navProfileMobile && navProfileMobile.tagName === 'A') navProfileMobile.href = 'teacher_profile.html?user=me';
+
+                if (teacherProfile && typeof window.__PX_NAV_APPLY === 'function') {
+                    window.__PX_NAV_APPLY({
+                        name: teacherProfile.name || teacherProfile.full_name || teacherProfile.username || 'Teacher',
+                        profile_image_url: teacherProfile.profile_image_url || teacherProfile.logo_url || teacherProfile.avatar_url || '',
+                        logo_url: teacherProfile.logo_url || '',
+                        avatar_url: teacherProfile.avatar_url || ''
+                    });
+                }
             } else if (isStudent) {
                 signedOut.classList.add('hidden');
                 signedIn.classList.remove('hidden');
