@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Control Panel - Abuse Blocks</title>
+  <link rel="icon" type="image/x-icon" href="../../assets/img/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="../../config.js"></script>
+  <script defer src="./cp-common.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: { brand: { 900: '#1E1E2F', 500: '#9E4B8A' } },
+        }
+      }
+    }
+  </script>
+</head>
+
+<body class="min-h-screen bg-slate-100 text-slate-900 dark:bg-brand-900 dark:text-white font-sans">
+  <header class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+    <div class="container mx-auto px-4 flex items-center justify-between py-3.5">
+      <a href="../../index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+        <img src="../../assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+        <img src="../../assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+      </a>
+      <div class="hidden md:flex items-center gap-2">
+        <button data-theme-toggle class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15">
+          <span class="material-symbols-rounded">dark_mode</span>
+          <span>Theme</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container mx-auto px-4 py-8 space-y-6">
+    <section class="rounded-3xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/5 p-6">
+      <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Blocked People / IPs</h1>
+      <p class="text-sm text-slate-600 dark:text-white/70 mt-2">Review abuse-score blocks, see reason, then allow or unblock trusted employees.</p>
+      <div class="mt-4 flex flex-wrap gap-2 text-sm">
+        <a data-cp-tab="plans" href="./plans-manager.html" class="rounded-full px-4 py-2 border border-black/10 dark:border-white/15 transition">Plans</a>
+        <a data-cp-tab="limits" href="./usage-limits.html" class="rounded-full px-4 py-2 border border-black/10 dark:border-white/15 transition">Usage Limits</a>
+        <a data-cp-tab="manual" href="./manual-access.html" class="rounded-full px-4 py-2 border border-black/10 dark:border-white/15 transition">Manual Access</a>
+        <a data-cp-tab="abuse" href="./abuse-blocks.html" class="rounded-full px-4 py-2 border border-black/10 dark:border-white/15 transition">Abuse Blocks</a>
+      </div>
+    </section>
+
+    <section class="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/5 p-5">
+      <p id="status" class="hidden text-xs mb-3"></p>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <label class="text-xs md:col-span-1">Lookback (hours)
+          <input id="hours" type="number" min="1" max="168" value="24" class="mt-1 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-brand-900/40 px-3 py-2 text-sm" />
+        </label>
+        <label class="text-xs md:col-span-2 flex items-center gap-2 pt-5 md:pt-0">
+          <input id="includeAllowlisted" type="checkbox" class="size-4" />
+          <span>Include allowlisted</span>
+        </label>
+        <button id="reloadBtn" class="rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white">Reload</button>
+      </div>
+
+      <div class="mt-4 overflow-auto">
+        <table class="w-full text-sm">
+          <thead class="text-xs text-slate-500 dark:text-white/60 border-b border-black/10 dark:border-white/10">
+            <tr>
+              <th class="text-left py-2">IP</th>
+              <th class="text-left">Status</th>
+              <th class="text-left">Score</th>
+              <th class="text-left">Reason</th>
+              <th class="text-left">Last Seen</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const $ = (id) => document.getElementById(id);
+      const statusEl = $('status');
+      const rowsEl = $('rows');
+
+      async function ensureStaff() {
+        const token = CP.getToken();
+        if (!token) throw new Error('Please sign in as admin/employee first.');
+        const res = await fetch(`${CP.API}/api/admin/roles/me`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+        const role = String(data.role || '').toLowerCase();
+        if (role !== 'admin' && role !== 'employee') {
+          throw new Error('Admin or employee role required');
+        }
+        return token;
+      }
+
+      async function fetchStaffJson(path, options) {
+        const token = await ensureStaff();
+        const init = options || {};
+        const headers = Object.assign({}, init.headers || {}, { Authorization: `Bearer ${token}` });
+        if (init.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+        const res = await fetch(`${CP.API}${path}`, Object.assign({}, init, { headers }));
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+        return data;
+      }
+
+      function esc(v) { return CP.escapeHtml(v == null ? '' : String(v)); }
+
+      function statusBadge(item) {
+        if (item.blocked) return '<span class="inline-flex rounded-full px-2 py-0.5 text-[11px] bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Blocked</span>';
+        if (item.allowlisted) return '<span class="inline-flex rounded-full px-2 py-0.5 text-[11px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Allowlisted</span>';
+        return '<span class="inline-flex rounded-full px-2 py-0.5 text-[11px] bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white/70">Observed</span>';
+      }
+
+      function rowActions(item) {
+        const ip = esc(item.ip || '');
+        return [
+          `<button data-action="allow_and_unblock" data-ip="${ip}" class="px-2 py-1 rounded bg-emerald-600 text-white text-xs">Allow + Unblock</button>`,
+          `<button data-action="unblock" data-ip="${ip}" class="px-2 py-1 rounded bg-amber-600 text-white text-xs">Unblock</button>`,
+          `<button data-action="unallow" data-ip="${ip}" class="px-2 py-1 rounded bg-slate-200 dark:bg-white/10 text-xs">Remove Allow</button>`
+        ].join(' ');
+      }
+
+      function render(items) {
+        if (!items.length) {
+          rowsEl.innerHTML = '<tr><td colspan="6" class="py-4 text-slate-500 dark:text-white/60">No blocked people found.</td></tr>';
+          return;
+        }
+        rowsEl.innerHTML = items.map((item) => `
+          <tr class="border-b border-black/5 dark:border-white/5 hover:bg-black/[0.02] dark:hover:bg-white/[0.04] align-top">
+            <td class="py-2 font-mono text-xs">${esc(item.ip)}</td>
+            <td>${statusBadge(item)}</td>
+            <td>${esc(item.score)} / ${esc(item.threshold)}</td>
+            <td class="max-w-md break-words">${esc(item.reason || '-')}</td>
+            <td>${esc(CP.fmtDate(item.last_seen))}</td>
+            <td class="text-right space-x-1">${rowActions(item)}</td>
+          </tr>
+        `).join('');
+      }
+
+      async function loadList() {
+        const hours = Math.max(1, Math.min(168, Number($('hours').value || 24)));
+        const includeAllowlisted = $('includeAllowlisted').checked ? 'true' : 'false';
+        const data = await fetchStaffJson(`/api/admin/security/abuse/blocked?hours=${hours}&include_allowlisted=${includeAllowlisted}`);
+        render(data.items || []);
+        CP.showStatus(statusEl, `Loaded ${Number(data.count || 0)} records.`, 'success');
+      }
+
+      async function doAction(ip, action) {
+        const reason = window.prompt('Reason (optional):', 'Trusted employee');
+        await fetchStaffJson('/api/admin/security/abuse/ip-action', {
+          method: 'POST',
+          body: JSON.stringify({ ip, action, reason: reason || null })
+        });
+        await loadList();
+      }
+
+      rowsEl.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-action][data-ip]');
+        if (!btn) return;
+        try {
+          await doAction(btn.getAttribute('data-ip') || '', btn.getAttribute('data-action') || '');
+        } catch (err) {
+          CP.showStatus(statusEl, err.message || 'Action failed', 'error');
+        }
+      });
+
+      $('reloadBtn').addEventListener('click', () => loadList().catch((e) => CP.showStatus(statusEl, e.message || 'Reload failed', 'error')));
+
+      (async function init() {
+        CP.initPageChrome('abuse');
+        try {
+          await ensureStaff();
+          await loadList();
+        } catch (err) {
+          CP.showStatus(statusEl, err.message || 'Init failed', 'error');
+        }
+      })();
+    })();
+  </script>
+</body>
+
+</html>

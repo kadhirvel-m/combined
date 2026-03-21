@@ -95,14 +95,17 @@
     try {
       const refreshToken = getUsableRefreshToken();
       const fallback = getBearerFallbackToken();
-      // Never call /refresh without a real refresh token.
-      if (!refreshToken) {
+      const hasSessionState = hasAuthState();
+      // If no token and no session signal, skip refresh attempt.
+      if (!refreshToken && !hasSessionState) {
         return !!fallback || hasAuthState();
       }
       if (isRefreshSuppressed()) {
         return !!fallback || hasAuthState();
       }
-      const body = JSON.stringify({ refresh_token: refreshToken });
+      const body = refreshToken
+        ? JSON.stringify({ refresh_token: refreshToken })
+        : '{}';
       const res = await fetch(`${API}/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -364,7 +367,8 @@
     window.__PX_AUTH_INIT_DONE = true;
     // Auto-refresh token if needed (for persistent sessions)
     const hasRefreshToken = !!getUsableRefreshToken();
-    if (hasRefreshToken) {
+    const hasSessionState = hasAuthState();
+    if (hasRefreshToken || hasSessionState) {
       const refreshed = await refreshTokensIfNeeded();
       if (!refreshed && !safeGet(USER_TOKEN_KEY) && !getBearerFallbackToken()) {
         console.warn('[Auth] Init - Refresh failed and no active cookie session. Keeping current auth markers.');

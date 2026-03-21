@@ -433,6 +433,74 @@
       var name = String(window.AUTH_CSRF_COOKIE_NAME || '').trim();
       return name || 'paperx_csrf';
     }
+
+    function _isAuthEndpoint(pathname) {
+      return pathname === '/login' || pathname === '/refresh' || pathname === '/logout';
+    }
+
+    function _setBearerFallback(token) {
+      var t = String(token || '').trim();
+      if (!t || t === AUTH_SENTINEL) return;
+      try { sessionStorage.setItem(BEARER_FALLBACK_KEY, t); } catch (_) { }
+      try { localStorage.setItem(BEARER_FALLBACK_KEY, t); } catch (_) { }
+    }
+
+    function _applyAuthStateFromResponse(pathname, response) {
+      try {
+        if (_isAuthEndpoint(pathname) && response.ok) {
+          setAuthStateMarker(true);
+        }
+        if (pathname === '/api/me') {
+          if (response.ok) setAuthStateMarker(true);
+          if (response.status === 401) {
+            setAuthStateMarker(false);
+            clearBearerFallback();
+          }
+        }
+        if (pathname === '/logout' && response.ok) {
+          setAuthStateMarker(false);
+          clearBearerFallback();
+        }
+      } catch (_) { }
+    }
+
+    var _refreshPromise = null;
+    function _attemptAutoRefresh() {
+      if (_refreshPromise) return _refreshPromise;
+
+      var apiBase = String(window.API_BASE || window.__API_BASE || '').replace(/\/$/, '');
+      if (!apiBase) {
+        _refreshPromise = Promise.resolve(false);
+        return _refreshPromise.finally(function () { _refreshPromise = null; });
+      }
+
+      var refreshUrl = apiBase + '/refresh';
+      _refreshPromise = _fetch(refreshUrl, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        // Cookie-based refresh works with an empty body.
+        body: '{}'
+      }).then(function (res) {
+        if (!res.ok) return false;
+        return res.json().then(function (data) {
+          var at = data && data.access_token ? String(data.access_token).trim() : '';
+          if (at) _setBearerFallback(at);
+          setAuthStateMarker(true);
+          return true;
+        }).catch(function () {
+          setAuthStateMarker(true);
+          return true;
+        });
+      }).catch(function () {
+        return false;
+      }).finally(function () {
+        _refreshPromise = null;
+      });
+
+      return _refreshPromise;
+    }
+
     window.fetch = function (input, init) {
       init = init || {};
       var req = Object.assign({}, init);
@@ -471,25 +539,44 @@
 
       req.headers = headers;
       return _fetch(input, req).then(function (response) {
-        try {
-          if (isApiRequest) {
-            if ((reqPath === '/login' || reqPath === '/refresh') && response.ok) {
-              setAuthStateMarker(true);
-            }
-            if (reqPath === '/api/me') {
-              if (response.ok) setAuthStateMarker(true);
-              if (response.status === 401) {
-                setAuthStateMarker(false);
-                clearBearerFallback();
-              }
-            }
-            if (reqPath === '/logout' && response.ok) {
-              setAuthStateMarker(false);
-              clearBearerFallback();
-            }
+        var canRetryOn401 =
+          isApiRequest &&
+          response.status === 401 &&
+          !_isAuthEndpoint(reqPath) &&
+          reqPath !== '/api/me' &&
+          !req.__paperxRetried;
+
+        if (!canRetryOn401) {
+          _applyAuthStateFromResponse(reqPath, response);
+          return response;
+        }
+
+        return _attemptAutoRefresh().then(function (refreshed) {
+          if (!refreshed) {
+            _applyAuthStateFromResponse(reqPath, response);
+            return response;
           }
-        } catch (_) { }
-        return response;
+
+          var retryReq = Object.assign({}, req, { __paperxRetried: true });
+          var retryHeaders = new Headers(retryReq.headers || {});
+          // Drop stale bearer before retry; we will attach latest fallback if present.
+          retryHeaders.delete('Authorization');
+          retryHeaders.delete('authorization');
+          var retryFallback = getBearerFallback();
+          if (retryFallback) retryHeaders.set('Authorization', 'Bearer ' + retryFallback);
+          retryReq.headers = retryHeaders;
+
+          return _fetch(input, retryReq).then(function (retryResponse) {
+            _applyAuthStateFromResponse(reqPath, retryResponse);
+            return retryResponse;
+          }).catch(function () {
+            _applyAuthStateFromResponse(reqPath, response);
+            return response;
+          });
+        }).catch(function () {
+          _applyAuthStateFromResponse(reqPath, response);
+          return response;
+        });
       }).catch(function (err) {
         throw err;
       });

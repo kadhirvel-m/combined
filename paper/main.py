@@ -635,6 +635,13 @@ ABUSE_SCORE_403 = max(1, int(os.getenv("ABUSE_SCORE_403", "6")))
 ABUSE_SCORE_429 = max(1, int(os.getenv("ABUSE_SCORE_429", "8")))
 ABUSE_SCORE_5XX = max(1, int(os.getenv("ABUSE_SCORE_5XX", "2")))
 ABUSE_SCORE_ADMIN_MUTATION = max(1, int(os.getenv("ABUSE_SCORE_ADMIN_MUTATION", "3")))
+ABUSE_SCORE_EXEMPT_PATHS = {
+    p.strip()
+    for p in (os.getenv("ABUSE_SCORE_EXEMPT_PATHS", "/analytics/session/heartbeat") or "").split(",")
+    if p.strip()
+}
+ABUSE_IP_OVERRIDES_TABLE = os.getenv("ABUSE_IP_OVERRIDES_TABLE", "abuse_ip_overrides")
+ABUSE_IP_OVERRIDES_DB_ENABLED = (os.getenv("ABUSE_IP_OVERRIDES_DB_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
 
 COMPILER_WORKER_BASE_URL = (os.getenv("COMPILER_WORKER_BASE_URL") or "").strip().rstrip("/")
 
@@ -728,6 +735,132 @@ def _security_persist_event(event: Dict[str, Any], *, severity: str) -> None:
 
 _ABUSE_SCORE_LOCK = threading.Lock()
 _ABUSE_SCORE_STATE: Dict[str, Dict[str, float]] = {}
+_ABUSE_OVERRIDE_LOCK = threading.Lock()
+_ABUSE_IP_OVERRIDES: Dict[str, Dict[str, Any]] = {}
+
+
+def _abuse_db_row_to_override(row: Optional[Dict[str, Any]], ip: str) -> Dict[str, Any]:
+    if not isinstance(row, dict):
+        return {"ip": ip}
+    return {
+        "ip": ip,
+        "allow": bool(row.get("is_allowed")),
+        "reason": (str(row.get("reason") or "").strip() or None),
+        "updated_at": row.get("updated_at"),
+        "updated_by": row.get("updated_by"),
+    }
+
+
+def _abuse_load_override_from_db(ip: str) -> Optional[Dict[str, Any]]:
+    if not ABUSE_IP_OVERRIDES_DB_ENABLED:
+        return None
+    try:
+        supabase = get_service_client()
+        if not supabase:
+            return None
+        res = (
+            supabase.table(ABUSE_IP_OVERRIDES_TABLE)
+            .select("ip,is_allowed,reason,updated_at,updated_by")
+            .eq("ip", ip)
+            .limit(1)
+            .execute()
+        )
+        row = _first_or_none(getattr(res, "data", None))
+        if not row:
+            return None
+        return _abuse_db_row_to_override(row, ip)
+    except Exception:
+        return None
+
+
+def _abuse_store_override_to_db(ip: str, *, allow: bool, reason: Optional[str], actor_user_id: Optional[str], ts_iso: str) -> None:
+    if not ABUSE_IP_OVERRIDES_DB_ENABLED:
+        return
+    try:
+        supabase = get_service_client()
+        if not supabase:
+            return
+
+        existing = (
+            supabase.table(ABUSE_IP_OVERRIDES_TABLE)
+            .select("ip")
+            .eq("ip", ip)
+            .limit(1)
+            .execute()
+        )
+        row = _first_or_none(getattr(existing, "data", None))
+        payload = {
+            "is_allowed": bool(allow),
+            "reason": (reason or "").strip() or None,
+            "updated_at": ts_iso,
+            "updated_by": (actor_user_id or "").strip() or None,
+        }
+
+        if row:
+            _ = (
+                supabase.table(ABUSE_IP_OVERRIDES_TABLE)
+                .update(_supabase_payload(payload))
+                .eq("ip", ip)
+                .execute()
+            )
+        else:
+            _ = (
+                supabase.table(ABUSE_IP_OVERRIDES_TABLE)
+                .insert(_supabase_payload({"ip": ip, "created_at": ts_iso, **payload}))
+                .execute()
+            )
+    except Exception:
+        # Persistence should not break request handling; in-memory override still applies.
+        return
+
+
+def _abuse_is_exempt_path(path: Optional[str]) -> bool:
+    p = _rl_norm_path(path or "")
+    return p in ABUSE_SCORE_EXEMPT_PATHS
+
+
+def _abuse_get_override(ip: str) -> Dict[str, Any]:
+    key = (ip or "unknown").strip() or "unknown"
+    with _ABUSE_OVERRIDE_LOCK:
+        cached = _ABUSE_IP_OVERRIDES.get(key)
+    if cached is not None:
+        row = dict(cached)
+        row["ip"] = key
+        return row
+
+    db_row = _abuse_load_override_from_db(key)
+    if db_row is not None:
+        with _ABUSE_OVERRIDE_LOCK:
+            _ABUSE_IP_OVERRIDES[key] = dict(db_row)
+        return db_row
+
+    return {"ip": key}
+
+
+def _abuse_set_override(ip: str, *, allow: bool, reason: Optional[str], actor_user_id: Optional[str]) -> Dict[str, Any]:
+    key = (ip or "unknown").strip() or "unknown"
+    ts_iso = datetime.utcnow().isoformat() + "Z"
+    row = {
+        "allow": bool(allow),
+        "reason": (reason or "").strip() or None,
+        "updated_at": ts_iso,
+        "updated_by": (actor_user_id or "").strip() or None,
+    }
+    with _ABUSE_OVERRIDE_LOCK:
+        _ABUSE_IP_OVERRIDES[key] = row
+    _abuse_store_override_to_db(key, allow=bool(allow), reason=row.get("reason"), actor_user_id=actor_user_id, ts_iso=ts_iso)
+    return {"ip": key, **row}
+
+
+def _abuse_allowlisted(ip: str) -> bool:
+    row = _abuse_get_override(ip)
+    return bool(row.get("allow"))
+
+
+def _abuse_reset_score(ip: str) -> None:
+    key = (ip or "unknown").strip() or "unknown"
+    with _ABUSE_SCORE_LOCK:
+        _ABUSE_SCORE_STATE[key] = {"score": 0.0, "updated": float(time.time())}
 
 
 def _abuse_apply_and_check(ip: str, *, delta: int = 0, now_ts: Optional[float] = None) -> Tuple[int, bool]:
@@ -750,11 +883,13 @@ def _abuse_apply_and_check(ip: str, *, delta: int = 0, now_ts: Optional[float] =
 
         state["updated"] = ts
         score = int(round(float(state.get("score") or 0.0)))
-        blocked = score >= ABUSE_SCORE_BLOCK_THRESHOLD
+        blocked = (score >= ABUSE_SCORE_BLOCK_THRESHOLD) and (not _abuse_allowlisted(key))
         return score, blocked
 
 
 def _abuse_delta_for_response(*, status_code: int, path: str, method: str) -> int:
+    if _abuse_is_exempt_path(path):
+        return 0
     delta = 0
     if status_code == 401:
         delta += ABUSE_SCORE_401
@@ -10505,6 +10640,12 @@ class ManualAccessActionIn(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=2000)
 
 
+class AbuseIPActionIn(BaseModel):
+    action: Literal["allow", "unallow", "unblock", "allow_and_unblock"]
+    ip: str = Field(..., min_length=2, max_length=120)
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
 class AccessCheckIn(BaseModel):
     action: Literal["topic_open", "subject_open", "mcq_attempt", "blink_view", "search", "ai_prompt"]
     consume: bool = True
@@ -11543,6 +11684,133 @@ def admin_manual_access_action(auth_user_id: str, payload: ManualAccessActionIn,
         _upsert_manual_override(uid, {"department_id_override": dept_uuid, "notes": payload.notes}, admin_uid)
 
     return {"ok": True, "auth_user_id": uid, "action": payload.action}
+
+
+@academics_router.get("/api/admin/security/abuse/blocked", summary="Admin: list blocked abuse-score IPs and reasons")
+def admin_security_abuse_blocked(
+    authorization: Optional[str] = Header(default=None),
+    hours: int = Query(default=24, ge=1, le=168),
+    include_allowlisted: bool = Query(default=False),
+):
+    _require_admin_or_employee(authorization)
+
+    now_ts = float(time.time())
+    recent_from = (datetime.utcnow() - timedelta(hours=int(hours))).isoformat() + "Z"
+    out: Dict[str, Dict[str, Any]] = {}
+
+    with _ABUSE_SCORE_LOCK:
+        score_snapshot = dict(_ABUSE_SCORE_STATE)
+
+    for ip, state in score_snapshot.items():
+        score = int(round(float((state or {}).get("score") or 0.0)))
+        blocked = score >= ABUSE_SCORE_BLOCK_THRESHOLD
+        override = _abuse_get_override(ip)
+        allowlisted = bool(override.get("allow"))
+        if not blocked and not allowlisted:
+            continue
+        if allowlisted and not include_allowlisted and not blocked:
+            continue
+        out[ip] = {
+            "ip": ip,
+            "score": score,
+            "threshold": ABUSE_SCORE_BLOCK_THRESHOLD,
+            "blocked": bool(blocked and not allowlisted),
+            "allowlisted": allowlisted,
+            "reason": override.get("reason") or ("Allowlisted by admin" if allowlisted else "Abuse score threshold reached"),
+            "last_seen": datetime.utcfromtimestamp(float((state or {}).get("updated") or now_ts)).isoformat() + "Z",
+            "source": "memory",
+            "override": override,
+        }
+
+    try:
+        supabase = get_service_client()
+        ev = (
+            supabase.table(SECURITY_EVENTS_TABLE)
+            .select("event_type,client_ip,event_payload,event_ts,created_at")
+            .in_("event_type", ["alert.abuse_score_block", "alert.abuse_score_threshold_crossed"])
+            .gte("created_at", recent_from)
+            .order("created_at", desc=True)
+            .limit(500)
+            .execute()
+        )
+        rows = getattr(ev, "data", None) or []
+        for row in rows:
+            ip = str(row.get("client_ip") or "").strip()
+            if not ip:
+                payload = row.get("event_payload") if isinstance(row.get("event_payload"), dict) else {}
+                ip = str(payload.get("client_ip") or "").strip()
+            if not ip:
+                continue
+            payload = row.get("event_payload") if isinstance(row.get("event_payload"), dict) else {}
+            score = int(payload.get("score") or 0)
+            threshold = int(payload.get("threshold") or ABUSE_SCORE_BLOCK_THRESHOLD)
+            existing = out.get(ip)
+            override = _abuse_get_override(ip)
+            allowlisted = bool(override.get("allow"))
+            blocked = (score >= threshold) and (not allowlisted)
+            item = {
+                "ip": ip,
+                "score": score,
+                "threshold": threshold,
+                "blocked": blocked,
+                "allowlisted": allowlisted,
+                "reason": override.get("reason") or f"{row.get('event_type')}: score {score} >= {threshold}",
+                "last_seen": row.get("event_ts") or row.get("created_at"),
+                "source": "security_events",
+                "override": override,
+            }
+            if existing is None:
+                out[ip] = item
+            else:
+                # Keep higher score and most recent timestamp-like value.
+                existing["score"] = max(int(existing.get("score") or 0), score)
+                existing["blocked"] = bool(existing.get("blocked") or item.get("blocked"))
+                existing["allowlisted"] = allowlisted
+                existing["reason"] = existing.get("reason") or item.get("reason")
+                existing["last_seen"] = existing.get("last_seen") or item.get("last_seen")
+    except Exception:
+        pass
+
+    items = list(out.values())
+    items.sort(key=lambda r: (0 if r.get("blocked") else 1, -(int(r.get("score") or 0)), str(r.get("ip") or "")))
+    return {
+        "count": len(items),
+        "threshold": ABUSE_SCORE_BLOCK_THRESHOLD,
+        "items": items,
+    }
+
+
+@academics_router.post("/api/admin/security/abuse/ip-action", summary="Admin: allow/unallow/unblock an abuse-score IP")
+def admin_security_abuse_ip_action(payload: AbuseIPActionIn, authorization: Optional[str] = Header(default=None)):
+    admin_uid, _ = _require_admin_or_employee(authorization)
+    ip = (payload.ip or "").strip()
+    if not ip:
+        raise HTTPException(status_code=400, detail="ip is required")
+
+    action = payload.action
+    if action == "allow":
+        override = _abuse_set_override(ip, allow=True, reason=payload.reason, actor_user_id=admin_uid)
+    elif action == "unallow":
+        override = _abuse_set_override(ip, allow=False, reason=payload.reason, actor_user_id=admin_uid)
+    elif action == "unblock":
+        _abuse_reset_score(ip)
+        override = _abuse_get_override(ip)
+    elif action == "allow_and_unblock":
+        _abuse_set_override(ip, allow=True, reason=payload.reason, actor_user_id=admin_uid)
+        _abuse_reset_score(ip)
+        override = _abuse_get_override(ip)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported action")
+
+    score, blocked = _abuse_apply_and_check(ip, delta=0)
+    return {
+        "ok": True,
+        "ip": ip,
+        "action": action,
+        "score": score,
+        "blocked": blocked,
+        "override": override,
+    }
 
 
 @academics_router.post("/api/access/check-and-consume", summary="Server-side access decision and usage consumption")
@@ -25563,6 +25831,9 @@ class TestQuestionIn(BaseModel):
     correct_index: int = Field(..., ge=0)
     points: int = Field(1, ge=1, le=100)
     order: Optional[int] = Field(None, ge=0)
+    difficulty: Optional[str] = Field(None, max_length=16, description="Question difficulty: Easy/Medium/Hard")
+    co: Optional[str] = Field(None, max_length=120, description="Course Outcome tag, e.g. CO1")
+    k_level: Optional[str] = Field(None, max_length=8, description="Bloom taxonomy level tag, e.g. K1..K6")
 
     @validator("options", pre=True)
     def _clean_options(cls, v):
@@ -25583,6 +25854,45 @@ class TestQuestionIn(BaseModel):
         if v < 0 or v >= len(opts):
             raise ValueError("correct_index must point to an option")
         return v
+
+    @validator("difficulty", pre=True)
+    def _normalize_difficulty(cls, v):
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if not s:
+            return None
+        if s.startswith("e"):
+            return "Easy"
+        if s.startswith("m"):
+            return "Medium"
+        if s.startswith("h"):
+            return "Hard"
+        raise ValueError("difficulty must be Easy, Medium, or Hard")
+
+    @validator("co", pre=True)
+    def _normalize_co(cls, v):
+        if v is None:
+            return None
+        s = str(v).strip()
+        if not s:
+            return None
+        s = re.sub(r"\s+", "", s)
+        if re.fullmatch(r"(?i)co\d{1,2}", s):
+            return s.upper()
+        return str(v).strip()[:120]
+
+    @validator("k_level", pre=True)
+    def _normalize_k_level(cls, v):
+        if v is None:
+            return None
+        s = str(v).strip().upper()
+        if not s:
+            return None
+        m = re.search(r"([1-6])", s)
+        if not m:
+            raise ValueError("k_level must be K1..K6")
+        return f"K{m.group(1)}"
 
 
 class CreateTestIn(BaseModel):
@@ -25625,7 +25935,7 @@ def _fetch_test_questions(supabase, test_id: str) -> List[Dict[str, Any]]:
     res = _supabase_retry(lambda: (
         supabase
         .table("test_questions")
-        .select("id,prompt,options,correct_index,points,question_order")
+        .select("id,prompt,options,correct_index,points,question_order,difficulty,co,k_level")
         .eq("test_id", test_id)
         .order("question_order", desc=False)
         .order("id", desc=False)
@@ -25713,9 +26023,17 @@ class TeacherAIGenerateTestIn(BaseModel):
     # Keep an upper bound to avoid accidental huge payloads.
     topic: str = Field(..., min_length=3, max_length=5000)
     count: int = Field(10, ge=1, le=30)
+    difficulty: str = Field("balanced", description="Question difficulty preference: balanced/easy/medium/hard")
+
+    @validator("difficulty", pre=True)
+    def _normalize_difficulty_pref(cls, v):
+        s = str(v or "balanced").strip().lower()
+        if s not in {"balanced", "easy", "medium", "hard"}:
+            raise ValueError("difficulty must be one of: balanced, easy, medium, hard")
+        return s
 
 
-def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[Dict[str, Any]], str]:
+def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str = "balanced") -> Tuple[str, List[Dict[str, Any]], str]:
     """Generate MCQ questions from a topic for the teacher test builder.
 
     IMPORTANT: Per product requirement, this uses gemini-2.5-flash only.
@@ -25734,10 +26052,18 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[D
     cleaned_topic = (topic or "").strip()
     if not cleaned_topic:
         raise HTTPException(status_code=400, detail="topic is required")
+    normalized_pref = str(difficulty_pref or "balanced").strip().lower()
+    if normalized_pref not in {"balanced", "easy", "medium", "hard"}:
+        normalized_pref = "balanced"
 
     # Keep the schema example short even if the actual topic prompt is long.
     cleaned_topic_one_line = re.sub(r"\s+", " ", cleaned_topic).strip()
     schema_title = (cleaned_topic_one_line[:80] + "…") if len(cleaned_topic_one_line) > 80 else cleaned_topic_one_line
+
+    if normalized_pref == "balanced":
+        difficulty_instruction = "Use balanced distribution across Easy, Medium, and Hard questions."
+    else:
+        difficulty_instruction = f"Prefer {normalized_pref.capitalize()} difficulty for most questions."
 
     prompt = textwrap.dedent(
         f"""
@@ -25748,12 +26074,15 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[D
         Constraints:
         - Each question MUST have 4 options.
         - Options must be plausible and unambiguous.
-        - Provide: prompt, options (length 4), correct_index (0..3), explanation (<= 18 words).
-        - Difficulty: mixed (basic to moderate), suitable for classroom assessment.
+        - Provide: prompt, options (length 4), correct_index (0..3), explanation (<= 18 words), difficulty, co, k_level.
+        - difficulty must be one of: Easy, Medium, Hard.
+        - co should be a short tag like CO1, CO2, CO3.
+        - k_level must be one of: K1, K2, K3, K4, K5, K6.
+        - {difficulty_instruction}
         - Return ONLY strict JSON (no markdown fences, no commentary).
 
         Schema (exact keys):
-        {{"title":"...","description":"...","questions":[{{"prompt":"...","options":["...","...","...","..."],"correct_index":0,"explanation":"..."}}]}}
+        {{"title":"...","description":"...","questions":[{{"prompt":"...","options":["...","...","...","..."],"correct_index":0,"explanation":"...","difficulty":"Medium","co":"CO1","k_level":"K2"}}]}}
         """
     ).strip()
 
@@ -25772,7 +26101,7 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[D
                 - explanation <= 12 words
 
                 Schema:
-                {{"title":"{schema_title} MCQ","questions":[{{"prompt":"...","options":["...","...","...","..."],"correct_index":0,"explanation":"..."}}]}}
+                {{"title":"{schema_title} MCQ","questions":[{{"prompt":"...","options":["...","...","...","..."],"correct_index":0,"difficulty":"Medium","co":"CO1","k_level":"K2"}}]}}
                 """
         ).strip()
 
@@ -25870,6 +26199,63 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[D
             pass
         raise ValueError("Unable to parse JSON")
 
+    def _extract_options(item: Dict[str, Any]) -> List[str]:
+        # Accept multiple common shapes from LLM JSON:
+        # 1) options: ["...", "...", ...]
+        # 2) options: {"A":"...","B":"...","C":"...","D":"..."}
+        # 3) option_a/option_b/... or a/b/c/d keys
+        # 4) choices: [...]
+        raw_opts = item.get("options")
+
+        if isinstance(raw_opts, list):
+            out: List[str] = []
+            for o in raw_opts:
+                if isinstance(o, dict):
+                    text_val = o.get("text") or o.get("option") or o.get("value")
+                    s = str(text_val or "").strip()
+                else:
+                    s = str(o or "").strip()
+                if s:
+                    out.append(s)
+            return out
+
+        if isinstance(raw_opts, dict):
+            out = []
+            for k in ["A", "B", "C", "D", "a", "b", "c", "d", "1", "2", "3", "4"]:
+                if k in raw_opts:
+                    s = str(raw_opts.get(k) or "").strip()
+                    if s:
+                        out.append(s)
+            if out:
+                return out
+            # Fallback to deterministic key ordering.
+            for k in sorted(raw_opts.keys(), key=lambda x: str(x)):
+                s = str(raw_opts.get(k) or "").strip()
+                if s:
+                    out.append(s)
+            return out
+
+        key_candidates = [
+            "option_a", "option_b", "option_c", "option_d",
+            "option1", "option2", "option3", "option4",
+            "a", "b", "c", "d",
+            "choice_a", "choice_b", "choice_c", "choice_d",
+        ]
+        out = []
+        for key in key_candidates:
+            if key in item:
+                s = str(item.get(key) or "").strip()
+                if s:
+                    out.append(s)
+        if out:
+            return out
+
+        choices = item.get("choices")
+        if isinstance(choices, list):
+            return [str(c or "").strip() for c in choices if str(c or "").strip()]
+
+        return []
+
     try:
         data = _try_parse_payload(raw)
     except Exception:
@@ -25887,24 +26273,83 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[D
     if not isinstance(qlist, list) or not qlist:
         raise HTTPException(status_code=500, detail="AI response missing 'questions' list")
 
+    rng = random.SystemRandom()
+    balanced_difficulty_pool: List[str] = []
+    balanced_co_pool: List[str] = []
+    if normalized_pref == "balanced":
+        base = safe_count // 3
+        rem = safe_count % 3
+        labels = ["Easy", "Medium", "Hard"]
+        for i, label in enumerate(labels):
+            balanced_difficulty_pool.extend([label] * (base + (1 if i < rem else 0)))
+        rng.shuffle(balanced_difficulty_pool)
+
+        co_labels = ["CO1", "CO2", "CO3"]
+        for i, label in enumerate(co_labels):
+            balanced_co_pool.extend([label] * (base + (1 if i < rem else 0)))
+        rng.shuffle(balanced_co_pool)
+
     out_questions: List[Dict[str, Any]] = []
     for idx, item in enumerate(qlist[:safe_count]):
         if not isinstance(item, dict):
             continue
         prompt_text = str(item.get("prompt") or "").strip()
-        options = item.get("options")
+        options = _extract_options(item)
         correct_index = item.get("correct_index")
-        if not isinstance(options, list):
-            options = []
         norm_options = [str(o or "").strip()[:500] for o in options if str(o or "").strip()]
         norm_options = norm_options[:4]
+        if len(norm_options) < 2:
+            continue
         while len(norm_options) < 4:
-            norm_options.append(norm_options[-1] if norm_options else "")
+            norm_options.append(norm_options[-1])
         try:
             ci = int(correct_index)
         except Exception:
             ci = 0
         ci = max(0, min(ci, 3))
+
+        out_idx = len(out_questions)
+        if normalized_pref == "balanced":
+            # Keep balanced overall distribution, but avoid repetitive visible patterns.
+            if out_idx < len(balanced_difficulty_pool):
+                q_difficulty = balanced_difficulty_pool[out_idx]
+            else:
+                q_difficulty = rng.choice(["Easy", "Medium", "Hard"])
+        else:
+            diff_raw = str(item.get("difficulty") or "").strip().lower()
+            if diff_raw.startswith("e"):
+                q_difficulty = "Easy"
+            elif diff_raw.startswith("m"):
+                q_difficulty = "Medium"
+            elif diff_raw.startswith("h"):
+                q_difficulty = "Hard"
+            elif normalized_pref in {"easy", "medium", "hard"}:
+                q_difficulty = normalized_pref.capitalize()
+            else:
+                q_difficulty = "Medium"
+
+        co_raw = str(item.get("co") or item.get("course_outcome") or "").strip()
+        co_clean = re.sub(r"\s+", "", co_raw)
+        if normalized_pref == "balanced":
+            if out_idx < len(balanced_co_pool):
+                q_co = balanced_co_pool[out_idx]
+            else:
+                q_co = rng.choice(["CO1", "CO2", "CO3"])
+        elif re.fullmatch(r"(?i)co\d{1,2}", co_clean):
+            q_co = co_clean.upper()
+        else:
+            q_co = f"CO{(idx % 3) + 1}"
+
+        k_raw = str(item.get("k_level") or item.get("klevel") or item.get("blooms_level") or item.get("bloom_level") or "").strip()
+        k_match = re.search(r"([1-6])", k_raw)
+        if k_match:
+            q_k_level = f"K{k_match.group(1)}"
+        else:
+            q_k_level = {
+                "Easy": rng.choice(["K1", "K2"]),
+                "Medium": rng.choice(["K2", "K3", "K4"]),
+                "Hard": rng.choice(["K3", "K4", "K5", "K6"]),
+            }.get(q_difficulty, "K2")
 
         # Validate through existing schema
         try:
@@ -25914,6 +26359,9 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[D
                 correct_index=ci,
                 points=1,
                 order=idx,
+                difficulty=q_difficulty,
+                co=q_co,
+                k_level=q_k_level,
             )
         except Exception:
             continue
@@ -25924,6 +26372,9 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[D
             "correct_index": q_in.correct_index,
             "points": q_in.points,
             "order": idx,
+            "difficulty": q_in.difficulty,
+            "co": q_in.co,
+            "k_level": q_in.k_level,
         })
 
     if len(out_questions) < max(1, min(3, safe_count)):
@@ -25935,11 +26386,12 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int) -> Tuple[str, List[D
 @teacher_router.post("/api/teacher/tests/ai", summary="Teacher: generate MCQ questions with AI")
 def api_teacher_generate_test_ai(payload: TeacherAIGenerateTestIn, authorization: Optional[str] = Header(default=None)):
     _ = _require_teacher(authorization)
-    title, out_questions, model = _generate_topic_mcq_for_teacher(payload.topic, payload.count)
+    title, out_questions, model = _generate_topic_mcq_for_teacher(payload.topic, payload.count, payload.difficulty)
     return {
         "topic": payload.topic,
         "title": title,
         "description": f"AI generated MCQ test on {payload.topic}.",
+        "difficulty": payload.difficulty,
         "questions": out_questions,
         "model": model,
         "count": len(out_questions),
@@ -25979,6 +26431,9 @@ def api_create_test(payload: CreateTestIn, authorization: Optional[str] = Header
             "correct_index": q.correct_index,
             "points": q.points,
             "question_order": q.order if q.order is not None else idx,
+            "difficulty": q.difficulty,
+            "co": q.co,
+            "k_level": q.k_level,
         }))
 
     qres = supabase.table("test_questions").insert(question_rows).execute()
@@ -26089,6 +26544,9 @@ def api_update_test(test_id: str, payload: UpdateTestIn, authorization: Optional
             "correct_index": q.correct_index,
             "points": q.points,
             "question_order": q.order if q.order is not None else idx,
+            "difficulty": q.difficulty,
+            "co": q.co,
+            "k_level": q.k_level,
         }))
     qres = supabase.table("test_questions").insert(question_rows).execute()
     if getattr(qres, "error", None):
@@ -26252,6 +26710,9 @@ def api_get_test(test_id: str, authorization: Optional[str] = Header(default=Non
             "options": q.get("options"),
             "points": q.get("points", 1),
             "order": q.get("question_order", 0),
+            "difficulty": q.get("difficulty"),
+            "co": q.get("co"),
+            "k_level": q.get("k_level"),
         }
         if is_owner:
             entry["correct_index"] = q.get("correct_index")
@@ -26885,8 +27346,12 @@ def create_app() -> FastAPI:
         token = AUTH_REQUEST_CTX.set(request)
         try:
             if ABUSE_SCORING_ENABLED:
+                path_norm = _rl_norm_path(request.url.path)
                 ip = _extract_client_ip(request) or "unknown"
-                score, blocked = _abuse_apply_and_check(ip, delta=0)
+                if _abuse_is_exempt_path(path_norm):
+                    score, blocked = 0, False
+                else:
+                    score, blocked = _abuse_apply_and_check(ip, delta=0)
                 if blocked:
                     _security_alert(
                         "abuse_score_block",

@@ -1246,6 +1246,9 @@ CREATE TABLE public.test_questions (
   options ARRAY NOT NULL CHECK (cardinality(options) >= 2 AND cardinality(options) <= 8),
   correct_index integer NOT NULL,
   points integer NOT NULL DEFAULT 1,
+  difficulty text CHECK (difficulty IS NULL OR (difficulty = ANY (ARRAY['Easy'::text, 'Medium'::text, 'Hard'::text]))),
+  co text,
+  k_level text CHECK (k_level IS NULL OR (k_level = ANY (ARRAY['K1'::text, 'K2'::text, 'K3'::text, 'K4'::text, 'K5'::text, 'K6'::text]))),
   question_order integer NOT NULL DEFAULT 0,
   CONSTRAINT test_questions_pkey PRIMARY KEY (id),
   CONSTRAINT test_questions_test_id_fkey FOREIGN KEY (test_id) REFERENCES public.tests(id)
@@ -1687,6 +1690,19 @@ CREATE INDEX IF NOT EXISTS security_events_type_idx ON public.security_events(ev
 CREATE INDEX IF NOT EXISTS security_events_severity_idx ON public.security_events(severity);
 CREATE INDEX IF NOT EXISTS security_events_user_idx ON public.security_events(user_id);
 CREATE INDEX IF NOT EXISTS security_events_email_idx ON public.security_events(email);
+
+CREATE TABLE IF NOT EXISTS public.abuse_ip_overrides (
+  ip text NOT NULL,
+  is_allowed boolean NOT NULL DEFAULT false,
+  reason text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_by text,
+  CONSTRAINT abuse_ip_overrides_pkey PRIMARY KEY (ip)
+);
+
+CREATE INDEX IF NOT EXISTS abuse_ip_overrides_allowed_idx ON public.abuse_ip_overrides(is_allowed);
+CREATE INDEX IF NOT EXISTS abuse_ip_overrides_updated_idx ON public.abuse_ip_overrides(updated_at);
 
 CREATE TABLE IF NOT EXISTS public.security_incidents (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

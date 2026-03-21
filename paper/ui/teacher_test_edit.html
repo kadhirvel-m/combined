@@ -94,7 +94,7 @@
             $$('button[data-del]', wrap).forEach(btn => btn.addEventListener('click', () => { const qi = parseInt(btn.dataset.del, 10); state.questions.splice(qi, 1); render(); }));
         }
 
-        function addQuestion() { state.questions.push({ prompt: '', options: ['', ''], correct_index: 0, points: 1 }); render(); }
+        function addQuestion() { state.questions.push({ prompt: '', options: ['', ''], correct_index: 0, points: 1, difficulty: null, co: null, k_level: null }); render(); }
 
         async function load() {
             const id = params.get('test_id') || params.get('id'); if (!id) { showAlert('Missing test id'); return; }
@@ -106,7 +106,16 @@
                 if (!res.ok) { showAlert('Could not load test'); return; }
                 const data = await res.json();
                 $('#title').value = data.title || ''; $('#desc').value = data.description || ''; $('#duration').value = data.duration_seconds ? Math.round(Number(data.duration_seconds) / 60) : ''; $('#accepting').checked = data.accepting_submissions !== false;
-                state.questions = (data.questions || []).map(q => ({ prompt: q.prompt || '', options: q.options || [], correct_index: q.correct_index ?? 0, points: q.points || 1, order: q.order || 0 }));
+                state.questions = (data.questions || []).map(q => ({
+                    prompt: q.prompt || '',
+                    options: q.options || [],
+                    correct_index: q.correct_index ?? 0,
+                    points: q.points || 1,
+                    order: q.order || 0,
+                    difficulty: q.difficulty || null,
+                    co: q.co || null,
+                    k_level: q.k_level || null,
+                }));
                 if (!state.questions.length) addQuestion(); else render();
             } catch (e) { console.error(e); showAlert('Load failed'); }
         }
@@ -120,7 +129,16 @@
                 description: $('#desc').value || null,
                 duration_seconds: durationSec,
                 accepting_submissions: $('#accepting').checked,
-                questions: state.questions.map((q, idx) => ({ prompt: q.prompt, options: q.options.filter(Boolean), correct_index: q.correct_index || 0, points: q.points || 1, order: idx })),
+                questions: state.questions.map((q, idx) => ({
+                    prompt: q.prompt,
+                    options: q.options.filter(Boolean),
+                    correct_index: q.correct_index || 0,
+                    points: q.points || 1,
+                    order: idx,
+                    difficulty: q.difficulty || null,
+                    co: q.co || null,
+                    k_level: q.k_level || null,
+                })),
             };
             if (!payload.questions.length) { return showAlert('Add at least one question'); }
             try {
