@@ -1,3 +1,42 @@
+## LEGAL OWNERSHIP AND COPYRIGHT WARNING (READ FIRST)
+
+This codebase, including all source code, architecture, logic, scripts, documentation, assets, and derivative works in this repository, is the exclusive intellectual property of:
+
+- Name: Kadhirvel M
+- GitHub: https://github.com/kadhirvel-m
+- Email: kadhirvel.ai@gmail.com
+
+No ownership, title, or proprietary right in this code is transferred by collaboration, contribution, pull request, fork, mirror, deployment, hosting, employment, contract access, or organizational usage unless there is a separate written and signed assignment agreement executed by Kadhirvel M.
+
+This code does NOT belong to Paperx Tech Private Limited.
+
+This entire codebase originated from Kadhirvel M's personal GitHub account and remains owned solely by Kadhirvel M, irrespective of the number of contributors.
+
+Any unauthorized copying, reuse, publication, relicensing, redistribution, sublicensing, commercialization, or inclusion of this code (in whole or in part) in any other repository, product, service, or organization without explicit written permission from Kadhirvel M is prohibited and may constitute unlawful infringement.
+
+### Legal Basis (India)
+
+The above claim and restrictions are asserted under applicable Indian law, including but not limited to:
+
+1. Copyright Act, 1957
+2. Section 13: Copyright subsists in original literary works (including software code).
+3. Section 14: Exclusive rights of the copyright owner.
+4. Section 17: First owner of copyright (subject to statutory exceptions and contracts).
+5. Section 51: Copyright infringement.
+6. Section 55: Civil remedies for infringement (injunction, damages, accounts of profits).
+7. Section 58: Rights and remedies against possession of infringing copies.
+8. Information Technology Act, 2000 (where applicable to unauthorized access, extraction, or misuse in digital systems).
+
+### Enforcement Notice
+
+If any repository, organization, individual, or entity contains code copied or substantially derived from this repository without authorization, such use may be treated as infringing/unauthorized and may be subject to civil and/or criminal action under applicable law.
+
+Contributors acknowledge that contributions do not alter underlying ownership of this codebase unless otherwise expressly agreed in writing and signed by Kadhirvel M.
+
+For licensing, assignment, or authorized commercial use, contact: kadhirvel.ai@gmail.com
+
+Disclaimer: This notice is provided for assertion of rights and informational purposes and does not constitute legal advice. For enforceability in specific disputes, consult a qualified legal professional.
+
 # PaperX - Comprehensive Technical Documentation
 
 ## 📋 Table of Contents
