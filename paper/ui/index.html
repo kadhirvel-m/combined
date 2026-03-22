@@ -1188,10 +1188,10 @@
                 </div>
 
                 <div id="ctaSignedIn" class="hidden flex flex-col sm:flex-row items-center justify-center gap-4">
-                    <a href="academicas.html"
+                    <a id="ctaSignedInPrimary" href="academicas.html"
                         class="relative inline-flex w-full sm:w-auto min-w-[260px] items-center justify-center gap-3 rounded-full bg-transparent text-brand-900 px-9 py-3 text-base font-semibold hover:bg-black/5 hover:shadow-glow ring-1 ring-brand-900/25 transition dark:bg-white/10 dark:text-white dark:ring-white/15 dark:hover:bg-white/20 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50">
                         <span class="material-symbols-rounded text-[20px]">menu_book</span>
-                        <span>NoteX</span>
+                        <span id="ctaSignedInPrimaryLabel">NoteX</span>
                     </a>
                 </div>
 
@@ -2195,6 +2195,8 @@
         (async function toggleLandingCtasForSession() {
             const signedOut = document.getElementById('ctaSignedOut');
             const signedIn = document.getElementById('ctaSignedIn');
+            const signedInPrimary = document.getElementById('ctaSignedInPrimary');
+            const signedInPrimaryLabel = document.getElementById('ctaSignedInPrimaryLabel');
             const teacherSignedIn = document.getElementById('ctaTeacherSignedIn');
             if (!signedOut || !signedIn) return;
 
@@ -2203,8 +2205,10 @@
             const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
 
             let isTeacher = false;
+            let isHod = false;
             let isStudent = false;
             let teacherProfile = null;
+            let hodProfile = null;
             let resolvedRole = null;
 
             try {
@@ -2223,6 +2227,9 @@
                         resolvedRole = String((statusData && statusData.role) || '').trim().toLowerCase();
                         if (resolvedRole === 'teacher') {
                             isTeacher = true;
+                        } else if (resolvedRole === 'hod') {
+                            isHod = true;
+                            isStudent = true;
                         } else {
                             // Any authenticated non-teacher role should use the student/admin CTA path (NoteX).
                             isStudent = true;
@@ -2248,6 +2255,16 @@
                 } catch (_) { }
             }
 
+            if (isHod) {
+                try {
+                    const hRes = await fetch(`${apiBase}/api/hod/me`, { credentials: 'include' });
+                    if (hRes.ok) {
+                        const hData = await hRes.json();
+                        hodProfile = (hData && (hData.hod || hData.profile || hData)) || null;
+                    }
+                } catch (_) { }
+            }
+
             if (isTeacher) {
                 signedOut.classList.add('hidden');
                 signedIn.classList.add('hidden');
@@ -2263,6 +2280,37 @@
                         logo_url: teacherProfile.logo_url || '',
                         avatar_url: teacherProfile.avatar_url || ''
                     });
+                }
+            } else if (isHod) {
+                signedOut.classList.add('hidden');
+                signedIn.classList.remove('hidden');
+                if (teacherSignedIn) teacherSignedIn.classList.add('hidden');
+
+                if (signedInPrimary && signedInPrimary.tagName === 'A') {
+                    signedInPrimary.href = 'hod/hod_dashboard.html';
+                }
+                if (signedInPrimaryLabel) {
+                    signedInPrimaryLabel.textContent = 'HOD Dashboard';
+                }
+
+                if (navProfile && navProfile.tagName === 'A') {
+                    navProfile.href = 'hod/hod_dashboard.html';
+                    navProfile.setAttribute('data-profile-link', 'hod/hod_dashboard.html');
+                }
+                if (navProfileMobile && navProfileMobile.tagName === 'A') {
+                    navProfileMobile.href = 'hod/hod_dashboard.html';
+                    navProfileMobile.setAttribute('data-profile-link', 'hod/hod_dashboard.html');
+                }
+
+                const hodNavProfile = {
+                    name: (hodProfile && (hodProfile.name || hodProfile.full_name || hodProfile.username)) || 'HOD',
+                    profile_image_url: (hodProfile && (hodProfile.profile_image_url || hodProfile.avatar_url || hodProfile.logo_url)) || '',
+                    logo_url: (hodProfile && (hodProfile.logo_url || hodProfile.profile_image_url)) || '',
+                    avatar_url: (hodProfile && (hodProfile.avatar_url || hodProfile.profile_image_url || hodProfile.logo_url)) || ''
+                };
+                window.__PX_PROFILE_SNAPSHOT = Object.assign({}, window.__PX_PROFILE_SNAPSHOT || {}, hodNavProfile);
+                if (typeof window.__PX_NAV_APPLY === 'function') {
+                    window.__PX_NAV_APPLY(hodNavProfile);
                 }
             } else if (isStudent) {
                 signedOut.classList.add('hidden');

@@ -28579,7 +28579,11 @@ def create_app() -> FastAPI:
         token = _bearer_token_from_header(request.headers.get("authorization"))
         if not token:
             token = _token_from_cookie(request, AUTH_ACCESS_COOKIE_NAME)
-        if not token and method == "GET" and path in {"/generate/stream", "/api/notes/generate/stream"}:
+        if not token and method == "GET" and path in {
+            "/generate/stream",
+            "/api/notes/generate/stream",
+            "/api/maths-notes/generate/stream",
+        }:
             # EventSource does not reliably support custom Authorization headers.
             # Allow explicit query-token fallback for stream endpoints only.
             token = _normalize_possible_token(

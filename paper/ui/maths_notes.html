@@ -1609,14 +1609,35 @@
     resetMCQAccess();
 
     // ===== User auth token helper =====
+    function normalizeAuthCandidate(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      const lower = raw.toLowerCase();
+      if (raw === '__COOKIE_AUTH__' || raw === '__cookie__' || lower === 'cookie' || lower === 'null' || lower === 'undefined' || lower === 'none') {
+        return '';
+      }
+      return raw;
+    }
+
     function getAuthToken() {
       const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
       for (const k of keys) {
         try {
-          const v = localStorage.getItem(k);
+          const v = normalizeAuthCandidate(localStorage.getItem(k));
           if (v) return v;
         } catch { /* ignore */ }
       }
+      try {
+        const fb = normalizeAuthCandidate(sessionStorage.getItem('paperx_bearer_fallback'));
+        if (fb) return fb;
+      } catch { /* ignore */ }
+      try {
+        const fb2 = normalizeAuthCandidate(localStorage.getItem('paperx_bearer_fallback'));
+        if (fb2) return fb2;
+      } catch { /* ignore */ }
+      try {
+        if (document.cookie.indexOf('paperx_auth=') !== -1) return '__COOKIE_AUTH__';
+      } catch { /* ignore */ }
       return '';
     }
 
@@ -3491,6 +3512,10 @@
       const degree = getSelectedDegree();
       if (degree) url.searchParams.set('degree', degree);
       if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
+      const streamToken = getAuthToken();
+      if (streamToken && streamToken !== '__COOKIE_AUTH__') {
+        url.searchParams.set('access_token', streamToken);
+      }
       es = new EventSource(url.toString(), { withCredentials: true });
 
       es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
