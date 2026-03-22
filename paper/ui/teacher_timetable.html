@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Teacher Weekly Time Table - Paper X</title>
+    <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script src="./config.js"></script>
+    <script src="./auth.js" defer></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #1E1E2F;
+            --plum: #4C2A59;
+            --orchid: #9E4B8A;
+            --line: rgba(30, 30, 47, 0.14);
+            --panel: rgba(255, 255, 255, 0.92);
+            --muted: #6f6a79;
+            --soft: #eef0f3;
+        }
+
+        body {
+            font-family: 'Sora', system-ui, -apple-system, sans-serif;
+            background:
+                radial-gradient(1200px 700px at 100% -20%, rgba(158, 75, 138, 0.22), transparent 62%),
+                radial-gradient(960px 560px at -10% -16%, rgba(76, 42, 89, 0.14), transparent 58%),
+                linear-gradient(180deg, #ffffff 0%, #f7f8fa 56%, #f3f5f8 100%);
+            min-height: 100vh;
+            color: var(--ink);
+        }
+
+        .dark body {
+            background:
+                radial-gradient(1200px 700px at 100% -20%, rgba(158, 75, 138, 0.35), transparent 62%),
+                radial-gradient(960px 560px at -10% -16%, rgba(76, 42, 89, 0.28), transparent 58%),
+                linear-gradient(180deg, #141422 0%, #1a172e 56%, #10111b 100%);
+            color: #f2eff7;
+        }
+
+        .material-symbols-rounded {
+            vertical-align: -5px;
+        }
+
+        .board {
+            background: var(--panel);
+            border: 1px solid rgba(30, 30, 47, 0.08);
+            border-radius: 1.25rem;
+            box-shadow: 0 28px 60px -36px rgba(30, 30, 47, 0.45);
+            overflow: hidden;
+        }
+
+        .dark .board {
+            background: rgba(31, 28, 49, 0.88);
+            border-color: rgba(255, 255, 255, 0.14);
+        }
+
+        .header-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.82);
+            color: #2a2532;
+            padding: 0.42rem 0.82rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .dark .header-chip {
+            color: #ece7f2;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .btn-core {
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.84);
+            padding: 0.52rem 0.95rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #272230;
+        }
+
+        .dark .btn-core {
+            color: #f2ebfb;
+            background: rgba(255, 255, 255, 0.09);
+        }
+
+        .table-wrap {
+            overflow: auto;
+            border-top: 1px solid rgba(30, 30, 47, 0.1);
+        }
+
+        .tt-grid {
+            width: 100%;
+            min-width: 1240px;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        .tt-grid th,
+        .tt-grid td {
+            border-right: 1px solid rgba(30, 30, 47, 0.13);
+            border-bottom: 1px solid rgba(30, 30, 47, 0.13);
+            padding: 0.6rem 0.62rem;
+            background: rgba(255, 255, 255, 0.56);
+        }
+
+        .dark .tt-grid th,
+        .dark .tt-grid td {
+            border-right-color: rgba(255, 255, 255, 0.12);
+            border-bottom-color: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .tt-grid th:last-child,
+        .tt-grid td:last-child {
+            border-right: 0;
+        }
+
+        .tt-grid thead th {
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: linear-gradient(165deg, #f8f9fb, #f2f4f8);
+        }
+
+        .dark .tt-grid thead th {
+            background: linear-gradient(165deg, rgba(34, 31, 53, 0.96), rgba(26, 24, 41, 0.95));
+        }
+
+        .day-col {
+            min-width: 108px;
+            text-align: left;
+            font-size: 1.45rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: #17141d;
+            background: #f9fafb;
+        }
+
+        .day-name {
+            font-size: 0.86rem;
+            font-weight: 600;
+        }
+
+        .dark .day-col {
+            color: #f5f1fb;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .period-head {
+            min-width: 116px;
+        }
+
+        .period-code {
+            font-size: 1.12rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 0.18rem;
+        }
+
+        .period-time {
+            font-size: 0.64rem;
+            color: var(--muted);
+            font-weight: 500;
+        }
+
+        .dark .period-time {
+            color: #c7bed6;
+        }
+
+        .period-cell {
+            min-width: 104px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .map-card {
+            width: 88%;
+            max-width: 92px;
+            border-radius: 0.72rem;
+            border: 1px solid rgba(30, 30, 47, 0.12);
+            min-height: 52px;
+            background: linear-gradient(145deg, #dde1e6, #d2d8de);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #414853;
+            transition: 0.16s ease;
+            text-align: center;
+            padding: 0.35rem;
+            margin: 0 auto;
+        }
+
+        .map-card:hover {
+            transform: translateY(-1px);
+            border-color: rgba(76, 42, 89, 0.32);
+        }
+
+        .dark .map-card {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.06));
+            border-color: rgba(255, 255, 255, 0.14);
+            color: #ece7f6;
+        }
+
+        .map-icon {
+            font-size: 0.88rem;
+            line-height: 1;
+            margin-bottom: 0.14rem;
+            opacity: 0.86;
+        }
+
+        .map-title {
+            font-size: 0.68rem;
+            font-weight: 600;
+            line-height: 1.15;
+        }
+
+        .map-sub {
+            margin-top: 0.18rem;
+            font-size: 0.65rem;
+            opacity: 0.75;
+        }
+
+        .inline-slot-select {
+            width: 100%;
+            max-width: 92px;
+            min-height: 52px;
+            border-radius: 0.72rem;
+            border: 1px solid rgba(76, 42, 89, 0.3);
+            background: #fff;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #2e2838;
+            padding: 0.42rem;
+            outline: none;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .dark .inline-slot-select {
+            background: rgba(255, 255, 255, 0.11);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .break-head,
+        .break-body {
+            min-width: 88px;
+            text-align: center;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.9rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #2f273a;
+        }
+
+        .break-head.interval,
+        .break-body.interval,
+        .break-head.lunch,
+        .break-body.lunch,
+        .break-head.internal,
+        .break-body.internal {
+            width: 56px;
+            min-width: 56px;
+            max-width: 56px;
+            font-size: 0.72rem;
+            letter-spacing: 0.03em;
+        }
+
+        .break-head.interval,
+        .break-body.interval {
+            background: linear-gradient(165deg, rgba(158, 75, 138, 0.72), rgba(76, 42, 89, 0.7));
+            color: #fff;
+        }
+
+        .break-head.lunch,
+        .break-body.lunch,
+        .break-head.internal,
+        .break-body.internal {
+            background: linear-gradient(165deg, rgba(158, 75, 138, 0.72), rgba(76, 42, 89, 0.7));
+            color: #fff;
+        }
+
+        .break-head.over,
+        .break-body.over {
+            background: linear-gradient(165deg, rgba(30, 30, 47, 0.2), rgba(30, 30, 47, 0.1));
+        }
+
+        .break-body {
+            padding: 0;
+            position: relative;
+        }
+
+        .break-body .vtext {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.62rem;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            transform: rotate(180deg);
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .break-head .bicon {
+            display: block;
+            font-size: 0.9rem;
+            margin-bottom: 0.18rem;
+            line-height: 1;
+        }
+
+        .break-body .vicon {
+            font-size: 1.18rem;
+            line-height: 1;
+        }
+
+        .break-body.interval .vtext,
+        .break-body.lunch .vtext {
+            font-size: 1.24rem;
+            letter-spacing: 0.06em;
+        }
+
+        .break-body.internal .vtext {
+            font-size: 1.24rem;
+            letter-spacing: 0.05em;
+        }
+
+        #toast {
+            position: fixed;
+            right: 14px;
+            bottom: 14px;
+            padding: 0.7rem 0.9rem;
+            border-radius: 0.8rem;
+            background: rgba(30, 30, 47, 0.92);
+            color: #fff;
+            font-size: 0.78rem;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(10px);
+            transition: .24s ease;
+            z-index: 60;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+    <script>
+        (function () {
+            const saved = localStorage.getItem('px_theme');
+            const prefersDark = matchMedia('(prefers-color-scheme: dark)').matches;
+            const mode = saved || (prefersDark ? 'dark' : 'light');
+            if (mode === 'dark') document.documentElement.classList.add('dark');
+        })();
+    </script>
+</head>
+
+<body class="min-h-screen text-neutral-900 dark:text-white">
+    <header
+        class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3">
+            <a href="./index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X">
+                <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X">
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="./index.html">Home</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="./teachers/teacher_notes.html">Upload</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="./help.html">Help</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <a href="./teacher_profile.html?user=me"
+                    class="btn-core inline-flex items-center gap-2 !py-2 !px-3 !text-sm">
+                    <span class="material-symbols-rounded text-base">arrow_back</span>Back
+                </a>
+                <button id="clearWeekBtn" class="btn-core inline-flex items-center gap-2 !py-2 !px-3 !text-sm">
+                    <span class="material-symbols-rounded text-base">ink_eraser</span>Clear Week
+                </button>
+                <a id="navEditProfile" href="./teacher_profile_edit.html"
+                    class="hidden items-center gap-1.5 text-sm px-4 py-2 rounded-full bg-brand-500 text-white font-medium hover:bg-brand-600 shadow-sm transition">
+                    <span class="material-symbols-rounded text-base">edit</span>
+                    Edit Profile
+                </a>
+                <a id="navFeedback" href="./teachers/teacher_feedback_list.html"
+                    class="hidden items-center gap-1.5 text-sm px-3 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded text-base">rate_review</span>
+                    Feedback
+                </a>
+                <a id="navTimeTable" href="./teacher_timetable.html" target="_blank" rel="noopener"
+                    class="hidden items-center gap-1.5 text-sm px-3 py-2 rounded-full ring-1 ring-brand-500/35 text-brand-700 dark:text-fuchsia-100 bg-brand-500/10 hover:bg-brand-500/20 transition">
+                    <span class="material-symbols-rounded text-base">calendar_month</span>
+                    Time Table
+                </a>
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                        class="material-symbols-rounded text-base">dark_mode</span></button>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <a href="./teacher_profile.html?user=me"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    title="Back">
+                    <span class="material-symbols-rounded">arrow_back</span>
+                </a>
+                <button id="clearWeekBtnMobile"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    title="Clear Week">
+                    <span class="material-symbols-rounded">ink_eraser</span>
+                </button>
+                <button data-theme-toggle
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                        class="material-symbols-rounded">dark_mode</span></button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8 space-y-4">
+        <section class="flex flex-wrap items-start justify-between gap-4">
+            <div class="space-y-3">
+                <div class="flex flex-wrap items-center gap-3">
+                    <h1 class="text-4xl font-bold tracking-tight">Class Mapping Grid</h1>
+                    <span id="classCountBadge" class="header-chip">
+                        <span class="material-symbols-rounded text-base">menu_book</span>
+                        0 Classes Available to Map
+                    </span>
+                </div>
+            </div>
+            <div></div>
+        </section>
+
+        <section class="board">
+            <div class="table-wrap">
+                <table class="tt-grid" id="ttGrid"></table>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast"></div>
+
+    <script>
+        (function theme() {
+            const root = document.documentElement;
+            const toggles = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+            const setMode = (mode) => {
+                if (mode === 'dark') root.classList.add('dark');
+                else root.classList.remove('dark');
+                localStorage.setItem('px_theme', mode);
+                toggles().forEach(btn => {
+                    const icon = btn.querySelector('.material-symbols-rounded');
+                    if (icon) icon.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+                });
+            };
+            setMode(root.classList.contains('dark') ? 'dark' : 'light');
+            document.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-theme-toggle]');
+                if (!btn) return;
+                setMode(root.classList.contains('dark') ? 'light' : 'dark');
+            });
+        })();
+
+        const DAYS = [
+            { idx: 1, name: 'Monday' },
+            { idx: 2, name: 'Tuesday' },
+            { idx: 3, name: 'Wednesday' },
+            { idx: 4, name: 'Thursday' },
+            { idx: 5, name: 'Friday' },
+            { idx: 6, name: 'Saturday' }
+        ];
+
+        const PERIODS = [
+            { period: 1, title: 'P1', time: '08:50 - 09:40' },
+            { period: 2, title: 'P2', time: '09:40 - 10:30' },
+            { period: 3, title: 'P3', time: '10:45 - 11:35' },
+            { period: 4, title: 'P4', time: '11:35 - 12:25' },
+            { period: 5, title: 'P5', time: '13:10 - 14:00' },
+            { period: 6, title: 'P6', time: '14:00 - 14:50' },
+            { period: 7, title: 'P7', time: '15:00 - 15:50' },
+            { period: 8, title: 'P8', time: '15:50 - 16:40' }
+        ];
+
+        let API_BASE = '';
+        let classOptions = [];
+        const slots = new Map();
+        let editingKey = '';
+
+        const $ = (s, r = document) => r.querySelector(s);
+
+        function slotKey(day, period) {
+            return `${day}-${period}`;
+        }
+
+        function setStatus(text, mode = 'ok') {
+            const el = $('#statusChip');
+            if (!el) return;
+            el.textContent = text;
+            el.style.borderColor = mode === 'error' ? 'rgba(220,38,38,.45)' : 'rgba(30,30,47,.14)';
+        }
+
+        function toast(msg, isError = false) {
+            const t = $('#toast');
+            if (!t) return;
+            t.textContent = msg;
+            t.style.background = isError ? 'rgba(127,29,29,.94)' : 'rgba(30,30,47,.92)';
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 1800);
+        }
+
+        async function resolveApi() {
+            if (API_BASE) return API_BASE;
+            const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, '');
+            if (b) {
+                API_BASE = b;
+                return b;
+            }
+            await new Promise(r => setTimeout(r, 70));
+            return resolveApi();
+        }
+
+        function getToken() {
+            const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+            for (const k of keys) {
+                try {
+                    const v = localStorage.getItem(k);
+                    if (v && v !== '__COOKIE_AUTH__') return v;
+                } catch (_) { }
+            }
+            return '';
+        }
+
+        function authHeaders() {
+            const h = {};
+            const t = getToken();
+            if (t) h.Authorization = `Bearer ${t}`;
+            return h;
+        }
+
+        function esc(v) {
+            return String(v == null ? '' : v)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function classSubject(c) {
+            const raw = String(c && c.subject ? c.subject : 'Class').trim();
+            if (!raw) return 'Class';
+            return raw
+                .replace(/^\s*[A-Z0-9]{4,}\s*[\u2014-]\s*/i, '')
+                .replace(/^\s*[A-Z]{2,}\d{1,}[A-Z0-9]*\s+/i, '')
+                .trim() || raw;
+        }
+
+        function classSection(c) {
+            const raw = String(
+                (c && (
+                    c.section ||
+                    c.section_name ||
+                    c.sec ||
+                    c.class_section ||
+                    c.section_label
+                )) || ''
+            ).trim();
+            if (!raw) return '';
+            return /^section\b/i.test(raw) ? raw : `Section ${raw}`;
+        }
+
+        function classDisplay(c) {
+            const subject = classSubject(c);
+            const section = classSection(c);
+            return section ? `${subject} (${section})` : subject;
+        }
+
+        function getClassById(id) {
+            return classOptions.find(c => String(c.id) === String(id || '')) || null;
+        }
+
+        function updateCountBadges() {
+            const assigned = [...slots.values()].filter(Boolean).length;
+            const available = classOptions.length;
+            const badge = $('#classCountBadge');
+            if (badge) {
+                badge.innerHTML = `<span class="material-symbols-rounded text-base">menu_book</span>${available} Classes Available to Map`;
+            }
+        }
+
+        function buildHeaderColumns() {
+            return `
+                <th class="day-col">Day</th>
+                <th class="period-head"><div class="period-code">P1</div><div class="period-time">08:50 - 09:40</div></th>
+                <th class="period-head"><div class="period-code">P2</div><div class="period-time">09:40 - 10:30</div></th>
+                <th class="break-head interval"></th>
+                <th class="period-head"><div class="period-code">P3</div><div class="period-time">10:45 - 11:35</div></th>
+                <th class="period-head"><div class="period-code">P4</div><div class="period-time">11:35 - 12:25</div></th>
+                <th class="break-head lunch"></th>
+                <th class="period-head"><div class="period-code">P5</div><div class="period-time">13:10 - 14:00</div></th>
+                <th class="period-head"><div class="period-code">P6</div><div class="period-time">14:00 - 14:50</div></th>
+                <th class="break-head internal"></th>
+                <th class="period-head"><div class="period-code">P7</div><div class="period-time">15:00 - 15:50</div></th>
+                <th class="period-head"><div class="period-code">P8</div><div class="period-time">15:50 - 16:40</div></th>
+            `;
+        }
+
+        function renderInlineSelect(day, period, selectedId) {
+            const hasSelected = String(selectedId || '').trim().length > 0;
+            const options = [`<option value="" disabled ${hasSelected ? '' : 'selected'}>Choose class</option>`, ...classOptions.map(o => {
+                const selected = String(o.id) === String(selectedId || '') ? 'selected' : '';
+                return `<option value="${esc(o.id)}" ${selected}>${esc(classDisplay(o))}</option>`;
+            }), `<option value="">Clear slot</option>`].join('');
+            return `<select class="inline-slot-select" data-day="${day}" data-period="${period}">${options}</select>`;
+        }
+
+        function renderPeriodCard(day, period) {
+            const key = slotKey(day, period);
+            const assignedId = slots.get(key) || '';
+            const cls = getClassById(assignedId);
+            if (editingKey === key) {
+                return renderInlineSelect(day, period, assignedId);
+            }
+            const title = cls ? classSubject(cls) : 'Tap to assign';
+            const section = cls ? classSection(cls) : '';
+            return `
+                <button class="map-card" data-day="${day}" data-period="${period}">
+                    <div class="map-icon">+</div>
+                    <div class="map-title">${esc(title)}</div>
+                    ${section ? `<div class="map-sub">${esc(section)}</div>` : ''}
+                </button>
+            `;
+        }
+
+        function renderGrid() {
+            const table = $('#ttGrid');
+            if (!table) return;
+            const head = `<thead><tr>${buildHeaderColumns()}</tr></thead>`;
+            const bodyRows = DAYS.map((day, idx) => {
+                const parts = [];
+                parts.push(`<td class="day-col"><div class="day-name">${day.name}</div></td>`);
+                parts.push(`<td class="period-cell">${renderPeriodCard(day.idx, 1)}</td>`);
+                parts.push(`<td class="period-cell">${renderPeriodCard(day.idx, 2)}</td>`);
+                if (idx === 0) parts.push(`<td class="break-body interval" rowspan="${DAYS.length}"><span class="vtext"><span class="material-symbols-rounded vicon">hourglass_top</span>Interval</span></td>`);
+                parts.push(`<td class="period-cell">${renderPeriodCard(day.idx, 3)}</td>`);
+                parts.push(`<td class="period-cell">${renderPeriodCard(day.idx, 4)}</td>`);
+                if (idx === 0) parts.push(`<td class="break-body lunch" rowspan="${DAYS.length}"><span class="vtext"><span class="material-symbols-rounded vicon">lunch_dining</span>Lunch</span></td>`);
+                parts.push(`<td class="period-cell">${renderPeriodCard(day.idx, 5)}</td>`);
+                parts.push(`<td class="period-cell">${renderPeriodCard(day.idx, 6)}</td>`);
+                if (idx === 0) parts.push(`<td class="break-body internal" rowspan="${DAYS.length}"><span class="vtext"><span class="material-symbols-rounded vicon">hourglass_bottom</span>Internal</span></td>`);
+                parts.push(`<td class="period-cell">${renderPeriodCard(day.idx, 7)}</td>`);
+                parts.push(`<td class="period-cell">${renderPeriodCard(day.idx, 8)}</td>`);
+                return `<tr>${parts.join('')}</tr>`;
+            }).join('');
+
+            table.innerHTML = `${head}<tbody>${bodyRows}</tbody>`;
+            bindGridEvents();
+            updateCountBadges();
+        }
+
+        async function loadClasses() {
+            const base = await resolveApi();
+            const res = await fetch(`${base}/api/teacher/classes/mine`, {
+                headers: authHeaders(),
+                credentials: 'include'
+            });
+            if (!res.ok) throw new Error('Could not load classes');
+            const rows = await res.json();
+            classOptions = (Array.isArray(rows) ? rows : []).map(c => ({
+                id: c.id,
+                subject: c.subject || 'Class',
+                section: c.section || c.section_name || c.sec || c.class_section || c.section_label || ''
+            }));
+        }
+
+        async function loadTimetable() {
+            const base = await resolveApi();
+            const res = await fetch(`${base}/api/teacher/timetable/me`, {
+                headers: authHeaders(),
+                credentials: 'include'
+            });
+            if (!res.ok) {
+                const txt = await res.text().catch(() => '');
+                throw new Error(txt || 'Could not load timetable');
+            }
+            const data = await res.json();
+            slots.clear();
+            (data.slots || []).forEach(s => {
+                slots.set(slotKey(Number(s.day_index), Number(s.period_index)), s.class_id || '');
+            });
+        }
+
+        async function saveSlot(day, period, classId) {
+            const base = await resolveApi();
+            setStatus('Saving...', 'saving');
+            const normalizedClassId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(classId || '').trim())
+                ? String(classId || '').trim()
+                : null;
+            const res = await fetch(`${base}/api/teacher/timetable/me/slot`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                credentials: 'include',
+                body: JSON.stringify({
+                    day_index: Number(day),
+                    period_index: Number(period),
+                    class_id: normalizedClassId
+                })
+            });
+            if (!res.ok) {
+                const msg = await res.text().catch(() => 'Failed to save slot');
+                setStatus('Save failed', 'error');
+                throw new Error(msg || 'Failed to save slot');
+            }
+            setStatus('Synced');
+        }
+
+        function bindGridEvents() {
+            document.querySelectorAll('.map-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const day = Number(card.dataset.day);
+                    const period = Number(card.dataset.period);
+                    editingKey = slotKey(day, period);
+                    renderGrid();
+                    const sel = document.querySelector(`.inline-slot-select[data-day="${day}"][data-period="${period}"]`);
+                    if (!sel) return;
+                    sel.focus();
+                    try {
+                        if (typeof sel.showPicker === 'function') {
+                            sel.showPicker();
+                        } else {
+                            sel.click();
+                        }
+                    } catch (_) {
+                        try { sel.click(); } catch (_) { }
+                    }
+                });
+            });
+
+            document.querySelectorAll('.inline-slot-select').forEach(sel => {
+                sel.addEventListener('change', async () => {
+                    const day = Number(sel.dataset.day || 0);
+                    const period = Number(sel.dataset.period || 0);
+                    const selected = String(sel.value || '').trim();
+                    const key = slotKey(day, period);
+                    const prev = slots.get(key) || '';
+                    slots.set(key, selected);
+                    editingKey = '';
+                    renderGrid();
+                    try {
+                        await saveSlot(day, period, selected);
+                        toast('Period mapped');
+                    } catch (_) {
+                        slots.set(key, prev);
+                        renderGrid();
+                        toast('Could not save this period', true);
+                    }
+                });
+
+                sel.addEventListener('blur', () => {
+                    editingKey = '';
+                    renderGrid();
+                });
+            });
+        }
+
+        async function clearWeek() {
+            const ok = confirm('Clear all 48 period mappings for this week?');
+            if (!ok) return;
+            const base = await resolveApi();
+            setStatus('Clearing...', 'saving');
+            const res = await fetch(`${base}/api/teacher/timetable/me`, {
+                method: 'DELETE',
+                headers: authHeaders(),
+                credentials: 'include'
+            });
+            if (!res.ok) {
+                setStatus('Clear failed', 'error');
+                toast('Failed to clear week', true);
+                return;
+            }
+            slots.clear();
+            renderGrid();
+            setStatus('Synced');
+            toast('Week cleared');
+        }
+
+        function bindTopControls() {
+            const clearBtn = $('#clearWeekBtn');
+            if (clearBtn) clearBtn.addEventListener('click', clearWeek);
+            const clearBtnMobile = $('#clearWeekBtnMobile');
+            if (clearBtnMobile) clearBtnMobile.addEventListener('click', clearWeek);
+        }
+
+        async function init() {
+            bindTopControls();
+            try {
+                await loadClasses();
+                await loadTimetable();
+                renderGrid();
+                setStatus('Synced');
+            } catch (e) {
+                console.error(e);
+                toast('Unable to load timetable data', true);
+                setStatus('Load failed', 'error');
+                const badge = $('#classCountBadge');
+                if (badge) badge.textContent = 'Failed to load classes/time table';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>

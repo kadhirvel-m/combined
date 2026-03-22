@@ -1,64 +1,720 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Paper X — Test Results</title>
+    <title>Teacher Report - Paper X</title>
     <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
     <link rel="stylesheet" href="assets/css/tailwind.css" />
     <script src="./config.js"></script>
     <script src="./auth.js" defer></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0"
+        rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #1E1E2F;
+            --plum: #4C2A59;
+            --orchid: #9E4B8A;
+            --paper: #F7F2F9;
+            --panel-a: rgba(255, 255, 255, 0.82);
+            --panel-b: rgba(255, 255, 255, 0.64);
+            --line: rgba(30, 30, 47, 0.10);
+        }
+
+        .dark {
+            --panel-a: rgba(30, 30, 47, 0.80);
+            --panel-b: rgba(30, 30, 47, 0.58);
+            --line: rgba(255, 255, 255, 0.14);
+        }
+
+        body {
+            font-family: 'Sora', system-ui, -apple-system, sans-serif;
+            background:
+                radial-gradient(1150px 620px at 110% -25%, rgba(158, 75, 138, 0.30), transparent 62%),
+                radial-gradient(900px 520px at -12% -18%, rgba(76, 42, 89, 0.20), transparent 58%),
+                linear-gradient(180deg, #ffffff 0%, #f7f2fb 45%, #f2ecf7 100%);
+            min-height: 100vh;
+        }
+
+        .dark body {
+            background:
+                radial-gradient(1100px 580px at 100% -22%, rgba(158, 75, 138, 0.46), transparent 62%),
+                radial-gradient(920px 520px at -18% -22%, rgba(76, 42, 89, 0.40), transparent 58%),
+                linear-gradient(180deg, #161425 0%, #1a172d 55%, #0f101a 100%);
+        }
+
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        .glass {
+            background:
+                linear-gradient(170deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.70)),
+                radial-gradient(300px 100px at 90% 0%, rgba(158, 75, 138, 0.16), transparent 70%);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border: 1px solid rgba(76, 42, 89, 0.16);
+            border-radius: 1.25rem;
+            box-shadow: 0 22px 54px -34px rgba(30, 30, 47, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .dark .glass {
+            background:
+                linear-gradient(170deg, rgba(34, 31, 52, 0.9), rgba(24, 22, 39, 0.82)),
+                radial-gradient(300px 120px at 90% 0%, rgba(158, 75, 138, 0.26), transparent 70%);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .kpi-card {
+            border: 1px solid var(--line);
+            border-radius: 1rem;
+            padding: 0.85rem;
+            background: rgba(255, 255, 255, 0.54);
+            min-height: 78px;
+        }
+
+        .dark .kpi-card {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .hero-grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: 1fr;
+            align-items: stretch;
+        }
+
+        @media (min-width: 1024px) {
+            .hero-grid {
+                grid-template-columns: minmax(260px, 28%) minmax(0, 72%);
+            }
+        }
+
+        .orbit-wrap {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            position: relative;
+            min-height: 100%;
+            gap: 0.8rem;
+            border: 1px solid rgba(76, 42, 89, 0.12);
+            border-radius: 1.2rem;
+            padding: 1.05rem 1rem 1rem;
+            background:
+                radial-gradient(210px 140px at 50% 0%, rgba(158, 75, 138, 0.24), transparent 76%),
+                linear-gradient(152deg, rgba(255, 255, 255, 0.95), rgba(241, 234, 248, 0.74));
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.8),
+                0 15px 25px -22px rgba(76, 42, 89, 0.72);
+        }
+
+        .dark .orbit-wrap {
+            background:
+                radial-gradient(210px 140px at 50% 0%, rgba(158, 75, 138, 0.3), transparent 76%),
+                linear-gradient(152deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.04));
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.12),
+                0 15px 25px -22px rgba(158, 75, 138, 0.6);
+        }
+
+        .orbit-wrap::before {
+            content: "";
+            position: absolute;
+            width: 196px;
+            height: 196px;
+            border-radius: 999px;
+            border: 1px dashed rgba(158, 75, 138, 0.22);
+            opacity: 0.48;
+            top: 52px;
+        }
+
+        .orbit {
+            width: 184px;
+            height: 184px;
+            border-radius: 999px;
+            position: relative;
+            display: grid;
+            place-items: center;
+            background: conic-gradient(var(--orchid) 0%, rgba(158, 75, 138, 0.10) 0);
+            box-shadow:
+                0 0 0 1px rgba(158, 75, 138, 0.34),
+                0 16px 24px -18px rgba(158, 75, 138, 0.55),
+                inset 0 0 16px rgba(158, 75, 138, 0.35);
+        }
+
+            .orbit::after {
+                content: "";
+                position: absolute;
+                width: 12px;
+                height: 12px;
+                border-radius: 999px;
+                top: 8px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: linear-gradient(180deg, #fff, #f2d7ec);
+                box-shadow: 0 0 0 3px rgba(158, 75, 138, 0.26);
+            }
+
+        .orbit::before {
+            content: "";
+            position: absolute;
+            inset: 20px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 245, 253, 0.9));
+            border: 1px solid rgba(76, 42, 89, 0.18);
+        }
+
+        .dark .orbit::before {
+            background: linear-gradient(180deg, rgba(30, 30, 47, 0.95), rgba(30, 30, 47, 0.88));
+        }
+
+        .orbit-value {
+            position: relative;
+            z-index: 2;
+            font-size: 3rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .orbit-sub {
+            position: relative;
+            z-index: 2;
+            font-size: 11px;
+            opacity: 0.72;
+            margin-top: 1px;
+        }
+
+        .summary-metrics {
+            min-height: 128px;
+            align-content: stretch;
+            display: grid;
+            gap: 0.56rem;
+            grid-template-columns: 1fr;
+        }
+
+        .summary-metrics .signal-card {
+            min-height: 122px;
+        }
+
+        @media (min-width: 1024px) {
+            .summary-metrics {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                grid-auto-rows: minmax(122px, auto);
+            }
+        }
+
+        .micro-pill {
+            border: 1px solid rgba(76, 42, 89, 0.2);
+            border-radius: 999px;
+            padding: 0.24rem 0.62rem;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            background: rgba(255, 255, 255, 0.86);
+        }
+
+        .dark .micro-pill {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .orbit-pills {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.45rem;
+            padding: 0.38rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(76, 42, 89, 0.12);
+            background: rgba(255, 255, 255, 0.42);
+        }
+
+        .dark .orbit-pills {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .orbit-pills .micro-pill {
+            width: 100%;
+            text-align: center;
+            font-size: 0.78rem;
+            line-height: 1;
+            text-transform: uppercase;
+        }
+
+        .orbit-pills .micro-pill b {
+            display: inline-flex;
+            width: 1.4rem;
+            height: 1.4rem;
+            border-radius: 999px;
+            margin-left: 0.36rem;
+            align-items: center;
+            justify-content: center;
+            background: rgba(76, 42, 89, 0.16);
+            font-size: 0.72rem;
+            font-weight: 800;
+        }
+
+        .dist-surface {
+            border: 1px solid rgba(76, 42, 89, 0.14);
+            border-radius: 1rem;
+            padding: 1rem;
+            min-height: 250px;
+            background:
+                radial-gradient(220px 90px at 100% 0%, rgba(158, 75, 138, 0.24), transparent 70%),
+                linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(246, 239, 251, 0.72));
+            box-shadow: 0 16px 24px -22px rgba(76, 42, 89, 0.86);
+        }
+
+        .dark .dist-surface {
+            border-color: rgba(255, 255, 255, 0.12);
+            background:
+                radial-gradient(220px 90px at 100% 0%, rgba(158, 75, 138, 0.26), transparent 70%),
+                linear-gradient(165deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.04));
+        }
+
+        .dist-head {
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            opacity: 0.72;
+            margin-bottom: 1.1rem;
+        }
+
+        .dist-lanes {
+            position: relative;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+            padding-top: 0.48rem;
+        }
+
+        @media (min-width: 768px) {
+            .dist-lanes {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+        }
+
+        .dist-lanes::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 58px;
+            border-top: 1px solid rgba(76, 42, 89, 0.16);
+        }
+
+        .dark .dist-lanes::after {
+            border-top-color: rgba(255, 255, 255, 0.14);
+        }
+
+        .dist-lane {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .dist-percent {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--plum);
+        }
+
+        .dark .dist-percent {
+            color: #f6d8f0;
+        }
+
+        .dist-column {
+            width: 100%;
+            max-width: 136px;
+            height: 92px;
+            border-radius: 0.9rem 0.9rem 0.2rem 0.2rem;
+            background: rgba(76, 42, 89, 0.10);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end;
+        }
+
+        .dark .dist-column {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        .dist-fill {
+            width: 100%;
+            height: 0;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #4c2a59, #9e4b8a);
+            box-shadow: 0 0 16px rgba(158, 75, 138, 0.35);
+        }
+
+        .dist-meta {
+            text-align: center;
+            font-size: 0.79rem;
+            line-height: 1.25;
+            opacity: 0.82;
+        }
+
+        .dist-meta strong {
+            display: block;
+            font-size: 0.86rem;
+            font-weight: 700;
+            margin-bottom: 0.16rem;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .chip {
+            border-radius: 999px;
+            font-size: 11px;
+            padding: 0.18rem 0.55rem;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.58);
+        }
+
+        .dark .chip {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .chip-high {
+            color: #fff;
+            border-color: transparent;
+            background: linear-gradient(135deg, #9E4B8A, #4C2A59);
+        }
+
+        .chip-mid {
+            color: #fff;
+            border-color: transparent;
+            background: linear-gradient(135deg, #7A3A88, #5B2E69);
+        }
+
+        .chip-low {
+            color: #fff;
+            border-color: transparent;
+            background: linear-gradient(135deg, #5D2E66, #3A2048);
+        }
+
+        .table-surface {
+            border: 1px solid var(--line);
+            border-radius: 0.9rem;
+            overflow: hidden;
+        }
+
+        .row-line {
+            border-top: 1px solid rgba(76, 42, 89, 0.15);
+        }
+
+        .mini-callout {
+            border: 1px solid rgba(158, 75, 138, 0.34);
+            background:
+                radial-gradient(220px 100px at 100% 0%, rgba(158, 75, 138, 0.18), transparent 72%),
+                linear-gradient(120deg, rgba(158, 75, 138, 0.16), rgba(76, 42, 89, 0.14));
+            border-radius: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+        }
+
+        .insight-icon {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.72rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: linear-gradient(135deg, #7e3474, #4f2c68);
+            box-shadow: 0 10px 18px -14px rgba(79, 44, 104, 0.9);
+        }
+
+        .btn-core {
+            border-radius: 0.8rem;
+            border: 1px solid var(--line);
+            padding: 0.52rem 0.9rem;
+            font-size: 0.82rem;
+            background: rgba(255, 255, 255, 0.64);
+            transition: .18s ease;
+        }
+
+        .dark .btn-core {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .btn-core:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-main {
+            border-radius: 0.82rem;
+            padding: 0.54rem 1rem;
+            font-size: 0.82rem;
+            color: white;
+            background: linear-gradient(135deg, var(--plum), var(--orchid));
+            box-shadow: 0 10px 20px -14px rgba(158, 75, 138, 0.9);
+        }
+
+        .section-title {
+            letter-spacing: 0.01em;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .signal-card {
+            border: 1px solid rgba(76, 42, 89, 0.13);
+            border-radius: 1rem;
+            padding: 0.72rem 0.78rem;
+            background:
+                radial-gradient(190px 90px at 100% 0%, rgba(158, 75, 138, 0.26), transparent 68%),
+                linear-gradient(165deg, rgba(255, 255, 255, 0.98), rgba(243, 236, 250, 0.72));
+            box-shadow: 0 14px 22px -20px rgba(76, 42, 89, 0.8);
+            transition: transform .2s ease, box-shadow .2s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .signal-card::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 3px;
+            height: 100%;
+            background: linear-gradient(180deg, #9e4b8a, #4c2a59);
+            opacity: 0.9;
+        }
+
+        .signal-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 18px 24px -20px rgba(76, 42, 89, 0.95);
+        }
+
+        .dark .signal-card {
+            border-color: rgba(255, 255, 255, 0.13);
+            background:
+                radial-gradient(190px 90px at 100% 0%, rgba(158, 75, 138, 0.32), transparent 68%),
+                linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+        }
+
+        .metric-head {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .metric-icon {
+            width: 1.9rem;
+            height: 1.9rem;
+            border-radius: 0.55rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.16rem;
+            background: linear-gradient(140deg, rgba(76, 42, 89, 0.94), rgba(158, 75, 138, 0.94));
+            color: #fff;
+            box-shadow: 0 8px 16px -12px rgba(158, 75, 138, 0.95);
+        }
+
+        .metric-label {
+            font-size: 0.88rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            text-transform: uppercase;
+            opacity: 0.78;
+        }
+
+        .metric-value {
+            margin-top: 0.52rem;
+            font-size: 2.05rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            line-height: 1.02;
+        }
+
+        .metric-foot {
+            margin-top: 0.52rem;
+            font-size: 1.04rem;
+            opacity: 0.88;
+        }
+
+        .hidden-soft {
+            display: none;
+        }
+    </style>
 </head>
 
-<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-slate-50 dark:bg-brand-900/90">
+<body class="min-h-screen text-neutral-900 dark:text-white">
     <main class="container mx-auto px-4 py-8 space-y-6">
-        <div class="flex items-center justify-between">
+        <header class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <h1 class="text-2xl font-bold" id="title">Test Results</h1>
-                <p id="meta" class="text-sm text-neutral-600 dark:text-white/70"></p>
+                <h1 class="text-2xl md:text-3xl font-bold" id="reportTitle">Teacher Performance Report</h1>
+                <p id="meta" class="text-sm text-neutral-600 dark:text-white/70 mt-1"></p>
             </div>
-            <div class="flex gap-2">
-                <a id="viewTest"
-                    class="px-4 py-2 rounded-lg ring-1 ring-black/5 dark:ring-white/15 text-sm hover:bg-black/5 dark:hover:bg-white/10">Open
-                    Test</a>
-                <a href="./teacher_tests.html"
-                    class="px-4 py-2 rounded-lg ring-1 ring-black/5 dark:ring-white/15 text-sm hover:bg-black/5 dark:hover:bg-white/10">Back</a>
+            <div class="flex flex-wrap gap-2">
+                <a id="viewTest" class="btn-core">Open Test</a>
+                <a href="./teacher_tests.html" class="btn-core">Back</a>
             </div>
-        </div>
+        </header>
+
         <div id="alert"
-            class="hidden text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-4 py-3 rounded-xl ring-1 ring-red-100 dark:ring-red-800">
+            class="hidden text-sm text-red-700 dark:text-red-200 bg-red-100 dark:bg-red-900/40 px-4 py-3 rounded-xl ring-1 ring-red-200 dark:ring-red-800">
         </div>
 
-        <section class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 space-y-2">
-            <div class="flex gap-4 text-sm">
-                <div>Completed: <span id="completed" class="font-semibold">-</span></div>
-                <div>Status: <span id="status" class="font-semibold"></span></div>
-            </div>
-            <div class="text-sm text-neutral-600 dark:text-white/70">Students who have not attempted appear below when
-                class enrollments are available.</div>
-        </section>
+        <section class="glass p-5 md:p-6 space-y-4">
+            <h2 class="text-lg font-semibold section-title">Top Summary</h2>
+            <div class="hero-grid">
+                <aside class="orbit-wrap">
+                    <div class="w-full text-left text-[10px] font-semibold tracking-[0.2em] uppercase opacity-70">Top Summary</div>
+                    <div id="completionOrbit" class="orbit">
+                        <div class="text-center">
+                            <div id="completionOrbitValue" class="orbit-value">0%</div>
+                            <div class="text-[11px] opacity-60 mt-1">Completed</div>
+                        </div>
+                    </div>
 
-        <section class="grid md:grid-cols-2 gap-4">
-            <div class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10">
-                <h2 class="font-semibold mb-2">Attempts</h2>
-                <div id="attempts" class="space-y-2 text-sm"></div>
-            </div>
-            <div class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10">
-                <h2 class="font-semibold mb-2">Not Attempted</h2>
-                <div id="missing" class="space-y-2 text-sm"></div>
-            </div>
-        </section>
+                    <div class="text-sm font-semibold" id="completionMeta">0/0 completed</div>
 
-        <section class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10">
-            <div class="flex items-center justify-between mb-2">
-                <div>
-                    <h2 class="font-semibold">Class Roster</h2>
-                    <p class="text-sm text-neutral-600 dark:text-white/70">All enrolled students for this class with
-                        status.</p>
+                    <div class="mt-1 orbit-pills">
+                        <span class="micro-pill" id="completedPill">Done 0</span>
+                        <span class="micro-pill" id="pendingPill">Pending 0</span>
+                    </div>
+                </aside>
+                <div class="space-y-3">
+                    <div id="summaryGrid" class="summary-metrics"></div>
+                    <div class="dist-surface">
+                        <div class="dist-head">Performance Distribution</div>
+                        <div id="distribution" class="dist-lanes"></div>
+                    </div>
                 </div>
             </div>
-            <div id="roster" class="space-y-2 text-sm"></div>
+            <div id="statusInsight" class="mini-callout px-4 py-3 text-sm font-semibold"></div>
+            <div id="proMove" class="mini-callout px-4 py-3 text-sm"></div>
+        </section>
+
+        <section class="glass p-5 md:p-6 space-y-4">
+            <h2 class="text-lg font-semibold section-title">Topic-wise Performance</h2>
+            <div class="table-surface overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-black/[0.03] dark:bg-white/[0.04]">
+                        <tr class="text-left">
+                            <th class="py-2.5 px-3">Topic</th>
+                            <th class="py-2.5 px-3">Avg Score</th>
+                            <th class="py-2.5 px-3">Students Weak</th>
+                            <th class="py-2.5 px-3">Difficulty</th>
+                            <th class="py-2.5 px-3">Priority</th>
+                            <th class="py-2.5 px-3">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="topicRows"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="grid lg:grid-cols-2 gap-4">
+            <article class="glass p-5 md:p-6 space-y-4">
+                <h2 class="text-lg font-semibold section-title">CO-wise Performance</h2>
+                <div class="table-surface overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-black/[0.03] dark:bg-white/[0.04]">
+                            <tr class="text-left">
+                                <th class="py-2.5 px-3">CO</th>
+                                <th class="py-2.5 px-3">Avg %</th>
+                                <th class="py-2.5 px-3">Below Threshold</th>
+                                <th class="py-2.5 px-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="coRows"></tbody>
+                    </table>
+                </div>
+            </article>
+            <article class="glass p-5 md:p-6 space-y-4" id="kLevelBlock">
+                <h2 class="text-lg font-semibold section-title">K-Level Analysis</h2>
+                <div class="table-surface overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-black/[0.03] dark:bg-white/[0.04]">
+                            <tr class="text-left">
+                                <th class="py-2.5 px-3">K-Level</th>
+                                <th class="py-2.5 px-3">Skill</th>
+                                <th class="py-2.5 px-3">Avg %</th>
+                                <th class="py-2.5 px-3">Insight</th>
+                            </tr>
+                        </thead>
+                        <tbody id="kRows"></tbody>
+                    </table>
+                </div>
+            </article>
+        </section>
+
+        <section class="glass p-5 md:p-6 space-y-4">
+            <h2 class="text-lg font-semibold section-title">Student Segmentation</h2>
+            <div class="grid md:grid-cols-3 gap-4">
+                <div class="kpi-card">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-semibold">Weak Students</h3>
+                        <span class="chip chip-high">At-risk</span>
+                    </div>
+                    <p id="weakCount" class="text-sm mt-1 opacity-75"></p>
+                    <div id="weakStudents" class="mt-2 text-sm space-y-1"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-semibold">Average Students</h3>
+                        <span class="chip chip-mid">Monitor</span>
+                    </div>
+                    <p id="avgCount" class="text-sm mt-1 opacity-75"></p>
+                    <div id="avgStudents" class="mt-2 text-sm space-y-1"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-semibold">Top Performers</h3>
+                        <span class="chip chip-low">Strong</span>
+                    </div>
+                    <p id="topCount" class="text-sm mt-1 opacity-75"></p>
+                    <div id="topStudents" class="mt-2 text-sm space-y-1"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="glass p-5 md:p-6 space-y-4">
+            <div class="flex items-center justify-between gap-2">
+                <h2 class="text-lg font-semibold section-title">Critical Questions (Low Accuracy)</h2>
+                <button id="toggleAllQuestions" class="btn-core">View All Questions</button>
+            </div>
+            <div id="questionInsights" class="space-y-2 text-sm"></div>
+        </section>
+
+        <section class="grid lg:grid-cols-2 gap-4">
+            <article class="glass p-5 md:p-6 space-y-3">
+                <h2 class="text-lg font-semibold section-title">Key Insights</h2>
+                <div id="keyInsights" class="space-y-2 text-sm"></div>
+            </article>
+            <article class="glass p-5 md:p-6 space-y-3">
+                <h2 class="text-lg font-semibold section-title">Recommended Actions</h2>
+                <div id="recommendedActions" class="space-y-2 text-sm"></div>
+            </article>
+        </section>
+
+        <section class="glass p-5 md:p-6 space-y-4">
+            <h2 class="text-lg font-semibold section-title">Export & Sharing</h2>
+            <div class="flex flex-wrap gap-2">
+                <button id="exportPdf" class="btn-main">Export PDF</button>
+                <button id="exportExcel" class="btn-core">Export Excel (CSV)</button>
+                <button id="shareReport" class="btn-core">Share Report</button>
+            </div>
         </section>
     </main>
 
@@ -66,140 +722,519 @@
         const $ = (s, r = document) => r.querySelector(s);
         const params = new URLSearchParams(location.search);
         let API_BASE = '';
-        async function resolveApi() { if (API_BASE) return API_BASE; const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, ''); if (b) { API_BASE = b; return b; } await new Promise(r => setTimeout(r, 60)); return resolveApi(); }
-        function getToken() { const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token']; for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } } return ''; }
-        function showAlert(msg) { const a = $('#alert'); a.textContent = msg; a.classList.remove('hidden'); }
+
+        async function resolveApi() {
+            if (API_BASE) return API_BASE;
+            const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, '');
+            if (b) {
+                API_BASE = b;
+                return b;
+            }
+            await new Promise(r => setTimeout(r, 60));
+            return resolveApi();
+        }
+
+        function getToken() {
+            const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+            for (const k of keys) {
+                try {
+                    const v = localStorage.getItem(k);
+                    if (v) return v;
+                } catch (_) { }
+            }
+            return '';
+        }
+
+        function esc(v) {
+            return String(v == null ? '' : v)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function showAlert(msg) {
+            const a = $('#alert');
+            if (!a) return;
+            a.textContent = msg;
+            a.classList.remove('hidden');
+        }
+
+        function studentKey(s) {
+            if (!s || typeof s !== 'object') return '';
+            return String(s.auth_user_id || s.student_user_id || s.user_id || s.id || s.email || '').trim().toLowerCase();
+        }
+
+        function fmtPct(n) {
+            return `${Math.max(0, Math.min(100, Number(n || 0))).toFixed(1)}%`;
+        }
+
+        function fmtSec(sec) {
+            const s = Math.max(0, Number(sec || 0));
+            const m = Math.floor(s / 60);
+            const r = Math.floor(s % 60);
+            return `${m}m ${String(r).padStart(2, '0')}s`;
+        }
+
+        function metricTile(icon, label, value, foot = 'Updated from live attempts') {
+            return `<article class="signal-card">
+                <div class="metric-head">
+                    <span class="metric-icon material-symbols-rounded">${esc(icon)}</span>
+                    <span class="metric-label">${esc(label)}</span>
+                </div>
+                <div class="metric-value">${esc(value)}</div>
+                <div class="metric-foot">${esc(foot)}</div>
+            </article>`;
+        }
+
+        function stripSubjectCode(subject) {
+            const raw = String(subject || '').trim();
+            if (!raw) return '';
+            return raw.replace(/^\s*[A-Z0-9]{4,}\s*[\u2014-]\s*/i, '').trim();
+        }
+
+        function skillLabel(k) {
+            const map = { K1: 'Remember', K2: 'Understanding', K3: 'Apply', K4: 'Analyze', K5: 'Evaluate', K6: 'Create' };
+            return map[k] || 'Mixed';
+        }
+
+        function aggregateMetric(rows, keyName, studentPerfByKey) {
+            const map = new Map();
+            rows.forEach((row) => {
+                const key = String(row[keyName] || 'Unmapped').trim() || 'Unmapped';
+                const entry = map.get(key) || { key, correctSum: 0, qCount: 0, labels: [] };
+                entry.correctSum += Number(row.correctPct || 0);
+                entry.qCount += 1;
+                if (row.difficulty) entry.labels.push(String(row.difficulty));
+                map.set(key, entry);
+            });
+
+            const out = [];
+            map.forEach((entry) => {
+                const avg = entry.qCount ? (entry.correctSum / entry.qCount) : 0;
+                const weakStudents = Number(studentPerfByKey.get(entry.key) || 0);
+                const mode = (() => {
+                    const cnt = {};
+                    entry.labels.forEach(v => { cnt[v] = (cnt[v] || 0) + 1; });
+                    return Object.keys(cnt).sort((a, b) => (cnt[b] || 0) - (cnt[a] || 0))[0] || '-';
+                })();
+                out.push({ key: entry.key, avg, weakStudents, difficulty: mode });
+            });
+            out.sort((a, b) => a.avg - b.avg);
+            return out;
+        }
+
+        function priorityTag(avg) {
+            if (avg < 35) return { text: 'HIGH', cls: 'chip-high' };
+            if (avg < 55) return { text: 'MEDIUM', cls: 'chip-mid' };
+            return { text: 'LOW', cls: 'chip-low' };
+        }
+
+        function buildTopicPriorityMap(topicAgg) {
+            const map = new Map();
+            const n = topicAgg.length;
+            if (!n) return map;
+
+            const scored = topicAgg.map((t, idx) => ({
+                idx,
+                key: t.key,
+                risk: (100 - Number(t.avg || 0)) + (Number(t.weakStudents || 0) * 7)
+            })).sort((a, b) => b.risk - a.risk);
+
+            const highCount = n === 1 ? 1 : Math.max(1, Math.ceil(n * 0.3));
+            const medCount = n <= 2 ? Math.max(0, n - highCount) : Math.max(1, Math.ceil(n * 0.35));
+
+            scored.forEach((item, rank) => {
+                if (rank < highCount) map.set(item.key, { text: 'HIGH', cls: 'chip-high' });
+                else if (rank < highCount + medCount) map.set(item.key, { text: 'MEDIUM', cls: 'chip-mid' });
+                else map.set(item.key, { text: 'LOW', cls: 'chip-low' });
+            });
+
+            return map;
+        }
 
         async function load() {
             const id = params.get('test_id') || params.get('id');
             if (!id) return showAlert('Missing test id');
-            const token = getToken(); if (!token) { showAlert('Sign in as teacher'); return; }
+            const token = getToken();
+            if (!token) return showAlert('Sign in as teacher');
+
             try {
                 const base = await resolveApi();
-                const res = await fetch(`${base}/api/teacher/tests/${id}/results`, { headers: { Authorization: 'Bearer ' + token } });
-                if (!res.ok) { showAlert('Could not load results'); return; }
-                const data = await res.json();
-                $('#title').textContent = data.test?.title || 'Test Results';
-                $('#meta').textContent = `Max ${data.test?.max_score || 0}`;
-                $('#viewTest').href = `./test_take.html?test_id=${id}`;
-                $('#status').textContent = data.test?.accepting_submissions === false ? 'Closed' : 'Open';
-                $('#completed').textContent = data.completed_count ?? 0;
-                const classId = data.test?.class_id;
+                const headers = { Authorization: 'Bearer ' + token };
+                const [resultRes, classes] = await Promise.all([
+                    fetch(`${base}/api/teacher/tests/${encodeURIComponent(id)}/results`, { headers }),
+                    fetch(`${base}/api/teacher/classes/mine`, { headers }).then(r => r.ok ? r.json() : []).catch(() => [])
+                ]);
+                if (!resultRes.ok) return showAlert('Could not load results');
 
-                const attempts = data.attempts || [];
-                const mWrap = $('#missing');
+                const data = await resultRes.json();
+                const test = data.test || {};
+                const attemptsRaw = Array.isArray(data.attempts) ? data.attempts : [];
+                const questions = Array.isArray(data.questions)
+                    ? data.questions.slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+                    : [];
 
-                const rWrap = $('#roster');
-                const renderRoster = (list) => {
-                    if (!rWrap) return;
-                    rWrap.innerHTML = list.length ? list.map(s => {
-                        const name = (s.name && s.name.trim()) || s.email || s.auth_user_id || 'Student';
-                        const statusLabel = s.status === 'completed' ? 'Completed' : (s.status === 'in_progress' ? 'In progress' : 'Not attempted');
-                        const badgeClass = s.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-200' : (s.status === 'in_progress' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200' : 'bg-neutral-100 text-neutral-700 dark:bg-white/10 dark:text-white');
-                        const when = s.submitted_at ? ` • ${new Date(s.submitted_at).toLocaleString()}` : '';
-                        const score = typeof s.score === 'number' ? ` • Score ${s.score}` : '';
-                        return `<div class="p-3 rounded-lg ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 flex justify-between gap-4">
-              <div>
-                <div class="font-medium">${name}</div>
-                <div class="text-xs text-neutral-500">${(s.email && s.email !== name ? s.email : '')}${when}${score}</div>
-              </div>
-              <div class="px-3 py-1 rounded-full text-xs font-semibold ${badgeClass}">${statusLabel}</div>
-            </div>`;
-                    }).join('') : '<div class="text-sm text-neutral-500">No class roster found for this test.</div>';
-                };
+                const classMap = new Map((classes || []).map(c => [String(c.id || ''), c]));
+                const classInfo = classMap.get(String(test.class_id || '')) || {};
+                const classStudents = Array.isArray(data.class_students) ? data.class_students : [];
+                const missing = Array.isArray(data.students_not_attempted) ? data.students_not_attempted : [];
 
-                let roster = data.class_students || [];
-                if ((!roster || !roster.length) && classId) {
-                    try {
-                        const rs = await fetch(`${base}/api/teacher/classes/${classId}/students`, { headers: { Authorization: 'Bearer ' + token } });
-                        if (rs.ok) {
-                            const cls = await rs.json();
-                            const students = (cls.students || cls.data || []).map(s => ({
-                                auth_user_id: s.auth_user_id || s.user_id || s.id,
-                                name: s.name,
-                                email: s.email,
-                                status: 'not_attempted'
-                            }));
-                            roster = students;
-                        }
-                    } catch (_) { }
-                }
-                // Merge and dedupe roster + attempts by any shared identifier (auth_user_id, student_user_id, email)
-                const alias = new Map(); // key -> canonicalKey
-                const canonMap = new Map(); // canonicalKey -> merged entry
-                const keysFor = (e) => {
-                    return [e.auth_user_id, e.student_user_id, e.email]
-                        .filter(Boolean)
-                        .map(v => String(v).trim().toLowerCase())
-                        .filter(Boolean);
-                };
-
-                const mergeEntry = (entry) => {
-                    if (!entry) return;
-                    const keys = keysFor(entry);
-                    if (!keys.length) return;
-                    let canon = null;
-                    for (const k of keys) {
-                        const found = alias.get(k);
-                        if (found) { canon = found; break; }
+                const submitted = attemptsRaw.filter(a => !!a.submitted_at);
+                const submittedByStudent = new Map();
+                submitted.forEach((a) => {
+                    const key = studentKey(a);
+                    if (!key) return;
+                    const prev = submittedByStudent.get(key);
+                    if (!prev) submittedByStudent.set(key, a);
+                    else {
+                        const prevAt = new Date(prev.submitted_at || 0).getTime();
+                        const curAt = new Date(a.submitted_at || 0).getTime();
+                        if (curAt > prevAt) submittedByStudent.set(key, a);
                     }
-                    if (!canon) { canon = keys[0]; }
-                    const prev = canonMap.get(canon) || {};
-                    const merged = { ...prev, ...entry };
-                    canonMap.set(canon, merged);
-                    keys.forEach(k => alias.set(k, canon));
-                };
+                });
+                const submittedList = Array.from(submittedByStudent.values());
 
-                (roster || []).forEach(mergeEntry);
-                (attempts || []).forEach(a => {
-                    mergeEntry({
-                        auth_user_id: a.student_user_id,
-                        student_user_id: a.student_user_id,
-                        name: a.name,
-                        email: a.email,
-                        status: a.submitted_at ? 'completed' : (a.submitted_at === null ? 'in_progress' : a.status || 'in_progress'),
-                        score: a.score,
-                        submitted_at: a.submitted_at,
+                const rosterUnion = new Set();
+                classStudents.forEach(s => { const k = studentKey(s); if (k) rosterUnion.add(k); });
+                attemptsRaw.forEach(s => { const k = studentKey(s); if (k) rosterUnion.add(k); });
+                missing.forEach(s => { const k = studentKey(s); if (k) rosterUnion.add(k); });
+
+                const maxScore = Number(test.max_score || 0);
+                const totalStudents = Math.max(rosterUnion.size, submittedList.length);
+                const attemptedStudents = submittedList.length;
+
+                const scores = submittedList.map(a => Number(a.score || 0));
+                const avgScore = scores.length ? scores.reduce((x, y) => x + y, 0) / scores.length : 0;
+                const avgAccuracy = (maxScore > 0 && scores.length) ? (avgScore / maxScore) * 100 : 0;
+                const highest = scores.length ? Math.max(...scores) : 0;
+                const lowest = scores.length ? Math.min(...scores) : 0;
+                const avgTimeSec = (() => {
+                    const withTime = submittedList.map(a => Number(a.elapsed_seconds || 0)).filter(v => Number.isFinite(v) && v > 0);
+                    if (!withTime.length) return 0;
+                    return withTime.reduce((x, y) => x + y, 0) / withTime.length;
+                })();
+
+                const year = classInfo.semester ? `Year ${Math.floor((Number(classInfo.semester) - 1) / 2) + 1}` : null;
+                const cleanSubject = stripSubjectCode(classInfo.subject) || 'N/A';
+                const classLabel = [cleanSubject, classInfo.section ? `Sec ${classInfo.section}` : null, year].filter(Boolean).join(' | ');
+
+                $('#reportTitle').textContent = test.title || 'Teacher Performance Report';
+                $('#meta').textContent = `${classLabel || 'N/A'} | Max Score: ${maxScore}`;
+                $('#viewTest').href = `./test_take.html?test_id=${encodeURIComponent(id)}`;
+
+                const summaryGrid = $('#summaryGrid');
+                summaryGrid.innerHTML = [
+                    metricTile('track_changes', 'Average Accuracy', fmtPct(avgAccuracy), avgAccuracy < 40 ? 'Needs intervention' : (avgAccuracy < 70 ? 'Can be improved' : 'Healthy trend')),
+                    metricTile('analytics', 'Highest + Lowest', `${highest} / ${maxScore} | ${lowest} / ${maxScore}`, 'Spread of class marks'),
+                    metricTile('schedule', 'Average Time Taken', fmtSec(avgTimeSec), 'Per attempted student'),
+                ].join('');
+
+                const completionPct = totalStudents > 0 ? (attemptedStudents / totalStudents) * 100 : 0;
+                const orbit = $('#completionOrbit');
+                const orbitVal = $('#completionOrbitValue');
+                const completionMeta = $('#completionMeta');
+                const completedPill = $('#completedPill');
+                const pendingPill = $('#pendingPill');
+                if (orbit) {
+                    const safe = Math.max(0, Math.min(100, completionPct));
+                    orbit.style.background = `conic-gradient(var(--orchid) ${safe}%, rgba(158, 75, 138, 0.16) ${safe}% 100%)`;
+                }
+                if (orbitVal) orbitVal.textContent = `${completionPct.toFixed(0)}%`;
+                if (completionMeta) completionMeta.textContent = `${attemptedStudents}/${totalStudents} completed`;
+                if (completedPill) completedPill.innerHTML = `DONE <b>${attemptedStudents}</b>`;
+                if (pendingPill) pendingPill.innerHTML = `PENDING <b>${Math.max(totalStudents - attemptedStudents, 0)}</b>`;
+
+                const statusInsight = $('#statusInsight');
+                if (statusInsight) {
+                    const line = avgAccuracy < 60
+                        ? `Overall class performance is below expected level (Avg: ${avgAccuracy.toFixed(0)}%)`
+                        : `Overall class performance is stable (Avg: ${avgAccuracy.toFixed(0)}%)`;
+                    statusInsight.innerHTML = `<span class="insight-icon material-symbols-rounded">monitor_heart</span><span>${esc(line)}</span>`;
+                }
+
+                const perfRows = submittedList.map(s => {
+                    const pct = maxScore > 0 ? (Number(s.score || 0) / maxScore) * 100 : 0;
+                    return {
+                        name: s.name || s.email || 'Student',
+                        email: s.email || '',
+                        pct,
+                        score: Number(s.score || 0),
+                        elapsed: Number(s.elapsed_seconds || 0),
+                        answers: Array.isArray(s.answers) ? s.answers : []
+                    };
+                });
+
+                const bins = [
+                    { name: '0-25', count: 0 },
+                    { name: '25-50', count: 0 },
+                    { name: '50-75', count: 0 },
+                    { name: '75-100', count: 0 }
+                ];
+                perfRows.forEach((row) => {
+                    if (row.pct < 25) bins[0].count += 1;
+                    else if (row.pct < 50) bins[1].count += 1;
+                    else if (row.pct < 75) bins[2].count += 1;
+                    else bins[3].count += 1;
+                });
+                const distNode = $('#distribution');
+                if (distNode) {
+                    distNode.innerHTML = bins.map(b => {
+                        const ratio = totalStudents > 0 ? ((b.count / totalStudents) * 100) : 0;
+                        const safe = Math.max(0, Math.min(100, ratio)).toFixed(2);
+                        return `<article class="dist-lane">
+                            <div class="dist-percent">${ratio.toFixed(0)}%</div>
+                            <div class="dist-column"><div class="dist-fill" style="height:${safe}%"></div></div>
+                            <div class="dist-meta"><strong>${esc(b.name)}</strong>${b.count} students</div>
+                        </article>`;
+                    }).join('');
+                }
+
+                const weakStudents = perfRows.filter(s => s.pct < 40).sort((a, b) => a.pct - b.pct);
+                const avgStudents = perfRows.filter(s => s.pct >= 40 && s.pct < 70).sort((a, b) => b.pct - a.pct);
+                const topStudents = perfRows.filter(s => s.pct >= 70).sort((a, b) => b.pct - a.pct);
+
+                const listNames = (arr) => arr.slice(0, 10).map(s => `<div class="flex items-center justify-between"><span>${esc(s.name)}</span><span class="opacity-75">${s.pct.toFixed(1)}%</span></div>`).join('') || '<div class="opacity-65">None</div>';
+                $('#weakCount').textContent = `${weakStudents.length} students`;
+                $('#avgCount').textContent = `${avgStudents.length} students`;
+                $('#topCount').textContent = `${topStudents.length} students`;
+                $('#weakStudents').innerHTML = listNames(weakStudents);
+                $('#avgStudents').innerHTML = listNames(avgStudents);
+                $('#topStudents').innerHTML = listNames(topStudents);
+
+                const questionRows = [];
+                questions.forEach((q, idx) => {
+                    const total = perfRows.length;
+                    let correct = 0;
+                    perfRows.forEach(s => {
+                        const ans = Number((s.answers || [])[idx]);
+                        if (Number.isInteger(ans) && ans === Number(q.correct_index)) correct += 1;
+                    });
+                    questionRows.push({
+                        index: idx + 1,
+                        prompt: q.prompt || '',
+                        topic: q.topic_name || 'Unmapped',
+                        co: q.co || 'Unmapped',
+                        k: q.k_level || 'Unmapped',
+                        difficulty: q.difficulty || '-',
+                        correctPct: total ? (correct / total) * 100 : 0
                     });
                 });
 
-                roster = Array.from(canonMap.values()).map(r => {
-                    const status = r.submitted_at ? 'completed' : (r.status === 'in_progress' ? 'in_progress' : 'not_attempted');
-                    return { ...r, status };
-                });
-                roster.sort((a, b) => ((a.name || '').localeCompare(b.name || '')) || ((a.email || '').localeCompare(b.email || '')) || ((a.auth_user_id || '').localeCompare(b.auth_user_id || '')));
+                const studentPerfByTopic = new Map();
+                const studentPerfByCo = new Map();
+                const studentPerfByK = new Map();
 
-                // Split by completion: attempted = submitted, pending = in-progress or never started
-                const attemptedList = roster.filter(s => s.submitted_at);
-                const pending = roster.filter(s => !s.submitted_at);
-
-                // Attempts section shows completed submissions only
-                const atWrap = $('#attempts');
-                atWrap.innerHTML = attemptedList.length ? attemptedList.map(a => {
-                    const when = a.submitted_at ? new Date(a.submitted_at).toLocaleString() : 'In progress';
-                    const label = (a.name && a.name.trim()) || a.email || a.auth_user_id || a.student_user_id || 'Student';
-                    const secondary = a.email && a.email !== label ? `${a.email} - ${when}` : when;
-                    return `<div class="p-3 rounded-lg ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 flex justify-between">
-            <div>
-              <div class="font-medium">${label}</div>
-              <div class="text-xs text-neutral-500">${secondary}</div>
-            </div>
-            <div class="text-sm font-semibold">${a.score ?? 0}</div>
-          </div>`;
-                }).join('') : '<div class="text-sm text-neutral-500">No completed submissions yet.</div>';
-
-                // Not attempted = in progress or not started
-                if (pending.length) {
-                    mWrap.innerHTML = pending.map(m => `<div class="p-3 rounded-lg ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5">
-            <div class="font-medium">${m.name || 'Student'}</div>
-            <div class="text-xs text-neutral-500">${m.email || m.auth_user_id || ''}</div>
-          </div>`).join('');
-                } else if (roster.length) {
-                    mWrap.innerHTML = '<div class="text-sm text-neutral-500">All enrolled students completed.</div>';
+                function addStudentPerf(map, key, ratio) {
+                    const group = map.get(key) || [];
+                    group.push(ratio);
+                    map.set(key, group);
                 }
 
-                renderRoster(roster || []);
-            } catch (e) { console.error(e); showAlert('Failed to load'); }
+                perfRows.forEach(s => {
+                    const byTopic = new Map();
+                    const byCo = new Map();
+                    const byK = new Map();
+                    questionRows.forEach((q, idx) => {
+                        const ans = Number((s.answers || [])[idx]);
+                        const ok = Number.isInteger(ans) && ans === Number(questions[idx]?.correct_index);
+
+                        const t = byTopic.get(q.topic) || { c: 0, t: 0 };
+                        t.t += 1;
+                        if (ok) t.c += 1;
+                        byTopic.set(q.topic, t);
+
+                        const c = byCo.get(q.co) || { c: 0, t: 0 };
+                        c.t += 1;
+                        if (ok) c.c += 1;
+                        byCo.set(q.co, c);
+
+                        const k = byK.get(q.k) || { c: 0, t: 0 };
+                        k.t += 1;
+                        if (ok) k.c += 1;
+                        byK.set(q.k, k);
+                    });
+
+                    byTopic.forEach((v, key) => addStudentPerf(studentPerfByTopic, key, v.t ? (v.c / v.t) * 100 : 0));
+                    byCo.forEach((v, key) => addStudentPerf(studentPerfByCo, key, v.t ? (v.c / v.t) * 100 : 0));
+                    byK.forEach((v, key) => addStudentPerf(studentPerfByK, key, v.t ? (v.c / v.t) * 100 : 0));
+                });
+
+                const weakCountByTopic = new Map();
+                studentPerfByTopic.forEach((arr, key) => weakCountByTopic.set(key, arr.filter(x => x < 40).length));
+                const weakCountByCo = new Map();
+                studentPerfByCo.forEach((arr, key) => weakCountByCo.set(key, arr.filter(x => x < 40).length));
+                const weakCountByK = new Map();
+                studentPerfByK.forEach((arr, key) => weakCountByK.set(key, arr.filter(x => x < 40).length));
+
+                const topicAgg = aggregateMetric(questionRows, 'topic', weakCountByTopic);
+                const coAgg = aggregateMetric(questionRows, 'co', weakCountByCo);
+                const kAgg = aggregateMetric(questionRows, 'k', weakCountByK);
+                const topicPriorityMap = buildTopicPriorityMap(topicAgg);
+
+                $('#topicRows').innerHTML = topicAgg.map(t => {
+                    const p = topicPriorityMap.get(t.key) || priorityTag(t.avg);
+                    const action = p.text === 'HIGH' ? 'Re-teach' : (p.text === 'MEDIUM' ? 'Targeted revise' : 'Reinforce');
+                    return `<tr class="row-line">
+                        <td class="py-2.5 px-3">${esc(t.key)}</td>
+                        <td class="py-2.5 px-3">${fmtPct(t.avg)}</td>
+                        <td class="py-2.5 px-3">${t.weakStudents}</td>
+                        <td class="py-2.5 px-3">${esc(t.difficulty)}</td>
+                        <td class="py-2.5 px-3"><span class="chip ${p.cls}">${p.text}</span></td>
+                        <td class="py-2.5 px-3"><span class="chip">${action}</span></td>
+                    </tr>`;
+                }).join('') || '<tr><td colspan="6" class="py-3 px-3 opacity-70">No topic data available.</td></tr>';
+
+                $('#coRows').innerHTML = coAgg.map(c => {
+                    const tag = priorityTag(c.avg);
+                    const label = c.avg < 40 ? 'Weak' : (c.avg < 70 ? 'Moderate' : 'Good');
+                    return `<tr class="row-line">
+                        <td class="py-2.5 px-3">${esc(c.key)}</td>
+                        <td class="py-2.5 px-3">${fmtPct(c.avg)}</td>
+                        <td class="py-2.5 px-3">${c.weakStudents}</td>
+                        <td class="py-2.5 px-3"><span class="chip ${tag.cls}">${label}</span></td>
+                    </tr>`;
+                }).join('') || '<tr><td colspan="4" class="py-3 px-3 opacity-70">No CO data available.</td></tr>';
+
+                $('#kRows').innerHTML = kAgg.map(k => {
+                    const tag = priorityTag(k.avg);
+                    const label = k.avg < 40 ? 'Weak' : (k.avg < 70 ? 'Moderate' : 'Good');
+                    return `<tr class="row-line">
+                        <td class="py-2.5 px-3">${esc(k.key)}</td>
+                        <td class="py-2.5 px-3">${esc(skillLabel(k.key))}</td>
+                        <td class="py-2.5 px-3">${fmtPct(k.avg)}</td>
+                        <td class="py-2.5 px-3"><span class="chip ${tag.cls}">${label}</span></td>
+                    </tr>`;
+                }).join('') || '<tr><td colspan="4" class="py-3 px-3 opacity-70">No K-level data available.</td></tr>';
+
+                if (kAgg.length <= 1) {
+                    const kBlock = $('#kLevelBlock');
+                    if (kBlock) kBlock.classList.add('hidden-soft');
+                }
+
+                const sortedByDifficulty = questionRows.slice().sort((a, b) => a.correctPct - b.correctPct);
+                let showAllQuestions = false;
+                const questionInsights = $('#questionInsights');
+                const renderQuestions = () => {
+                    const source = showAllQuestions ? sortedByDifficulty : sortedByDifficulty.slice(0, 5);
+                    questionInsights.innerHTML = source.map(q => `<div class="kpi-card">
+                        <div class="flex items-start justify-between gap-2">
+                            <div><span class="font-semibold">Q${q.index}</span> ${esc(q.prompt).slice(0, 100)}</div>
+                            <span class="chip ${priorityTag(q.correctPct).cls}">${fmtPct(q.correctPct)}</span>
+                        </div>
+                        <div class="text-xs opacity-75 mt-1">Topic: ${esc(q.topic)} | CO: ${esc(q.co)} | K-level: ${esc(q.k)}</div>
+                    </div>`).join('') || '<div class="opacity-70">No question analytics available.</div>';
+                    const btn = $('#toggleAllQuestions');
+                    if (btn) btn.textContent = showAllQuestions ? 'Show Critical Only' : 'View All Questions';
+                };
+                renderQuestions();
+                const toggleBtn = $('#toggleAllQuestions');
+                if (toggleBtn) {
+                    toggleBtn.onclick = () => {
+                        showAllQuestions = !showAllQuestions;
+                        renderQuestions();
+                    };
+                }
+
+                const topWeakTopics = topicAgg.filter(t => t.avg < 50).slice(0, 3).map(t => t.key);
+                const allBelow50 = topicAgg.length > 0 && topicAgg.every(t => t.avg < 50);
+                const k2Gap = kAgg.some(k => k.key === 'K2' && k.avg < 40);
+                const leadTopic = topWeakTopics[0] || '';
+                const leadFailed = leadTopic ? Number(weakCountByTopic.get(leadTopic) || 0) : 0;
+
+                const fallbackInsights = [
+                    leadTopic ? `${leadFailed} students failed in ${leadTopic} concept.` : null,
+                    coAgg[0] ? `${coAgg[0].key} attainment is low at ${fmtPct(coAgg[0].avg)}.` : null,
+                    k2Gap ? 'Conceptual understanding gap (K2) across entire class.' : null,
+                    allBelow50 ? 'No topic crossed 50% mastery.' : null,
+                    weakStudents.length ? `${weakStudents.length} students need immediate intervention.` : null,
+                ].filter(Boolean);
+
+                const fallbackActions = [
+                    leadTopic ? `Re-teach ${leadTopic} using visual explanation.` : null,
+                    weakStudents.length ? `Conduct remedial class for ${weakStudents.length} weak students.` : null,
+                    coAgg[0] ? `Assign focused practice quiz for ${coAgg[0].key}.` : null,
+                    topWeakTopics[1] ? `Use Blink diagram for quick revision of ${topWeakTopics[1]}.` : null,
+                ].filter(Boolean);
+
+                let proMoveText = `If you fix top 2 weak topics, class average can improve from ${avgAccuracy.toFixed(0)}% to ${Math.max(60, Math.min(90, Math.round(avgAccuracy + 18)))}%.`;
+
+                try {
+                    const aiRes = await fetch(`${base}/api/teacher/tests/${encodeURIComponent(id)}/ai-insights`, {
+                        method: 'POST',
+                        headers: { ...headers, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            snapshot: {
+                                average_accuracy: Number(avgAccuracy.toFixed(2)),
+                                max_score: maxScore,
+                                total_students: totalStudents,
+                                attempted_students: attemptedStudents,
+                                weak_students_count: weakStudents.length,
+                                weak_topics: topWeakTopics,
+                                co_summary: coAgg.slice(0, 5).map(x => ({ co: x.key, avg: Number(x.avg.toFixed(2)), weak_students: x.weakStudents })),
+                                k_summary: kAgg.slice(0, 5).map(x => ({ k_level: x.key, avg: Number(x.avg.toFixed(2)), weak_students: x.weakStudents }))
+                            }
+                        })
+                    });
+                    if (aiRes.ok) {
+                        const ai = await aiRes.json();
+                        if (ai && ai.status_line) $('#statusInsight').textContent = String(ai.status_line);
+                        if (ai && ai.pro_move) proMoveText = String(ai.pro_move);
+
+                        if (ai && Array.isArray(ai.insights) && ai.insights.length) {
+                            const cleaned = ai.insights.slice(0, 5).map(x => {
+                                const line = String(x || '').trim();
+                                if (line.toLowerCase().includes('uneven')) return leadTopic ? `${leadFailed} students failed in ${leadTopic} concept.` : 'No topic crossed 50% mastery.';
+                                return line;
+                            });
+                            $('#keyInsights').innerHTML = cleaned.map(i => `<div class="kpi-card">${esc(i)}</div>`).join('');
+                        }
+                        if (ai && Array.isArray(ai.actions) && ai.actions.length) {
+                            $('#recommendedActions').innerHTML = ai.actions.slice(0, 5).map(i => `<div class="kpi-card">${esc(i)}</div>`).join('');
+                        }
+                    }
+                } catch (_) { }
+
+                if (!$('#keyInsights').innerHTML.trim()) {
+                    $('#keyInsights').innerHTML = fallbackInsights.map(i => `<div class="kpi-card">${esc(i)}</div>`).join('') || '<div class="opacity-70">No insights available.</div>';
+                }
+                if (!$('#recommendedActions').innerHTML.trim()) {
+                    $('#recommendedActions').innerHTML = fallbackActions.map(i => `<div class="kpi-card">${esc(i)}</div>`).join('') || '<div class="opacity-70">No actions available.</div>';
+                }
+                const proMove = $('#proMove');
+                if (proMove) proMove.innerHTML = `<span class="insight-icon material-symbols-rounded">rocket_launch</span><span>${esc(proMoveText)}</span>`;
+
+                const exportRows = [
+                    ['Student', 'Email', 'Score', 'AccuracyPercent', 'ElapsedSeconds'],
+                    ...perfRows.map(s => [s.name, s.email, s.score, s.pct.toFixed(2), s.elapsed])
+                ];
+
+                $('#exportExcel').addEventListener('click', () => {
+                    const csv = exportRows.map(r => r.map(v => `"${String(v || '').replaceAll('"', '""')}"`).join(',')).join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `teacher_report_${id}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                });
+
+                $('#exportPdf').addEventListener('click', () => window.print());
+
+                $('#shareReport').addEventListener('click', async () => {
+                    const text = `${test.title || 'Test'} report\nAvg accuracy: ${avgAccuracy.toFixed(1)}%\nWeak students: ${weakStudents.length}\nTop weak topic: ${topWeakTopics[0] || '-'}\n${proMoveText}`;
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        alert('Report summary copied to clipboard.');
+                    } catch (_) {
+                        alert('Could not copy report summary.');
+                    }
+                });
+            } catch (err) {
+                console.error(err);
+                showAlert('Failed to load report');
+            }
         }
 
         document.addEventListener('DOMContentLoaded', load);

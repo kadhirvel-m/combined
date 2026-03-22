@@ -103,7 +103,7 @@
   <div id="staffModal" class="hidden fixed inset-0 z-50">
     <div class="absolute inset-0 bg-black/25 dark:bg-black/50 backdrop-blur-sm" data-close-modal></div>
     <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="w-full max-w-xl rounded-3xl glass ring-1 ring-black/10 dark:ring-white/10 overflow-hidden text-neutral-900 dark:text-white">
+      <div class="w-full max-w-5xl rounded-3xl glass ring-1 ring-black/10 dark:ring-white/10 overflow-hidden text-neutral-900 dark:text-white">
         <div class="px-5 py-4 border-b border-black/5 dark:border-white/10 flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span class="material-symbols-rounded text-[20px]">badge</span>
@@ -114,7 +114,7 @@
           </button>
         </div>
 
-        <div class="p-5 max-h-[80vh] overflow-y-auto">
+        <div class="p-5 max-h-[88vh] overflow-y-auto">
           <div id="modalBody"></div>
 
           <div id="removePane" class="hidden mt-5 rounded-2xl bg-red-500/10 ring-1 ring-red-500/20 p-4">
@@ -177,6 +177,7 @@
       let staff = [];
       let activeStaff = null;
       let scopeLoaded = false;
+      let currentHodUserId = '';
 
       function setLoading(on){
         if (on){
@@ -236,6 +237,7 @@
         HOD.mountNav('staff');
         errBox.classList.add('hidden');
         const me = await HOD.requireHod();
+        currentHodUserId = String((me && me.hod && me.hod.auth_user_id) || '').trim();
         departments = me.departments || [];
         deptSelect.innerHTML = '<option value="">All</option>' + departments.map(d => `<option value="${HOD.esc(d.id)}">${HOD.esc(d.name)}</option>`).join('');
         if (departments.length === 1) deptSelect.value = String(departments[0].id);
@@ -253,7 +255,9 @@
         setLoading(true);
         try {
           const resp = await HOD.fetchJSON(url.toString(), { headers: { Authorization: 'Bearer ' + token } });
-          staff = resp.staff || [];
+          const rows = Array.isArray(resp.staff) ? resp.staff : [];
+          const hodId = String(currentHodUserId || '').trim();
+          staff = hodId ? rows.filter(t => String((t && t.auth_user_id) || '').trim() !== hodId) : rows;
           renderList(staff);
         } catch(e){
           staff = [];
@@ -281,6 +285,10 @@
         const initials = (t.name || t.email || '?').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
         const dept = deptName(t.department_id) || '';
         const cls = typeof t.classes_count === 'number' ? t.classes_count : (t.classes_count || 0);
+        const assignmentsCount = typeof t.assignments_count === 'number' ? t.assignments_count : (t.assignments_count || 0);
+        const testsCount = typeof t.tests_count === 'number' ? t.tests_count : (t.tests_count || 0);
+        const feedbackCollected = typeof t.feedback_collected_count === 'number' ? t.feedback_collected_count : (t.feedback_collected_count || 0);
+        const classDetails = Array.isArray(t.class_details) ? t.class_details : [];
 
         modalProfile.href = '../teacher_profile.html?user=' + encodeURIComponent(t.auth_user_id);
 
@@ -295,17 +303,45 @@
             </div>
           </div>
 
-          <div class="mt-4 grid grid-cols-1 gap-3">
+          <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-3">
               <div class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/45">Classes</div>
               <div class="mt-1 text-lg font-bold">${HOD.esc(cls)}</div>
             </div>
+            <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-3">
+              <div class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/45">Assignments</div>
+              <div class="mt-1 text-lg font-bold">${HOD.esc(assignmentsCount)}</div>
+            </div>
+            <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-3">
+              <div class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/45">Tests Conducted</div>
+              <div class="mt-1 text-lg font-bold">${HOD.esc(testsCount)}</div>
+            </div>
+            <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-3">
+              <div class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/45">Feedback Collected</div>
+              <div class="mt-1 text-lg font-bold">${HOD.esc(feedbackCollected)}</div>
+            </div>
           </div>
 
-          ${t.headline ? `<div class="mt-4 rounded-2xl bg-black/5 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10 p-3">
-            <div class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/45">Headline</div>
-            <div class="mt-1 text-sm">${HOD.esc(t.headline)}</div>
-          </div>` : ''}
+          <div class="mt-4 rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-3">
+            <div class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/45">Handled Classes</div>
+            ${classDetails.length ? `
+              <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                ${classDetails.map(c => {
+                  const subject = c && c.subject ? String(c.subject) : 'Class';
+                  const bits = [];
+                  if (c && c.department_name) bits.push(String(c.department_name));
+                  if (c && c.year) bits.push(String(c.year));
+                  if (c && c.section) bits.push('Section ' + String(c.section));
+                  const meta = bits.join(' • ') || '—';
+                  return `<div class="rounded-xl bg-black/5 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10 px-3 py-2">
+                    <div class="text-sm font-semibold">${HOD.esc(subject)}</div>
+                    <div class="text-xs text-neutral-600 dark:text-white/65 mt-0.5">${HOD.esc(meta)}</div>
+                  </div>`;
+                }).join('')}
+              </div>
+            ` : `<div class="mt-2 text-sm text-neutral-600 dark:text-white/60">No class details available.</div>`}
+          </div>
+
         `;
 
         staffModal.classList.remove('hidden');

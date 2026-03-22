@@ -546,7 +546,16 @@
           reqPath !== '/api/me' &&
           !req.__paperxRetried;
 
-        if (!canRetryOn401) {
+        // Some protected endpoints return 403 for expired/rotated auth state.
+        // Allow a single refresh+retry only when we appear authenticated.
+        var canRetryOn403 =
+          isApiRequest &&
+          response.status === 403 &&
+          !_isAuthEndpoint(reqPath) &&
+          !req.__paperxRetried &&
+          (hasAuthState() || !!getBearerFallback());
+
+        if (!canRetryOn401 && !canRetryOn403) {
           _applyAuthStateFromResponse(reqPath, response);
           return response;
         }

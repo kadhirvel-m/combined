@@ -726,9 +726,15 @@ def _security_persist_event(event: Dict[str, Any], *, severity: str) -> None:
             "event_ts": event.get("ts"),
             "event_payload": event,
         }
-        res = supabase.table(SECURITY_EVENTS_TABLE).insert(row).execute()
+        res = _supabase_retry(
+            lambda: supabase.table(SECURITY_EVENTS_TABLE).insert(row).execute(),
+            retries=3,
+            base_delay=0.2,
+        )
         if getattr(res, "error", None):
             security_logger.warning("security event db insert failed: %s", res.error)
+    except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+        security_logger.warning("security event db insert transient failure after retries: %s", type(exc).__name__)
     except Exception as exc:
         security_logger.warning("security event db insert exception: %s", exc)
 
@@ -922,9 +928,15 @@ def _security_create_incident(*, alert_type: str, severity: str, event_payload: 
             "client_ip": event_payload.get("client_ip") or _security_extract_ip(request),
             "event_payload": event_payload,
         }
-        res = supabase.table(SECURITY_INCIDENTS_TABLE).insert(row).execute()
+        res = _supabase_retry(
+            lambda: supabase.table(SECURITY_INCIDENTS_TABLE).insert(row).execute(),
+            retries=3,
+            base_delay=0.2,
+        )
         if getattr(res, "error", None):
             security_logger.warning("security incident insert failed: %s", res.error)
+    except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+        security_logger.warning("security incident insert transient failure after retries: %s", type(exc).__name__)
     except Exception as exc:
         security_logger.warning("security incident insert exception: %s", exc)
 
@@ -2383,9 +2395,12 @@ def db_get_ai_note_by_id_variant(note_id: str, *, variant: Optional[str] = None)
     supabase = get_service_client()
     table = _table_for_variant(variant)
     try:
+        select_cols = "id,title,markdown,image_urls,created_at,updated_at"
+        if table == AI_NOTES_TABLE:
+            select_cols += ",verified_by_teacher_id,verified_by_name,verified_at"
         res = (
             supabase.table(table)
-            .select("id,title,markdown,image_urls,created_at,updated_at")
+            .select(select_cols)
             .eq("id", note_id)
             .limit(1)
             .execute()
@@ -2899,7 +2914,7 @@ SERPAPI_API_KEY = (os.getenv("SERPAPI_API_KEY", "") or "").strip()
 SERPAPI_ENABLED = os.getenv("ENABLE_SERPAPI", "true").strip().lower() in {"1", "true", "yes", "on"}
 SERPAPI_TIMEOUT_SEC = float(os.getenv("SERPAPI_TIMEOUT_SEC", "8"))
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or "").strip()
-GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-3-pro-preview")
+GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-3.1-flash-image-preview")
 MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
 # Default domains for notes/web search when DB has no config yet
@@ -10395,7 +10410,32 @@ def _get_auth_user(authorization: Optional[str]) -> Tuple[Optional[str], Optiona
     token = _parse_bearer_token(authorization)
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
-    user_obj = _auth_user_obj_from_token(token)
+
+    retryable_auth_errors: tuple[Any, ...] = (AuthRetryableError,)
+    if httpx is not None:
+        retryable_auth_errors = retryable_auth_errors + (httpx.RemoteProtocolError,)  # type: ignore
+        if HTTPXRemoteProtocolError not in retryable_auth_errors:
+            retryable_auth_errors = retryable_auth_errors + (HTTPXRemoteProtocolError,)  # type: ignore
+    else:
+        retryable_auth_errors = retryable_auth_errors + (HTTPXRemoteProtocolError,)
+
+    user_obj: Any = None
+    last_retryable: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            user_obj = _auth_user_obj_from_token(token)
+            break
+        except HTTPException:
+            raise
+        except retryable_auth_errors as exc:  # type: ignore
+            last_retryable = exc
+            if attempt == 2:
+                break
+            time.sleep(0.2 * (2 ** attempt))
+
+    if not user_obj and last_retryable is not None:
+        raise HTTPException(status_code=503, detail=f"Auth temporarily unavailable. Please retry. ({type(last_retryable).__name__})")
+
     if not user_obj:
         raise HTTPException(status_code=401, detail="Invalid auth context")
     user_id = getattr(user_obj, "id", None) or (user_obj.get("id") if isinstance(user_obj, dict) else None)
@@ -11771,6 +11811,108 @@ def admin_security_abuse_blocked(
     except Exception:
         pass
 
+    # Enrich each IP with account emails/names recently seen from that client IP.
+    # This helps admins identify which users were active behind a blocked/allowlisted IP.
+    try:
+        if out:
+            supabase = get_service_client()
+            ips = [str(k) for k in out.keys() if str(k).strip()]
+            acct_res = (
+                supabase.table(SECURITY_EVENTS_TABLE)
+                .select("client_ip,user_id,email,event_payload,created_at,event_ts")
+                .in_("client_ip", ips)
+                .gte("created_at", recent_from)
+                .order("created_at", desc=True)
+                .limit(1500)
+                .execute()
+            )
+            acct_rows = getattr(acct_res, "data", None) or []
+
+            seen_by_ip: Dict[str, Dict[str, Dict[str, Any]]] = {}
+            profile_ids: Set[str] = set()
+            for row in acct_rows:
+                ip = str(row.get("client_ip") or "").strip()
+                if not ip:
+                    continue
+                payload = row.get("event_payload") if isinstance(row.get("event_payload"), dict) else {}
+                user_id = str(
+                    row.get("user_id")
+                    or payload.get("user_id")
+                    or payload.get("actor_user_id")
+                    or ""
+                ).strip()
+                email = str(
+                    row.get("email")
+                    or payload.get("email")
+                    or payload.get("actor_email")
+                    or ""
+                ).strip().lower()
+                if not user_id and not email:
+                    continue
+                key = user_id or f"email:{email}"
+                bucket = seen_by_ip.setdefault(ip, {})
+                current = bucket.get(key) or {
+                    "user_id": user_id or None,
+                    "email": email or None,
+                    "name": None,
+                    "last_seen": row.get("event_ts") or row.get("created_at"),
+                }
+                if user_id and not current.get("user_id"):
+                    current["user_id"] = user_id
+                if email and not current.get("email"):
+                    current["email"] = email
+                if not current.get("last_seen"):
+                    current["last_seen"] = row.get("event_ts") or row.get("created_at")
+                bucket[key] = current
+                if user_id:
+                    profile_ids.add(user_id)
+
+            profile_by_id: Dict[str, Dict[str, Any]] = {}
+            if profile_ids:
+                prof_res = (
+                    supabase.table("user_profiles")
+                    .select("auth_user_id,name,email")
+                    .in_("auth_user_id", list(profile_ids))
+                    .execute()
+                )
+                prof_rows = getattr(prof_res, "data", None) or []
+                for p in prof_rows:
+                    pid = str(p.get("auth_user_id") or "").strip()
+                    if not pid:
+                        continue
+                    profile_by_id[pid] = {
+                        "name": p.get("name"),
+                        "email": (str(p.get("email") or "").strip().lower() or None),
+                    }
+
+            for ip, users in seen_by_ip.items():
+                item = out.get(ip)
+                if item is None:
+                    continue
+                accounts: List[Dict[str, Any]] = []
+                for data in users.values():
+                    uid = data.get("user_id")
+                    prof = profile_by_id.get(str(uid)) if uid else None
+                    name = (prof or {}).get("name") or data.get("name")
+                    email = (prof or {}).get("email") or data.get("email")
+                    accounts.append({
+                        "user_id": uid,
+                        "name": name,
+                        "email": email,
+                        "last_seen": data.get("last_seen"),
+                    })
+
+                accounts.sort(key=lambda a: (
+                    1 if (a.get("name") or "").strip() else 0,
+                    1 if (a.get("email") or "").strip() else 0,
+                    str(a.get("name") or "").lower(),
+                    str(a.get("email") or "").lower(),
+                ))
+                item["accounts"] = accounts[:8]
+                item["accounts_count"] = len(accounts)
+    except Exception:
+        pass
+
     items = list(out.values())
     items.sort(key=lambda r: (0 if r.get("blocked") else 1, -(int(r.get("score") or 0)), str(r.get("ip") or "")))
     return {
@@ -11815,10 +11957,24 @@ def admin_security_abuse_ip_action(payload: AbuseIPActionIn, authorization: Opti
 
 @academics_router.post("/api/access/check-and-consume", summary="Server-side access decision and usage consumption")
 def access_check_and_consume(payload: AccessCheckIn, authorization: Optional[str] = Header(default=None)):
-    user_id, _ = _get_auth_user(authorization)
+    user_id, email = _get_auth_user(authorization)
     if not user_id:
         raise HTTPException(status_code=401, detail="Missing auth user")
     try:
+        action = payload.action
+
+        # Admin/employee accounts bypass daily generation limits.
+        # Keep this explicit so frontend receives a definitive "allowed" response.
+        if action == "ai_prompt" and _is_admin_or_employee(user_id, email):
+            return {
+                "allowed": True,
+                "tier": "staff",
+                "reason": "Unlimited AI generation for admin/employee",
+                "limit": None,
+                "remaining": None,
+                "current": None,
+            }
+
         effective = _resolve_effective_access_cached(str(user_id))
         if effective.get("blocked"):
             return {
@@ -11828,7 +11984,6 @@ def access_check_and_consume(payload: AccessCheckIn, authorization: Optional[str
                 "remaining": 0,
             }
 
-        action = payload.action
         tier = str(effective.get("tier") or "free")
         plan = effective.get("plan") or {}
         free_rule = effective.get("free_rule") or {}
@@ -12325,6 +12480,20 @@ def _require_hod(authorization: Optional[str]) -> str:
     role = data[0].get("role") if data else "student"
     if role not in {"hod", "admin"}:
         raise HTTPException(status_code=403, detail="HOD role required")
+    return uid
+
+
+def _require_teacher_or_hod_only(authorization: Optional[str]) -> str:
+    """Require role to be teacher or hod (admin is not allowed)."""
+    uid, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    role_q = supabase.table("admin_roles").select("role").eq("auth_user_id", uid).limit(1).execute()
+    if getattr(role_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (role check): {role_q.error}")
+    data = role_q.data or []
+    role = str((data[0] or {}).get("role") if data else "student").strip().lower()
+    if role not in {"teacher", "hod"}:
+        raise HTTPException(status_code=403, detail="Teacher or HOD role required")
     return uid
 
 
@@ -13635,6 +13804,25 @@ class TeacherClassStudentsResponse(BaseModel):
     total: int
     applied_filters: Dict[str, Any] = Field(default_factory=dict)
 
+
+class TeacherTimetableSlotUpsertIn(BaseModel):
+    day_index: int = Field(..., ge=1, le=6)
+    period_index: int = Field(..., ge=1, le=8)
+    class_id: Optional[uuid.UUID] = None
+
+
+class TeacherTimetableSlotOut(BaseModel):
+    day_index: int
+    period_index: int
+    class_id: Optional[uuid.UUID] = None
+    class_label: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class TeacherTimetableOut(BaseModel):
+    slots: List[TeacherTimetableSlotOut]
+    counts: Dict[str, int] = Field(default_factory=dict)
+
 def _map_teacher_class_row(row: Dict[str, Any]) -> TeacherClassOut:
     return TeacherClassOut(
         id=uuid.UUID(row["id"]),
@@ -13651,6 +13839,30 @@ def _map_teacher_class_row(row: Dict[str, Any]) -> TeacherClassOut:
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
+
+
+def _teacher_class_label(row: Optional[Dict[str, Any]]) -> str:
+    if not row:
+        return ""
+    subject = str(row.get("subject") or "").strip() or "Class"
+    sem = row.get("semester")
+    section = str(row.get("section") or "").strip()
+    chips: List[str] = []
+    if sem is not None:
+        chips.append(f"Sem {sem}")
+    if section:
+        chips.append(f"Sec {section}")
+    return f"{subject} ({' | '.join(chips)})" if chips else subject
+
+
+def _raise_timetable_db_error(stage: str, err: Any) -> None:
+    text = str(err or "").lower()
+    if "teacher_timetable_entries" in text and ("does not exist" in text or "relation" in text):
+        raise HTTPException(
+            status_code=500,
+            detail="Teacher timetable table is missing. Run scripts/sql/teacher_timetable.sql in Supabase SQL editor.",
+        )
+    raise HTTPException(status_code=500, detail=f"Supabase error ({stage}): {err}")
 
 @teacher_router.put("/api/teacher/profile/me", summary="Upsert my extended teacher profile")
 def upsert_teacher_profile(payload: TeacherProfileUpsertIn, authorization: Optional[str] = Header(default=None), http_request: Request = None):
@@ -14476,17 +14688,85 @@ def hod_list_staff(
         raise HTTPException(status_code=500, detail=f"Supabase error (staff list): {staff_res.error}")
     staff = staff_res.data or []
 
-    # Add quick workload estimate (class count)
+    # Add workload/activity aggregates for modal details.
     teacher_ids = [str(r.get("auth_user_id")) for r in staff if r.get("auth_user_id")]
     class_counts: Dict[str, int] = {tid: 0 for tid in teacher_ids}
+    assignment_counts: Dict[str, int] = {tid: 0 for tid in teacher_ids}
+    test_counts: Dict[str, int] = {tid: 0 for tid in teacher_ids}
+    feedback_collected_counts: Dict[str, int] = {tid: 0 for tid in teacher_ids}
+    class_details_by_teacher: Dict[str, List[Dict[str, Any]]] = {tid: [] for tid in teacher_ids}
+
+    def _year_from_semester(sem: Any) -> Optional[str]:
+        try:
+            sv = int(str(sem).strip())
+            if sv <= 0:
+                return None
+            return f"Year {(sv + 1) // 2}"
+        except Exception:
+            return None
+
     if teacher_ids:
-        # Supabase doesn't give per-user counts in one query; do a lightweight scan instead (bounded)
-        cls_rows = supabase.table("teacher_classes").select("teacher_user_id").in_("teacher_user_id", teacher_ids).limit(5000).execute()
+        cls_rows = supabase.table("teacher_classes").select(
+            "teacher_user_id,subject,section,semester,department_id"
+        ).in_("teacher_user_id", teacher_ids).limit(5000).execute()
         if not getattr(cls_rows, "error", None):
-            for row in cls_rows.data or []:
+            cls_data = cls_rows.data or []
+            dept_ids = {str(r.get("department_id")) for r in cls_data if r.get("department_id")}
+            dept_name_map: Dict[str, str] = {}
+            if dept_ids:
+                dep_rows = supabase.table("departments").select("id,name").in_("id", list(dept_ids)).execute()
+                if not getattr(dep_rows, "error", None):
+                    for dep in dep_rows.data or []:
+                        did = str(dep.get("id") or "")
+                        if did:
+                            dept_name_map[did] = str(dep.get("name") or "")
+
+            for row in cls_data:
                 tid = str(row.get("teacher_user_id") or "")
-                if tid in class_counts:
-                    class_counts[tid] += 1
+                if tid not in class_counts:
+                    continue
+                class_counts[tid] += 1
+
+                dep_id = str(row.get("department_id") or "")
+                class_details_by_teacher[tid].append({
+                    "subject": row.get("subject") or "Class",
+                    "department_name": dept_name_map.get(dep_id) or None,
+                    "year": _year_from_semester(row.get("semester")),
+                    "section": row.get("section") or None,
+                })
+
+        ass_rows = supabase.table("assignments").select("teacher_user_id").in_("teacher_user_id", teacher_ids).limit(5000).execute()
+        if not getattr(ass_rows, "error", None):
+            for row in ass_rows.data or []:
+                tid = str(row.get("teacher_user_id") or "")
+                if tid in assignment_counts:
+                    assignment_counts[tid] += 1
+
+        tst_rows = supabase.table("tests").select("teacher_user_id").in_("teacher_user_id", teacher_ids).limit(5000).execute()
+        if not getattr(tst_rows, "error", None):
+            for row in tst_rows.data or []:
+                tid = str(row.get("teacher_user_id") or "")
+                if tid in test_counts:
+                    test_counts[tid] += 1
+
+        form_rows = supabase.table("feedback_forms").select("id,teacher_id").in_("teacher_id", teacher_ids).limit(5000).execute()
+        form_to_teacher: Dict[str, str] = {}
+        if not getattr(form_rows, "error", None):
+            for row in form_rows.data or []:
+                fid = str(row.get("id") or "")
+                tid = str(row.get("teacher_id") or "")
+                if fid and tid in feedback_collected_counts:
+                    form_to_teacher[fid] = tid
+
+        form_ids = [fid for fid in form_to_teacher.keys() if fid]
+        if form_ids:
+            resp_rows = supabase.table("feedback_responses").select("form_id").in_("form_id", form_ids).limit(20000).execute()
+            if not getattr(resp_rows, "error", None):
+                for row in resp_rows.data or []:
+                    fid = str(row.get("form_id") or "")
+                    tid = form_to_teacher.get(fid)
+                    if tid:
+                        feedback_collected_counts[tid] += 1
 
     # Fallback client-side search (in case OR/ilike isn't supported by client/table)
     if needle_l:
@@ -14497,6 +14777,12 @@ def hod_list_staff(
     for r in staff:
         tid = str(r.get("auth_user_id") or "")
         r["classes_count"] = class_counts.get(tid, 0)
+        r["assignments_count"] = assignment_counts.get(tid, 0)
+        r["tests_count"] = test_counts.get(tid, 0)
+        r["feedback_collected_count"] = feedback_collected_counts.get(tid, 0)
+        details = class_details_by_teacher.get(tid, [])
+        details.sort(key=lambda x: (str(x.get("subject") or "").lower(), str(x.get("section") or "").lower()))
+        r["class_details"] = details
 
     return {"total": len(staff), "staff": staff}
 
@@ -14890,6 +15176,154 @@ def list_my_teacher_classes(authorization: Optional[str] = Header(default=None))
         raise HTTPException(status_code=500, detail=f"Supabase error (list classes): {res.error}")
     rows = res.data or []
     return [_map_teacher_class_row(r) for r in rows]
+
+
+@teacher_router.get(
+    "/api/teacher/timetable/me",
+    response_model=TeacherTimetableOut,
+    summary="Get my weekly timetable",
+)
+def get_my_teacher_timetable(authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+
+    rows_res = supabase.table("teacher_timetable_entries").select(
+        "day_index,period_index,class_id,class_label,updated_at"
+    ).eq("teacher_user_id", uid).order("day_index").order("period_index").limit(200).execute()
+    if getattr(rows_res, "error", None):
+        _raise_timetable_db_error("list timetable", rows_res.error)
+    rows = rows_res.data or []
+
+    class_ids = [str(r.get("class_id")) for r in rows if r.get("class_id")]
+    class_by_id: Dict[str, Dict[str, Any]] = {}
+    if class_ids:
+        cls_res = supabase.table("teacher_classes").select(
+            "id,teacher_user_id,subject,semester,section"
+        ).in_("id", class_ids).limit(500).execute()
+        if getattr(cls_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (resolve timetable classes): {cls_res.error}")
+        for row in cls_res.data or []:
+            if str(row.get("teacher_user_id") or "") == str(uid):
+                class_by_id[str(row.get("id"))] = row
+
+    slots: List[TeacherTimetableSlotOut] = []
+    assigned = 0
+    for row in rows:
+        day = int(row.get("day_index") or 0)
+        period = int(row.get("period_index") or 0)
+        if day < 1 or day > 6 or period < 1 or period > 8:
+            continue
+        class_id_raw = row.get("class_id")
+        class_id_str = str(class_id_raw) if class_id_raw else ""
+        class_row = class_by_id.get(class_id_str)
+        class_uuid = uuid.UUID(class_id_str) if class_row and class_id_str else None
+        class_label = str(row.get("class_label") or "").strip() or _teacher_class_label(class_row)
+        if class_uuid:
+            assigned += 1
+        slots.append(
+            TeacherTimetableSlotOut(
+                day_index=day,
+                period_index=period,
+                class_id=class_uuid,
+                class_label=class_label or None,
+                updated_at=row.get("updated_at"),
+            )
+        )
+
+    return TeacherTimetableOut(
+        slots=slots,
+        counts={
+            "assigned_periods": assigned,
+            "total_periods": 48,
+            "free_periods": max(48 - assigned, 0),
+        },
+    )
+
+
+@teacher_router.put(
+    "/api/teacher/timetable/me/slot",
+    response_model=TeacherTimetableSlotOut,
+    summary="Set one timetable slot",
+)
+def set_teacher_timetable_slot(payload: TeacherTimetableSlotUpsertIn, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+
+    class_row: Optional[Dict[str, Any]] = None
+    class_label: Optional[str] = None
+    if payload.class_id:
+        cls_res = supabase.table("teacher_classes").select(
+            "id,teacher_user_id,subject,semester,section"
+        ).eq("id", str(payload.class_id)).limit(1).execute()
+        if getattr(cls_res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (get class for timetable): {cls_res.error}")
+        if not cls_res.data:
+            raise HTTPException(status_code=404, detail="Class not found")
+        class_row = cls_res.data[0]
+        if str(class_row.get("teacher_user_id") or "") != str(uid):
+            raise HTTPException(status_code=403, detail="Cannot assign another teacher's class")
+        class_label = _teacher_class_label(class_row)
+
+    existing = supabase.table("teacher_timetable_entries").select("id").eq("teacher_user_id", uid).eq(
+        "day_index", payload.day_index
+    ).eq("period_index", payload.period_index).limit(1).execute()
+    if getattr(existing, "error", None):
+        _raise_timetable_db_error("get timetable slot", existing.error)
+
+    # Treat null class_id as clearing the period assignment.
+    if not payload.class_id:
+        if existing.data:
+            del_res = supabase.table("teacher_timetable_entries").delete().eq(
+                "id", str(existing.data[0].get("id"))
+            ).execute()
+            if getattr(del_res, "error", None):
+                _raise_timetable_db_error("clear timetable slot", del_res.error)
+        return TeacherTimetableSlotOut(day_index=payload.day_index, period_index=payload.period_index)
+
+    row_payload = {
+        "teacher_user_id": str(uid),
+        "day_index": payload.day_index,
+        "period_index": payload.period_index,
+        "class_id": str(payload.class_id),
+        "class_label": class_label,
+    }
+
+    if existing.data:
+        slot_id = str(existing.data[0].get("id"))
+        upd = supabase.table("teacher_timetable_entries").update(row_payload).eq("id", slot_id).execute()
+        if getattr(upd, "error", None):
+            _raise_timetable_db_error("update timetable slot", upd.error)
+    else:
+        ins = supabase.table("teacher_timetable_entries").insert(row_payload).execute()
+        if getattr(ins, "error", None):
+            _raise_timetable_db_error("insert timetable slot", ins.error)
+
+    reload_res = supabase.table("teacher_timetable_entries").select(
+        "day_index,period_index,class_id,class_label,updated_at"
+    ).eq("teacher_user_id", uid).eq("day_index", payload.day_index).eq("period_index", payload.period_index).limit(1).execute()
+    if getattr(reload_res, "error", None) or not reload_res.data:
+        raise HTTPException(status_code=500, detail="Failed to reload timetable slot")
+    row = reload_res.data[0]
+    return TeacherTimetableSlotOut(
+        day_index=int(row.get("day_index") or payload.day_index),
+        period_index=int(row.get("period_index") or payload.period_index),
+        class_id=uuid.UUID(str(row.get("class_id"))) if row.get("class_id") else None,
+        class_label=row.get("class_label"),
+        updated_at=row.get("updated_at"),
+    )
+
+
+@teacher_router.delete(
+    "/api/teacher/timetable/me",
+    summary="Clear my full weekly timetable",
+)
+def clear_my_teacher_timetable(authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    del_res = supabase.table("teacher_timetable_entries").delete().eq("teacher_user_id", uid).execute()
+    if getattr(del_res, "error", None):
+        _raise_timetable_db_error("clear timetable", del_res.error)
+    return {"ok": True, "cleared": True}
 
 
 @teacher_router.get("/api/teacher/classes/{class_id}", response_model=TeacherClassOut, summary="Get a teacher class")
@@ -21989,7 +22423,7 @@ async def generate_stream(
 
 # --- Engineering Mathematics Notes (Gemini 3 Pro Preview only) ---
 
-MATHS_NOTES_MODEL = "gemini-3-pro-preview"
+MATHS_NOTES_MODEL = "gemini-3.1-flash-image-preview"
 
 MATHS_NOTES_SYSTEM_PROMPT = """You are a senior Engineering Mathematics educator teaching undergraduate students in India.
 
@@ -24519,7 +24953,7 @@ def api_resolve_note(
     # Include ppt_link only for the detailed-variant ai_notes table
     select_cols = "id,title,markdown,updated_at,image_urls"
     if table == AI_NOTES_TABLE:
-        select_cols += ",ppt_link"
+        select_cols += ",ppt_link,verified_by_teacher_id,verified_by_name,verified_at"
 
     try:
         res = _supabase_retry(lambda: (
@@ -24544,6 +24978,9 @@ def api_resolve_note(
         }
         if table == AI_NOTES_TABLE:
             result["ppt_link"] = row.get("ppt_link") or None
+            result["verified_by_teacher_id"] = row.get("verified_by_teacher_id")
+            result["verified_by_name"] = row.get("verified_by_name")
+            result["verified_at"] = row.get("verified_at")
         return result
     except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network dependent
         raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.") from exc
@@ -24614,7 +25051,7 @@ def api_read_note(note_id: str, variant: Optional[str] = Query(default=None)):
         row, used_variant = db_get_ai_note_by_id_any(note_id)
     if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
-    return {
+    result = {
         "id": row.get("id"),
         "title": row.get("title"),
         "markdown": row.get("markdown", ""),
@@ -24622,6 +25059,11 @@ def api_read_note(note_id: str, variant: Optional[str] = Query(default=None)):
         "variant": used_variant,
         "image_urls": row.get("image_urls") or [],
     }
+    if used_variant == "detailed":
+        result["verified_by_teacher_id"] = row.get("verified_by_teacher_id")
+        result["verified_by_name"] = row.get("verified_by_name")
+        result["verified_at"] = row.get("verified_at")
+    return result
 
 
 @notes_router.put("/notes/{note_id}")
@@ -24744,6 +25186,72 @@ def api_upsert_user_edit(
         "variant": row.get("variant"),
         "updated_at": row.get("updated_at"),
     }
+
+
+@notes_router.post("/api/notes/verify", summary="Teacher/HOD: verify a note")
+def api_verify_note(
+    payload: dict,
+    authorization: Optional[str] = Header(default=None),
+):
+    verifier_user_id = _require_teacher_or_hod_only(authorization)
+    note_id = str((payload or {}).get("note_id") or "").strip()
+    title = str((payload or {}).get("title") or (payload or {}).get("topic") or "").strip()
+
+    if not note_id and not title:
+        raise HTTPException(status_code=400, detail="note_id or title is required")
+
+    supabase = get_service_client()
+    verifier_name = ""
+    try:
+        tprof = supabase.table("teacher_profiles").select("name").eq("auth_user_id", verifier_user_id).limit(1).execute()
+        if not getattr(tprof, "error", None) and tprof.data:
+            verifier_name = str((tprof.data[0] or {}).get("name") or "").strip()
+        if not verifier_name:
+            uprof = supabase.table("user_profiles").select("name").eq("auth_user_id", verifier_user_id).limit(1).execute()
+            if not getattr(uprof, "error", None) and uprof.data:
+                verifier_name = str((uprof.data[0] or {}).get("name") or "").strip()
+    except Exception:
+        verifier_name = verifier_name or ""
+
+    verify_payload = {
+        "verified_by_teacher_id": verifier_user_id,
+        "verified_by_name": verifier_name or None,
+        "verified_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+
+    try:
+        q = supabase.table(AI_NOTES_TABLE).update(verify_payload)
+        if note_id:
+            q = q.eq("id", note_id)
+        else:
+            q = q.eq("title_ci", title.lower())
+        res = q.execute()
+        if getattr(res, "error", None):
+            err_txt = str(res.error)
+            if "verified_by_teacher_id" in err_txt or "verified_by_name" in err_txt or "verified_at" in err_txt:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Verification columns missing. Run scripts/sql/alter_ai_notes_add_verification_columns.sql",
+                )
+            raise HTTPException(status_code=500, detail=f"Supabase error (verify note): {res.error}")
+
+        updated_rows = getattr(res, "data", None) or []
+        if not updated_rows:
+            raise HTTPException(status_code=404, detail="Note not found")
+        row = updated_rows[0] or {}
+        return {
+            "ok": True,
+            "note_id": row.get("id"),
+            "title": row.get("title"),
+            "verified_by_teacher_id": row.get("verified_by_teacher_id") or verifier_user_id,
+            "verified_by_name": row.get("verified_by_name") or verifier_name or None,
+            "verified_at": row.get("verified_at") or verify_payload["verified_at"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to verify note: {e}")
 
 
 @notes_router.post("/pdf")
@@ -25834,6 +26342,7 @@ class TestQuestionIn(BaseModel):
     difficulty: Optional[str] = Field(None, max_length=16, description="Question difficulty: Easy/Medium/Hard")
     co: Optional[str] = Field(None, max_length=120, description="Course Outcome tag, e.g. CO1")
     k_level: Optional[str] = Field(None, max_length=8, description="Bloom taxonomy level tag, e.g. K1..K6")
+    topic_name: Optional[str] = Field(None, max_length=255, description="Exact syllabus topic name mapped to this question")
 
     @validator("options", pre=True)
     def _clean_options(cls, v):
@@ -25894,6 +26403,13 @@ class TestQuestionIn(BaseModel):
             raise ValueError("k_level must be K1..K6")
         return f"K{m.group(1)}"
 
+    @validator("topic_name", pre=True)
+    def _normalize_topic_name(cls, v):
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s[:255] if s else None
+
 
 class CreateTestIn(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
@@ -25935,7 +26451,7 @@ def _fetch_test_questions(supabase, test_id: str) -> List[Dict[str, Any]]:
     res = _supabase_retry(lambda: (
         supabase
         .table("test_questions")
-        .select("id,prompt,options,correct_index,points,question_order,difficulty,co,k_level")
+        .select("id,prompt,options,correct_index,points,question_order,difficulty,co,k_level,topic_name")
         .eq("test_id", test_id)
         .order("question_order", desc=False)
         .order("id", desc=False)
@@ -25944,6 +26460,18 @@ def _fetch_test_questions(supabase, test_id: str) -> List[Dict[str, Any]]:
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (get questions): {res.error}")
     return getattr(res, "data", None) or []
+
+
+def _parse_utc_iso(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    try:
+        s = str(value).strip()
+        if not s:
+            return None
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except Exception:
+        return None
 
 
 def _ensure_user_allowed_for_test(supabase, test_row: Dict[str, Any], user_id: str):
@@ -26024,6 +26552,7 @@ class TeacherAIGenerateTestIn(BaseModel):
     topic: str = Field(..., min_length=3, max_length=5000)
     count: int = Field(10, ge=1, le=30)
     difficulty: str = Field("balanced", description="Question difficulty preference: balanced/easy/medium/hard")
+    selected_topics: Optional[List[str]] = Field(default=None, description="Exact selected syllabus topic names for mapping")
 
     @validator("difficulty", pre=True)
     def _normalize_difficulty_pref(cls, v):
@@ -26032,8 +26561,66 @@ class TeacherAIGenerateTestIn(BaseModel):
             raise ValueError("difficulty must be one of: balanced, easy, medium, hard")
         return s
 
+    @validator("selected_topics", pre=True)
+    def _normalize_selected_topics(cls, v):
+        if v is None:
+            return None
+        if not isinstance(v, list):
+            raise ValueError("selected_topics must be a list")
+        out: List[str] = []
+        seen: Set[str] = set()
+        for item in v:
+            s = str(item or "").strip()
+            if not s:
+                continue
+            key = s.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(s[:255])
+            if len(out) >= 300:
+                break
+        return out or None
 
-def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str = "balanced") -> Tuple[str, List[Dict[str, Any]], str]:
+
+def _assign_exact_topics_to_questions(questions: List[Dict[str, Any]], selected_topics: Optional[List[str]]) -> List[Dict[str, Any]]:
+    topics = [str(t or "").strip() for t in (selected_topics or []) if str(t or "").strip()]
+    if not topics or not questions:
+        return questions
+
+    def _tokens(text: str) -> Set[str]:
+        return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(w) >= 3}
+
+    topic_tokens = [(_tokens(t), t) for t in topics]
+    rr = 0
+
+    for q in questions:
+        prompt_blob = " ".join([
+            str(q.get("prompt") or ""),
+            " ".join(str(o or "") for o in (q.get("options") or [])),
+        ])
+        q_tokens = _tokens(prompt_blob)
+
+        best_topic = None
+        best_score = 0
+        for t_tokens, t_name in topic_tokens:
+            if not t_tokens or not q_tokens:
+                continue
+            score = len(q_tokens.intersection(t_tokens))
+            if score > best_score:
+                best_score = score
+                best_topic = t_name
+
+        if best_topic:
+            q["topic_name"] = best_topic
+        else:
+            q["topic_name"] = topics[rr % len(topics)]
+            rr += 1
+
+    return questions
+
+
+def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str = "balanced", selected_topics: Optional[List[str]] = None) -> Tuple[str, List[Dict[str, Any]], str]:
     """Generate MCQ questions from a topic for the teacher test builder.
 
     IMPORTANT: Per product requirement, this uses gemini-2.5-flash only.
@@ -26375,10 +26962,13 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
             "difficulty": q_in.difficulty,
             "co": q_in.co,
             "k_level": q_in.k_level,
+            "topic_name": q_in.topic_name,
         })
 
     if len(out_questions) < max(1, min(3, safe_count)):
         raise HTTPException(status_code=500, detail="AI returned too few valid questions")
+
+    out_questions = _assign_exact_topics_to_questions(out_questions, selected_topics)
 
     return title, out_questions, model_name
 
@@ -26386,12 +26976,18 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
 @teacher_router.post("/api/teacher/tests/ai", summary="Teacher: generate MCQ questions with AI")
 def api_teacher_generate_test_ai(payload: TeacherAIGenerateTestIn, authorization: Optional[str] = Header(default=None)):
     _ = _require_teacher(authorization)
-    title, out_questions, model = _generate_topic_mcq_for_teacher(payload.topic, payload.count, payload.difficulty)
+    title, out_questions, model = _generate_topic_mcq_for_teacher(
+        payload.topic,
+        payload.count,
+        payload.difficulty,
+        payload.selected_topics,
+    )
     return {
         "topic": payload.topic,
         "title": title,
         "description": f"AI generated MCQ test on {payload.topic}.",
         "difficulty": payload.difficulty,
+        "selected_topics": payload.selected_topics or [],
         "questions": out_questions,
         "model": model,
         "count": len(out_questions),
@@ -26434,6 +27030,7 @@ def api_create_test(payload: CreateTestIn, authorization: Optional[str] = Header
             "difficulty": q.difficulty,
             "co": q.co,
             "k_level": q.k_level,
+            "topic_name": q.topic_name,
         }))
 
     qres = supabase.table("test_questions").insert(question_rows).execute()
@@ -26456,14 +27053,21 @@ def api_list_attempts(test_id: str, authorization: Optional[str] = Header(defaul
     if test_row.get("teacher_user_id") != teacher_id:
         raise HTTPException(status_code=403, detail="You do not own this test")
 
-    res = (
-        supabase
-        .table("test_attempts")
-        .select("id,student_user_id,score,elapsed_seconds,started_at,submitted_at")
-        .eq("test_id", test_id)
-        .order("submitted_at", desc=True)
-        .execute()
-    )
+    try:
+        res = _supabase_retry(lambda: (
+            supabase
+            .table("test_attempts")
+            .select("id,student_user_id,score,elapsed_seconds,started_at,submitted_at")
+            .eq("test_id", test_id)
+            .order("submitted_at", desc=True)
+            .execute()
+        ), retries=5, base_delay=0.25)
+    except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+        raise HTTPException(
+            status_code=503,
+            detail=f"Attempts list temporarily unavailable. Please retry. ({type(exc).__name__})",
+        ) from exc
+
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (list attempts): {res.error}")
     return {
@@ -26476,15 +27080,22 @@ def api_list_attempts(test_id: str, authorization: Optional[str] = Header(defaul
 def api_list_tests(authorization: Optional[str] = Header(default=None)):
     teacher_id = _require_teacher(authorization)
     supabase = get_service_client()
-    res = (
-        supabase
-        .table("tests")
-        .select("id,title,description,class_id,duration_seconds,max_score,accepting_submissions,created_at,updated_at")
-        .eq("teacher_user_id", teacher_id)
-        .order("created_at", desc=True)
-        .limit(200)
-        .execute()
-    )
+    try:
+        res = _supabase_retry(lambda: (
+            supabase
+            .table("tests")
+            .select("id,title,description,class_id,duration_seconds,max_score,accepting_submissions,created_at,updated_at")
+            .eq("teacher_user_id", teacher_id)
+            .order("created_at", desc=True)
+            .limit(200)
+            .execute()
+        ), retries=5, base_delay=0.25)
+    except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+        raise HTTPException(
+            status_code=503,
+            detail=f"Tests list temporarily unavailable. Please retry. ({type(exc).__name__})",
+        ) from exc
+
     if getattr(res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (list tests): {res.error}")
     return res.data or []
@@ -26547,6 +27158,7 @@ def api_update_test(test_id: str, payload: UpdateTestIn, authorization: Optional
             "difficulty": q.difficulty,
             "co": q.co,
             "k_level": q.k_level,
+            "topic_name": q.topic_name,
         }))
     qres = supabase.table("test_questions").insert(question_rows).execute()
     if getattr(qres, "error", None):
@@ -26576,15 +27188,22 @@ def api_test_results(test_id: str, authorization: Optional[str] = Header(default
     if test_row.get("teacher_user_id") != teacher_id:
         raise HTTPException(status_code=403, detail="You do not own this test")
 
-    attempts_res = (
-        supabase
-        .table("test_attempts")
-        .select("id,student_user_id,score,elapsed_seconds,started_at,submitted_at")
-        .eq("test_id", test_id)
-        .order("submitted_at", desc=True)
-        .limit(500)
-        .execute()
-    )
+    try:
+        attempts_res = _supabase_retry(lambda: (
+            supabase
+            .table("test_attempts")
+            .select("id,student_user_id,answers,score,elapsed_seconds,started_at,submitted_at")
+            .eq("test_id", test_id)
+            .order("submitted_at", desc=True)
+            .limit(500)
+            .execute()
+        ), retries=5, base_delay=0.25)
+    except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+        raise HTTPException(
+            status_code=503,
+            detail=f"Results list temporarily unavailable. Please retry. ({type(exc).__name__})",
+        ) from exc
+
     if getattr(attempts_res, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (results attempts): {attempts_res.error}")
     attempts = attempts_res.data or []
@@ -26664,6 +27283,22 @@ def api_test_results(test_id: str, authorization: Optional[str] = Header(default
         # Optional: keep deterministic order by name/email
         class_students.sort(key=lambda r: (r.get("name") or "", r.get("email") or "", r.get("auth_user_id") or ""))
 
+    questions = _fetch_test_questions(supabase, test_id)
+    questions_meta = [
+        {
+            "id": q.get("id"),
+            "order": q.get("question_order", 0),
+            "prompt": q.get("prompt"),
+            "correct_index": q.get("correct_index"),
+            "points": q.get("points", 1),
+            "difficulty": q.get("difficulty"),
+            "co": q.get("co"),
+            "k_level": q.get("k_level"),
+            "topic_name": q.get("topic_name"),
+        }
+        for q in questions
+    ]
+
     completed = len([a for a in attempts if a.get("submitted_at")])
     return {
         "test": {
@@ -26677,7 +27312,125 @@ def api_test_results(test_id: str, authorization: Optional[str] = Header(default
         "attempts": attempts,
         "students_not_attempted": students_not_attempted,
         "class_students": class_students,
+        "questions": questions_meta,
     }
+
+
+class TeacherResultsInsightsIn(BaseModel):
+    snapshot: Dict[str, Any] = Field(default_factory=dict)
+
+
+def _teacher_results_insights_fallback(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    avg = float(snapshot.get("average_accuracy") or 0.0)
+    weak_topics = snapshot.get("weak_topics") or []
+    weak_count = int(snapshot.get("weak_students_count") or 0)
+
+    status = (
+        f"Overall class performance is below expected level (Avg: {avg:.0f}%)"
+        if avg < 60
+        else f"Overall class performance is stable (Avg: {avg:.0f}%)"
+    )
+
+    lead_topic = str(weak_topics[0]) if weak_topics else "core concepts"
+    second_topic = str(weak_topics[1]) if len(weak_topics) > 1 else "application questions"
+    target = max(65, int(round(min(90, avg + 18))))
+
+    return {
+        "status_line": status,
+        "insights": [
+            f"Majority of mistakes are clustered around {lead_topic}.",
+            "CO attainment is uneven and needs targeted intervention.",
+            "Lower Bloom levels and concept-application links need reinforcement.",
+            f"{weak_count} students are currently at risk and need a remedial plan.",
+        ],
+        "actions": [
+            f"Re-teach {lead_topic} with short visual and worked examples.",
+            f"Run a remedial mini-quiz focused on {second_topic} and CO1 gaps.",
+            "Assign a structured practice set by K-level (K2 -> K4 progression).",
+            f"Prioritize one intervention batch for {weak_count} weak students this week.",
+        ],
+        "pro_move": f"If you fix the top 2 weak topics, class average can improve from {avg:.0f}% to ~{target}%.",
+        "model": "heuristic-fallback",
+        "used_fallback": True,
+    }
+
+
+def _teacher_results_generate_ai_insights(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    fallback = _teacher_results_insights_fallback(snapshot)
+    if not GEMINI_API_KEY:
+        return fallback
+
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception:
+        return fallback
+
+    prompt = textwrap.dedent(
+        f"""
+        You are an academic analytics assistant for teachers.
+        Use the provided class snapshot and return strict JSON only.
+
+        Requirements:
+        - status_line: one concise sentence for top summary.
+        - insights: 3 to 5 bullets, concrete and evidence-based.
+        - actions: 3 to 5 action bullets, teacher-operational.
+        - pro_move: one sentence in this style:
+          If you fix top weak topics, class average can improve from X% to Y%.
+        - Keep language clear and professional.
+
+        JSON schema:
+        {{"status_line":"...","insights":["..."],"actions":["..."],"pro_move":"..."}}
+
+        Snapshot:
+        {json.dumps(snapshot, ensure_ascii=True)}
+        """
+    ).strip()
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        cfg = genai.GenerationConfig(
+            response_mime_type="application/json",
+            temperature=0.2,
+            top_p=0.9,
+            max_output_tokens=1400,
+            candidate_count=1,
+        )
+        resp = model.generate_content(
+            [{"text": prompt}],
+            generation_config=cfg,
+            request_options={"timeout": 20},
+        )
+        raw = str(getattr(resp, "text", "") or "").strip()
+        if not raw:
+            return fallback
+        parsed = json.loads(raw)
+        status_line = str(parsed.get("status_line") or "").strip()
+        insights = [str(x).strip() for x in (parsed.get("insights") or []) if str(x).strip()][:5]
+        actions = [str(x).strip() for x in (parsed.get("actions") or []) if str(x).strip()][:5]
+        pro_move = str(parsed.get("pro_move") or "").strip()
+        if not status_line or not insights or not actions or not pro_move:
+            return fallback
+        return {
+            "status_line": status_line,
+            "insights": insights,
+            "actions": actions,
+            "pro_move": pro_move,
+            "model": "gemini-2.5-flash",
+            "used_fallback": False,
+        }
+    except Exception:
+        return fallback
+
+
+@teacher_router.post("/api/teacher/tests/{test_id}/ai-insights", summary="Teacher: AI insights for test report")
+def api_teacher_test_ai_insights(test_id: str, payload: TeacherResultsInsightsIn, authorization: Optional[str] = Header(default=None)):
+    teacher_id = _require_teacher(authorization)
+    supabase = get_service_client()
+    test_row = _fetch_test_row(supabase, test_id)
+    if test_row.get("teacher_user_id") != teacher_id:
+        raise HTTPException(status_code=403, detail="You do not own this test")
+    return _teacher_results_generate_ai_insights(payload.snapshot or {})
 
 
 @academics_router.get("/api/tests/{test_id}", summary="Fetch a test for taking")
@@ -26691,7 +27444,7 @@ def api_get_test(test_id: str, authorization: Optional[str] = Header(default=Non
     attempt_res = _supabase_retry(lambda: (
         supabase
         .table("test_attempts")
-        .select("id,submitted_at,score")
+        .select("id,submitted_at,score,elapsed_seconds,started_at")
         .eq("test_id", test_id)
         .eq("student_user_id", user_id)
         .limit(1)
@@ -26713,6 +27466,7 @@ def api_get_test(test_id: str, authorization: Optional[str] = Header(default=Non
             "difficulty": q.get("difficulty"),
             "co": q.get("co"),
             "k_level": q.get("k_level"),
+            "topic_name": q.get("topic_name"),
         }
         if is_owner:
             entry["correct_index"] = q.get("correct_index")
@@ -26800,7 +27554,7 @@ def api_submit_attempt(test_id: str, payload: SubmitAttemptIn, authorization: Op
     att_res = (
         supabase
         .table("test_attempts")
-        .select("id,submitted_at")
+        .select("id,submitted_at,started_at")
         .eq("test_id", test_id)
         .eq("student_user_id", user_id)
         .limit(1)
@@ -26820,7 +27574,11 @@ def api_submit_attempt(test_id: str, payload: SubmitAttemptIn, authorization: Op
         }).execute()
         if getattr(ins, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (start attempt late): {ins.error}")
-        attempt_id = (getattr(ins, "data", None) or [{}])[0].get("id")
+        inserted = (getattr(ins, "data", None) or [{}])[0]
+        attempt_id = inserted.get("id")
+        started_at_val = inserted.get("started_at")
+    else:
+        started_at_val = att_rows[0].get("started_at")
 
     if len(payload.answers) != len(questions):
         raise HTTPException(status_code=400, detail="Answer count does not match questions")
@@ -26834,11 +27592,36 @@ def api_submit_attempt(test_id: str, payload: SubmitAttemptIn, authorization: Op
         if ans_int == q.get("correct_index"):
             score += int(q.get("points", 1))
 
+    now_utc = datetime.utcnow()
+    started_dt = _parse_utc_iso(started_at_val)
+    server_elapsed: Optional[int] = None
+    if started_dt is not None:
+        server_elapsed = max(0, int((now_utc - started_dt.replace(tzinfo=None)).total_seconds()))
+
+    duration_cap = test_row.get("duration_seconds")
+    try:
+        duration_cap = int(duration_cap) if duration_cap is not None else None
+    except Exception:
+        duration_cap = None
+
+    elapsed_candidates: List[int] = []
+    if payload.elapsed_seconds is not None:
+        try:
+            elapsed_candidates.append(max(0, int(payload.elapsed_seconds)))
+        except Exception:
+            pass
+    if server_elapsed is not None:
+        elapsed_candidates.append(server_elapsed)
+
+    final_elapsed = max(elapsed_candidates) if elapsed_candidates else None
+    if final_elapsed is not None and duration_cap is not None:
+        final_elapsed = min(final_elapsed, max(duration_cap, 0))
+
     upd = supabase.table("test_attempts").update({
         "answers": payload.answers,
         "score": score,
-        "elapsed_seconds": payload.elapsed_seconds,
-        "submitted_at": datetime.utcnow().isoformat(),
+        "elapsed_seconds": final_elapsed,
+        "submitted_at": now_utc.isoformat() + "Z",
     }).eq("id", attempt_id).execute()
     if getattr(upd, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (submit attempt): {upd.error}")
@@ -26848,6 +27631,312 @@ def api_submit_attempt(test_id: str, payload: SubmitAttemptIn, authorization: Op
         "attempt_id": attempt_id,
         "score": score,
         "max_score": test_row.get("max_score"),
+        "elapsed_seconds": final_elapsed,
+        "submitted_at": now_utc.isoformat() + "Z",
+    }
+
+
+@academics_router.get("/api/tests/{test_id}/my-result", summary="Get current user's submitted result for a test")
+def api_get_my_test_result(test_id: str, authorization: Optional[str] = Header(default=None)):
+    user_id, _ = _get_auth_user(authorization)
+    supabase = get_service_client()
+    test_row = _fetch_test_row(supabase, test_id)
+    _ensure_user_allowed_for_test(supabase, test_row, user_id)
+
+    attempt_res = _supabase_retry(lambda: (
+        supabase
+        .table("test_attempts")
+        .select("id,answers,score,elapsed_seconds,started_at,submitted_at")
+        .eq("test_id", test_id)
+        .eq("student_user_id", user_id)
+        .limit(1)
+        .execute()
+    ))
+    if getattr(attempt_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (attempt result): {attempt_res.error}")
+
+    attempt = (getattr(attempt_res, "data", None) or [None])[0]
+    if not attempt or not attempt.get("submitted_at"):
+        raise HTTPException(status_code=404, detail="No submitted attempt found")
+
+    questions = _fetch_test_questions(supabase, test_id)
+    answers = attempt.get("answers")
+    if not isinstance(answers, list):
+        answers = []
+
+    total_questions = len(questions)
+    answered_count = 0
+    correct_count = 0
+    question_breakdown: List[Dict[str, Any]] = []
+    co_stats: Dict[str, Dict[str, Any]] = {}
+    k_stats: Dict[str, Dict[str, Any]] = {}
+    weak_question_refs: List[Dict[str, Any]] = []
+
+    def _co_label(raw: Any) -> str:
+        s = str(raw or "").strip().upper()
+        return s if s else "UNMAPPED"
+
+    def _k_label(raw: Any) -> str:
+        s = str(raw or "").strip().upper()
+        if re.fullmatch(r"K[1-6]", s):
+            return s
+        return "UNMAPPED"
+
+    for idx, q in enumerate(questions):
+        ans = answers[idx] if idx < len(answers) else -1
+        try:
+            ans_i = int(ans)
+        except Exception:
+            ans_i = -1
+
+        options = q.get("options") if isinstance(q.get("options"), list) else []
+        safe_opts = [str(o or "") for o in options]
+        correct_idx = int(q.get("correct_index") if q.get("correct_index") is not None else -1)
+        is_answered = ans_i >= 0
+        is_correct = bool(ans_i == correct_idx)
+
+        if is_answered:
+            answered_count += 1
+        if is_correct:
+            correct_count += 1
+
+        co_tag = _co_label(q.get("co"))
+        k_tag = _k_label(q.get("k_level"))
+
+        points = int(q.get("points") or 1)
+        points_earned = points if is_correct else 0
+
+        q_item = {
+            "index": idx + 1,
+            "id": q.get("id"),
+            "prompt": q.get("prompt"),
+            "difficulty": q.get("difficulty"),
+            "co": None if co_tag == "UNMAPPED" else co_tag,
+            "k_level": None if k_tag == "UNMAPPED" else k_tag,
+            "options": safe_opts,
+            "selected_index": ans_i if is_answered else None,
+            "selected_option": safe_opts[ans_i] if is_answered and 0 <= ans_i < len(safe_opts) else None,
+            "correct_index": correct_idx,
+            "correct_option": safe_opts[correct_idx] if 0 <= correct_idx < len(safe_opts) else None,
+            "is_answered": is_answered,
+            "is_correct": is_correct,
+            "points": points,
+            "points_earned": points_earned,
+        }
+        question_breakdown.append(q_item)
+
+        co_entry = co_stats.setdefault(co_tag, {
+            "co": None if co_tag == "UNMAPPED" else co_tag,
+            "total": 0,
+            "answered": 0,
+            "correct": 0,
+            "wrong": 0,
+            "unanswered": 0,
+            "missed_questions": [],
+        })
+        co_entry["total"] += 1
+        if is_answered:
+            co_entry["answered"] += 1
+        else:
+            co_entry["unanswered"] += 1
+        if is_correct:
+            co_entry["correct"] += 1
+        else:
+            co_entry["wrong"] += 1
+            co_entry["missed_questions"].append(idx + 1)
+
+        k_entry = k_stats.setdefault(k_tag, {
+            "k_level": None if k_tag == "UNMAPPED" else k_tag,
+            "total": 0,
+            "answered": 0,
+            "correct": 0,
+            "wrong": 0,
+            "unanswered": 0,
+            "missed_questions": [],
+        })
+        k_entry["total"] += 1
+        if is_answered:
+            k_entry["answered"] += 1
+        else:
+            k_entry["unanswered"] += 1
+        if is_correct:
+            k_entry["correct"] += 1
+        else:
+            k_entry["wrong"] += 1
+            k_entry["missed_questions"].append(idx + 1)
+
+        if not is_correct:
+            weak_question_refs.append({
+                "index": idx + 1,
+                "prompt": q.get("prompt"),
+                "co": None if co_tag == "UNMAPPED" else co_tag,
+                "k_level": None if k_tag == "UNMAPPED" else k_tag,
+            })
+
+    unanswered_count = max(0, total_questions - answered_count)
+    wrong_count = max(0, answered_count - correct_count)
+
+    max_score = int(test_row.get("max_score") or 0)
+    score = int(attempt.get("score") or 0)
+    percentage = round((score / max_score) * 100.0, 2) if max_score > 0 else 0.0
+
+    elapsed_seconds = attempt.get("elapsed_seconds")
+    try:
+        elapsed_seconds = int(elapsed_seconds) if elapsed_seconds is not None else None
+    except Exception:
+        elapsed_seconds = None
+
+    if elapsed_seconds is None:
+        started_dt = _parse_utc_iso(attempt.get("started_at"))
+        submitted_dt = _parse_utc_iso(attempt.get("submitted_at"))
+        if started_dt and submitted_dt:
+            elapsed_seconds = max(0, int((submitted_dt - started_dt).total_seconds()))
+
+    duration_seconds = test_row.get("duration_seconds")
+    try:
+        duration_seconds = int(duration_seconds) if duration_seconds is not None else None
+    except Exception:
+        duration_seconds = None
+
+    time_remaining_seconds: Optional[int] = None
+    if duration_seconds is not None and elapsed_seconds is not None:
+        time_remaining_seconds = max(0, duration_seconds - elapsed_seconds)
+
+    def _with_accuracy(rows: Dict[str, Dict[str, Any]], *, field_name: str) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for _, item in rows.items():
+            total = int(item.get("total") or 0)
+            correct = int(item.get("correct") or 0)
+            accuracy = round((correct / total) * 100.0, 2) if total > 0 else 0.0
+            evidence = "high" if total >= 4 else ("medium" if total >= 2 else "low")
+            row = {
+                **item,
+                field_name: item.get(field_name),
+                "accuracy": accuracy,
+                "evidence": evidence,
+            }
+            out.append(row)
+        out.sort(key=lambda r: (-(int(r.get("total") or 0)), str(r.get(field_name) or "")))
+        return out
+
+    co_breakdown = _with_accuracy(co_stats, field_name="co")
+    k_breakdown = _with_accuracy(k_stats, field_name="k_level")
+
+    strengths: List[Dict[str, Any]] = []
+    weaknesses: List[Dict[str, Any]] = []
+    for row in co_breakdown:
+        label = row.get("co")
+        if not label:
+            continue
+        total = int(row.get("total") or 0)
+        acc = float(row.get("accuracy") or 0.0)
+        if total >= 2 and acc >= 80.0:
+            strengths.append({"type": "co", "label": label, "accuracy": acc, "total": total, "evidence": row.get("evidence")})
+        if total >= 2 and acc < 60.0:
+            weaknesses.append({"type": "co", "label": label, "accuracy": acc, "total": total, "evidence": row.get("evidence"), "missed_questions": row.get("missed_questions") or []})
+
+    for row in k_breakdown:
+        label = row.get("k_level")
+        if not label:
+            continue
+        total = int(row.get("total") or 0)
+        acc = float(row.get("accuracy") or 0.0)
+        if total >= 2 and acc >= 80.0:
+            strengths.append({"type": "k_level", "label": label, "accuracy": acc, "total": total, "evidence": row.get("evidence")})
+        if total >= 2 and acc < 60.0:
+            weaknesses.append({"type": "k_level", "label": label, "accuracy": acc, "total": total, "evidence": row.get("evidence"), "missed_questions": row.get("missed_questions") or []})
+
+    k_level_actions = {
+        "K1": "Revise key definitions and core facts using short recall sessions.",
+        "K2": "Focus on concept understanding with worked examples and explain-in-your-own-words practice.",
+        "K3": "Practice applying formulas/rules on mixed problems with timed sets.",
+        "K4": "Compare cases and break problems into parts before solving.",
+        "K5": "Practice evaluation tasks: justify choices and critique alternatives.",
+        "K6": "Attempt design/open-ended problems and peer-review your solutions.",
+    }
+
+    suggestions: List[Dict[str, Any]] = []
+    for w in weaknesses:
+        if w.get("type") == "co":
+            label = str(w.get("label") or "")
+            suggestions.append({
+                "focus": f"Improve {label}",
+                "reason": f"Accuracy in {label} is {float(w.get('accuracy') or 0.0):.2f}% across {int(w.get('total') or 0)} questions.",
+                "action": f"Revisit class material mapped to {label} and re-attempt the missed questions listed in this report.",
+                "evidence": {
+                    "confidence": w.get("evidence"),
+                    "missed_questions": w.get("missed_questions") or [],
+                },
+            })
+        elif w.get("type") == "k_level":
+            label = str(w.get("label") or "")
+            suggestions.append({
+                "focus": f"Strengthen {label} thinking skill",
+                "reason": f"{label} accuracy is {float(w.get('accuracy') or 0.0):.2f}% across {int(w.get('total') or 0)} questions.",
+                "action": k_level_actions.get(label, "Practice more questions at this cognitive level."),
+                "evidence": {
+                    "confidence": w.get("evidence"),
+                    "missed_questions": w.get("missed_questions") or [],
+                },
+            })
+
+    suggestions.sort(key=lambda s: len((s.get("evidence") or {}).get("missed_questions") or []), reverse=True)
+    suggestions = suggestions[:8]
+
+    topics_to_improve = []
+    for w in weak_question_refs:
+        topics_to_improve.append({
+            "question_index": w.get("index"),
+            "co": w.get("co"),
+            "k_level": w.get("k_level"),
+            "prompt": w.get("prompt"),
+        })
+
+    strong_areas = [
+        {
+            "type": s.get("type"),
+            "label": s.get("label"),
+            "accuracy": s.get("accuracy"),
+            "total": s.get("total"),
+            "evidence": s.get("evidence"),
+        }
+        for s in strengths
+    ]
+
+    return {
+        "test": {
+            "id": test_row.get("id"),
+            "title": test_row.get("title"),
+            "description": test_row.get("description"),
+            "duration_seconds": duration_seconds,
+            "max_score": max_score,
+        },
+        "attempt": {
+            "id": attempt.get("id"),
+            "score": score,
+            "submitted_at": attempt.get("submitted_at"),
+            "started_at": attempt.get("started_at"),
+            "elapsed_seconds": elapsed_seconds,
+        },
+        "summary": {
+            "total_questions": total_questions,
+            "answered_count": answered_count,
+            "correct_count": correct_count,
+            "wrong_count": wrong_count,
+            "unanswered_count": unanswered_count,
+            "percentage": percentage,
+            "time_remaining_seconds": time_remaining_seconds,
+        },
+        "analytics": {
+            "question_breakdown": question_breakdown,
+            "co_breakdown": co_breakdown,
+            "k_level_breakdown": k_breakdown,
+            "strong_areas": strong_areas,
+            "weak_areas": weaknesses,
+            "topics_to_improve": topics_to_improve,
+            "suggestions": suggestions,
+            "evidence_policy": "All insights are derived from submitted answers and question metadata (CO/K-level), not inferred from external data.",
+        },
     }
 
 
@@ -28932,7 +30021,7 @@ _BLINK_LINK_FALLBACK_CONCURRENCY = max(1, int(os.getenv("BLINK_LINK_FALLBACK_CON
 _SELECTED_IMAGE_GEN_TIMEOUT_S = max(30, int(os.getenv("SELECTED_IMAGE_GEN_TIMEOUT_SECONDS", "95") or "95"))
 _SELECTED_IMAGE_GEN_RETRY_TIMEOUT_S = max(20, int(os.getenv("SELECTED_IMAGE_GEN_RETRY_TIMEOUT_SECONDS", "70") or "70"))
 _SELECTED_IMAGE_MAX_INPUT_CHARS = max(500, int(os.getenv("SELECTED_IMAGE_MAX_INPUT_CHARS", "20000") or "20000"))
-_SELECTED_IMAGE_MODEL = (os.getenv("SELECTED_IMAGE_MODEL", "gemini-3-pro-image-preview") or "gemini-3-pro-image-preview").strip()
+_SELECTED_IMAGE_MODEL = (os.getenv("SELECTED_IMAGE_MODEL", "gemini-3.1-flash-image-preview") or "gemini-3.1-flash-image-preview").strip()
 _SELECTED_IMAGE_MODELS = [
     m.strip()
     for m in (os.getenv("SELECTED_IMAGE_MODELS", "") or "").split(",")
@@ -29472,7 +30561,7 @@ async def generate_blink_endpoint(
             
             # Using user-provided structure specifically:
             chat = client_g.chats.create(
-                model="gemini-3-pro-image-preview", 
+                model="gemini-3.1-flash-image-preview", 
                 config=types.GenerateContentConfig(
                     response_modalities=['TEXT', 'IMAGE'],
                     tools=[{"google_search": {}}]
@@ -29985,7 +31074,7 @@ async def generate_labx(req: LabXGenerateRequest):
         def _generate_sync():
             client = genai.Client(api_key=gemini_key)
             response = client.models.generate_content(
-                model="gemini-3-pro-preview",
+                model="gemini-3.1-flash-image-preview",
                 contents=prompt,
             )
             return response.text
@@ -30158,7 +31247,7 @@ async def generate_labx_stream(req: LabXGenerateRequest):
         try:
             client = genai.Client(api_key=gemini_key)
             response_stream = client.models.generate_content_stream(
-                model="gemini-3-pro-preview",
+                model="gemini-3.1-flash-image-preview",
                 contents=prompt,
             )
             
@@ -34825,7 +35914,7 @@ async def math_td_question_history(session_id: str):
 # InnovateX — Smart Idea Engine
 # ==========================================
 
-INNOVATEX_MODEL = "gemini-3-pro-preview"
+INNOVATEX_MODEL = "gemini-3.1-flash-image-preview"
 
 class InnovateXIdeaRequest(BaseModel):
     skills: List[str] = Field(default=[], description="Optional skills the student knows")
@@ -36260,7 +37349,7 @@ class PPTSlideRequest(BaseModel):
 
 @app.post("/api/ppt/generate-outline")
 async def ppt_generate_outline(body: PPTOutlineRequest):
-    """Generate a content outline for a PPT using gemini-3-pro-preview."""
+    """Generate a content outline for a PPT using gemini-3.1-flash-image-preview."""
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="Gemini API key not configured")
 
@@ -36389,7 +37478,7 @@ No markdown, no code blocks, no explanations — just JSON.
 
 @app.post("/api/ppt/generate-slide")
 async def ppt_generate_slide(body: PPTSlideRequest):
-    """Generate a single PPT slide image using gemini-3-pro-image-preview with reference designs."""
+    """Generate a single PPT slide image using gemini-3.1-flash-image-preview with reference designs."""
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="Gemini API key not configured")
     if not genai:
@@ -36472,7 +37561,7 @@ Generate this slide image now. Make it VISUALLY STUNNING with diagrams and infog
             contents = [prompt] + ref_images
 
             response = client_g.models.generate_content(
-                model="gemini-3-pro-image-preview",
+                model="gemini-3.1-flash-image-preview",
                 contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=['TEXT', 'IMAGE'],
@@ -36521,7 +37610,7 @@ MEDIX_RAG_CHUNKS_TABLE = os.getenv("MEDIX_RAG_CHUNKS_TABLE", "medix_rag_chunks")
 MEDIX_RAG_SESSIONS_TABLE = os.getenv("MEDIX_RAG_SESSIONS_TABLE", "medix_rag_sessions")
 MEDIX_RAG_MESSAGES_TABLE = os.getenv("MEDIX_RAG_MESSAGES_TABLE", "medix_rag_messages")
 
-MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-3-pro-preview")
+MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-3.1-flash-image-preview")
 MEDIX_EMBED_MODEL = "gemini-embedding-001"
 MEDIX_EMBED_DIM = int(os.getenv("MEDIX_RAG_EMBED_DIM", "768"))
 MEDIX_MAX_UPLOAD_MB = int(os.getenv("MEDIX_RAG_MAX_UPLOAD_MB", "50"))

@@ -2,96 +2,800 @@
 <html lang="en" class="scroll-smooth">
 
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Paper X — My Tests</title>
+    <title>Teacher Tests - PaperX</title>
+    <meta name="description" content="Manage your tests with completion insights" />
     <link rel="icon" type="image/x-icon" href="assets/img/favicon.svg">
     <link rel="stylesheet" href="assets/css/tailwind.css" />
     <script src="./config.js"></script>
-    <script src="./auth.js" defer></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0"
+        rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #1E1E2F;
+            --plum: #4C2A59;
+            --orchid: #9E4B8A;
+            --glass-bg: rgba(255, 255, 255, 0.78);
+            --glass-bg-2: rgba(255, 255, 255, 0.62);
+            --glass-border: rgba(30, 30, 47, 0.10);
+            --shadow-soft: 0 12px 42px -10px rgba(30, 30, 47, .18);
+        }
+
+        .dark {
+            --glass-bg: rgba(30, 30, 47, 0.74);
+            --glass-bg-2: rgba(30, 30, 47, 0.58);
+            --glass-border: rgba(255, 255, 255, 0.14);
+            --shadow-soft: 0 22px 60px -12px rgba(0, 0, 0, .55);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        .material-symbols-rounded {
+            vertical-align: -6px;
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .icon {
+            font-family: 'Material Symbols Rounded';
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: -6px;
+        }
+
+        .page-bg {
+            background:
+                radial-gradient(1000px 560px at 50% -18%, rgba(158, 75, 138, 0.18), transparent 62%),
+                linear-gradient(180deg, #FFFFFF 0%, #FBF8FC 55%, #F7F2F9 100%);
+        }
+
+        .dark .page-bg {
+            background:
+                radial-gradient(900px 520px at 50% -15%, rgba(158, 75, 138, 0.35), transparent 65%),
+                linear-gradient(180deg, #1E1E2F 0%, #201934 55%, #141321 100%);
+        }
+
+        .glass-card {
+            background: linear-gradient(180deg, var(--glass-bg), var(--glass-bg-2));
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.25rem;
+            box-shadow: var(--shadow-soft);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--plum) 0%, var(--orchid) 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 10px 30px rgba(158, 75, 138, 0.30);
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 40px rgba(158, 75, 138, 0.40);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.55);
+            color: inherit;
+            border: 1px solid var(--glass-border);
+            transition: all 0.2s ease;
+        }
+
+        .dark .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.70);
+        }
+
+        .dark .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        .tests-panel {
+            min-height: 560px;
+            max-height: min(78vh, 980px);
+            overflow: auto;
+            scrollbar-width: thin;
+        }
+
+        .carousel-shell {
+            width: min(360px, 90vw);
+            margin-inline: auto;
+        }
+
+        @media (min-width: 1024px) {
+            .carousel-shell {
+                width: 360px;
+            }
+        }
+
+        .dashboard-columns {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            align-items: start;
+            min-height: calc(100vh - 220px);
+        }
+
+        .page-shell {
+            width: 100%;
+            margin-inline: auto;
+            padding-inline: clamp(14px, 2.2vw, 34px);
+        }
+
+        @media (min-width: 1024px) {
+            .dashboard-columns {
+                display: grid;
+                grid-template-columns: 360px minmax(0, 1fr);
+                column-gap: 1.5rem;
+                align-items: start;
+            }
+        }
+
+        .completion-ring {
+            --pct: 0;
+            width: 70px;
+            height: 70px;
+            border-radius: 999px;
+            background: conic-gradient(#9E4B8A calc(var(--pct) * 1%), rgba(255, 255, 255, 0.25) 0);
+            position: relative;
+            display: grid;
+            place-items: center;
+            flex-shrink: 0;
+        }
+
+        .completion-ring::before {
+            content: "";
+            position: absolute;
+            inset: 7px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(76, 42, 89, 0.12);
+        }
+
+        .dark .completion-ring::before {
+            background: rgba(30, 30, 47, 0.92);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .completion-value {
+            position: relative;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+        }
+
+        #mobileNavBackdrop {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s ease;
+        }
+
+        #mobileNavPanel {
+            opacity: 0;
+            transform: translateY(-12px);
+            pointer-events: none;
+            transition: opacity .25s ease, transform .25s ease;
+        }
+
+        #mobileNavBackdrop[data-open="true"],
+        #mobileNavBackdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #mobileNavPanel[data-open="true"],
+        #mobileNavPanel.open {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+    </style>
 </head>
 
-<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-slate-50 dark:bg-brand-900/90">
-    <main class="container mx-auto px-4 py-8 space-y-6">
-        <div class="flex items-center justify-between">
-            <div>
-                <h1 class="text-2xl font-bold">My Tests</h1>
-                <p class="text-sm text-neutral-600 dark:text-white/70">Manage, edit, and review your tests.</p>
-            </div>
-            <div class="flex gap-2">
+<body class="min-h-screen page-bg text-[#0d1117] dark:text-zinc-100">
+    <header
+        class="fixed top-0 left-0 right-0 z-40 w-full bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-4">
+            <a href="./index.html" class="flex items-center gap-3" aria-label="Paper X Home">
+                <img src="./assets/img/logo-light.svg" alt="Paper X" class="h-10 w-auto dark:hidden">
+                <img src="./assets/img/logo-dark.svg" alt="Paper X" class="h-10 w-auto hidden dark:block">
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="./index.html">Home</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="./about.html">About</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="./teacher_profile.html">Profile</a>
+                <a class="hover:text-brandlt-900 dark:hover:text-white" href="./teacher_classes_manage.html">Classes</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg:white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden sm:block">Theme</span>
+                </button>
                 <a href="./teacher_test_builder.html"
-                    class="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm hover:bg-brand-600">Create Test</a>
-                <a href="./teacher_profile.html"
-                    class="px-4 py-2 rounded-lg ring-1 ring-black/5 dark:ring-white/15 text-sm hover:bg-black/5 dark:hover:bg-white/10">Back</a>
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Create
+                    Test</a>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+                <button id="mobileNavToggle" type="button" aria-expanded="false" aria-controls="mobileNavPanel"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg:white/5 transition">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="material-symbols-rounded" data-icon>menu</span>
+                </button>
             </div>
         </div>
-        <div id="alert"
-            class="hidden text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-4 py-3 rounded-xl ring-1 ring-red-100 dark:ring-red-800">
+    </header>
+
+    <div id="mobileNavBackdrop" aria-hidden="true"
+        class="hidden md:hidden fixed inset-0 z-40 bg-black/60 dark:bg-black/80 backdrop-blur-sm"></div>
+    <nav id="mobileNavPanel" aria-hidden="true"
+        class="hidden md:hidden fixed inset-x-4 top-24 z-50 flex flex-col gap-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6">
+        <div class="flex flex-col gap-2 text-sm text-neutral-700 dark:text-white/80">
+            <a href="./index.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Home</a>
+            <a href="./teacher_profile.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Profile</a>
+            <a href="./teacher_classes_manage.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Classes</a>
+            <a href="./teacher_test_builder.html" data-close-mobile-nav
+                class="rounded-xl px-3 py-2 hover:bg-brandlt-100/70 hover:dark:bg-brand-700/20 transition">Create Test</a>
         </div>
-        <div id="tests" class="grid gap-4 md:grid-cols-2"></div>
+    </nav>
+
+    <main class="container mx-auto px-4 pb-12" style="padding-top: 110px !important;">
+        <div class="w-full max-w-none space-y-8">
+            <section class="w-full">
+                <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight mb-4 max-w-5xl">
+                    Tests with a cleaner <span
+                        class="bg-gradient-to-r from-[#9E4B8A] to-[#FF7FD1] bg-clip-text text-transparent">teaching dashboard</span>
+                </h1>
+            </section>
+
+            <div class="dashboard-columns">
+
+                <div class="w-full lg:w-auto">
+                    <div class="video-carousel-container relative carousel-shell">
+                        <div
+                            style="position: relative; overflow: hidden; border-radius: 50%; aspect-ratio: 1/1; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); background: linear-gradient(to bottom right, rgba(158, 75, 138, 0.1), rgba(76, 42, 89, 0.1));">
+                            <div id="videoCarousel" class="relative w-full h-full">
+                                <video
+                                    class="carousel-video absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500"
+                                    src="./assets/video/group/1.mp4" muted loop playsinline></video>
+                                <video
+                                    class="carousel-video absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500"
+                                    src="./assets/video/group/2.mp4" muted loop playsinline></video>
+                                <video
+                                    class="carousel-video absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500"
+                                    src="./assets/video/group/3.mp4" muted loop playsinline></video>
+                            </div>
+
+                            <button id="prevVideo"
+                                class="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/80 dark:bg-black/50 backdrop-blur flex items-center justify-center shadow-lg hover:scale-105 transition z-10">
+                                <span class="icon text-2xl">chevron_left</span>
+                            </button>
+                            <button id="nextVideo"
+                                class="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/80 dark:bg-black/50 backdrop-blur flex items-center justify-center shadow-lg hover:scale-105 transition z-10">
+                                <span class="icon text-2xl">chevron_right</span>
+                            </button>
+
+                            <div
+                                style="position: absolute; bottom: 0; left: 0; right: 0; z-index: 20; text-align: center; overflow: visible;">
+                                <div
+                                    style="background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 50% 50% 0 0 / 100% 100% 0 0; padding: 45px 20px 30px 20px;">
+                                    <h3 id="carouselTitle"
+                                        style="color: #1E1E2F; font-size: 1.5rem; font-weight: 700; margin: 0 0 8px 0; word-wrap: break-word; overflow-wrap: break-word; white-space: normal;">
+                                        Track completion in real-time</h3>
+                                    <p id="carouselDesc"
+                                        style="color: #555; font-size: 0.75rem; margin: 0 auto; line-height: 1.5; max-width: 90%; word-wrap: break-word; overflow-wrap: break-word; white-space: normal;">
+                                        View progress, improve outcomes, and manage tests with confidence.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="carouselDots" class="flex justify-center gap-2 mt-4">
+                            <button class="carousel-dot w-2.5 h-2.5 rounded-full bg-[#9E4B8A]/30 transition-all duration-300"
+                                data-index="0"></button>
+                            <button class="carousel-dot w-2.5 h-2.5 rounded-full bg-[#9E4B8A]/30 transition-all duration-300"
+                                data-index="1"></button>
+                            <button class="carousel-dot w-2.5 h-2.5 rounded-full bg-[#9E4B8A]/30 transition-all duration-300"
+                                data-index="2"></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-full min-w-0">
+                    <div class="glass-card p-6 sm:p-8 space-y-5">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <h2 class="text-2xl font-bold">My Tests</h2>
+                            </div>
+                            <a href="./teacher_test_builder.html"
+                                class="btn-primary px-5 py-3 rounded-xl font-semibold text-sm inline-flex items-center gap-2">
+                                <span class="icon">add</span>Create
+                            </a>
+                        </div>
+
+                        <div id="alert" class="hidden rounded-xl px-4 py-3 text-sm"></div>
+                        <div id="tests" class="tests-panel space-y-4 pr-1"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
+
+    <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 hidden">
+        <div class="glass-card px-6 py-3 flex items-center gap-3 shadow-xl">
+            <span id="toastIcon" class="icon text-brand-500">check_circle</span>
+            <span id="toastText"></span>
+        </div>
+    </div>
 
     <script>
         const $ = (s, r = document) => r.querySelector(s);
         const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+        const esc = (s = '') => String(s).replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         let API_BASE = '';
-        async function resolveApi() { if (API_BASE) return API_BASE; const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, ''); if (b) { API_BASE = b; return b; } await new Promise(r => setTimeout(r, 60)); return resolveApi(); }
-        function getToken() { const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token']; for (const k of keys) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } } return ''; }
-        function showAlert(msg) { const a = $('#alert'); if (!a) return; a.textContent = msg; a.classList.remove('hidden'); setTimeout(() => a.classList.add('hidden'), 3200); }
+
+        async function resolveApi() {
+            if (API_BASE) return API_BASE;
+            const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, '');
+            if (b) { API_BASE = b; return b; }
+            await new Promise(r => setTimeout(r, 60));
+            return resolveApi();
+        }
+
+        function getToken() {
+            const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+            for (const k of keys) {
+                try {
+                    const v = localStorage.getItem(k);
+                    if (v) return v;
+                } catch (_) { }
+            }
+            return '';
+        }
+
+        function showToast(message, icon = 'check_circle', duration = 2800) {
+            const toast = $('#toast');
+            $('#toastText').textContent = message;
+            $('#toastIcon').textContent = icon;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), duration);
+        }
+
+        function showAlert(message, isError = true) {
+            const alert = $('#alert');
+            if (!alert) return;
+            alert.className = isError
+                ? 'rounded-xl px-4 py-3 text-sm text-red-700 dark:text-red-200 bg-red-50/90 dark:bg-red-900/40 ring-1 ring-red-200 dark:ring-red-700'
+                : 'rounded-xl px-4 py-3 text-sm text-emerald-700 dark:text-emerald-200 bg-emerald-50/90 dark:bg-emerald-900/30 ring-1 ring-emerald-200 dark:ring-emerald-700';
+            alert.textContent = message;
+            alert.classList.remove('hidden');
+            setTimeout(() => alert.classList.add('hidden'), 3200);
+        }
+
+        function formatDate(iso) {
+            if (!iso) return 'Date not available';
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return 'Date not available';
+            return d.toLocaleString([], {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function subjectNameOnly(raw) {
+            const s = String(raw || '').trim();
+            if (!s) return 'Subject';
+            if (s.includes('—')) {
+                const parts = s.split('—').map(p => p.trim()).filter(Boolean);
+                if (parts.length >= 2 && /^[A-Z0-9]{4,}$/.test(parts[0])) return parts.slice(1).join(' — ');
+            }
+            return s.replace(/^[A-Z0-9]{4,}\s*[-:|]\s*/i, '').trim() || s;
+        }
+
+        function yearLabelForSem(semNum) {
+            const s = parseInt(semNum, 10);
+            if (!s || s < 1) return '';
+            const year = Math.floor((s - 1) / 2) + 1;
+            const ord = { 1: 'First', 2: 'Second', 3: 'Third', 4: 'Fourth', 5: 'Fifth', 6: 'Sixth' };
+            return ord[year] ? `${ord[year]} Year` : '';
+        }
+
+        function studentKey(s) {
+            if (!s || typeof s !== 'object') return '';
+            return String(
+                s.auth_user_id || s.student_user_id || s.user_id || s.id || s.email || s.name || ''
+            ).trim().toLowerCase();
+        }
+
+        function classLabelParts(cls, meta = {}) {
+            if (!cls) {
+                return { line1: 'Class not linked', line2: '' };
+            }
+            const subject = subjectNameOnly(cls.subject || 'Class');
+            const year = yearLabelForSem(cls.semester);
+            const batch = meta.batchLabel ? `Batch ${meta.batchLabel}` : '';
+            const sec = cls.section ? `Sec ${cls.section}` : '';
+            return {
+                line1: subject,
+                line2: [batch, year, sec].filter(Boolean).join(' • '),
+            };
+        }
+
+        async function fetchJSON(url, opts = {}, retries = 2) {
+            try {
+                const res = await fetch(url, opts);
+                const raw = await res.text();
+                let data = {};
+                try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = { detail: raw }; }
+                if (!res.ok) {
+                    const err = new Error(data.detail || 'Request failed');
+                    err.status = res.status;
+                    throw err;
+                }
+                return data;
+            } catch (err) {
+                const status = err && err.status;
+                const transient = (err instanceof TypeError) || status === 502 || status === 503 || status === 504;
+                if (retries > 0 && transient) {
+                    await new Promise(r => setTimeout(r, 300));
+                    return fetchJSON(url, opts, retries - 1);
+                }
+                throw err;
+            }
+        }
 
         async function loadTests() {
             const token = getToken();
-            if (!token) { showAlert('Sign in as teacher.'); return; }
             const wrap = $('#tests');
-            wrap.innerHTML = '<div class="col-span-2 text-sm text-neutral-500">Loading…</div>';
+            if (!token) {
+                wrap.innerHTML = '<div class="text-sm opacity-70">Sign in as teacher to view tests.</div>';
+                return;
+            }
+            wrap.innerHTML = '<div class="text-sm opacity-70">Loading tests...</div>';
+
             try {
                 const base = await resolveApi();
-                const res = await fetch(`${base}/api/teacher/tests`, { headers: { Authorization: 'Bearer ' + token } });
-                if (!res.ok) { showAlert('Could not load tests'); return; }
-                const data = await res.json();
-                if (!data.length) { wrap.innerHTML = '<div class="col-span-2 text-sm text-neutral-500">No tests yet.</div>'; return; }
-                wrap.innerHTML = data.map(t => {
-                    const status = t.accepting_submissions === false ? '<span class="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">Closed</span>' : '<span class="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">Open</span>';
-                    return `<div class="p-4 rounded-xl bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 space-y-2">
-            <div class="flex items-start justify-between gap-3">
-              <div><div class="font-semibold">${t.title || 'Untitled'}</div><div class="text-xs text-neutral-500">Max ${t.max_score || 0}</div></div>
-              ${status}
-            </div>
-            <div class="text-sm text-neutral-600 dark:text-white/70 line-clamp-2">${t.description || ''}</div>
-            <div class="flex flex-wrap gap-2 text-xs">
-              <button data-action="results" data-id="${t.id}" class="px-3 py-1.5 rounded-lg ring-1 ring-black/5 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">View Results</button>
-              <button data-action="edit" data-id="${t.id}" class="px-3 py-1.5 rounded-lg ring-1 ring-black/5 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">Edit</button>
-              <button data-action="toggle" data-id="${t.id}" data-on="${t.accepting_submissions !== false}" class="px-3 py-1.5 rounded-lg ring-1 ring-black/5 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10">${t.accepting_submissions === false ? 'Turn On' : 'Turn Off'}</button>
-              <button data-action="delete" data-id="${t.id}" class="px-3 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200">Delete</button>
-            </div>
-          </div>`;
+                const headers = { Authorization: 'Bearer ' + token };
+
+                const [tests, classes] = await Promise.all([
+                    fetchJSON(`${base}/api/teacher/tests`, { headers }),
+                    fetchJSON(`${base}/api/teacher/classes/mine`, { headers }).catch(() => [])
+                ]);
+
+                if (!Array.isArray(tests) || !tests.length) {
+                    wrap.innerHTML = '<div class="text-sm opacity-70">No tests created yet.</div>';
+                    return;
+                }
+
+                const classMap = new Map((classes || []).map(c => [String(c.id || ''), c]));
+                const classMetaById = new Map();
+                const classRosterById = new Map();
+
+                const classIds = Array.from(new Set((tests || []).map(t => String(t.class_id || '')).filter(Boolean)));
+                await Promise.all(classIds.map(async (classId) => {
+                    try {
+                        const r = await fetchJSON(`${base}/api/teacher/classes/${encodeURIComponent(classId)}/students`, { headers }, 1);
+                        const roster = Array.isArray(r.students) ? r.students : [];
+                        classRosterById.set(String(classId), roster);
+                        classMetaById.set(String(classId), {
+                            strength: Number(r.total || 0),
+                            batchLabel: (r.applied_filters && r.applied_filters.batch_label) ? String(r.applied_filters.batch_label) : ''
+                        });
+                    } catch (_) {
+                        classRosterById.set(String(classId), []);
+                        classMetaById.set(String(classId), { strength: 0, batchLabel: '' });
+                    }
+                }));
+
+                const rows = await Promise.all(tests.map(async (t) => {
+                    try {
+                        const result = await fetchJSON(`${base}/api/teacher/tests/${encodeURIComponent(t.id)}/results`, { headers }, 1);
+                        const attempts = Array.isArray(result.attempts) ? result.attempts : [];
+                        const notAttempted = Array.isArray(result.students_not_attempted) ? result.students_not_attempted : [];
+                        const resultRoster = Array.isArray(result.class_students) ? result.class_students : [];
+                        const classRoster = Array.isArray(classRosterById.get(String(t.class_id || ''))) ? classRosterById.get(String(t.class_id || '')) : [];
+
+                        const submittedIds = new Set();
+                        const inProgressIds = new Set();
+                        attempts.forEach((a) => {
+                            const key = studentKey(a);
+                            if (!key) return;
+                            if (a && a.submitted_at) submittedIds.add(key);
+                            else inProgressIds.add(key);
+                        });
+                        // If a student appears as submitted, do not keep them in in-progress.
+                        submittedIds.forEach((k) => inProgressIds.delete(k));
+
+                        const completedFromAttempts = submittedIds.size;
+                        const inProgressFromAttempts = inProgressIds.size;
+
+                        const completedFromRoster = resultRoster.filter((s) => String(s.status || '').toLowerCase() === 'completed').length;
+                        const inProgressFromRoster = resultRoster.filter((s) => String(s.status || '').toLowerCase() === 'in_progress').length;
+                        const pendingFromRoster = resultRoster.filter((s) => String(s.status || '').toLowerCase() === 'pending').length;
+
+                        const completed = Math.max(Number(result.completed_count || 0), completedFromAttempts, completedFromRoster);
+
+                        const union = new Set();
+                        classRoster.forEach(s => { const k = studentKey(s); if (k) union.add(k); });
+                        resultRoster.forEach(s => { const k = studentKey(s); if (k) union.add(k); });
+                        notAttempted.forEach(s => { const k = studentKey(s); if (k) union.add(k); });
+                        attempts.forEach(s => { const k = studentKey(s); if (k) union.add(k); });
+
+                        const classMeta = classMetaById.get(String(t.class_id || '')) || { strength: 0, batchLabel: '' };
+                        const totalFromClassStrength = Number(classMeta.strength || 0);
+                        const totalFromRoster = completedFromRoster + inProgressFromRoster + pendingFromRoster;
+                        const totalFromResults = completed + inProgressFromAttempts + notAttempted.length;
+                        const totalFromUnion = union.size;
+                        const total = Math.max(totalFromClassStrength, totalFromRoster, totalFromResults, totalFromUnion, completed);
+
+                        return { id: t.id, completed, total: Math.max(total, 0) };
+                    } catch (_) {
+                        return { id: t.id, completed: 0, total: 0 };
+                    }
+                }));
+
+                const progressById = new Map(rows.map(r => [String(r.id), r]));
+
+                wrap.innerHTML = tests.map(t => {
+                    const prog = progressById.get(String(t.id)) || { completed: 0, total: 0 };
+                    const pct = prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : 0;
+                    const cls = classMap.get(String(t.class_id || ''));
+                    const classMeta = classMetaById.get(String(t.class_id || '')) || { strength: 0, batchLabel: '' };
+                    const classLines = classLabelParts(cls, classMeta);
+                    const statusClass = t.accepting_submissions === false
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200'
+                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/35 dark:text-emerald-200';
+                    const statusText = t.accepting_submissions === false ? 'Closed' : 'Open';
+                    const dateLabel = formatDate(t.created_at || t.updated_at);
+
+                    return `<article class="rounded-2xl p-4 sm:p-5 bg-white/65 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/15">
+                        <div class="flex gap-4 items-start">
+                            <div class="completion-ring" style="--pct:${Math.max(0, Math.min(100, pct))}">
+                                <span class="completion-value">${pct}%</span>
+                            </div>
+                            <div class="min-w-0 flex-1 space-y-2">
+                                <div class="flex items-start justify-between gap-3">
+                                    <h3 class="text-base sm:text-lg font-bold truncate">${esc(t.title || 'Untitled Test')}</h3>
+                                    <span class="px-2.5 py-1 rounded-full text-[11px] font-semibold ${statusClass}">${statusText}</span>
+                                </div>
+                                <p class="text-sm opacity-75 line-clamp-2">${esc(t.description || 'No description provided.')}</p>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs sm:text-sm">
+                                    <div class="rounded-lg bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2">
+                                        <div class="opacity-60">Completion</div>
+                                        <div class="font-semibold">${prog.completed} / ${prog.total || 0} completed</div>
+                                    </div>
+                                    <div class="rounded-lg bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2">
+                                        <div class="opacity-60">Test date</div>
+                                        <div class="font-semibold">${esc(dateLabel)}</div>
+                                    </div>
+                                    <div class="rounded-lg bg-black/[0.03] dark:bg-white/[0.05] px-3 py-2">
+                                        <div class="opacity-60">Class & section</div>
+                                        <div class="font-semibold truncate">${esc(classLines.line1)}</div>
+                                        <div class="text-[11px] opacity-70 truncate">${esc(classLines.line2 || '-')}</div>
+                                    </div>
+                                </div>
+                                <div class="flex flex-wrap gap-2 pt-1">
+                                    <button data-action="results" data-id="${esc(t.id)}" class="btn-secondary px-3 py-1.5 rounded-lg text-xs sm:text-sm">View Results</button>
+                                    <button data-action="edit" data-id="${esc(t.id)}" class="btn-secondary px-3 py-1.5 rounded-lg text-xs sm:text-sm">Edit</button>
+                                    <button data-action="toggle" data-id="${esc(t.id)}" data-on="${t.accepting_submissions !== false}" class="btn-secondary px-3 py-1.5 rounded-lg text-xs sm:text-sm">${t.accepting_submissions === false ? 'Turn On' : 'Turn Off'}</button>
+                                    <button data-action="delete" data-id="${esc(t.id)}" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    </article>`;
                 }).join('');
+
                 $$('button[data-action]', wrap).forEach(btn => btn.addEventListener('click', () => handleAction(btn)));
-            } catch (e) { console.error(e); showAlert('Failed to load tests'); }
+            } catch (err) {
+                console.error(err);
+                wrap.innerHTML = '<div class="text-sm text-red-600 dark:text-red-300">Unable to load tests right now.</div>';
+            }
         }
 
         async function handleAction(btn) {
-            const action = btn.dataset.action; const id = btn.dataset.id; const token = getToken(); if (!token) return showAlert('Sign in.'); const base = await resolveApi();
+            const action = btn.dataset.action;
+            const id = btn.dataset.id;
+            const token = getToken();
+            if (!token) return showAlert('Sign in as teacher.');
+
             try {
+                const base = await resolveApi();
+
+                if (action === 'results') {
+                    location.href = `./teacher_test_results.html?test_id=${encodeURIComponent(id)}`;
+                    return;
+                }
+                if (action === 'edit') {
+                    location.href = `./teacher_test_edit.html?test_id=${encodeURIComponent(id)}`;
+                    return;
+                }
                 if (action === 'delete') {
                     if (!confirm('Delete this test?')) return;
-                    const res = await fetch(`${base}/api/teacher/tests/${id}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+                    const res = await fetch(`${base}/api/teacher/tests/${encodeURIComponent(id)}`, {
+                        method: 'DELETE',
+                        headers: { Authorization: 'Bearer ' + token }
+                    });
                     if (!res.ok) throw new Error('Delete failed');
-                    loadTests();
+                    showToast('Test deleted', 'delete');
+                    await loadTests();
+                    return;
                 }
-                if (action === 'results') location.href = `./teacher_test_results.html?test_id=${id}`;
-                if (action === 'edit') location.href = `./teacher_test_edit.html?test_id=${id}`;
                 if (action === 'toggle') {
                     const on = btn.dataset.on === 'true';
-                    const res = await fetch(`${base}/api/teacher/tests/${id}/accepting?accepting=${on ? 'false' : 'true'}`, { method: 'PATCH', headers: { Authorization: 'Bearer ' + token } });
+                    const res = await fetch(`${base}/api/teacher/tests/${encodeURIComponent(id)}/accepting?accepting=${on ? 'false' : 'true'}`, {
+                        method: 'PATCH',
+                        headers: { Authorization: 'Bearer ' + token }
+                    });
                     if (!res.ok) throw new Error('Toggle failed');
-                    loadTests();
+                    showToast(on ? 'Submissions turned off' : 'Submissions turned on', 'sync');
+                    await loadTests();
+                    return;
                 }
-            } catch (e) { console.error(e); showAlert(e.message || 'Action failed'); }
+            } catch (err) {
+                console.error(err);
+                showAlert(err.message || 'Action failed');
+            }
         }
+
+        (function () {
+            const root = document.documentElement;
+            const stored = localStorage.getItem('px_theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const initial = stored || (prefersDark ? 'dark' : 'light');
+
+            const toggles = () => Array.from(document.querySelectorAll('[data-theme-toggle]'));
+            const setIcon = (mode) => toggles().forEach(b => {
+                const i = b.querySelector('.material-symbols-rounded');
+                if (i) i.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+            });
+            const setTheme = (mode) => {
+                mode === 'dark' ? root.classList.add('dark') : root.classList.remove('dark');
+                localStorage.setItem('px_theme', mode);
+                setIcon(mode);
+            };
+
+            setTheme(initial);
+            document.addEventListener('click', e => {
+                const t = e.target.closest('[data-theme-toggle]');
+                if (!t) return;
+                setTheme(root.classList.contains('dark') ? 'light' : 'dark');
+            });
+        })();
+
+        (function () {
+            const videos = document.querySelectorAll('.carousel-video');
+            const dots = document.querySelectorAll('.carousel-dot');
+            const prevBtn = $('#prevVideo');
+            const nextBtn = $('#nextVideo');
+            const titleEl = $('#carouselTitle');
+            const descEl = $('#carouselDesc');
+            if (!videos.length) return;
+
+            const captions = [
+                { title: 'Track completion in real-time', desc: 'See completed vs total learners for every test at a glance.' },
+                { title: 'Organize by class and section', desc: 'Keep your conducted tests structured and easy to review.' },
+                { title: 'Act faster with clear controls', desc: 'Open results, edit, close, or delete with one click.' }
+            ];
+
+            let currentIndex = 0;
+            let autoPlayInterval;
+
+            function showSlide(index) {
+                videos.forEach((video, i) => {
+                    if (i === index) {
+                        video.style.opacity = '1';
+                        video.play().catch(() => { });
+                    } else {
+                        video.style.opacity = '0';
+                        video.pause();
+                    }
+                });
+
+                dots.forEach((dot, i) => {
+                    if (i === index) {
+                        dot.classList.remove('bg-[#9E4B8A]/30');
+                        dot.classList.add('bg-[#9E4B8A]', 'w-6');
+                    } else {
+                        dot.classList.add('bg-[#9E4B8A]/30');
+                        dot.classList.remove('bg-[#9E4B8A]', 'w-6');
+                    }
+                });
+
+                if (captions[index]) {
+                    titleEl.textContent = captions[index].title;
+                    descEl.textContent = captions[index].desc;
+                }
+                currentIndex = index;
+            }
+
+            function nextSlide() { showSlide((currentIndex + 1) % videos.length); }
+            function prevSlide() { showSlide((currentIndex - 1 + videos.length) % videos.length); }
+            function startAutoPlay() { stopAutoPlay(); autoPlayInterval = setInterval(nextSlide, 5000); }
+            function stopAutoPlay() { if (autoPlayInterval) clearInterval(autoPlayInterval); }
+
+            if (prevBtn) prevBtn.onclick = () => { prevSlide(); startAutoPlay(); };
+            if (nextBtn) nextBtn.onclick = () => { nextSlide(); startAutoPlay(); };
+            dots.forEach((dot, i) => { dot.onclick = () => { showSlide(i); startAutoPlay(); }; });
+
+            showSlide(0);
+            startAutoPlay();
+
+            const carousel = document.querySelector('.video-carousel-container');
+            if (carousel) {
+                carousel.addEventListener('mouseenter', stopAutoPlay);
+                carousel.addEventListener('mouseleave', startAutoPlay);
+            }
+        })();
+
+        (function () {
+            const toggle = $('#mobileNavToggle');
+            const panel = $('#mobileNavPanel');
+            const backdrop = $('#mobileNavBackdrop');
+            if (!toggle || !panel || !backdrop) return;
+            const icon = toggle.querySelector('[data-icon]');
+
+            const open = () => {
+                panel.classList.remove('hidden');
+                backdrop.classList.remove('hidden');
+                panel.setAttribute('data-open', 'true');
+                panel.classList.add('open');
+                panel.setAttribute('aria-hidden', 'false');
+                backdrop.setAttribute('data-open', 'true');
+                backdrop.classList.add('open');
+                backdrop.setAttribute('aria-hidden', 'false');
+                toggle.setAttribute('aria-expanded', 'true');
+                if (icon) icon.textContent = 'close';
+                document.body.classList.add('overflow-hidden');
+            };
+
+            const close = () => {
+                panel.removeAttribute('data-open');
+                panel.classList.remove('open');
+                panel.setAttribute('aria-hidden', 'true');
+                backdrop.removeAttribute('data-open');
+                backdrop.classList.remove('open');
+                backdrop.setAttribute('aria-hidden', 'true');
+                toggle.setAttribute('aria-expanded', 'false');
+                if (icon) icon.textContent = 'menu';
+                document.body.classList.remove('overflow-hidden');
+                panel.classList.add('hidden');
+                backdrop.classList.add('hidden');
+            };
+
+            toggle.addEventListener('click', () => toggle.getAttribute('aria-expanded') === 'true' ? close() : open());
+            backdrop.addEventListener('click', close);
+            window.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+            window.matchMedia('(min-width: 768px)').addEventListener('change', e => { if (e.matches) close(); });
+            panel.addEventListener('click', evt => { if (evt.target.closest('[data-close-mobile-nav]')) close(); });
+            close();
+        })();
 
         document.addEventListener('DOMContentLoaded', loadTests);
     </script>
+
+    <script src="./auth.js"></script>
 </body>
 
 </html>

@@ -594,6 +594,17 @@
             <span id="themeIcon" class="material-symbols-rounded text-base">dark_mode</span>
             <span id="themeText" class="hidden sm:inline">Theme</span>
           </button>
+          <span id="verifiedByChip"
+            class="hidden items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs sm:text-sm font-medium bg-[var(--brand-soft)] text-[var(--surface-contrast)]"
+            style="border-color: var(--outline)">
+            <span class="material-symbols-rounded text-[16px]">verified_user</span>
+            <span data-verified-by-text>Verified by -</span>
+          </span>
+          <button id="verifyBtn"
+            class="ripple hidden items-center gap-2 px-4 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 transition shadow-glow">
+            <span class="material-symbols-rounded text-[18px]">verified</span>
+            <span data-verify-label>Approve</span>
+          </button>
         </div>
       </div>
     </div>
@@ -663,8 +674,9 @@
               style="border-color: var(--outline); background: var(--surface); color: var(--surface-contrast)" />
             <button id="generateBtn"
               class="ripple px-3 py-2 sm:px-4 sm:py-3 rounded-xl hover:opacity-95 text-white font-medium text-sm sm:text-base shadow-neon transition disabled:opacity-50 disabled:cursor-not-allowed"
-              style="background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-strong) 100%); box-shadow: 0 12px 32px rgba(158,75,138,0.35);">
-              Generate
+              style="background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-strong) 100%); box-shadow: 0 12px 32px rgba(158,75,138,0.35);"
+              aria-label="Generate notes" title="Generate notes">
+              <span class="material-symbols-rounded text-[20px] leading-none">auto_awesome</span>
             </button>
             <button id="regenBtnMobile"
               class="ripple sm:hidden px-3 py-2 rounded-xl border text-sm hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1176,6 +1188,7 @@
     const $wrap = document.getElementById('outputWrap');
     const $outputLoader = document.getElementById('outputLoader');
     const $editToggle = document.getElementById('editToggle');
+    const $verifyBtn = document.getElementById('verifyBtn');
     const $save = document.getElementById('saveBtn');
     const $myNoteBtn = document.getElementById('myNoteBtn');
     const $editor = document.getElementById('editor');
@@ -1185,6 +1198,7 @@
     const $themeBtn = document.getElementById('themeBtn');
     const $themeIcon = document.getElementById('themeIcon');
     const $themeText = document.getElementById('themeText');
+    const $verifiedByChip = document.getElementById('verifiedByChip');
     const $densityBtn = document.getElementById('densityBtn');
     const $fsCtrl = document.getElementById('fsControls');
     const $fsExit = document.getElementById('fsExitBtn');
@@ -1640,10 +1654,6 @@
       // Backend explicitly marks uncertain path like "Access check unavailable".
       if (!reason || reasonLc.includes('unavailable') || reasonLc.includes('temporar')) return false;
 
-      const tier = String(d.tier || currentAccessSummary?.tier || '').toLowerCase();
-      // Enforce only when we are sure a paid policy is actually active for this user context.
-      if (tier !== 'paid') return false;
-
       // Strong signal: concrete daily/quota limit wording or explicit limit fields.
       if (reasonLc.includes('daily limit') || reasonLc.includes('limit reached') || reasonLc.includes('quota')) return true;
       if (d.limit !== null && d.limit !== undefined) return true;
@@ -1740,10 +1750,17 @@
       const privilegedEls = [
         (typeof $regen !== 'undefined' ? $regen : null),
         (typeof $regenMobile !== 'undefined' ? $regenMobile : null),
-        (typeof $editToggle !== 'undefined' ? $editToggle : null),
         (typeof $download !== 'undefined' ? $download : null),
-        document.getElementById('geminiSelectionEdit'),
         document.getElementById('feedbackInboxLink')
+      ].filter(Boolean);
+
+      const editEls = [
+        (typeof $editToggle !== 'undefined' ? $editToggle : null),
+        document.getElementById('geminiSelectionEdit'),
+      ].filter(Boolean);
+
+      const emphasisEls = [
+        (typeof $emphBtn !== 'undefined' ? $emphBtn : null),
       ].filter(Boolean);
 
       function setPrivilegedVisible(visible) {
@@ -1759,8 +1776,44 @@
         });
       }
 
+      function setEditVisible(visible) {
+        editEls.forEach(el => {
+          el.classList.toggle('px-privilege-hidden', !visible);
+          if (!visible) {
+            el.setAttribute('aria-hidden', 'true');
+          } else {
+            el.removeAttribute('aria-hidden');
+          }
+        });
+      }
+
+      function setVerifyVisible(visible) {
+        if (!$verifyBtn) return;
+        $verifyBtn.classList.toggle('hidden', !visible);
+        $verifyBtn.classList.toggle('inline-flex', !!visible);
+        if (!visible) {
+          $verifyBtn.setAttribute('aria-hidden', 'true');
+        } else {
+          $verifyBtn.removeAttribute('aria-hidden');
+        }
+      }
+
+      function setEmphasisVisible(visible) {
+        emphasisEls.forEach(el => {
+          el.classList.toggle('px-privilege-hidden', !visible);
+          if (!visible) {
+            el.setAttribute('aria-hidden', 'true');
+          } else {
+            el.removeAttribute('aria-hidden');
+          }
+        });
+      }
+
       // Default to hidden until role is verified.
       setPrivilegedVisible(false);
+      setEditVisible(false);
+      setVerifyVisible(false);
+      setEmphasisVisible(false);
 
       (async function () {
         try {
@@ -1801,8 +1854,12 @@
           const isAdmin = primaryRole === 'admin' || rolesArr.includes('admin') || data?.is_admin === true;
           const isEmployee = primaryRole === 'employee' || rolesArr.includes('employee') || data?.is_employee === true;
           const allowed = !!(isAdmin || isEmployee || hasStaffRole || hasStaffEditPermission);
+          const isTeacherOrHod = primaryRole === 'teacher' || primaryRole === 'hod' || rolesArr.includes('teacher') || rolesArr.includes('hod');
           if (allowed) {
             setPrivilegedVisible(true);
+            setEditVisible(!isTeacherOrHod);
+            setVerifyVisible(isTeacherOrHod);
+            setEmphasisVisible(!isTeacherOrHod);
           }
         } catch (_) {
           // Keep privileged buttons hidden on any failure
@@ -2787,6 +2844,41 @@
     try { localStorage.setItem('paperx:lastVariant', currentVariant); } catch { }
     const noteKey = (v) => `paperx:lastNoteId:${v}`;
     let currentNoteId = localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? (localStorage.getItem('paperx:lastNoteId') || '') : '');
+
+    function setVerifiedByChip(verifiedByName) {
+      if (!$verifiedByChip) return;
+      const name = String(verifiedByName || '').trim();
+      const textEl = $verifiedByChip.querySelector('[data-verified-by-text]');
+      if (!name) {
+        $verifiedByChip.classList.add('hidden');
+        $verifiedByChip.classList.remove('inline-flex');
+        return;
+      }
+      if (textEl) {
+        textEl.textContent = `Verified by ${name}`;
+      } else {
+        $verifiedByChip.textContent = `Verified by ${name}`;
+      }
+      $verifiedByChip.classList.remove('hidden');
+      $verifiedByChip.classList.add('inline-flex');
+    }
+
+    function applyNoteVerificationState(noteData) {
+      const verifyLabel = $verifyBtn ? $verifyBtn.querySelector('[data-verify-label]') : null;
+      const verifiedByName = String(noteData?.verified_by_name || '').trim();
+      setVerifiedByChip(verifiedByName);
+      if (!$verifyBtn) return;
+      if (verifiedByName) {
+        if (verifyLabel) verifyLabel.textContent = 'Verified';
+        else $verifyBtn.textContent = 'Verified';
+        $verifyBtn.disabled = true;
+      } else {
+        if (verifyLabel) verifyLabel.textContent = 'Approve';
+        else $verifyBtn.textContent = 'Approve';
+        $verifyBtn.disabled = false;
+      }
+    }
+
     function setVariantUI() {
       const act = currentVariant;
       [$variantDetailed, $variantCheatsheet].forEach(btn => {
@@ -2816,6 +2908,7 @@
         currentVariant = v;
         try { localStorage.setItem('paperx:lastVariant', v); } catch { }
         setVariantUI();
+        applyNoteVerificationState(null);
         logEvent('Switch variant', v);
         console.log('[Variant] switch clicked:', v);
         checkMyNoteVisibility();
@@ -2835,6 +2928,7 @@
           if (res.status === 200 && res.data && res.data.markdown) {
             renderMarkdown(res.data.markdown);
             renderImageGallery(res.data.image_urls || []);
+            applyNoteVerificationState(res.data);
             currentNoteId = res.data.id || '';
             try {
               if (currentNoteId) localStorage.setItem(noteKey(currentVariant), currentNoteId);
@@ -2858,6 +2952,7 @@
           if (res.status === 200 && res.data && res.data.markdown) {
             renderMarkdown(res.data.markdown);
             renderImageGallery(res.data.image_urls || []);
+            applyNoteVerificationState(res.data);
             $meta.textContent = `Loaded • ${res.data.id || lastId} • ${currentVariant}`;
             currentNoteId = res.data.id || lastId;
             const loadedTopic = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
@@ -3010,6 +3105,7 @@
           if (!res.ok) { throw new Error((data && (data.detail || data.error)) || 'Load failed'); }
           if (data && data.markdown) {
             renderMarkdown(data.markdown);
+            applyNoteVerificationState(data);
             $meta.textContent = `My note • ${currentVariant}`;
             snack('Loaded My note');
           }
@@ -3381,6 +3477,7 @@
           clearUI();
           renderMarkdown(check.data.markdown);
           renderImageGallery(check.data.image_urls || []);
+          applyNoteVerificationState(check.data);
           setEmphasis(emphasis);
           currentNoteId = check.data.id || '';
           try {
@@ -3409,6 +3506,7 @@
       const canGenerate = await ensureUserAccess('ai_prompt', { consume: true, allowOnTransientFailure: false, renderInOutput: true });
       if (!canGenerate) return;
 
+      applyNoteVerificationState(null);
       clearUI();
       setBusy(true);
       showOutputLoader();
@@ -3828,6 +3926,7 @@
         if (data?.markdown) {
           renderMarkdown(data.markdown);
           renderImageGallery(data.image_urls || []);
+          applyNoteVerificationState(data);
           $meta.textContent = `Loaded • ${id} • ${currentVariant}`;
           currentNoteId = data?.id || id;
           const derivedTopic = (
@@ -3908,6 +4007,60 @@
         setEditMode(isEditing);
       });
     }
+
+    if ($verifyBtn) {
+      const verifyLabel = $verifyBtn.querySelector('[data-verify-label]');
+      const setVerifyLabel = (text) => {
+        if (verifyLabel) verifyLabel.textContent = text;
+        else $verifyBtn.textContent = text;
+      };
+
+      $verifyBtn.addEventListener('click', async () => {
+        const token = getAuthToken();
+        if (!token) { snack('Sign in required'); return; }
+
+        const title = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+        if (!currentNoteId && !title) {
+          snack('Generate notes first');
+          return;
+        }
+
+        const prev = verifyLabel ? verifyLabel.textContent : $verifyBtn.textContent;
+        $verifyBtn.disabled = true;
+        setVerifyLabel('Verifying...');
+        try {
+          const payload = currentNoteId ? { note_id: currentNoteId } : { title };
+          const res = await fetch(`${apiBase}/api/notes/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) ? String(data.detail || data.error) : 'Verify failed';
+            throw new Error(detail);
+          }
+          if (data && data.note_id) {
+            currentNoteId = String(data.note_id);
+            try {
+              localStorage.setItem(noteKey(currentVariant), currentNoteId);
+              if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+            } catch { }
+          }
+          $meta.textContent = `Verified • ${data?.verified_by_name || 'Teacher/HOD'} • ${currentVariant}`;
+          setVerifiedByChip(data?.verified_by_name || 'Teacher/HOD');
+          setVerifyLabel('Verified');
+          snack('Note verified');
+        } catch (e) {
+          console.warn('Verify failed', e);
+          snack((e && e.message) ? e.message : 'Verify failed');
+          setVerifyLabel(prev || 'Approve');
+        } finally {
+          $verifyBtn.disabled = false;
+        }
+      });
+    }
+
     $save.addEventListener('click', async () => {
       const md = $editor.value || '';
       if (!currentNoteId) {

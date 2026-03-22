@@ -481,6 +481,7 @@
       const rawK = String(q.k_level || q.klevel || q.bloom_level || '').trim().toUpperCase();
       const kMatch = rawK.match(/([1-6])/);
       const k_level = kMatch ? `K${kMatch[1]}` : null;
+      const topic_name = String(q.topic_name || q.topic || '').trim() || null;
       return {
         prompt,
         options: options.slice(0, 4),
@@ -489,6 +490,7 @@
         difficulty,
         co,
         k_level,
+        topic_name,
       };
     }
 
@@ -514,6 +516,7 @@
       wrap.innerHTML = state.questions.map((q, qi) => {
         const safePrompt = escHtml(q.prompt || '');
         const chips = [
+          q.topic_name ? `<span class="chip inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-white/80 dark:bg-white/10">Topic: ${escHtml(q.topic_name)}</span>` : '',
           q.co ? `<span class="chip inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-white/80 dark:bg-white/10">CO: ${escHtml(q.co)}</span>` : '',
           q.k_level ? `<span class="chip inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-white/80 dark:bg-white/10">K-level: ${escHtml(q.k_level)}</span>` : '',
           q.difficulty ? `<span class="chip inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-white/80 dark:bg-white/10">Difficulty: ${escHtml(q.difficulty)}</span>` : '',
@@ -616,6 +619,7 @@
             difficulty: nq.difficulty || null,
             co: nq.co || null,
             k_level: nq.k_level || null,
+            topic_name: nq.topic_name || null,
           };
         })
       };
@@ -878,6 +882,24 @@
       return `Create an academic MCQ test strictly from the syllabus for ${subjectLine}. Focus on these unit/topics:\n${lines.join('\n')}\nReturn only MCQ JSON.`;
     }
 
+    function getAcademicSelectedTopics() {
+      const selectedItems = [];
+      aiState.topicIndex.forEach((info, key) => {
+        if (!aiState.selected.has(key)) return;
+        const topicTitle = String(info?.topicTitle || '').trim();
+        if (topicTitle) selectedItems.push(topicTitle);
+      });
+      const out = [];
+      const seen = new Set();
+      selectedItems.forEach((t) => {
+        const k = t.toLowerCase();
+        if (seen.has(k)) return;
+        seen.add(k);
+        out.push(t);
+      });
+      return out;
+    }
+
     function clearAcademicSelection() {
       aiState.selected = new Set();
       $$('#aiAcademicList input[data-topic-key]').forEach((cb) => { cb.checked = false; });
@@ -938,6 +960,7 @@
       const topic = aiState.mode === 'academic'
         ? (getAcademicTopicPrompt() || '').trim()
         : (($('#aiTopic').value || '').trim());
+      const selected_topics = aiState.mode === 'academic' ? getAcademicSelectedTopics() : [];
       const count = parseInt($('#aiCount').value || '10', 10);
       const difficulty = String($('#aiDifficulty')?.value || 'balanced').trim().toLowerCase();
       const replaceExisting = !!$('#aiReplace').checked;
@@ -969,7 +992,7 @@
         const res = await fetch(`${base}/api/teacher/tests/ai`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-          body: JSON.stringify({ topic, count, difficulty }),
+          body: JSON.stringify({ topic, count, difficulty, selected_topics }),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -987,6 +1010,7 @@
           difficulty: q.difficulty,
           co: q.co,
           k_level: q.k_level,
+          topic_name: q.topic_name || q.topic,
         })).filter(q => (q.prompt || '').trim());
 
         if (!mapped.length) throw new Error('AI output could not be normalized.');

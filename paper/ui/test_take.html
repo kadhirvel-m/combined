@@ -38,9 +38,16 @@
                 <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X">
                 <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X">
             </a>
-            <button id="themeToggle"
-                class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
-                    class="material-symbols-rounded">dark_mode</span></button>
+            <div class="flex items-center gap-2">
+                <div id="navTimer"
+                    class="hidden items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold bg-brand-500/15 text-brand-700 dark:text-fuchsia-100 ring-1 ring-brand-500/30">
+                    <span class="material-symbols-rounded text-base">timer</span>
+                    <span id="navTimerText">00:00</span>
+                </div>
+                <button id="themeToggle"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"><span
+                        class="material-symbols-rounded">dark_mode</span></button>
+            </div>
         </div>
     </header>
 
@@ -71,6 +78,29 @@
                     type="button">Clear selections</button>
             </div>
             <div id="result" class="mt-4 text-sm font-semibold text-brand-700 dark:text-fuchsia-100"></div>
+        </section>
+
+        <section id="alreadyTakenSection"
+            class="hidden rounded-3xl p-6 md:p-8 ring-1 ring-black/5 dark:ring-white/10 bg-white/80 dark:bg-white/5 shadow-card">
+            <div class="flex items-start gap-3">
+                <div
+                    class="size-12 rounded-2xl bg-gradient-to-br from-emerald-500/25 to-emerald-700/20 grid place-items-center text-emerald-700 dark:text-emerald-200">
+                    <span class="material-symbols-rounded text-2xl">verified</span>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h2 class="text-xl font-bold">Test already taken</h2>
+                    <p id="alreadyTakenText" class="mt-1 text-sm text-neutral-600 dark:text-white/70"></p>
+                </div>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center gap-3">
+                <div id="alreadyTakenScore"
+                    class="inline-flex items-center gap-2 rounded-full px-4 py-2 bg-brand-500/15 text-brand-700 dark:text-fuchsia-100 ring-1 ring-brand-500/30 text-sm font-semibold"></div>
+                <a id="viewResultBtn" href="#"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-600 text-white text-sm hover:bg-brand-700">
+                    <span class="material-symbols-rounded">insights</span>
+                    View detailed result
+                </a>
+            </div>
         </section>
     </main>
 
@@ -145,7 +175,14 @@
             return '';
         }
 
-        const state = { questions: [], testId: '', startedAt: null, duration: null, timer: null };
+        const state = {
+            questions: [],
+            testId: '',
+            startedAtMs: null,
+            duration: null,
+            timer: null,
+            submitting: false,
+        };
 
         function renderEmpty(msg) {
             $('#testTitle').textContent = 'Test unavailable';
@@ -154,31 +191,74 @@
             $('#notice').classList.remove('hidden');
             $('#notice').textContent = 'Sign in and ask your teacher for help.';
             $('#testSection').classList.add('hidden');
+            setNavTimer(false);
+        }
+
+        function fmtMMSS(totalSeconds) {
+            const s = Math.max(0, parseInt(totalSeconds || 0, 10));
+            const mins = Math.floor(s / 60);
+            const secs = s % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function setNavTimer(visible, label) {
+            const chip = $('#navTimer');
+            const txt = $('#navTimerText');
+            if (!chip || !txt) return;
+            chip.classList.toggle('hidden', !visible);
+            chip.classList.toggle('inline-flex', !!visible);
+            if (label != null) txt.textContent = String(label);
         }
 
         function renderCountdown(seconds) {
             const meta = $('#testMeta');
             if (!meta) return;
             meta.dataset.baseText = meta.dataset.baseText || meta.textContent || '';
-            const mins = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            meta.textContent = `${meta.dataset.baseText} • Timer ${mins}:${secs.toString().padStart(2, '0')}`.trim();
+            const label = fmtMMSS(seconds);
+            meta.textContent = `${meta.dataset.baseText} • Timer ${label}`.trim();
+            setNavTimer(true, label);
         }
 
-        function startTimer(durationSec) {
+        function startTimer(durationSec, startedAtIso) {
             if (!durationSec) return;
+            const parsedStart = startedAtIso ? Date.parse(String(startedAtIso)) : NaN;
+            state.startedAtMs = Number.isFinite(parsedStart) ? parsedStart : Date.now();
             state.duration = durationSec;
-            state.startedAt = Date.now();
-            renderCountdown(durationSec);
+            const initialElapsed = Math.floor((Date.now() - state.startedAtMs) / 1000);
+            const initialRemaining = Math.max(durationSec - Math.max(initialElapsed, 0), 0);
+            renderCountdown(initialRemaining);
             state.timer = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
+                const elapsed = Math.floor((Date.now() - state.startedAtMs) / 1000);
                 const remaining = Math.max(durationSec - elapsed, 0);
                 renderCountdown(remaining);
                 if (remaining <= 0) {
                     clearInterval(state.timer);
-                    $('#submitBtn').click();
+                    state.timer = null;
+                    setNavTimer(true, '0:00');
+                    submitAnswers({ autoSubmit: true }).catch(() => { });
                 }
             }, 1000);
+        }
+
+        function lockTestUI() {
+            $('#submitBtn').disabled = true;
+            $$('input', $('#testForm')).forEach(i => i.disabled = true);
+        }
+
+        function goToResultPage() {
+            if (!state.testId) return;
+            location.href = `./test_result.html?test_id=${encodeURIComponent(state.testId)}`;
+        }
+
+        function showAlreadyTaken(attempt, maxScore) {
+            const score = Number.isFinite(Number(attempt?.score)) ? Number(attempt.score) : 0;
+            $('#testSection').classList.add('hidden');
+            $('#alreadyTakenSection').classList.remove('hidden');
+            $('#alreadyTakenText').textContent = 'You have already submitted this test. New attempts are blocked.';
+            $('#alreadyTakenScore').textContent = `Your marks: ${score}/${maxScore}`;
+            const btn = $('#viewResultBtn');
+            if (btn) btn.href = `./test_result.html?test_id=${encodeURIComponent(state.testId)}`;
+            setNavTimer(false);
         }
 
         function renderTest(payload) {
@@ -259,14 +339,12 @@
                     return;
                 }
                 if (data.attempt && data.attempt.submitted_at) {
-                    $('#notice').classList.remove('hidden');
-                    $('#notice').textContent = `Already submitted. Score ${data.attempt.score ?? 0}/${data.max_score ?? data.questions.length}`;
-                    $('#submitBtn').disabled = true;
-                    $$('input', $('#testForm')).forEach(i => i.disabled = true);
+                    showAlreadyTaken(data.attempt, data.max_score ?? data.questions.length);
                     return;
                 }
-                await startAttempt();
-                if (data.duration_seconds) startTimer(parseInt(data.duration_seconds, 10));
+                const started = await startAttempt();
+                if (data.duration_seconds) startTimer(parseInt(data.duration_seconds, 10), started?.started_at || data.attempt?.started_at || null);
+                else setNavTimer(false);
             } catch (e) {
                 console.error(e);
                 renderEmpty('Could not load test.');
@@ -289,22 +367,28 @@
                 return;
             }
             if (res.status === 409) {
-                $('#notice').classList.remove('hidden');
-                $('#notice').textContent = 'You already submitted this test.';
-                $('#submitBtn').disabled = true;
-                $$('input', $('#testForm')).forEach(i => i.disabled = true);
+                setTimeout(goToResultPage, 100);
+                return null;
             }
+            if (!res.ok) return null;
+            return await res.json().catch(() => null);
         }
 
-        async function submitAnswers() {
+        async function submitAnswers(opts = {}) {
+            if (state.submitting) return;
+            state.submitting = true;
             const token = getToken();
-            if (!state.testId || !token) { renderEmpty('Please sign in to submit.'); return; }
+            if (!state.testId || !token) {
+                renderEmpty('Please sign in to submit.');
+                state.submitting = false;
+                return;
+            }
             const form = $('#testForm');
             const answers = state.questions.map((_, idx) => {
                 const chosen = form.querySelector(`input[name="q${idx}"]:checked`);
                 return chosen ? parseInt(chosen.value, 10) : -1;
             });
-            const elapsed = state.startedAt ? Math.round((Date.now() - state.startedAt) / 1000) : null;
+            const elapsed = state.startedAtMs ? Math.round((Date.now() - state.startedAtMs) / 1000) : null;
 
             try {
                 const base = await resolveApi();
@@ -320,7 +404,8 @@
                 }
                 if (res.status === 409) {
                     $('#notice').classList.remove('hidden');
-                    $('#notice').textContent = 'You already submitted this test.';
+                    $('#notice').textContent = 'You already submitted this test. Opening your result...';
+                    setTimeout(goToResultPage, 500);
                     return;
                 }
                 if (!res.ok) {
@@ -330,13 +415,20 @@
                 const data = await res.json();
                 $('#result').textContent = `Score: ${data.score}/${data.max_score}`;
                 $('#notice').classList.add('hidden');
-                $('#submitBtn').disabled = true;
-                $$('input', $('#testForm')).forEach(i => i.disabled = true);
+                lockTestUI();
                 if (state.timer) clearInterval(state.timer);
+                setNavTimer(false);
+                if (opts && opts.autoSubmit) {
+                    $('#notice').classList.remove('hidden');
+                    $('#notice').textContent = 'Time is up. Test submitted automatically.';
+                }
+                setTimeout(goToResultPage, 400);
             } catch (e) {
                 console.error(e);
                 $('#notice').classList.remove('hidden');
                 $('#notice').textContent = e.message || 'Submit failed';
+            } finally {
+                state.submitting = false;
             }
         }
 
