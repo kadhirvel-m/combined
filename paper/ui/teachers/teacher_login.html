@@ -355,6 +355,56 @@
       }
     }
 
+    function persistTeacherSession(data) {
+      const access = String(data?.access_token || '').trim();
+      const refresh = String(data?.refresh_token || '').trim();
+      const expiresIn = Number(data?.expires_in || 0);
+      const expiresAt = expiresIn > 0 ? String(Date.now() + (expiresIn * 1000)) : '';
+      if (!access) return;
+      try {
+        localStorage.setItem('teacherToken', access);
+        localStorage.setItem('px_token', access);
+        localStorage.setItem('px_auth_token', access);
+        localStorage.setItem('userToken', access);
+        localStorage.setItem('sb-access-token', access);
+        if (refresh) localStorage.setItem('px_refresh_token', refresh);
+        if (expiresAt) localStorage.setItem('px_token_expires_at', expiresAt);
+      } catch (_) {
+        // Ignore and continue with sessionStorage below
+      }
+      // Mirror into sessionStorage for restrictive browser/device contexts
+      try {
+        sessionStorage.setItem('teacherToken', access);
+        sessionStorage.setItem('px_token', access);
+        sessionStorage.setItem('px_auth_token', access);
+        sessionStorage.setItem('userToken', access);
+        sessionStorage.setItem('sb-access-token', access);
+        if (refresh) sessionStorage.setItem('px_refresh_token', refresh);
+        if (expiresAt) sessionStorage.setItem('px_token_expires_at', expiresAt);
+      } catch (_) { }
+    }
+
+    function getPostLoginRedirect() {
+      try {
+        const params = new URLSearchParams(location.search || '');
+        const raw = params.get('redirect');
+        if (!raw) return '';
+        const decoded = decodeURIComponent(raw);
+        if (!decoded.startsWith('/') && !decoded.startsWith('./') && !decoded.startsWith('../')) return '';
+        if (/^https?:\/\//i.test(decoded)) return '';
+        return decoded;
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function withAccessTokenFragment(path, accessToken) {
+      const token = String(accessToken || '').trim();
+      if (!token) return path;
+      const joiner = path.includes('#') ? '&' : '#';
+      return `${path}${joiner}at=${encodeURIComponent(token)}`;
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const tokenFromWidget = (window.turnstile && turnstileWidgetId !== null)
@@ -382,13 +432,8 @@
           throw new Error(message);
         }
         if (!data.access_token) { throw new Error('No access token returned'); }
-        // Cookie session is authoritative; clear any stale legacy token keys.
-        try {
-          localStorage.removeItem('teacherToken');
-          localStorage.removeItem('px_token');
-          localStorage.removeItem('px_refresh_token');
-          localStorage.removeItem('px_token_expires_at');
-        } catch { }
+        // Persist token for teacher pages that rely on Authorization headers from storage.
+        persistTeacherSession(data);
         statusEl.classList.remove('hidden');
         statusEl.textContent = 'Signed in. Checking role...';
         const st = await fetch(base + '/api/teacher/me/status', { headers: { 'Authorization': 'Bearer ' + data.access_token } });
@@ -402,11 +447,16 @@
 
         if (tstatus === 'approved') {
           statusEl.textContent = 'Approved. Redirecting...';
+          const next = getPostLoginRedirect();
+          if (next) {
+            setTimeout(() => { location.href = withAccessTokenFragment(next, data.access_token); }, 400);
+            return;
+          }
           const isHod = (role === 'hod') || await hasHodAccess(base, data.access_token);
           if (isHod) {
-            setTimeout(() => { location.href = '../hod/hod_dashboard.html'; }, 600);
+            setTimeout(() => { location.href = withAccessTokenFragment('../hod/hod_dashboard.html', data.access_token); }, 600);
           } else {
-            setTimeout(() => { location.href = '../teacher_profile.html'; }, 600);
+            setTimeout(() => { location.href = withAccessTokenFragment('../teacher_profile.html', data.access_token); }, 600);
           }
         } else if (tstatus === 'pending') {
           // Show pending modal

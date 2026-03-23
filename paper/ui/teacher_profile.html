@@ -192,20 +192,72 @@
 
         let API_BASE = '';
         async function resolveApi() { if (API_BASE) return API_BASE; const b = (window.__API_BASE || window.API_BASE || '').replace(/\/$/, ''); if (b) { API_BASE = b; return b; } await new Promise(r => setTimeout(r, 80)); return resolveApi(); }
+        function isLikelyJwt(v) {
+            if (!v || typeof v !== 'string') return false;
+            const p = v.split('.');
+            return p.length === 3 && p[0].length > 8 && p[1].length > 8;
+        }
+
+        function tokenFromHash() {
+            try {
+                const hash = String(location.hash || '');
+                if (!hash) return '';
+                const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+                const at = params.get('at') || '';
+                return isLikelyJwt(at) ? at : '';
+            } catch {
+                return '';
+            }
+        }
+
+        function persistInboundToken(token) {
+            if (!isLikelyJwt(token)) return;
+            try {
+                localStorage.setItem('teacherToken', token);
+                localStorage.setItem('px_token', token);
+                localStorage.setItem('px_auth_token', token);
+                localStorage.setItem('userToken', token);
+                localStorage.setItem('sb-access-token', token);
+            } catch { }
+            try {
+                sessionStorage.setItem('teacherToken', token);
+                sessionStorage.setItem('px_token', token);
+                sessionStorage.setItem('px_auth_token', token);
+                sessionStorage.setItem('userToken', token);
+                sessionStorage.setItem('sb-access-token', token);
+            } catch { }
+        }
+
+        function clearAccessTokenHash() {
+            try {
+                if (!location.hash) return;
+                const clean = location.pathname + location.search;
+                history.replaceState(null, '', clean);
+            } catch { }
+        }
         function getToken() {
+            // One-time inbound token from login redirect fragment
+            const inbound = tokenFromHash();
+            if (inbound) {
+                persistInboundToken(inbound);
+                clearAccessTokenHash();
+                return inbound;
+            }
             // Known priority keys first
             const primary = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
-            for (const k of primary) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } }
-            // Fallback heuristic: scan all keys containing 'token'
-            try {
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (/token/i.test(key || '')) {
-                        const v = localStorage.getItem(key);
-                        if (v && v.length > 10) return v;
-                    }
-                }
-            } catch { }
+            for (const k of primary) {
+                try {
+                    const v = localStorage.getItem(k);
+                    if (isLikelyJwt(v)) return v;
+                } catch { }
+            }
+            // Session storage fallback (private mode/restricted localStorage cases)
+            for (const k of primary) {
+                try {
+                    const v = sessionStorage.getItem(k);
+                    if (isLikelyJwt(v)) return v;
+                } catch { }
+            }
             return '';
         }
 
@@ -273,12 +325,15 @@
                 throw lastErr;
             }
             const makeUrl = dynamicSelfMode ? `${base}/api/teacher/profile/me?${strictParam}` : `${base}/api/teacher/profile/${encodeURIComponent(targetUser)}?${strictParam}`;
-            const headers = dynamicSelfMode
-                ? (token ? { Authorization: 'Bearer ' + token, 'X-TeacherProfile-Strict': 'true' } : { 'X-TeacherProfile-Strict': 'true' })
-                : (token ? { Authorization: 'Bearer ' + token, 'X-TeacherProfile-Strict': 'true' } : { 'X-TeacherProfile-Strict': 'true' });
-            if (dynamicSelfMode && !token) { noAuthForMe(); return; }
+            const baseHeaders = { 'X-TeacherProfile-Strict': 'true' };
+            let headers = token ? { ...baseHeaders, Authorization: 'Bearer ' + token } : baseHeaders;
             try {
                 res = await fetchWithRetry(makeUrl, headers);
+                // If local token is stale/invalid, retry once with cookie-based auth only.
+                if (res && res.status === 401 && token) {
+                    headers = baseHeaders;
+                    res = await fetchWithRetry(makeUrl, headers);
+                }
             } catch (e) {
                 console.error('Profile fetch retries exhausted', e);
                 if (dynamicSelfMode) {

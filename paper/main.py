@@ -234,6 +234,7 @@ AUTH_VALIDATE_ISSUER = (os.getenv("AUTH_VALIDATE_ISSUER", "true").strip().lower(
 AUTH_VALIDATE_AUDIENCE = (os.getenv("AUTH_VALIDATE_AUDIENCE", "true").strip().lower() in {"1", "true", "yes", "on"})
 AUTH_JWT_SECRET = (os.getenv("AUTH_JWT_SECRET") or os.getenv("SUPABASE_JWT_SECRET") or "").strip()
 AUTH_VERIFY_SIGNATURE = (os.getenv("AUTH_VERIFY_SIGNATURE", "true").strip().lower() in {"1", "true", "yes", "on"})
+AUTH_SIGNUP_ADMIN_FALLBACK_ON_429 = (os.getenv("AUTH_SIGNUP_ADMIN_FALLBACK_ON_429", "true").strip().lower() in {"1", "true", "yes", "on"})
 RBAC_ENFORCEMENT_ENABLED = (os.getenv("RBAC_ENFORCEMENT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
 RBAC_ADMIN_PREFIXES: Tuple[str, ...] = (
     "/api/admin",
@@ -4809,6 +4810,22 @@ def _get_user_id_from_auth_response(res) -> Optional[str]:
     return None
 
 
+def _create_auth_user_via_admin(email: str, password: str) -> Optional[str]:
+    """Fallback auth user creation through service-role admin API.
+
+    Used only when public signup is rate-limited by upstream auth provider.
+    """
+    supabase = get_service_client()
+    admin_res = supabase.auth.admin.create_user(
+        {
+            "email": email,
+            "password": password,
+            "email_confirm": True,
+        }
+    )
+    return _get_user_id_from_auth_response(admin_res)
+
+
 def _resolve_college_id_by_name(college_name: str) -> uuid.UUID:
     supabase = get_service_client()
     q = (
@@ -4840,6 +4857,23 @@ def _resolve_department_id(college_id: uuid.UUID, dept_name: str) -> uuid.UUID:
     if not dep_q.data:
         raise HTTPException(status_code=404, detail="Department not found for college")
     return uuid.UUID(dep_q.data[0]["id"])
+
+
+def _resolve_degree_id(college_id: uuid.UUID, degree_name: str) -> uuid.UUID:
+    supabase = get_service_client()
+    deg_q = (
+        supabase.table("degrees")
+        .select("id")
+        .eq("college_id", str(college_id))
+        .eq("name", degree_name)
+        .limit(1)
+        .execute()
+    )
+    if getattr(deg_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (find degree): {deg_q.error}")
+    if not deg_q.data:
+        raise HTTPException(status_code=404, detail="Degree not found for college")
+    return uuid.UUID(deg_q.data[0]["id"])
 
 
 def _get_or_create_batch_id(
@@ -12589,7 +12623,11 @@ async def teacher_signup(
     confirm_password: str = Form(...),
     name: str = Form(...),
     college: Optional[str] = Form(None),
+    college_name: Optional[str] = Form(None),
+    degree: Optional[str] = Form(None),
+    degree_name: Optional[str] = Form(None),
     department: Optional[str] = Form(None),
+    department_name: Optional[str] = Form(None),
     subjects: Optional[str] = Form(None),  # JSON array or comma list
     id_card_front: UploadFile = File(...),
     id_card_back: UploadFile = File(...),
@@ -12604,22 +12642,78 @@ async def teacher_signup(
     if not anon_client:
         raise HTTPException(status_code=500, detail="Auth disabled")
     try:
-        auth_res = anon_client.auth.sign_up({"email": email, "password": password})
-        auth_user_id = _get_user_id_from_auth_response(auth_res)
+        auth_res = None
+        auth_user_id = None
+        try:
+            auth_res = anon_client.auth.sign_up({"email": email, "password": password})
+            auth_user_id = _get_user_id_from_auth_response(auth_res)
+        except Exception as auth_exc:
+            auth_msg = str(auth_exc or "")
+            auth_low = auth_msg.lower()
+            if ("already registered" in auth_low) or ("user already registered" in auth_low):
+                raise HTTPException(status_code=409, detail="Email already registered. Please login instead.")
+            if AUTH_SIGNUP_ADMIN_FALLBACK_ON_429:
+                try:
+                    auth_user_id = _create_auth_user_via_admin(email=email, password=password)
+                    auth_res = None
+                except Exception as admin_exc:
+                    try:
+                        supabase_logger.error(f"teacher_signup admin fallback failed | email={email} | err={admin_exc}")
+                    except Exception:
+                        pass
+                    admin_msg = str(admin_exc or "")
+                    admin_low = admin_msg.lower()
+                    if ("already registered" in admin_low) or ("user already registered" in admin_low):
+                        raise HTTPException(status_code=409, detail="Email already registered. Please login instead.")
+                    if (
+                        ("rate limit" in auth_low)
+                        or ("too many requests" in auth_low)
+                        or ("429" in auth_low)
+                        or ("rate limit" in admin_low)
+                        or ("too many requests" in admin_low)
+                        or ("429" in admin_low)
+                    ):
+                        raise HTTPException(status_code=429, detail="Signup is rate-limited right now. Please wait a minute and try again.")
+                    msg = (auth_msg or admin_msg or "Signup failed. Please verify details and retry.").strip()
+                    raise HTTPException(status_code=400, detail=(msg[:180] or "Signup failed. Please verify details and retry."))
+            if auth_user_id:
+                pass
+            elif ("rate limit" in auth_low) or ("too many requests" in auth_low) or ("429" in auth_low):
+                raise HTTPException(status_code=429, detail="Signup is rate-limited right now. Please wait a minute and try again.")
+            else:
+                raise HTTPException(status_code=400, detail=((auth_msg.strip()[:180]) or "Signup failed. Please verify details and retry."))
         if not auth_user_id:
             raise HTTPException(status_code=400, detail="Failed to create auth user")
-        access_token = _extract_access_token(auth_res)
+        access_token = _extract_access_token(auth_res) if auth_res else None
         supabase = get_service_client()
         college_id = None
+        degree_id = None
         department_id = None
-        if college:
+        college_raw = (college or college_name or "").strip()
+        degree_raw = (degree or degree_name or "").strip()
+        department_raw = (department or department_name or "").strip()
+
+        # Ignore common placeholder values from legacy forms.
+        if college_raw.startswith("--"):
+            college_raw = ""
+        if degree_raw.startswith("--"):
+            degree_raw = ""
+        if department_raw.startswith("--"):
+            department_raw = ""
+
+        if college_raw:
             try:
-                college_id = str(_resolve_college_id_by_name(college))
+                college_id = _to_uuid_str(college_raw) or str(_resolve_college_id_by_name(college_raw))
             except Exception:
                 college_id = None
-        if department and college_id:
+        if degree_raw and college_id:
             try:
-                department_id = str(_resolve_department_id(uuid.UUID(college_id), department.upper()))
+                degree_id = _to_uuid_str(degree_raw) or str(_resolve_degree_id(uuid.UUID(college_id), degree_raw))
+            except Exception:
+                degree_id = None
+        if department_raw and college_id:
+            try:
+                department_id = _to_uuid_str(department_raw) or str(_resolve_department_id(uuid.UUID(college_id), department_raw.upper()))
             except Exception:
                 department_id = None
         # subjects parse
@@ -12649,7 +12743,7 @@ async def teacher_signup(
         _storage_upload_bytes(supabase, "teacher", back_name, back_bytes, back_content_type)
         front_url = _storage_public_url(supabase, "teacher", front_name)
         back_url = _storage_public_url(supabase, "teacher", back_name)
-        ins = supabase.table("teacher_applications").insert({
+        insert_payload: Dict[str, Any] = {
             "auth_user_id": auth_user_id,
             "email": email,
             "name": name,
@@ -12659,13 +12753,47 @@ async def teacher_signup(
             "id_card_front_path": front_url,
             "id_card_back_path": back_url,
             "status": "pending"
-        }).execute()
+        }
+        if degree_id:
+            insert_payload["degree_id"] = degree_id
+
+        try:
+            ins = supabase.table("teacher_applications").insert(insert_payload).execute()
+        except Exception as ins_exc:
+            ins_exc_text = str(ins_exc or "").lower()
+            if degree_id and ("degree_id" in ins_exc_text) and (("column" in ins_exc_text) or ("schema" in ins_exc_text) or ("42703" in ins_exc_text) or ("pgrst204" in ins_exc_text)):
+                insert_payload.pop("degree_id", None)
+                ins = supabase.table("teacher_applications").insert(insert_payload).execute()
+            else:
+                raise HTTPException(status_code=500, detail=f"Supabase error (teacher application insert): {ins_exc}")
+        # Some environments may not yet have teacher_applications.degree_id.
+        if getattr(ins, "error", None) and degree_id:
+            err_text = str(getattr(ins, "error", "") or "").lower()
+            if ("degree_id" in err_text) and (("column" in err_text) or ("schema" in err_text) or ("42703" in err_text) or ("pgrst204" in err_text)):
+                insert_payload.pop("degree_id", None)
+                ins = supabase.table("teacher_applications").insert(insert_payload).execute()
         if getattr(ins, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (teacher application insert): {ins.error}")
         return {"message": "Teacher application submitted", "access_token": access_token, "user_id": auth_user_id}
-    except HTTPException:
+    except HTTPException as exc:
+        if int(getattr(exc, "status_code", 500) or 500) >= 500:
+            try:
+                supabase_logger.error(
+                    "teacher_signup HTTPException",
+                    extra={
+                        "status_code": getattr(exc, "status_code", None),
+                        "detail": str(getattr(exc, "detail", "")),
+                        "email": email,
+                    },
+                )
+            except Exception:
+                pass
         raise
     except Exception as e:
+        try:
+            supabase_logger.exception("teacher_signup unexpected error", extra={"email": email})
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Unexpected signup error: {e}")
 
 
@@ -12676,7 +12804,11 @@ async def hod_signup(
     confirm_password: str = Form(...),
     name: str = Form(...),
     college: Optional[str] = Form(None),
+    college_name: Optional[str] = Form(None),
+    degree: Optional[str] = Form(None),
+    degree_name: Optional[str] = Form(None),
     department: Optional[str] = Form(None),
+    department_name: Optional[str] = Form(None),
     motivation: Optional[str] = Form(None),
     id_card_front: UploadFile = File(...),
     id_card_back: UploadFile = File(...),
@@ -12698,23 +12830,77 @@ async def hod_signup(
     if not anon_client:
         raise HTTPException(status_code=500, detail="Auth disabled")
     try:
-        auth_res = anon_client.auth.sign_up({"email": email, "password": password})
-        auth_user_id = _get_user_id_from_auth_response(auth_res)
+        auth_res = None
+        auth_user_id = None
+        try:
+            auth_res = anon_client.auth.sign_up({"email": email, "password": password})
+            auth_user_id = _get_user_id_from_auth_response(auth_res)
+        except Exception as auth_exc:
+            auth_msg = str(auth_exc or "")
+            auth_low = auth_msg.lower()
+            if ("already registered" in auth_low) or ("user already registered" in auth_low):
+                raise HTTPException(status_code=409, detail="Email already registered. Please login instead.")
+            if AUTH_SIGNUP_ADMIN_FALLBACK_ON_429:
+                try:
+                    auth_user_id = _create_auth_user_via_admin(email=email, password=password)
+                    auth_res = None
+                except Exception as admin_exc:
+                    try:
+                        supabase_logger.error(f"hod_signup admin fallback failed | email={email} | err={admin_exc}")
+                    except Exception:
+                        pass
+                    admin_msg = str(admin_exc or "")
+                    admin_low = admin_msg.lower()
+                    if ("already registered" in admin_low) or ("user already registered" in admin_low):
+                        raise HTTPException(status_code=409, detail="Email already registered. Please login instead.")
+                    if (
+                        ("rate limit" in auth_low)
+                        or ("too many requests" in auth_low)
+                        or ("429" in auth_low)
+                        or ("rate limit" in admin_low)
+                        or ("too many requests" in admin_low)
+                        or ("429" in admin_low)
+                    ):
+                        raise HTTPException(status_code=429, detail="Signup is rate-limited right now. Please wait a minute and try again.")
+                    msg = (auth_msg or admin_msg or "Signup failed. Please verify details and retry.").strip()
+                    raise HTTPException(status_code=400, detail=(msg[:180] or "Signup failed. Please verify details and retry."))
+            if auth_user_id:
+                pass
+            elif ("rate limit" in auth_low) or ("too many requests" in auth_low) or ("429" in auth_low):
+                raise HTTPException(status_code=429, detail="Signup is rate-limited right now. Please wait a minute and try again.")
+            else:
+                raise HTTPException(status_code=400, detail=((auth_msg.strip()[:180]) or "Signup failed. Please verify details and retry."))
         if not auth_user_id:
             raise HTTPException(status_code=400, detail="Failed to create auth user")
-        access_token = _extract_access_token(auth_res)
+        access_token = _extract_access_token(auth_res) if auth_res else None
         supabase = get_service_client()
 
         college_id = None
+        degree_id = None
         department_id = None
-        if college:
+        college_raw = (college or college_name or "").strip()
+        degree_raw = (degree or degree_name or "").strip()
+        department_raw = (department or department_name or "").strip()
+        if college_raw.startswith("--"):
+            college_raw = ""
+        if degree_raw.startswith("--"):
+            degree_raw = ""
+        if department_raw.startswith("--"):
+            department_raw = ""
+
+        if college_raw:
             try:
-                college_id = str(_resolve_college_id_by_name(college))
+                college_id = _to_uuid_str(college_raw) or str(_resolve_college_id_by_name(college_raw))
             except Exception:
                 college_id = None
-        if department and college_id:
+        if degree_raw and college_id:
             try:
-                department_id = str(_resolve_department_id(uuid.UUID(college_id), department.upper()))
+                degree_id = _to_uuid_str(degree_raw) or str(_resolve_degree_id(uuid.UUID(college_id), degree_raw))
+            except Exception:
+                degree_id = None
+        if department_raw and college_id:
+            try:
+                department_id = _to_uuid_str(department_raw) or str(_resolve_department_id(uuid.UUID(college_id), department_raw.upper()))
             except Exception:
                 department_id = None
 
@@ -12735,7 +12921,7 @@ async def hod_signup(
         back_url = _storage_public_url(supabase, "teacher", back_name)
 
         # Always create a teacher application too (so HOD is also a teacher).
-        ins_teacher = supabase.table("teacher_applications").insert({
+        teacher_insert_payload: Dict[str, Any] = {
             "auth_user_id": auth_user_id,
             "email": email,
             "name": name,
@@ -12745,7 +12931,24 @@ async def hod_signup(
             "id_card_front_path": front_url,
             "id_card_back_path": back_url,
             "status": "pending",
-        }).execute()
+        }
+        if degree_id:
+            teacher_insert_payload["degree_id"] = degree_id
+
+        try:
+            ins_teacher = supabase.table("teacher_applications").insert(teacher_insert_payload).execute()
+        except Exception as ins_exc:
+            ins_exc_text = str(ins_exc or "").lower()
+            if degree_id and ("degree_id" in ins_exc_text) and (("column" in ins_exc_text) or ("schema" in ins_exc_text) or ("42703" in ins_exc_text) or ("pgrst204" in ins_exc_text)):
+                teacher_insert_payload.pop("degree_id", None)
+                ins_teacher = supabase.table("teacher_applications").insert(teacher_insert_payload).execute()
+            else:
+                raise HTTPException(status_code=500, detail=f"Supabase error (teacher application insert): {ins_exc}")
+        if getattr(ins_teacher, "error", None) and degree_id:
+            err_text = str(getattr(ins_teacher, "error", "") or "").lower()
+            if ("degree_id" in err_text) and (("column" in err_text) or ("schema" in err_text) or ("42703" in err_text) or ("pgrst204" in err_text)):
+                teacher_insert_payload.pop("degree_id", None)
+                ins_teacher = supabase.table("teacher_applications").insert(teacher_insert_payload).execute()
         if getattr(ins_teacher, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (teacher application insert): {ins_teacher.error}")
 
@@ -12764,9 +12967,25 @@ async def hod_signup(
             raise HTTPException(status_code=500, detail=f"Supabase error (hod application insert): {ins_hod.error}")
 
         return {"message": "HOD application submitted", "access_token": access_token, "user_id": auth_user_id}
-    except HTTPException:
+    except HTTPException as exc:
+        if int(getattr(exc, "status_code", 500) or 500) >= 500:
+            try:
+                supabase_logger.error(
+                    "hod_signup HTTPException",
+                    extra={
+                        "status_code": getattr(exc, "status_code", None),
+                        "detail": str(getattr(exc, "detail", "")),
+                        "email": email,
+                    },
+                )
+            except Exception:
+                pass
         raise
     except Exception as e:
+        try:
+            supabase_logger.exception("hod_signup unexpected error", extra={"email": email})
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Unexpected signup error: {e}")
 
 

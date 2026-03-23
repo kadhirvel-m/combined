@@ -243,6 +243,7 @@
                     <div>
                       <label class="block text-xs font-semibold tracking-wide uppercase mb-1">College</label>
                       <select id="collegeSelect" name="college"
+                        required
                         class="w-full rounded-lg border-neutral-300 dark:border-white/15 bg-white/70 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500">
                         <option value="">-- Select College --</option>
                       </select>
@@ -250,6 +251,7 @@
                     <div>
                       <label class="block text-xs font-semibold tracking-wide uppercase mb-1">Degree</label>
                       <select id="degreeSelect" name="degree"
+                        required
                         class="w-full rounded-lg border-neutral-300 dark:border-white/15 bg-white/70 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500">
                         <option value="">-- Select Degree --</option>
                       </select>
@@ -257,6 +259,7 @@
                     <div>
                       <label class="block text-xs font-semibold tracking-wide uppercase mb-1">Department</label>
                       <select id="departmentSelect" name="department"
+                        required
                         class="w-full rounded-lg border-neutral-300 dark:border-white/15 bg-white/70 dark:bg-brand-900/40 focus:ring-brand-500 focus:border-brand-500">
                         <option value="">-- Select Department --</option>
                       </select>
@@ -407,10 +410,18 @@
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!collegeSelect.value || !degreeSelect.value || !departmentSelect.value) {
+        alert('Please select college, degree, and department.');
+        return;
+      }
       const fd = new FormData(form);
-      fd.set('college', collegeSelect.options[collegeSelect.selectedIndex]?.text || '');
-      fd.set('degree', degreeSelect.options[degreeSelect.selectedIndex]?.text || '');
-      fd.set('department', departmentSelect.options[departmentSelect.selectedIndex]?.text || '');
+      // Send UUID ids as primary values; include names for backward compatibility.
+      fd.set('college', collegeSelect.value || '');
+      fd.set('degree', degreeSelect.value || '');
+      fd.set('department', departmentSelect.value || '');
+      fd.set('college_name', collegeSelect.options[collegeSelect.selectedIndex]?.text || '');
+      fd.set('degree_name', degreeSelect.options[degreeSelect.selectedIndex]?.text || '');
+      fd.set('department_name', departmentSelect.options[departmentSelect.selectedIndex]?.text || '');
       statusBox.style.display = 'none';
       setLoading(true);
       try {
