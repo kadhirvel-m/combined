@@ -227,17 +227,25 @@
         const addTopicRowBottomButton = $('#addTopicRowBottom');
         const unitModalMessage = $('#unitModalMessage');
 
+        function normalizeStoredToken(v) {
+            const raw = String(v || '').trim();
+            if (!raw || raw === '__COOKIE_AUTH__' || raw === 'null' || raw === 'undefined' || raw === 'none') return '';
+            return raw;
+        }
+
+        const ensureAuthReady = (typeof window.__PX_ENSURE_AUTH_READY === 'function')
+            ? window.__PX_ENSURE_AUTH_READY
+            : (async () => false);
+
         function getToken() {
-            const primary = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
-            for (const k of primary) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } }
+            // Cookie-session first; attach bearer fallback only when available.
             try {
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (/token/i.test(key || '')) {
-                        const v = localStorage.getItem(key);
-                        if (v && v.length > 10) return v;
-                    }
-                }
+                const fb = normalizeStoredToken(sessionStorage.getItem('paperx_bearer_fallback'));
+                if (fb) return fb;
+            } catch { }
+            try {
+                const fb2 = normalizeStoredToken(localStorage.getItem('paperx_bearer_fallback'));
+                if (fb2) return fb2;
             } catch { }
             return '';
         }
@@ -303,15 +311,20 @@
         // Load ratings for the current course
         async function loadRatings() {
             if (!courseId) return;
-            const token = getToken();
-            if (!token) return;
+            try { await ensureAuthReady(); } catch { }
 
             try {
                 const baseRaw = window.__API_BASE || window.API_BASE || 'http://127.0.0.1:8000';
                 const base = String(baseRaw || '').replace(/\/$/, '');
-                const res = await fetch(`${base}/api/syllabus/courses/${encodeURIComponent(courseId)}/ratings`, {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
+                let token = getToken();
+                let headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                let res = await fetch(`${base}/api/syllabus/courses/${encodeURIComponent(courseId)}/ratings`, { headers });
+                if (res.status === 401) {
+                    try { await ensureAuthReady(); } catch { }
+                    token = getToken();
+                    headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                    res = await fetch(`${base}/api/syllabus/courses/${encodeURIComponent(courseId)}/ratings`, { headers });
+                }
                 if (res.ok) {
                     const data = await res.json();
                     topicRatings = data.ratings || {};
@@ -502,9 +515,16 @@
             try {
                 const baseRaw = window.__API_BASE || window.API_BASE || 'http://127.0.0.1:8000';
                 const base = String(baseRaw || '').replace(/\/$/, '');
-                const token = getToken();
-                const headers = token ? { Authorization: 'Bearer ' + token } : {};
-                const res = await fetch(`${base}/api/syllabus/courses/${encodeURIComponent(courseId)}`, { headers });
+                try { await ensureAuthReady(); } catch { }
+                let token = getToken();
+                let headers = token ? { Authorization: 'Bearer ' + token } : {};
+                let res = await fetch(`${base}/api/syllabus/courses/${encodeURIComponent(courseId)}`, { headers });
+                if (res.status === 401) {
+                    try { await ensureAuthReady(); } catch { }
+                    token = getToken();
+                    headers = token ? { Authorization: 'Bearer ' + token } : {};
+                    res = await fetch(`${base}/api/syllabus/courses/${encodeURIComponent(courseId)}`, { headers });
+                }
                 if (!res.ok) { throw new Error(`Failed to load syllabus (${res.status})`); }
                 const data = await res.json();
                 syllabusCourse = data;

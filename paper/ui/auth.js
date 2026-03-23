@@ -51,6 +51,12 @@
   }
 
   function getUsableRefreshToken(){
+    try {
+      const fromSession = String(sessionStorage.getItem(REFRESH_TOKEN_KEY) || '').trim();
+      if (fromSession && fromSession !== AUTH_SENTINEL && fromSession !== 'null' && fromSession !== 'undefined') {
+        return fromSession;
+      }
+    } catch (_) { }
     const raw = safeGet(REFRESH_TOKEN_KEY);
     if (!raw) return null;
     const tok = String(raw).trim();
@@ -93,7 +99,8 @@
   async function refreshTokensIfNeeded() {
     console.log('[Auth] Attempting cookie-based token refresh...');
     try {
-      const refreshToken = getUsableRefreshToken();
+      const hasCookieSession = hasAuthStateCookie();
+      const refreshToken = hasCookieSession ? null : getUsableRefreshToken();
       const fallback = getBearerFallbackToken();
       const hasSessionState = hasAuthState();
       // If no token and no session signal, skip refresh attempt.
@@ -119,6 +126,11 @@
           try { safeRemove(REFRESH_TOKEN_KEY); } catch (_) { }
           suppressRefreshTemporarily(5 * 60 * 1000);
         } else if (res.status === 401 || res.status === 403) {
+          try { safeRemove(REFRESH_TOKEN_KEY); } catch (_) { }
+          try { sessionStorage.removeItem(REFRESH_TOKEN_KEY); } catch (_) { }
+          try { safeRemove('paperx_session_state'); } catch (_) { }
+          try { sessionStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
+          try { localStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
           suppressRefreshTemporarily(60 * 1000);
         }
         // Do not clear session markers/tokens here; this can cause auth bounce loops
@@ -131,6 +143,10 @@
         if (at) {
           sessionStorage.setItem(BEARER_FALLBACK_KEY, at);
           localStorage.setItem(BEARER_FALLBACK_KEY, at);
+        }
+        const rt = String((data && data.refresh_token) || '').trim();
+        if (rt && rt !== AUTH_SENTINEL) {
+          sessionStorage.setItem(REFRESH_TOKEN_KEY, rt);
         }
       } catch (_) { }
       console.log('[Auth] Token refreshed successfully.', data && data.message ? data.message : 'ok');
@@ -150,6 +166,7 @@
     safeRemove(TOKEN_EXPIRES_KEY);
     safeRemove('paperx_session_state');
     safeRemove('paperx_session_id'); // Clear analytics session
+    try { sessionStorage.removeItem(REFRESH_TOKEN_KEY); } catch (_) { }
     try { sessionStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
     try { localStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
   }

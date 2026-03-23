@@ -2,16 +2,37 @@
 (function(){
   const API_BASE = (window.API_BASE || window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
 
+  function normalizeToken(v){
+    const raw = String(v || '').trim();
+    if (!raw || raw === '__COOKIE_AUTH__' || raw === 'null' || raw === 'undefined' || raw === 'none') return '';
+    return raw;
+  }
+
   function getToken(){
-    const keys = ['teacherToken','px_token','userToken','sb-access-token','supabase.auth.token'];
+    const keys = ['paperx_bearer_fallback','teacherToken','px_token','userToken','sb-access-token','supabase.auth.token'];
     for (const k of keys){
-      try { const v = localStorage.getItem(k); if (v) return v; } catch(_){ }
+      try {
+        const v = normalizeToken(sessionStorage.getItem(k));
+        if (v) return v;
+      } catch(_){ }
+    }
+    for (const k of keys){
+      try {
+        const v = normalizeToken(localStorage.getItem(k));
+        if (v) return v;
+      } catch(_){ }
     }
     return '';
   }
 
   async function fetchJSON(url, opts, retries){
-    opts = opts || {};
+    opts = Object.assign({ credentials: 'include' }, opts || {});
+    const headers = Object.assign({}, opts.headers || {});
+    // Never send an empty bearer token; let cookie auth flow if token is unavailable.
+    if (typeof headers.Authorization === 'string' && /^Bearer\s*$/i.test(headers.Authorization)) {
+      delete headers.Authorization;
+    }
+    opts.headers = headers;
     retries = typeof retries === 'number' ? retries : 2;
     try {
       const res = await fetch(url, opts);
@@ -70,10 +91,22 @@
 
   async function requireHod(){
     const token = getToken();
-    if (!token) redirectToTeacherLogin();
+    const headers = token ? { Authorization: 'Bearer ' + token } : {};
     try {
-      return await fetchJSON(API_BASE + '/api/hod/me', { headers: { Authorization: 'Bearer ' + token } });
+      return await fetchJSON(API_BASE + '/api/hod/me', { headers });
     } catch (e){
+      // One prewarm/retry handles first-load races where cookie/session settles slightly later.
+      if (e && e.status === 401 && typeof window.__PX_ENSURE_AUTH_READY === 'function') {
+        try { await window.__PX_ENSURE_AUTH_READY(); } catch (_) { }
+        const retryToken = getToken();
+        const retryHeaders = retryToken ? { Authorization: 'Bearer ' + retryToken } : {};
+        try {
+          return await fetchJSON(API_BASE + '/api/hod/me', { headers: retryHeaders }, 0);
+        } catch (e2){
+          if (e2 && e2.status === 401) redirectToTeacherLogin();
+          throw e2;
+        }
+      }
       if (e && (e.status === 401)) redirectToTeacherLogin();
       throw e;
     }
@@ -89,6 +122,7 @@
       { id:'batches', href: root + 'batch_management.html', label:'Batch Mgmt', icon:'calendar_month' },
       { id:'staff', href: root + 'hod_staff.html', label:'Staff', icon:'groups' },
       { id:'apps', href: root + 'hod_applications.html', label:'Applications', icon:'badge' },
+      { id:'password', href: root + 'hod_change_password.html', label:'Change Password', icon:'lock_reset' },
       { id:'ai', href: root + 'hod_ai.html', label:'AI Insights', icon:'auto_awesome' },
     ];
     el.innerHTML = links.map(l => {

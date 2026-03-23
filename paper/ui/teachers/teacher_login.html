@@ -358,29 +358,24 @@
     function persistTeacherSession(data) {
       const access = String(data?.access_token || '').trim();
       const refresh = String(data?.refresh_token || '').trim();
-      const expiresIn = Number(data?.expires_in || 0);
-      const expiresAt = expiresIn > 0 ? String(Date.now() + (expiresIn * 1000)) : '';
       if (!access) return;
+      // Cookie-session is authoritative. Keep only compatibility markers/fallbacks.
       try {
-        localStorage.setItem('teacherToken', access);
-        localStorage.setItem('px_token', access);
-        localStorage.setItem('px_auth_token', access);
-        localStorage.setItem('userToken', access);
-        localStorage.setItem('sb-access-token', access);
-        if (refresh) localStorage.setItem('px_refresh_token', refresh);
-        if (expiresAt) localStorage.setItem('px_token_expires_at', expiresAt);
-      } catch (_) {
-        // Ignore and continue with sessionStorage below
-      }
-      // Mirror into sessionStorage for restrictive browser/device contexts
+        ['teacherToken', 'px_token', 'px_auth_token', 'userToken', 'sb-access-token', 'px_token_expires_at', 'px_refresh_token'].forEach((k) => {
+          localStorage.removeItem(k);
+        });
+      } catch (_) { }
       try {
-        sessionStorage.setItem('teacherToken', access);
-        sessionStorage.setItem('px_token', access);
-        sessionStorage.setItem('px_auth_token', access);
-        sessionStorage.setItem('userToken', access);
-        sessionStorage.setItem('sb-access-token', access);
+        ['teacherToken', 'px_token', 'px_auth_token', 'userToken', 'sb-access-token', 'px_token_expires_at'].forEach((k) => {
+          sessionStorage.removeItem(k);
+        });
+      } catch (_) { }
+      try { localStorage.setItem('paperx_session_state', '1'); } catch (_) { }
+      try { sessionStorage.setItem('paperx_bearer_fallback', access); } catch (_) { }
+      try { localStorage.setItem('paperx_bearer_fallback', access); } catch (_) { }
+      try {
         if (refresh) sessionStorage.setItem('px_refresh_token', refresh);
-        if (expiresAt) sessionStorage.setItem('px_token_expires_at', expiresAt);
+        else sessionStorage.removeItem('px_refresh_token');
       } catch (_) { }
     }
 
@@ -398,11 +393,8 @@
       }
     }
 
-    function withAccessTokenFragment(path, accessToken) {
-      const token = String(accessToken || '').trim();
-      if (!token) return path;
-      const joiner = path.includes('#') ? '&' : '#';
-      return `${path}${joiner}at=${encodeURIComponent(token)}`;
+    function withAccessTokenFragment(path) {
+      return path;
     }
 
     form.addEventListener('submit', async (e) => {
@@ -436,7 +428,7 @@
         persistTeacherSession(data);
         statusEl.classList.remove('hidden');
         statusEl.textContent = 'Signed in. Checking role...';
-        const st = await fetch(base + '/api/teacher/me/status', { headers: { 'Authorization': 'Bearer ' + data.access_token } });
+        const st = await fetch(base + '/api/teacher/me/status', { credentials: 'include' });
         if (!st.ok) {
           console.warn('[login] status check failed', st.status);
           friendlyError('Could not verify role (status ' + st.status + ').');

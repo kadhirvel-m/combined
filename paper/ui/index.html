@@ -2203,6 +2203,9 @@
             const navProfile = document.getElementById('navProfile');
             const navProfileMobile = document.getElementById('navProfileMobile');
             const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+            const ensureAuthReady = (typeof window.__PX_ENSURE_AUTH_READY === 'function')
+                ? window.__PX_ENSURE_AUTH_READY
+                : (async () => false);
 
             let isTeacher = false;
             let isHod = false;
@@ -2218,6 +2221,9 @@
                 isTeacher = !!(tTeach && tTeach !== AUTH_SENTINEL);
                 isStudent = !!(tUser && tUser !== AUTH_SENTINEL);
             } catch (_) { }
+
+            // Avoid first protected-call 401 by warming auth once when session markers exist.
+            try { await ensureAuthReady(); } catch (_) { }
 
             if (!isTeacher && !isStudent) {
                 try {
@@ -2367,6 +2373,10 @@
             const podiumEl = document.getElementById('podiumContainer');
             if (!podiumEl) return;
 
+            const ensureAuthReady = (typeof window.__PX_ENSURE_AUTH_READY === 'function')
+                ? window.__PX_ENSURE_AUTH_READY
+                : (async () => false);
+
             // FIX: Enforce horizontal layout on all screens (flex-row)
             podiumEl.className = 'flex flex-row items-end justify-center gap-3 md:gap-16 min-h-[220px] pb-4';
 
@@ -2397,6 +2407,7 @@
 
             try {
                 const apiBase = (window.API_BASE || '').replace(/\/$/, '');
+                try { await ensureAuthReady(); } catch (_) { }
                 const res = await fetch(`${apiBase}/api/leaderboard?limit=3`);
                 if (!res.ok) throw new Error(`API Error: ${res.status}`);
                 const data = await res.json();

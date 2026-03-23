@@ -1724,6 +1724,9 @@
         }
         const consumedSubjectOpenIds = loadDailySet(consumedSubjectOpenStorageKey);
         let __pxAccessSummary = null;
+        const ensureAuthReady = (typeof window.__PX_ENSURE_AUTH_READY === 'function')
+            ? window.__PX_ENSURE_AUTH_READY
+            : (async () => false);
         const $ = (id) => document.getElementById(id);
         const setText = (id, val) => { const n = $(id); if (n) n.textContent = val ?? '-'; };
         function initials(name) { if (!name) return 'U'; return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase()).join('') || 'U'; }
@@ -1923,12 +1926,14 @@
             const TOKEN_EXPIRES_KEY = 'px_token_expires_at';
             const USER_TOKEN_KEY = 'px_token';
 
-            const refreshToken = normalizeStoredAuthValue(localStorage.getItem(REFRESH_TOKEN_KEY));
+            const localRefreshToken = normalizeStoredAuthValue(localStorage.getItem(REFRESH_TOKEN_KEY));
+            const sessionRefreshToken = normalizeStoredAuthValue(sessionStorage.getItem(REFRESH_TOKEN_KEY));
             const expiresAt = normalizeStoredAuthValue(localStorage.getItem(TOKEN_EXPIRES_KEY));
             const accessToken = normalizeStoredAuthValue(localStorage.getItem(USER_TOKEN_KEY));
 
             // If no stored refresh token but cookie session exists, let backend refresh via cookie fallback.
             const hasCookieSession = hasCookieAuthState();
+            const refreshToken = hasCookieSession ? null : (sessionRefreshToken || localRefreshToken);
             if (!refreshToken && !hasCookieSession) return false;
 
             if (!force && !refreshToken && hasCookieSession) {
@@ -1966,6 +1971,7 @@
                         localStorage.removeItem(USER_TOKEN_KEY);
                         localStorage.removeItem(REFRESH_TOKEN_KEY);
                         localStorage.removeItem(TOKEN_EXPIRES_KEY);
+                        sessionStorage.removeItem(REFRESH_TOKEN_KEY);
                     } catch { }
                     return true;
                 }
@@ -1977,8 +1983,9 @@
         }
 
         async function loadProfileAndProgress() {
-            // First attempt to refresh token if needed
+            // Warm auth once so first protected API wave does not race a refresh.
             setLoaderStatus('Verifying session...');
+            await ensureAuthReady();
             await refreshTokenIfNeeded(false);
 
             clearProgressError();
@@ -2059,7 +2066,8 @@
                 completedTopicIds.clear();
                 progressIds.forEach(id => completedTopicIds.add(id));
 
-                const syllabus = Array.isArray(meOut.data?.syllabus) ? meOut.data.syllabus : [];
+                let syllabus = Array.isArray(meOut.data?.syllabus) ? meOut.data.syllabus : [];
+                syllabus = await hydrateSyllabusCourses(syllabus);
                 const emptyState = $('syllabusEmpty');
                 if (emptyState) emptyState.classList.toggle('hidden', Boolean(syllabus.length));
                 setLoaderStatus('Loading syllabus...');
@@ -2097,6 +2105,72 @@
                 console.warn('[Academics] attempt load failed', err);
                 return { ok: false };
             }
+        }
+
+        function countCourseTopics(course) {
+            try {
+                let total = 0;
+                const units = Array.isArray(course?.units) ? course.units : [];
+                units.forEach((u) => {
+                    const topics = Array.isArray(u?.topics) ? u.topics : [];
+                    total += topics.length;
+                });
+                return total;
+            } catch {
+                return 0;
+            }
+        }
+
+        function normalizeHydratedCourse(raw, fallback) {
+            if (!raw || typeof raw !== 'object') return fallback;
+            const merged = {
+                id: raw.id || fallback?.id || null,
+                course_code: raw.course_code || fallback?.course_code || '',
+                title: raw.title || fallback?.title || '',
+                semester: raw.semester || fallback?.semester || '',
+                type: raw.type || fallback?.type || '',
+                units: []
+            };
+            const units = Array.isArray(raw.units) ? raw.units : [];
+            merged.units = units.map((u) => ({
+                id: u?.id || null,
+                unit_title: u?.unit_title || u?.title || 'Unit',
+                order_in_course: u?.order_in_course,
+                topics: (Array.isArray(u?.topics) ? u.topics : []).map((t) => ({
+                    id: t?.id || null,
+                    topic: t?.topic || '',
+                    order_in_unit: t?.order_in_unit,
+                    image_url: t?.image_url || '',
+                    lab_url: t?.lab_url || ''
+                }))
+            }));
+            return merged;
+        }
+
+        async function hydrateSyllabusCourses(syllabus) {
+            const courses = Array.isArray(syllabus) ? syllabus : [];
+            if (!courses.length) return courses;
+
+            const hydrated = await Promise.all(courses.map(async (course) => {
+                const courseId = String(course?.id || '').trim();
+                if (!courseId) return course;
+
+                const fallbackTopics = countCourseTopics(course);
+                const maxAttempts = 3;
+                for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                    const out = await fetchJson(`${API_BASE}/api/syllabus/courses/${encodeURIComponent(courseId)}`, { headers: authHeaders() });
+                    if (isSuccess(out) && out.data) {
+                        const candidate = normalizeHydratedCourse(out.data, course);
+                        const candidateTopics = countCourseTopics(candidate);
+                        return candidateTopics >= fallbackTopics ? candidate : course;
+                    }
+                    if (out.unauthorized) return course;
+                    await wait(220 * (attempt + 1));
+                }
+                return course;
+            }));
+
+            return hydrated;
         }
 
         async function loadTeacherNotesForSubjects(syllabus = []) {

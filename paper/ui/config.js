@@ -261,6 +261,7 @@
     var AUTH_SENTINEL = '__COOKIE_AUTH__';
     var AUTH_STATE_KEY = 'paperx_session_state';
     var BEARER_FALLBACK_KEY = 'paperx_bearer_fallback';
+    var REFRESH_SUPPRESS_UNTIL_KEY = 'paperx_refresh_suppress_until';
     var stateCookieName = 'paperx_auth=';
 
     function hasAuthStateCookie() {
@@ -313,6 +314,42 @@
       try { localStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
     }
 
+    function _normalizeRefreshTokenValue(v) {
+      var tok = String(v || '').trim();
+      if (!tok || tok === AUTH_SENTINEL || tok === 'null' || tok === 'undefined') return '';
+      return tok;
+    }
+
+    function _readRefreshCandidate() {
+      try {
+        var sessionTok = _normalizeRefreshTokenValue(sessionStorage.getItem('px_refresh_token'));
+        if (sessionTok) return sessionTok;
+      } catch (_) { }
+      try {
+        // Use the original storage getter to bypass token sentinel shims.
+        var persistedTok = _normalizeRefreshTokenValue(_getItem.call(localStorage, 'px_refresh_token'));
+        if (persistedTok) return persistedTok;
+      } catch (_) { }
+      return '';
+    }
+
+    function _suppressRefreshFor(ms) {
+      try {
+        var until = Date.now() + Math.max(1000, Number(ms) || 0);
+        sessionStorage.setItem(REFRESH_SUPPRESS_UNTIL_KEY, String(until));
+      } catch (_) { }
+    }
+
+    function _isRefreshSuppressed() {
+      try {
+        var raw = sessionStorage.getItem(REFRESH_SUPPRESS_UNTIL_KEY);
+        var until = raw ? Number(raw) : 0;
+        return Number.isFinite(until) && until > Date.now();
+      } catch (_) {
+        return false;
+      }
+    }
+
     function isTokenLikeKey(k) {
       if (!k) return false;
       if (TOKEN_KEYS.has(k)) return true;
@@ -339,6 +376,23 @@
       }
       for (var j = 0; j < keysToRemove.length; j++) {
         try { _removeItem.call(localStorage, keysToRemove[j]); } catch (_) { }
+      }
+
+      // Also clear legacy sessionStorage bearer keys from older teacher/user flows.
+      // Keep paperx_bearer_fallback and session-state controls intact.
+      var sessionLegacyKeys = [
+        'teacherToken',
+        'px_token',
+        'px_auth_token',
+        'userToken',
+        'sb-access-token',
+        'supabase.auth.token',
+        'access_token',
+        'auth_token',
+        'px_token_expires_at'
+      ];
+      for (var s = 0; s < sessionLegacyKeys.length; s++) {
+        try { sessionStorage.removeItem(sessionLegacyKeys[s]); } catch (_) { }
       }
     } catch (_) { }
 
@@ -467,6 +521,10 @@
     var _refreshPromise = null;
     function _attemptAutoRefresh() {
       if (_refreshPromise) return _refreshPromise;
+      if (_isRefreshSuppressed()) {
+        _refreshPromise = Promise.resolve(false);
+        return _refreshPromise.finally(function () { _refreshPromise = null; });
+      }
 
       var apiBase = String(window.API_BASE || window.__API_BASE || '').replace(/\/$/, '');
       if (!apiBase) {
@@ -475,24 +533,40 @@
       }
 
       var refreshUrl = apiBase + '/refresh';
+      // When cookie auth is present, prefer cookie-based refresh and avoid sending a potentially stale body token.
+      var refreshTokenCandidate = hasAuthStateCookie() ? '' : _readRefreshCandidate();
+      var refreshPayload = refreshTokenCandidate ? { refresh_token: refreshTokenCandidate } : {};
       _refreshPromise = _fetch(refreshUrl, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        // Cookie-based refresh works with an empty body.
-        body: '{}'
+        body: JSON.stringify(refreshPayload)
       }).then(function (res) {
-        if (!res.ok) return false;
+        if (!res.ok) {
+          if (res.status === 400 || res.status === 401 || res.status === 403) {
+            setAuthStateMarker(false);
+            clearBearerFallback();
+            _suppressRefreshFor(2 * 60 * 1000);
+            try { _removeItem.call(localStorage, 'px_refresh_token'); } catch (_) { }
+            try { sessionStorage.removeItem('px_refresh_token'); } catch (_) { }
+          } else {
+            _suppressRefreshFor(30 * 1000);
+          }
+          return false;
+        }
         return res.json().then(function (data) {
           var at = data && data.access_token ? String(data.access_token).trim() : '';
           if (at) _setBearerFallback(at);
           setAuthStateMarker(true);
+          try { sessionStorage.removeItem(REFRESH_SUPPRESS_UNTIL_KEY); } catch (_) { }
           return true;
         }).catch(function () {
           setAuthStateMarker(true);
+          try { sessionStorage.removeItem(REFRESH_SUPPRESS_UNTIL_KEY); } catch (_) { }
           return true;
         });
       }).catch(function () {
+        _suppressRefreshFor(20 * 1000);
         return false;
       }).finally(function () {
         _refreshPromise = null;
@@ -500,6 +574,19 @@
 
       return _refreshPromise;
     }
+
+    // Public helper for pages that want to avoid first-request 401 latency.
+    // It preserves security by using the same /refresh flow and cookie/CSRF behavior.
+    window.__PX_ENSURE_AUTH_READY = function () {
+      try {
+        if (!(hasAuthState() || !!getBearerFallback())) {
+          return Promise.resolve(false);
+        }
+      } catch (_) {
+        return Promise.resolve(false);
+      }
+      return _attemptAutoRefresh().then(function (ok) { return !!ok; }).catch(function () { return false; });
+    };
 
     window.fetch = function (input, init) {
       init = init || {};

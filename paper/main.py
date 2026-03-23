@@ -13150,14 +13150,49 @@ def teacher_me_status(authorization: Optional[str] = Header(default=None), http_
         request=req_obj,
         endpoint_name="teacher_me_status",
     )
-    app_q = supabase.table("teacher_applications").select("status").eq("auth_user_id", uid).limit(1).execute()
-    if getattr(app_q, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get teacher status): {app_q.error}")
-    status = app_q.data[0]["status"] if app_q.data else None
-    role_q = supabase.table("admin_roles").select("role").eq("auth_user_id", uid).limit(1).execute()
+    status = None
     current_role = None
-    if not getattr(role_q, "error", None) and role_q.data:
-        current_role = role_q.data[0].get("role")
+    try:
+        app_q = _supabase_retry(
+            lambda: (
+                supabase
+                .table("teacher_applications")
+                .select("status")
+                .eq("auth_user_id", uid)
+                .limit(1)
+                .execute()
+            )
+        )
+        if getattr(app_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (get teacher status): {app_q.error}")
+        status = app_q.data[0]["status"] if app_q.data else None
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network timing dependent
+        logging.getLogger("teachers").warning(
+            "teacher_me_status transient protocol error on application lookup uid=%s: %s",
+            uid,
+            exc,
+        )
+
+    try:
+        role_q = _supabase_retry(
+            lambda: (
+                supabase
+                .table("admin_roles")
+                .select("role")
+                .eq("auth_user_id", uid)
+                .limit(1)
+                .execute()
+            )
+        )
+        if not getattr(role_q, "error", None) and role_q.data:
+            current_role = role_q.data[0].get("role")
+    except HTTPXRemoteProtocolError as exc:  # pragma: no cover - network timing dependent
+        logging.getLogger("teachers").warning(
+            "teacher_me_status transient protocol error on role lookup uid=%s: %s",
+            uid,
+            exc,
+        )
+
     return {"status": status, "role": current_role}
 
 
@@ -14304,6 +14339,12 @@ class HodAiAgendaIn(BaseModel):
     days: int = Field(default=14, ge=1, le=180)
 
 
+class HodChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+    confirm_new_password: str = Field(min_length=8, max_length=128)
+
+
 def _enrich_departments(supabase: Client, department_ids: List[str]) -> List[Dict[str, Any]]:
     if not department_ids:
         return []
@@ -14351,6 +14392,86 @@ def hod_me(authorization: Optional[str] = Header(default=None)):
         "departments": departments,
         "college": college,
     }
+
+
+@teacher_router.post("/api/hod/change-password", summary="HOD: change account password")
+def hod_change_password(
+    payload: HodChangePasswordIn,
+    authorization: Optional[str] = Header(default=None),
+    request: Request = None,
+):
+    request_obj = _resolve_request_for_auth(request)
+    hod_user_id = _require_hod(authorization)
+    _, auth_email = _get_auth_user(authorization)
+
+    current_password = payload.current_password or ""
+    new_password = payload.new_password or ""
+    confirm_password = payload.confirm_new_password or ""
+
+    if not current_password:
+        raise HTTPException(status_code=400, detail="Current password is required")
+    if new_password != confirm_password:
+        raise HTTPException(status_code=400, detail="New password and confirm password do not match")
+    if current_password == new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+
+    email = (auth_email or "").strip().lower()
+    if not email:
+        supabase = get_service_client()
+        prof = (
+            supabase.table("teacher_profiles")
+            .select("email")
+            .eq("auth_user_id", hod_user_id)
+            .limit(1)
+            .execute()
+        )
+        if not getattr(prof, "error", None) and prof.data:
+            email = (prof.data[0].get("email") or "").strip().lower()
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Unable to resolve account email for password verification")
+
+    anon_client = get_anon_client()
+    if not anon_client:
+        raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
+
+    try:
+        anon_client.auth.sign_in_with_password({"email": email, "password": current_password})
+    except Exception:
+        _security_emit(
+            "auth.password.change.failure",
+            request=request_obj,
+            severity="warning",
+            user_id=hod_user_id,
+            email=email,
+            reason="invalid_current_password",
+        )
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+    try:
+        supabase = get_service_client()
+        supabase.auth.admin.update_user_by_id(hod_user_id, {"password": new_password})
+        _security_emit(
+            "auth.password.change.success",
+            request=request_obj,
+            user_id=hod_user_id,
+            email=email,
+            source="hod_portal",
+        )
+        return {"message": "Password changed successfully"}
+    except HTTPException:
+        raise
+    except Exception:
+        supabase_logger.exception("HOD password change failed")
+        _security_emit(
+            "auth.password.change.failure",
+            request=request_obj,
+            severity="warning",
+            user_id=hod_user_id,
+            email=email,
+            reason="update_failed",
+        )
+        raise HTTPException(status_code=500, detail="Failed to change password")
 
 
 @teacher_router.get("/api/hod/classes", summary="HOD: list classes in my departments")
@@ -17622,7 +17743,9 @@ def refresh_token(request: Request, payload: Optional[RefreshTokenRequest] = Bod
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_ANON_KEY")
     body_refresh = _normalize_possible_token(payload.refresh_token) if payload else None
     cookie_refresh = _token_from_cookie(_resolve_request_for_auth(request), AUTH_REFRESH_COOKIE_NAME)
-    refresh_candidate = body_refresh or cookie_refresh
+    # Prefer HttpOnly cookie refresh token when available.
+    # This avoids stale client-side fallback tokens triggering false reuse-detection revocations.
+    refresh_candidate = cookie_refresh or body_refresh
     if not refresh_candidate:
         raise HTTPException(status_code=400, detail="refresh_token is required")
 
@@ -29029,10 +29152,30 @@ async def analytics_track_event(payload: AnalyticsEventModel):
     def _insert_once(event_payload: Dict[str, Any]) -> None:
         get_service_client().table("analytics_events").insert(event_payload).execute()
 
+    def _ensure_session_exists(session_id: str, user_id: Optional[str]) -> None:
+        if not session_id:
+            return
+        session_payload: Dict[str, Any] = {
+            "id": session_id,
+            "last_seen_at": datetime.utcnow().isoformat(),
+        }
+        if user_id:
+            session_payload["user_id"] = user_id
+        get_service_client().table("user_sessions").upsert(session_payload).execute()
+
+    def _looks_like_missing_session_fk(err: Exception) -> bool:
+        text = str(err or "").lower()
+        return (
+            "analytics_events_session_id_fkey" in text
+            or ("foreign key" in text and "session_id" in text and "user_sessions" in text)
+        )
+
     try:
         await run_in_threadpool(_insert_once, data)
     except Exception as first_error:
         try:
+            if _looks_like_missing_session_fk(first_error):
+                await run_in_threadpool(_ensure_session_exists, payload.session_id, data.get("user_id"))
             await asyncio.sleep(0.12)
             await run_in_threadpool(_insert_once, data)
         except Exception as second_error:
