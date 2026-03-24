@@ -262,6 +262,13 @@
     var AUTH_STATE_KEY = 'paperx_session_state';
     var BEARER_FALLBACK_KEY = 'paperx_bearer_fallback';
     var REFRESH_SUPPRESS_UNTIL_KEY = 'paperx_refresh_suppress_until';
+    var REFRESH_LOCK_KEY = 'paperx_refresh_lock';
+    var REFRESH_EVENT_KEY = 'paperx_refresh_event';
+    var LAST_REFRESH_OK_AT_KEY = 'paperx_last_refresh_ok_at';
+    var REFRESH_LOCK_TTL_MS = 15000;
+    var REFRESH_WAIT_TIMEOUT_MS = 12000;
+    var REFRESH_COOLDOWN_MS = 45000;
+    var TAB_ID = 'px-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
     var stateCookieName = 'paperx_auth=';
 
     function hasAuthStateCookie() {
@@ -348,6 +355,150 @@
       } catch (_) {
         return false;
       }
+    }
+
+    function _readJsonLocalStorage(key) {
+      try {
+        var raw = String(localStorage.getItem(key) || '').trim();
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function _writeJsonLocalStorage(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function _readLastRefreshOkAt() {
+      try {
+        var v = Number(localStorage.getItem(LAST_REFRESH_OK_AT_KEY) || 0);
+        return Number.isFinite(v) ? v : 0;
+      } catch (_) {
+        return 0;
+      }
+    }
+
+    function _markRefreshOkNow() {
+      try { localStorage.setItem(LAST_REFRESH_OK_AT_KEY, String(Date.now())); } catch (_) { }
+    }
+
+    function _acquireRefreshLock() {
+      var now = Date.now();
+      var existing = _readJsonLocalStorage(REFRESH_LOCK_KEY);
+      if (existing && existing.owner && existing.owner !== TAB_ID) {
+        var existingExp = Number(existing.expiresAt || 0);
+        if (Number.isFinite(existingExp) && existingExp > now) {
+          return false;
+        }
+      }
+      var next = { owner: TAB_ID, expiresAt: now + REFRESH_LOCK_TTL_MS, ts: now };
+      if (!_writeJsonLocalStorage(REFRESH_LOCK_KEY, next)) return false;
+      var verify = _readJsonLocalStorage(REFRESH_LOCK_KEY);
+      return !!(verify && verify.owner === TAB_ID);
+    }
+
+    function _extendRefreshLock() {
+      try {
+        var current = _readJsonLocalStorage(REFRESH_LOCK_KEY);
+        if (!current || current.owner !== TAB_ID) return;
+        _writeJsonLocalStorage(REFRESH_LOCK_KEY, {
+          owner: TAB_ID,
+          expiresAt: Date.now() + REFRESH_LOCK_TTL_MS,
+          ts: Date.now()
+        });
+      } catch (_) { }
+    }
+
+    function _releaseRefreshLock() {
+      try {
+        var current = _readJsonLocalStorage(REFRESH_LOCK_KEY);
+        if (current && current.owner === TAB_ID) {
+          localStorage.removeItem(REFRESH_LOCK_KEY);
+        }
+      } catch (_) { }
+    }
+
+    function _emitRefreshEvent(ok, reason) {
+      _writeJsonLocalStorage(REFRESH_EVENT_KEY, {
+        owner: TAB_ID,
+        ok: !!ok,
+        reason: String(reason || ''),
+        ts: Date.now()
+      });
+      if (ok) _markRefreshOkNow();
+    }
+
+    function _waitForRefreshFromOtherTab() {
+      return new Promise(function (resolve) {
+        var resolved = false;
+        var startedAt = Date.now();
+
+        function finish(value) {
+          if (resolved) return;
+          resolved = true;
+          try { window.removeEventListener('storage', onStorage); } catch (_) { }
+          resolve(!!value);
+        }
+
+        function onStorage(evt) {
+          if (!evt) return;
+          if (evt.key === REFRESH_EVENT_KEY && evt.newValue) {
+            try {
+              var payload = JSON.parse(evt.newValue);
+              if (!payload || payload.owner === TAB_ID) return;
+              if ((Date.now() - Number(payload.ts || 0)) > REFRESH_WAIT_TIMEOUT_MS) return;
+              finish(!!payload.ok);
+            } catch (_) { }
+            return;
+          }
+          if (evt.key === REFRESH_LOCK_KEY && !evt.newValue) {
+            // Lock released without event; fallback to checking current auth state.
+            finish(hasAuthState() || !!getBearerFallback());
+          }
+        }
+
+        try { window.addEventListener('storage', onStorage); } catch (_) { }
+
+        var timer = setInterval(function () {
+          if (resolved) {
+            clearInterval(timer);
+            return;
+          }
+          var now = Date.now();
+          if ((now - startedAt) >= REFRESH_WAIT_TIMEOUT_MS) {
+            clearInterval(timer);
+            finish(hasAuthState() || !!getBearerFallback());
+            return;
+          }
+          var lock = _readJsonLocalStorage(REFRESH_LOCK_KEY);
+          if (!lock || !lock.owner) {
+            clearInterval(timer);
+            finish(hasAuthState() || !!getBearerFallback());
+            return;
+          }
+          if (lock.owner !== TAB_ID) {
+            var exp = Number(lock.expiresAt || 0);
+            if (Number.isFinite(exp) && exp <= now) {
+              clearInterval(timer);
+              finish(hasAuthState() || !!getBearerFallback());
+            }
+          }
+        }, 300);
+
+        // Fast path: consume very recent refresh event if already published.
+        var latest = _readJsonLocalStorage(REFRESH_EVENT_KEY);
+        if (latest && latest.owner !== TAB_ID && (Date.now() - Number(latest.ts || 0)) < 2500) {
+          clearInterval(timer);
+          finish(!!latest.ok);
+        }
+      });
     }
 
     function isTokenLikeKey(k) {
@@ -527,15 +678,39 @@
     var _refreshPromise = null;
     function _attemptAutoRefresh() {
       if (_refreshPromise) return _refreshPromise;
+
+      var hasSessionState = hasAuthState() || !!getBearerFallback();
+      if (hasSessionState) {
+        var lastOkAt = _readLastRefreshOkAt();
+        if (lastOkAt && (Date.now() - lastOkAt) < REFRESH_COOLDOWN_MS) {
+          _refreshPromise = Promise.resolve(true);
+          return _refreshPromise.finally(function () { _refreshPromise = null; });
+        }
+      }
+
       if (_isRefreshSuppressed()) {
         _refreshPromise = Promise.resolve(false);
         return _refreshPromise.finally(function () { _refreshPromise = null; });
       }
 
+      if (!_acquireRefreshLock()) {
+        _refreshPromise = _waitForRefreshFromOtherTab()
+          .then(function (ok) {
+            if (ok) return true;
+            return hasAuthState() || !!getBearerFallback();
+          })
+          .finally(function () { _refreshPromise = null; });
+        return _refreshPromise;
+      }
+
       var apiBase = String(window.API_BASE || window.__API_BASE || '').replace(/\/$/, '');
       if (!apiBase) {
         _refreshPromise = Promise.resolve(false);
-        return _refreshPromise.finally(function () { _refreshPromise = null; });
+        return _refreshPromise.finally(function () {
+          _emitRefreshEvent(false, 'missing-api-base');
+          _releaseRefreshLock();
+          _refreshPromise = null;
+        });
       }
 
       var hasCookieSession = hasAuthStateCookie();
@@ -549,7 +724,11 @@
           setAuthStateMarker(false);
         }
         _refreshPromise = Promise.resolve(!!bearerFallback);
-        return _refreshPromise.finally(function () { _refreshPromise = null; });
+        return _refreshPromise.finally(function () {
+          _emitRefreshEvent(!!bearerFallback, 'no-refresh-credential');
+          _releaseRefreshLock();
+          _refreshPromise = null;
+        });
       }
 
       var refreshUrl = apiBase + '/refresh';
@@ -560,6 +739,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(refreshPayload)
       }).then(function (res) {
+        _extendRefreshLock();
         if (!res.ok) {
           var hasCookie = hasAuthStateCookie();
           if (res.status === 429) {
@@ -585,6 +765,7 @@
           } else {
             _suppressRefreshFor(30 * 1000);
           }
+          _emitRefreshEvent(false, 'refresh-http-' + String(res.status));
           return false;
         }
         return res.json().then(function (data) {
@@ -592,16 +773,20 @@
           if (at) _setBearerFallback(at);
           setAuthStateMarker(true);
           try { sessionStorage.removeItem(REFRESH_SUPPRESS_UNTIL_KEY); } catch (_) { }
+          _emitRefreshEvent(true, 'refresh-ok');
           return true;
         }).catch(function () {
           setAuthStateMarker(true);
           try { sessionStorage.removeItem(REFRESH_SUPPRESS_UNTIL_KEY); } catch (_) { }
+          _emitRefreshEvent(true, 'refresh-ok-no-json');
           return true;
         });
       }).catch(function () {
         _suppressRefreshFor(20 * 1000);
+        _emitRefreshEvent(false, 'refresh-network-error');
         return false;
       }).finally(function () {
+        _releaseRefreshLock();
         _refreshPromise = null;
       });
 
