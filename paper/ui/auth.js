@@ -121,21 +121,34 @@
       });
       if (!res.ok) {
         console.error('[Auth] Refresh request failed:', res.status);
+        if (res.status === 429) {
+          // Too many refresh attempts (often from multi-tab/page-load bursts).
+          // Keep current auth state and back off briefly.
+          suppressRefreshTemporarily(2 * 60 * 1000);
+          return !!fallback || hasAuthState();
+        }
         // Stale/invalid refresh token should be dropped to avoid endless 400 loops.
         if (res.status === 400) {
-          try { safeRemove(REFRESH_TOKEN_KEY); } catch (_) { }
+          if (!hasCookieSession) {
+            try { safeRemove(REFRESH_TOKEN_KEY); } catch (_) { }
+            try { sessionStorage.removeItem(REFRESH_TOKEN_KEY); } catch (_) { }
+          }
           suppressRefreshTemporarily(5 * 60 * 1000);
         } else if (res.status === 401 || res.status === 403) {
-          try { safeRemove(REFRESH_TOKEN_KEY); } catch (_) { }
-          try { sessionStorage.removeItem(REFRESH_TOKEN_KEY); } catch (_) { }
-          try { safeRemove('paperx_session_state'); } catch (_) { }
-          try { sessionStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
-          try { localStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
+          // If we still have cookie-auth, avoid force-clearing session markers.
+          // Another tab/page may have already rotated refresh state.
+          if (!hasCookieSession) {
+            try { safeRemove(REFRESH_TOKEN_KEY); } catch (_) { }
+            try { sessionStorage.removeItem(REFRESH_TOKEN_KEY); } catch (_) { }
+            try { safeRemove('paperx_session_state'); } catch (_) { }
+            try { sessionStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
+            try { localStorage.removeItem(BEARER_FALLBACK_KEY); } catch (_) { }
+          }
           suppressRefreshTemporarily(60 * 1000);
         }
         // Do not clear session markers/tokens here; this can cause auth bounce loops
         // in privacy-hardened browsers where refresh cookies are blocked.
-        return false;
+        return !!fallback || hasAuthState();
       }
       const data = await res.json();
       try {
@@ -339,7 +352,15 @@
         reqHeaders.Authorization = `Bearer ${session.token}`;
       }
       const res = await fetch(url, { headers: reqHeaders, credentials: 'include' });
-      if(res.status === 401){ safeRemove(USER_TOKEN_KEY); safeRemove(TEACHER_TOKEN_KEY); showAuthButtons(); hideSessionUI(); return; }
+      if (res.status === 401) {
+        // Avoid UI sign-out flicker during transient auth/refresh races.
+        if (hasAuthState()) return;
+        safeRemove(USER_TOKEN_KEY);
+        safeRemove(TEACHER_TOKEN_KEY);
+        showAuthButtons();
+        hideSessionUI();
+        return;
+      }
       const data = await res.json().catch(()=>({}));
       const profile = session.kind === 'teacher'
         ? ((data && (data.teacher || data.profile || data)) || {})
@@ -360,7 +381,14 @@
       const session = activeSession();
       if (!session.token) { showAuthButtons(); hideSessionUI(); return; }
       const res = await fetch(`${API}/api/shop/me`, { headers: { Authorization: `Bearer ${session.token}` }});
-      if(res.status === 401){ safeRemove(USER_TOKEN_KEY); safeRemove(TEACHER_TOKEN_KEY); showAuthButtons(); hideSessionUI(); return; }
+      if (res.status === 401) {
+        if (hasAuthState()) return;
+        safeRemove(USER_TOKEN_KEY);
+        safeRemove(TEACHER_TOKEN_KEY);
+        showAuthButtons();
+        hideSessionUI();
+        return;
+      }
       if(res.status === 404){ fetchProfile(); return; }
       if(!res.ok) return;
       const shop = await res.json().catch(()=>null);
@@ -386,7 +414,10 @@
     const hasRefreshToken = !!getUsableRefreshToken();
     const hasSessionState = hasAuthState();
     if (hasRefreshToken || hasSessionState) {
-      const refreshed = await refreshTokensIfNeeded();
+      const refreshFn = (typeof window.__PX_ENSURE_AUTH_READY === 'function')
+        ? window.__PX_ENSURE_AUTH_READY
+        : refreshTokensIfNeeded;
+      const refreshed = await refreshFn();
       if (!refreshed && !safeGet(USER_TOKEN_KEY) && !getBearerFallbackToken()) {
         console.warn('[Auth] Init - Refresh failed and no active cookie session. Keeping current auth markers.');
       }

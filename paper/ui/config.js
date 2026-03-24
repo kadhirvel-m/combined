@@ -507,8 +507,14 @@
         if (pathname === '/api/me') {
           if (response.ok) setAuthStateMarker(true);
           if (response.status === 401) {
-            setAuthStateMarker(false);
-            clearBearerFallback();
+            // Keep state when cookie auth is present to prevent noisy sign-out loops
+            // from transient /api/me auth races.
+            if (hasAuthStateCookie()) {
+              _suppressRefreshFor(30 * 1000);
+            } else {
+              setAuthStateMarker(false);
+              clearBearerFallback();
+            }
           }
         }
         if (pathname === '/logout' && response.ok) {
@@ -532,9 +538,21 @@
         return _refreshPromise.finally(function () { _refreshPromise = null; });
       }
 
-      var refreshUrl = apiBase + '/refresh';
+      var hasCookieSession = hasAuthStateCookie();
       // When cookie auth is present, prefer cookie-based refresh and avoid sending a potentially stale body token.
-      var refreshTokenCandidate = hasAuthStateCookie() ? '' : _readRefreshCandidate();
+      var refreshTokenCandidate = hasCookieSession ? '' : _readRefreshCandidate();
+      var bearerFallback = getBearerFallback();
+      // If we only have a stale local "session marker" but no actual refresh credential,
+      // skip /refresh to avoid repeated 400 loops and clear marker drift.
+      if (!hasCookieSession && !refreshTokenCandidate) {
+        if (!bearerFallback) {
+          setAuthStateMarker(false);
+        }
+        _refreshPromise = Promise.resolve(!!bearerFallback);
+        return _refreshPromise.finally(function () { _refreshPromise = null; });
+      }
+
+      var refreshUrl = apiBase + '/refresh';
       var refreshPayload = refreshTokenCandidate ? { refresh_token: refreshTokenCandidate } : {};
       _refreshPromise = _fetch(refreshUrl, {
         method: 'POST',
@@ -543,12 +561,27 @@
         body: JSON.stringify(refreshPayload)
       }).then(function (res) {
         if (!res.ok) {
-          if (res.status === 400 || res.status === 401 || res.status === 403) {
-            setAuthStateMarker(false);
-            clearBearerFallback();
+          var hasCookie = hasAuthStateCookie();
+          if (res.status === 429) {
+            // Refresh storms can happen when many pages/tabs bootstrap together.
+            // Back off without dropping current session markers.
             _suppressRefreshFor(2 * 60 * 1000);
-            try { _removeItem.call(localStorage, 'px_refresh_token'); } catch (_) { }
-            try { sessionStorage.removeItem('px_refresh_token'); } catch (_) { }
+            if (hasCookie) setAuthStateMarker(true);
+            return false;
+          }
+          if (res.status === 400 || res.status === 401 || res.status === 403) {
+            // Do not aggressively sign out if cookie-based auth still exists.
+            if (!hasCookie) {
+              setAuthStateMarker(false);
+              clearBearerFallback();
+            } else {
+              setAuthStateMarker(true);
+            }
+            _suppressRefreshFor(2 * 60 * 1000);
+            if (!hasCookie) {
+              try { _removeItem.call(localStorage, 'px_refresh_token'); } catch (_) { }
+              try { sessionStorage.removeItem('px_refresh_token'); } catch (_) { }
+            }
           } else {
             _suppressRefreshFor(30 * 1000);
           }
