@@ -428,7 +428,7 @@
 
             return `
                 <div class="glass-panel rounded-2xl overflow-hidden class-section animate-fadeUp" data-collapsed="true" style="animation-delay: ${idx * 0.08}s">
-                    <div class="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-white/50 dark:hover:bg-white/5 transition-colors border-b border-black/5 dark:border-white/10" onclick="toggleSection(this.parentElement)">
+                    <div class="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-white/50 dark:hover:bg-white/5 transition-colors border-b border-black/5 dark:border-white/10" data-class-toggle>
                         <div class="flex items-center gap-3">
                             <span class="material-symbols-rounded text-neutral-500 transition-transform duration-200" data-caret>expand_more</span>
                             <div>
@@ -461,6 +461,17 @@
         function toggleSection(el) {
             const collapsed = el.dataset.collapsed === 'true';
             el.dataset.collapsed = collapsed ? 'false' : 'true';
+        }
+
+        function attachClassSectionHandlers() {
+            document.querySelectorAll('[data-class-toggle]').forEach(header => {
+                if (header.dataset.bound === '1') return;
+                header.dataset.bound = '1';
+                header.addEventListener('click', () => {
+                    const section = header.closest('.class-section');
+                    if (section) toggleSection(section);
+                });
+            });
         }
 
         function render() {
@@ -508,6 +519,7 @@
             // Group by class and render
             const grouped = groupByClass(filtered, allClasses);
             $('contentArea').innerHTML = grouped.map((c, i) => renderClassSection(c, i)).join('');
+            attachClassSectionHandlers();
             $('contentArea').classList.remove('hidden');
         }
 

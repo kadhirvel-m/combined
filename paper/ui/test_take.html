@@ -137,7 +137,10 @@
                     if (obj.data && obj.data.session && obj.data.session.access_token) return obj.data.session.access_token;
                 }
             } catch (_) { /* raw string */ }
-            return raw;
+            const t = String(raw || '').trim();
+            if (!t) return '';
+            if (t === '__COOKIE_AUTH__' || t === '__cookie__' || t === 'cookie' || t === 'null' || t === 'undefined') return '';
+            return t;
         }
 
         function getToken() {
@@ -173,6 +176,50 @@
                 }
             } catch { }
             return '';
+        }
+
+        function hasSessionSignal() {
+            try {
+                if (String(localStorage.getItem('paperx_session_state') || '').trim() === '1') return true;
+            } catch { }
+            try {
+                const fb1 = String(sessionStorage.getItem('paperx_bearer_fallback') || '').trim();
+                if (fb1) return true;
+            } catch { }
+            try {
+                const fb2 = String(localStorage.getItem('paperx_bearer_fallback') || '').trim();
+                if (fb2) return true;
+            } catch { }
+            try {
+                if ((document.cookie || '').indexOf('paperx_auth=') !== -1) return true;
+            } catch { }
+            return false;
+        }
+
+        function getAuthHeaders() {
+            const token = getToken();
+            if (token) return { Authorization: 'Bearer ' + token };
+            return {};
+        }
+
+        function isAuthDetail(detail) {
+            const s = String(detail || '').toLowerCase();
+            if (!s) return false;
+            return (
+                s.includes('unauthorized') ||
+                s.includes('invalid auth') ||
+                s.includes('invalid token') ||
+                s.includes('auth token') ||
+                s.includes('sign in') ||
+                s.includes('login required') ||
+                s.includes('not authenticated') ||
+                s.includes('authenticated user required')
+            );
+        }
+
+        function redirectToLogin() {
+            const next = `${location.pathname}${location.search || ''}${location.hash || ''}`;
+            location.href = `./login.html?next=${encodeURIComponent(next)}`;
         }
 
         const state = {
@@ -300,13 +347,14 @@
             state.testId = testId;
             if (!testId) { renderEmpty('No test specified.'); return; }
             const token = getToken();
-            if (!token) { renderEmpty('Please sign in to take this test.'); return; }
+            if (!token && !hasSessionSignal()) { redirectToLogin(); return; }
             try {
                 const base = await resolveApi();
-                const res = await fetch(`${base}/api/tests/${testId}`, { headers: { Authorization: 'Bearer ' + token } });
-                if (res.status === 401) { renderEmpty('Session expired. Sign in again.'); return; }
+                const res = await fetch(`${base}/api/tests/${testId}`, { headers: getAuthHeaders() });
+                if (res.status === 401) { redirectToLogin(); return; }
                 if (res.status === 403) {
                     const err = await res.json().catch(() => ({}));
+                    if (isAuthDetail(err?.detail)) { redirectToLogin(); return; }
                     renderEmpty((err && err.detail) ? err.detail : 'This test is restricted to a specific class.');
                     $('#notice').classList.remove('hidden');
                     $('#notice').textContent = 'Ask your teacher to assign you to that class, or request an open-to-all test link.';
@@ -315,10 +363,11 @@
                 if (!res.ok) {
                     // Retry once after a short delay for transient backend errors
                     await new Promise(r => setTimeout(r, 150));
-                    const res2 = await fetch(`${base}/api/tests/${testId}`, { headers: { Authorization: 'Bearer ' + token } });
-                    if (res2.status === 401) { renderEmpty('Session expired. Sign in again.'); return; }
+                    const res2 = await fetch(`${base}/api/tests/${testId}`, { headers: getAuthHeaders() });
+                    if (res2.status === 401) { redirectToLogin(); return; }
                     if (res2.status === 403) {
                         const err2 = await res2.json().catch(() => ({}));
+                        if (isAuthDetail(err2?.detail)) { redirectToLogin(); return; }
                         renderEmpty((err2 && err2.detail) ? err2.detail : 'This test is restricted to a specific class.');
                         $('#notice').classList.remove('hidden');
                         $('#notice').textContent = 'Ask your teacher to assign you to that class, or request an open-to-all test link.';
@@ -353,12 +402,24 @@
 
         async function startAttempt() {
             const token = getToken();
-            if (!state.testId || !token) return;
+            if (!state.testId) return;
+            if (!token && !hasSessionSignal()) { redirectToLogin(); return null; }
             const base = await resolveApi();
             const res = await fetch(`${base}/api/tests/${state.testId}/start`, {
                 method: 'POST',
-                headers: { Authorization: 'Bearer ' + token }
+                headers: getAuthHeaders()
             });
+            if (res.status === 401) {
+                redirectToLogin();
+                return null;
+            }
+            if (res.status === 403) {
+                const err = await res.json().catch(() => ({}));
+                if (isAuthDetail(err?.detail) || !hasSessionSignal()) {
+                    redirectToLogin();
+                    return null;
+                }
+            }
             if (res.status === 410) {
                 $('#notice').classList.remove('hidden');
                 $('#notice').textContent = 'This test is closed.';
@@ -378,8 +439,13 @@
             if (state.submitting) return;
             state.submitting = true;
             const token = getToken();
-            if (!state.testId || !token) {
-                renderEmpty('Please sign in to submit.');
+            if (!state.testId) {
+                renderEmpty('Missing test id.');
+                state.submitting = false;
+                return;
+            }
+            if (!token && !hasSessionSignal()) {
+                redirectToLogin();
                 state.submitting = false;
                 return;
             }
@@ -394,9 +460,21 @@
                 const base = await resolveApi();
                 const res = await fetch(`${base}/api/tests/${state.testId}/submit`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                     body: JSON.stringify({ answers, elapsed_seconds: elapsed }),
                 });
+                if (res.status === 401) {
+                    redirectToLogin();
+                    return;
+                }
+                if (res.status === 403) {
+                    const err = await res.json().catch(() => ({}));
+                    if (isAuthDetail(err?.detail) || !hasSessionSignal()) {
+                        redirectToLogin();
+                        return;
+                    }
+                    throw new Error(err?.detail || 'Submit forbidden');
+                }
                 if (res.status === 410) {
                     $('#notice').classList.remove('hidden');
                     $('#notice').textContent = 'This test is closed.';

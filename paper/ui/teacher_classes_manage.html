@@ -140,6 +140,44 @@
         function setThemeToggle() { document.addEventListener('click', e => { if (e.target.closest('[data-theme-toggle]')) { const r = document.documentElement; const d = r.classList.toggle('dark'); localStorage.setItem('px_theme', d ? 'dark' : 'light') } }) }
         function esc(s = '') { return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])) }
         const els = { grid: document.getElementById('classesGrid'), empty: document.getElementById('classesEmpty'), err: document.getElementById('classesError'), form: document.getElementById('classForm'), status: document.getElementById('formStatus'), filter: document.getElementById('filterInput'), submitLabel: document.getElementById('submitLabel') };
+        let editIdentitySnapshot = null;
+        function norm(v) { return String(v ?? '').trim().toLowerCase(); }
+        function getFormIdentity() {
+            return {
+                college_id: norm(els?.form?.college_id?.value),
+                department_id: norm(document.getElementById('departmentSelect')?.value),
+                batch_id: norm(document.getElementById('batchSelect')?.value),
+                semester: norm(els?.form?.semester?.value),
+                subject_id: norm(document.getElementById('subjectId')?.value),
+                section: norm(els?.form?.section?.value),
+            };
+        }
+        function setCreateMode(clearForm = false) {
+            if (clearForm) {
+                els.form.reset();
+                const subjSel = document.getElementById('subjectSelect');
+                if (subjSel) subjSel.innerHTML = '<option value="">Select batch & semester first</option>';
+            }
+            if (els?.form?.class_id) els.form.class_id.value = '';
+            editIdentitySnapshot = null;
+            els.submitLabel.textContent = 'Add Class';
+        }
+        function setEditModeFromRow(row) {
+            editIdentitySnapshot = {
+                college_id: norm(row?.college_id),
+                department_id: norm(row?.department_id),
+                batch_id: norm(row?.batch_id),
+                semester: norm(row?.semester),
+                subject_id: norm(row?.subject_id),
+                section: norm(row?.section),
+            };
+            els.submitLabel.textContent = 'Update Class';
+        }
+        function didIdentityChangeSinceEdit() {
+            if (!editIdentitySnapshot) return false;
+            const cur = getFormIdentity();
+            return Object.keys(editIdentitySnapshot).some(k => norm(cur[k]) !== norm(editIdentitySnapshot[k]));
+        }
         async function fetchJSON(u, opts = {}, retries = 2) {
             try {
                 const r = await fetch(u, opts);
@@ -210,17 +248,38 @@
         document.getElementById('subjectSelect').addEventListener('change', (e) => { const opt = e.target.selectedOptions && e.target.selectedOptions[0]; document.getElementById('subjectId').value = e.target.value || ''; document.getElementById('subjectName').value = (opt ? (opt.textContent || '').trim() : ''); });
         document.getElementById('batchSelect').addEventListener('change', loadSubjectsForSelection);
         (function(){ const semEl = document.querySelector('[name="semester"]'); if (!semEl) return; const handler = () => { clearTimeout(window.__sem_timer); window.__sem_timer = setTimeout(loadSubjectsForSelection, 150); }; semEl.addEventListener('input', handler); semEl.addEventListener('change', handler); })();
-        els.form.addEventListener('submit', async e => { e.preventDefault(); const tk = getToken(); if (!tk) { alert('Login required'); return; } const id = els.form.class_id.value || null; const subjVal = (document.getElementById('subjectId').value || '').trim(); const subjName = (document.getElementById('subjectName').value || '').trim(); if (!subjVal || !subjName) { alert('Please select a subject'); return; } els.status.textContent = 'Saving...'; const payload = formToPayload(els.form); try { let r; if (id) { r = await fetch(API_BASE + '/api/teacher/classes/' + encodeURIComponent(id), { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } else { r = await fetch(API_BASE + '/api/teacher/classes', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Save failed'); els.status.textContent = 'Saved ✔'; els.form.reset(); els.submitLabel.textContent = 'Add Class'; loadClasses(); } catch (err) { els.status.textContent = 'Error: ' + err.message; } });
+        els.form.addEventListener('submit', async e => { e.preventDefault(); const tk = getToken(); if (!tk) { alert('Login required'); return; } let id = els.form.class_id.value || null; const subjVal = (document.getElementById('subjectId').value || '').trim(); const subjName = (document.getElementById('subjectName').value || '').trim(); if (!subjVal || !subjName) { alert('Please select a subject'); return; } if (id && didIdentityChangeSinceEdit()) { id = null; if (els?.form?.class_id) els.form.class_id.value = ''; } els.status.textContent = 'Saving...'; const payload = formToPayload(els.form); try { let r; if (id) { r = await fetch(API_BASE + '/api/teacher/classes/' + encodeURIComponent(id), { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } else { r = await fetch(API_BASE + '/api/teacher/classes', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(payload) }); } const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Save failed'); els.status.textContent = 'Saved ✔'; setCreateMode(true); loadClasses(); } catch (err) { els.status.textContent = 'Error: ' + err.message; } });
         document.addEventListener('click', e => {
             if (e.target.matches('[data-edit]')) {
-                const card = e.target.closest('.group'); const id = e.target.getAttribute('data-edit'); // fetch latest row before editing
-                (async () => { try { const rows = await fetchJSON(API_BASE + '/api/teacher/classes/mine', { headers: { Authorization: 'Bearer ' + getToken() } }); const row = rows.find(r => r.id === id); if (!row) return; els.form.class_id.value = row.id; els.form.semester.value = row.semester || ''; els.form.section.value = row.section || ''; els.form.notes.value = row.notes || ''; if (row.batch_id && row.semester) { document.getElementById('batchSelect').value = row.batch_id; await loadSubjectsForSelection(); const subjSel = document.getElementById('subjectSelect'); if (row.subject_id) { subjSel.value = row.subject_id; document.getElementById('subjectId').value = row.subject_id; const opt = subjSel.selectedOptions && subjSel.selectedOptions[0]; document.getElementById('subjectName').value = (opt ? (opt.textContent || '').trim() : (row.subject || '')); } else { const opt = document.createElement('option'); opt.value = ''; opt.textContent = row.subject || 'Subject'; opt.selected = true; subjSel.prepend(opt); document.getElementById('subjectId').value = ''; document.getElementById('subjectName').value = row.subject || ''; } } else { document.getElementById('subjectSelect').innerHTML = '<option value="">Select batch & semester first</option>'; } els.submitLabel.textContent = 'Update Class'; window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { } })();
+                const id = e.target.getAttribute('data-edit'); // fetch latest row before editing
+                (async () => { try { const rows = await fetchJSON(API_BASE + '/api/teacher/classes/mine', { headers: { Authorization: 'Bearer ' + getToken() } }); const row = rows.find(r => r.id === id); if (!row) return; els.form.class_id.value = row.id; els.form.semester.value = row.semester || ''; els.form.section.value = row.section || ''; els.form.notes.value = row.notes || ''; if (row.department_id) document.getElementById('departmentSelect').value = row.department_id; if (row.batch_id && row.semester) { document.getElementById('batchSelect').value = row.batch_id; await loadSubjectsForSelection(); const subjSel = document.getElementById('subjectSelect'); if (row.subject_id) { subjSel.value = row.subject_id; document.getElementById('subjectId').value = row.subject_id; const opt = subjSel.selectedOptions && subjSel.selectedOptions[0]; document.getElementById('subjectName').value = (opt ? (opt.textContent || '').trim() : (row.subject || '')); } else { const opt = document.createElement('option'); opt.value = ''; opt.textContent = row.subject || 'Subject'; opt.selected = true; subjSel.prepend(opt); document.getElementById('subjectId').value = ''; document.getElementById('subjectName').value = row.subject || ''; } } else { document.getElementById('subjectSelect').innerHTML = '<option value="">Select batch & semester first</option>'; } setEditModeFromRow(row); window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { } })();
             }
             if (e.target.matches('[data-del]')) { const id = e.target.getAttribute('data-del'); if (!confirm('Delete this class?')) return; (async () => { els.status.textContent = 'Deleting...'; try { const r = await fetch(API_BASE + '/api/teacher/classes/' + encodeURIComponent(id), { method: 'DELETE', headers: { Authorization: 'Bearer ' + getToken() } }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Delete failed'); els.status.textContent = 'Deleted'; loadClasses(); } catch (err) { els.status.textContent = 'Error: ' + err.message; } })(); }
         }
         );
         els.filter.addEventListener('input', () => { loadClasses() });
-        document.getElementById('resetBtn').addEventListener('click', () => { els.form.reset(); els.form.class_id.value = ''; els.submitLabel.textContent = 'Add Class'; els.status.textContent = '' });
+        document.getElementById('resetBtn').addEventListener('click', () => { setCreateMode(true); els.status.textContent = '' });
+        ['departmentSelect', 'batchSelect', 'semesterSelect', 'subjectSelect'].forEach(id => {
+            const node = document.getElementById(id);
+            if (!node) return;
+            node.addEventListener('change', () => {
+                if (els?.form?.class_id?.value && didIdentityChangeSinceEdit()) {
+                    if (els?.form?.class_id) els.form.class_id.value = '';
+                    editIdentitySnapshot = null;
+                    els.submitLabel.textContent = 'Add Class';
+                }
+            });
+        });
+        const secNode = els?.form?.section;
+        if (secNode) {
+            secNode.addEventListener('input', () => {
+                if (els?.form?.class_id?.value && didIdentityChangeSinceEdit()) {
+                    if (els?.form?.class_id) els.form.class_id.value = '';
+                    editIdentitySnapshot = null;
+                    els.submitLabel.textContent = 'Add Class';
+                }
+            });
+        }
         loadClasses(); loadAcademics(); setThemeToggle();
     </script>
 </body>

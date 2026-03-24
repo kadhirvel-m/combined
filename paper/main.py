@@ -18188,10 +18188,329 @@ def _parse_bearer_token(authorization: Optional[str]) -> Optional[str]:
     return _token_from_cookie(req, AUTH_ACCESS_COOKIE_NAME)
 
 
+def _parse_iso_utc(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def _ua_browser_family(ua: Optional[str]) -> str:
+    s = (ua or "").lower()
+    if not s:
+        return "Unknown"
+    if "edg/" in s:
+        return "Edge"
+    if "opr/" in s or "opera" in s:
+        return "Opera"
+    if "firefox/" in s:
+        return "Firefox"
+    if "safari/" in s and "chrome/" not in s and "chromium/" not in s:
+        return "Safari"
+    if "chrome/" in s or "chromium/" in s:
+        return "Chrome"
+    return "Other"
+
+
+def _ua_os_family(ua: Optional[str]) -> str:
+    s = (ua or "").lower()
+    if not s:
+        return "Unknown"
+    if "windows" in s:
+        return "Windows"
+    if "android" in s:
+        return "Android"
+    if "iphone" in s or "ipad" in s or "ios" in s:
+        return "iOS"
+    if "mac os x" in s or "macintosh" in s:
+        return "macOS"
+    if "linux" in s:
+        return "Linux"
+    return "Other"
+
+
+def _ua_device_kind(ua: Optional[str]) -> str:
+    s = (ua or "").lower()
+    if not s:
+        return "Unknown"
+    if "ipad" in s or "tablet" in s:
+        return "Tablet"
+    if "mobi" in s or "iphone" in s or "android" in s:
+        return "Mobile"
+    return "Desktop"
+
+
+def _ua_device_model(ua: Optional[str]) -> str:
+    s = (ua or "").lower()
+    if not s:
+        return "Unknown device"
+    if "iphone" in s:
+        return "iPhone"
+    if "ipad" in s:
+        return "iPad"
+    if "android" in s:
+        if "samsung" in s:
+            return "Samsung Android"
+        if "pixel" in s:
+            return "Google Pixel"
+        return "Android device"
+    if "windows" in s:
+        return "Windows PC"
+    if "macintosh" in s or "mac os x" in s:
+        return "Mac"
+    if "linux" in s:
+        return "Linux device"
+    return "Unknown device"
+
+
 @academics_router.get("/api/me")
 def get_me(authorization: Optional[str] = Header(default=None)):
     token = _parse_bearer_token(authorization)
     return get_current_user_profile(token)
+
+
+@academics_router.get("/api/me/devices", summary="List active logged-in devices")
+def get_my_devices(
+    request: Request,
+    authorization: Optional[str] = Header(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    token = _parse_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    try:
+        user_id = _get_user_id_with_retry(token)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    supabase = get_service_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase service client unavailable")
+
+    req = _resolve_request_for_auth(request)
+    current_refresh = _token_from_cookie(req, AUTH_REFRESH_COOKIE_NAME)
+    current_hash = _hash_refresh_token(current_refresh) if current_refresh else ""
+
+    rows: List[Dict[str, Any]] = []
+    try:
+        res = (
+            supabase.table(AUTH_ROTATION_TABLE)
+            .select("id,token_hash,family_id,status,created_at,used_at,expires_at,last_ip,user_agent")
+            .eq("user_id", user_id)
+            .eq("status", "active")
+            .order("created_at", desc=True)
+            .limit(max(50, limit * 3))
+            .execute()
+        )
+        if getattr(res, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (devices): {res.error}")
+        rows = getattr(res, "data", None) or []
+    except HTTPException:
+        raise
+    except Exception as exc:
+        supabase_logger.warning("get_my_devices failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to load devices")
+
+    now_utc = datetime.now(timezone.utc)
+    by_family: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        expires_at = _parse_iso_utc(row.get("expires_at"))
+        if expires_at and expires_at <= now_utc:
+            continue
+
+        key = str(row.get("family_id") or row.get("token_hash") or row.get("id") or "").strip()
+        if not key:
+            continue
+
+        current_ts = _parse_iso_utc(row.get("used_at")) or _parse_iso_utc(row.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc)
+        prev = by_family.get(key)
+        if prev is None:
+            by_family[key] = row
+            continue
+        prev_ts = _parse_iso_utc(prev.get("used_at")) or _parse_iso_utc(prev.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc)
+        if current_ts >= prev_ts:
+            by_family[key] = row
+
+    country_hint = ""
+    try:
+        country_hint = (req.headers.get("CF-IPCountry") if req else "") or ""
+        country_hint = country_hint.strip().upper()
+    except Exception:
+        country_hint = ""
+
+    devices: List[Dict[str, Any]] = []
+    for row in by_family.values():
+        ua = str(row.get("user_agent") or "").strip()
+        ip_value = str(row.get("last_ip") or "").strip()
+        is_current = bool(current_hash and str(row.get("token_hash") or "") == current_hash)
+
+        location_hint = "Unknown"
+        if is_current and country_hint and country_hint not in {"XX", "T1"}:
+            location_hint = country_hint
+        elif ip_value:
+            try:
+                ip_obj = ipaddress.ip_address(ip_value)
+                if ip_obj.is_private or ip_obj.is_loopback:
+                    location_hint = "Private network"
+            except Exception:
+                location_hint = "Unknown"
+
+        last_login = row.get("created_at")
+        last_active = row.get("used_at") or row.get("created_at")
+
+        devices.append(
+            {
+                "session_id": row.get("id"),
+                "family_id": row.get("family_id"),
+                "is_current": is_current,
+                "ip": ip_value or "Unknown",
+                "last_login": last_login,
+                "last_active": last_active,
+                "device_model": _ua_device_model(ua),
+                "device_type": _ua_device_kind(ua),
+                "os": _ua_os_family(ua),
+                "browser": _ua_browser_family(ua),
+                "location": location_hint,
+                "user_agent": ua,
+            }
+        )
+
+    devices.sort(
+        key=lambda d: _parse_iso_utc(d.get("last_active")) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+    return {
+        "devices": devices[:limit],
+        "count": len(devices),
+    }
+
+
+@academics_router.post("/api/me/devices/signout", summary="Sign out current device or other devices")
+def signout_my_devices(
+    request: Request,
+    payload: Optional[Dict[str, Any]] = Body(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    action = str((payload or {}).get("action") or "").strip().lower()
+    if action not in {"current", "others", "session"}:
+        raise HTTPException(status_code=400, detail="action must be 'current', 'others', or 'session'")
+
+    try:
+        user_id = _get_user_id_with_retry(token)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    supabase = get_service_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase service client unavailable")
+
+    req = _resolve_request_for_auth(request)
+    current_refresh = _token_from_cookie(req, AUTH_REFRESH_COOKIE_NAME)
+    current_hash = _hash_refresh_token(current_refresh) if current_refresh else ""
+    current_family = ""
+    if current_hash:
+        rec = _auth_rotation_get(current_hash)
+        if rec:
+            current_family = str(rec.get("family_id") or "").strip()
+
+    if action == "current":
+        if current_family:
+            _auth_rotation_revoke_family(current_family, "user-signout-current-device", req)
+        res = JSONResponse({"ok": True, "action": "current"})
+        _clear_auth_cookies(res, request=req)
+        _security_emit("auth.logout", request=req, source="devices-current")
+        return res
+
+    if not current_family:
+        raise HTTPException(status_code=400, detail="Could not determine current device session")
+
+    if action == "session":
+        target_family = str((payload or {}).get("family_id") or "").strip()
+        target_session_id = str((payload or {}).get("session_id") or "").strip()
+
+        if not target_family and target_session_id:
+            try:
+                q = (
+                    supabase.table(AUTH_ROTATION_TABLE)
+                    .select("family_id")
+                    .eq("id", target_session_id)
+                    .eq("user_id", user_id)
+                    .limit(1)
+                    .execute()
+                )
+                if getattr(q, "error", None):
+                    raise HTTPException(status_code=500, detail=f"Supabase error (resolve device session): {q.error}")
+                rows = getattr(q, "data", None) or []
+                if rows:
+                    target_family = str(rows[0].get("family_id") or "").strip()
+            except HTTPException:
+                raise
+            except Exception as exc:
+                supabase_logger.warning("signout session resolve failed: %s", exc)
+                raise HTTPException(status_code=500, detail="Failed to resolve target session")
+
+        if not target_family:
+            raise HTTPException(status_code=400, detail="family_id or session_id is required")
+
+        _auth_rotation_revoke_family(target_family, "user-signout-single-device", req)
+        is_current_target = bool(current_family and target_family == current_family)
+        if is_current_target:
+            res = JSONResponse({"ok": True, "action": "session", "current": True})
+            _clear_auth_cookies(res, request=req)
+            _security_emit("auth.logout", request=req, source="devices-single-current")
+            return res
+
+        _security_emit("auth.logout", request=req, source="devices-single")
+        return {"ok": True, "action": "session", "current": False}
+
+    try:
+        now_iso = datetime.utcnow().isoformat() + "Z"
+        ip = _extract_client_ip(req)
+        ua = (req.headers.get("user-agent") if req else None)
+        upd = (
+            supabase.table(AUTH_ROTATION_TABLE)
+            .update(
+                {
+                    "status": "revoked",
+                    "revoked_at": now_iso,
+                    "revoke_reason": "user-signout-other-devices",
+                    "last_ip": ip,
+                    "user_agent": ua,
+                }
+            )
+            .eq("user_id", user_id)
+            .eq("status", "active")
+            .neq("family_id", current_family)
+            .execute()
+        )
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (signout devices): {upd.error}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        supabase_logger.warning("signout_my_devices failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to sign out other devices")
+
+    _security_emit("auth.logout", request=req, source="devices-others")
+    return {"ok": True, "action": "others"}
 
 
 @academics_router.post("/api/syllabus/courses", response_model=SyllabusCourseOut, summary="Upsert syllabus course with units & topics")
@@ -26895,6 +27214,8 @@ class TeacherAIGenerateTestIn(BaseModel):
     count: int = Field(10, ge=1, le=30)
     difficulty: str = Field("balanced", description="Question difficulty preference: balanced/easy/medium/hard")
     selected_topics: Optional[List[str]] = Field(default=None, description="Exact selected syllabus topic names for mapping")
+    selected_topic_units: Optional[Dict[str, int]] = Field(default=None, description="Topic to syllabus unit mapping (1..5) for CO tagging")
+    selected_unit_numbers: Optional[List[int]] = Field(default=None, description="Selected syllabus unit numbers (1..5)")
 
     @validator("difficulty", pre=True)
     def _normalize_difficulty_pref(cls, v):
@@ -26921,6 +27242,55 @@ class TeacherAIGenerateTestIn(BaseModel):
             seen.add(key)
             out.append(s[:255])
             if len(out) >= 300:
+                break
+        return out or None
+
+    @validator("selected_topic_units", pre=True)
+    def _normalize_selected_topic_units(cls, v):
+        if v is None:
+            return None
+        if not isinstance(v, dict):
+            raise ValueError("selected_topic_units must be an object")
+        out: Dict[str, int] = {}
+        for k, unit in v.items():
+            topic = str(k or "").strip()
+            if not topic:
+                continue
+            try:
+                n = int(unit)
+            except Exception:
+                continue
+            if n < 1:
+                n = 1
+            if n > 5:
+                n = 5
+            out[topic[:255]] = n
+            if len(out) >= 500:
+                break
+        return out or None
+
+    @validator("selected_unit_numbers", pre=True)
+    def _normalize_selected_unit_numbers(cls, v):
+        if v is None:
+            return None
+        if not isinstance(v, list):
+            raise ValueError("selected_unit_numbers must be a list")
+        out: List[int] = []
+        seen: Set[int] = set()
+        for item in v:
+            try:
+                n = int(item)
+            except Exception:
+                continue
+            if n < 1:
+                n = 1
+            if n > 5:
+                n = 5
+            if n in seen:
+                continue
+            seen.add(n)
+            out.append(n)
+            if len(out) >= 5:
                 break
         return out or None
 
@@ -26962,7 +27332,7 @@ def _assign_exact_topics_to_questions(questions: List[Dict[str, Any]], selected_
     return questions
 
 
-def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str = "balanced", selected_topics: Optional[List[str]] = None) -> Tuple[str, List[Dict[str, Any]], str]:
+def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str = "balanced", selected_topics: Optional[List[str]] = None, selected_topic_units: Optional[Dict[str, int]] = None, selected_unit_numbers: Optional[List[int]] = None) -> Tuple[str, List[Dict[str, Any]], str]:
     """Generate MCQ questions from a topic for the teacher test builder.
 
     IMPORTANT: Per product requirement, this uses gemini-2.5-flash only.
@@ -27005,8 +27375,8 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
         - Options must be plausible and unambiguous.
         - Provide: prompt, options (length 4), correct_index (0..3), explanation (<= 18 words), difficulty, co, k_level.
         - difficulty must be one of: Easy, Medium, Hard.
-        - co should be a short tag like CO1, CO2, CO3.
-        - k_level must be one of: K1, K2, K3, K4, K5, K6.
+        - co should be one of: CO1, CO2, CO3, CO4, CO5.
+        - k_level must be one of: K1, K2, K3, K4.
         - {difficulty_instruction}
         - Return ONLY strict JSON (no markdown fences, no commentary).
 
@@ -27205,6 +27575,7 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
     rng = random.SystemRandom()
     balanced_difficulty_pool: List[str] = []
     balanced_co_pool: List[str] = []
+    balanced_k_pool: List[str] = []
     if normalized_pref == "balanced":
         base = safe_count // 3
         rem = safe_count % 3
@@ -27213,10 +27584,31 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
             balanced_difficulty_pool.extend([label] * (base + (1 if i < rem else 0)))
         rng.shuffle(balanced_difficulty_pool)
 
-        co_labels = ["CO1", "CO2", "CO3"]
+        co_labels = ["CO1", "CO2", "CO3", "CO4", "CO5"]
+        co_base = safe_count // len(co_labels)
+        co_rem = safe_count % len(co_labels)
         for i, label in enumerate(co_labels):
-            balanced_co_pool.extend([label] * (base + (1 if i < rem else 0)))
+            balanced_co_pool.extend([label] * (co_base + (1 if i < co_rem else 0)))
         rng.shuffle(balanced_co_pool)
+
+    # Always maintain a diversified K-level pool across K1..K4 for visible variety.
+    k_labels = ["K1", "K2", "K3", "K4"]
+    k_base = safe_count // len(k_labels)
+    k_rem = safe_count % len(k_labels)
+    for i, label in enumerate(k_labels):
+        balanced_k_pool.extend([label] * (k_base + (1 if i < k_rem else 0)))
+    rng.shuffle(balanced_k_pool)
+
+    unit_map_norm: Dict[str, int] = {}
+    for t, u in (selected_topic_units or {}).items():
+        key = str(t or "").strip().lower()
+        if not key:
+            continue
+        try:
+            n = int(u)
+        except Exception:
+            continue
+        unit_map_norm[key] = max(1, min(5, n))
 
     out_questions: List[Dict[str, Any]] = []
     for idx, item in enumerate(qlist[:safe_count]):
@@ -27263,22 +27655,26 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
             if out_idx < len(balanced_co_pool):
                 q_co = balanced_co_pool[out_idx]
             else:
-                q_co = rng.choice(["CO1", "CO2", "CO3"])
-        elif re.fullmatch(r"(?i)co\d{1,2}", co_clean):
+                q_co = rng.choice(["CO1", "CO2", "CO3", "CO4", "CO5"])
+        elif re.fullmatch(r"(?i)co[1-5]", co_clean):
             q_co = co_clean.upper()
         else:
-            q_co = f"CO{(idx % 3) + 1}"
+            q_co = f"CO{(idx % 5) + 1}"
 
         k_raw = str(item.get("k_level") or item.get("klevel") or item.get("blooms_level") or item.get("bloom_level") or "").strip()
-        k_match = re.search(r"([1-6])", k_raw)
+        k_match = re.search(r"([1-4])", k_raw)
         if k_match:
             q_k_level = f"K{k_match.group(1)}"
         else:
-            q_k_level = {
-                "Easy": rng.choice(["K1", "K2"]),
-                "Medium": rng.choice(["K2", "K3", "K4"]),
-                "Hard": rng.choice(["K3", "K4", "K5", "K6"]),
-            }.get(q_difficulty, "K2")
+            # Pull from diversified pool first to avoid uniform K-levels.
+            if out_idx < len(balanced_k_pool):
+                q_k_level = balanced_k_pool[out_idx]
+            else:
+                q_k_level = {
+                    "Easy": rng.choice(["K1", "K2"]),
+                    "Medium": rng.choice(["K2", "K3"]),
+                    "Hard": rng.choice(["K3", "K4"]),
+                }.get(q_difficulty, "K2")
 
         # Validate through existing schema
         try:
@@ -27312,6 +27708,72 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
 
     out_questions = _assign_exact_topics_to_questions(out_questions, selected_topics)
 
+    # Enforce CO tags from selected syllabus units only:
+    # Unit 1 -> CO1, ... Unit 5 -> CO5.
+    selected_units_from_numbers = [max(1, min(5, int(n))) for n in (selected_unit_numbers or [])]
+    selected_units_from_topic_map = [max(1, min(5, int(v))) for v in unit_map_norm.values()]
+    selected_units = sorted(set(selected_units_from_numbers or selected_units_from_topic_map))
+
+    if selected_units:
+        # Robust rule: if exactly one unit is selected, force that CO for all questions.
+        if len(selected_units) == 1:
+            forced_unit = selected_units[0]
+            for q in out_questions:
+                q["co"] = f"CO{forced_unit}"
+        else:
+            def _tok(s: str) -> Set[str]:
+                return {w for w in re.findall(r"[a-z0-9]+", (s or "").lower()) if len(w) >= 3}
+
+            topic_unit_items: List[Tuple[int, Set[str]]] = []
+            for topic_name, unit_no in unit_map_norm.items():
+                tks = _tok(topic_name)
+                if tks:
+                    topic_unit_items.append((unit_no, tks))
+
+            allowed_cos = {f"CO{u}" for u in selected_units}
+
+            for i, q in enumerate(out_questions):
+                blob = " ".join([
+                    str(q.get("topic_name") or ""),
+                    str(q.get("prompt") or ""),
+                    " ".join(str(o or "") for o in (q.get("options") or [])),
+                ])
+                q_tokens = _tok(blob)
+
+                best_unit = None
+                best_score = 0
+                for unit_no, tks in topic_unit_items:
+                    score = len(q_tokens.intersection(tks))
+                    if score > best_score:
+                        best_score = score
+                        best_unit = unit_no
+
+                if best_unit is not None and best_score > 0 and best_unit in selected_units:
+                    q["co"] = f"CO{best_unit}"
+                    continue
+
+                co_guess = str(q.get("co") or "").strip().upper()
+                if co_guess in allowed_cos:
+                    q["co"] = co_guess
+                else:
+                    # Strict fallback inside selected units only.
+                    q["co"] = f"CO{selected_units[i % len(selected_units)]}"
+
+    # Final K-level sanitization and anti-uniformity pass.
+    if out_questions:
+        allowed_k = {"K1", "K2", "K3", "K4"}
+        for q in out_questions:
+            kval = str(q.get("k_level") or "").strip().upper()
+            if kval not in allowed_k:
+                q["k_level"] = rng.choice(["K1", "K2", "K3", "K4"])
+        if len(out_questions) > 1:
+            uniq = {str(q.get("k_level") or "").strip().upper() for q in out_questions}
+            if len(uniq) == 1:
+                spread = ["K1", "K2", "K3", "K4"]
+                rng.shuffle(spread)
+                for i, q in enumerate(out_questions):
+                    q["k_level"] = spread[i % len(spread)]
+
     return title, out_questions, model_name
 
 
@@ -27323,6 +27785,8 @@ def api_teacher_generate_test_ai(payload: TeacherAIGenerateTestIn, authorization
         payload.count,
         payload.difficulty,
         payload.selected_topics,
+        payload.selected_topic_units,
+        payload.selected_unit_numbers,
     )
     return {
         "topic": payload.topic,
@@ -28823,6 +29287,28 @@ def create_app() -> FastAPI:
                 headers = [(k, v) for (k, v) in headers if k.lower() != b"authorization"]
                 headers.append((b"authorization", f"Bearer {cookie_token}".encode("utf-8")))
                 request.scope["headers"] = headers
+
+            # Immediate remote sign-out enforcement:
+            # If an authenticated browser still presents a refresh cookie whose rotation record
+            # is revoked/rotated, block access right away instead of waiting for access token expiry.
+            effective_auth_token = auth_token or cookie_token
+            refresh_cookie = _token_from_cookie(request, AUTH_REFRESH_COOKIE_NAME)
+            if effective_auth_token and refresh_cookie:
+                refresh_row = _auth_rotation_get(_hash_refresh_token(refresh_cookie))
+                if refresh_row:
+                    refresh_status = str(refresh_row.get("status") or "").strip().lower()
+                    refresh_used = bool(refresh_row.get("used_at"))
+                    if refresh_status != "active" or refresh_used:
+                        deny = JSONResponse({"detail": "Session expired. Please sign in again."}, status_code=401)
+                        _clear_auth_cookies(deny, request=request)
+                        _security_emit(
+                            "auth.session.revoked_cookie_block",
+                            request=request,
+                            severity="warning",
+                            status=refresh_status or None,
+                            used=refresh_used,
+                        )
+                        return deny
 
             csrf_block = _enforce_csrf_for_request(request)
             if csrf_block is not None:
@@ -30447,6 +30933,12 @@ def _blink_cache_remove(topic_ci: str) -> None:
         for k in keys:
             _blink_link_cache.pop(k, None)
 
+
+def _normalize_topic_key(value: str) -> str:
+    if not value:
+        return ""
+    return " ".join(value.strip().lower().split())
+
 class BlinkRequest(BaseModel):
     topic: Optional[str] = None
     topic_id: Optional[str] = None
@@ -30454,7 +30946,8 @@ class BlinkRequest(BaseModel):
 
 
 class BlinkLinkUpdateRequest(BaseModel):
-    topic_id: str = Field(..., min_length=1, description="ai_notes.id to update")
+    topic_id: Optional[str] = Field(default=None, description="ai_notes.id or syllabus_topics.id")
+    topic: Optional[str] = Field(default=None, description="Topic name fallback to resolve ai_notes.title_ci")
     blink_link: Optional[str] = Field(default=None, description="HTTP(S) image URL; empty clears it")
 
 class SelectedImageRequest(BaseModel):
@@ -30772,11 +31265,6 @@ async def get_blink_links(
     Returns a map of topic_name -> blink_link for topics that have blinks.
     """
     supabase = get_service_client()
-
-    def _normalize_topic_key(value: str) -> str:
-        if not value:
-            return ""
-        return " ".join(value.strip().lower().split())
 
     raw_topics = _parse_topic_list_query(topics, topics_json)
     requested_topics = []
@@ -31295,11 +31783,21 @@ class BlinkRemoveRequest(BaseModel):
 @app.post("/api/blink/link")
 async def update_blink_link_endpoint(req: BlinkLinkUpdateRequest):
     """
-    Set or clear ai_notes.blink_link for a specific topic row id.
+    Set or clear ai_notes.blink_link for a topic.
+    Accepts ai_notes.id directly, or syllabus_topics.id / topic text and resolves to ai_notes.title_ci.
     """
     topic_id = (req.topic_id or "").strip()
-    if not topic_id:
-        raise HTTPException(status_code=400, detail="topic_id is required")
+    topic_name = " ".join((req.topic or "").strip().split())
+
+    # Backward compatibility: some callers may send topic text in topic_id.
+    if topic_id and not topic_name:
+        try:
+            uuid.UUID(topic_id)
+        except Exception:
+            topic_name = " ".join(topic_id.split())
+
+    if not topic_id and not topic_name:
+        raise HTTPException(status_code=400, detail="Either topic_id or topic is required")
 
     raw_link = (req.blink_link or "").strip()
     blink_link_value = raw_link or None
@@ -31311,22 +31809,104 @@ async def update_blink_link_endpoint(req: BlinkLinkUpdateRequest):
 
     supabase = get_service_client()
     try:
-        row_res = (
-            supabase
-            .table(AI_NOTES_TABLE)
-            .select("id,title_ci,title")
-            .eq("id", topic_id)
-            .limit(1)
-            .execute()
-        )
-        rows = getattr(row_res, "data", None) or []
-        if not rows:
-            raise HTTPException(status_code=404, detail="Topic not found")
+        row = None
 
-        row = rows[0]
+        # 1) Backward-compatible path: direct ai_notes.id lookup.
+        if topic_id:
+            row_res = (
+                supabase
+                .table(AI_NOTES_TABLE)
+                .select("id,title_ci,title")
+                .eq("id", topic_id)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(row_res, "data", None) or []
+            if rows:
+                row = rows[0]
+
+        # 2) If topic_id is actually syllabus_topics.id, resolve topic name from syllabus_topics.
+        if row is None and topic_id:
+            syllabus_res = (
+                supabase
+                .table("syllabus_topics")
+                .select("topic")
+                .eq("id", topic_id)
+                .limit(1)
+                .execute()
+            )
+            syllabus_rows = getattr(syllabus_res, "data", None) or []
+            if syllabus_rows:
+                syllabus_topic_name = " ".join((syllabus_rows[0].get("topic") or "").strip().split())
+                topic_name = topic_name or syllabus_topic_name
+
+        # 3) Resolve ai_notes by normalized topic title.
+        topic_ci_input = _normalize_topic_key(topic_name)
+        if row is None and topic_ci_input:
+            by_title_res = (
+                supabase
+                .table(AI_NOTES_TABLE)
+                .select("id,title_ci,title")
+                .eq("title_ci", topic_ci_input)
+                .limit(1)
+                .execute()
+            )
+            by_title_rows = getattr(by_title_res, "data", None) or []
+            if by_title_rows:
+                row = by_title_rows[0]
+
+        # 4) Create a minimal ai_notes row when topic is known but note row does not exist yet.
+        if row is None and topic_ci_input:
+            create_title = " ".join((topic_name or "").strip().split()) or topic_ci_input
+            create_payload = {
+                "title": create_title,
+                "markdown": f"# {create_title}\n",
+            }
+            try:
+                create_res = (
+                    supabase
+                    .table(AI_NOTES_TABLE)
+                    .insert(create_payload, returning="representation")
+                    .execute()
+                )
+                created_rows = getattr(create_res, "data", None) or []
+                if created_rows:
+                    row = created_rows[0]
+            except Exception:
+                # Handle race where another request created this topic concurrently.
+                pass
+
+            if row is None:
+                by_title_res = (
+                    supabase
+                    .table(AI_NOTES_TABLE)
+                    .select("id,title_ci,title")
+                    .eq("title_ci", topic_ci_input)
+                    .limit(1)
+                    .execute()
+                )
+                by_title_rows = getattr(by_title_res, "data", None) or []
+                if by_title_rows:
+                    row = by_title_rows[0]
+
+        if row is None:
+            print(
+                "[Blink Link] Resolve miss:",
+                {
+                    "topic_id": topic_id,
+                    "topic_name": topic_name,
+                    "topic_ci": topic_ci_input,
+                },
+            )
+            raise HTTPException(status_code=404, detail="Topic not found in ai_notes")
+
+        resolved_topic_id = (row.get("id") or "").strip()
+        if not resolved_topic_id:
+            raise HTTPException(status_code=404, detail="Topic not found in ai_notes")
+
         topic_ci = _normalize_topic_key(row.get("title_ci") or row.get("title") or "")
 
-        supabase.table(AI_NOTES_TABLE).update({"blink_link": blink_link_value}).eq("id", topic_id).execute()
+        supabase.table(AI_NOTES_TABLE).update({"blink_link": blink_link_value}).eq("id", resolved_topic_id).execute()
 
         if topic_ci:
             if blink_link_value:
@@ -31336,7 +31916,7 @@ async def update_blink_link_endpoint(req: BlinkLinkUpdateRequest):
 
         return {
             "success": True,
-            "topic_id": topic_id,
+            "topic_id": resolved_topic_id,
             "blink_link": blink_link_value,
             "message": "Blink link updated" if blink_link_value else "Blink link removed",
         }

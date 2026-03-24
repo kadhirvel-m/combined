@@ -1544,11 +1544,11 @@
             setTimeout(() => blinkLinkInput?.focus(), 0);
         }
 
-        async function saveBlinkLink(topicId, blinkUrl) {
+        async function saveBlinkLink(topicId, topicName, blinkUrl) {
             const res = await fetch(`${apiBase}/api/blink/link`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ topic_id: topicId, blink_link: blinkUrl })
+                body: JSON.stringify({ topic_id: topicId, topic: topicName, blink_link: blinkUrl })
             });
 
             if (!res.ok) {
@@ -1580,7 +1580,7 @@
             if (blinkLinkRemove) blinkLinkRemove.disabled = true;
 
             try {
-                await saveBlinkLink(topicId, trimmed);
+                await saveBlinkLink(topicId, topicName, trimmed);
                 applyBlinkStateOnButtons(topicId, topicName, trimmed);
                 closeBlinkLinkModal();
             } catch (err) {
@@ -1606,7 +1606,7 @@
             blinkLinkSave.disabled = true;
 
             try {
-                await saveBlinkLink(topicId, '');
+                await saveBlinkLink(topicId, topicName, '');
                 applyBlinkStateOnButtons(topicId, topicName, '');
                 if (blinkLinkInput) blinkLinkInput.value = '';
                 if (blinkLinkHint) blinkLinkHint.textContent = 'Blink removed. Enter a new image link.';
