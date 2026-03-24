@@ -394,6 +394,48 @@
         </div>
     </div>
 
+    <!-- Blink Link Modal -->
+    <div id="blinkLinkModal"
+        class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8" role="dialog"
+        aria-modal="true" aria-labelledby="blinkLinkTitle">
+        <div id="blinkLinkBackdrop" class="fixed inset-0 bg-brand-900/70 dark:bg-black/70 backdrop-blur-sm"></div>
+        <div
+            class="relative w-full max-w-xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 shadow-[0_24px_60px_rgba(30,30,47,0.45)]">
+            <div class="flex items-start justify-between gap-4 border-b border-black/5 dark:border-white/10 px-6 py-5">
+                <div>
+                    <h2 id="blinkLinkTitle" class="text-xl font-semibold text-neutral-900 dark:text-white">blink_link</h2>
+                    <p id="blinkLinkTopic" class="mt-1 text-sm text-neutral-600 dark:text-white/70"></p>
+                </div>
+                <button id="blinkLinkClose" type="button"
+                    class="rounded-full border border-transparent p-2 text-neutral-500 hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
+                    <span class="material-symbols-rounded text-lg">close</span>
+                </button>
+            </div>
+            <form id="blinkLinkForm" class="px-6 py-6 space-y-4">
+                <label class="block text-sm font-medium text-neutral-700 dark:text-white/85">Image URL
+                    <input id="blinkLinkInput" type="url" inputmode="url" required
+                        placeholder="https://..."
+                        class="mt-2 w-full rounded-2xl border border-black/10 dark:border-white/15 bg-white/80 dark:bg-white/5 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
+                </label>
+                <p id="blinkLinkHint" class="text-xs text-neutral-500 dark:text-white/60">Paste an image link to store in blink_link.</p>
+                <div class="flex items-center justify-between gap-3 pt-2">
+                    <button id="blinkLinkRemove" type="button"
+                        class="hidden inline-flex items-center gap-2 rounded-full border border-red-300/60 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200 px-4 py-2 text-sm font-medium hover:border-red-400/80 hover:bg-red-100 dark:hover:bg-red-500/20 transition">
+                        <span class="material-symbols-rounded text-base">delete</span>Remove Blink
+                    </button>
+                    <div class="ml-auto flex items-center gap-2">
+                        <button id="blinkLinkCancel" type="button"
+                            class="inline-flex items-center justify-center rounded-full border border-black/10 dark:border-white/15 px-4 py-2 text-sm font-medium text-neutral-600 dark:text-white/70 hover:border-brand-500/50 transition">Cancel</button>
+                        <button id="blinkLinkSave" type="submit"
+                            class="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(158,75,138,0.35)] hover:shadow-[0_14px_34px_rgba(158,75,138,0.45)] transition">
+                            <span class="material-symbols-rounded text-base">save</span>Save Link
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- LabX Preview Modal -->
     <div id="labxPreviewModal"
         class="fixed inset-0 z-50 hidden flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8" role="dialog"
@@ -1201,6 +1243,10 @@
                 <span class=\"material-symbols-rounded text-sm\">${labxBtnIcon}</span>
                 <span>${labxBtnLabel}</span>
             </button>
+            <button type=\"button\" data-topic-blink-link=\"${t.id}\" data-topic-name=\"${Collage.escapeHtml(t.topic_title || t.topic || '')}\" data-current-blink-url=\"${Collage.escapeHtml(blinkUrl)}\" class=\"inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-200 hover:bg-violet-100 hover:border-violet-300 dark:hover:bg-violet-500/20\">
+                <span class=\"material-symbols-rounded text-sm\">add_link</span>
+                <span>blink_link</span>
+            </button>
             <button type=\"button\" ${blinkBtnAttr}=\"${t.id}\" data-topic-name=\"${Collage.escapeHtml(t.topic_title || t.topic || '')}\" ${blinkCurrentAttr} class=\"inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${hasBlink ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 dark:hover:bg-emerald-500/20' : 'border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-500/40 dark:bg-pink-500/10 dark:text-pink-200 hover:bg-pink-100 hover:border-pink-300 dark:hover:bg-pink-500/20'}\">
                 <span class=\"material-symbols-rounded text-sm\">${blinkBtnIcon}</span>
                 <span>${blinkBtnLabel}</span>
@@ -1349,7 +1395,7 @@
                         const res = await fetch(`${apiBase}/api/blink/generate`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ topic: topicName })
+                            body: JSON.stringify({ topic: topicName, topic_id: topicId })
                         });
 
                         if (!res.ok) {
@@ -1372,6 +1418,10 @@
                         // Re-attach the view handler to this button
                         attachViewBlinkHandler(btn);
 
+                        // Keep blink_link button state in sync for the same row
+                        const linkBtn = btn.closest('li')?.querySelector('[data-topic-blink-link]');
+                        if (linkBtn) linkBtn.setAttribute('data-current-blink-url', blinkUrl);
+
                         // Update local cache
                         topicBlinkLinks[normalizeTopicKey(topicName)] = blinkUrl;
 
@@ -1388,6 +1438,22 @@
             results.querySelectorAll('[data-topic-view-blink]').forEach(btn => {
                 attachViewBlinkHandler(btn);
             });
+
+            // blink_link button handler - manual save/remove for ai_notes.blink_link
+            results.querySelectorAll('[data-topic-blink-link]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const topicId = btn.getAttribute('data-topic-blink-link');
+                    const topicName = btn.getAttribute('data-topic-name') || '';
+                    const blinkUrl = btn.getAttribute('data-current-blink-url') || '';
+                    if (!topicId || !topicName) {
+                        alert('Topic details are missing.');
+                        return;
+                    }
+                    openBlinkLinkModal(topicId, topicName, blinkUrl, btn);
+                });
+            });
         }
 
         // Blink preview modal elements
@@ -1399,7 +1465,161 @@
         const blinkPreviewOpenTab = document.getElementById('blinkPreviewOpenTab');
         const blinkPreviewRemove = document.getElementById('blinkPreviewRemove');
 
+        // Blink link modal elements
+        const blinkLinkModal = document.getElementById('blinkLinkModal');
+        const blinkLinkBackdrop = document.getElementById('blinkLinkBackdrop');
+        const blinkLinkClose = document.getElementById('blinkLinkClose');
+        const blinkLinkCancel = document.getElementById('blinkLinkCancel');
+        const blinkLinkForm = document.getElementById('blinkLinkForm');
+        const blinkLinkInput = document.getElementById('blinkLinkInput');
+        const blinkLinkTopic = document.getElementById('blinkLinkTopic');
+        const blinkLinkHint = document.getElementById('blinkLinkHint');
+        const blinkLinkSave = document.getElementById('blinkLinkSave');
+        const blinkLinkRemove = document.getElementById('blinkLinkRemove');
+
         let currentBlinkContext = { topicId: null, topicName: '', blinkUrl: '', originBtn: null };
+        let currentBlinkLinkContext = { topicId: null, topicName: '', blinkUrl: '', originBtn: null, actionBtn: null };
+
+        function applyBlinkStateOnButtons(topicId, topicName, blinkUrl) {
+            const normalized = normalizeTopicKey(topicName);
+            if (blinkUrl) {
+                topicBlinkLinks[normalized] = blinkUrl;
+            } else {
+                delete topicBlinkLinks[normalized];
+            }
+
+            const { originBtn, actionBtn } = currentBlinkLinkContext;
+
+            if (originBtn) {
+                originBtn.setAttribute('data-current-blink-url', blinkUrl || '');
+            }
+
+            if (actionBtn) {
+                if (blinkUrl) {
+                    actionBtn.removeAttribute('data-topic-gen-blink');
+                    actionBtn.setAttribute('data-topic-view-blink', topicId);
+                    actionBtn.setAttribute('data-blink-url', blinkUrl);
+                    actionBtn.className = actionBtn.className.replace(/border-pink-200.*?dark:hover:bg-pink-500\/20/g,
+                        'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 dark:hover:bg-emerald-500/20');
+                    actionBtn.innerHTML = '<span class="material-symbols-rounded text-sm">visibility</span><span>View Blink</span>';
+                    actionBtn.disabled = false;
+                    attachViewBlinkHandler(actionBtn);
+                } else {
+                    actionBtn.removeAttribute('data-topic-view-blink');
+                    actionBtn.removeAttribute('data-blink-url');
+                    actionBtn.setAttribute('data-topic-gen-blink', topicId);
+                    actionBtn.className = actionBtn.className.replace(/border-emerald-200.*?dark:hover:bg-emerald-500\/20/g,
+                        'border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-500/40 dark:bg-pink-500/10 dark:text-pink-200 hover:bg-pink-100 hover:border-pink-300 dark:hover:bg-pink-500/20');
+                    actionBtn.innerHTML = '<span class="material-symbols-rounded text-sm">auto_awesome</span><span>Gen Blink</span>';
+                    actionBtn.disabled = false;
+                    attachGenBlinkHandler(actionBtn);
+                }
+            }
+        }
+
+        function closeBlinkLinkModal() {
+            blinkLinkModal?.classList.add('hidden');
+            if (blinkLinkInput) blinkLinkInput.value = '';
+            if (blinkLinkHint) blinkLinkHint.textContent = 'Paste an image link to store in blink_link.';
+            if (blinkLinkRemove) blinkLinkRemove.classList.add('hidden');
+            currentBlinkLinkContext = { topicId: null, topicName: '', blinkUrl: '', originBtn: null, actionBtn: null };
+        }
+
+        function openBlinkLinkModal(topicId, topicName, blinkUrl, originBtn) {
+            const row = originBtn?.closest('li');
+            const actionBtn = row ? row.querySelector('[data-topic-view-blink], [data-topic-gen-blink]') : null;
+            currentBlinkLinkContext = { topicId, topicName, blinkUrl, originBtn, actionBtn };
+
+            if (blinkLinkTopic) blinkLinkTopic.textContent = topicName;
+            if (blinkLinkInput) blinkLinkInput.value = blinkUrl || '';
+            if (blinkLinkHint) {
+                blinkLinkHint.textContent = blinkUrl
+                    ? 'Blink link exists. You can remove it and enter a new link.'
+                    : 'Paste an image link to store in blink_link.';
+            }
+            if (blinkLinkRemove) {
+                blinkLinkRemove.classList.toggle('hidden', !blinkUrl);
+            }
+            blinkLinkModal?.classList.remove('hidden');
+            setTimeout(() => blinkLinkInput?.focus(), 0);
+        }
+
+        async function saveBlinkLink(topicId, blinkUrl) {
+            const res = await fetch(`${apiBase}/api/blink/link`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic_id: topicId, blink_link: blinkUrl })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.detail || `HTTP ${res.status}`);
+            }
+
+            return res.json().catch(() => ({}));
+        }
+
+        blinkLinkClose?.addEventListener('click', closeBlinkLinkModal);
+        blinkLinkCancel?.addEventListener('click', closeBlinkLinkModal);
+        blinkLinkBackdrop?.addEventListener('click', closeBlinkLinkModal);
+
+        blinkLinkForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const { topicId, topicName } = currentBlinkLinkContext;
+            if (!topicId || !topicName) return;
+
+            const trimmed = (blinkLinkInput?.value || '').trim();
+            if (!trimmed) {
+                alert('Blink link cannot be empty.');
+                return;
+            }
+
+            const originalHTML = blinkLinkSave.innerHTML;
+            blinkLinkSave.innerHTML = '<span class="material-symbols-rounded text-base animate-spin">progress_activity</span>Saving...';
+            blinkLinkSave.disabled = true;
+            if (blinkLinkRemove) blinkLinkRemove.disabled = true;
+
+            try {
+                await saveBlinkLink(topicId, trimmed);
+                applyBlinkStateOnButtons(topicId, topicName, trimmed);
+                closeBlinkLinkModal();
+            } catch (err) {
+                console.error('[BlinkLinkSave] Error:', err);
+                alert(err?.message || 'Unable to save blink link.');
+            } finally {
+                blinkLinkSave.innerHTML = originalHTML;
+                blinkLinkSave.disabled = false;
+                if (blinkLinkRemove) blinkLinkRemove.disabled = false;
+            }
+        });
+
+        blinkLinkRemove?.addEventListener('click', async () => {
+            const { topicId, topicName } = currentBlinkLinkContext;
+            if (!topicId || !topicName) return;
+
+            const ok = window.confirm('Remove current blink link for this topic?');
+            if (!ok) return;
+
+            const originalHTML = blinkLinkRemove.innerHTML;
+            blinkLinkRemove.innerHTML = '<span class="material-symbols-rounded text-base animate-spin">progress_activity</span>Removing...';
+            blinkLinkRemove.disabled = true;
+            blinkLinkSave.disabled = true;
+
+            try {
+                await saveBlinkLink(topicId, '');
+                applyBlinkStateOnButtons(topicId, topicName, '');
+                if (blinkLinkInput) blinkLinkInput.value = '';
+                if (blinkLinkHint) blinkLinkHint.textContent = 'Blink removed. Enter a new image link.';
+                blinkLinkRemove.classList.add('hidden');
+            } catch (err) {
+                console.error('[BlinkLinkRemove] Error:', err);
+                alert(err?.message || 'Unable to remove blink link.');
+            } finally {
+                blinkLinkRemove.innerHTML = originalHTML;
+                blinkLinkRemove.disabled = false;
+                blinkLinkSave.disabled = false;
+            }
+        });
 
         function openBlinkPreview(topicId, topicName, blinkUrl, originBtn) {
             currentBlinkContext = { topicId, topicName, blinkUrl, originBtn };
@@ -1450,6 +1670,9 @@
                         'border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-500/40 dark:bg-pink-500/10 dark:text-pink-200 hover:bg-pink-100 hover:border-pink-300 dark:hover:bg-pink-500/20');
                     originBtn.innerHTML = '<span class="material-symbols-rounded text-sm">auto_awesome</span><span>Gen Blink</span>';
                     attachGenBlinkHandler(originBtn);
+
+                    const linkBtn = originBtn.closest('li')?.querySelector('[data-topic-blink-link]');
+                    if (linkBtn) linkBtn.setAttribute('data-current-blink-url', '');
                 }
 
                 // Update local cache
@@ -1500,7 +1723,7 @@
                     const res = await fetch(`${apiBase}/api/blink/generate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ topic: topicName })
+                        body: JSON.stringify({ topic: topicName, topic_id: topicId })
                     });
 
                     if (!res.ok) {
@@ -1522,6 +1745,10 @@
 
                     // Re-attach the view handler to this button
                     attachViewBlinkHandler(btn);
+
+                    // Keep blink_link button state in sync for the same row
+                    const linkBtn = btn.closest('li')?.querySelector('[data-topic-blink-link]');
+                    if (linkBtn) linkBtn.setAttribute('data-current-blink-url', blinkUrl);
 
                     // Update local cache
                     topicBlinkLinks[normalizeTopicKey(topicName)] = blinkUrl;

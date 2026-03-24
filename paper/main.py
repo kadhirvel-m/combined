@@ -30433,10 +30433,29 @@ def _blink_cache_set(topic_ci: str, link: str, alias_key: Optional[str] = None) 
                     _blink_link_cache.pop(k, None)
         _blink_link_cache[topic_ci] = (now + _BLINK_LINK_CACHE_TTL_S, link, cache_alias)
 
+
+def _blink_cache_remove(topic_ci: str) -> None:
+    topic_ci = (topic_ci or "").strip()
+    if not topic_ci:
+        return
+    with _blink_link_cache_lock:
+        keys = [
+            k
+            for k, (_, _, alias) in _blink_link_cache.items()
+            if k == topic_ci or (alias or "").strip() == topic_ci
+        ]
+        for k in keys:
+            _blink_link_cache.pop(k, None)
+
 class BlinkRequest(BaseModel):
     topic: Optional[str] = None
     topic_id: Optional[str] = None
     note_content: Optional[str] = None # Optional override
+
+
+class BlinkLinkUpdateRequest(BaseModel):
+    topic_id: str = Field(..., min_length=1, description="ai_notes.id to update")
+    blink_link: Optional[str] = Field(default=None, description="HTTP(S) image URL; empty clears it")
 
 class SelectedImageRequest(BaseModel):
     selected_text: str = Field(..., min_length=1, description="Selected text to illustrate")
@@ -31272,17 +31291,73 @@ async def list_selected_images_endpoint(topic: str = Query(..., min_length=1, de
 class BlinkRemoveRequest(BaseModel):
     topic: str = Field(..., min_length=1, description="Topic name to remove blink for")
 
+
+@app.post("/api/blink/link")
+async def update_blink_link_endpoint(req: BlinkLinkUpdateRequest):
+    """
+    Set or clear ai_notes.blink_link for a specific topic row id.
+    """
+    topic_id = (req.topic_id or "").strip()
+    if not topic_id:
+        raise HTTPException(status_code=400, detail="topic_id is required")
+
+    raw_link = (req.blink_link or "").strip()
+    blink_link_value = raw_link or None
+
+    if blink_link_value:
+        parsed = urlparse(blink_link_value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise HTTPException(status_code=400, detail="blink_link must be a valid http/https URL")
+
+    supabase = get_service_client()
+    try:
+        row_res = (
+            supabase
+            .table(AI_NOTES_TABLE)
+            .select("id,title_ci,title")
+            .eq("id", topic_id)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(row_res, "data", None) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="Topic not found")
+
+        row = rows[0]
+        topic_ci = _normalize_topic_key(row.get("title_ci") or row.get("title") or "")
+
+        supabase.table(AI_NOTES_TABLE).update({"blink_link": blink_link_value}).eq("id", topic_id).execute()
+
+        if topic_ci:
+            if blink_link_value:
+                _blink_cache_set(topic_ci, blink_link_value, topic_ci)
+            else:
+                _blink_cache_remove(topic_ci)
+
+        return {
+            "success": True,
+            "topic_id": topic_id,
+            "blink_link": blink_link_value,
+            "message": "Blink link updated" if blink_link_value else "Blink link removed",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Blink Link] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/blink/remove")
 async def remove_blink_endpoint(req: BlinkRemoveRequest):
     """
     Remove the blink_link from ai_notes for a given topic.
     """
     supabase = get_service_client()
-    topic_ci = req.topic.strip().lower()
+    topic_ci = _normalize_topic_key(req.topic)
     
     try:
         # Update ai_notes to set blink_link to null
         res = supabase.table(AI_NOTES_TABLE).update({"blink_link": None}).eq("title_ci", topic_ci).execute()
+        _blink_cache_remove(topic_ci)
         
         return {
             "success": True,
