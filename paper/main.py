@@ -250,6 +250,7 @@ RATE_LIMIT_AI_PREFIXES: Tuple[str, ...] = (
     "/api/innovatex/",
     "/api/hod/ai/",
     "/api/maths-notes/",
+    "/api/physics-notes/",
     "/api/notes/caseflow",
     "/api/notes/flashcards",
     "/api/notes/mcq",
@@ -2299,7 +2300,7 @@ def _normalize_course_type(course_type: Optional[str]) -> Optional[str]:
     if course_type is None:
         return None
     value = str(course_type).strip().lower()
-    if value in {"maths", "theorey", "practical"}:
+    if value in {"maths", "theorey", "physics", "practical"}:
         return value
     return None
 
@@ -4273,7 +4274,7 @@ class SyllabusCourseIn(BaseModel):
 
     @validator("type", pre=True, always=True)
     def _normalize_type(cls, value: Any):  # noqa: N805
-        allowed = {"maths", "theorey", "practical"}
+        allowed = {"maths", "theorey", "physics", "practical"}
         if value is None:
             return "practical"
         if isinstance(value, str):
@@ -4362,7 +4363,7 @@ class SyllabusCourseSimpleBase(BaseModel):
 
     @validator("type", pre=True, always=True)
     def _normalize_type(cls, value: Any):  # noqa: N805
-        allowed = {"maths", "theorey", "practical"}
+        allowed = {"maths", "theorey", "physics", "practical"}
         if value is None:
             return "practical"
         if isinstance(value, str):
@@ -6461,7 +6462,13 @@ def get_current_user_profile(token: Optional[str]):
             },
             "syllabus": syllabus,
         }
-        _me_response_cache_set(user_id, result)
+        # Avoid caching empty syllabus when batch+semester context exists.
+        # This prevents sticky empty first-load results from transient upstream timing.
+        should_cache_me = bool(syllabus) or not (effective_batch_id and final_semester)
+        if should_cache_me:
+            _me_response_cache_set(user_id, result)
+        else:
+            _me_response_cache_invalidate(user_id)
         return result
 
     except HTTPException:
@@ -6963,6 +6970,14 @@ def _me_response_cache_set(user_id: str, payload: Dict[str, Any]) -> None:
                 ts, _ = _ME_RESPONSE_CACHE[k]
                 if ts < stale_cutoff:
                     _ME_RESPONSE_CACHE.pop(k, None)
+
+
+def _me_response_cache_invalidate(user_id: str) -> None:
+    uid = str(user_id or "").strip()
+    if not uid:
+        return
+    with _ME_RESPONSE_CACHE_LOCK:
+        _ME_RESPONSE_CACHE.pop(uid, None)
 
 def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.25) -> str:
     # Fast path: decode claims locally (signature/issuer/audience checks are handled by _validate_token_claims).
@@ -23304,6 +23319,293 @@ async def generate_stream(
 # --- Engineering Mathematics Notes (Gemini 3 Pro Preview only) ---
 
 MATHS_NOTES_MODEL = "gemini-3.1-flash-image-preview"
+
+PHYSICS_NOTES_MODEL = os.getenv("PHYSICS_NOTES_MODEL", "gemini-3.1-flash-image-preview")
+
+PHYSICS_NOTES_SYSTEM_PROMPT_TEMPLATE = """You will compose comprehensive, exam-ready Markdown notes for the physics topic "{topic}".
+
+PRIMARY GOAL:
+Produce notes that are **conceptually accurate, derivation-focused, and numerically reliable**, strictly relevant to the topic.
+Use the provided context ONLY if it is correct and directly applicable. Ignore any irrelevant or weak content and rely on strong physics fundamentals.
+
+Context:
+{context}
+
+-----------------------------------
+STRICT CONTENT RULES:
+- Content must be **physics-accurate and derivation-complete**.
+- Do NOT skip intermediate steps in derivations.
+- Clearly state **assumptions** before derivations.
+- Use **standard symbols and SI units** consistently.
+- Do NOT include vague phrases like "may vary" or "depends".
+- If context is insufficient, generate correct physics content yourself.
+- Ensure answers match **university-level exam expectations**.
+
+-----------------------------------
+STRUCTURE & DEPTH:
+- Write **deep, step-by-step explanations**.
+- Move logically:
+  Basics -> Laws -> Mathematical Formulation -> Derivations -> Applications -> Problems
+- Include formulas, reasoning, and interpretation of results.
+- Ensure **mathematical clarity and physical intuition**.
+
+-----------------------------------
+MANDATORY SECTIONS:
+
+# {topic}
+
+## Introduction
+- Concept overview
+- Physical significance
+- Where it appears in real systems
+
+## Need / Importance
+- What problem this concept solves
+- Why it was developed in physics
+
+## Definition / Core Concept
+- Precise technical definition
+- Key principles or laws involved
+
+## Fundamental Laws / Principles
+- List and explain governing laws
+- Include mathematical expressions
+
+## Assumptions (if applicable)
+- Clearly list all assumptions used in derivations
+
+## Mathematical Formulation
+- Introduce variables and equations
+- Define each symbol clearly
+
+## Derivations (VERY IMPORTANT)
+- Provide **step-by-step derivations**
+- No skipping steps
+- Highlight final derived formula
+- Explain each transformation logically
+
+## Key Formulae Summary
+- List all important equations in one place
+
+## Graphs / Diagrams (Describe if needed)
+- Explain shape, axes, and significance
+- Mention what each region represents
+
+## Applications
+- Real-world and engineering applications
+- Link concept to practical systems
+
+## Worked Example (Numerical)
+- Solve **at least one problem step-by-step**
+- Include:
+  Given -> Formula -> Substitution -> Final Answer
+
+## Conceptual Insights
+- Physical meaning of equations
+- Intuition behind results
+
+## Advantages / Limitations (if applicable)
+
+## Common Mistakes
+- Typical student errors in exams
+
+## Short Exam Points / TL;DR
+- Quick revision bullets
+
+-----------------------------------
+FORMATTING RULES:
+- Output must be in **Markdown**
+- Start with: `# {topic}`
+- Bold:
+  - Important terms
+  - Final formulas
+  - Key laws
+- Use clean equations formatting
+- Use bullet points and tables where needed
+
+-----------------------------------
+CITATIONS:
+Add a final section:
+
+## CITATIONS
+
+Use only trusted sources:
+- [GFG] - GeeksforGeeks
+- [TPT] - TutorialsPoint
+- [Scaler] - Scaler Topics
+- [Wiki] - Wikipedia
+- [TP] - Standard textbooks (e.g., H.C. Verma, Resnick Halliday)
+
+Use inline citations like:
+"... explanation ... [Wiki]"
+
+-----------------------------------
+TARGET LENGTH:
+900-1200 words (can exceed if derivation-heavy topic)
+
+-----------------------------------
+QUALITY BAR:
+- Must be **exam-ready**
+- Must include **complete derivations**
+- Must include **numerical example**
+- Must build **strong conceptual clarity + scoring ability**"""
+
+
+def _build_physics_notes_system_prompt(topic: str, context: str) -> str:
+    clean_topic = (topic or "").strip() or "Physics"
+    clean_context = (context or "").strip() or "No additional context provided."
+    return PHYSICS_NOTES_SYSTEM_PROMPT_TEMPLATE.format(topic=clean_topic, context=clean_context)
+
+
+def _generate_physics_notes_markdown(topic: str, context: str = "") -> str:
+    """Generate physics notes in Markdown using the physics-only system prompt."""
+    if not genai:
+        raise HTTPException(status_code=500, detail="AI service not available")
+
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not gemini_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+
+    clean_topic = (topic or "").strip()
+    if not clean_topic:
+        raise HTTPException(status_code=400, detail="Missing topic")
+
+    client = genai.Client(api_key=gemini_key)
+    response = client.models.generate_content(
+        model=PHYSICS_NOTES_MODEL,
+        contents=[
+            {
+                "role": "user",
+                "parts": [{"text": f"Generate physics notes for: {clean_topic}"}],
+            }
+        ],
+        config=types.GenerateContentConfig(
+            system_instruction=_build_physics_notes_system_prompt(clean_topic, context),
+            temperature=0.35,
+            max_output_tokens=int(os.getenv("PHYSICS_NOTES_MAX_TOKENS", "8192") or "8192"),
+        ),
+    )
+
+    text = getattr(response, "text", "") or ""
+    text = (text or "").strip()
+    if not text:
+        raise HTTPException(status_code=502, detail="Empty response from Gemini")
+    return text
+
+
+@notes_router.post("/api/physics-notes/generate", summary="Generate Physics notes (physics-only prompt)")
+async def api_generate_physics_notes(payload: dict):
+    topic = (payload or {}).get("topic", "").strip()
+    context = (payload or {}).get("context", "")
+    force = bool((payload or {}).get("force", False))
+    variant = _normalize_variant((payload or {}).get("variant", "detailed"))
+    if not topic:
+        return JSONResponse({"error": "Missing 'topic'"}, status_code=400)
+
+    if not force:
+        row = db_get_ai_note_by_title_exact_variant(topic, variant=variant)
+        if row and (row.get("markdown") or "").strip():
+            return {
+                "id": row.get("id"),
+                "markdown": row.get("markdown", ""),
+                "cached": True,
+                "title": row.get("title"),
+                "variant": variant,
+                "image_urls": row.get("image_urls") or [],
+                "model": PHYSICS_NOTES_MODEL,
+            }
+
+    md = await run_in_threadpool(_generate_physics_notes_markdown, topic, context)
+    row = db_upsert_ai_note_by_title_variant(topic, md, variant=variant, image_urls=[])
+    return {
+        "id": row.get("id"),
+        "markdown": row.get("markdown", md),
+        "cached": False,
+        "title": row.get("title"),
+        "variant": variant,
+        "image_urls": row.get("image_urls") or [],
+        "model": PHYSICS_NOTES_MODEL,
+    }
+
+
+@notes_router.get("/api/physics-notes/generate/stream", summary="Stream Physics notes (physics-only prompt)")
+async def api_generate_physics_notes_stream(
+    topic: str,
+    force: bool = False,
+    variant: str = "detailed",
+    degree: Optional[str] = None,
+    course_type: Optional[str] = None,
+    context: Optional[str] = None,
+):
+    async def event_source() -> AsyncGenerator[bytes, None]:
+        yield b"event: open\n\n"
+
+        normalized_variant = _normalize_variant(variant)
+
+        if not force:
+            row = db_get_ai_note_by_title_exact_variant(topic, variant=normalized_variant)
+            if row and (row.get("markdown") or "").strip():
+                payload = {
+                    "id": row.get("id"),
+                    "markdown": row.get("markdown", ""),
+                    "cached": True,
+                    "title": row.get("title"),
+                    "variant": normalized_variant,
+                    "image_urls": row.get("image_urls") or [],
+                    "model": PHYSICS_NOTES_MODEL,
+                }
+                yield b"event: final\n"
+                yield ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+                yield b"event: close\n\n"
+                return
+
+        try:
+            start_payload = {
+                "topic": topic,
+                "model": PHYSICS_NOTES_MODEL,
+                "variant": normalized_variant,
+                "degree": degree,
+                "course_type": course_type,
+                "force": bool(force),
+            }
+            yield b"event: start\n"
+            yield ("data: " + json.dumps(start_payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+
+            yield b"event: llm_start\n"
+            yield ("data: " + json.dumps({"status": "generating"}, ensure_ascii=False) + "\n\n").encode("utf-8")
+
+            md = await run_in_threadpool(_generate_physics_notes_markdown, topic, context or "")
+
+            row = None
+            try:
+                row = db_upsert_ai_note_by_title_variant(topic, md, variant=normalized_variant, image_urls=[])
+            except Exception:
+                row = None
+
+            final_payload = {
+                "id": (row.get("id") if isinstance(row, dict) else None),
+                "markdown": (row.get("markdown") if isinstance(row, dict) and row.get("markdown") else md),
+                "cached": False,
+                "title": (row.get("title") if isinstance(row, dict) and row.get("title") else topic),
+                "variant": normalized_variant,
+                "image_urls": (row.get("image_urls") if isinstance(row, dict) else []) or [],
+                "model": PHYSICS_NOTES_MODEL,
+            }
+            yield b"event: final\n"
+            yield ("data: " + json.dumps(final_payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+        except Exception as exc:
+            err_payload = {"message": str(exc)}
+            yield b"event: error\n"
+            yield ("data: " + json.dumps(err_payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+        finally:
+            yield b"event: close\n\n"
+
+    headers = {
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(event_source(), media_type="text/event-stream", headers=headers)
 
 MATHS_NOTES_SYSTEM_PROMPT = """You are a senior Engineering Mathematics educator teaching undergraduate students in India.
 
