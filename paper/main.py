@@ -4321,6 +4321,24 @@ class SyllabusCourseSummaryOut(BaseModel):
     type: Optional[str] = None
 
 
+class SyllabusCoursesBatchIn(BaseModel):
+    course_ids: List[uuid.UUID] = Field(default_factory=list)
+
+    @validator("course_ids", pre=True)
+    def _normalize_course_ids(cls, value: Any):  # noqa: N805
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        raise ValueError("course_ids must be a list")
+
+    @validator("course_ids")
+    def _validate_course_ids(cls, value: List[uuid.UUID]):  # noqa: N805
+        if len(value) > 200:
+            raise ValueError("Too many course_ids; maximum is 200")
+        return value
+
+
 class SyllabusCourseSimpleBase(BaseModel):
     semester: int = Field(..., ge=1, le=12)
     course_code: str = Field(..., min_length=1, max_length=64)
@@ -18867,6 +18885,32 @@ def api_list_courses_for_batch(
 )
 def api_get_syllabus_course(course_id: uuid.UUID):
     return load_course_with_units(course_id)
+
+
+@academics_router.post(
+    "/api/syllabus/courses/batch",
+    response_model=List[SyllabusCourseOut],
+    summary="Batch get syllabus courses with units & topics",
+)
+def api_get_syllabus_courses_batch(payload: SyllabusCoursesBatchIn):
+    ordered_unique: List[uuid.UUID] = []
+    seen: Set[str] = set()
+    for cid in (payload.course_ids or []):
+        key = str(cid)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered_unique.append(cid)
+
+    out: List[SyllabusCourseOut] = []
+    for cid in ordered_unique:
+        try:
+            out.append(load_course_with_units(cid))
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                continue
+            raise
+    return out
 
 
 @academics_router.post(

@@ -928,6 +928,7 @@
             if (!bar) return;
             var current = 0;
             var slowTimer = null;
+            var slowInterval = null;
             var finished = false;
 
             function setWidth(pct) {
@@ -935,29 +936,31 @@
                 bar.style.width = current + '%';
             }
 
-            // Fast phase: 0 → 80% in ~800ms
-            function startFast() {
-                bar.style.transition = 'width 0.8s cubic-bezier(0.4,0,0.2,1)';
-                requestAnimationFrame(function () { setWidth(80); });
-            }
-
-            // Slow phase: 80% → 98% over ~3.5s (never quite reaches 100 until content loads)
+            // Slow phase: after 80%, creep forward gradually until finished.
             function startSlow() {
-                if (finished) return;
-                bar.style.transition = 'width 3.5s cubic-bezier(0.1,0.4,0.2,1)';
-                requestAnimationFrame(function () { setWidth(98); });
+                if (finished || slowInterval) return;
+                slowInterval = setInterval(function () {
+                    if (finished) return;
+                    var next = current;
+                    if (current < 90) next = Math.min(90, current + 0.8);
+                    else if (current < 95) next = Math.min(95, current + 0.35);
+                    else if (current < 98) next = Math.min(98, current + 0.12);
+                    else return;
+                    bar.style.transition = 'width 0.28s linear';
+                    setWidth(next);
+                }, 220);
             }
 
             // Set to a specific pct (used by setLoaderStatus)
             function set(pct) {
                 if (finished) return;
-                if (pct <= current) return; // only go forward
-                if (pct < 80) {
-                    bar.style.transition = 'width 0.4s ease';
-                } else {
-                    bar.style.transition = 'width 0.6s ease';
-                }
-                setWidth(pct);
+                var target = Math.max(0, Math.min(Number(pct) || 0, 80));
+                if (target <= current) return; // only go forward
+                bar.style.transition = target <= 20 ? 'width 0.28s ease-out'
+                    : target <= 50 ? 'width 0.55s ease-out'
+                        : 'width 0.75s ease-out';
+                setWidth(target);
+                if (target >= 80) startSlow();
             }
 
             // Finish: jump to 100% immediately
@@ -965,13 +968,16 @@
                 if (finished) return;
                 finished = true;
                 if (slowTimer) clearTimeout(slowTimer);
+                if (slowInterval) clearInterval(slowInterval);
                 bar.style.transition = 'width 0.3s ease';
                 setWidth(100);
             }
 
-            // Kick off: fast phase, then start slow phase after fast completes
-            startFast();
-            slowTimer = setTimeout(startSlow, 850);
+            // Kick off exactly as requested: 20% start, then fast to 50 and 80.
+            requestAnimationFrame(function () { set(20); });
+            setTimeout(function () { set(50); }, 420);
+            setTimeout(function () { set(80); }, 980);
+            slowTimer = setTimeout(startSlow, 1060);
 
             window.__pxLoaderProgress = { set: set, finish: finish };
         })();
@@ -1824,16 +1830,9 @@
             return !!plan[featureKey];
         }
         async function loadAccessSummary() {
-            if (!getToken()) {
-                __pxAccessSummary = null;
-                return;
-            }
-            try {
-                const out = await fetchJson(`${API_BASE}/api/access/summary`, { headers: authHeaders() });
-                __pxAccessSummary = isSuccess(out) ? (out.data || null) : null;
-            } catch {
-                __pxAccessSummary = null;
-            }
+            // Access summary API call intentionally disabled on this page.
+            // Enforcement still happens server-side via /api/access/check-and-consume.
+            __pxAccessSummary = null;
         }
         async function canUseAction(action, consume = false) {
             try {
@@ -1890,11 +1889,12 @@
             // Advance progress bar based on status
             if (window.__pxLoaderProgress) {
                 const map = {
-                    'Verifying session...': 10,
-                    'Loading profile and progress...': 30,
-                    'Loading syllabus...': 50,
-                    'Loading Blink and LabX...': 65,
-                    'Finalizing dashboard...': 78,
+                    'Verifying session...': 20,
+                    'Loading profile and progress...': 50,
+                    'Loading syllabus...': 80,
+                    'Loading Blink availability and LabX...': 80,
+                    'Loading Blink and LabX...': 80,
+                    'Finalizing dashboard...': 80,
                     'Ready': 100
                 };
                 const pct = map[message];
@@ -1995,14 +1995,15 @@
                 if (!isSuccess(meOut) || !meOut?.data?.profile) {
                     return { ok: false };
                 }
+                // Progress is optional for first paint; do not block syllabus render on this endpoint.
                 if (!isSuccess(progOut)) {
-                    return { ok: false };
+                    console.warn('[Academics] Progress endpoint unavailable; continuing with empty completion set');
+                    progOut = { status: 200, data: { completed_topic_ids: [] } };
                 }
 
                 const profile = meOut.data.profile;
                 window.__PX_PROFILE_SNAPSHOT = profile;
                 window.__PX_DEGREE_STREAM = (profile.degree_stream || '').trim().toLowerCase();
-                await loadAccessSummary();
                 __pxEduMaybeRequire(profile).catch(err => console.error('Education modal failed', err));
                 if (typeof window.__PX_NAV_APPLY === 'function') { window.__PX_NAV_APPLY(profile); }
                 renderProfile(profile);
@@ -2021,7 +2022,8 @@
 
                 const teacherNotesPromise = loadTeacherNotesForSubjects(syllabus);
 
-                // Collect all topic names (lowercase) and fetch blink links
+                // Collect topic ids for ratings and topic names for LabX.
+                // Blink availability is now checked per-unit using only the first topic.
                 const allTopicNames = [];
                 const allTopicIds = [];
                 syllabus.forEach(c => (c.units || []).forEach(u => (u.topics || []).forEach(t => {
@@ -2029,18 +2031,18 @@
                     if (t.id) allTopicIds.push(t.id);
                 })));
                 const uniqueTopicNames = Array.from(new Set(allTopicNames));
-                setLoaderStatus('Loading Blink and LabX...');
+                setLoaderStatus('Loading Blink availability and LabX...');
 
                 // Fire ALL enrichment calls in parallel — no waterfall
-                const [teacherNotesBySubject, blinkLinks, labxStatus, topicRatings] = await Promise.all([
+                const [teacherNotesBySubject, unitBlinkAvailability, labxStatus, topicRatings] = await Promise.all([
                     teacherNotesPromise,
-                    fetchBlinkLinks(uniqueTopicNames),
+                    fetchUnitBlinkAvailability(syllabus),
                     fetchLabxStatus(uniqueTopicNames),
                     fetchTopicRatings(allTopicIds),
                     fetchWishlistStatus()  // runs in parallel, populates wishlistedTopicIds set
                 ]);
 
-                renderSyllabus(syllabus, teacherNotesBySubject, blinkLinks, topicRatings, labxStatus);
+                renderSyllabus(syllabus, teacherNotesBySubject, unitBlinkAvailability, topicRatings, labxStatus);
                 computeAggregateStats(syllabus);
                 setLoaderStatus('Finalizing dashboard...');
 
@@ -2098,18 +2100,62 @@
             const courses = Array.isArray(syllabus) ? syllabus : [];
             if (!courses.length) return courses;
 
+            const pickBestHydration = (course, candidate) => {
+                if (!candidate) return course;
+                const normalized = normalizeHydratedCourse(candidate, course);
+                const candidateTopics = countCourseTopics(normalized);
+                const fallbackTopics = countCourseTopics(course);
+                return candidateTopics >= fallbackTopics ? normalized : course;
+            };
+
+            const courseIds = Array.from(new Set(courses
+                .map((course) => String(course?.id || '').trim())
+                .filter(Boolean)));
+
+            if (courseIds.length) {
+                const maxBatchAttempts = 2;
+                for (let attempt = 0; attempt < maxBatchAttempts; attempt++) {
+                    const out = await fetchJson(`${API_BASE}/api/syllabus/courses/batch`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                        body: JSON.stringify({ course_ids: courseIds })
+                    });
+
+                    if (isSuccess(out) && Array.isArray(out.data)) {
+                        const hydratedById = new Map();
+                        out.data.forEach((item) => {
+                            const id = String(item?.id || '').trim();
+                            if (!id) return;
+                            hydratedById.set(id, item);
+                        });
+                        return courses.map((course) => {
+                            const key = String(course?.id || '').trim();
+                            if (!key) return course;
+                            return pickBestHydration(course, hydratedById.get(key));
+                        });
+                    }
+
+                    // Endpoint unavailable in older backends; fall through to legacy per-course hydration.
+                    if (out?.status === 404 || out?.status === 405) {
+                        break;
+                    }
+                    if (out?.unauthorized) {
+                        return courses;
+                    }
+                    await wait(180 * (attempt + 1));
+                }
+            }
+
+            // Fallback for environments without batch endpoint support.
             const hydrated = await Promise.all(courses.map(async (course) => {
                 const courseId = String(course?.id || '').trim();
                 if (!courseId) return course;
 
-                const fallbackTopics = countCourseTopics(course);
                 const maxAttempts = 3;
                 for (let attempt = 0; attempt < maxAttempts; attempt++) {
                     const out = await fetchJson(`${API_BASE}/api/syllabus/courses/${encodeURIComponent(courseId)}`, { headers: authHeaders() });
                     if (isSuccess(out) && out.data) {
-                        const candidate = normalizeHydratedCourse(out.data, course);
-                        const candidateTopics = countCourseTopics(candidate);
-                        return candidateTopics >= fallbackTopics ? candidate : course;
+                        return pickBestHydration(course, out.data);
                     }
                     if (out.unauthorized) return course;
                     await wait(220 * (attempt + 1));
@@ -2203,6 +2249,41 @@
             throw new Error('Blink fetch retry exhausted');
         }
 
+        // Check blink availability per unit by querying only the first topic in each unit.
+        // This avoids sending the full syllabus topics payload during initial page load.
+        async function fetchUnitBlinkAvailability(syllabus = []) {
+            const availabilityMap = new Map();
+            const unitsByTopic = new Map();
+
+            (Array.isArray(syllabus) ? syllabus : []).forEach((course) => {
+                (Array.isArray(course?.units) ? course.units : []).forEach((unit) => {
+                    const unitId = unit?.id || unit?.unit_id;
+                    if (!unitId) return;
+                    const topics = Array.isArray(unit?.topics) ? unit.topics : [];
+                    const firstTopic = topics.find((t) => String(t?.topic || '').trim());
+                    if (!firstTopic) return;
+                    const topicKey = normalizeTopicKey(firstTopic.topic);
+                    if (!topicKey) return;
+                    if (!unitsByTopic.has(topicKey)) unitsByTopic.set(topicKey, new Set());
+                    unitsByTopic.get(topicKey).add(String(unitId));
+                });
+            });
+
+            if (!unitsByTopic.size) return availabilityMap;
+
+            const firstTopics = Array.from(unitsByTopic.keys());
+            try {
+                const blinkLinksMap = await fetchBlinkLinks(firstTopics);
+                unitsByTopic.forEach((unitIds, topicKey) => {
+                    if (!blinkLinksMap.has(topicKey)) return;
+                    unitIds.forEach((unitId) => availabilityMap.set(unitId, true));
+                });
+            } catch (err) {
+                console.warn('[Academics] Unit blink availability check failed', err);
+            }
+            return availabilityMap;
+        }
+
         // Fetch LabX cache status for topic names from labx_explanations (bulk)
         async function fetchLabxStatus(topicNames) {
             const labxMap = new Map();
@@ -2229,12 +2310,12 @@
                 } catch (err) {
                     if (attempt === maxAttempts - 1) {
                         console.warn('[Academics] Failed to fetch LabX status', err);
-                        throw err;
+                        return labxMap;
                     }
                 }
                 await wait(180 * (attempt + 1));
             }
-            throw new Error('LabX fetch retry exhausted');
+            return labxMap;
         }
 
         async function openLabxInNewTab(topicName) {
@@ -2390,7 +2471,7 @@
             const completion = pct(doneTopics, totalTopics); updateRing(completion); const bar = $('barTopics'); if (bar) { bar.style.width = (completion || 0) + '%'; bar.classList.remove('animate-pulseBar'); }
         }
 
-        function renderSyllabus(list, teacherNotesBySubject = new Map(), blinkLinksMap = new Map(), topicRatingsMap = new Map(), labxStatusMap = new Map()) {
+        function renderSyllabus(list, teacherNotesBySubject = new Map(), unitBlinkAvailabilityMap = new Map(), topicRatingsMap = new Map(), labxStatusMap = new Map()) {
             const wrap = $('syllabus'); wrap.innerHTML = ''; const cTpl = $('courseCardTpl'); const uTpl = $('unitItemTpl');
             const courseNodes = [];
             list.forEach(c => {
@@ -2431,22 +2512,14 @@
                     const unitProgBar = uNode.querySelector('[data-unit-progress-bar]');
                     const unitProgText = uNode.querySelector('[data-unit-progress-text]');
                     const blinkBtn = uNode.querySelector('[data-unit-blink]');
+                    const unitId = u.id || u.unit_id;
 
                     // Check BOTH tables for blink images:
                     // 1. syllabus_topics.image_url (old way)
                     const hasImageInSyllabus = Array.isArray(u.topics) && u.topics.some(t => (t.image_url || '').trim() !== '');
 
-                    // 2. ai_notes.blink_link (new way)
-                    let hasBlinkInAiNotes = false;
-                    if (Array.isArray(u.topics)) {
-                        for (const t of u.topics) {
-                            const topicKey = normalizeTopicKey(t.topic);
-                            if (blinkLinksMap.has(topicKey)) {
-                                hasBlinkInAiNotes = true;
-                                break;
-                            }
-                        }
-                    }
+                    // 2. ai_notes.blink_link (new way, prechecked by first topic per unit)
+                    const hasBlinkInAiNotes = unitId ? unitBlinkAvailabilityMap.get(String(unitId)) === true : false;
 
                     // Show blink button if ANY topic has image in EITHER table
                     const hasAnyBlink = hasImageInSyllabus || hasBlinkInAiNotes;
@@ -2466,7 +2539,6 @@
                     });
 
                     if (blinkBtn) {
-                        const unitId = u.id || u.unit_id;
                         // Show blink button if any topic has image in either table
                         blinkBtn.classList.toggle('hidden', !(hasAnyBlink && canUseBlink));
                         blinkBtn.addEventListener('click', async (ev) => {

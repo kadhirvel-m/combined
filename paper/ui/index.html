@@ -720,6 +720,7 @@
     <!-- Auth config and auto-refresh -->
     <script src="config.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script type="module" src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js"></script>
     <script src="auth.js" defer></script>
 </head>
 
@@ -1159,7 +1160,14 @@
 
             <!-- CTA row -->
             <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-                <div id="ctaSignedOut" class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <div id="ctaLandingLoading" class="flex items-center justify-center gap-3 rounded-full px-5 py-2.5 ring-1 ring-brand-900/15 bg-white/70 dark:bg-white/10 dark:ring-white/15">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 overflow-visible">
+                        <dotlottie-wc class="block w-full h-full scale-[1.55]" style="transform-origin:center;" src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie" autoplay loop></dotlottie-wc>
+                    </div>
+                    <span class="text-sm font-semibold text-brand-900/80 dark:text-white/80">Preparing your dashboard...</span>
+                </div>
+
+                <div id="ctaSignedOut" class="hidden flex flex-col sm:flex-row items-center justify-center gap-4">
                     <!-- Google (exact multi-color SVG) -->
                     <a href="login.html" id="googleBtn"
                         class="inline-flex items-center gap-3 rounded-full bg-white text-brand-900 px-6 py-3 text-sm font-semibold hover:shadow-glow ring-1 ring-black/10 transition dark:bg-white/10 dark:text-white dark:ring-white/15 dark:hover:bg-white/20">
@@ -2193,6 +2201,7 @@
         }
 
         (async function toggleLandingCtasForSession() {
+            const loading = document.getElementById('ctaLandingLoading');
             const signedOut = document.getElementById('ctaSignedOut');
             const signedIn = document.getElementById('ctaSignedIn');
             const signedInPrimary = document.getElementById('ctaSignedInPrimary');
@@ -2200,12 +2209,41 @@
             const teacherSignedIn = document.getElementById('ctaTeacherSignedIn');
             if (!signedOut || !signedIn) return;
 
+            const hideAllCtas = () => {
+                signedOut.classList.add('hidden');
+                signedIn.classList.add('hidden');
+                if (teacherSignedIn) teacherSignedIn.classList.add('hidden');
+            };
+
+            const showCta = (kind) => {
+                hideAllCtas();
+                if (kind === 'teacher' && teacherSignedIn) {
+                    teacherSignedIn.classList.remove('hidden');
+                } else if (kind === 'signed-in') {
+                    signedIn.classList.remove('hidden');
+                } else {
+                    signedOut.classList.remove('hidden');
+                }
+                if (loading) loading.classList.add('hidden');
+            };
+
+            hideAllCtas();
+
             const navProfile = document.getElementById('navProfile');
             const navProfileMobile = document.getElementById('navProfileMobile');
             const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
             const ensureAuthReady = (typeof window.__PX_ENSURE_AUTH_READY === 'function')
                 ? window.__PX_ENSURE_AUTH_READY
                 : (async () => false);
+            const fetchWithTimeout = async (url, opts = {}, timeoutMs = 2200) => {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), timeoutMs);
+                try {
+                    return await fetch(url, { ...opts, signal: controller.signal });
+                } finally {
+                    clearTimeout(timer);
+                }
+            };
 
             let isTeacher = false;
             let isHod = false;
@@ -2215,117 +2253,113 @@
             let resolvedRole = null;
 
             try {
-                const AUTH_SENTINEL = '__COOKIE_AUTH__';
-                const tTeach = localStorage.getItem('teacherToken');
-                const tUser = localStorage.getItem('px_token');
-                isTeacher = !!(tTeach && tTeach !== AUTH_SENTINEL);
-                isStudent = !!(tUser && tUser !== AUTH_SENTINEL);
-            } catch (_) { }
-
-            // Avoid first protected-call 401 by warming auth once when session markers exist.
-            try { await ensureAuthReady(); } catch (_) { }
-
-            if (!isTeacher && !isStudent) {
                 try {
-                    const statusRes = await fetch(`${apiBase}/api/teacher/me/status`, { credentials: 'include' });
-                    if (statusRes.ok) {
-                        const statusData = await statusRes.json();
-                        resolvedRole = String((statusData && statusData.role) || '').trim().toLowerCase();
-                        if (resolvedRole === 'teacher') {
-                            isTeacher = true;
-                        } else if (resolvedRole === 'hod') {
-                            isHod = true;
-                            isStudent = true;
-                        } else {
-                            // Any authenticated non-teacher role should use the student/admin CTA path (NoteX).
-                            isStudent = true;
+                    const AUTH_SENTINEL = '__COOKIE_AUTH__';
+                    const tTeach = localStorage.getItem('teacherToken');
+                    const tUser = localStorage.getItem('px_token');
+                    isTeacher = !!(tTeach && tTeach !== AUTH_SENTINEL);
+                    isStudent = !!(tUser && tUser !== AUTH_SENTINEL);
+                } catch (_) { }
+
+                // Avoid first protected-call 401 by warming auth once when session markers exist.
+                try { await ensureAuthReady(); } catch (_) { }
+
+                if (!isTeacher && !isStudent) {
+                    try {
+                        const statusRes = await fetchWithTimeout(`${apiBase}/api/teacher/me/status`, { credentials: 'include' });
+                        if (statusRes.ok) {
+                            const statusData = await statusRes.json();
+                            resolvedRole = String((statusData && statusData.role) || '').trim().toLowerCase();
+                            if (resolvedRole === 'teacher') {
+                                isTeacher = true;
+                            } else if (resolvedRole === 'hod') {
+                                isHod = true;
+                                isStudent = true;
+                            } else {
+                                // Any authenticated non-teacher role should use the student/admin CTA path (NoteX).
+                                isStudent = true;
+                            }
                         }
+                    } catch (_) { }
+                }
+
+                if (!isTeacher && !isStudent) {
+                    try {
+                        const meRes = await fetchWithTimeout(`${apiBase}/api/me`, { credentials: 'include' });
+                        isStudent = meRes.ok;
+                    } catch (_) { }
+                }
+
+                if (isTeacher) {
+                    try {
+                        const tRes = await fetchWithTimeout(`${apiBase}/api/teacher/profile/me`, { credentials: 'include' });
+                        if (tRes.ok) {
+                            const tData = await tRes.json();
+                            teacherProfile = (tData && (tData.teacher || tData.profile || tData)) || null;
+                        }
+                    } catch (_) { }
+                }
+
+                if (isHod) {
+                    try {
+                        const hRes = await fetchWithTimeout(`${apiBase}/api/hod/me`, { credentials: 'include' });
+                        if (hRes.ok) {
+                            const hData = await hRes.json();
+                            hodProfile = (hData && (hData.hod || hData.profile || hData)) || null;
+                        }
+                    } catch (_) { }
+                }
+
+                if (isTeacher) {
+                    showCta('teacher');
+
+                    if (navProfile && navProfile.tagName === 'A') navProfile.href = 'teacher_profile.html?user=me';
+                    if (navProfileMobile && navProfileMobile.tagName === 'A') navProfileMobile.href = 'teacher_profile.html?user=me';
+
+                    if (teacherProfile && typeof window.__PX_NAV_APPLY === 'function') {
+                        window.__PX_NAV_APPLY({
+                            name: teacherProfile.name || teacherProfile.full_name || teacherProfile.username || 'Teacher',
+                            profile_image_url: teacherProfile.profile_image_url || teacherProfile.logo_url || teacherProfile.avatar_url || '',
+                            logo_url: teacherProfile.logo_url || '',
+                            avatar_url: teacherProfile.avatar_url || ''
+                        });
                     }
-                } catch (_) { }
-            }
+                } else if (isHod) {
+                    showCta('signed-in');
 
-            if (!isTeacher && !isStudent) {
-                try {
-                    const meRes = await fetch(`${apiBase}/api/me`, { credentials: 'include' });
-                    isStudent = meRes.ok;
-                } catch (_) { }
-            }
-
-            if (isTeacher) {
-                try {
-                    const tRes = await fetch(`${apiBase}/api/teacher/profile/me`, { credentials: 'include' });
-                    if (tRes.ok) {
-                        const tData = await tRes.json();
-                        teacherProfile = (tData && (tData.teacher || tData.profile || tData)) || null;
+                    if (signedInPrimary && signedInPrimary.tagName === 'A') {
+                        signedInPrimary.href = 'hod/hod_dashboard.html';
                     }
-                } catch (_) { }
-            }
-
-            if (isHod) {
-                try {
-                    const hRes = await fetch(`${apiBase}/api/hod/me`, { credentials: 'include' });
-                    if (hRes.ok) {
-                        const hData = await hRes.json();
-                        hodProfile = (hData && (hData.hod || hData.profile || hData)) || null;
+                    if (signedInPrimaryLabel) {
+                        signedInPrimaryLabel.textContent = 'HOD Dashboard';
                     }
-                } catch (_) { }
-            }
 
-            if (isTeacher) {
-                signedOut.classList.add('hidden');
-                signedIn.classList.add('hidden');
-                if (teacherSignedIn) teacherSignedIn.classList.remove('hidden');
+                    if (navProfile && navProfile.tagName === 'A') {
+                        navProfile.href = 'hod/hod_dashboard.html';
+                        navProfile.setAttribute('data-profile-link', 'hod/hod_dashboard.html');
+                    }
+                    if (navProfileMobile && navProfileMobile.tagName === 'A') {
+                        navProfileMobile.href = 'hod/hod_dashboard.html';
+                        navProfileMobile.setAttribute('data-profile-link', 'hod/hod_dashboard.html');
+                    }
 
-                if (navProfile && navProfile.tagName === 'A') navProfile.href = 'teacher_profile.html?user=me';
-                if (navProfileMobile && navProfileMobile.tagName === 'A') navProfileMobile.href = 'teacher_profile.html?user=me';
-
-                if (teacherProfile && typeof window.__PX_NAV_APPLY === 'function') {
-                    window.__PX_NAV_APPLY({
-                        name: teacherProfile.name || teacherProfile.full_name || teacherProfile.username || 'Teacher',
-                        profile_image_url: teacherProfile.profile_image_url || teacherProfile.logo_url || teacherProfile.avatar_url || '',
-                        logo_url: teacherProfile.logo_url || '',
-                        avatar_url: teacherProfile.avatar_url || ''
-                    });
+                    const hodNavProfile = {
+                        name: (hodProfile && (hodProfile.name || hodProfile.full_name || hodProfile.username)) || 'HOD',
+                        profile_image_url: (hodProfile && (hodProfile.profile_image_url || hodProfile.avatar_url || hodProfile.logo_url)) || '',
+                        logo_url: (hodProfile && (hodProfile.logo_url || hodProfile.profile_image_url)) || '',
+                        avatar_url: (hodProfile && (hodProfile.avatar_url || hodProfile.profile_image_url || hodProfile.logo_url)) || ''
+                    };
+                    window.__PX_PROFILE_SNAPSHOT = Object.assign({}, window.__PX_PROFILE_SNAPSHOT || {}, hodNavProfile);
+                    if (typeof window.__PX_NAV_APPLY === 'function') {
+                        window.__PX_NAV_APPLY(hodNavProfile);
+                    }
+                } else if (isStudent) {
+                    showCta('signed-in');
+                } else {
+                    showCta('signed-out');
                 }
-            } else if (isHod) {
-                signedOut.classList.add('hidden');
-                signedIn.classList.remove('hidden');
-                if (teacherSignedIn) teacherSignedIn.classList.add('hidden');
-
-                if (signedInPrimary && signedInPrimary.tagName === 'A') {
-                    signedInPrimary.href = 'hod/hod_dashboard.html';
-                }
-                if (signedInPrimaryLabel) {
-                    signedInPrimaryLabel.textContent = 'HOD Dashboard';
-                }
-
-                if (navProfile && navProfile.tagName === 'A') {
-                    navProfile.href = 'hod/hod_dashboard.html';
-                    navProfile.setAttribute('data-profile-link', 'hod/hod_dashboard.html');
-                }
-                if (navProfileMobile && navProfileMobile.tagName === 'A') {
-                    navProfileMobile.href = 'hod/hod_dashboard.html';
-                    navProfileMobile.setAttribute('data-profile-link', 'hod/hod_dashboard.html');
-                }
-
-                const hodNavProfile = {
-                    name: (hodProfile && (hodProfile.name || hodProfile.full_name || hodProfile.username)) || 'HOD',
-                    profile_image_url: (hodProfile && (hodProfile.profile_image_url || hodProfile.avatar_url || hodProfile.logo_url)) || '',
-                    logo_url: (hodProfile && (hodProfile.logo_url || hodProfile.profile_image_url)) || '',
-                    avatar_url: (hodProfile && (hodProfile.avatar_url || hodProfile.profile_image_url || hodProfile.logo_url)) || ''
-                };
-                window.__PX_PROFILE_SNAPSHOT = Object.assign({}, window.__PX_PROFILE_SNAPSHOT || {}, hodNavProfile);
-                if (typeof window.__PX_NAV_APPLY === 'function') {
-                    window.__PX_NAV_APPLY(hodNavProfile);
-                }
-            } else if (isStudent) {
-                signedOut.classList.add('hidden');
-                signedIn.classList.remove('hidden');
-                if (teacherSignedIn) teacherSignedIn.classList.add('hidden');
-            } else {
-                signedIn.classList.add('hidden');
-                if (teacherSignedIn) teacherSignedIn.classList.add('hidden');
-                signedOut.classList.remove('hidden');
+            } catch (_) {
+                showCta('signed-out');
             }
         })();
 
