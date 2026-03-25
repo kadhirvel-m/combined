@@ -1,0 +1,4500 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth" data-theme="light">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PaperX — Notes Generator (Material Style)</title>
+
+  <script>
+    (function () {
+      try {
+        var v = localStorage.getItem('px_theme');
+        var mode = (v === 'dark' || v === 'light') ? v : null;
+        if (!mode && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          mode = 'dark';
+        }
+        if (mode) {
+          document.documentElement.setAttribute('data-theme', mode);
+          document.documentElement.classList.toggle('dark', mode === 'dark');
+        }
+      } catch (e) { }
+    })();
+  </script>
+
+  <!-- Tailwind (local build) + plugins -->
+  <link rel="stylesheet" href="assets/css/tailwind.css" />
+  <script defer src="assets/js/analytics-tracker.js"></script>
+  <script>
+    // Use the same palette + mode behavior as other PaperX pages when CDN dev build is present
+    if (window.tailwind) {
+      window.tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+            },
+            colors: {
+              brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+              brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' },
+              surface: { DEFAULT: 'var(--surface)', dim: 'var(--surface-dim)', contrast: 'var(--surface-contrast)' }
+            },
+            boxShadow: {
+              glow: '0 8px 30px rgba(158,75,138,0.35)',
+              neon: '0 0 25px rgba(158,75,138,.35), 0 0 60px rgba(158,75,138,.25)',
+              'e1': '0 1px 2px rgba(0,0,0,0.06)',
+              'e2': '0 2px 6px rgba(0,0,0,0.08)',
+              'e3': '0 6px 12px rgba(0,0,0,0.10)',
+              'e4': '0 10px 16px rgba(0,0,0,0.12)'
+            },
+            keyframes: {
+              in: { '0%': { opacity: 0, transform: 'translateY(6px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+              pulsebar: { '0%': { width: '8%' }, '50%': { width: '55%' }, '100%': { width: '92%' } },
+              shimmer: { '0%': { backgroundPosition: '-468px 0' }, '100%': { backgroundPosition: '468px 0' } }
+            },
+            animation: { in: 'in .25s ease-out', pulsebar: 'pulsebar 1.8s ease-in-out infinite', shimmer: 'shimmer 1.25s linear infinite' }
+          }
+        }
+      };
+    }
+  </script>
+
+  <!-- Shared config + theme manager -->
+  <script src="./config.js"></script>
+
+  <script>
+    // Require student login for Notes Generator.
+    // If not logged in, redirect to login and return back to this page after login.
+    (function () {
+      try {
+        var token = String(localStorage.getItem('px_token') || '').trim();
+        var refresh = String(localStorage.getItem('px_refresh_token') || '').trim();
+        var marker = String(localStorage.getItem('paperx_session_state') || '').trim() === '1';
+        var fb = String(sessionStorage.getItem('paperx_bearer_fallback') || '').trim();
+        var hasCookie = false;
+        try { hasCookie = document.cookie.indexOf('paperx_auth=') !== -1; } catch (_) { }
+        if (!token && !refresh && !marker && !fb && !hasCookie) {
+          var next = encodeURIComponent(location.pathname + (location.search || ''));
+          location.replace('login.html?next=' + next);
+        }
+      } catch (e) { }
+    })();
+  </script>
+  <script src="./auth.js" defer></script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" />
+
+  <style>
+    /* Role-gating: keep elements hidden unless privileged, without fighting Tailwind responsive classes */
+    .px-privilege-hidden {
+      display: none !important;
+    }
+
+    :root {
+      /* PaperX light tokens */
+      --surface: #ffffff;
+      --surface-dim: #FBF8FC;
+      --surface-contrast: #1E1E2F;
+      --outline: rgba(30, 30, 47, 0.10);
+      --muted: #5b6178;
+      --elev: 1;
+      --brand: #9E4B8A;
+      --brand-strong: #4C2A59;
+      --brand-soft: #F3E7F2;
+      --chip: #FAF5FB;
+      --kbd: #F3E7F2;
+    }
+
+    [data-theme="dark"] {
+      /* PaperX dark tokens */
+      --surface: #1E1E2F;
+      --surface-dim: #201934;
+      --surface-contrast: #EAEAF2;
+      --outline: rgba(255, 255, 255, .12);
+      --muted: #c9c6d8;
+      --elev: 0;
+      --brand: #9E4B8A;
+      --brand-strong: #CA6CB3;
+      --brand-soft: rgba(255, 255, 255, 0.06);
+      --chip: rgba(255, 255, 255, 0.08);
+      --kbd: rgba(255, 255, 255, 0.08);
+    }
+
+    html,
+    body {
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    /* Background decorations to match other pages */
+    .bg-grid-radial {
+      background-color: var(--surface-dim);
+      background-image: radial-gradient(circle at 20% 10%, rgba(158, 75, 138, .18), transparent 40%),
+        radial-gradient(circle at 80% 15%, rgba(76, 42, 89, .22), transparent 45%),
+        radial-gradient(circle at 55% 80%, rgba(250, 245, 251, .6), transparent 50%);
+    }
+
+    .glass {
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    [data-theme="dark"] .glass {
+      background: rgba(15, 18, 38, 0.55);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    /* Prose tweaks */
+    .prose :where(h1, h2, h3, h4) {
+      scroll-margin-top: 6rem;
+    }
+
+    .prose pre {
+      border-radius: .75rem;
+      border: 1px solid var(--outline);
+      background: #0b1020;
+      color: #e5e7eb;
+    }
+
+    .prose code:not(pre code) {
+      background: var(--kbd);
+      padding: .18rem .4rem;
+      border-radius: .35rem;
+    }
+
+    .prose img {
+      border-radius: .75rem;
+    }
+
+    /* Mobile stability: don't let wide tables expand the page */
+    #output table {
+      max-width: 100%;
+    }
+
+    /* Scrollbars */
+    .scrollbar-thin {
+      scrollbar-width: thin;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: #cdd4ff;
+      border-radius: 9999px;
+    }
+
+    /* Ripple (Material state) */
+    .ripple {
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .ripple::after {
+      content: '';
+      position: absolute;
+      inset: auto;
+      width: 0;
+      height: 0;
+      border-radius: 9999px;
+      background: currentColor;
+      opacity: .12;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    /* Skeleton shimmer */
+    .skeleton {
+      background: linear-gradient(90deg, rgba(0, 0, 0, 0.06) 25%, rgba(0, 0, 0, 0.12) 37%, rgba(0, 0, 0, 0.06) 63%);
+      background-size: 800px 100%;
+      animation: shimmer 1.25s linear infinite;
+    }
+
+    /* Glass */
+    .glass {
+      backdrop-filter: blur(10px);
+      background: rgba(255, 255, 255, 0.65);
+    }
+
+    [data-theme="dark"] .glass {
+      background: rgba(15, 18, 38, 0.55);
+    }
+
+    /* Emphasis styling for bold keywords (toggleable) */
+    .emph-strong .prose strong {
+      background: var(--brand-soft);
+      color: var(--surface-contrast);
+      padding: .06rem .25rem;
+      border-radius: .25rem;
+    }
+
+    /* Citation pills */
+    .citation-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 .5rem;
+      height: 20px;
+      line-height: 18px;
+      border-radius: 9999px;
+      border: 1px solid var(--outline);
+      background: var(--chip);
+      color: inherit;
+      font-size: 11px;
+      text-decoration: none;
+      vertical-align: text-bottom;
+    }
+
+    .citation-pill img {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      object-fit: cover;
+    }
+
+    /* Citations section list: one line per item, clickable, hoverable */
+    .citations-list {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: .35rem;
+      margin-top: .5rem;
+    }
+
+    .citation-item {
+      display: block;
+      padding: .35rem .5rem;
+      border-radius: .5rem;
+      border: 1px solid var(--outline);
+      background: var(--chip);
+      color: inherit;
+      font-size: .9rem;
+      text-decoration: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .citation-item:hover {
+      background: color-mix(in oklab, var(--brand-soft) 60%, transparent);
+    }
+
+    /* Related videos carousel */
+    .yt-carousel {
+      display: flex;
+      gap: 1.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: thin;
+    }
+
+    .yt-carousel::-webkit-scrollbar {
+      height: 8px;
+    }
+
+    .yt-carousel::-webkit-scrollbar-thumb {
+      background: var(--outline);
+      border-radius: 9999px;
+    }
+
+    .yt-card {
+      flex: 0 0 260px;
+      scroll-snap-align: start;
+      border: 1px solid var(--outline);
+      border-radius: 1rem;
+      overflow: hidden;
+      background: var(--surface);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+      display: flex;
+      flex-direction: column;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      position: relative;
+    }
+
+    .yt-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 28px rgba(37, 99, 235, 0.18);
+    }
+
+    .yt-thumb {
+      position: relative;
+      padding-top: 56.25%;
+      background: #000;
+    }
+
+    .yt-thumb img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .yt-duration {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      padding: 2px 6px;
+      border-radius: 9999px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .yt-hover-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(155deg, rgba(8, 7, 31, 0.75), rgba(88, 28, 135, 0.45));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.8rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 2;
+    }
+
+    .yt-card:hover .yt-hover-overlay,
+    .yt-card:focus-within .yt-hover-overlay {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .yt-hover-overlay .yt-hover-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 9999px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 12px 22px rgba(15, 23, 42, 0.35);
+      font-size: 0;
+    }
+
+    .yt-hover-overlay .yt-hover-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 24px rgba(15, 23, 42, 0.45);
+    }
+
+    .yt-hover-overlay .yt-hover-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .yt-hover-btn-play {
+      background: linear-gradient(135deg, #4C2A59, #B06AB3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .yt-hover-btn-notes {
+      background: linear-gradient(135deg, #4C2A59, #B06AB3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .yt-hover-btn-icon {
+      font-size: 22px;
+      line-height: 1;
+      color: inherit;
+      font-family: 'Material Symbols Rounded', 'Material Symbols Outlined', sans-serif;
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .yt-body {
+      padding: 0.75rem 0.95rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .yt-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      line-height: 1.3;
+      overflow: hidden;
+      display: -webkit-box;
+      line-clamp: 2;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .yt-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .yt-channel-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      object-fit: cover;
+      border: 1px solid var(--outline);
+      flex-shrink: 0;
+    }
+
+    .yt-channel-name {
+      font-weight: 600;
+      color: var(--surface-contrast);
+    }
+
+    .yt-views {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .yt-skeleton-grid {
+      display: flex;
+      gap: 1.5rem;
+      overflow: hidden;
+    }
+
+    .yt-skeleton-card {
+      flex: 0 0 260px;
+      height: 180px;
+      border-radius: 1rem;
+      background: rgba(148, 163, 184, 0.2);
+    }
+
+    .topic-remaining-toast {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 95;
+      max-width: min(90vw, 320px);
+      padding: .6rem .9rem;
+      border-radius: .8rem;
+      border: 1px solid var(--outline);
+      background: color-mix(in oklab, var(--surface) 86%, var(--brand-soft));
+      color: var(--surface-contrast);
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
+      font-size: .8rem;
+      font-weight: 600;
+      transform: translateX(125%);
+      opacity: 0;
+      transition: transform .34s ease, opacity .34s ease;
+      pointer-events: none;
+    }
+
+    .topic-remaining-toast.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+
+    /* Mobile adjustments: reduce Related Videos height */
+    @media (max-width: 640px) {
+
+      /* Mobile-only: hide emphasis/fullscreen controls completely */
+      #emphBtn,
+      #expandBtn,
+      #fsControls {
+        display: none !important;
+      }
+
+      .yt-card {
+        flex: 0 0 200px;
+      }
+
+      .yt-thumb {
+        padding-top: 45%;
+      }
+
+      .yt-skeleton-card {
+        flex: 0 0 200px;
+        height: 130px;
+      }
+
+      .yt-skeleton-grid {
+        gap: 1rem;
+      }
+
+      #relatedVideosSection .py-5 {
+        padding-top: .75rem !important;
+        padding-bottom: .75rem !important;
+      }
+    }
+
+    /* Ensure the output area reserves space while loading */
+    #outputWrap.loading {
+      min-height: 360px;
+    }
+  </style>
+  <style>
+    /* Shared loader box to keep the animation perfectly square and responsive */
+    .px-loader-box {
+      width: clamp(180px, 45vw, 360px);
+      aspect-ratio: 1 / 1;
+    }
+
+    .px-loader-box>dotlottie-wc {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  </style>
+</head>
+
+<body class="bg-[var(--surface-dim)] text-[var(--surface-contrast)] min-h-screen font-sans overflow-x-hidden">
+  <!-- Background theme (light/dark) -->
+  <div aria-hidden="true" class="fixed inset-0 -z-10">
+    <div class="absolute inset-0 bg-[var(--surface-dim)]"></div>
+  </div>
+
+  <!-- Top App Bar (PaperX style) -->
+  <header
+    class="sticky top-0 z-40 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+      <div class="h-16 flex items-center gap-4">
+        <a href="index.html" class="flex items-center gap-2 min-w-0">
+          <img src="assets/img/logo-light.svg" alt="Paper X" class="h-8 w-auto dark:hidden">
+          <img src="assets/img/logo-dark.svg" alt="Paper X" class="h-8 w-auto hidden dark:block">
+          <span class="sr-only">Paper X</span>
+        </a>
+        <div class="ml-auto flex items-center gap-2">
+          <button id="feedbackBtn"
+            class="ripple inline-flex items-center gap-2 px-3 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold shadow-glow transition hover:opacity-95"
+            type="button">
+            <span class="material-symbols-rounded text-[18px] leading-none">feedback</span>
+            Feedback
+          </button>
+          <button id="shareBtn"
+            class="ripple inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm font-semibold hover:bg-brandlt-100 dark:hover:bg-white/10 transition"
+            style="border-color: var(--outline)" type="button">
+            <span class="material-symbols-rounded text-[18px] leading-none">share</span>
+            Share
+          </button>
+          <button id="mcqBtn"
+            class="ripple hidden px-3 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold shadow-glow transition disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled aria-disabled="true">MCQ</button>
+          <button id="themeBtn"
+            class="ripple inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm hover:bg-brandlt-100 dark:hover:bg-white/10 transition"
+            style="border-color: var(--outline)" title="Toggle theme">
+            <span id="themeIcon" class="material-symbols-rounded text-base">dark_mode</span>
+            <span id="themeText" class="hidden sm:inline">Theme</span>
+          </button>
+          <span id="verifiedByChip"
+            class="hidden items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs sm:text-sm font-medium bg-[var(--brand-soft)] text-[var(--surface-contrast)]"
+            style="border-color: var(--outline)">
+            <span class="material-symbols-rounded text-[16px]">verified_user</span>
+            <span data-verified-by-text>Verified by -</span>
+          </span>
+          <button id="verifyBtn"
+            class="ripple hidden items-center gap-2 px-4 py-2 rounded-full bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600 transition shadow-glow">
+            <span class="material-symbols-rounded text-[18px]">verified</span>
+            <span data-verify-label>Approve</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Related Videos -->
+  <section id="relatedVideosSection" class="max-w-7xl mx-auto px-4 sm:px-6 mt-6 hidden">
+    <div class="rounded-2xl glass border shadow-glow"
+      style="border-color: var(--outline); background: color-mix(in oklab, var(--surface) 78%, transparent);">
+      <div class="flex items-center justify-between gap-3 px-6 py-4 border-b flex-nowrap"
+        style="border-color: var(--outline)">
+        <div class="min-w-0">
+          <h2 class="text-base sm:text-lg font-semibold tracking-tight">Related Video</h2>
+          <p id="relatedVideosSummary" class="hidden sm:block text-xs sm:text-sm text-[var(--muted)]">Enter a topic to
+            discover
+            supporting videos.</p>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          <select id="videoLanguageSelect"
+            class="rounded-xl border px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm font-medium bg-transparent text-current focus:outline-none focus:ring-2 focus:ring-[var(--brand-soft)] transition"
+            style="border-color: var(--outline)" aria-label="Select video language">
+            <option value="English">English</option>
+            <option value="Tamil">Tamil</option>
+            <option value="Hindi">Hindi</option>
+            <option value="Telugu">Telugu</option>
+            <option value="Malayalam">Malayalam</option>
+          </select>
+          <button id="refreshVideosBtn"
+            class="ripple inline-flex items-center gap-1.5 rounded-xl border px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm font-medium hover:bg-[var(--brand-soft)] transition shrink-0"
+            style="border-color: var(--outline)">
+            <span class="material-symbols-outlined text-sm sm:text-base">refresh</span>
+            Refresh
+          </button>
+        </div>
+      </div>
+      <div id="relatedVideosSkeleton" class="px-6 py-5">
+        <div class="yt-skeleton-grid">
+          <div class="yt-skeleton-card skeleton"></div>
+          <div class="yt-skeleton-card skeleton"></div>
+          <div class="yt-skeleton-card skeleton"></div>
+        </div>
+      </div>
+      <div id="relatedVideosWrap" class="px-6 py-5 hidden">
+        <div id="relatedVideoCarousel" class="yt-carousel"></div>
+      </div>
+      <div id="relatedVideosEmpty" class="px-6 pb-6 text-sm text-[var(--muted)] hidden">
+        Videos will appear once a topic is generated.
+      </div>
+    </div>
+  </section>
+
+
+  <!-- Main layout -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left column -->
+    <aside class="space-y-4 lg:col-span-3">
+
+      <!-- Input Card -->
+      <section class="hidden sm:block rounded-2xl glass p-4 sm:p-5 border shadow-glow animate-in"
+        style="border-color: var(--outline); background: color-mix(in oklab, var(--surface) 75%, transparent)">
+        <div class="">
+          <label class="block text-sm font-medium mb-2 hidden sm:block">Topic</label>
+          <div class="flex gap-2 items-center">
+            <input id="topic" type="text" placeholder="e.g., Support Vector Machine"
+              class="w-full px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500"
+              style="border-color: var(--outline); background: var(--surface); color: var(--surface-contrast)" />
+            <button id="generateBtn"
+              class="ripple px-3 py-2 sm:px-4 sm:py-3 rounded-xl hover:opacity-95 text-white font-medium text-sm sm:text-base shadow-neon transition disabled:opacity-50 disabled:cursor-not-allowed"
+              style="background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-strong) 100%); box-shadow: 0 12px 32px rgba(158,75,138,0.35);"
+              aria-label="Generate notes" title="Generate notes">
+              <span class="material-symbols-rounded text-[20px] leading-none">auto_awesome</span>
+            </button>
+            <button id="regenBtnMobile"
+              class="ripple sm:hidden px-3 py-2 rounded-xl border text-sm hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              style="border-color: var(--outline)">Regenerate</button>
+          </div>
+          <!-- Degree selector -->
+          <div id="degreeRow" class="hidden mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
+            <div class="flex items-center gap-2">
+              <label for="degreeSelect" class="text-xs font-medium shrink-0">Degree</label>
+              <select id="degreeSelect"
+                class="w-full px-3 py-2 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                style="border-color: var(--outline)">
+                <option value="">Select degree…</option>
+                <option value="custom">Other…</option>
+              </select>
+            </div>
+            <div id="degreeCustomRow" class="hidden sm:col-span-1">
+              <input id="degreeCustom" type="text" placeholder="Type your degree (e.g., B.Tech)"
+                class="w-full px-3 py-2 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                style="border-color: var(--outline); background: var(--surface); color: var(--surface-contrast)" />
+            </div>
+          </div>
+          <div class="hidden sm:flex items-center gap-2 mt-3">
+            <button id="regenBtn"
+              class="ripple px-3 py-2 rounded-xl border hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              style="border-color: var(--outline)">Regenerate</button>
+            <button id="cancelBtn"
+              class="ripple px-3 py-2 rounded-xl border hover:bg-[var(--brand-soft)] transition disabled:opacity-50 disabled:cursor-not-allowed"
+              style="border-color: var(--outline)" disabled>Cancel</button>
+            <div class="text-xs text-[var(--muted)] ml-auto"><span id="domainsHint">Sources: auto</span></div>
+          </div>
+        </div>
+
+        <!-- Stepper / progress -->
+        <div class="pt-4 hidden sm:block">
+          <ol class="grid grid-cols-5 gap-2 text-[11px] text-center text-[var(--muted)]">
+            <li class="step" data-step="start">Start</li>
+            <li class="step" data-step="search_results">Search</li>
+            <li class="step" data-step="fetch_done">Parse</li>
+            <li class="step" data-step="llm_done">Generate</li>
+            <li class="step" data-step="final">Done</li>
+          </ol>
+          <div class="h-1.5 mt-2 bg-[var(--brand-soft)] rounded-full overflow-hidden">
+            <div id="progressBar" class="h-full bg-brand-500 w-0 transition-all"></div>
+          </div>
+        </div>
+      </section>
+
+
+
+      <!-- Related Images -->
+      <section class="hidden" style="border-color: var(--outline);">
+        <div class="p-4 sm:p-5">
+          <h3 class="text-sm font-semibold mb-3">Related Images</h3>
+          <div id="images" class="grid grid-cols-3 gap-2">
+            <!-- skeletons -->
+            <div class="h-24 rounded-lg skeleton"></div>
+            <div class="h-24 rounded-lg skeleton"></div>
+            <div class="h-24 rounded-lg skeleton"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Contents (sticky) -->
+      <section class="rounded-2xl glass border shadow-glow sticky top-24 hidden sm:block"
+        style="border-color: var(--outline);">
+        <div class="p-4 sm:p-5">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold">Contents</h3>
+            <div class="text-xs text-[var(--muted)] hidden" id="noteMeta"></div>
+          </div>
+          <nav id="toc" class="text-sm space-y-1 max-h-72 overflow-auto pr-1 scrollbar-thin">
+            <!-- TOC items injected -->
+          </nav>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Right column (Output) -->
+    <section class="lg:col-span-9 space-y-4">
+
+      <div class="rounded-2xl glass border shadow-glow" style="border-color: var(--outline);">
+        <!-- Toolbar -->
+        <div class="px-4 sm:px-5 py-3 border-b flex items-center gap-2" style="border-color: var(--outline);">
+          <h3 class="text-sm font-semibold mr-auto">Final Output</h3>
+
+          <!-- removed MD / Mermaid / Citations chips per request -->
+
+          <!-- Variant switcher -->
+          <div class="inline-flex items-center mr-2 rounded-xl border p-0.5 bg-[var(--surface)]" role="tablist"
+            aria-label="Variant" style="border-color: var(--outline)">
+            <button id="variantDetailed" data-variant="detailed"
+              class="ripple px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--brand-soft)] transition">Detailed</button>
+            <button id="variantCheatsheet" data-variant="cheatsheet"
+              class="ripple px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--brand-soft)] transition">Cheat Sheet</button>
+          </div>
+
+          <!-- removed Edit & Copy MD buttons per request -->
+          <button id="saveBtn"
+            class="ripple px-3 py-2 rounded-lg bg-emerald-500/90 hover:bg-emerald-600 text-white text-sm hidden">Save</button>
+          <button id="myNoteBtn" class="ripple px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)] hidden"
+            style="border-color: var(--outline)">My note</button>
+          <button id="editToggle"
+            class="ripple px-privilege-hidden inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
+            style="border-color: var(--outline)">Edit</button>
+          <button id="downloadBtn"
+            class="ripple hidden sm:inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
+            style="border-color: var(--outline)">Download</button>
+          <button id="emphBtn"
+            class="ripple hidden sm:inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
+            style="border-color: var(--outline)">Emphasis</button>
+          <button id="expandBtn"
+            class="ripple hidden sm:inline-flex px-3 py-2 rounded-lg border text-sm hover:bg-[var(--brand-soft)]"
+            style="border-color: var(--outline)">Fullscreen</button>
+        </div>
+
+        <!-- Output -->
+        <div id="outputWrap" class="relative p-4 sm:p-6 overflow-x-auto scrollbar-thin">
+          <!-- Centered loader overlay inside the answer box -->
+          <div id="outputLoader" class="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
+            style="display: none;">
+            <div class="px-loader-box">
+              <dotlottie-wc src="https://lottie.host/848055f4-11c7-4032-80e0-d51319c33bca/lF6845uqpU.lottie" autoplay
+                loop></dotlottie-wc>
+            </div>
+          </div>
+          <article id="output" class="prose prose-slate dark:prose-invert max-w-none"></article>
+
+          <textarea id="editor"
+            class="hidden w-full h-[60vh] mt-2 p-3 rounded-lg border font-mono text-[13px] font-semibold"
+            style="border-color: var(--outline); background: var(--surface); color: var(--surface-contrast)"
+            spellcheck="false"></textarea>
+
+          <!-- Fullscreen overlay controls -->
+          <div id="fsControls" class="hidden fixed top-4 right-4 z-[60] flex items-center gap-2">
+            <button id="fsThemeBtn"
+              class="ripple inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm bg-[var(--surface)] hover:bg-brandlt-100 dark:hover:bg-white/10 transition shadow-lg"
+              style="border-color: var(--outline)" title="Toggle theme">
+              <span class="material-symbols-rounded text-base">dark_mode</span>
+              <span class="hidden sm:inline">Theme</span>
+            </button>
+            <button id="fsExitBtn"
+              class="ripple px-3 py-2 rounded-lg border text-sm bg-[var(--surface)] hover:bg-[var(--brand-soft)] shadow-lg"
+              style="border-color: var(--outline)">Exit Fullscreen</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating AI Assistant FAB -->
+
+
+    </section>
+  </main>
+
+  <!-- Snackbar -->
+  <div id="snack"
+    class="fixed left-1/2 -translate-x-1/2 bottom-4 px-4 py-2 rounded-xl shadow-glow bg-[var(--surface)] border text-sm hidden"
+    style="border-color: var(--outline)">Copied</div>
+
+  <!-- Share Modal -->
+  <div id="shareModal" class="hidden fixed inset-0" style="z-index: 2147483646;" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/85 backdrop-blur-xl"></div>
+    <div class="relative h-full w-full flex items-center justify-center p-4">
+      <div data-share-modal-panel
+        class="w-full max-w-md rounded-3xl border border-white/25 dark:border-white/20 bg-white/96 dark:bg-brand-900/96 text-neutral-900 dark:text-white shadow-[0_36px_96px_rgba(0,0,0,0.52)] ring-1 ring-brand-500/20 backdrop-blur-xl supports-[backdrop-filter]:backdrop-blur-xl p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-700 dark:text-brandlt-200 bg-brandlt-100/85 dark:bg-brand-700/35">
+              <span class="material-symbols-rounded text-[15px] leading-none">share</span>
+              Share Notes
+            </div>
+            <h3 class="mt-2 text-base font-semibold">Share this topic quickly</h3>
+            <p class="mt-1 text-xs text-black/60 dark:text-white/60">Topic and a short notes preview are ready. Use Copy Link to share instantly.</p>
+          </div>
+          <button id="shareModalClose" type="button" aria-label="Close share modal"
+            class="inline-flex items-center justify-center size-9 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+            <span class="material-symbols-rounded text-[20px]">close</span>
+          </button>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          <div class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-black/15 px-3 py-2.5">
+            <div class="text-[11px] uppercase tracking-wide font-semibold text-black/55 dark:text-white/55">Topic</div>
+            <div id="shareTopicPreview" class="mt-1 text-sm font-medium break-words">-</div>
+          </div>
+          <div class="rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-black/15 px-3 py-2.5">
+            <div class="text-[11px] uppercase tracking-wide font-semibold text-black/55 dark:text-white/55">Preview</div>
+            <p id="shareContentPreview" class="mt-1 text-sm leading-relaxed text-black/80 dark:text-white/80">Generate notes to preview share content.</p>
+          </div>
+          <div class="flex items-center justify-between gap-3 pt-1">
+            <div id="shareStatus" class="text-xs text-black/60 dark:text-white/60"></div>
+            <button id="shareCopyBtn" type="button"
+              class="ripple inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white bg-gradient-to-r from-brand-500 via-[#B06AB3] to-[#FF7FD1] shadow-glow hover:opacity-95 transition">
+              <span class="material-symbols-rounded text-[18px]">link</span>
+              Copy Link
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feedback Modal (opened by Feedback button) -->
+  <div id="feedbackModal" class="hidden fixed inset-0" style="z-index: 2147483647;" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70"></div>
+    <div class="relative h-full w-full flex items-center justify-center p-4">
+      <div data-feedback-modal-panel
+        class="w-full max-w-2xl rounded-3xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-brand-900/95 text-neutral-900 dark:text-white shadow-card backdrop-blur supports-[backdrop-filter]:backdrop-blur-xl p-6 overflow-y-auto overflow-x-hidden"
+        style="max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem);">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-rounded text-brand-500">feedback</span>
+              <h3 class="text-lg font-semibold">Feedback</h3>
+            </div>
+            <p class="text-xs text-black/60 dark:text-white/60 mt-1">Report anything wrong/unclear/missing in the notes.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <a id="feedbackInboxLink" href="./admin/notes_feedback.html"
+              class="px-4 py-2 rounded-2xl text-xs font-semibold ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition px-privilege-hidden">
+              Open Inbox
+            </a>
+            <button id="feedbackModalClose" type="button" aria-label="Close"
+              class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Category</label>
+            <select id="fbCategory"
+              class="w-full px-3 py-2.5 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40">
+              <option value="Wrong information">Wrong information</option>
+              <option value="Missing details">Missing details</option>
+              <option value="Needs examples">Needs examples</option>
+              <option value="Spelling / grammar">Spelling / grammar</option>
+              <option value="Formatting issue">Formatting issue</option>
+              <option value="Outdated">Outdated</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Rating
+              <span class="font-normal">(optional)</span></label>
+            <div id="fbRating" class="flex flex-wrap items-center gap-2">
+              <button type="button" data-rating="1"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">1</button>
+              <button type="button" data-rating="2"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">2</button>
+              <button type="button" data-rating="3"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">3</button>
+              <button type="button" data-rating="4"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">4</button>
+              <button type="button" data-rating="5"
+                class="ripple px-3 py-2 rounded-2xl ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">5</button>
+            </div>
+          </div>
+
+          <div class="md:col-span-2">
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick
+              tags</label>
+            <div id="fbTags" class="flex flex-wrap gap-2">
+              <button type="button" data-tag="Wrong"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong</button>
+              <button type="button" data-tag="Unclear"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Unclear</button>
+              <button type="button" data-tag="Too long"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too
+                long</button>
+              <button type="button" data-tag="Too short"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too
+                short</button>
+              <button type="button" data-tag="Example needed"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Example
+                needed</button>
+              <button type="button" data-tag="Equation"
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Equation</button>
+            </div>
+          </div>
+
+          <div class="md:col-span-2">
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Quick
+              templates</label>
+            <div id="fbTemplates" class="flex flex-wrap gap-2">
+              <button type="button" data-template="This section seems wrong: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Wrong
+                section</button>
+              <button type="button" data-template="Please add an example for: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Need
+                example</button>
+              <button type="button" data-template="Please simplify this part: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Too
+                complex</button>
+              <button type="button" data-template="Spelling/grammar issue here: "
+                class="ripple px-4 py-2 rounded-full ring-1 ring-black/10 dark:ring-white/15 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition">Grammar</button>
+            </div>
+          </div>
+
+          <div class="md:col-span-2">
+            <label
+              class="block text-[11px] tracking-wide uppercase font-semibold text-black/60 dark:text-white/60 mb-1">Your
+              feedback</label>
+            <textarea id="fbMessage" rows="5" placeholder="Write what’s wrong / what to improve…"
+              class="w-full px-4 py-3 rounded-3xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/70 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40"></textarea>
+
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <button id="fbUseSelection" type="button"
+                class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-xs font-semibold ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                <span class="material-symbols-rounded text-[16px]">content_copy</span>
+                Use selected text
+              </button>
+              <div id="fbSelPreview" class="text-xs text-black/60 dark:text-white/60 truncate max-w-[min(720px,90vw)]">
+              </div>
+            </div>
+          </div>
+
+          <div class="md:col-span-2 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div id="fbStatus" class="text-xs text-black/60 dark:text-white/60"></div>
+              <div id="fbAuthHint" class="text-xs text-black/60 dark:text-white/60 hidden">Sign in required to send
+                feedback.</div>
+            </div>
+            <button id="fbSubmit" type="button"
+              class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">
+              <span class="material-symbols-rounded text-[18px]">send</span>
+              Send feedback
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inline Gemini helper affordances -->
+  <button id="geminiSelectionBtn" type="button" aria-label="Ask TuneAI about selection"
+    class="hidden select-none text-brand-600"
+    style="position:absolute; z-index:70; border:1px solid var(--outline); background:var(--surface); border-radius:999px; padding:6px; box-shadow:0 6px 16px rgba(15,23,42,0.18);">
+    <span class="material-symbols-outlined text-base leading-none">auto_awesome</span>
+  </button>
+  <div id="geminiSelectionPanel" role="dialog" aria-modal="false" aria-hidden="true"
+    class="hidden rounded-2xl glass border shadow-glow custom-scroll"
+    style="position:absolute; z-index:70; width:420px; max-width:calc(100vw-32px); border-color:var(--outline);">
+    <div class="p-4 space-y-2">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex items-center gap-1.5 text-[12px] font-semibold text-brand-600">
+          <span class="material-symbols-outlined text-base leading-none">auto_awesome</span>
+          TuneAI Inline
+        </div>
+        <button id="geminiSelectionClose" type="button"
+          class="text-[10px] uppercase tracking-wide text-[var(--muted)] hover:text-[var(--surface-contrast)]">Close</button>
+      </div>
+      <div
+        class="text-[11px] text-[var(--muted)] bg-[var(--chip)]/60 rounded-lg px-2 py-1 max-h-20 overflow-auto custom-scroll"
+        id="geminiSelectionContext"></div>
+      <label for="geminiSelectionInput" class="text-[11px] font-medium text-[var(--muted)] tracking-wide uppercase">Ask
+        anything</label>
+      <textarea id="geminiSelectionInput" rows="2" spellcheck="false"
+        class="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+        placeholder="Explain it simply, expand it, translate it..."
+        style="border-color:var(--outline); background:var(--surface); color:var(--surface-contrast);"></textarea>
+      <div class="flex items-center gap-2">
+        <button id="geminiSelectionRun" type="button"
+          class="ripple px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold uppercase tracking-wide">Ask
+          Tune</button>
+        <button id="geminiSelectionMeaning" type="button"
+          class="ripple px-3 py-2 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
+          style="border-color:var(--outline)"><span
+            class="material-symbols-outlined text-xs align-middle mr-1">translate</span>Meaning</button>
+        <button id="geminiSelectionEdit" type="button"
+          class="ripple px-3 py-2 rounded-lg border text-xs hover:bg-[var(--brand-soft)]"
+          style="border-color:var(--outline)"><span
+            class="material-symbols-outlined text-xs align-middle mr-1">edit</span>Edit</button>
+        <div id="geminiSelectionStatus" class="text-[11px] text-[var(--muted)] hidden"></div>
+      </div>
+      <div id="geminiSelectionOutput"
+        class="text-sm leading-relaxed prose prose-sm dark:prose-invert max-h-56 overflow-auto custom-scroll"></div>
+    </div>
+  </div>
+
+
+
+  <!-- Inject Material Symbols for icons used in the FAB/panel -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+    rel="stylesheet" />
+
+  <style>
+    /* Floating AI Assistant panel open state and scrollbars */
+    #aiPanel.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    #aiPanel::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    #aiPanel::-webkit-scrollbar-thumb {
+      background: var(--outline);
+      border-radius: 4px;
+    }
+
+    #geminiSelectionBtn {
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+    }
+
+    #geminiSelectionBtn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.25);
+    }
+
+    #geminiSelectionPanel {
+      backdrop-filter: blur(18px);
+    }
+
+    #geminiSelectionOutput :is(p, ul, ol) {
+      margin: 0.35rem 0;
+      font-size: 0.85rem;
+    }
+
+    #geminiSelectionOutput::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #geminiSelectionOutput::-webkit-scrollbar-thumb {
+      background: var(--outline);
+      border-radius: 4px;
+    }
+
+    #geminiSelectionContext {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 1.5rem;
+    }
+
+    #output ::selection {
+      background: #9f4e8d;
+      color: #ffffff;
+    }
+
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: var(--outline);
+      border-radius: 4px;
+    }
+  </style>
+
+  <script>
+    const __scriptCache = new Map();
+    const __styleCache = new Set();
+
+    function loadScriptOnce(src, opts = {}) {
+      if (__scriptCache.has(src)) return __scriptCache.get(src);
+      const p = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        if (opts.module) s.type = 'module';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(s);
+      });
+      __scriptCache.set(src, p);
+      return p;
+    }
+
+    function loadStyleOnce(href) {
+      if (__styleCache.has(href)) return;
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = href;
+      document.head.appendChild(l);
+      __styleCache.add(href);
+    }
+
+    const LOTTIE_SRC = 'https://unpkg.com/@lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js';
+    async function ensureLottie() {
+      if (window.customElements && window.customElements.get('dotlottie-wc')) return;
+      try { await loadScriptOnce(LOTTIE_SRC, { module: true }); } catch { }
+    }
+
+    let __mdRuntimePromise = null;
+    async function ensureMarkdownRuntime() {
+      if (__mdRuntimePromise) return __mdRuntimePromise;
+      __mdRuntimePromise = (async () => {
+        loadStyleOnce('https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css');
+        loadStyleOnce('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css');
+        await Promise.all([
+          loadScriptOnce('https://cdn.jsdelivr.net/npm/marked/marked.min.js'),
+          loadScriptOnce('https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js'),
+          loadScriptOnce('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js'),
+          loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js'),
+        ]);
+        await loadScriptOnce('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js');
+        await loadScriptOnce('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js');
+        try { mermaid.initialize({ startOnLoad: false, theme: 'default' }); } catch { }
+        try { marked.use({ gfm: true, breaks: true, mangle: false, headerIds: true }); } catch { }
+      })();
+      return __mdRuntimePromise;
+    }
+
+    // Central API base (supports file:// open or custom API_BASE)
+    let __defaultBase = 'http://127.0.0.1:8000';
+    if (/^https?:/i.test(window.location.origin)) {
+      const host = window.location.host;
+      if (/localhost:5500|127\.0\.0\.1:5500/.test(host)) {
+        __defaultBase = 'http://127.0.0.1:8000';
+      } else {
+        __defaultBase = window.location.origin;
+      }
+    }
+    const apiBase = (window.API_BASE || __defaultBase).replace(/\/$/, '');
+          // Share notes modal
+          (function () {
+            const modal = document.getElementById('shareModal');
+            const btnOpen = document.getElementById('shareBtn');
+            const btnClose = document.getElementById('shareModalClose');
+            const topicPreview = document.getElementById('shareTopicPreview');
+            const contentPreview = document.getElementById('shareContentPreview');
+            const copyBtn = document.getElementById('shareCopyBtn');
+            const statusEl = document.getElementById('shareStatus');
+            if (!modal || !btnOpen || !btnClose || !topicPreview || !contentPreview || !copyBtn) return;
+
+            function truncate(text, maxLen) {
+              const clean = String(text || '').replace(/\s+/g, ' ').trim();
+              if (!clean) return '';
+              if (clean.length <= maxLen) return clean;
+              return `${clean.slice(0, maxLen).trim()}...`;
+            }
+
+            function resolveTopic() {
+              const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
+              const fromInput = (document.getElementById('topic')?.value || '').trim();
+              return fromHeading || fromInput || 'Untitled topic';
+            }
+
+            function resolvePreviewText() {
+              const fromOutput = (document.getElementById('output')?.textContent || '').trim();
+              if (!fromOutput) return 'Generate notes to preview share content.';
+              return truncate(fromOutput, 240);
+            }
+
+            function composeShareLink() {
+              const topic = resolveTopic();
+              const url = new URL(window.location.href);
+              url.searchParams.set('topic', topic);
+              return url.toString();
+            }
+
+            function setStatus(text, isError) {
+              if (!statusEl) return;
+              statusEl.textContent = text || '';
+              statusEl.style.color = isError ? '#ef4444' : '';
+            }
+
+            function refreshPreview() {
+              topicPreview.textContent = resolveTopic();
+              contentPreview.textContent = resolvePreviewText();
+              setStatus('', false);
+            }
+
+            function openModal() {
+              refreshPreview();
+              modal.classList.remove('hidden');
+              modal.setAttribute('aria-hidden', 'false');
+              document.body.style.overflow = 'hidden';
+            }
+
+            function closeModal() {
+              modal.classList.add('hidden');
+              modal.setAttribute('aria-hidden', 'true');
+              document.body.style.overflow = '';
+            }
+
+            async function copyShareText() {
+              const payload = composeShareLink();
+              try {
+                await navigator.clipboard.writeText(payload);
+                setStatus('Link copied to clipboard.', false);
+                if (typeof snack === 'function') snack('Link copied');
+              } catch {
+                try {
+                  const ta = document.createElement('textarea');
+                  ta.value = payload;
+                  ta.setAttribute('readonly', 'true');
+                  ta.style.position = 'fixed';
+                  ta.style.opacity = '0';
+                  document.body.appendChild(ta);
+                  ta.select();
+                  document.execCommand('copy');
+                  document.body.removeChild(ta);
+                  setStatus('Link copied to clipboard.', false);
+                  if (typeof snack === 'function') snack('Link copied');
+                } catch {
+                  setStatus('Unable to copy link. Try again.', true);
+                }
+              }
+            }
+
+            btnOpen.addEventListener('click', openModal);
+            btnClose.addEventListener('click', closeModal);
+            copyBtn.addEventListener('click', copyShareText);
+
+            modal.addEventListener('click', (event) => {
+              if (event.target?.closest?.('[data-share-modal-panel]')) return;
+              closeModal();
+            });
+
+            document.addEventListener('keydown', (event) => {
+              if (event.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+            });
+          })();
+        </script>
+
+        <script>
+
+    // ===== Elements =====
+    const $relatedVideosSection = document.getElementById('relatedVideosSection');
+    const $relatedVideosSummary = document.getElementById('relatedVideosSummary');
+    const $relatedVideosSkeleton = document.getElementById('relatedVideosSkeleton');
+    const $relatedVideosWrap = document.getElementById('relatedVideosWrap');
+    const $relatedVideosCarousel = document.getElementById('relatedVideoCarousel');
+    const $relatedVideosEmpty = document.getElementById('relatedVideosEmpty');
+    const $refreshVideos = document.getElementById('refreshVideosBtn');
+    const $videoLanguage = document.getElementById('videoLanguageSelect');
+    const $topic = document.getElementById('topic');
+    const $degree = document.getElementById('degreeSelect');
+    const $degreeCustom = document.getElementById('degreeCustom');
+    const $degreeCustomRow = document.getElementById('degreeCustomRow');
+    const $degreeRow = document.getElementById('degreeRow');
+    const $generate = document.getElementById('generateBtn');
+    const $regen = document.getElementById('regenBtn');
+    const $regenMobile = document.getElementById('regenBtnMobile');
+    const $cancel = document.getElementById('cancelBtn');
+    const $output = document.getElementById('output');
+    const $images = document.getElementById('images');
+    const $toc = document.getElementById('toc');
+    const $progress = document.getElementById('progressBar');
+    const $copy = document.getElementById('copyBtn');
+    const $download = document.getElementById('downloadBtn');
+    const $emphBtn = document.getElementById('emphBtn');
+    const $expand = document.getElementById('expandBtn');
+    const $wrap = document.getElementById('outputWrap');
+    const $outputLoader = document.getElementById('outputLoader');
+    const $editToggle = document.getElementById('editToggle');
+    const $verifyBtn = document.getElementById('verifyBtn');
+    const $save = document.getElementById('saveBtn');
+    const $myNoteBtn = document.getElementById('myNoteBtn');
+    const $editor = document.getElementById('editor');
+    const $meta = document.getElementById('noteMeta');
+    const $domainsHint = document.getElementById('domainsHint');
+    const $snack = document.getElementById('snack');
+    const $themeBtn = document.getElementById('themeBtn');
+    const $themeIcon = document.getElementById('themeIcon');
+    const $themeText = document.getElementById('themeText');
+    const $verifiedByChip = document.getElementById('verifiedByChip');
+    const $fsCtrl = document.getElementById('fsControls');
+    const $fsExit = document.getElementById('fsExitBtn');
+    const $fsHome = document.getElementById('fsHomeBtn');
+    const $flashcardBtn = document.getElementById('flashcardBtn');
+    const $mcqBtn = document.getElementById('mcqBtn');
+    let currentAccessSummary = null;
+    const flashcardDefaultLabel = $flashcardBtn ? ($flashcardBtn.textContent || 'Flashcards') : 'Flashcards';
+    const mcqDefaultLabel = $mcqBtn ? ($mcqBtn.textContent || 'MCQ') : 'MCQ';
+    const $variantDetailed = document.getElementById('variantDetailed');
+    const $variantCheatsheet = document.getElementById('variantCheatsheet');
+    // inline panel action buttons are wired inside the inline IIFE
+
+    const fallbackChannelLogo = 'https://www.youtube.com/s/desktop/94838207/img/favicon_144x144.png';
+    const fallbackChannelLogoLocal = '/ui/assets/img/favicon.svg';
+    const fallbackVideoThumb = '/ui/assets/img/logo-light.svg';
+    const channelLogoCache = new Map();
+    let relatedVideosAbort = null;
+    let relatedVideosTopic = '';
+    let relatedVideosFullQuery = '';
+    let relatedVideosLanguage = ($videoLanguage?.value || 'English');
+    let relatedVideosDebounce = null;
+
+    // ===== Degree handling =====
+    const DEGREE_KEY = 'paperx:degree';
+    const topicOpenUsageDate = new Date().toISOString().slice(0, 10);
+    const topicOpenUsageStorageKey = `paperx:consumedTopicOpen:v3:${topicOpenUsageDate}`;
+    let topicRemainingToastHideTimer = null;
+
+    function loadDailyTopicOpenSet() {
+      try {
+        const raw = localStorage.getItem(topicOpenUsageStorageKey);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return new Set();
+        return new Set(parsed.map((item) => String(item || '').trim()).filter(Boolean));
+      } catch {
+        return new Set();
+      }
+    }
+
+    function persistDailyTopicOpenSet() {
+      try {
+        localStorage.setItem(topicOpenUsageStorageKey, JSON.stringify(Array.from(consumedTopicOpenSet)));
+      } catch {
+      }
+    }
+
+    function normalizeTopicAccessKey(value) {
+      return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    const consumedTopicOpenSet = loadDailyTopicOpenSet();
+
+    function hasConsumedTopicOpen(topic) {
+      const key = normalizeTopicAccessKey(topic);
+      if (!key) return false;
+      return consumedTopicOpenSet.has(key);
+    }
+
+    function markTopicOpenConsumed(topic) {
+      const key = normalizeTopicAccessKey(topic);
+      if (!key) return;
+      consumedTopicOpenSet.add(key);
+      persistDailyTopicOpenSet();
+    }
+
+    function ensureTopicRemainingToast() {
+      let node = document.getElementById('topicRemainingToast');
+      if (node) return node;
+      node = document.createElement('div');
+      node.id = 'topicRemainingToast';
+      node.className = 'topic-remaining-toast';
+      document.body.appendChild(node);
+      return node;
+    }
+
+    function showTopicRemainingToast(remaining) {
+      const value = Number(remaining);
+      if (!Number.isFinite(value)) return;
+      const node = ensureTopicRemainingToast();
+      node.textContent = `Topics left today: ${Math.max(0, Math.floor(value))}`;
+      node.classList.remove('show');
+      void node.offsetWidth;
+      node.classList.add('show');
+      if (topicRemainingToastHideTimer) clearTimeout(topicRemainingToastHideTimer);
+      topicRemainingToastHideTimer = setTimeout(() => {
+        node.classList.remove('show');
+      }, 3200);
+    }
+
+    function getStoredDegree() {
+      try { return localStorage.getItem(DEGREE_KEY) || ''; } catch { return ''; }
+    }
+    function setStoredDegree(v) {
+      try { if (v) localStorage.setItem(DEGREE_KEY, v); else localStorage.removeItem(DEGREE_KEY); } catch { }
+    }
+    function getSelectedDegree() {
+      // Prefer hidden select/custom values; fall back to stored degree if UI not initialized yet.
+      const uiVal = (() => {
+        if (!$degree) return '';
+        const v = ($degree.value || '').trim();
+        if (v === 'custom') { return ($degreeCustom?.value || '').trim(); }
+        return v;
+      })();
+      if (uiVal) return uiVal;
+      const stored = getStoredDegree();
+      return (stored || '').trim();
+    }
+    async function loadDegreeOptions() {
+      if (!$degree) return;
+      // Preserve any existing non-default options except 'custom'
+      try {
+        const res = await fetch(`${apiBase}/api/notes/degrees`, { headers: authHeadersIfAny() });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const arr = await res.json();
+        const selected = getStoredDegree();
+        // Reset to default + custom
+        $degree.innerHTML = '';
+        const opt0 = document.createElement('option'); opt0.value = ''; opt0.textContent = 'Select degree…'; $degree.appendChild(opt0);
+        if (Array.isArray(arr)) {
+          arr.forEach(row => {
+            const lbl = (row && (row.degree_label || row.degree_key)) || '';
+            const key = (row && (row.degree_key || row.degree_label)) || '';
+            const val = (lbl || key || '').trim();
+            if (!val) return;
+            const opt = document.createElement('option');
+            opt.value = val; opt.textContent = lbl || key;
+            $degree.appendChild(opt);
+          });
+        }
+        const optC = document.createElement('option'); optC.value = 'custom'; optC.textContent = 'Other…'; $degree.appendChild(optC);
+        // Apply selection
+        if (selected) {
+          // If matches an option, select it; else select custom and fill input
+          const match = Array.from($degree.options).some(o => (o.value || '').toLowerCase() === selected.toLowerCase());
+          if (match) {
+            $degree.value = selected;
+            $degreeCustomRow?.classList.add('hidden');
+          } else {
+            $degree.value = 'custom';
+            if ($degreeCustom) $degreeCustom.value = selected;
+            $degreeCustomRow?.classList.remove('hidden');
+          }
+        }
+        updateDomainsHintDebounced();
+      } catch {
+        // ignore
+      }
+    }
+    function onDegreeChange() {
+      const val = ($degree?.value || '').trim();
+      if (val === 'custom') {
+        $degreeCustomRow?.classList.remove('hidden'); // keep row hidden globally; used only if we ever show
+        // don't store incomplete custom until user types
+      } else {
+        $degreeCustomRow?.classList.add('hidden');
+        setStoredDegree(val);
+        updateDomainsHintDebounced();
+      }
+    }
+    function onDegreeCustomInput() {
+      const v = ($degreeCustom?.value || '').trim();
+      setStoredDegree(v);
+      updateDomainsHintDebounced();
+    }
+    async function updateDomainsHint() {
+      if (!$domainsHint) return;
+      const degree = getSelectedDegree();
+      if (!degree) { $domainsHint.textContent = 'Sources: auto'; return; }
+      try {
+        const res = await fetch(`${apiBase}/api/notes/allowed-domains?degree=${encodeURIComponent(degree)}`, { headers: authHeadersIfAny() });
+        if (!res.ok) { $domainsHint.textContent = `Degree: ${degree}`; return; }
+        const data = await res.json();
+        const list = (data && Array.isArray(data.domains)) ? data.domains : [];
+        if (!list || list.length === 0) { $domainsHint.textContent = `Degree: ${degree} • web (fallback)`; return; }
+        const preview = list.slice(0, 4).join(', ');
+        $domainsHint.textContent = `Degree: ${degree} • ${preview}${list.length > 4 ? '…' : ''}`;
+      } catch {
+        $domainsHint.textContent = `Degree: ${degree}`;
+      }
+    }
+    let domainsHintTimer = null;
+    function updateDomainsHintDebounced() {
+      if (domainsHintTimer) clearTimeout(domainsHintTimer);
+      domainsHintTimer = setTimeout(updateDomainsHint, 250);
+    }
+
+    // Auto-resolve degree from logged-in profile and hide UI controls
+    async function autoResolveDegreeFromProfile() {
+      try {
+        const token = getAuthToken();
+        if (!token) { return false; }
+        const meRes = await fetch(`${apiBase}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!meRes.ok) { return false; }
+        const me = await meRes.json();
+        const deptId = me && me.profile && me.profile.department && me.profile.department.id;
+        if (!deptId) { return false; }
+        // fetch academic meta to map department -> degree
+        const metaRes = await fetch(`${apiBase}/api/public/academic-meta`);
+        if (!metaRes.ok) { return false; }
+        const meta = await metaRes.json();
+        const depts = Array.isArray(meta && meta.departments) ? meta.departments : [];
+        const degrees = Array.isArray(meta && meta.degrees) ? meta.degrees : [];
+        const dept = depts.find(d => String(d.id) === String(deptId));
+        if (!dept || !dept.degree_id) { return false; }
+        const deg = degrees.find(g => String(g.id) === String(dept.degree_id));
+        const label = (deg && deg.name) ? String(deg.name).trim() : '';
+        if (!label) { return false; }
+        // Store and set hidden inputs
+        setStoredDegree(label);
+        if ($degree) {
+          // Try to select matching option if present, else set custom value
+          const match = Array.from($degree.options || []).some(o => (o.value || '').toLowerCase() === label.toLowerCase());
+          if (match) { $degree.value = label; }
+          else { $degree.value = 'custom'; if ($degreeCustom) $degreeCustom.value = label; }
+        }
+        updateDomainsHintDebounced();
+        return true;
+      } catch { return false; }
+    }
+
+    function normalizeVideoLanguage(language) {
+      return (language || '').trim();
+    }
+
+    function buildRelatedVideosQuery(baseTopic, language) {
+      const topic = (baseTopic || '').trim();
+      if (!topic) return '';
+      const lang = normalizeVideoLanguage(language);
+      if (!lang) return topic;
+      if (lang.toLowerCase() === 'english') return topic;
+      const suffix = ` in ${lang}`;
+      if (topic.toLowerCase().endsWith(suffix.toLowerCase())) {
+        return topic;
+      }
+      return `${topic}${suffix}`;
+    }
+
+    function resetFlashcardAccess() {
+      if (!$flashcardBtn) return;
+      $flashcardBtn.classList.add('hidden');
+      $flashcardBtn.disabled = true;
+      $flashcardBtn.setAttribute('aria-disabled', 'true');
+      $flashcardBtn.dataset.noteId = '';
+      $flashcardBtn.dataset.topic = '';
+      $flashcardBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (flashcardDefaultLabel) {
+        $flashcardBtn.textContent = flashcardDefaultLabel;
+      }
+    }
+
+    function resetMCQAccess() {
+      if (!$mcqBtn) return;
+      $mcqBtn.classList.add('hidden');
+      $mcqBtn.disabled = true;
+      $mcqBtn.setAttribute('aria-disabled', 'true');
+      $mcqBtn.dataset.noteId = '';
+      $mcqBtn.dataset.topic = '';
+      $mcqBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (mcqDefaultLabel) {
+        $mcqBtn.textContent = mcqDefaultLabel;
+      }
+    }
+
+    function enableFlashcardAccess(noteId, topic) {
+      if (!$flashcardBtn) return;
+      if (!isFeatureAllowedForCurrentPlan('flashcard_access', true)) {
+        resetFlashcardAccess();
+        return;
+      }
+      $flashcardBtn.dataset.noteId = noteId || '';
+      $flashcardBtn.dataset.topic = topic || '';
+      $flashcardBtn.disabled = false;
+      $flashcardBtn.removeAttribute('aria-disabled');
+      $flashcardBtn.classList.remove('hidden');
+      $flashcardBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (flashcardDefaultLabel) {
+        $flashcardBtn.textContent = flashcardDefaultLabel;
+      }
+    }
+
+    function enableMCQAccess(noteId, topic) {
+      if (!$mcqBtn) return;
+      if (!isFeatureAllowedForCurrentPlan('mcq_access', true)) {
+        resetMCQAccess();
+        return;
+      }
+      $mcqBtn.dataset.noteId = noteId || '';
+      $mcqBtn.dataset.topic = topic || '';
+      $mcqBtn.disabled = false;
+      $mcqBtn.removeAttribute('aria-disabled');
+      $mcqBtn.classList.remove('hidden');
+      $mcqBtn.classList.remove('pointer-events-none', 'opacity-70');
+      if (mcqDefaultLabel) {
+        $mcqBtn.textContent = mcqDefaultLabel;
+      }
+    }
+
+    function openFlashcards() {
+      if (!$flashcardBtn) return;
+      const noteId = ($flashcardBtn.dataset.noteId || '').trim();
+      if (!noteId) {
+        snack('Generate notes first');
+        return;
+      }
+      const inferredTopic = (
+        ($flashcardBtn.dataset.topic || '')
+        || (document.querySelector('#output h1')?.textContent || '')
+        || ($topic.value || '')
+      ).trim();
+      try {
+        sessionStorage.setItem('paperx:lastFlashcardSeed', JSON.stringify({ noteId, topic: inferredTopic, ts: Date.now() }));
+      } catch (e) { /* ignore */ }
+      const search = new URLSearchParams({ noteId });
+      if (inferredTopic) {
+        search.set('topic', inferredTopic);
+      }
+      const target = `./flashcards.html?${search.toString()}`;
+      $flashcardBtn.classList.add('pointer-events-none', 'opacity-70');
+      $flashcardBtn.textContent = 'Opening…';
+      setTimeout(() => { window.location.href = target; }, 120);
+    }
+
+    async function openMCQ() {
+      if (!$mcqBtn) return;
+      if (!isFeatureAllowedForCurrentPlan('mcq_access', true)) {
+        snack('MCQ access disabled for your current plan');
+        return;
+      }
+      const allowed = await ensureUserAccess('mcq_attempt', { consume: false, allowOnTransientFailure: false });
+      if (!allowed) return;
+      const noteId = ($mcqBtn.dataset.noteId || '').trim();
+      if (!noteId) {
+        snack('Generate notes first');
+        return;
+      }
+      const inferredTopic = (
+        ($mcqBtn.dataset.topic || '')
+        || (document.querySelector('#output h1')?.textContent || '')
+        || ($topic.value || '')
+      ).trim();
+      try {
+        sessionStorage.setItem('paperx:lastMCQSeed', JSON.stringify({ noteId, topic: inferredTopic, ts: Date.now() }));
+      } catch (e) { }
+      const search = new URLSearchParams({ noteId });
+      if (inferredTopic) search.set('topic', inferredTopic);
+      const target = `./mcq.html?${search.toString()}`;
+      $mcqBtn.classList.add('pointer-events-none', 'opacity-70');
+      $mcqBtn.textContent = 'Opening…';
+      setTimeout(() => { window.location.href = target; }, 120);
+    }
+
+    resetFlashcardAccess();
+    resetMCQAccess();
+
+    // ===== User auth token helper =====
+    function normalizeAuthCandidate(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      const lower = raw.toLowerCase();
+      if (raw === '__COOKIE_AUTH__' || raw === '__cookie__' || lower === 'cookie' || lower === 'null' || lower === 'undefined' || lower === 'none') {
+        return '';
+      }
+      return raw;
+    }
+
+    function getAuthToken() {
+      const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+      for (const k of keys) {
+        try {
+          const v = normalizeAuthCandidate(localStorage.getItem(k));
+          if (v) return v;
+        } catch { /* ignore */ }
+      }
+      try {
+        const fb = normalizeAuthCandidate(sessionStorage.getItem('paperx_bearer_fallback'));
+        if (fb) return fb;
+      } catch { /* ignore */ }
+      try {
+        const fb2 = normalizeAuthCandidate(localStorage.getItem('paperx_bearer_fallback'));
+        if (fb2) return fb2;
+      } catch { /* ignore */ }
+      try {
+        if (document.cookie.indexOf('paperx_auth=') !== -1) return '__COOKIE_AUTH__';
+      } catch { /* ignore */ }
+      return '';
+    }
+
+    function authHeadersIfAny(extra = {}) {
+      const token = getAuthToken();
+      if (token) return Object.assign({}, extra, { Authorization: `Bearer ${token}` });
+      return Object.assign({}, extra);
+    }
+
+    function isApiBaseRequest(url) {
+      try {
+        const abs = new URL(String(url), location.href).href;
+        return abs.startsWith(`${apiBase}/`);
+      } catch {
+        return false;
+      }
+    }
+
+    function renderLimitReachedState({ action = '', reason = 'Plan limit reached', remaining = null } = {}) {
+      if (!$output) return;
+      clearUI();
+      const actionLabelMap = {
+        topic_open: 'Topic access',
+        subject_open: 'Subject access',
+        ai_prompt: 'AI generation',
+        mcq_attempt: 'MCQ access',
+        blink_view: 'Blink access',
+        search: 'Search access'
+      };
+      const actionLabel = actionLabelMap[action] || 'Access';
+      const rem = (remaining === null || remaining === undefined)
+        ? 'Remaining today: —'
+        : `Remaining today: ${remaining}`;
+      $meta.textContent = `Access limited • ${currentVariant}`;
+      $output.innerHTML = `
+        <section class="rounded-3xl border p-6 sm:p-8 shadow-glow"
+          style="border-color: var(--outline); background:
+            radial-gradient(1200px 400px at 0% 0%, color-mix(in oklab, var(--brand) 22%, transparent), transparent 45%),
+            radial-gradient(900px 300px at 100% 100%, color-mix(in oklab, var(--brand-strong) 20%, transparent), transparent 48%),
+            color-mix(in oklab, var(--surface) 88%, transparent);">
+          <div class="flex flex-col gap-4">
+            <div class="inline-flex items-center gap-3 text-[12px] font-semibold tracking-wide uppercase text-[var(--muted)]">
+              <span class="inline-flex items-center justify-center w-8 h-8 rounded-full border" style="border-color:var(--outline)">🛸</span>
+              <span>Policy Shield Active</span>
+            </div>
+            <div class="text-4xl sm:text-5xl leading-none">🛰️🚫✨💫</div>
+            <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight">Daily limit reached for ${actionLabel}</h2>
+            <p class="text-sm sm:text-base text-[var(--muted)]">${reason}</p>
+            <div class="mt-1 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm"
+              style="border-color:var(--outline); background:color-mix(in oklab, var(--brand-soft) 70%, transparent)">
+              <span class="material-symbols-rounded text-base">schedule</span>
+              <span>${rem}</span>
+            </div>
+            <p class="text-xs sm:text-sm text-[var(--muted)]">Try again after your daily quota resets or upgrade your plan for higher limits.</p>
+          </div>
+        </section>
+      `;
+    }
+
+    function isDefinitiveAccessDeny(data) {
+      const d = data && typeof data === 'object' ? data : {};
+      const allowed = !!d.allowed;
+      if (allowed) return false;
+
+      const reason = String(d.reason || d.detail || '').trim();
+      const reasonLc = reason.toLowerCase();
+      // Backend explicitly marks uncertain path like "Access check unavailable".
+      if (!reason || reasonLc.includes('unavailable') || reasonLc.includes('temporar')) return false;
+
+      // Strong signal: concrete daily/quota limit wording or explicit limit fields.
+      if (reasonLc.includes('daily limit') || reasonLc.includes('limit reached') || reasonLc.includes('quota')) return true;
+      if (d.limit !== null && d.limit !== undefined) return true;
+      return false;
+    }
+
+    async function ensureUserAccess(action, { consume = true, increment = 1, allowOnTransientFailure = true, renderInOutput = false } = {}) {
+      const token = getAuthToken();
+      if (!token) {
+        return true;
+      }
+      try {
+        const res = await fetch(`${apiBase}/api/access/check-and-consume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action, consume: !!consume, increment: Math.max(1, Number(increment) || 1) })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            snack((data && data.detail) ? data.detail : 'Sign in required');
+            return false;
+          }
+          console.warn('Access check failed', res.status, data);
+          return !!allowOnTransientFailure;
+        }
+        if (!data.allowed) {
+          const definitive = isDefinitiveAccessDeny(data);
+          if (!definitive) {
+            console.warn('Access check non-definitive deny; allowing fallback', data);
+            return true;
+          }
+          const reason = data.reason || 'Plan limit reached';
+          const remaining = (data.remaining === null || data.remaining === undefined) ? '' : ` (Remaining today: ${data.remaining})`;
+          snack(`${reason}${remaining}`);
+          if (renderInOutput) {
+            renderLimitReachedState({ action, reason, remaining: data.remaining });
+          }
+          return false;
+        }
+        if (action === 'topic_open' && consume) {
+          showTopicRemainingToast((data || {}).remaining);
+        }
+        return true;
+      } catch (err) {
+        console.warn('Access check failed', err);
+        return !!allowOnTransientFailure;
+      }
+    }
+
+    function isFeatureAllowedForCurrentPlan(featureKey, fallback = true) {
+      const tier = String(currentAccessSummary?.tier || '').toLowerCase();
+      if (tier !== 'paid') return true;
+      const plan = currentAccessSummary?.plan || {};
+      if (!Object.prototype.hasOwnProperty.call(plan, featureKey)) return !!fallback;
+      return !!plan[featureKey];
+    }
+
+    function applyFeatureAccessUI() {
+      if (!isFeatureAllowedForCurrentPlan('mcq_access', true)) {
+        resetMCQAccess();
+      }
+      if (!isFeatureAllowedForCurrentPlan('flashcard_access', true)) {
+        resetFlashcardAccess();
+      }
+    }
+
+    async function loadAccessSummary() {
+      const token = getAuthToken();
+      if (!token) {
+        currentAccessSummary = null;
+        applyFeatureAccessUI();
+        return;
+      }
+      try {
+        const res = await fetch(`${apiBase}/api/access/summary`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          currentAccessSummary = null;
+          applyFeatureAccessUI();
+          return;
+        }
+        currentAccessSummary = await res.json().catch(() => null);
+      } catch (err) {
+        console.warn('Access summary load failed', err);
+        currentAccessSummary = null;
+      }
+      applyFeatureAccessUI();
+    }
+
+    // ===== Role-gated actions (admin / employee only) =====
+    (function () {
+      const privilegedEls = [
+        (typeof $regen !== 'undefined' ? $regen : null),
+        (typeof $regenMobile !== 'undefined' ? $regenMobile : null),
+        (typeof $download !== 'undefined' ? $download : null),
+        document.getElementById('feedbackInboxLink')
+      ].filter(Boolean);
+
+      const editEls = [
+        (typeof $editToggle !== 'undefined' ? $editToggle : null),
+        document.getElementById('geminiSelectionEdit'),
+      ].filter(Boolean);
+
+      const emphasisEls = [
+        (typeof $emphBtn !== 'undefined' ? $emphBtn : null),
+      ].filter(Boolean);
+
+      function setPrivilegedVisible(visible) {
+        privilegedEls.forEach(el => {
+          // Use a dedicated class so we don't override Tailwind responsive intent
+          // (e.g., Edit/Download are still hidden on mobile via `hidden sm:inline-flex`).
+          el.classList.toggle('px-privilege-hidden', !visible);
+          if (!visible) {
+            el.setAttribute('aria-hidden', 'true');
+          } else {
+            el.removeAttribute('aria-hidden');
+          }
+        });
+      }
+
+      function setEditVisible(visible) {
+        editEls.forEach(el => {
+          el.classList.toggle('px-privilege-hidden', !visible);
+          if (!visible) {
+            el.setAttribute('aria-hidden', 'true');
+          } else {
+            el.removeAttribute('aria-hidden');
+          }
+        });
+      }
+
+      function setVerifyVisible(visible) {
+        if (!$verifyBtn) return;
+        $verifyBtn.classList.toggle('hidden', !visible);
+        $verifyBtn.classList.toggle('inline-flex', !!visible);
+        if (!visible) {
+          $verifyBtn.setAttribute('aria-hidden', 'true');
+        } else {
+          $verifyBtn.removeAttribute('aria-hidden');
+        }
+      }
+
+      function setEmphasisVisible(visible) {
+        emphasisEls.forEach(el => {
+          el.classList.toggle('px-privilege-hidden', !visible);
+          if (!visible) {
+            el.setAttribute('aria-hidden', 'true');
+          } else {
+            el.removeAttribute('aria-hidden');
+          }
+        });
+      }
+
+      // Default to hidden until role is verified.
+      setPrivilegedVisible(false);
+      setEditVisible(false);
+      setVerifyVisible(false);
+      setEmphasisVisible(false);
+
+      (async function () {
+        try {
+          const token = getAuthToken();
+          const normToken = String(token || '').trim();
+          const lowerToken = normToken.toLowerCase();
+          const useBearer = !!normToken && !['__cookie_auth__', '__cookie__', 'cookie', 'null', 'undefined', 'none'].includes(lowerToken);
+          let res = await fetch(`${apiBase}/api/admin/roles/me`, {
+            headers: useBearer ? { Authorization: `Bearer ${normToken}` } : {},
+            credentials: 'include'
+          });
+
+          // If localStorage bearer is stale but cookie auth is valid, retry without Authorization header.
+          if (!res.ok && useBearer && (res.status === 401 || res.status === 403)) {
+            res = await fetch(`${apiBase}/api/admin/roles/me`, {
+              headers: {},
+              credentials: 'include'
+            });
+          }
+
+          if (!res.ok) return;
+          const data = await res.json().catch(() => ({}));
+          const primaryRole = String(data?.role || data?.user_role || data?.userRole || '').toLowerCase().trim();
+          const rolesArr = Array.isArray(data?.roles) ? data.roles.map(r => String(r || '').toLowerCase().trim()) : [];
+          const staffRoles = new Set(['admin', 'employee', 'teacher', 'moderator', 'hod']);
+          const hasStaffRole = staffRoles.has(primaryRole) || rolesArr.some(r => staffRoles.has(r));
+          const perms = (data && typeof data.permissions === 'object' && data.permissions) ? data.permissions : {};
+          const hasStaffEditPermission = [
+            perms.edit,
+            perms.can_edit,
+            perms.edit_notes,
+            perms.can_edit_notes,
+            perms.notes_edit,
+            perms.manage_notes,
+            perms.is_employee,
+            perms.is_admin
+          ].some(v => v === true);
+          const isAdmin = primaryRole === 'admin' || rolesArr.includes('admin') || data?.is_admin === true;
+          const isEmployee = primaryRole === 'employee' || rolesArr.includes('employee') || data?.is_employee === true;
+          const allowed = !!(isAdmin || isEmployee || hasStaffRole || hasStaffEditPermission);
+          const isTeacherOrHod = primaryRole === 'teacher' || primaryRole === 'hod' || rolesArr.includes('teacher') || rolesArr.includes('hod');
+          if (allowed) {
+            setPrivilegedVisible(true);
+            setEditVisible(!isTeacherOrHod);
+            setVerifyVisible(isTeacherOrHod);
+            setEmphasisVisible(!isTeacherOrHod);
+          }
+        } catch (_) {
+          // Keep privileged buttons hidden on any failure
+        }
+      })();
+    })();
+
+    // ===== My note visibility and loading =====
+    async function checkMyNoteVisibility() {
+      if (!$myNoteBtn) return;
+      const token = getAuthToken();
+      if (!token) { $myNoteBtn.classList.add('hidden'); return; }
+      const title = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+      if (!title) { $myNoteBtn.classList.add('hidden'); return; }
+      try {
+        const url = `${apiBase}/api/notes/edited/check?title=${encodeURIComponent(title)}&variant=${encodeURIComponent(currentVariant)}`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) { $myNoteBtn.classList.add('hidden'); return; }
+        const data = await res.json().catch(() => ({}));
+        if (data && data.exists) { $myNoteBtn.classList.remove('hidden'); }
+        else { $myNoteBtn.classList.add('hidden'); }
+      } catch { $myNoteBtn.classList.add('hidden'); }
+    }
+
+    // ===== Inline Gemini selection assistant =====
+    (function () {
+      if (!$output) return;
+      const btn = document.getElementById('geminiSelectionBtn');
+      const panel = document.getElementById('geminiSelectionPanel');
+      const closeBtn = document.getElementById('geminiSelectionClose');
+      const promptInput = document.getElementById('geminiSelectionInput');
+      const runBtn = document.getElementById('geminiSelectionRun');
+      const meaningBtn = document.getElementById('geminiSelectionMeaning');
+      const editBtn = document.getElementById('geminiSelectionEdit');
+      const statusBox = document.getElementById('geminiSelectionStatus');
+      const contextBox = document.getElementById('geminiSelectionContext');
+      const outputBox = document.getElementById('geminiSelectionOutput');
+      if (!btn || !panel || !runBtn || !contextBox || !outputBox) return;
+
+      const endpoint = `${apiBase}/api/notes/snippet-assist`;
+      const MAX_SELECTION_PAYLOAD = 2800;
+      const PREVIEW_MAX = 420;
+      let selectionText = '';
+      let selectionRect = null;
+      let selectionEndRect = null;
+      let selectionAnchorNode = null;
+      let selectionFocusNode = null;
+      let panelPinned = false;
+      let busy = false;
+
+      function withinOutput(node) {
+        if (!node) return false;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        return node ? $output.contains(node) : false;
+      }
+
+      function hideBtn() {
+        btn.classList.add('hidden');
+      }
+
+      function resetStatus() {
+        if (statusBox) {
+          statusBox.textContent = '';
+          statusBox.classList.add('hidden');
+          delete statusBox.dataset.error;
+          statusBox.style.color = 'var(--muted)';
+        }
+      }
+
+      function setStatus(msg, isError = false) {
+        if (!statusBox) return;
+        if (!msg) {
+          resetStatus();
+          return;
+        }
+        statusBox.textContent = msg;
+        statusBox.style.color = isError ? '#ef4444' : 'var(--muted)';
+        statusBox.dataset.error = isError ? '1' : '';
+        statusBox.classList.remove('hidden');
+      }
+
+      function setBusy(state) {
+        busy = state;
+        runBtn.disabled = state;
+        runBtn.classList.toggle('opacity-60', state);
+        if (state) {
+          setStatus('Asking TuneAI…', false);
+        } else if (!statusBox?.dataset.error) {
+          resetStatus();
+        }
+      }
+
+      function captureRect(range) {
+        if (!range) return null;
+        const rect = range.getBoundingClientRect();
+        if (!rect || (!rect.width && !rect.height)) return null;
+        return {
+          top: rect.top + window.scrollY,
+          left: rect.left + window.scrollX,
+          right: rect.right + window.scrollX,
+          bottom: rect.bottom + window.scrollY,
+          width: rect.width || 0,
+        };
+      }
+
+      function positionBtn(rect) {
+        if (!rect) return;
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight;
+        const anchorX = (typeof rect.right === 'number' && rect.right) ? rect.right : (rect.left + (rect.width || 0));
+        const btnWidth = 32;
+        const left = Math.min(
+          Math.max(anchorX - btnWidth / 2, window.scrollX + 12),
+          window.scrollX + viewportWidth - btnWidth - 12
+        );
+        const anchorY = (typeof rect.bottom === 'number' && rect.bottom) ? rect.bottom : rect.top;
+        const top = Math.min(
+          Math.max(anchorY + 6, window.scrollY + 12),
+          window.scrollY + viewportHeight - 48
+        );
+        btn.style.left = `${left}px`;
+        btn.style.top = `${top}px`;
+        btn.classList.remove('hidden');
+      }
+
+      function positionPanel() {
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight;
+        const panelWidth = panel.offsetWidth || Math.min(420, viewportWidth - 32);
+        let left = selectionRect ? selectionRect.left : (window.scrollX + (viewportWidth - panelWidth) / 2);
+        let top = selectionRect ? selectionRect.bottom + 12 : (window.scrollY + 80);
+        left = Math.min(Math.max(window.scrollX + 16, left), window.scrollX + viewportWidth - panelWidth - 16);
+        const maxTop = window.scrollY + viewportHeight - panel.offsetHeight - 16;
+        top = Math.min(Math.max(window.scrollY + 16, top), Number.isFinite(maxTop) ? maxTop : top);
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+      }
+
+      function hidePanel() {
+        panelPinned = false;
+        panel.classList.add('hidden');
+        panel.setAttribute('aria-hidden', 'true');
+        resetStatus();
+      }
+
+      function updateContextPreview() {
+        if (!contextBox) return;
+        if (!selectionText) {
+          contextBox.textContent = 'Select text in the Final Output to get inline Gemini help.';
+          return;
+        }
+        const preview = selectionText.slice(0, PREVIEW_MAX);
+        contextBox.textContent = preview + (selectionText.length > PREVIEW_MAX ? '…' : '');
+      }
+
+      function handleSelectionChange() {
+        if (panelPinned) return;
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) {
+          selectionText = '';
+          selectionRect = null;
+          selectionEndRect = null;
+          selectionAnchorNode = null;
+          selectionFocusNode = null;
+          hideBtn();
+          return;
+        }
+        if (!withinOutput(sel.anchorNode) || !withinOutput(sel.focusNode)) {
+          selectionText = '';
+          selectionRect = null;
+          selectionEndRect = null;
+          selectionAnchorNode = null;
+          selectionFocusNode = null;
+          hideBtn();
+          return;
+        }
+        const text = sel.toString().trim();
+        if (!text) {
+          selectionText = '';
+          selectionRect = null;
+          selectionEndRect = null;
+          selectionAnchorNode = null;
+          selectionFocusNode = null;
+          hideBtn();
+          return;
+        }
+        selectionText = text.replace(/\s+/g, ' ').trim();
+        selectionAnchorNode = sel.anchorNode;
+        selectionFocusNode = sel.focusNode;
+        const range = sel.getRangeAt(sel.rangeCount - 1);
+        const rect = captureRect(range);
+        const endClone = range.cloneRange();
+        endClone.collapse(false);
+        const endRect = captureRect(endClone);
+        if (!rect) {
+          selectionRect = null;
+          selectionEndRect = null;
+          hideBtn();
+          return;
+        }
+        selectionRect = rect;
+        selectionEndRect = endRect || rect;
+        updateContextPreview();
+        positionBtn(selectionEndRect);
+      }
+
+      async function runGemini() {
+        if (!selectionText || !selectionRect) {
+          snack('Select some text in the Final Output first');
+          return;
+        }
+        if (busy) return;
+        const instruction = (promptInput?.value || '').trim() || 'Explain the highlighted text simply.';
+        const payloadSelection = selectionText.slice(0, MAX_SELECTION_PAYLOAD);
+        setBusy(true);
+        outputBox.innerHTML = '';
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selection: payloadSelection, instruction })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `HTTP ${res.status}`;
+            throw new Error(detail);
+          }
+          const text = (data && data.text) ? String(data.text) : '';
+          if (!text) {
+            setStatus('Gemini returned an empty reply', true);
+            outputBox.textContent = '';
+            return;
+          }
+          try {
+            await ensureMarkdownRuntime();
+            outputBox.innerHTML = marked.parse(text);
+          } catch (err) {
+            console.warn('Gemini inline render fallback', err);
+            outputBox.textContent = text;
+          }
+
+          // Track Note Generation
+          if (window.Analytics) {
+            window.Analytics.track('note_viewed', {
+              variant: 'generated',
+              prompt: instruction.slice(0, 50)
+            });
+          }
+
+          resetStatus();
+        } catch (error) {
+          console.error('Gemini inline assist error', error);
+          setStatus(error?.message || 'Gemini request failed', true);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function runMeaning() {
+        if (!selectionText || !selectionRect) {
+          snack('Select a term or phrase');
+          return;
+        }
+        if (busy) return;
+        const instruction = `Give a very short dictionary-like meaning for: "${selectionText}" (1–2 lines). No examples.`;
+        const payloadSelection = selectionText.slice(0, MAX_SELECTION_PAYLOAD);
+        setBusy(true);
+        outputBox.innerHTML = '';
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selection: payloadSelection, instruction })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) || `HTTP ${res.status}`;
+            throw new Error(detail);
+          }
+          const text = (data && data.text) ? String(data.text) : '';
+          if (!text) {
+            setStatus('No meaning available', true);
+            outputBox.textContent = '';
+            return;
+          }
+          try {
+            await ensureMarkdownRuntime();
+            outputBox.innerHTML = marked.parse(text);
+          } catch {
+            outputBox.textContent = text;
+          }
+          // Ensure panel is visible/pinned near selection
+          panelPinned = true;
+          panel.classList.remove('hidden');
+          panel.setAttribute('aria-hidden', 'false');
+          updateContextPreview();
+          requestAnimationFrame(positionPanel);
+          resetStatus();
+        } catch (error) {
+          console.warn('Meaning error', error);
+          setStatus(error?.message || 'Meaning failed', true);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function openPanel() {
+        if (!selectionText) {
+          snack('Select some text in the Final Output first');
+          panelPinned = false;
+          return;
+        }
+        panelPinned = true;
+        btn.classList.add('hidden');
+        panel.classList.remove('hidden');
+        panel.setAttribute('aria-hidden', 'false');
+        updateContextPreview();
+        resetStatus();
+        outputBox.innerHTML = '';
+        if (promptInput) {
+          promptInput.value = promptInput.value.trim() ? promptInput.value : 'Explain it simply';
+        }
+        requestAnimationFrame(() => {
+          positionPanel();
+          promptInput?.focus();
+        });
+      }
+
+      btn.addEventListener('click', openPanel);
+      runBtn.addEventListener('click', runGemini);
+      promptInput?.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          runGemini();
+        }
+      });
+      closeBtn?.addEventListener('click', hidePanel);
+
+      document.addEventListener('selectionchange', () => {
+        if (!panelPinned) handleSelectionChange();
+      });
+      window.addEventListener('scroll', () => {
+        if (!panelPinned) hideBtn();
+      }, { passive: true });
+      window.addEventListener('resize', () => {
+        if (panelPinned) {
+          requestAnimationFrame(positionPanel);
+        } else {
+          hideBtn();
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !panel.classList.contains('hidden')) {
+          hidePanel();
+        }
+      });
+      document.addEventListener('click', (e) => {
+        if (panel.classList.contains('hidden')) return;
+        const target = e.target;
+        if (panel.contains(target) || btn.contains(target)) return;
+        if (withinOutput(target)) return;
+        hidePanel();
+      });
+
+      updateContextPreview();
+
+      // Inline panel actions: Meaning and Edit
+      meaningBtn?.addEventListener('click', runMeaning);
+      function findClosestHeadingInOutput(node) {
+        if (!node) return null;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        let cur = node;
+        while (cur && cur !== $output) {
+          if (/^H[1-3]$/.test(cur.nodeName)) {
+            const level = cur.nodeName === 'H1' ? 1 : (cur.nodeName === 'H2' ? 2 : 3);
+            const title = (cur.textContent || '').trim();
+            return { level, title };
+          }
+          cur = cur.previousSibling || cur.parentNode;
+        }
+        // fallback: search previous headings
+        const hs = Array.from($output.querySelectorAll('h1,h2,h3'));
+        let last = null;
+        for (const h of hs) { if (h.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) break; last = h; }
+        if (last) {
+          const level = last.nodeName === 'H1' ? 1 : (last.nodeName === 'H2' ? 2 : 3);
+          return { level, title: (last.textContent || '').trim() };
+        }
+        return null;
+      }
+
+      function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+      function sliceSectionFromMarkdown(md, heading, level) {
+        const lines = md.split(/\n/);
+        const needle = `${'#'.repeat(level)} ${heading}`;
+        const startRe = new RegExp(`^${escapeRegex(needle)}\s*$`, 'i');
+        let start = -1;
+        for (let i = 0; i < lines.length; i++) { if (startRe.test(lines[i])) { start = i; break; } }
+        if (start === -1) return null;
+        const stopRe = new RegExp(`^#{1,${level}}\s+`); // next same or higher heading
+        let end = lines.length;
+        for (let i = start + 1; i < lines.length; i++) { if (stopRe.test(lines[i])) { end = i; break; } }
+        const before = lines.slice(0, start).join('\n');
+        const section = lines.slice(start, end).join('\n');
+        const after = lines.slice(end).join('\n');
+        return { before, section, after };
+      }
+
+      // --- Inline selection mapping helpers (DOM selection -> markdown substring) ---
+      function _normalizeForMatch(s) { return (s || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+      function _buildNormalizedMap(src) {
+        const map = [];
+        let norm = '';
+        let lastSpace = false;
+        for (let i = 0; i < src.length; i++) {
+          const ch = src[i];
+          if (/\s/.test(ch)) {
+            if (!lastSpace) { norm += ' '; map.push(i); lastSpace = true; }
+          } else { norm += ch.toLowerCase(); map.push(i); lastSpace = false; }
+        }
+        let a = 0; while (a < norm.length && norm[a] === ' ') a++;
+        let b = norm.length; while (b > a && norm[b - 1] === ' ') b--;
+        return { norm: norm.slice(a, b), map: map.slice(a, b) };
+      }
+
+      function findSelectionInMarkdownSection(sectionMd, selectionTxt) {
+        if (!selectionTxt) return null;
+        // 1. Direct substring
+        let direct = sectionMd.indexOf(selectionTxt);
+        if (direct !== -1) return { start: direct, end: direct + selectionTxt.length };
+        // 2. Normalized substring
+        const { norm, map } = _buildNormalizedMap(sectionMd);
+        const sel = _normalizeForMatch(selectionTxt);
+        let idx = norm.indexOf(sel);
+        if (idx !== -1) {
+          const start = map[idx];
+          const end = map[Math.min(idx + sel.length - 1, map.length - 1)] + 1;
+          return { start, end };
+        }
+        // 3. Try joining lines in selection (for multi-line or list selections)
+        const selFlat = _normalizeForMatch(selectionTxt.replace(/\n+/g, ' '));
+        idx = norm.indexOf(selFlat);
+        if (idx !== -1) {
+          const start = map[idx];
+          const end = map[Math.min(idx + selFlat.length - 1, map.length - 1)] + 1;
+          return { start, end };
+        }
+        // 4. Fuzzy: try to find the largest matching substring (at least 10 chars)
+        for (let len = Math.min(sel.length, 60); len >= 10; len--) {
+          for (let i = 0; i <= sel.length - len; i++) {
+            const sub = sel.slice(i, i + len);
+            const subIdx = norm.indexOf(sub);
+            if (subIdx !== -1) {
+              const start = map[subIdx];
+              const end = map[Math.min(subIdx + len - 1, map.length - 1)] + 1;
+              return { start, end, partial: true };
+            }
+          }
+        }
+        return null;
+      }
+
+      function isWithinCodeOrPre(node) {
+        if (!node) return false;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        const pre = node.closest ? node.closest('pre, code') : null;
+        return !!pre;
+      }
+
+      async function persistMyNote(fullMarkdown) {
+        const token = getAuthToken();
+        if (!token) return false;
+        const title = (document.querySelector('#output h1')?.textContent || $topic.value || 'Untitled').trim();
+        if (!title) return false;
+        try {
+          const res = await fetch(`${apiBase}/api/notes/edited?variant=${encodeURIComponent(currentVariant)}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ title, markdown: fullMarkdown })
+          });
+          if (!res.ok) return false;
+          return true;
+        } catch { return false; }
+      }
+
+      editBtn?.addEventListener('click', async () => {
+        const anchor = selectionAnchorNode;
+        const focus = selectionFocusNode;
+        if (!selectionText || (!anchor && !focus)) { snack('Select text to edit'); return; }
+        if (isWithinCodeOrPre(anchor) || isWithinCodeOrPre(focus)) { snack('Inline edit works on regular text (not code blocks)'); return; }
+        const head = findClosestHeadingInOutput(anchor) || findClosestHeadingInOutput(focus);
+        if (!head || head.level === 1) { snack('Place cursor inside a section (H2/H3)'); return; }
+        const found = sliceSectionFromMarkdown(lastMarkdown || '', head.title, head.level);
+        if (!found || !found.section) { snack('Could not locate section in markdown'); return; }
+        const match = findSelectionInMarkdownSection(found.section, selectionText);
+        let selectedMd, replaceStart, replaceEnd, partial = false;
+        if (match) {
+          selectedMd = found.section.slice(match.start, match.end);
+          replaceStart = match.start;
+          replaceEnd = match.end;
+          partial = !!match.partial;
+        } else {
+          // Fallback: try to find the paragraph or list item containing the selection
+          const paras = found.section.split(/\n{2,}/);
+          let paraIdx = -1;
+          for (let i = 0; i < paras.length; i++) {
+            if (_normalizeForMatch(paras[i]).includes(_normalizeForMatch(selectionText))) { paraIdx = i; break; }
+          }
+          if (paraIdx !== -1) {
+            let offset = 0;
+            for (let j = 0; j < paraIdx; j++) offset += paras[j].length + 2;
+            selectedMd = paras[paraIdx];
+            replaceStart = offset;
+            replaceEnd = offset + paras[paraIdx].length;
+            partial = true;
+          } else {
+            snack('Could not map selection to markdown. Try a shorter or more precise phrase.');
+            return;
+          }
+        }
+        const instruction = (promptInput?.value || '').trim() || (partial ? 'edit this part for clarity' : 'simplify the selected text with clearer language');
+        try {
+          setStatus('Processing…'); setBusy(true);
+          const res = await fetch(`${apiBase}/api/notes/transform`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'custom', markdown: selectedMd, prompt: instruction })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error((data && (data.detail || data.error)) || 'Transform failed');
+          const replacement = (data && data.markdown) ? String(data.markdown) : '';
+          if (!replacement) { snack('No change'); return; }
+          const updatedSection = found.section.slice(0, replaceStart) + replacement + found.section.slice(replaceEnd);
+          const merged = [found.before, updatedSection, found.after].filter(Boolean).join('\n');
+          lastMarkdown = merged;
+          if ($editor && !$editor.classList.contains('hidden')) { $editor.value = merged; }
+          renderMarkdown(merged);
+          const ok = await persistMyNote(merged);
+          if (ok) { snack('Edited and saved to My note'); checkMyNoteVisibility(); } else { snack('Edited (not saved — sign in to save)'); }
+        } catch (e) { console.warn('Edit selection error', e); snack('Edit failed'); }
+        finally { setBusy(false); resetStatus(); }
+      });
+    })();
+
+    function getChannelLogoAsync(channelPage) {
+      if (!channelPage) return Promise.resolve('');
+      const cached = channelLogoCache.get(channelPage);
+      if (cached !== undefined) {
+        return cached instanceof Promise ? cached : Promise.resolve(cached);
+      }
+      const request = (async () => {
+        try {
+          const res = await fetch(`${apiBase}/api/youtube/channel-logo?channel_url=${encodeURIComponent(channelPage)}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const logo = typeof data.logo === 'string' ? data.logo.trim() : '';
+          channelLogoCache.set(channelPage, logo);
+          return logo;
+        } catch (error) {
+          console.warn('Channel logo lookup failed:', error);
+          channelLogoCache.set(channelPage, '');
+          return '';
+        }
+      })();
+      channelLogoCache.set(channelPage, request);
+      return request;
+    }
+
+    function hydrateChannelLogo(img, channelPage, shouldAttempt) {
+      if (!img) return;
+      if (channelPage) {
+        img.dataset.channelPage = channelPage;
+      }
+      if (!shouldAttempt || !channelPage) {
+        return;
+      }
+      getChannelLogoAsync(channelPage)
+        .then((logo) => {
+          if (logo && img.dataset.channelPage === channelPage) {
+            img.src = logo;
+            img.dataset.logoLoaded = 'true';
+          }
+        })
+        .catch(() => { /* already logged */ });
+    }
+
+    function createRelatedVideoCard(video) {
+      const card = document.createElement('div');
+      const link = (typeof video.link === 'string' && video.link.trim()) || '';
+      const notesUrl = link ? `./youtube-notes.html?video=${encodeURIComponent(link)}` : '';
+      card.className = 'yt-card';
+      card.setAttribute('data-video-card', '1');
+
+      const thumb = document.createElement('div');
+      thumb.className = 'yt-thumb';
+      const thumbImg = document.createElement('img');
+      let videoId = typeof video.id === 'string' ? video.id.trim() : '';
+      if (!videoId && link) {
+        const m = link.match(/[?&]v=([^&#]+)/) || link.match(/youtu\.be\/([^?#]+)/) || link.match(/\/embed\/([^?#/]+)/);
+        videoId = m && m[1] ? m[1] : '';
+      }
+      const thumbCandidates = [];
+      const apiThumb = (typeof video.thumbnail === 'string' && video.thumbnail.trim()) || '';
+      if (apiThumb) thumbCandidates.push(apiThumb);
+      if (videoId) {
+        thumbCandidates.push(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`);
+        thumbCandidates.push(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
+        thumbCandidates.push(`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`);
+        thumbCandidates.push(`https://i3.ytimg.com/vi/${videoId}/hqdefault.jpg`);
+      }
+      thumbCandidates.push(fallbackVideoThumb);
+      thumbImg.dataset.thumbCandidates = JSON.stringify(thumbCandidates);
+      thumbImg.dataset.thumbIndex = '0';
+      thumbImg.src = thumbCandidates[0] || fallbackVideoThumb;
+      thumbImg.alt = (video.title || 'YouTube video').toString();
+      thumbImg.loading = 'lazy';
+      thumbImg.decoding = 'async';
+      thumbImg.referrerPolicy = 'no-referrer';
+      thumbImg.onerror = () => {
+        let list = [];
+        try { list = JSON.parse(thumbImg.dataset.thumbCandidates || '[]'); } catch { }
+        let idx = Number(thumbImg.dataset.thumbIndex || '0');
+        idx += 1;
+        thumbImg.dataset.thumbIndex = String(idx);
+        if (idx < list.length) {
+          thumbImg.src = list[idx];
+        }
+      };
+      thumb.appendChild(thumbImg);
+      if (video.duration) {
+        const badge = document.createElement('span');
+        badge.className = 'yt-duration';
+        badge.textContent = video.duration;
+        thumb.appendChild(badge);
+      }
+      if (video.recommended) {
+        const recBadge = document.createElement('span');
+        // Solid brand background so it remains clearly visible
+        recBadge.className = 'absolute left-2 top-2 z-[1] inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white shadow-[0_10px_26px_rgba(15,23,42,0.45)]';
+        const star = document.createElement('span');
+        star.className = 'text-[15px] leading-none';
+        star.style.color = '#FBBF24';
+        star.textContent = '\u2605';
+        const label = document.createElement('span');
+        label.textContent = 'Recommended';
+        recBadge.appendChild(star);
+        recBadge.appendChild(label);
+        thumb.appendChild(recBadge);
+      }
+      card.appendChild(thumb);
+
+      const body = document.createElement('div');
+      body.className = 'yt-body';
+
+      const titleEl = document.createElement('p');
+      titleEl.className = 'yt-title';
+      const titleText = (typeof video.title === 'string' ? video.title : '').trim() || 'Untitled video';
+      titleEl.textContent = titleText;
+      titleEl.title = titleText;
+      body.appendChild(titleEl);
+
+      const meta = document.createElement('div');
+      meta.className = 'yt-meta';
+
+      const logoImg = document.createElement('img');
+      logoImg.className = 'yt-channel-logo';
+      logoImg.src = (typeof video.channel_logo === 'string' && video.channel_logo.trim()) || fallbackChannelLogo;
+      logoImg.alt = (video.channel || 'Channel').toString();
+      logoImg.loading = 'lazy';
+      logoImg.referrerPolicy = 'no-referrer';
+      logoImg.onerror = () => {
+        if (!logoImg.dataset.fallbackTried) {
+          logoImg.dataset.fallbackTried = '1';
+          logoImg.src = fallbackChannelLogoLocal;
+          return;
+        }
+        logoImg.onerror = null;
+        logoImg.src = fallbackVideoThumb;
+      };
+      meta.appendChild(logoImg);
+
+      const channelName = document.createElement('span');
+      channelName.className = 'yt-channel-name';
+      const channelFull = (video.channel || 'YouTube').toString();
+      channelName.textContent = channelFull;
+      channelName.title = channelFull;
+      try {
+        if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
+          const trimmed = channelFull.trim();
+          channelName.textContent = trimmed.length > 10 ? (trimmed.slice(0, 10) + '...') : trimmed;
+        }
+      } catch { }
+      meta.appendChild(channelName);
+
+      if (video.views) {
+        const views = document.createElement('span');
+        views.className = 'yt-views';
+        views.textContent = video.views;
+        meta.appendChild(views);
+      }
+
+      body.appendChild(meta);
+      card.appendChild(body);
+
+      // Add a soft brand-colored glow for recommended videos
+      if (video.recommended) {
+        card.classList.add('shadow-[0_0_0_1px_rgba(158,75,138,0.4)]', 'shadow-neon');
+      }
+
+      const channelPage = (typeof video.channel_page === 'string' ? video.channel_page : '').trim();
+      const logoIsDefault = Boolean(video.channel_logo_is_default) || !video.channel_logo || video.channel_logo === fallbackChannelLogo;
+      hydrateChannelLogo(logoImg, channelPage, logoIsDefault && !!channelPage);
+
+      const overlay = document.createElement('div');
+      overlay.className = 'yt-hover-overlay';
+
+      const playBtn = document.createElement('button');
+      playBtn.type = 'button';
+      playBtn.className = 'yt-hover-btn yt-hover-btn-play';
+      playBtn.setAttribute('aria-label', 'Play on YouTube');
+      playBtn.title = 'Play on YouTube';
+      const playIcon = document.createElement('span');
+      playIcon.className = 'yt-hover-btn-icon';
+      playIcon.textContent = 'play_arrow';
+      playBtn.appendChild(playIcon);
+      if (!link) {
+        playBtn.disabled = true;
+        playBtn.style.opacity = '0.6';
+        playBtn.style.cursor = 'not-allowed';
+      }
+      playBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (link) {
+          window.open(link, '_blank', 'noopener');
+        }
+      });
+
+      const notesBtn = document.createElement('button');
+      notesBtn.type = 'button';
+      notesBtn.className = 'yt-hover-btn yt-hover-btn-notes';
+      notesBtn.setAttribute('aria-label', 'Open PaperX notes');
+      notesBtn.title = 'Open PaperX notes';
+      const notesIcon = document.createElement('span');
+      notesIcon.className = 'yt-hover-btn-icon';
+      notesIcon.textContent = 'description';
+      notesBtn.appendChild(notesIcon);
+      if (!notesUrl || notesUrl === '#') {
+        notesBtn.disabled = true;
+        notesBtn.style.opacity = '0.6';
+        notesBtn.style.cursor = 'not-allowed';
+      }
+      notesBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (notesUrl && notesUrl !== '#') {
+          window.open(notesUrl, '_blank', 'noopener');
+        }
+      });
+
+      overlay.appendChild(playBtn);
+      overlay.appendChild(notesBtn);
+
+      thumb.appendChild(overlay);
+      return card;
+    }
+
+    function renderRelatedVideos(videos, displayTopic, baseTopic, language) {
+      if (!$relatedVideosWrap || !$relatedVideosCarousel) return;
+      $relatedVideosCarousel.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+      videos.forEach(video => fragment.appendChild(createRelatedVideoCard(video)));
+      $relatedVideosCarousel.appendChild(fragment);
+      $relatedVideosSkeleton?.classList.add('hidden');
+      $relatedVideosEmpty?.classList.add('hidden');
+      $relatedVideosWrap.classList.remove('hidden');
+      if ($relatedVideosSummary) {
+        $relatedVideosSummary.textContent = `Showing for "${displayTopic}"`;
+      }
+      // Video caching disabled — always fetch fresh results
+    }
+
+    async function loadRelatedVideos(topic, options = {}) {
+      const baseQuery = (topic || '').trim();
+      const force = Boolean(options.force);
+      const requestedLanguage = normalizeVideoLanguage(options.language ?? relatedVideosLanguage);
+      const searchQuery = buildRelatedVideosQuery(baseQuery, requestedLanguage);
+      const previousQuery = (relatedVideosFullQuery || '').trim();
+
+      if (!baseQuery) {
+        relatedVideosTopic = '';
+        relatedVideosFullQuery = '';
+        relatedVideosAbort?.abort();
+        relatedVideosAbort = null;
+        if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
+        if ($relatedVideosSummary) {
+          $relatedVideosSummary.textContent = 'Enter a topic to discover supporting videos.';
+        }
+        if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = '';
+        $relatedVideosSkeleton?.classList.add('hidden');
+        if ($relatedVideosEmpty) {
+          $relatedVideosEmpty.textContent = 'Videos will appear once a topic is generated.';
+          $relatedVideosEmpty.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (!force && relatedVideosFullQuery && relatedVideosFullQuery.toLowerCase() === searchQuery.toLowerCase()) {
+        return;
+      }
+
+      relatedVideosTopic = baseQuery;
+      relatedVideosLanguage = requestedLanguage || 'English';
+      relatedVideosFullQuery = searchQuery;
+      if ($relatedVideosSection) $relatedVideosSection.classList.remove('hidden');
+      if ($relatedVideosSummary) {
+        $relatedVideosSummary.textContent = `Finding videos for "${searchQuery}"...`;
+      }
+
+
+      if (relatedVideosAbort) {
+        relatedVideosAbort.abort();
+      }
+      relatedVideosAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
+      const isSameQueryAsPrevious = previousQuery && previousQuery.toLowerCase() === searchQuery.toLowerCase();
+      if (!isSameQueryAsPrevious && $relatedVideosCarousel) {
+        $relatedVideosCarousel.innerHTML = '';
+      }
+      const hasExisting = isSameQueryAsPrevious && $relatedVideosCarousel && $relatedVideosCarousel.children.length > 0;
+      if (hasExisting) {
+        $relatedVideosSkeleton?.classList.add('hidden');
+        $relatedVideosWrap?.classList.remove('hidden');
+      } else {
+        $relatedVideosSkeleton?.classList.remove('hidden');
+        $relatedVideosWrap?.classList.add('hidden');
+      }
+      $relatedVideosEmpty?.classList.add('hidden');
+
+      try {
+        // Run recommendation lookup in parallel so YouTube search is not blocked by slow metadata APIs.
+        const recommendedPromise = (async () => {
+          try {
+            const recLookup = await fetchJsonWithTimeout(
+              `${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(baseQuery)}`,
+              { timeoutMs: 6000 }
+            );
+            const recData = recLookup?.data;
+            if (!Array.isArray(recData) || !recData.length) return null;
+
+            const first = recData.find(t => typeof t.video_url === 'string' && t.video_url.trim());
+            if (!first || !first.video_url) return null;
+
+            const vurl = first.video_url.trim();
+            let vidId = '';
+            const ytMatch = vurl.match(/[?&]v=([^&#]+)/) || vurl.match(/youtu\.be\/([^?#]+)/);
+            if (ytMatch && ytMatch[1]) vidId = ytMatch[1];
+
+            const recommended = {
+              id: vidId || '',
+              link: vurl,
+              title: (first.topic || baseQuery || '').toString(),
+              channel: 'Syllabus recommended',
+              channel_page: '',
+              thumbnail: '',
+              views: '',
+              channel_logo: '',
+              channel_logo_is_default: true,
+              duration: '',
+              recommended: true,
+            };
+
+            // Attempt backend metadata lookup with a strict timeout.
+            try {
+              const metaController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+              const metaTimer = metaController ? setTimeout(() => metaController.abort(), 7000) : null;
+              const metaRes = await fetch(`${apiBase}/api/transcripts/meta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: vurl }),
+                ...(metaController ? { signal: metaController.signal } : {}),
+              });
+              if (metaTimer) clearTimeout(metaTimer);
+              if (metaRes.ok) {
+                const meta = await metaRes.json();
+                if (meta && typeof meta === 'object') {
+                  if (meta.channel_name) recommended.channel = meta.channel_name;
+                  if (meta.channel_logo) {
+                    recommended.channel_logo = meta.channel_logo;
+                    recommended.channel_logo_is_default = false;
+                  }
+                  if (meta.channel_url) recommended.channel_page = meta.channel_url;
+                }
+              }
+            } catch (metaErr) {
+              console.warn('Recommended video metadata lookup failed:', metaErr);
+            }
+
+            // Fallback to YouTube oEmbed for channel name + URL if backend metadata unavailable.
+            if (!recommended.channel_page || recommended.channel === 'Syllabus recommended') {
+              try {
+                const oembedRes = await fetchJsonWithTimeout(
+                  `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(vurl)}`,
+                  { timeoutMs: 4000 }
+                );
+                const oembed = oembedRes?.data;
+                if (oembed && typeof oembed === 'object') {
+                  if (oembed.author_name) recommended.channel = oembed.author_name;
+                  if (oembed.author_url) recommended.channel_page = oembed.author_url;
+                }
+              } catch (oembedErr) {
+                console.warn('YouTube oEmbed lookup failed:', oembedErr);
+              }
+            }
+
+            return recommended;
+          } catch (e) {
+            console.warn('Recommended topic video lookup failed:', e);
+            return null;
+          }
+        })();
+
+        const fetchOptions = relatedVideosAbort ? { signal: relatedVideosAbort.signal } : undefined;
+        const response = await fetch(
+          `${apiBase}/api/youtube/search?query=${encodeURIComponent(searchQuery)}&num=8`,
+          Object.assign({}, fetchOptions || {}, { headers: authHeadersIfAny() })
+        );
+        if (!response.ok) {
+          throw new Error(`Search failed with status ${response.status}`);
+        }
+        const videos = await response.json();
+        const recommended = await Promise.race([
+          recommendedPromise,
+          sleep(1500).then(() => null)
+        ]);
+
+        if (!Array.isArray(videos) || videos.length === 0) {
+          if (recommended) {
+            renderRelatedVideos([recommended], searchQuery, baseQuery, relatedVideosLanguage);
+            return;
+          }
+          if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = '';
+          $relatedVideosSkeleton?.classList.add('hidden');
+          $relatedVideosWrap?.classList.add('hidden');
+          if ($relatedVideosEmpty) {
+            $relatedVideosEmpty.textContent = 'No related videos found. Try a more specific topic.';
+            $relatedVideosEmpty.classList.remove('hidden');
+          }
+          if ($relatedVideosSummary) {
+            $relatedVideosSummary.textContent = `No videos found for "${searchQuery}".`;
+          }
+          return;
+        }
+        const limited = videos.slice(0, 8);
+        const finalList = recommended ? [recommended, ...limited] : limited;
+        renderRelatedVideos(finalList, searchQuery, baseQuery, relatedVideosLanguage);
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        console.error('Related videos error:', error);
+        if ($relatedVideosCarousel) $relatedVideosCarousel.innerHTML = '';
+        $relatedVideosSkeleton?.classList.add('hidden');
+        $relatedVideosWrap?.classList.add('hidden');
+        if ($relatedVideosEmpty) {
+          $relatedVideosEmpty.textContent = 'Unable to load videos right now.';
+          $relatedVideosEmpty.classList.remove('hidden');
+        }
+        if ($relatedVideosSummary) {
+          $relatedVideosSummary.textContent = `Unable to load videos for "${searchQuery}".`;
+        }
+      } finally {
+        relatedVideosAbort = null;
+      }
+    }
+
+    // ===== State =====
+    let es = null;
+    let lastMarkdown = '';
+    let lastImageUrls = [];
+    const VARIANTS = ['detailed', 'cheatsheet'];
+    let currentVariant = 'detailed';
+    let currentCourseType = '';
+    try { localStorage.setItem('paperx:lastVariant', currentVariant); } catch { }
+    const noteKey = (v) => `paperx:lastNoteId:${v}`;
+    let currentNoteId = localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? (localStorage.getItem('paperx:lastNoteId') || '') : '');
+
+    function setVerifiedByChip(verifiedByName) {
+      if (!$verifiedByChip) return;
+      const name = String(verifiedByName || '').trim();
+      const textEl = $verifiedByChip.querySelector('[data-verified-by-text]');
+      if (!name) {
+        $verifiedByChip.classList.add('hidden');
+        $verifiedByChip.classList.remove('inline-flex');
+        return;
+      }
+      if (textEl) {
+        textEl.textContent = `Verified by ${name}`;
+      } else {
+        $verifiedByChip.textContent = `Verified by ${name}`;
+      }
+      $verifiedByChip.classList.remove('hidden');
+      $verifiedByChip.classList.add('inline-flex');
+    }
+
+    function applyNoteVerificationState(noteData) {
+      const verifyLabel = $verifyBtn ? $verifyBtn.querySelector('[data-verify-label]') : null;
+      const verifiedByName = String(noteData?.verified_by_name || '').trim();
+      setVerifiedByChip(verifiedByName);
+      if (!$verifyBtn) return;
+      if (verifiedByName) {
+        if (verifyLabel) verifyLabel.textContent = 'Verified';
+        else $verifyBtn.textContent = 'Verified';
+        $verifyBtn.disabled = true;
+      } else {
+        if (verifyLabel) verifyLabel.textContent = 'Approve';
+        else $verifyBtn.textContent = 'Approve';
+        $verifyBtn.disabled = false;
+      }
+    }
+
+    function setVariantUI() {
+      const act = currentVariant;
+      [$variantDetailed, $variantCheatsheet].forEach(btn => {
+        if (!btn) return;
+        const v = btn.dataset.variant;
+        const on = v === act;
+        btn.classList.toggle('bg-brand-600', on);
+        btn.classList.toggle('text-white', on);
+        btn.classList.toggle('shadow-neon', on);
+        btn.classList.toggle('bg-transparent', !on);
+        btn.classList.toggle('text-inherit', !on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+    }
+    setVariantUI();
+    function currentTopicOrHeading() {
+      const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
+      const fromInput = ($topic.value || '').trim();
+      return fromInput || fromHeading || '';
+    }
+
+    [$variantDetailed, $variantCheatsheet].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        const v = btn.dataset.variant;
+        if (!v || !VARIANTS.includes(v)) return;
+        currentVariant = v;
+        try { localStorage.setItem('paperx:lastVariant', v); } catch { }
+        setVariantUI();
+        applyNoteVerificationState(null);
+        logEvent('Switch variant', v);
+        console.log('[Variant] switch clicked:', v);
+        checkMyNoteVisibility();
+        // If a topic is present, auto-click Generate to regenerate for the new variant
+        const t0 = ($topic.value || '').trim();
+        if (t0) { $generate.click(); return; }
+        // load last note for this variant if available; else try DB resolve by topic/heading
+        const lastId = localStorage.getItem(noteKey(currentVariant)) || '';
+        const t = currentTopicOrHeading();
+
+        async function tryRenderResolvedByTitle(title) {
+          const clean = (title || '').trim();
+          if (!clean) return { loaded: false, definitiveMissing: false };
+          $meta.textContent = `Checking DB • ${currentVariant}`;
+          const url = `${apiBase}/api/notes/resolve?title=${encodeURIComponent(clean)}&variant=${encodeURIComponent(currentVariant)}`;
+          const res = await fetchJsonWithRetry(url, { timeoutMs: 8000, attempts: 3 });
+          if (res.status === 200 && res.data && res.data.markdown) {
+            renderMarkdown(res.data.markdown);
+            renderImageGallery(res.data.image_urls || []);
+            applyNoteVerificationState(res.data);
+            currentNoteId = res.data.id || '';
+            try {
+              if (currentNoteId) localStorage.setItem(noteKey(currentVariant), currentNoteId);
+            } catch { }
+            const loadedTopic = (res.data.title || document.querySelector('#output h1')?.textContent || '').trim();
+            $meta.textContent = `Loaded • ${currentNoteId || '-'} • ${currentVariant}`;
+            if (currentNoteId) {
+              enableFlashcardAccess(currentNoteId, loadedTopic);
+              enableMCQAccess(currentNoteId, loadedTopic);
+            }
+            return { loaded: true, definitiveMissing: false };
+          }
+          if (res.status === 404) return { loaded: false, definitiveMissing: true };
+          return { loaded: false, definitiveMissing: false };
+        }
+
+        if (lastId) {
+          $meta.textContent = `Loading • ${lastId} • ${currentVariant}`;
+          const url = `${apiBase}/notes/${encodeURIComponent(lastId)}?variant=${encodeURIComponent(currentVariant)}`;
+          const res = await fetchJsonWithRetry(url, { timeoutMs: 8000, attempts: 3 });
+          if (res.status === 200 && res.data && res.data.markdown) {
+            renderMarkdown(res.data.markdown);
+            renderImageGallery(res.data.image_urls || []);
+            applyNoteVerificationState(res.data);
+            $meta.textContent = `Loaded • ${res.data.id || lastId} • ${currentVariant}`;
+            currentNoteId = res.data.id || lastId;
+            const loadedTopic = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+            if (currentNoteId) {
+              enableFlashcardAccess(currentNoteId, loadedTopic);
+              enableMCQAccess(currentNoteId, loadedTopic);
+            }
+            return;
+          }
+
+          if (res.status === 404) {
+            // Stale localStorage id; try exact DB resolve by title.
+            const resolved = await tryRenderResolvedByTitle(t);
+            if (resolved.loaded) return;
+            if (resolved.definitiveMissing) {
+              if (!t) { snack('Enter a topic'); return; }
+              console.log('[Variant] auto-generate (definitive missing) for topic:', t, 'variant:', currentVariant);
+              logEvent('Auto-generate', `${currentVariant} • ${t}`);
+              startGeneration(t, false);
+              return;
+            }
+            snack('Unable to confirm saved note right now');
+            return;
+          }
+
+          // Any other error: do NOT auto-generate.
+          console.warn('[Variant] Fetch by id not definitive; skipping auto-generate', res);
+          snack('Unable to load saved note right now');
+          return;
+        }
+
+        // No lastId; try DB resolve by title, then (only if 404) auto-generate.
+        const resolved = await tryRenderResolvedByTitle(t);
+        if (resolved.loaded) return;
+        if (resolved.definitiveMissing) {
+          if (!t) { snack('Enter a topic'); return; }
+          console.log('[Variant] auto-generate (definitive missing) for topic:', t, 'variant:', currentVariant);
+          logEvent('Auto-generate', `${currentVariant} • ${t}`);
+          startGeneration(t, false);
+          return;
+        }
+        snack('Unable to confirm note in DB right now');
+      });
+    });
+    let emphasis = localStorage.getItem('paperx:emphasis') === '1';
+
+    // Initialize degree UI
+    if ($degree) {
+      $degree.addEventListener('change', onDegreeChange);
+      loadDegreeOptions();
+    }
+    if ($degreeCustom) {
+      $degreeCustom.addEventListener('input', onDegreeCustomInput);
+    }
+    // Always hide the entire degree selector field for automatic behavior
+    if ($degreeRow) { $degreeRow.classList.add('hidden'); }
+    // Resolve degree automatically from profile if possible; otherwise rely on stored degree or backend fallback
+    (async () => {
+      const ok = await autoResolveDegreeFromProfile();
+      if (!ok) {
+        // No profile/degree; if a stored degree exists, ensure hint shows it, else keep 'auto'
+        const stored = getStoredDegree();
+        if ($degree) {
+          if (stored) {
+            const match = Array.from($degree.options || []).some(o => (o.value || '').toLowerCase() === stored.toLowerCase());
+            if (match) $degree.value = stored; else { $degree.value = 'custom'; if ($degreeCustom) $degreeCustom.value = stored; }
+          } else {
+            $degree.value = '';
+          }
+        }
+      }
+      await loadAccessSummary();
+      updateDomainsHintDebounced();
+    })();
+
+    // Clean up any leftover video cache from previous sessions
+    try {
+      localStorage.removeItem('paperx:lastVideos');
+      localStorage.removeItem('paperx:lastTopic');
+      localStorage.removeItem('paperx:lastVideoLanguage');
+    } catch { }
+
+    if ($videoLanguage) {
+      relatedVideosLanguage = $videoLanguage.value || relatedVideosLanguage;
+    }
+
+    // No cached video restoration — always start fresh
+    if ($relatedVideosSection) {
+      $relatedVideosSection.classList.remove('hidden');
+      $relatedVideosSkeleton?.classList.remove('hidden');
+      $relatedVideosWrap?.classList.add('hidden');
+    }
+
+    // ===== Chips (suggested topics) =====
+    document.querySelectorAll('.chip').forEach(ch => {
+      ch.className = "ripple px-3 py-1.5 text-xs rounded-full border hover:bg-[var(--brand-soft)]";
+      ch.style.borderColor = "var(--outline)";
+      ch.addEventListener('click', () => {
+        const value = ch.dataset.val || ch.textContent || '';
+        $topic.value = value;
+        loadRelatedVideos(value, { force: true });
+      });
+    });
+
+    if ($refreshVideos) {
+      $refreshVideos.addEventListener('click', () => {
+        const current = ($topic.value || relatedVideosTopic || '').trim();
+        loadRelatedVideos(current || relatedVideosTopic, { force: true });
+      });
+    }
+
+    if ($videoLanguage) {
+      $videoLanguage.addEventListener('change', () => {
+        const selected = normalizeVideoLanguage($videoLanguage.value) || 'English';
+        if (selected.toLowerCase() === (relatedVideosLanguage || '').toLowerCase()) return;
+        relatedVideosLanguage = selected;
+        const current = ($topic.value || relatedVideosTopic || '').trim();
+        if (current) {
+          loadRelatedVideos(current, { force: true, language: relatedVideosLanguage });
+        }
+      });
+    }
+
+    if ($flashcardBtn) {
+      $flashcardBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        openFlashcards();
+      });
+    }
+
+    if ($mcqBtn) {
+      $mcqBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        openMCQ();
+      });
+    }
+
+    if ($myNoteBtn) {
+      $myNoteBtn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        const token = getAuthToken();
+        if (!token) { snack('Sign in to use My note'); return; }
+        const title = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+        if (!title) { snack('No note loaded'); return; }
+        try {
+          const url = `${apiBase}/api/notes/edited?title=${encodeURIComponent(title)}&variant=${encodeURIComponent(currentVariant)}`;
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) { throw new Error((data && (data.detail || data.error)) || 'Load failed'); }
+          if (data && data.markdown) {
+            renderMarkdown(data.markdown);
+            applyNoteVerificationState(data);
+            $meta.textContent = `My note • ${currentVariant}`;
+            snack('Loaded My note');
+          }
+        } catch (e) { console.warn('My note error:', e); snack('Unable to load My note'); }
+      });
+    }
+
+    if ($topic) {
+      $topic.addEventListener('input', () => {
+        const query = ($topic.value || '').trim();
+        if (relatedVideosDebounce) {
+          clearTimeout(relatedVideosDebounce);
+        }
+        relatedVideosDebounce = setTimeout(() => {
+          if (!query) {
+            loadRelatedVideos('', { force: true });
+            return;
+          }
+          loadRelatedVideos(query);
+        }, 600);
+      });
+    }
+
+    // ===== Ripple =====
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('.ripple'); if (!b) return;
+      const rect = b.getBoundingClientRect();
+      const circle = document.createElement('span');
+      circle.style.position = 'absolute';
+      circle.style.left = `${e.clientX - rect.left}px`;
+      circle.style.top = `${e.clientY - rect.top}px`;
+      circle.style.width = circle.style.height = '0px';
+      circle.style.borderRadius = '9999px';
+      circle.style.background = 'currentColor';
+      circle.style.opacity = '.12';
+      circle.style.transform = 'translate(-50%,-50%)';
+      circle.style.transition = 'width .5s ease, height .5s ease, opacity .8s ease';
+      b.appendChild(circle);
+      requestAnimationFrame(() => { circle.style.width = circle.style.height = Math.max(rect.width, rect.height) * 1.8 + 'px'; });
+      setTimeout(() => { circle.style.opacity = '0'; setTimeout(() => circle.remove(), 300); }, 250);
+    }, true);
+
+    // ===== Theme (shared manager) =====
+    (function initSharedTheme() {
+      function applyThemeButton(mode) {
+        const nextLabel = mode === 'dark' ? 'Light' : 'Dark';
+        if ($themeText) {
+          $themeText.textContent = nextLabel;
+        } else if ($themeBtn) {
+          // Fallback for older markup
+          $themeBtn.textContent = nextLabel;
+        }
+        if ($themeIcon) {
+          // Show the action (what clicking will switch to)
+          $themeIcon.textContent = mode === 'dark' ? 'light_mode' : 'dark_mode';
+        }
+      }
+      try {
+        // Ensure global Theme is initialized (config.js handles apply + data-theme)
+        if (window.Theme && typeof window.Theme.init === 'function') window.Theme.init();
+        const mode = (window.Theme && window.Theme.get && window.Theme.get()) || (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+        applyThemeButton(mode);
+      } catch { }
+      $themeBtn.addEventListener('click', () => {
+        try {
+          const mode = (window.Theme && window.Theme.toggle && window.Theme.toggle()) || (document.documentElement.classList.toggle('dark'), document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+          applyThemeButton(mode);
+        } catch { }
+      });
+    })();
+
+    // ===== Helpers =====
+    function snack(msg) {
+      $snack.textContent = msg;
+      $snack.classList.remove('hidden');
+      setTimeout(() => $snack.classList.add('hidden'), 1500);
+    }
+
+    function setEmphasis(on) {
+      emphasis = on;
+      $wrap.classList.toggle('emph-strong', on);
+      localStorage.setItem('paperx:emphasis', on ? '1' : '0');
+      // visual state on button
+      $emphBtn.classList.toggle('bg-[var(--brand-soft)]', on);
+      $emphBtn.textContent = on ? 'Emphasis On' : 'Emphasis';
+    }
+
+    function logEvent(title, detail = '') {
+      try { console.debug('[Status]', title, detail || ''); } catch { }
+    }
+
+    function setBusy(b) {
+      $generate.disabled = b; $cancel.disabled = !b; $topic.disabled = b;
+      if ($regen) $regen.disabled = b;
+      if ($regenMobile) $regenMobile.disabled = b;
+    }
+
+    // Loader controls scoped to the Final Output answer box
+    function showOutputLoader() {
+      ensureLottie();
+      if ($outputLoader) $outputLoader.style.display = 'flex';
+      if ($wrap) $wrap.classList.add('loading');
+    }
+    function hideOutputLoader() {
+      if ($outputLoader) $outputLoader.style.display = 'none';
+      if ($wrap) $wrap.classList.remove('loading');
+    }
+
+    function postprocessLinks() {
+      $output.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+    }
+
+    function buildTOC() {
+      $toc.innerHTML = '';
+      const hs = $output.querySelectorAll('h1, h2, h3');
+      hs.forEach(h => {
+        const level = h.tagName === 'H1' ? 1 : (h.tagName === 'H2' ? 2 : 3);
+        const id = h.id || h.textContent.trim().toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+        h.id = id;
+        const a = document.createElement('a');
+        a.href = `#${id}`;
+        a.textContent = h.textContent;
+        a.className = `${level > 1 ? 'ml-3' : ''} block px-2 py-1 rounded hover:bg-[var(--brand-soft)]`;
+        $toc.appendChild(a);
+      });
+    }
+
+    async function renderMarkdown(md) {
+      lastMarkdown = md ?? '';
+      try {
+        await ensureMarkdownRuntime();
+      } catch (err) {
+        console.warn('Markdown runtime failed to load', err);
+        $output.textContent = lastMarkdown;
+        $editor.value = lastMarkdown;
+        return;
+      }
+      const html = DOMPurify.sanitize(marked.parse(lastMarkdown));
+      $output.innerHTML = html;
+      $editor.value = lastMarkdown;
+
+      // Track note view if we have content
+      if (lastMarkdown && lastMarkdown.length > 50 && window.Analytics) {
+        // Debounce or just track? Since renderMarkdown might be called multiple times during streaming/editing, 
+        // we might want to be careful. But for now, assuming it's final render or major update.
+        // Actually, let's track only if it seems substantial.
+        window.Analytics.track('note_viewed', {
+          variant: currentVariant || 'detailed',
+          word_count: lastMarkdown.split(/\s+/).length
+        });
+      }
+
+      // Mermaid blocks
+      const mmd = $output.querySelectorAll('code.language-mermaid, pre code.language-mermaid');
+      mmd.forEach((codeEl, i) => {
+        const txt = codeEl.textContent;
+        const pre = codeEl.closest('pre');
+        const container = document.createElement('div');
+        container.className = 'my-4';
+        (pre || codeEl).replaceWith(container);
+        try {
+          mermaid.render('mmd-' + i + '-' + Date.now(), txt, (svg) => { container.innerHTML = svg; });
+        } catch { }
+      });
+
+      // Syntax highlight
+      try { hljs.highlightAll(); } catch { }
+
+      // Math (KaTeX auto-render): support $...$, $$...$$, \(...\), \[...\]
+      try {
+        if (typeof renderMathInElement === 'function') {
+          renderMathInElement($output, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\(', right: '\\)', display: false },
+              { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false,
+            ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+          });
+        }
+      } catch { }
+
+      // Transform inline [LABEL] citations into pills with favicons
+      try { applyCitationPills(); } catch { }
+
+      // Render CITATIONS section as one-line clickable list
+      try { renderCitationsSection(); } catch { }
+
+      postprocessLinks();
+      buildTOC();
+      // Update 'My note' visibility when content/title changes
+      checkMyNoteVisibility();
+    }
+
+    function clearUI() {
+      $images.innerHTML = '';
+      $output.innerHTML = '';
+      $toc.innerHTML = '';
+      $progress.style.width = '0%';
+      $meta.textContent = '';
+      resetFlashcardAccess();
+      resetMCQAccess();
+      currentNoteId = '';
+      lastImageUrls = [];
+      // reset images skeleton (keep for images only)
+      ['', '', ''].forEach(() => {
+        const sk = document.createElement('div');
+        sk.className = 'h-24 rounded-lg skeleton';
+        $images.appendChild(sk);
+      });
+    }
+
+    function renderImageGallery(urls) {
+      if (!$images) return;
+      const listRaw = Array.isArray(urls) ? urls.map(u => String(u || '').trim()).filter(u => !!u) : [];
+      const list = Array.from(new Set(listRaw));
+      lastImageUrls = list;
+      $images.innerHTML = '';
+      if (!list.length) return;
+      list.slice(0, 9).forEach(url => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = 'reference image';
+        img.className = 'w-full h-24 object-cover rounded-lg border';
+        img.style.borderColor = 'var(--outline)';
+        a.appendChild(img);
+        $images.appendChild(a);
+      });
+    }
+
+    function setProgress(stage) {
+      const map = {
+        start: 5, search_results: 20, fetch_start: 28, fetch_done: 46, merged_titles: 58,
+        context_ready: 66, llm_start: 72, llm_done: 88, images: 94, final: 100
+      };
+      const v = map[stage] ?? 0;
+      $progress.style.width = v + '%';
+      document.querySelectorAll('.step').forEach(el => {
+        el.classList.toggle('text-brand-700', el.dataset.step === stage);
+      });
+    }
+
+    function normalizeCourseType(type) {
+      const v = (type || '').trim().toLowerCase();
+      return ['practical', 'theorey', 'maths'].includes(v) ? v : '';
+    }
+
+    function ensureWorkingSection(md, topic, courseType) {
+      if (normalizeCourseType(courseType) !== 'practical') return md || '';
+      const text = md || '';
+      if (/^##\s*working\b/imu.test(text)) return text;
+      const trimmed = text.trim();
+      const working = [
+        '## Working',
+        `1. Prepare the required setup and apparatus for ${topic || 'this experiment'}.`,
+        '2. Configure the environment and verify all safety constraints.',
+        '3. Execute each step of the procedure methodically, capturing observations.',
+        '4. Record measurements/results with units after every key action.',
+        '5. Analyze the observations to derive the outcome, then clean up the setup.',
+      ].join('\n');
+      if (!trimmed) return working + '\n';
+      return `${trimmed}\n\n${working}\n`;
+    }
+
+    async function fetchCourseTypeForTopic(topic) {
+      const clean = (topic || '').trim();
+      if (!clean) return '';
+      try {
+        const res = await fetch(`${apiBase}/api/syllabus/topics/by-title?topic=${encodeURIComponent(clean)}`, { headers: authHeadersIfAny() });
+        if (!res.ok) return '';
+        const data = await res.json();
+        if (!Array.isArray(data) || !data.length) return '';
+        const match = data.find(t => t && t.course_type) || data[0];
+        return normalizeCourseType(match && match.course_type);
+      } catch (err) {
+        console.warn('Course type lookup failed', err);
+        return '';
+      }
+    }
+
+    // ===== Streaming events =====
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+      if (es) { es.close(); es = null; logEvent('Cancelled'); }
+      hideOutputLoader();
+      setBusy(false);
+    });
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function fetchJsonWithTimeout(url, { timeoutMs = 8000 } = {}) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const req = { signal: controller.signal };
+        if (isApiBaseRequest(url)) {
+          req.headers = authHeadersIfAny();
+          req.credentials = 'include';
+        }
+        const res = await fetch(url, req);
+        let data = null;
+        try { data = await res.json(); } catch { }
+        return { ok: res.ok, status: res.status, data };
+      } catch (err) {
+        return { ok: false, status: 0, data: null, error: err };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function fetchJsonWithRetry(url, { timeoutMs = 8000, attempts = 3 } = {}) {
+      let last = null;
+      for (let i = 0; i < attempts; i++) {
+        const r = await fetchJsonWithTimeout(url, { timeoutMs });
+        last = r;
+        // 200/404 are definitive for our purposes.
+        if (r.status === 200 || r.status === 404) return r;
+        // Retry on network/timeout and server errors.
+        if (r.status === 0 || r.status >= 500) {
+          await sleep(250 * (i + 1));
+          continue;
+        }
+        // Other 4xx (401/403/429) are not definitive for existence.
+        return r;
+      }
+      return last || { ok: false, status: 0, data: null };
+    }
+
+    // Unified generator: supports force to bypass cache
+    async function startGeneration(topic, force = false) {
+      const t = (topic || '').trim();
+      if (!t) { alert('Enter a topic'); return; }
+
+      loadRelatedVideos(t, { force: true });
+      if (es) { try { es.close(); } catch { } es = null; }
+      // DB-first behavior: only generate when we are definitively sure it doesn't exist.
+      if (!force) {
+        const openedAlreadyToday = hasConsumedTopicOpen(t);
+        if (!openedAlreadyToday) {
+          const canOpen = await ensureUserAccess('topic_open', { consume: true, allowOnTransientFailure: false, renderInOutput: true });
+          if (!canOpen) return;
+          markTopicOpenConsumed(t);
+        }
+
+        setBusy(true);
+        showOutputLoader();
+        $meta.textContent = `Checking DB • ${currentVariant}`;
+        const resolveUrl = `${apiBase}/api/notes/resolve?title=${encodeURIComponent(t)}&variant=${encodeURIComponent(currentVariant)}`;
+        const check = await fetchJsonWithRetry(resolveUrl, { timeoutMs: 8000, attempts: 3 });
+        if (check.status === 200 && check.data && check.data.markdown) {
+          clearUI();
+          renderMarkdown(check.data.markdown);
+          renderImageGallery(check.data.image_urls || []);
+          applyNoteVerificationState(check.data);
+          setEmphasis(emphasis);
+          currentNoteId = check.data.id || '';
+          try {
+            if (currentNoteId) {
+              localStorage.setItem(noteKey(currentVariant), currentNoteId);
+              if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+            }
+          } catch { }
+          $meta.textContent = `Loaded • ${currentNoteId || '-'} • ${currentVariant}`;
+          if (currentNoteId) {
+            enableFlashcardAccess(currentNoteId, (check.data.title || t).trim());
+            enableMCQAccess(currentNoteId, (check.data.title || t).trim());
+          }
+          hideOutputLoader();
+          setBusy(false);
+          return;
+        }
+        if (check.status !== 404) {
+          // Not definitive -> continue with live generation fallback.
+          console.warn('[Generate] DB check not definitive; continuing with generation fallback', check);
+          snack('DB check skipped. Generating notes...');
+        }
+        // check.status === 404 => definitively missing; proceed to generation.
+      }
+
+      const canGenerate = await ensureUserAccess('ai_prompt', { consume: true, allowOnTransientFailure: false, renderInOutput: true });
+      if (!canGenerate) return;
+
+      applyNoteVerificationState(null);
+      clearUI();
+      setBusy(true);
+      showOutputLoader();
+      currentCourseType = '';
+      try {
+        currentCourseType = await fetchCourseTypeForTopic(t);
+      } catch (err) {
+        console.warn('Course type lookup error', err);
+      }
+      const url = new URL(`${apiBase}/generate/stream`);
+      url.searchParams.set('topic', t);
+      if (force) url.searchParams.set('force', 'true');
+      url.searchParams.set('variant', currentVariant);
+      const degree = getSelectedDegree();
+      if (degree) url.searchParams.set('degree', degree);
+      if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
+      const streamToken = getAuthToken();
+      if (streamToken && streamToken !== '__COOKIE_AUTH__') {
+        url.searchParams.set('access_token', streamToken);
+      }
+      es = new EventSource(url.toString(), { withCredentials: true });
+
+      es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
+      es.addEventListener('error', () => { logEvent('Stream error'); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+      es.addEventListener('close', () => { hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+
+      const on = (name, fn) => es.addEventListener(name, (ev) => { try { fn(JSON.parse(ev.data)); setProgress(name); } catch { } });
+
+      on('start', (d) => {
+        const allowed = Array.isArray(d.allowed_domains) ? d.allowed_domains : [];
+        const deg = (d.degree || '').trim();
+        logEvent('Start', `Allowed: ${allowed.join(', ')}`);
+        if ($domainsHint) {
+          if (deg && allowed.length) {
+            const preview = allowed.slice(0, 4).join(', ');
+            $domainsHint.textContent = `Degree: ${deg} • ${preview}${allowed.length > 4 ? '…' : ''}`;
+          } else if (deg && !allowed.length) {
+            $domainsHint.textContent = `Degree: ${deg} • web (fallback)`;
+          } else if (!deg && allowed.length) {
+            // No degree param, but backend allowed domains present (likely default)
+            const preview = allowed.slice(0, 4).join(', ');
+            $domainsHint.textContent = `Sources: ${preview}${allowed.length > 4 ? '…' : ''}`;
+          } else {
+            $domainsHint.textContent = 'Sources: auto';
+          }
+        }
+      });
+      on('search_results', (d) => logEvent('Searching', `${d.urls.length} results`));
+      on('fetch_start', (d) => logEvent('Fetching', d.url));
+      on('fetch_done', (d) => logEvent('Parsed', `${d.title} (${d.sections} sections)`));
+      on('fetch_error', (d) => logEvent('Fetch error', d.error));
+      on('merged_titles', (d) => logEvent('Merged titles', `${d.titles.length} unique`));
+      on('context_ready', (d) => logEvent('Context ready', `${d.chars} chars`));
+      on('llm_start', () => logEvent('LLM generating…'));
+      on('llm_done', (d) => logEvent('LLM done', `${d.md_chars} chars`));
+      on('images', (d) => {
+        logEvent('Images', `${d.count} found`);
+        renderImageGallery(d.image_urls || d.urls || []);
+      });
+      on('error', (d) => { logEvent('Error', d.message); hideOutputLoader(); setBusy(false); es && es.close(); es = null; });
+      on('final', (d) => {
+        renderImageGallery(d.image_urls || d.urls || lastImageUrls);
+        const workingTopic = (d.title || d.topic || t);
+        const mdToRender = ensureWorkingSection(d.markdown, workingTopic, currentCourseType);
+        renderMarkdown(mdToRender);
+        setEmphasis(emphasis);
+        hideOutputLoader();
+        if (d.id) {
+          currentNoteId = d.id;
+          try {
+            localStorage.setItem(noteKey(currentVariant), currentNoteId);
+            if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+          } catch { }
+          $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
+        }
+        const detectedTopic = (() => {
+          const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
+          if (fromHeading) return fromHeading;
+          const fromPayload = (d.title || d.topic || '').trim();
+          if (fromPayload) return fromPayload;
+          const fromInput = ($topic.value || '').trim();
+          if (fromInput) return fromInput;
+          return relatedVideosTopic || '';
+        })();
+        if (currentNoteId) {
+          enableFlashcardAccess(currentNoteId, detectedTopic);
+          enableMCQAccess(currentNoteId, detectedTopic);
+        }
+        logEvent('Complete');
+        setBusy(false); es && es.close(); es = null;
+      });
+    }
+
+    // Regenerate from current topic or rendered H1 (force=true)
+    $regen.addEventListener('click', () => {
+      const fromTitle = (document.querySelector('#output h1')?.textContent || '').trim();
+      const t = ($topic.value || fromTitle).trim();
+      if (!t) { alert('Enter a topic'); return; }
+      $topic.value = t;
+      startGeneration(t, true);
+    });
+    if ($regenMobile) {
+      $regenMobile.addEventListener('click', (e) => {
+        e.preventDefault();
+        if ($regen && !$regen.disabled) {
+          $regen.click();
+        } else {
+          const fromTitle = (document.querySelector('#output h1')?.textContent || '').trim();
+          const t = ($topic.value || fromTitle).trim();
+          if (!t) { alert('Enter a topic'); return; }
+          $topic.value = t;
+          startGeneration(t, true);
+        }
+      });
+    }
+
+    document.getElementById('generateBtn').addEventListener('click', () => {
+      const topic = ($topic.value || '').trim();
+      console.log('[Generate] clicked topic:', topic, 'variant:', currentVariant);
+      startGeneration(topic, false);
+    });
+
+    // ===== Toolbar actions =====
+    if ($copy) $copy.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(lastMarkdown || ''); snack('Copied markdown'); }
+      catch { snack('Copy failed'); }
+    });
+
+    $download.addEventListener('click', async () => {
+      try {
+        if (currentNoteId) {
+          const res = await fetch(`${apiBase}/notes/${encodeURIComponent(currentNoteId)}/pdf`);
+          if (!res.ok) throw new Error('PDF request failed');
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = `${currentNoteId}.pdf`;
+          document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+          return;
+        }
+        // No note id yet — ad-hoc PDF from current content
+        const title = (document.querySelector('#output h1')?.textContent || 'notes').trim();
+        const res = await fetch(`${apiBase}/pdf`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, markdown: lastMarkdown || '' })
+        });
+        if (!res.ok) throw new Error('PDF request failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${(title || 'notes').toLowerCase().replace(/[^a-z0-9_.-]+/g, '_')}.pdf`;
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        snack('PDF download failed');
+      }
+    });
+
+    function setFullscreen(on) {
+      // You can adjust the padding here: 
+      // 'px-8 md:px-48' sets left/right padding (larger on desktop)
+      // 'pt-16' sets top padding
+      // 'pb-8' sets bottom padding
+      const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'px-8', 'md:px-48', 'pt-16', 'pb-8'];
+      classes.forEach(c => $wrap.classList.toggle(c, on));
+      $expand.textContent = on ? 'Exit' : 'Fullscreen';
+      if ($fsCtrl) $fsCtrl.classList.toggle('hidden', !on);
+
+      // Browser Fullscreen API - Use element requestFullscreen for strict isolation
+      try {
+        if (on) {
+          if (!document.fullscreenElement) {
+            // Request fullscreen on the wrapper element itself
+            $wrap.requestFullscreen().catch(err => {
+              console.warn(`Error attempting to enable fullscreen: ${err.message}`);
+            });
+          }
+        } else {
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(err => {
+              console.warn(`Error attempting to exit fullscreen: ${err.message}`);
+            });
+          }
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    $expand.addEventListener('click', () => {
+      // Toggle logic based on current state
+      const isCurrentlyFullscreen = $wrap.classList.contains('fixed');
+      setFullscreen(!isCurrentlyFullscreen);
+    });
+
+    $fsExit?.addEventListener('click', () => setFullscreen(false));
+
+    // Sync with browser fullscreen changes (e.g. user presses Esc)
+    document.addEventListener('fullscreenchange', () => {
+      const isBrowserFullscreen = !!document.fullscreenElement;
+      // If browser exited fullscreen but UI is still in fullscreen mode, we need to exit UI mode too
+      if (!isBrowserFullscreen && $wrap.classList.contains('fixed')) {
+        // We only want to update UI, not call exitFullscreen again (it would fail)
+        const classes = ['fixed', 'inset-0', 'z-50', 'bg-[var(--surface)]', 'overflow-auto', 'p-6'];
+        classes.forEach(c => $wrap.classList.toggle(c, false));
+        $expand.textContent = 'Fullscreen';
+        if ($fsCtrl) $fsCtrl.classList.add('hidden');
+      }
+    });
+
+    // Theme toggle in fullscreen
+    const $fsThemeBtn = document.getElementById('fsThemeBtn');
+    if ($fsThemeBtn && $themeBtn) {
+      $fsThemeBtn.addEventListener('click', () => {
+        $themeBtn.click();
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $wrap.classList.contains('fixed')) {
+        setFullscreen(false);
+      }
+    });
+
+    // Emphasis toggle
+    setEmphasis(emphasis);
+    $emphBtn.addEventListener('click', () => setEmphasis(!emphasis));
+
+    // ===== Citations: parser + transformer =====
+    function parseCitationsFromMarkdown(mdText) {
+      const map = {};
+      if (!mdText) return map;
+      const secMatch = mdText.match(/^##\s*CITATIONS\b[\s\S]*$/im);
+      if (!secMatch) return map;
+      const startIdx = secMatch.index || 0;
+      // find next section header after CITATIONS
+      const after = mdText.slice(startIdx + secMatch[0].split('\n')[0].length);
+      const nextHeaderIdx = after.search(/^##\s+/m);
+      const secBody = nextHeaderIdx >= 0 ? after.slice(0, nextHeaderIdx) : after;
+      // Patterns: "- [LABEL]: URL", "- [LABEL] - URL", or "- LABEL: URL"
+      const lines = secBody.split(/\n+/);
+      const urlRe = /(https?:\/\/[^\s)\]]+)/i;
+      for (const line of lines) {
+        const m1 = line.match(/\[\s*([A-Za-z0-9_-]{2,20})\s*\][^\n]*?(https?:\/\/[^\s)\]]+)/i);
+        if (m1) { map[m1[1].trim()] = m1[2].trim(); continue; }
+        const m2 = line.match(/^\s*[-*]?\s*([A-Za-z0-9_-]{2,20})\s*[:\-–—]\s*(https?:\/\/\S+)/i);
+        if (m2) { map[m2[1].trim()] = m2[2].trim(); continue; }
+        const m3 = line.match(urlRe);
+        if (m3) {
+          // try to infer label from domain if missing explicit label
+          try {
+            const u = new URL(m3[1]);
+            const host = u.hostname.replace(/^www\./, '');
+            const guess = host.split('.')[0];
+            if (guess && !map[guess]) map[guess] = m3[1];
+          } catch { }
+        }
+      }
+      return map;
+    }
+
+    function applyCitationPills() {
+      const citations = parseCitationsFromMarkdown(lastMarkdown || '');
+      const labels = Object.keys(citations);
+      if (!labels.length) return;
+
+      // Mark all nodes inside the CITATIONS section to exclude from transform
+      const h2s = $output.querySelectorAll('h2');
+      let citationsMarked = false;
+      for (const h of h2s) {
+        if ((h.textContent || '').trim().toUpperCase() === 'CITATIONS') {
+          // mark the heading as part of citations section
+          if (h.nodeType === 1) h.setAttribute('data-citations-section', '1');
+          let cur = h.nextSibling;
+          while (cur) {
+            if (cur.nodeType === 1 && /^(H1|H2)$/i.test(cur.nodeName)) break;
+            if (cur.nodeType === 1) {
+              cur.setAttribute('data-citations-section', '1');
+            }
+            cur = cur.nextSibling;
+          }
+          citationsMarked = true;
+          break;
+        }
+      }
+
+      const isInExcluded = (node) => {
+        if (!node) return false;
+        let n = node.parentNode;
+        while (n && n !== $output) {
+          if (n.nodeType === 1) {
+            if (n.hasAttribute && n.hasAttribute('data-citations-section')) return true;
+            const tag = n.nodeName;
+            if (tag === 'PRE' || tag === 'CODE' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'A') return true;
+          }
+          n = n.parentNode;
+        }
+        return false;
+      };
+
+      const pattern = /\[([^\[\]]+)\]/g; // [GFG] or [GFG, TP]
+      const walker = document.createTreeWalker($output, NodeFilter.SHOW_TEXT);
+      const toProcess = [];
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!node.nodeValue || node.nodeValue.indexOf('[') === -1) continue;
+        if (isInExcluded(node)) continue;
+        toProcess.push(node);
+      }
+
+      toProcess.forEach(node => {
+        const text = node.nodeValue;
+        pattern.lastIndex = 0;
+        let m;
+        let lastIdx = 0;
+        let replaced = false;
+        const frag = document.createDocumentFragment();
+
+        while ((m = pattern.exec(text))) {
+          const inside = m[1];
+          const tokens = inside.split(',').map(s => s.trim()).filter(Boolean);
+          const valid = tokens.filter(t => citations[t]);
+          if (!valid.length) continue;
+          // prepend text before match
+          if (m.index > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+          // add pills for each valid label
+          valid.forEach((lab, idx) => {
+            const href = citations[lab];
+            let host = '';
+            try { host = new URL(href).hostname.replace(/^www\./, ''); } catch { }
+            const a = document.createElement('a');
+            if (href) a.href = href;
+            a.target = '_blank'; a.rel = 'noopener';
+            a.className = 'citation-pill';
+            a.title = href || '';
+            const img = document.createElement('img');
+            img.alt = '';
+            img.loading = 'lazy';
+            img.referrerPolicy = 'no-referrer';
+            img.src = host ? `https://www.google.com/s2/favicons?domain=${host}&sz=32` : '';
+            a.appendChild(img);
+            const span = document.createElement('span');
+            span.textContent = lab;
+            a.appendChild(span);
+            frag.appendChild(a);
+            if (idx !== valid.length - 1) frag.appendChild(document.createTextNode(' '));
+          });
+          lastIdx = pattern.lastIndex;
+          replaced = true;
+        }
+        if (replaced) {
+          if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+          node.parentNode.replaceChild(frag, node);
+        }
+      });
+    }
+
+    function renderCitationsSection() {
+      const citations = parseCitationsFromMarkdown(lastMarkdown || '');
+      const labels = Object.keys(citations);
+      if (!labels.length) return;
+
+      const h2s = $output.querySelectorAll('h2');
+      let h2 = null;
+      for (const h of h2s) {
+        if ((h.textContent || '').trim().toUpperCase() === 'CITATIONS') { h2 = h; break; }
+      }
+      if (!h2) return;
+
+      // Remove existing section content (list/paragraphs) until next H1/H2
+      let cur = h2.nextSibling;
+      const toRemove = [];
+      while (cur) {
+        if (cur.nodeType === 1 && /^(H1|H2)$/i.test(cur.nodeName)) break;
+        toRemove.push(cur);
+        cur = cur.nextSibling;
+      }
+      toRemove.forEach(n => n.parentNode && n.parentNode.removeChild(n));
+
+      // Build our one-line list
+      const wrap = document.createElement('div');
+      wrap.className = 'citations-list';
+
+      labels.forEach(lab => {
+        const href = citations[lab];
+        const a = document.createElement('a');
+        a.className = 'citation-item';
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.title = href;
+        // Visible text: LABEL — URL
+        a.textContent = `${lab} — ${href}`;
+        wrap.appendChild(a);
+      });
+
+      h2.insertAdjacentElement('afterend', wrap);
+    }
+
+    let queryTopic = (() => {
+      try {
+        const qs = new URLSearchParams(window.location.search);
+        return (qs.get('topic') || qs.get('q') || '').trim();
+      }
+      catch { return ''; }
+    })();
+    const initialQueryTopic = queryTopic;
+    let autoInitialStarted = false;
+
+    // Load last note on open (persistence)
+    (async function loadLastNote() {
+      if (queryTopic) return;
+      const id = (localStorage.getItem(noteKey(currentVariant)) || (currentVariant === 'detailed' ? localStorage.getItem('paperx:lastNoteId') : '')); if (!id) return;
+      try {
+        const res = await fetch(`${apiBase}/notes/${encodeURIComponent(id)}?variant=${encodeURIComponent(currentVariant)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.markdown) {
+          renderMarkdown(data.markdown);
+          renderImageGallery(data.image_urls || []);
+          applyNoteVerificationState(data);
+          $meta.textContent = `Loaded • ${id} • ${currentVariant}`;
+          currentNoteId = data?.id || id;
+          const derivedTopic = (
+            (data?.title || '')
+            || (document.querySelector('#output h1')?.textContent || '')
+            || storedTopic
+            || ($topic.value || '')
+          ).trim();
+          if (currentNoteId) {
+            enableFlashcardAccess(currentNoteId, derivedTopic);
+            enableMCQAccess(currentNoteId, derivedTopic);
+          }
+        }
+      } catch { }
+    })();
+
+    function tryAutoStartFromPageLoad(force = false) {
+      if (autoInitialStarted && !force) return;
+      const t = (initialQueryTopic || $topic.value || '').trim();
+      if (!t) return;
+      autoInitialStarted = true;
+      $topic.value = t;
+      startGeneration(t, false);
+      setTimeout(() => document.getElementById('output')?.scrollIntoView({ behavior: 'smooth' }), 80);
+      // Keep URL clean only after we actually trigger auto-start
+      try { history.replaceState(null, '', window.location.pathname + window.location.hash); } catch { }
+      queryTopic = '';
+    }
+
+    // Auto-generate immediately on load (URL topic or prefilled topic), no button click needed.
+    (function ensureAutoStartOnLoad() {
+      if (!initialQueryTopic && !($topic.value || '').trim()) return;
+      // immediate attempt
+      tryAutoStartFromPageLoad(false);
+      // retry once soon in case of startup race
+      setTimeout(() => {
+        if (!autoInitialStarted) {
+          tryAutoStartFromPageLoad(true);
+        }
+      }, 250);
+      // final retry after full load
+      window.addEventListener('load', () => {
+        if (!autoInitialStarted) {
+          tryAutoStartFromPageLoad(true);
+        }
+      }, { once: true });
+    })();
+
+    // Edit / Save
+    function setEditMode(on) {
+      $output.classList.toggle('hidden', on);
+      $editor.classList.toggle('hidden', !on);
+      $save.classList.toggle('hidden', !on);
+      if (typeof $editToggle !== 'undefined' && $editToggle) {
+        $editToggle.textContent = on ? 'Preview' : 'Edit';
+      }
+      if (on) {
+        $editor.value = lastMarkdown;
+        requestAnimationFrame(() => {
+          if ($editor && typeof $editor.focus === 'function') {
+            try {
+              $editor.focus({ preventScroll: true });
+            } catch (err) {
+              $editor.focus();
+            }
+          }
+        });
+      } else {
+        renderMarkdown($editor.value);
+      }
+    }
+    let isEditing = false;
+    if (typeof $editToggle !== 'undefined' && $editToggle) {
+      $editToggle.addEventListener('click', () => {
+        const hasMarkdown = !!(lastMarkdown && lastMarkdown.trim());
+        if (!hasMarkdown) { snack('Generate notes first'); return; }
+        isEditing = !isEditing;
+        setEditMode(isEditing);
+      });
+    }
+
+    if ($verifyBtn) {
+      const verifyLabel = $verifyBtn.querySelector('[data-verify-label]');
+      const setVerifyLabel = (text) => {
+        if (verifyLabel) verifyLabel.textContent = text;
+        else $verifyBtn.textContent = text;
+      };
+
+      $verifyBtn.addEventListener('click', async () => {
+        const token = getAuthToken();
+        if (!token) { snack('Sign in required'); return; }
+
+        const title = (document.querySelector('#output h1')?.textContent || $topic.value || '').trim();
+        if (!currentNoteId && !title) {
+          snack('Generate notes first');
+          return;
+        }
+
+        const prev = verifyLabel ? verifyLabel.textContent : $verifyBtn.textContent;
+        $verifyBtn.disabled = true;
+        setVerifyLabel('Verifying...');
+        try {
+          const payload = currentNoteId ? { note_id: currentNoteId } : { title };
+          const res = await fetch(`${apiBase}/api/notes/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = (data && (data.detail || data.error)) ? String(data.detail || data.error) : 'Verify failed';
+            throw new Error(detail);
+          }
+          if (data && data.note_id) {
+            currentNoteId = String(data.note_id);
+            try {
+              localStorage.setItem(noteKey(currentVariant), currentNoteId);
+              if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+            } catch { }
+          }
+          $meta.textContent = `Verified • ${data?.verified_by_name || 'Teacher/HOD'} • ${currentVariant}`;
+          setVerifiedByChip(data?.verified_by_name || 'Teacher/HOD');
+          setVerifyLabel('Verified');
+          snack('Note verified');
+        } catch (e) {
+          console.warn('Verify failed', e);
+          snack((e && e.message) ? e.message : 'Verify failed');
+          setVerifyLabel(prev || 'Approve');
+        } finally {
+          $verifyBtn.disabled = false;
+        }
+      });
+    }
+
+    $save.addEventListener('click', async () => {
+      const md = $editor.value || '';
+      if (!currentNoteId) {
+        const topic = (document.querySelector('#output h1')?.textContent || $topic.value || 'Untitled').trim();
+        const res = await fetch(`${apiBase}/notes?variant=${encodeURIComponent(currentVariant)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, markdown: md, image_urls: lastImageUrls })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          currentNoteId = data.id;
+          try {
+            localStorage.setItem(noteKey(currentVariant), currentNoteId);
+            if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+          } catch { }
+          $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
+          renderImageGallery(data.image_urls || lastImageUrls);
+          renderMarkdown(md);
+          isEditing = false; setEditMode(false);
+          logEvent('Saved', currentNoteId);
+          snack('Saved');
+        } else { logEvent('Save failed'); snack('Save failed'); }
+        return;
+      }
+      const res = await fetch(`${apiBase}/notes/${encodeURIComponent(currentNoteId)}?variant=${encodeURIComponent(currentVariant)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markdown: md, image_urls: lastImageUrls })
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        renderImageGallery((data && data.image_urls) || lastImageUrls);
+        renderMarkdown(md);
+        isEditing = false; setEditMode(false);
+        $meta.textContent = `Saved • ${currentNoteId} • ${currentVariant}`;
+        logEvent('Saved', currentNoteId);
+        snack('Saved');
+      } else { logEvent('Save failed'); snack('Save failed'); }
+    });
+
+
+  </script>
+
+  <script>
+    // Notes Feedback widget
+    (function () {
+      const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+      const modal = document.getElementById('feedbackModal');
+      const btnOpen = document.getElementById('feedbackBtn');
+      const btnClose = document.getElementById('feedbackModalClose');
+      if (!modal || !btnOpen) return;
+
+      const $stickyHeader = document.querySelector('header');
+
+      function setHeaderHidden(hidden) {
+        if (!$stickyHeader) return;
+        if (hidden) {
+          if ($stickyHeader.dataset.prevVisibility === undefined) {
+            $stickyHeader.dataset.prevVisibility = $stickyHeader.style.visibility || '';
+          }
+          $stickyHeader.style.visibility = 'hidden';
+        } else {
+          const prev = $stickyHeader.dataset.prevVisibility;
+          $stickyHeader.style.visibility = prev || '';
+          delete $stickyHeader.dataset.prevVisibility;
+        }
+      }
+
+      const $category = document.getElementById('fbCategory');
+      const $message = document.getElementById('fbMessage');
+      const $submit = document.getElementById('fbSubmit');
+      const $status = document.getElementById('fbStatus');
+      const $authHint = document.getElementById('fbAuthHint');
+
+      const $tagsWrap = document.getElementById('fbTags');
+      const $templatesWrap = document.getElementById('fbTemplates');
+      const $ratingWrap = document.getElementById('fbRating');
+      const $useSel = document.getElementById('fbUseSelection');
+      const $selPreview = document.getElementById('fbSelPreview');
+
+      let selectedTags = new Set();
+      let selectedRating = null;
+      let selectedText = '';
+
+      function safeGetToken() {
+        try {
+          if (typeof getAuthToken === 'function') return getAuthToken() || '';
+        } catch { }
+        // fallback: same keys
+        const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+        for (const k of keys) {
+          try { const v = localStorage.getItem(k); if (v) return v; } catch { }
+        }
+        return '';
+      }
+
+      function withinOutput(node) {
+        const out = document.getElementById('output');
+        if (!out || !node) return false;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        return out.contains(node);
+      }
+
+      function setStatus(text, isError) {
+        if (!$status) return;
+        $status.textContent = text || '';
+        $status.style.color = isError ? '#ef4444' : 'var(--muted)';
+      }
+
+      function openModal() {
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        setHeaderHidden(true);
+        setStatus('', false);
+        setTimeout(() => { $message?.focus(); }, 50);
+      }
+
+      function closeModal() {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        setHeaderHidden(false);
+      }
+
+      btnOpen.addEventListener('click', openModal);
+      btnClose?.addEventListener('click', closeModal);
+      modal.addEventListener('click', (event) => {
+        if (modal.classList.contains('hidden')) return;
+        if (event.target?.closest?.('[data-feedback-modal-panel]')) return;
+        closeModal();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+      });
+
+      function setTagButtonState(btn, on) {
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.classList.toggle('bg-[var(--brand-soft)]', on);
+      }
+
+      $tagsWrap?.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('button[data-tag]');
+        const tag = btn?.getAttribute?.('data-tag');
+        if (!btn || !tag) return;
+        if (selectedTags.has(tag)) selectedTags.delete(tag);
+        else selectedTags.add(tag);
+        setTagButtonState(btn, selectedTags.has(tag));
+      });
+
+      $templatesWrap?.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('button[data-template]');
+        const tpl = btn?.getAttribute?.('data-template');
+        if (!btn || !tpl || !$message) return;
+        const cur = ($message.value || '').trim();
+        $message.value = cur ? (cur + '\n' + tpl) : tpl;
+        $message.focus();
+      });
+
+      $ratingWrap?.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('button[data-rating]');
+        const r = btn?.getAttribute?.('data-rating');
+        if (!btn || !r) return;
+        const num = parseInt(r, 10);
+        if (!Number.isFinite(num)) return;
+        selectedRating = num;
+        $ratingWrap.querySelectorAll('button[data-rating]').forEach(b => {
+          b.classList.toggle('bg-[var(--brand-soft)]', b.getAttribute('data-rating') === r);
+        });
+      });
+
+      $useSel?.addEventListener('click', () => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) {
+          setStatus('Select some text in the output first.', true);
+          return;
+        }
+        if (!withinOutput(sel.anchorNode) || !withinOutput(sel.focusNode)) {
+          setStatus('Selection must be inside the Final Output.', true);
+          return;
+        }
+        const txt = (sel.toString() || '').trim();
+        if (!txt) {
+          setStatus('Selection is empty.', true);
+          return;
+        }
+        selectedText = txt.slice(0, 1200);
+        if ($selPreview) $selPreview.textContent = `Selected: ${selectedText.length > 120 ? selectedText.slice(0, 120) + '…' : selectedText}`;
+        setStatus('Added selection to feedback.', false);
+      });
+
+      function resolveVariant() {
+        // Try to infer from active variant buttons
+        const active = document.querySelector('[data-variant][aria-selected="true"]')?.getAttribute('data-variant');
+        if (active) return active;
+        // fallback: localStorage last variant if present
+        try {
+          const v = localStorage.getItem('paperx:notesVariant');
+          if (v) return v;
+        } catch { }
+        return null;
+      }
+
+      function resolveNoteId(variant) {
+        try {
+          const key = variant ? `paperx:lastNoteId:${variant}` : null;
+          const v = key ? localStorage.getItem(key) : null;
+          if (v) return v;
+          return localStorage.getItem('paperx:lastNoteId') || '';
+        } catch { return ''; }
+      }
+
+      function resolveTitleTopic() {
+        const h1 = document.querySelector('#output h1')?.textContent || '';
+        const topic = (document.getElementById('topic')?.value || '').trim();
+        return {
+          title: (h1 || topic || '').trim(),
+          topic: (topic || h1 || '').trim()
+        };
+      }
+
+      async function submit() {
+        const token = safeGetToken();
+        const msg = ($message?.value || '').trim();
+        if (!token) {
+          $authHint?.classList.remove('hidden');
+          setStatus('Sign in required to send feedback.', true);
+          return;
+        }
+        $authHint?.classList.add('hidden');
+        if (!msg) {
+          setStatus('Please write a short message.', true);
+          $message?.focus();
+          return;
+        }
+        const category = ($category?.value || 'Other').trim();
+        const variant = resolveVariant();
+        const noteId = resolveNoteId(variant);
+        const { title, topic } = resolveTitleTopic();
+        const tags = Array.from(selectedTags);
+
+        const body = {
+          category,
+          message: msg,
+          quick_tags: tags,
+          rating: selectedRating,
+          note_id: noteId || null,
+          note_variant: variant || null,
+          note_title: title || null,
+          topic: topic || null,
+          page_path: (location && location.pathname) ? location.pathname : null,
+          page_url: (location && location.href) ? location.href : null,
+          selected_text: selectedText || null,
+          meta: {
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+            lang: navigator.language || null,
+            screen: { w: window.screen?.width || null, h: window.screen?.height || null },
+          }
+        };
+
+        $submit.disabled = true;
+        $submit.classList.add('opacity-70');
+        setStatus('Sending…', false);
+        try {
+          const res = await fetch(`${apiBase}/api/notes/feedback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+          setStatus('Thanks! Feedback sent.', false);
+          try { if (typeof snack === 'function') snack('Feedback sent'); } catch { }
+          $message.value = '';
+          selectedText = '';
+          if ($selPreview) $selPreview.textContent = '';
+          selectedTags.clear();
+          $tagsWrap?.querySelectorAll('button[data-tag]').forEach(b => setTagButtonState(b, false));
+          selectedRating = null;
+          $ratingWrap?.querySelectorAll('button[data-rating]').forEach(b => b.classList.remove('bg-[var(--brand-soft)]'));
+          // Close modal after successful submit
+          closeModal();
+        } catch (e) {
+          console.error(e);
+          setStatus(e?.message || 'Failed to send', true);
+        } finally {
+          $submit.disabled = false;
+          $submit.classList.remove('opacity-70');
+        }
+      }
+
+      $submit?.addEventListener('click', submit);
+    })();
+  </script>
+</body>
+
+<!-- Marker overlay (browser-only) -->
+<script src="assets/js/marker_overlay.js"></script>
+
+</html>

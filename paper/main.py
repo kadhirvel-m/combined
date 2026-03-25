@@ -6154,6 +6154,10 @@ def get_current_user_profile(token: Optional[str]):
 
     try:
         user_id = _get_user_id_with_retry(token)
+        cached = _me_response_cache_get(user_id)
+        if cached is not None:
+            return cached
+
         supabase = get_service_client()
 
         # 1. Fetch Profile WITH embedded College, Dept, Batch data in ONE request
@@ -6411,7 +6415,7 @@ def get_current_user_profile(token: Optional[str]):
             except Exception as e:
                 supabase_logger.warning(f"Syllabus fetch error: {e}")
 
-        return {
+        result = {
             "profile": {
                 "id": prof["id"],
                 "auth_user_id": prof["auth_user_id"],
@@ -6457,6 +6461,8 @@ def get_current_user_profile(token: Optional[str]):
             },
             "syllabus": syllabus,
         }
+        _me_response_cache_set(user_id, result)
+        return result
 
     except HTTPException:
         raise
@@ -6673,85 +6679,116 @@ def sync_units_and_topics(course_id: uuid.UUID, units: List[UnitIn]) -> List[Uni
     return out_units
 
 
-def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
+def _load_courses_with_units_batch(course_ids: List[uuid.UUID]) -> Dict[str, SyllabusCourseOut]:
+    ids = [str(cid) for cid in (course_ids or []) if cid]
+    if not ids:
+        return {}
+
     supabase = get_service_client()
 
-    def _safe_exec(builder, label: str):
-        # Lightweight retry loop so transient disconnects (RemoteProtocolError, etc.) don't crash the endpoint
-        retries = 3
-        delay = 0.15
-        last_err = None
-        for attempt in range(retries):
-            try:
-                res = builder.execute()
-                break
-            except Exception as e:  # httpx / network-level errors are fine to retry
-                last_err = e
-                if attempt == retries - 1:
-                    raise HTTPException(status_code=503, detail=f"Supabase error ({label}): {e}")
-                time.sleep(delay * (attempt + 1))
+    def _safe_exec(fn, label: str):
+        try:
+            res = _supabase_retry(fn)
+        except RETRYABLE_EXCEPTIONS as exc:  # pragma: no cover - network timing dependent
+            raise HTTPException(status_code=503, detail=f"Supabase error ({label}): {exc}") from exc
         if getattr(res, "error", None):
             raise HTTPException(status_code=503, detail=f"Supabase error ({label}): {res.error}")
         return res
 
-    course_builder = (
-        supabase.table("syllabus_courses")
-        .select("id,batch_id,semester,course_code,title,type")
-        .eq("id", str(course_id))
-        .single()
+    courses_res = _safe_exec(
+        lambda: (
+            supabase.table("syllabus_courses")
+            .select("id,batch_id,semester,course_code,title,type")
+            .in_("id", ids)
+            .execute()
+        ),
+        "get courses",
     )
-    course_q = _safe_exec(course_builder, "get course")
-    if not course_q.data:
-        raise HTTPException(status_code=404, detail="Course not found")
+    course_rows = courses_res.data or []
+    if not course_rows:
+        return {}
 
-    units_builder = (
-        supabase.table("syllabus_units")
-        .select("id,unit_title,order_in_course")
-        .eq("course_id", str(course_id))
-        .order("order_in_course")
+    units_res = _safe_exec(
+        lambda: (
+            supabase.table("syllabus_units")
+            .select("id,course_id,unit_title,order_in_course")
+            .in_("course_id", [str(r.get("id")) for r in course_rows if r.get("id")])
+            .order("order_in_course")
+            .execute()
+        ),
+        "get units",
     )
-    units_rows = _safe_exec(units_builder, "get units")
+    unit_rows = units_res.data or []
+    unit_ids = [str(u.get("id")) for u in unit_rows if u.get("id")]
 
-    units_out: List[UnitOut] = []
-    for unit_row in units_rows.data or []:
-        unit_id = uuid.UUID(unit_row["id"])
-        topics_builder = (
-            supabase.table("syllabus_topics")
-            .select("id,topic,order_in_unit,image_url,video_url,ppt_url,lab_url")
-            .eq("unit_id", str(unit_id))
-            .order("order_in_unit")
+    topics_by_unit: Dict[str, List[TopicOut]] = {}
+    if unit_ids:
+        topics_res = _safe_exec(
+            lambda: (
+                supabase.table("syllabus_topics")
+                .select("id,unit_id,topic,order_in_unit,image_url,video_url,ppt_url,lab_url")
+                .in_("unit_id", unit_ids)
+                .order("order_in_unit")
+                .execute()
+            ),
+            "get topics",
         )
-        topics_rows = _safe_exec(topics_builder, "get topics")
-        units_out.append(
+        for tr in (topics_res.data or []):
+            uid = str(tr.get("unit_id") or "").strip()
+            if not uid:
+                continue
+            topics_by_unit.setdefault(uid, []).append(
+                TopicOut(
+                    id=uuid.UUID(str(tr["id"])),
+                    topic=tr.get("topic"),
+                    order_in_unit=int(tr.get("order_in_unit") or 0),
+                    image_url=tr.get("image_url"),
+                    video_url=tr.get("video_url"),
+                    ppt_url=tr.get("ppt_url"),
+                    lab_url=tr.get("lab_url"),
+                )
+            )
+
+    units_by_course: Dict[str, List[UnitOut]] = {}
+    for ur in unit_rows:
+        cid = str(ur.get("course_id") or "").strip()
+        uid = str(ur.get("id") or "").strip()
+        if not cid or not uid:
+            continue
+        units_by_course.setdefault(cid, []).append(
             UnitOut(
-                id=unit_id,
-                unit_title=unit_row["unit_title"],
-                order_in_course=unit_row["order_in_course"],
-                topics=[
-                    TopicOut(
-                        id=uuid.UUID(topic_row["id"]),
-                        topic=topic_row["topic"],
-                        order_in_unit=topic_row["order_in_unit"],
-                        image_url=topic_row.get("image_url"),
-                        video_url=topic_row.get("video_url"),
-                        ppt_url=topic_row.get("ppt_url"),
-                        lab_url=topic_row.get("lab_url"),
-                    )
-                    for topic_row in (topics_rows.data or [])
-                ],
+                id=uuid.UUID(uid),
+                unit_title=ur.get("unit_title"),
+                order_in_course=int(ur.get("order_in_course") or 0),
+                topics=topics_by_unit.get(uid, []),
             )
         )
 
-    data = course_q.data
-    return SyllabusCourseOut(
-        id=uuid.UUID(data["id"]),
-        batch_id=uuid.UUID(data["batch_id"]),
-        semester=int(data["semester"]),
-        course_code=data.get("course_code"),
-        title=data.get("title"),
-        type=data.get("type"),
-        units=units_out,
-    )
+    out: Dict[str, SyllabusCourseOut] = {}
+    for row in course_rows:
+        cid = str(row.get("id") or "").strip()
+        if not cid:
+            continue
+        units = units_by_course.get(cid, [])
+        units.sort(key=lambda u: int(u.order_in_course or 0))
+        out[cid] = SyllabusCourseOut(
+            id=uuid.UUID(cid),
+            batch_id=uuid.UUID(str(row["batch_id"])),
+            semester=int(row.get("semester") or 0),
+            course_code=row.get("course_code"),
+            title=row.get("title"),
+            type=row.get("type"),
+            units=units,
+        )
+    return out
+
+
+def load_course_with_units(course_id: uuid.UUID) -> SyllabusCourseOut:
+    loaded = _load_courses_with_units_batch([course_id])
+    row = loaded.get(str(course_id))
+    if not row:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return row
 
 
 def load_unit_with_topics(unit_id: uuid.UUID) -> UnitOut:
@@ -6857,7 +6894,90 @@ def _auth_user_obj_from_token(token: str) -> Any:
         raise HTTPException(status_code=500, detail="Supabase auth key is invalid in server configuration")
     raise HTTPException(status_code=401, detail="Invalid token")
 
+
+_PROFILE_ID_CACHE_LOCK = threading.Lock()
+_PROFILE_ID_CACHE: Dict[str, Tuple[float, str]] = {}
+_PROFILE_ID_CACHE_TTL_SECONDS = max(5.0, float(os.getenv("PROFILE_ID_CACHE_TTL_SECONDS", "45")))
+_ME_RESPONSE_CACHE_LOCK = threading.Lock()
+_ME_RESPONSE_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_ME_RESPONSE_CACHE_TTL_SECONDS = max(3.0, float(os.getenv("ME_RESPONSE_CACHE_TTL_SECONDS", "20")))
+
+
+def _profile_id_cache_get(user_id: str) -> Optional[str]:
+    uid = str(user_id or "").strip()
+    if not uid:
+        return None
+    now_ts = time.time()
+    with _PROFILE_ID_CACHE_LOCK:
+        entry = _PROFILE_ID_CACHE.get(uid)
+        if not entry:
+            return None
+        ts, profile_id = entry
+        if (now_ts - ts) > _PROFILE_ID_CACHE_TTL_SECONDS:
+            _PROFILE_ID_CACHE.pop(uid, None)
+            return None
+        return profile_id
+
+
+def _profile_id_cache_set(user_id: str, profile_id: str) -> None:
+    uid = str(user_id or "").strip()
+    pid = str(profile_id or "").strip()
+    if not uid or not pid:
+        return
+    with _PROFILE_ID_CACHE_LOCK:
+        _PROFILE_ID_CACHE[uid] = (time.time(), pid)
+        # Bound memory for long-running processes.
+        if len(_PROFILE_ID_CACHE) > 20000:
+            stale_cutoff = time.time() - _PROFILE_ID_CACHE_TTL_SECONDS
+            for k in list(_PROFILE_ID_CACHE.keys()):
+                ts, _ = _PROFILE_ID_CACHE[k]
+                if ts < stale_cutoff:
+                    _PROFILE_ID_CACHE.pop(k, None)
+
+
+def _me_response_cache_get(user_id: str) -> Optional[Dict[str, Any]]:
+    uid = str(user_id or "").strip()
+    if not uid:
+        return None
+    now_ts = time.time()
+    with _ME_RESPONSE_CACHE_LOCK:
+        entry = _ME_RESPONSE_CACHE.get(uid)
+        if not entry:
+            return None
+        ts, payload = entry
+        if (now_ts - ts) > _ME_RESPONSE_CACHE_TTL_SECONDS:
+            _ME_RESPONSE_CACHE.pop(uid, None)
+            return None
+        return payload
+
+
+def _me_response_cache_set(user_id: str, payload: Dict[str, Any]) -> None:
+    uid = str(user_id or "").strip()
+    if not uid or not isinstance(payload, dict):
+        return
+    with _ME_RESPONSE_CACHE_LOCK:
+        _ME_RESPONSE_CACHE[uid] = (time.time(), payload)
+        if len(_ME_RESPONSE_CACHE) > 5000:
+            stale_cutoff = time.time() - _ME_RESPONSE_CACHE_TTL_SECONDS
+            for k in list(_ME_RESPONSE_CACHE.keys()):
+                ts, _ = _ME_RESPONSE_CACHE[k]
+                if ts < stale_cutoff:
+                    _ME_RESPONSE_CACHE.pop(k, None)
+
 def _get_user_id_with_retry(token: str, retries: int = 3, base_delay: float = 0.25) -> str:
+    # Fast path: decode claims locally (signature/issuer/audience checks are handled by _validate_token_claims).
+    # This avoids a network round-trip to auth.get_user() on hot paths like /api/me and /api/progress/topics.
+    token_str = (token or "").strip()
+    if token_str:
+        try:
+            claims = _validate_token_claims(token_str)
+            subject = str(claims.get("sub") or "").strip()
+            if subject:
+                return subject
+        except Exception:
+            # Fall back to Supabase auth lookup for compatibility when local claim validation cannot be used.
+            pass
+
     last_exc: Optional[Exception] = None
     retryable_auth_errors: tuple[Any, ...] = (AuthRetryableError,)
     if httpx is not None:
@@ -6891,6 +7011,11 @@ def _require_user_and_profile(token: Optional[str]) -> tuple[str, str]:
     if not token:
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
     user_id = _get_user_id_with_retry(token)
+
+    cached_profile_id = _profile_id_cache_get(user_id)
+    if cached_profile_id:
+        return user_id, cached_profile_id
+
     supabase = get_service_client()
     try:
         prof_q = _supabase_retry(
@@ -6907,6 +7032,7 @@ def _require_user_and_profile(token: Optional[str]) -> tuple[str, str]:
     if getattr(prof_q, "error", None) or not prof_q.data:
         raise HTTPException(status_code=404, detail="Profile not found")
     profile_id = prof_q.data[0]["id"]
+    _profile_id_cache_set(user_id, profile_id)
     return user_id, profile_id
 
 
@@ -6919,6 +7045,11 @@ def _ensure_user_and_profile(token: Optional[str]) -> tuple[str, str]:
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
 
     user_id = _get_user_id_with_retry(token)
+
+    cached_profile_id = _profile_id_cache_get(user_id)
+    if cached_profile_id:
+        return user_id, cached_profile_id
+
     supabase = get_service_client()
 
     # Try existing profile first
@@ -6937,7 +7068,9 @@ def _ensure_user_and_profile(token: Optional[str]) -> tuple[str, str]:
     if getattr(prof_q, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (get profile): {prof_q.error}")
     if prof_q.data:
-        return user_id, prof_q.data[0]["id"]
+        profile_id = prof_q.data[0]["id"]
+        _profile_id_cache_set(user_id, profile_id)
+        return user_id, profile_id
 
     # Create a minimal profile using email/name from auth metadata when available
     email = None
@@ -6985,7 +7118,9 @@ def _ensure_user_and_profile(token: Optional[str]) -> tuple[str, str]:
         raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.") from exc
     if getattr(prof_q2, "error", None) or not prof_q2.data:
         raise HTTPException(status_code=500, detail=f"Supabase error (refetch profile): {getattr(prof_q2, 'error', None)}")
-    return user_id, prof_q2.data[0]["id"]
+    profile_id = prof_q2.data[0]["id"]
+    _profile_id_cache_set(user_id, profile_id)
+    return user_id, profile_id
 
 
 def _get_profile_me(token: Optional[str]):
@@ -7728,6 +7863,16 @@ def _upload_profile_asset(token: Optional[str], kind: str, file):
 def get_completed_topic_ids(token: Optional[str]):
     # Ensure a profile exists to scope progress correctly for new OAuth users
     _, profile_id = _ensure_user_and_profile(token)
+
+    now_ts = time.time()
+    with _progress_topic_ids_cache_lock:
+        entry = _progress_topic_ids_cache.get(profile_id)
+        if entry:
+            exp_ts, topic_ids = entry
+            if exp_ts > now_ts:
+                return {"completed_topic_ids": list(topic_ids)}
+            _progress_topic_ids_cache.pop(profile_id, None)
+
     supabase = get_service_client()
     try:
         q = _supabase_retry(
@@ -7743,7 +7888,14 @@ def get_completed_topic_ids(token: Optional[str]):
         raise HTTPException(status_code=503, detail="Upstream temporarily unavailable. Please retry.")
     if getattr(q, "error", None):
         raise HTTPException(status_code=500, detail=f"Supabase error (get progress): {q.error}")
-    return {"completed_topic_ids": [row["topic_id"] for row in (q.data or [])]}
+    topic_ids = [row["topic_id"] for row in (q.data or []) if row.get("topic_id")]
+    with _progress_topic_ids_cache_lock:
+        _progress_topic_ids_cache[profile_id] = (time.time() + _PROGRESS_TOPIC_IDS_CACHE_TTL_S, topic_ids)
+        if len(_progress_topic_ids_cache) > _PROGRESS_TOPIC_IDS_CACHE_MAX_ENTRIES:
+            stale_keys = [k for k, (exp, _) in _progress_topic_ids_cache.items() if exp <= time.time()]
+            for k in stale_keys:
+                _progress_topic_ids_cache.pop(k, None)
+    return {"completed_topic_ids": topic_ids}
 
 
 def toggle_topic_completion(token: Optional[str], topic_id: uuid.UUID, completed: bool):
@@ -7774,6 +7926,8 @@ def toggle_topic_completion(token: Optional[str], topic_id: uuid.UUID, completed
             msg = str(getattr(exc, "detail", exc))
             if not ("duplicate" in msg.lower() or "unique" in msg.lower()):
                 raise
+        with _progress_topic_ids_cache_lock:
+            _progress_topic_ids_cache.pop(profile_id, None)
         return {"completed": True}
     else:
         resp = (
@@ -7785,6 +7939,8 @@ def toggle_topic_completion(token: Optional[str], topic_id: uuid.UUID, completed
         )
         if getattr(resp, "error", None):
             raise HTTPException(status_code=500, detail=f"Supabase error (unmark done): {resp.error}")
+        with _progress_topic_ids_cache_lock:
+            _progress_topic_ids_cache.pop(profile_id, None)
         return {"completed": False}
 
 
@@ -18902,14 +19058,12 @@ def api_get_syllabus_courses_batch(payload: SyllabusCoursesBatchIn):
         seen.add(key)
         ordered_unique.append(cid)
 
+    loaded = _load_courses_with_units_batch(ordered_unique)
     out: List[SyllabusCourseOut] = []
     for cid in ordered_unique:
-        try:
-            out.append(load_course_with_units(cid))
-        except HTTPException as exc:
-            if exc.status_code == 404:
-                continue
-            raise
+        row = loaded.get(str(cid))
+        if row:
+            out.append(row)
     return out
 
 
@@ -19743,32 +19897,53 @@ def get_topic_ratings_batch(
     if not topic_ids:
         return {"ratings": {}}
 
-    supabase = get_service_client()
-    
-    # Convert UUIDs to strings for query
+    # Convert UUIDs to normalized strings and make cache key order-insensitive.
     topic_id_strs = [str(tid) for tid in topic_ids]
-    
-    # Get all ratings for these topics
+    cache_key = "|".join(sorted(topic_id_strs))
+
+    now_ts = time.time()
+    with _topic_ratings_batch_cache_lock:
+        entry = _topic_ratings_batch_cache.get(cache_key)
+        if entry:
+            exp_ts, payload = entry
+            if exp_ts > now_ts:
+                return payload
+            _topic_ratings_batch_cache.pop(cache_key, None)
+
+    supabase = get_service_client()
+    ratings: Dict[str, Any] = {}
+    chunk_size = _TOPIC_RATINGS_BATCH_CHUNK_SIZE
     try:
-        ratings_q = _supabase_retry(lambda: (
-            supabase.table("topic_ratings")
-            .select("topic_id,rating")
-            .in_("topic_id", topic_id_strs)
-            .execute()
-        ))
+        for idx in range(0, len(topic_id_strs), chunk_size):
+            chunk = topic_id_strs[idx: idx + chunk_size]
+            ratings_q = _supabase_retry(lambda chunk_ids=chunk: (
+                supabase.table("topic_ratings")
+                .select("topic_id,rating")
+                .in_("topic_id", chunk_ids)
+                .execute()
+            ))
+            if getattr(ratings_q, "error", None):
+                return {"ratings": {}}
+
+            for r in (ratings_q.data or []):
+                tid = r.get("topic_id")
+                if tid and tid not in ratings:
+                    ratings[tid] = r.get("rating")
     except HTTPXRemoteProtocolError:
         return {"ratings": {}}
-    if getattr(ratings_q, "error", None):
-        return {"ratings": {}}
 
-    # Return first rating found for each topic
-    ratings = {}
-    for r in (ratings_q.data or []):
-        tid = r["topic_id"]
-        if tid not in ratings:
-            ratings[tid] = r["rating"]
-    
-    return {"ratings": ratings}
+    payload = {"ratings": ratings}
+    with _topic_ratings_batch_cache_lock:
+        _topic_ratings_batch_cache[cache_key] = (time.time() + _TOPIC_RATINGS_BATCH_CACHE_TTL_S, payload)
+        if len(_topic_ratings_batch_cache) > _TOPIC_RATINGS_BATCH_CACHE_MAX_ENTRIES:
+            stale_keys = [k for k, (exp, _) in _topic_ratings_batch_cache.items() if exp <= time.time()]
+            for k in stale_keys:
+                _topic_ratings_batch_cache.pop(k, None)
+            if len(_topic_ratings_batch_cache) > _TOPIC_RATINGS_BATCH_CACHE_MAX_ENTRIES:
+                for k in list(_topic_ratings_batch_cache.keys())[: max(1, _TOPIC_RATINGS_BATCH_CACHE_MAX_ENTRIES // 10)]:
+                    _topic_ratings_batch_cache.pop(k, None)
+
+    return payload
 
 
 # ---------- Progress tracking ----------
@@ -21602,27 +21777,7 @@ def mp_teacher_notes_by_subject_batch(payload: TeacherNotesBatchIn):
     if not owner_ids:
         return {"notes": {}, "count": 0, "limit": payload.limit}
 
-    teacher_ids: Set[str] = set()
-    try:
-        role_res = (
-            supabase.table("admin_roles")
-            .select("auth_user_id,role")
-            .in_("auth_user_id", list(owner_ids))
-            .eq("role", "teacher")
-            .execute()
-        )
-        if getattr(role_res, "error", None):
-            teacher_ids = set(owner_ids)
-        else:
-            teacher_ids = {row.get("auth_user_id") for row in (role_res.data or []) if row.get("auth_user_id")}
-    except Exception:
-        teacher_ids = set(owner_ids)
-
-    filtered_notes = [row for row in notes if row.get("owner_user_id") in teacher_ids]
-    if not filtered_notes:
-        return {"notes": {}, "count": 0, "limit": payload.limit}
-
-    seller_ids = {row.get("owner_user_id") for row in filtered_notes if row.get("owner_user_id")}
+    seller_ids = {row.get("owner_user_id") for row in notes if row.get("owner_user_id")}
     user_profiles_map: Dict[str, Dict[str, Any]] = {}
     teacher_profiles_map: Dict[str, Dict[str, Any]] = {}
 
@@ -21641,6 +21796,26 @@ def mp_teacher_notes_by_subject_batch(payload: TeacherNotesBatchIn):
                         user_profiles_map[uid] = row
         except Exception:
             pass
+
+    teacher_ids: Set[str] = set(teacher_profiles_map.keys())
+    unresolved_ids = [oid for oid in owner_ids if oid and oid not in teacher_ids]
+    if unresolved_ids:
+        try:
+            role_res = (
+                supabase.table("admin_roles")
+                .select("auth_user_id,role")
+                .in_("auth_user_id", unresolved_ids)
+                .eq("role", "teacher")
+                .execute()
+            )
+            if not getattr(role_res, "error", None):
+                teacher_ids.update({row.get("auth_user_id") for row in (role_res.data or []) if row.get("auth_user_id")})
+        except Exception:
+            pass
+
+    filtered_notes = [row for row in notes if row.get("owner_user_id") in teacher_ids]
+    if not filtered_notes:
+        return {"notes": {}, "count": 0, "limit": payload.limit}
         try:
             tprof_res = (
                 supabase.table("teacher_profiles")
@@ -29631,8 +29806,6 @@ analytics_router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 @analytics_router.post("/session/start")
 async def start_session(req: AnalyticsSessionStart, request: Request):
-    supabase = get_service_client()
-    
     user_agent = req.user_agent or request.headers.get("user-agent")
     client_ip = request.client.host if request.client else None
     
@@ -29640,22 +29813,24 @@ async def start_session(req: AnalyticsSessionStart, request: Request):
     if uid and not uid.strip():
         uid = None
 
+    session_id = str(uuid.uuid4())
     data = {
+        "id": session_id,
         "user_id": uid,
         "user_agent": user_agent,
         "ip": client_ip,
         "last_seen_at": datetime.utcnow().isoformat()
     }
-    
-    try:
-        res = supabase.table("user_sessions").insert(data).execute()
-        if res.data:
-            return {"session_id": res.data[0]["id"]}
-        # Fallback if no data returned (RLS or otherwise), generate UUID
-        return {"session_id": str(uuid.uuid4())} 
-    except Exception as e:
-        print(f"Analytics Error: {e}")
-        return {"session_id": str(uuid.uuid4())} # Graceful degradation
+
+    def _persist_session_start(row: Dict[str, Any]) -> None:
+        try:
+            get_service_client().table("user_sessions").upsert(row).execute()
+        except Exception as exc:
+            print(f"Analytics Error: {exc}")
+
+    # Fire-and-forget persistence to avoid blocking page interactivity on analytics I/O.
+    asyncio.create_task(run_in_threadpool(_persist_session_start, data))
+    return {"session_id": session_id}
 
 @analytics_router.post("/session/heartbeat")
 async def analytics_heartbeat(payload: AnalyticsHeartbeat):
@@ -30914,6 +31089,19 @@ async def run_java_compiler(request: CompilerRequest, http_request: Request):
 _BLINK_LINK_CACHE_TTL_S = max(1, int(os.getenv("BLINK_LINK_CACHE_TTL_SECONDS", "45") or "45"))
 _BLINK_LINK_CACHE_MAX_ENTRIES = max(100, int(os.getenv("BLINK_LINK_CACHE_MAX_ENTRIES", "5000") or "5000"))
 _BLINK_LINK_FALLBACK_CONCURRENCY = max(1, int(os.getenv("BLINK_LINK_FALLBACK_CONCURRENCY", "6") or "6"))
+_BLINK_LINK_ENABLE_FUZZY_FALLBACK = (os.getenv("BLINK_LINK_ENABLE_FUZZY_FALLBACK", "false").strip().lower() in {"1", "true", "yes", "on"})
+_BLINK_LINK_MAX_FALLBACK_TOPICS = max(0, int(os.getenv("BLINK_LINK_MAX_FALLBACK_TOPICS", "8") or "8"))
+
+_LABX_CHECK_CACHE_TTL_S = max(1, int(os.getenv("LABX_CHECK_CACHE_TTL_SECONDS", "120") or "120"))
+_LABX_CHECK_CACHE_MAX_ENTRIES = max(200, int(os.getenv("LABX_CHECK_CACHE_MAX_ENTRIES", "8000") or "8000"))
+_LABX_CHECK_DB_CHUNK_SIZE = max(10, int(os.getenv("LABX_CHECK_DB_CHUNK_SIZE", "250") or "250"))
+
+_TOPIC_RATINGS_BATCH_CACHE_TTL_S = max(1, int(os.getenv("TOPIC_RATINGS_BATCH_CACHE_TTL_SECONDS", "20") or "20"))
+_TOPIC_RATINGS_BATCH_CACHE_MAX_ENTRIES = max(100, int(os.getenv("TOPIC_RATINGS_BATCH_CACHE_MAX_ENTRIES", "3000") or "3000"))
+_TOPIC_RATINGS_BATCH_CHUNK_SIZE = max(20, int(os.getenv("TOPIC_RATINGS_BATCH_CHUNK_SIZE", "400") or "400"))
+
+_PROGRESS_TOPIC_IDS_CACHE_TTL_S = max(1, int(os.getenv("PROGRESS_TOPIC_IDS_CACHE_TTL_SECONDS", "15") or "15"))
+_PROGRESS_TOPIC_IDS_CACHE_MAX_ENTRIES = max(200, int(os.getenv("PROGRESS_TOPIC_IDS_CACHE_MAX_ENTRIES", "5000") or "5000"))
 _SELECTED_IMAGE_GEN_TIMEOUT_S = max(30, int(os.getenv("SELECTED_IMAGE_GEN_TIMEOUT_SECONDS", "95") or "95"))
 _SELECTED_IMAGE_GEN_RETRY_TIMEOUT_S = max(20, int(os.getenv("SELECTED_IMAGE_GEN_RETRY_TIMEOUT_SECONDS", "70") or "70"))
 _SELECTED_IMAGE_MAX_INPUT_CHARS = max(500, int(os.getenv("SELECTED_IMAGE_MAX_INPUT_CHARS", "20000") or "20000"))
@@ -30930,6 +31118,12 @@ _SELECTED_IMAGE_MAX_CONCURRENT = max(1, int(os.getenv("SELECTED_IMAGE_MAX_CONCUR
 _SELECTED_IMAGE_QUEUE_WAIT_S = max(1, int(os.getenv("SELECTED_IMAGE_QUEUE_WAIT_SECONDS", "15") or "15"))
 _blink_link_cache: Dict[str, Tuple[float, str, str]] = {}
 _blink_link_cache_lock = Lock()
+_labx_check_cache: Dict[str, Tuple[float, bool]] = {}
+_labx_check_cache_lock = Lock()
+_topic_ratings_batch_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_topic_ratings_batch_cache_lock = Lock()
+_progress_topic_ids_cache: Dict[str, Tuple[float, List[str]]] = {}
+_progress_topic_ids_cache_lock = Lock()
 _selected_image_generation_semaphore = asyncio.Semaphore(_SELECTED_IMAGE_MAX_CONCURRENT)
 
 
@@ -31367,7 +31561,7 @@ async def get_blink_links(
 
         # Fallback path: for unresolved topics, try looser ilike match.
         unresolved = [topic for topic in requested_topics if topic not in matched_requested]
-        if unresolved:
+        if unresolved and _BLINK_LINK_ENABLE_FUZZY_FALLBACK and len(unresolved) <= _BLINK_LINK_MAX_FALLBACK_TOPICS:
             semaphore = asyncio.Semaphore(_BLINK_LINK_FALLBACK_CONCURRENCY)
 
             async def _fetch_fallback_rows(topic_key: str) -> Tuple[str, List[Dict[str, Any]]]:
@@ -32209,22 +32403,55 @@ async def check_labx_cache_batch(
         return JSONResponse(content={"cached": {}})
     
     try:
-        supabase = get_service_client()
-        # Fetch all matching topics in one query
-        result = await _execute_with_retry(
-            lambda: supabase.table(LABX_EXPLANATIONS_TABLE).select(
-                "topic_ci"
-            ).in_("topic_ci", topics_list).execute()
-        )
-        
-        # Build map of which topics exist
-        cached_set = set()
-        if result.data:
-            for row in result.data:
-                cached_set.add(row.get("topic_ci", "").lower())
-        
-        cached_map = {topic: topic in cached_set for topic in topics_list}
-        
+        cached_map: Dict[str, bool] = {}
+        pending: List[str] = []
+        now_ts = time.time()
+
+        with _labx_check_cache_lock:
+            for topic in topics_list:
+                entry = _labx_check_cache.get(topic)
+                if not entry:
+                    pending.append(topic)
+                    continue
+                exp_ts, exists_val = entry
+                if exp_ts <= now_ts:
+                    _labx_check_cache.pop(topic, None)
+                    pending.append(topic)
+                    continue
+                cached_map[topic] = bool(exists_val)
+
+        if pending:
+            supabase = get_service_client()
+            found_topics: Set[str] = set()
+            chunk_size = _LABX_CHECK_DB_CHUNK_SIZE
+            for idx in range(0, len(pending), chunk_size):
+                chunk = pending[idx: idx + chunk_size]
+                result = await _execute_with_retry(
+                    lambda chunk_ids=chunk: supabase.table(LABX_EXPLANATIONS_TABLE)
+                    .select("topic_ci")
+                    .in_("topic_ci", chunk_ids)
+                    .execute()
+                )
+                for row in (result.data or []):
+                    row_topic = " ".join(str(row.get("topic_ci") or "").strip().lower().split())
+                    if row_topic:
+                        found_topics.add(row_topic)
+
+            with _labx_check_cache_lock:
+                exp_ts = time.time() + _LABX_CHECK_CACHE_TTL_S
+                for topic in pending:
+                    exists_val = topic in found_topics
+                    cached_map[topic] = exists_val
+                    _labx_check_cache[topic] = (exp_ts, exists_val)
+
+                if len(_labx_check_cache) > _LABX_CHECK_CACHE_MAX_ENTRIES:
+                    stale_keys = [k for k, (exp, _) in _labx_check_cache.items() if exp <= time.time()]
+                    for k in stale_keys:
+                        _labx_check_cache.pop(k, None)
+                    if len(_labx_check_cache) > _LABX_CHECK_CACHE_MAX_ENTRIES:
+                        for k in list(_labx_check_cache.keys())[: max(1, _LABX_CHECK_CACHE_MAX_ENTRIES // 10)]:
+                            _labx_check_cache.pop(k, None)
+
         return JSONResponse(content={"cached": cached_map, "loaded": True})
     except Exception as e:
         print(f"[LabX] Batch check error: {e}")

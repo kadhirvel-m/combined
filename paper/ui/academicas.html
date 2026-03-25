@@ -2016,6 +2016,10 @@
 
                 let syllabus = Array.isArray(meOut.data?.syllabus) ? meOut.data.syllabus : [];
                 syllabus = await hydrateSyllabusCourses(syllabus);
+                if (!syllabus.length) {
+                    const recovered = await recoverSyllabusFromProfile(profile);
+                    if (recovered.length) syllabus = recovered;
+                }
                 const emptyState = $('syllabusEmpty');
                 if (emptyState) emptyState.classList.toggle('hidden', Boolean(syllabus.length));
                 setLoaderStatus('Loading syllabus...');
@@ -2054,6 +2058,31 @@
                 console.warn('[Academics] attempt load failed', err);
                 return { ok: false };
             }
+        }
+
+        async function recoverSyllabusFromProfile(profile) {
+            const batchId = String(profile?.batch?.id || '').trim();
+            const semesterRaw = profile?.semester;
+            const semester = Number(semesterRaw);
+            if (!batchId || !Number.isFinite(semester) || semester <= 0) {
+                return [];
+            }
+
+            const maxAttempts = 3;
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                const out = await fetchJson(
+                    `${API_BASE}/api/syllabus/batch/${encodeURIComponent(batchId)}/courses?semester=${encodeURIComponent(String(Math.trunc(semester)))}`,
+                    { headers: authHeaders() }
+                );
+                if (isSuccess(out) && Array.isArray(out.data) && out.data.length) {
+                    return hydrateSyllabusCourses(out.data);
+                }
+                if (out?.unauthorized) {
+                    break;
+                }
+                await wait(250 * (attempt + 1));
+            }
+            return [];
         }
 
         function countCourseTopics(course) {
