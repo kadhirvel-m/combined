@@ -2267,7 +2267,7 @@ deepseek_model_client =  OpenAIChatCompletionClient(
 
 gemini_model_client = OpenAIChatCompletionClient(
     base_url=os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-    model="gemini-2.5-flash",
+    model="gemini-3.1-flash-lite-preview",
     api_key=(os.getenv("GEMINI_API_KEY", "") or "").strip(),
     model_info=ModelInfo(
         vision=True,
@@ -3011,7 +3011,7 @@ def load_learning_tracks_config() -> Dict[str, Any]:
     goals = _parse_env_list("LEARNING_TRACK_GOALS", LEARNING_TRACK_DEFAULT_GOALS)
     companies = _parse_env_list("LEARNING_TRACK_COMPANIES", LEARNING_TRACK_DEFAULT_COMPANIES)
     compiler_languages = _parse_env_json_array("LEARNING_TRACK_COMPILER_LANGUAGES", LEARNING_TRACK_DEFAULT_COMPILER_LANGUAGES)
-    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-2.5-flash"))
+    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-3.1-flash-lite-preview"))
     flashcard_model = os.getenv("LEARNING_TRACK_FLASHCARD_MODEL", GEMINI_NOTES_MODEL)
     code_explainer_model = os.getenv("LEARNING_TRACK_CODE_MODEL", GEMINI_NOTES_MODEL)
     mcq_model = os.getenv("LEARNING_TRACK_MCQ_MODEL", GEMINI_NOTES_MODEL)
@@ -5244,7 +5244,7 @@ def _normalize_parsed_struct(parsed: dict, hints: dict) -> ParsedSyllabusOut:
     return ParsedSyllabusOut(course_code=cc, title=ttl, units=units_in)
 
 
-GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-2.5-flash").strip()
+GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-3.1-flash-lite-preview").strip()
 
 
 SYLLABUS_AI_PARSE_PROMPT = """Analyze this university syllabus/curriculum document and extract the structure as JSON.
@@ -5301,7 +5301,7 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-2.5-flash")
+        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-3.1-flash-lite-preview")
         
         # Limit the text length to keep latency low
         max_chars = int(os.getenv("GEMINI_PARSE_MAX_CHARS", "100000"))
@@ -22707,7 +22707,7 @@ def _generate_variant_from_detailed_markdown(topic: str, detailed_markdown: str,
     ).strip()
 
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
 
     response = model.generate_content(
         [{"text": prompt_instruction}, {"text": source_md}],
@@ -25020,7 +25020,7 @@ def _generate_caseflow_scenario_question(markdown: str, topic: str) -> Tuple[str
         """
     ).strip()
 
-    model_name = "gemini-2.5-pro"
+    model_name = "gemini-3.1-flash-lite-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
     safety_settings = [
@@ -25145,7 +25145,7 @@ def _evaluate_caseflow_answer(
         """
     ).strip()
 
-    model_name = "gemini-2.5-pro"
+    model_name = "gemini-3.1-flash-lite-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -25573,7 +25573,7 @@ def _generate_viva_turn(
         """
     ).strip()
 
-    model_name = "gemini-2.5-pro"
+    model_name = "gemini-3.1-flash-lite-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -25664,7 +25664,7 @@ def _generate_clinical_decision_tree(topic: str, markdown: str) -> Dict[str, Any
         """
     ).strip()
 
-    model_name = "gemini-2.5-pro"
+    model_name = "gemini-3.1-flash-lite-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -25874,7 +25874,7 @@ def _generate_match_following(markdown: str, topic: str) -> Tuple[List[Dict[str,
         """
     ).strip()
 
-    model_name = "gemini-2.5-flash"
+    model_name = "gemini-3.1-flash-lite-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
     generation_config = genai.GenerationConfig(
@@ -25950,7 +25950,7 @@ def api_match_following(payload: Dict[str, Any] = Body(...)):
     """Generate 5 match-the-following pairs for a topic.
 
     Caches results in ai_notes_match keyed by topic_ci.
-    Uses gemini-2.5-flash only.
+    Uses gemini-3.1-flash-lite-preview only.
     """
     topic = str(payload.get("topic") or "").strip()
     if not topic:
@@ -27856,7 +27856,7 @@ def _assign_exact_topics_to_questions(questions: List[Dict[str, Any]], selected_
 def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str = "balanced", selected_topics: Optional[List[str]] = None, selected_topic_units: Optional[Dict[str, int]] = None, selected_unit_numbers: Optional[List[int]] = None) -> Tuple[str, List[Dict[str, Any]], str]:
     """Generate MCQ questions from a topic for the teacher test builder.
 
-    IMPORTANT: Per product requirement, this uses gemini-2.5-flash only.
+    IMPORTANT: Per product requirement, this uses gemini-3.1-flash-lite-preview only.
 
     Returns (title, questions, model_name).
     """
@@ -27867,7 +27867,7 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
 
-    model_name = "gemini-2.5-flash"
+    model_name = "gemini-3.1-flash-lite-preview"
     safe_count = int(max(1, min(int(count or 10), 30)))
     cleaned_topic = (topic or "").strip()
     if not cleaned_topic:
@@ -28715,7 +28715,7 @@ def _teacher_results_generate_ai_insights(snapshot: Dict[str, Any]) -> Dict[str,
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
         cfg = genai.GenerationConfig(
             response_mime_type="application/json",
             temperature=0.2,
@@ -28743,7 +28743,7 @@ def _teacher_results_generate_ai_insights(snapshot: Dict[str, Any]) -> Dict[str,
             "insights": insights,
             "actions": actions,
             "pro_move": pro_move,
-            "model": "gemini-2.5-flash",
+            "model": "gemini-3.1-flash-lite-preview",
             "used_fallback": False,
         }
     except Exception:
@@ -29932,6 +29932,7 @@ def create_app() -> FastAPI:
             "/generate/stream",
             "/api/notes/generate/stream",
             "/api/maths-notes/generate/stream",
+            "/api/physics-notes/generate/stream",
         }:
             # EventSource does not reliably support custom Authorization headers.
             # Allow explicit query-token fallback for stream endpoints only.
@@ -32986,7 +32987,7 @@ async def _generate_ai_response(messages: List[Dict[str, str]], study_mode: Opti
         
         # Create chat session with system instruction
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.1-flash-lite-preview",
             contents=gemini_messages,
             config=types.GenerateContentConfig(
                 system_instruction=STUDYAI_SYSTEM_PROMPT,
@@ -33235,7 +33236,7 @@ async def send_message(
         "role": "assistant",
         "content": ai_response,
         "attachments": [],
-        "metadata": {"model": "gemini-2.5-flash"},
+        "metadata": {"model": "gemini-3.1-flash-lite-preview"},
     }
     
     try:
@@ -35612,7 +35613,7 @@ Generate {payload.count} professional, insightful feedback questions. Output ONL
         import google.generativeai as genai
         
         # Use Gemini 2.5 Flash as specified
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
         response = model.generate_content(prompt)
         
         response_text = response.text.strip()
@@ -35651,7 +35652,7 @@ Generate {payload.count} professional, insightful feedback questions. Output ONL
             if cleaned["question_text"]:
                 cleaned_questions.append(cleaned)
         
-        return {"questions": cleaned_questions[:payload.count], "model": "gemini-2.5-flash"}
+        return {"questions": cleaned_questions[:payload.count], "model": "gemini-3.1-flash-lite-preview"}
         
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
