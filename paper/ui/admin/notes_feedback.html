@@ -148,19 +148,64 @@
   <script>
     (function () {
       const API = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+      const AUTH_SENTINEL = '__COOKIE_AUTH__';
+
+      function safeStorageGet(store, key) {
+        try {
+          const v = store.getItem(key);
+          return v == null ? '' : String(v);
+        } catch {
+          return '';
+        }
+      }
+
+      function parseSupabaseAccessToken(raw) {
+        if (!raw) return '';
+        const value = String(raw || '').trim();
+        if (!value || value === AUTH_SENTINEL || value === 'null' || value === 'undefined') return '';
+        if (!value.startsWith('{') && !value.startsWith('[')) return value;
+        try {
+          const parsed = JSON.parse(value);
+          if (typeof parsed === 'string') return parsed;
+          return String(
+            parsed?.currentSession?.access_token ||
+            parsed?.access_token ||
+            parsed?.session?.access_token ||
+            ''
+          ).trim();
+        } catch {
+          return '';
+        }
+      }
 
       function getAuthToken() {
-        const keys = ['teacherToken', 'px_token', 'userToken', 'sb-access-token', 'supabase.auth.token'];
+        const keys = [
+          'teacherToken',
+          'px_token',
+          'userToken',
+          'sb-access-token',
+          'paperx_bearer_fallback',
+          'supabase.auth.token',
+          'sb-uppzpkmpxgyipjzcskva-auth-token'
+        ];
         for (const k of keys) {
-          try { const v = localStorage.getItem(k); if (v) return v; } catch { }
+          const localValue = parseSupabaseAccessToken(safeStorageGet(localStorage, k));
+          if (localValue) return localValue;
+          const sessionValue = parseSupabaseAccessToken(safeStorageGet(sessionStorage, k));
+          if (sessionValue) return sessionValue;
         }
         return '';
       }
 
       async function ensureAdmin() {
+        if (typeof window.__PX_ENSURE_AUTH_READY === 'function') {
+          try { await window.__PX_ENSURE_AUTH_READY(); } catch { }
+        }
+
         const token = getAuthToken();
-        if (!token) throw new Error('Not signed in');
-        const res = await fetch(`${API}/api/admin/roles/me`, { headers: { Authorization: `Bearer ${token}` } });
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch(`${API}/api/admin/roles/me`, { headers, credentials: 'include' });
+        if (res.status === 401) throw new Error('Not signed in');
         if (!res.ok) throw new Error('Not authorized');
         const data = await res.json().catch(() => ({}));
         const role = String(data?.role || '').toLowerCase().trim();
