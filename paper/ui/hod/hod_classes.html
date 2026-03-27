@@ -39,13 +39,20 @@
 
   <header class="sticky top-0 z-40 backdrop-blur bg-white/70 dark:bg-brand-900/70 border-b border-black/5 dark:border-white/10">
     <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-16">
-      <a href="./hod_dashboard.html" class="flex items-center gap-2 font-bold tracking-tight text-lg">
+      <a href="../index.html" class="flex items-center gap-2 font-bold tracking-tight text-lg">
         <img src="../assets/img/logo-light.svg" class="h-8 w-auto dark:hidden" alt="Paper X" />
         <img src="../assets/img/logo-dark.svg" class="h-8 w-auto hidden dark:block" alt="Paper X" />
         <span class="hidden sm:inline text-neutral-600 dark:text-white/70 font-semibold">HOD • Classes</span>
       </a>
       <div class="flex items-center gap-2">
-        <a href="../teacher_profile.html?user=me" class="hidden sm:inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition">Teacher Profile</a>
+        <a id="hodProfileBtn" href="../teacher_profile.html?user=me" class="inline-flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition" title="Teacher Profile" aria-label="Teacher Profile">
+          <img id="hodProfileImg" src="" alt="HOD Profile" class="hidden h-full w-full object-cover" />
+          <span id="hodProfileFallback" class="material-symbols-rounded text-[20px]">person</span>
+        </a>
+        <button id="hodSignOutBtn" class="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 transition" title="Sign out" aria-label="Sign out">
+          <span class="material-symbols-rounded text-[18px]">logout</span>
+          <span class="hidden sm:inline">Sign out</span>
+        </button>
         <button data-theme-toggle class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-white/70 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/20 transition material-symbols-rounded" title="Toggle theme">dark_mode</button>
       </div>
     </div>
@@ -200,6 +207,9 @@
       const statStudents = $('#statStudents');
       const statSections = $('#statSections');
       const statSubjects = $('#statSubjects');
+      const hodProfileImg = $('#hodProfileImg');
+      const hodProfileFallback = $('#hodProfileFallback');
+      const hodSignOutBtn = $('#hodSignOutBtn');
 
       const refreshBtn = $('#refreshBtn');
       const expandAllBtn = $('#expandAllBtn');
@@ -212,6 +222,47 @@
       let activeClassId = null;
       let activeMode = 'reassign';
       let activeClassObj = null;
+
+      function applyHodProfileAvatar(me){
+        if (!hodProfileImg || !hodProfileFallback) return;
+        const avatar = (me && (
+          me.profile_image_url ||
+          me.avatar_url ||
+          me.photo_url ||
+          (me.teacher && (me.teacher.profile_image_url || me.teacher.avatar_url || me.teacher.photo_url))
+        )) || '';
+        const displayName = (me && (me.name || me.teacher_name || (me.teacher && me.teacher.name))) || 'HOD';
+        if (avatar) {
+          hodProfileImg.src = avatar;
+          hodProfileImg.classList.remove('hidden');
+          hodProfileFallback.classList.add('hidden');
+          return;
+        }
+        hodProfileImg.classList.add('hidden');
+        hodProfileFallback.classList.remove('hidden');
+        const initial = String(displayName || 'H').trim().charAt(0).toUpperCase() || 'H';
+        hodProfileFallback.classList.remove('material-symbols-rounded');
+        hodProfileFallback.classList.add('text-sm', 'font-bold');
+        hodProfileFallback.textContent = initial;
+      }
+
+      async function fetchTeacherProfileMe(token){
+        const headers = { 'X-TeacherProfile-Strict': 'true' };
+        if (token) headers.Authorization = 'Bearer ' + token;
+        const data = await HOD.fetchJSON(HOD.API_BASE + '/api/teacher/profile/me?strict=1', { headers });
+        return (data && (data.teacher || data.profile || data)) || {};
+      }
+
+      async function signOutFromHod(){
+        try {
+          await fetch(HOD.API_BASE + '/logout', { method: 'POST', credentials: 'include' });
+        } catch(_){ }
+        ['px_token','teacherToken','userToken','sb-access-token','supabase.auth.token','paperx_bearer_fallback'].forEach(k => {
+          try { localStorage.removeItem(k); } catch(_){ }
+          try { sessionStorage.removeItem(k); } catch(_){ }
+        });
+        location.href = '../login.html';
+      }
 
       function setLoading(on){
         if (on){
@@ -230,6 +281,28 @@
         const dept = c.department_name || '';
         const batch = c.batch_label ? ('Batch ' + c.batch_label) : '';
         const meta = [dept, batch, c.section ? ('Sec ' + c.section) : '', c.semester ? ('Sem ' + c.semester) : ''].filter(Boolean).join(' • ');
+        const rawSubject = String(c.subject || 'Subject');
+        const subjectTitle = (() => {
+          if (rawSubject.includes('—')) return rawSubject.split('—').slice(1).join('—').trim() || rawSubject;
+          const m = rawSubject.match(/^\s*[A-Z]{2,}\d+[A-Z0-9]*\s*[-:]\s*(.+)$/i);
+          if (m && m[1]) return String(m[1]).trim();
+          return rawSubject;
+        })();
+        const params = new URLSearchParams();
+        if (c.subject_id) params.set('course_id', c.subject_id);
+        if (c.subject) params.set('subject', c.subject);
+        if (c.id) params.set('class_id', c.id);
+        if (c.batch_id) params.set('batch_id', c.batch_id);
+        if (c.section) params.set('section', c.section);
+        if (c.semester) params.set('semester', c.semester);
+        const syllabusHref = c.subject_id ? ('../teacher_class_syllabus.html?' + params.toString()) : '';
+        const syllabusBtn = syllabusHref
+          ? `<a href="${HOD.esc(syllabusHref)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold bg-white/80 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/15 hover:bg-white dark:hover:bg-white/15" title="Open syllabus">
+               <span class="material-symbols-rounded text-[16px]">menu_book</span>Syllabus
+             </a>`
+          : `<button type="button" disabled class="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold bg-black/5 dark:bg-white/10 text-neutral-500 dark:text-white/40 ring-1 ring-black/10 dark:ring-white/15 cursor-not-allowed" title="Syllabus not linked">
+               <span class="material-symbols-rounded text-[16px]">menu_book</span>Syllabus
+             </button>`;
         const isAssigned = !!(c.teacher_user_id);
         const tname = (isAssigned ? (c.teacher_name || 'Assigned') : 'Unassigned');
         const tsub = (isAssigned ? 'Assigned staff' : 'No staff assigned');
@@ -246,9 +319,12 @@
             `;
         return `
           <div class="rounded-2xl bg-white/70 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 p-4 flex flex-col gap-3 hover:shadow-[0_18px_60px_-28px_rgba(158,75,138,.65)] transition">
-            <div class="min-w-0">
-              <div class="font-semibold leading-snug line-clamp-2">${HOD.esc(c.subject || 'Subject')}</div>
-              <div class="mt-1 text-[11px] text-neutral-500 dark:text-white/45">${HOD.esc(meta || '—')}</div>
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="font-semibold leading-snug line-clamp-2">${HOD.esc(subjectTitle || 'Subject')}</div>
+                <div class="mt-1 text-[11px] text-neutral-500 dark:text-white/45">${HOD.esc(meta || '—')}</div>
+              </div>
+              <div class="shrink-0">${syllabusBtn}</div>
             </div>
             <div class="flex items-center justify-between gap-2">
               <div class="text-xs">
@@ -406,8 +482,14 @@
             const secList = bySection.get(sec) || [];
             if (!secList.length) return '';
 
-            const studentCounts = new Set(secList.map(x => (typeof x.students_count === 'number') ? x.students_count : null).filter(v => v !== null));
-            const sectionStudents = (studentCounts.size === 1) ? Array.from(studentCounts)[0] : null;
+            const studentCounts = secList
+              .map(x => (typeof x.students_count === 'number') ? x.students_count : null)
+              .filter(v => v !== null);
+            const sectionStudents = studentCounts.length ? Math.max(...studentCounts) : null;
+
+            // Hide sections that are explicitly known to have zero students.
+            if (sectionStudents === 0) return '';
+
             const rightMeta = (sectionStudents === null)
               ? ''
               : badge(String(sectionStudents) + ' students', 'groups', true);
@@ -460,10 +542,15 @@
           return;
         }
         const deps = (me && me.departments) ? me.departments : [];
+        const token = HOD.getToken();
+        try {
+          const teacherProfile = await fetchTeacherProfileMe(token);
+          applyHodProfileAvatar(teacherProfile);
+        } catch(_){
+          applyHodProfileAvatar(me);
+        }
         scopeLine.textContent = (deps.length ? (deps.length + ' department' + (deps.length > 1 ? 's' : '')) : 'No departments');
         scopeSub.textContent = deps.length ? deps.map(d => d.name).slice(0, 3).join(' • ') + (deps.length > 3 ? ' • …' : '') : 'Ask admin to configure HOD scope.';
-
-        const token = HOD.getToken();
 
         // Staff list is lazy-loaded only when opening the reassign modal.
         staff = [];
@@ -608,6 +695,8 @@
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       });
+
+      if (hodSignOutBtn) hodSignOutBtn.addEventListener('click', signOutFromHod);
 
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadAll, { once:true });
       else loadAll();

@@ -129,6 +129,10 @@
         const semesterParam = params.get('semester') || '';
         const batchParam = params.get('batch_id') || '';
 
+        function isUuidLike(v) {
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || '').trim());
+        }
+
         function getToken() {
             const primary = ['px_token', 'teacherToken', 'userToken', 'sb-access-token', 'supabase.auth.token'];
             for (const k of primary) { try { const v = localStorage.getItem(k); if (v) return v; } catch { } }
@@ -280,7 +284,17 @@
                 const baseRaw = window.__API_BASE || window.API_BASE || 'http://127.0.0.1:8000';
                 const base = String(baseRaw || '').replace(/\/$/, '');
                 const headers = { Authorization: 'Bearer ' + token };
-                const res = await fetch(`${base}/api/teacher/classes/${encodeURIComponent(classId)}/students`, { headers, cache: 'no-store' });
+                let endpoint = `${base}/api/teacher/classes/${encodeURIComponent(classId)}/students`;
+                if (!isUuidLike(classId)) {
+                    const q = new URLSearchParams();
+                    if (batchParam) q.set('batch_id', batchParam);
+                    if (sectionParam) q.set('section', sectionParam);
+                    if (semesterParam) q.set('semester', semesterParam);
+                    if (courseId) q.set('subject_id', courseId);
+                    if (subjectQuery) q.set('subject', subjectQuery);
+                    endpoint = `${base}/api/teacher/classes/students/by-context?${q.toString()}`;
+                }
+                const res = await fetch(endpoint, { headers, cache: 'no-store' });
                 if (res.status === 401) { throw new Error('Session expired – please sign in again.'); }
                 if (!res.ok) { throw new Error(`Failed to load roster (${res.status})`); }
                 const data = await res.json();

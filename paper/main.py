@@ -2267,7 +2267,7 @@ deepseek_model_client =  OpenAIChatCompletionClient(
 
 gemini_model_client = OpenAIChatCompletionClient(
     base_url=os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3.1-pro-preview",
     api_key=(os.getenv("GEMINI_API_KEY", "") or "").strip(),
     model_info=ModelInfo(
         vision=True,
@@ -3011,7 +3011,7 @@ def load_learning_tracks_config() -> Dict[str, Any]:
     goals = _parse_env_list("LEARNING_TRACK_GOALS", LEARNING_TRACK_DEFAULT_GOALS)
     companies = _parse_env_list("LEARNING_TRACK_COMPANIES", LEARNING_TRACK_DEFAULT_COMPANIES)
     compiler_languages = _parse_env_json_array("LEARNING_TRACK_COMPILER_LANGUAGES", LEARNING_TRACK_DEFAULT_COMPILER_LANGUAGES)
-    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-3.1-flash-lite-preview"))
+    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-3.1-pro-preview"))
     flashcard_model = os.getenv("LEARNING_TRACK_FLASHCARD_MODEL", GEMINI_NOTES_MODEL)
     code_explainer_model = os.getenv("LEARNING_TRACK_CODE_MODEL", GEMINI_NOTES_MODEL)
     mcq_model = os.getenv("LEARNING_TRACK_MCQ_MODEL", GEMINI_NOTES_MODEL)
@@ -5244,7 +5244,7 @@ def _normalize_parsed_struct(parsed: dict, hints: dict) -> ParsedSyllabusOut:
     return ParsedSyllabusOut(course_code=cc, title=ttl, units=units_in)
 
 
-GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-3.1-flash-lite-preview").strip()
+GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-3.1-pro-preview").strip()
 
 
 SYLLABUS_AI_PARSE_PROMPT = """Analyze this university syllabus/curriculum document and extract the structure as JSON.
@@ -5301,7 +5301,7 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-3.1-flash-lite-preview")
+        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-3.1-pro-preview")
         
         # Limit the text length to keep latency low
         max_chars = int(os.getenv("GEMINI_PARSE_MAX_CHARS", "100000"))
@@ -14775,9 +14775,14 @@ def hod_list_classes(
 
     # Students count (fast): count user_education entries matching batch + section + current_semester
     students_count_map: Dict[str, int] = {}
+    sections_by_pair: Dict[str, set[str]] = {}
     try:
-        rel_batch_ids = sorted({str(c.get("batch_id")) for c in classes if c.get("batch_id")})
-        rel_sems = sorted({int(c.get("semester")) for c in classes if c.get("semester")})
+        if current_only and allowed_batch_ids and allowed_semesters:
+            rel_batch_ids = sorted({str(b) for b in allowed_batch_ids if b})
+            rel_sems = sorted({int(s) for s in allowed_semesters if s is not None})
+        else:
+            rel_batch_ids = sorted({str(c.get("batch_id")) for c in classes if c.get("batch_id")})
+            rel_sems = sorted({int(c.get("semester")) for c in classes if c.get("semester")})
         if rel_batch_ids and rel_sems:
             edu = (
                 supabase.table("user_education")
@@ -14799,15 +14804,40 @@ def hod_list_classes(
                         sem_i = int(semv)
                     except Exception:
                         continue
-                    k = f"{str(bid)}|{str(sec)}|{sem_i}"
+                    bid_s = str(bid)
+                    sec_s = str(sec).strip()
+                    if not sec_s:
+                        continue
+                    pair_key = f"{bid_s}|{sem_i}"
+                    sections_by_pair.setdefault(pair_key, set()).add(sec_s)
+                    k = f"{bid_s}|{sec_s}|{sem_i}"
                     students_count_map[k] = students_count_map.get(k, 0) + 1
     except Exception:
         students_count_map = {}
+        sections_by_pair = {}
 
     # Ensure we display all subjects for each section/semester, even when no teacher is assigned.
     # We do this by reading syllabus_courses (per batch + semester) and synthesizing virtual rows.
     if current_only and allowed_batch_ids and allowed_semesters:
         try:
+            batch_dept_hint: Dict[str, str] = {}
+            try:
+                b_hint = (
+                    supabase.table("batches")
+                    .select("id,department_id")
+                    .in_("id", allowed_batch_ids)
+                    .limit(5000)
+                    .execute()
+                )
+                if not getattr(b_hint, "error", None):
+                    for br in b_hint.data or []:
+                        bid = br.get("id")
+                        did = br.get("department_id")
+                        if bid and did:
+                            batch_dept_hint[str(bid)] = str(did)
+            except Exception:
+                batch_dept_hint = {}
+
             # Map: (batch_id, semester) -> list of courses
             sc = (
                 supabase.table("syllabus_courses")
@@ -14919,6 +14949,65 @@ def hod_list_classes(
                     if sid:
                         existing_course_ids.setdefault(sk, set()).add(str(sid))
 
+                # Also include active sections inferred from enrolled students,
+                # so years with zero teacher_classes rows still render virtual subjects.
+                for pair_key, sections in sections_by_pair.items():
+                    if not sections:
+                        continue
+                    try:
+                        bid, sem_s = pair_key.split("|", 1)
+                        sem_i = int(sem_s)
+                    except Exception:
+                        continue
+                    for sec in sections:
+                        sec_s = str(sec).strip()
+                        if not sec_s:
+                            continue
+                        section_keys.add(f"{bid}|{sem_i}|{sec_s}")
+
+                # Fallback: for mapped pairs that have syllabus but no inferred sections yet,
+                # reuse known active sections from the same department (or global fallback).
+                # This prevents entire years from disappearing when teacher_classes is empty
+                # and student semester rows are sparse/incomplete for that pair.
+                known_sections_global: set[str] = set()
+                known_sections_by_dept: Dict[str, set[str]] = {}
+
+                for sk in section_keys:
+                    try:
+                        bid, _sem_s, sec = sk.split("|", 2)
+                    except Exception:
+                        continue
+                    sec_s = str(sec).strip()
+                    if not sec_s:
+                        continue
+                    known_sections_global.add(sec_s)
+                    did = batch_dept_hint.get(str(bid))
+                    if did:
+                        known_sections_by_dept.setdefault(str(did), set()).add(sec_s)
+
+                pair_has_sections: set[str] = set()
+                for sk in section_keys:
+                    try:
+                        bid, sem_s, _sec = sk.split("|", 2)
+                    except Exception:
+                        continue
+                    pair_has_sections.add(f"{bid}|{sem_s}")
+
+                for pair_key in courses_by_pair.keys():
+                    if pair_key in pair_has_sections:
+                        continue
+                    try:
+                        bid, sem_s = pair_key.split("|", 1)
+                        sem_i = int(sem_s)
+                    except Exception:
+                        continue
+                    dept_id = batch_dept_hint.get(str(bid))
+                    fallback_secs = (known_sections_by_dept.get(str(dept_id)) if dept_id else None) or known_sections_global
+                    for sec_s in sorted(fallback_secs):
+                        if not sec_s:
+                            continue
+                        section_keys.add(f"{bid}|{sem_i}|{sec_s}")
+
                 virtual_rows: List[Dict[str, Any]] = []
                 for sk in sorted(section_keys):
                     bid, sem_s, sec = sk.split("|", 2)
@@ -14947,6 +15036,8 @@ def hod_list_classes(
                             if str(c.get("batch_id")) == bid and int(c.get("semester") or 0) == sem_i and str(c.get("section")) == sec:
                                 dept_guess = c.get("department_id")
                                 break
+                        if not dept_guess:
+                            dept_guess = batch_dept_hint.get(str(bid))
                         row = {
                             "id": virtual_id,
                             "virtual": True,
@@ -15931,24 +16022,11 @@ def delete_teacher_class(class_id: uuid.UUID, authorization: Optional[str] = Hea
     return {"ok": True, "deleted": True, "id": str(class_id)}
 
 
-@teacher_router.get(
-    "/api/teacher/classes/{class_id}/students",
-    response_model=TeacherClassStudentsResponse,
-    summary="List students for a teacher class",
-)
-def list_teacher_class_students(class_id: uuid.UUID, authorization: Optional[str] = Header(default=None)):
-    uid = _require_teacher(authorization)
-    supabase = get_service_client()
-    class_res = _supabase_retry(
-        lambda: supabase.table("teacher_classes").select("*").eq("id", str(class_id)).limit(1).execute()
-    )
-    if getattr(class_res, "error", None):
-        raise HTTPException(status_code=500, detail=f"Supabase error (get class): {class_res.error}")
-    if not class_res.data:
-        raise HTTPException(status_code=404, detail="Class not found")
-    class_row = class_res.data[0]
-    if class_row.get("teacher_user_id") != uid:
-        raise HTTPException(status_code=403, detail="Cannot view another teacher's class")
+def _build_teacher_class_students_response(
+    *,
+    supabase: Client,
+    class_row: Dict[str, Any],
+) -> TeacherClassStudentsResponse:
 
     course_topic_ids: List[str] = []
     total_course_topics = 0
@@ -16117,6 +16195,94 @@ def list_teacher_class_students(class_id: uuid.UUID, authorization: Optional[str
         total=len(students),
         applied_filters=applied_filters,
     )
+
+
+@teacher_router.get(
+    "/api/teacher/classes/{class_id}/students",
+    response_model=TeacherClassStudentsResponse,
+    summary="List students for a teacher class",
+)
+def list_teacher_class_students(class_id: uuid.UUID, authorization: Optional[str] = Header(default=None)):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+    class_res = _supabase_retry(
+        lambda: supabase.table("teacher_classes").select("*").eq("id", str(class_id)).limit(1).execute()
+    )
+    if getattr(class_res, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (get class): {class_res.error}")
+    if not class_res.data:
+        raise HTTPException(status_code=404, detail="Class not found")
+    class_row = class_res.data[0]
+    if class_row.get("teacher_user_id") != uid:
+        raise HTTPException(status_code=403, detail="Cannot view another teacher's class")
+
+    return _build_teacher_class_students_response(supabase=supabase, class_row=class_row)
+
+
+@teacher_router.get(
+    "/api/teacher/classes/students/by-context",
+    response_model=TeacherClassStudentsResponse,
+    summary="List students by class context (batch/section/semester)",
+)
+def list_teacher_class_students_by_context(
+    batch_id: str = Query(...),
+    section: str = Query(...),
+    semester: int = Query(..., ge=1, le=12),
+    subject_id: Optional[str] = Query(default=None),
+    subject: Optional[str] = Query(default=None),
+    college_id: Optional[str] = Query(default=None),
+    degree_id: Optional[str] = Query(default=None),
+    department_id: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    uid = _require_teacher(authorization)
+    supabase = get_service_client()
+
+    def _uuid_or_none(v: Optional[str], field_name: str) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip()
+        if not s:
+            return None
+        try:
+            return str(uuid.UUID(s))
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Invalid {field_name}")
+
+    bid = _uuid_or_none(batch_id, "batch_id")
+    if not bid:
+        raise HTTPException(status_code=400, detail="batch_id is required")
+
+    sec = str(section or "").strip()
+    if not sec:
+        raise HTTPException(status_code=400, detail="section is required")
+
+    sid = _uuid_or_none(subject_id, "subject_id")
+    cid = _uuid_or_none(college_id, "college_id")
+    did = _uuid_or_none(degree_id, "degree_id")
+    depid = _uuid_or_none(department_id, "department_id")
+
+    # Build a synthetic class row so we can reuse the standard roster pipeline.
+    # Use deterministic UUID to keep id stable for same batch+sem+sec+subject context.
+    synth_key = f"ctx|{bid}|{int(semester)}|{sec.lower()}|{sid or (subject or '').strip().lower()}"
+    synth_id = str(uuid.uuid5(uuid.NAMESPACE_URL, synth_key))
+    class_row: Dict[str, Any] = {
+        "id": synth_id,
+        "teacher_user_id": str(uid),
+        "subject": (str(subject or "").strip() or "Class"),
+        "semester": int(semester),
+        "batch_id": bid,
+        "section": sec,
+        "college_id": cid,
+        "degree_id": did,
+        "department_id": depid,
+        "subject_id": sid,
+        "notes": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+
+    return _build_teacher_class_students_response(supabase=supabase, class_row=class_row)
 
 
 def _asset_debug(msg: str, **extra):  # lightweight conditional debug
@@ -22707,7 +22873,7 @@ def _generate_variant_from_detailed_markdown(topic: str, detailed_markdown: str,
     ).strip()
 
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+    model = genai.GenerativeModel("gemini-3.1-pro-preview")
 
     response = model.generate_content(
         [{"text": prompt_instruction}, {"text": source_md}],
@@ -25020,7 +25186,7 @@ def _generate_caseflow_scenario_question(markdown: str, topic: str) -> Tuple[str
         """
     ).strip()
 
-    model_name = "gemini-3.1-flash-lite-preview"
+    model_name = "gemini-3.1-pro-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
     safety_settings = [
@@ -25145,7 +25311,7 @@ def _evaluate_caseflow_answer(
         """
     ).strip()
 
-    model_name = "gemini-3.1-flash-lite-preview"
+    model_name = "gemini-3.1-pro-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -25573,7 +25739,7 @@ def _generate_viva_turn(
         """
     ).strip()
 
-    model_name = "gemini-3.1-flash-lite-preview"
+    model_name = "gemini-3.1-pro-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -25664,7 +25830,7 @@ def _generate_clinical_decision_tree(topic: str, markdown: str) -> Dict[str, Any
         """
     ).strip()
 
-    model_name = "gemini-3.1-flash-lite-preview"
+    model_name = "gemini-3.1-pro-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -25874,7 +26040,7 @@ def _generate_match_following(markdown: str, topic: str) -> Tuple[List[Dict[str,
         """
     ).strip()
 
-    model_name = "gemini-3.1-flash-lite-preview"
+    model_name = "gemini-3.1-pro-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
     generation_config = genai.GenerationConfig(
@@ -25950,7 +26116,7 @@ def api_match_following(payload: Dict[str, Any] = Body(...)):
     """Generate 5 match-the-following pairs for a topic.
 
     Caches results in ai_notes_match keyed by topic_ci.
-    Uses gemini-3.1-flash-lite-preview only.
+    Uses gemini-3.1-pro-preview only.
     """
     topic = str(payload.get("topic") or "").strip()
     if not topic:
@@ -27856,7 +28022,7 @@ def _assign_exact_topics_to_questions(questions: List[Dict[str, Any]], selected_
 def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str = "balanced", selected_topics: Optional[List[str]] = None, selected_topic_units: Optional[Dict[str, int]] = None, selected_unit_numbers: Optional[List[int]] = None) -> Tuple[str, List[Dict[str, Any]], str]:
     """Generate MCQ questions from a topic for the teacher test builder.
 
-    IMPORTANT: Per product requirement, this uses gemini-3.1-flash-lite-preview only.
+    IMPORTANT: Per product requirement, this uses gemini-3.1-pro-preview only.
 
     Returns (title, questions, model_name).
     """
@@ -27867,7 +28033,7 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
 
-    model_name = "gemini-3.1-flash-lite-preview"
+    model_name = "gemini-3.1-pro-preview"
     safe_count = int(max(1, min(int(count or 10), 30)))
     cleaned_topic = (topic or "").strip()
     if not cleaned_topic:
@@ -28715,7 +28881,7 @@ def _teacher_results_generate_ai_insights(snapshot: Dict[str, Any]) -> Dict[str,
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+        model = genai.GenerativeModel("gemini-3.1-pro-preview")
         cfg = genai.GenerationConfig(
             response_mime_type="application/json",
             temperature=0.2,
@@ -28743,7 +28909,7 @@ def _teacher_results_generate_ai_insights(snapshot: Dict[str, Any]) -> Dict[str,
             "insights": insights,
             "actions": actions,
             "pro_move": pro_move,
-            "model": "gemini-3.1-flash-lite-preview",
+            "model": "gemini-3.1-pro-preview",
             "used_fallback": False,
         }
     except Exception:
@@ -31503,6 +31669,9 @@ class SelectedImageStoreRequest(BaseModel):
 
 GCS_IMAGE_BUCKET = os.getenv("GCS_IMAGE_BUCKET", "paperx-pro").strip() or "paperx-pro"
 GCS_LOCAL_SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR, "service_account_key.json")
+SELECTED_IMAGE_SUPABASE_BUCKET = (
+    os.getenv("SUPABASE_GEN_IMG_BUCKET", "gen_img").strip() or "gen_img"
+)
 
 
 def _resolve_gcs_client_class():
@@ -31767,6 +31936,38 @@ def _upload_pyq_file_to_gcs(file_bytes: bytes, *, original_name: str = "pyq.pdf"
             object_path=object_path,
             content_type=content_type,
         )
+
+
+def _upload_generated_image_to_supabase(
+    image_bytes: bytes,
+    *,
+    original_name: str = "generated.png",
+    bucket_name: str = SELECTED_IMAGE_SUPABASE_BUCKET,
+) -> Dict[str, str]:
+    if not image_bytes:
+        raise RuntimeError("No image bytes to upload")
+
+    guessed_content_type, _ = mimetypes.guess_type(original_name)
+    content_type = guessed_content_type or "image/png"
+    ext = os.path.splitext(original_name)[1].strip().lower() or ".png"
+    if len(ext) > 6 or not re.match(r"^\.[a-z0-9]+$", ext):
+        ext = ".png"
+
+    stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    object_path = f"img_gen/{stamp}_{uuid.uuid4().hex[:8]}{ext}"
+
+    supabase = get_service_client()
+    _storage_upload_bytes(supabase, bucket_name, object_path, image_bytes, content_type)
+    public_url = _storage_public_url(supabase, bucket_name, object_path)
+    if not public_url:
+        raise RuntimeError("Failed to resolve public URL after Supabase upload")
+
+    return {
+        "bucket": bucket_name,
+        "path": object_path,
+        "public_url": public_url,
+        "content_type": content_type,
+    }
 
 
 def _parse_topic_list_query(topics: Optional[str], topics_json: Optional[str]) -> List[str]:
@@ -32038,7 +32239,7 @@ async def generate_blink_endpoint(
 @app.post("/api/blink/generate-selected")
 async def generate_selected_image_endpoint(req: SelectedImageRequest):
     """
-    Generate an illustration for selected note text and upload it to Google Cloud Storage.
+    Generate an illustration for selected note text and upload it to Supabase Storage.
     """
     selected_text = (req.selected_text or "").strip()
     topic = (req.topic or "").strip()
@@ -32198,17 +32399,17 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
 
         print(f"[SelImg][{req_id}] gemini_generate_done bytes={len(image_bytes) if image_bytes else 0}")
 
-        print(f"[SelImg][{req_id}] gcs_upload_begin")
-        gcs_upload = await run_in_threadpool(
-            lambda: _upload_generated_image_to_gcs(
+        print(f"[SelImg][{req_id}] supabase_upload_begin bucket={SELECTED_IMAGE_SUPABASE_BUCKET}")
+        storage_upload = await run_in_threadpool(
+            lambda: _upload_generated_image_to_supabase(
                 image_bytes,
                 original_name=f"selected_{uuid.uuid4().hex[:8]}.png",
             )
         )
-        public_url = (gcs_upload.get("public_url") or "").strip()
+        public_url = (storage_upload.get("public_url") or "").strip()
         if not public_url:
-            raise RuntimeError("Failed to resolve public URL after GCS upload")
-        print(f"[SelImg][{req_id}] gcs_upload_done url='{public_url[:140]}'")
+            raise RuntimeError("Failed to resolve public URL after Supabase upload")
+        print(f"[SelImg][{req_id}] supabase_upload_done url='{public_url[:140]}'")
 
         # Persist generated selected-image link so UI can load history without
         # relying on a second client-side save request.
@@ -32236,8 +32437,9 @@ async def generate_selected_image_endpoint(req: SelectedImageRequest):
             "success": True,
             "url": public_url,
             "public_url": public_url,
-            "bucket": gcs_upload.get("bucket") or GCS_IMAGE_BUCKET,
-            "gcs_path": gcs_upload.get("gcs_path"),
+            "bucket": storage_upload.get("bucket") or SELECTED_IMAGE_SUPABASE_BUCKET,
+            "storage_path": storage_upload.get("path"),
+            "gcs_path": storage_upload.get("path"),  # Backward-compatible response key
             "saved_in_db": saved_in_db,
             "prompt": used_prompt
         }
@@ -32987,7 +33189,7 @@ async def _generate_ai_response(messages: List[Dict[str, str]], study_mode: Opti
         
         # Create chat session with system instruction
         response = client.models.generate_content(
-            model="gemini-3.1-flash-lite-preview",
+            model="gemini-3.1-pro-preview",
             contents=gemini_messages,
             config=types.GenerateContentConfig(
                 system_instruction=STUDYAI_SYSTEM_PROMPT,
@@ -33236,7 +33438,7 @@ async def send_message(
         "role": "assistant",
         "content": ai_response,
         "attachments": [],
-        "metadata": {"model": "gemini-3.1-flash-lite-preview"},
+        "metadata": {"model": "gemini-3.1-pro-preview"},
     }
     
     try:
@@ -35613,7 +35815,7 @@ Generate {payload.count} professional, insightful feedback questions. Output ONL
         import google.generativeai as genai
         
         # Use Gemini 2.5 Flash as specified
-        model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+        model = genai.GenerativeModel("gemini-3.1-pro-preview")
         response = model.generate_content(prompt)
         
         response_text = response.text.strip()
@@ -35652,7 +35854,7 @@ Generate {payload.count} professional, insightful feedback questions. Output ONL
             if cleaned["question_text"]:
                 cleaned_questions.append(cleaned)
         
-        return {"questions": cleaned_questions[:payload.count], "model": "gemini-3.1-flash-lite-preview"}
+        return {"questions": cleaned_questions[:payload.count], "model": "gemini-3.1-pro-preview"}
         
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
