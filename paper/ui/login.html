@@ -708,6 +708,9 @@
         history.replaceState(null, document.title, location.pathname + location.search);
         try {
           // Exchange OAuth refresh token for first-party HttpOnly cookies.
+          // Some browsers/providers can return a short-lived or already-rotated callback refresh token.
+          // Treat this step as best-effort and continue with bearer verification fallback if needed.
+          let cookieExchangeOk = false;
           if (refreshToken) {
             const refreshRes = await fetch(`${apiBase}/refresh`, {
               method: 'POST',
@@ -715,11 +718,16 @@
               credentials: 'include',
               body: JSON.stringify({ refresh_token: refreshToken })
             });
-            if (!refreshRes.ok) {
+            if (refreshRes.ok) {
+              cookieExchangeOk = true;
+              try { localStorage.setItem('paperx_session_state', '1'); } catch { }
+            } else {
               const out = await refreshRes.json().catch(() => ({}));
-              throw new Error(out?.detail || out?.message || `Refresh failed (${refreshRes.status})`);
+              console.warn('[Auth] OAuth refresh exchange skipped:', out?.detail || out?.message || `Refresh failed (${refreshRes.status})`);
+              // Drop stale callback refresh token to avoid repeated invalid-refresh loops.
+              try { sessionStorage.removeItem('px_refresh_token'); } catch { }
+              try { localStorage.removeItem('px_refresh_token'); } catch { }
             }
-            try { localStorage.setItem('paperx_session_state', '1'); } catch { }
           }
 
           // Verify session cookie is active before navigating away to avoid login bounce loops.
@@ -741,10 +749,15 @@
                   try {
                     sessionStorage.setItem('paperx_bearer_fallback', token);
                     localStorage.setItem('paperx_bearer_fallback', token);
+                    // Keep authenticated marker for pages that rely on cookie-state hints.
+                    localStorage.setItem('paperx_session_state', '1');
                   } catch { }
                 } else {
                   const bOut = await bearerRes.json().catch(() => ({}));
-                  throw new Error(bOut?.detail || bOut?.message || `Session verification failed (${bearerRes.status})`);
+                  const refreshHint = (!cookieExchangeOk && refreshToken)
+                    ? ' (OAuth refresh exchange failed on this device/browser)'
+                    : '';
+                  throw new Error((bOut?.detail || bOut?.message || `Session verification failed (${bearerRes.status})`) + refreshHint);
                 }
               } else {
                 throw new Error(out?.detail || out?.message || `Session verification failed (${meRes.status})`);
