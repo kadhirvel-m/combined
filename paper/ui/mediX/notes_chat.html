@@ -5447,12 +5447,15 @@
         if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
         if (allowedDomains.length) url.searchParams.set('allowed_urls', allowedDomains.join(','));
         if (ragContext?.answer) {
-          url.searchParams.set('rag_answer', ragContext.answer.slice(0, 1800));
+          url.searchParams.set('rag_answer', ragContext.answer.slice(0, 4000));
         }
         if (ragContext?.citations?.length) {
           const compactCitations = ragContext.citations.slice(0, 8).map((c) => ({
             source_name: c.source_name,
             chunk_index: c.chunk_index,
+            section_title: c.section_title,
+            similarity: c.similarity,
+            chunk_text: (typeof c.chunk_text === 'string' ? c.chunk_text : '').slice(0, 1200),
           }));
           url.searchParams.set('rag_citations', JSON.stringify(compactCitations));
         }

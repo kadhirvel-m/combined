@@ -25,7 +25,7 @@ Run:
 Optional tuning:
 - `MEDIX_RAG_CHAT_MODEL` (default `gemini-3-pro-preview`)
 - `MEDIX_RAG_EMBED_DIM` (default `768`; model fixed to `gemini-embedding-001`)
-- `MEDIX_RAG_MAX_UPLOAD_MB` (default `30`)
+- `MEDIX_RAG_MAX_UPLOAD_MB` (default `70`)
 - `MEDIX_RAG_DEFAULT_TOP_K` (default `12`)
 - `MEDIX_RAG_MAX_CONTEXT_CHARS` (default `26000`)
 - `MEDIX_RAG_SEMANTIC_BUFFER_SIZE` (default `1`)

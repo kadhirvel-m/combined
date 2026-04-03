@@ -2916,7 +2916,7 @@ SERPAPI_API_KEY = (os.getenv("SERPAPI_API_KEY", "") or "").strip()
 SERPAPI_ENABLED = os.getenv("ENABLE_SERPAPI", "true").strip().lower() in {"1", "true", "yes", "on"}
 SERPAPI_TIMEOUT_SEC = float(os.getenv("SERPAPI_TIMEOUT_SEC", "8"))
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or "").strip()
-GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-3.1-flash-image-preview")
+GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-3.1-pro-preview")
 MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
 # Default domains for notes/web search when DB has no config yet
@@ -3011,7 +3011,7 @@ def load_learning_tracks_config() -> Dict[str, Any]:
     goals = _parse_env_list("LEARNING_TRACK_GOALS", LEARNING_TRACK_DEFAULT_GOALS)
     companies = _parse_env_list("LEARNING_TRACK_COMPANIES", LEARNING_TRACK_DEFAULT_COMPANIES)
     compiler_languages = _parse_env_json_array("LEARNING_TRACK_COMPILER_LANGUAGES", LEARNING_TRACK_DEFAULT_COMPILER_LANGUAGES)
-    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-3.1-pro-preview"))
+    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-2.5-flash"))
     flashcard_model = os.getenv("LEARNING_TRACK_FLASHCARD_MODEL", GEMINI_NOTES_MODEL)
     code_explainer_model = os.getenv("LEARNING_TRACK_CODE_MODEL", GEMINI_NOTES_MODEL)
     mcq_model = os.getenv("LEARNING_TRACK_MCQ_MODEL", GEMINI_NOTES_MODEL)
@@ -3485,30 +3485,55 @@ def unify_section_titles(pages: List[PageExtract]) -> List[str]:
     return merged
 
 
-def assemble_context_for_llm(pages: List[PageExtract], merged_titles: List[str], topic: str) -> str:
-    """
-    Build a compact, source-quoted context the model can use.
-    """
-    lines = [f"Topic: {topic}", "", "SOURCE EXCERPTS (keep factual grounding):"]
-    for p in pages:
-        lines.append(f"\n### {p.title}\nURL: {p.url}")
-        for s in p.sections[:8]:  # keep compact
-            lines.append(f"- [{s.title}] {s.quote}â€¦")
+def assemble_context_for_llm(
+    pages: List[PageExtract],
+    merged_titles: List[str],
+    topic: str,
+) -> Tuple[str, Dict[str, Dict[str, str]]]:
+    """Build source-labeled context and return a citation source map."""
+    source_map: Dict[str, Dict[str, str]] = {}
+    lines = [
+        f"Topic: {topic}",
+        "",
+        "WEB SOURCE PACK (ground claims with labels [W1], [W2], ...):",
+    ]
+
+    for idx, p in enumerate(pages, start=1):
+        label = f"W{idx}"
+        url = str(p.url or "").strip()
+        title = normalize_text(str(p.title or "").strip()) or "Untitled"
+        source_map[label] = {"url": url, "title": title, "kind": "web"}
+        lines.append(f"- [{label}] {title} | {url}")
+
+    lines.append("")
+    lines.append("WEB SOURCE EXCERPTS:")
+    for idx, p in enumerate(pages, start=1):
+        label = f"W{idx}"
+        page_title = normalize_text(str(p.title or "").strip()) or "Untitled"
+        lines.append(f"\n### [{label}] {page_title}")
+        lines.append(f"URL: {str(p.url or '').strip()}")
+        for s in p.sections[:8]:
+            sec_title = normalize_text(str(s.title or "").strip()) or "Section"
+            quote = normalize_text(str(s.quote or s.text or "").strip())
+            if len(quote) > 320:
+                quote = quote[:320].rstrip() + " ..."
+            if quote:
+                lines.append(f"- [{label}] [{sec_title}] \"{quote}\"")
+
     lines.append("\nMERGED SECTION TITLES CANDIDATE ORDER:")
     for t in merged_titles:
         lines.append(f"- {t}")
-    return "\n".join(lines)
+    return "\n".join(lines), source_map
 
 
 SYSTEM_INSTRUCTIONS = """You are a senior educational writer building accurate, well-structured notes for college students in India.
 
 PRIMARY GOAL:
 Produce notes that are **accurate, complete, and strictly relevant** to the given topic.  
-Use the provided context **only where it is clearly correct and directly applicable**.  
-If any part of the context is **irrelevant, weakly related, outdated, or incorrect**, **IGNORE it completely** and rely on your **own expert knowledge** instead.
+Use the provided context as the primary evidence source.
 
 CRITICAL RULES:
-- If information is missing, **generate it yourself accurately**.
+- If key information is missing in the evidence, explicitly state it is not present in provided sources.
 - Use ONLY content that genuinely matches the topic.
 - Do NOT force‑fit unrelated context.
 - Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
@@ -3517,7 +3542,7 @@ CRITICAL RULES:
 - You MUST also include these blocks even if not present: Introduction, Examples, Conclusion.
 - Keep explanations concise but complete; use bullet points where helpful.
 - Include at least one Mermaid diagram when process/relationships are relevant.
-- Every non-obvious claim MUST carry an inline citation like [GFG], [TP], [Scaler], [Wiki], or [TPT] mapped in the CITATIONS section.
+- Every non-obvious claim MUST carry an inline citation label that exists in the provided source pack (for example [W1], [R2]).
 - Prefer plain text + Mermaid diagrams; do not embed external images.
 - Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (ε-greedy)**, **Markov Decision Process (MDP)**, parameters like **θ**, **γ**, **α**, algorithm names like **Q-learning**.
 
@@ -3530,6 +3555,7 @@ Return a single Markdown document with:
 5) A final '## CITATIONS' list mapping labels to URLs with short quoted spans
 
 If sources contradict, mark the line with [conflict] and keep both with citations.
+Never fabricate citation labels or URLs.
 
 Keep it under ~900–1200 words unless the topic is inherently longer.
 """
@@ -3595,7 +3621,7 @@ def generate_notes_markdown(topic: str, *, degree: Optional[str] = None) -> str:
     )
 
     # 4) Build context for LLM
-    context = assemble_context_for_llm(pages, merged_titles, topic)
+    context, source_map = assemble_context_for_llm(pages, merged_titles, topic)
 
     # 5) Call AutoGen Assistant
     assistant = build_agent()
@@ -3604,8 +3630,7 @@ You will compose comprehensive, exam-ready Markdown notes for the topic "{topic}
 
 PRIMARY GOAL:
 Produce notes that are **accurate, complete, and strictly relevant** to the given topic.  
-Use the provided context **only where it is clearly correct and directly applicable**.  
-If any part of the context is **irrelevant, weakly related, outdated, or incorrect**, **IGNORE it completely** and rely on your **own expert knowledge** instead.
+Use the provided context as the primary evidence and ground claims with provided source labels.
 
 Context:
 {context}
@@ -3615,9 +3640,9 @@ STRICT CONTENT RULES:
 - Use ONLY content that genuinely matches the topic.
 - Do NOT force‑fit unrelated context.
 - Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
-- If information is missing, **generate it yourself accurately**.
+- If information is missing in provided sources, clearly say it is not available in source excerpts.
 - Ensure **conceptual correctness suitable for university exams**.
-- No hallucinated references; cite only well‑known, credible sources.
+- No hallucinated references; use only source labels provided in context.
 - Maintain a confident academic tone.
 
 STRUCTURE & DEPTH:
@@ -3640,14 +3665,8 @@ FORMATTING RULES:
 
 CITATIONS:
 - Add a final section: **## CITATIONS**
-- Map citation labels to URLs, using only trusted sources:
-  - [GFG] – GeeksforGeeks
-  - [TPT] – TutorialsPoint
-  - [Scaler] – Scaler Topics
-  - [Wiki] – Wikipedia
-  - [TP] – Trusted textbooks / official documentation
-- Inline‑cite like:  
-  "... explanation ... [GFG]" or "... definition ... [Wiki]"
+- Use only labels present in source pack (for example [W1], [W2], [R1]).
+- Never invent labels or URLs.
 
 TARGET LENGTH:
 - **900–1200 words**, unless the topic strictly requires less.
@@ -3660,6 +3679,7 @@ Start with '# {topic}' and then the sections in a logical order.
     # Use safe runner to support both CLI and FastAPI contexts
     result = _run_assistant_blocking(assistant, user_prompt)
     content = result.messages[-1].content
+    content = _medix_ground_citations_markdown(content, source_map)
     notes_logger.info("generate_notes_markdown:success", extra={"topic": topic, "length": len(content)})
     return content
 
@@ -3679,6 +3699,8 @@ Output rules (STRICT):
 - Keep it ultra concise (≈ 250-400 words). Use bullets and tables.
 - Start with a single H1: '# {topic} — Cheat Sheet'.
 - If a `RAG PRIORITY CONTEXT` block is present, prioritize those facts over generic web context.
+- Use only citation labels present in the provided source pack (e.g., [W1], [R1]) when citing.
+- Never invent citation labels.
 - Sections (H2):
   1) Core Concepts (5–10 bullets, crisp one-liners)
   2) Key Definitions & Formulas (bullets; inline math where relevant)
@@ -3705,7 +3727,8 @@ Output rules (STRICT):
 - Explain in everyday words without dumbing down definitions.
 - Use bullets and small tables where helpful.
 - Bold important terms with **...**.
-- Include a final '## CITATIONS' section with label→URL list for the sources you used.
+- Include a final '## CITATIONS' section with label→URL list for labels used.
+- Use only labels present in source pack (e.g., [W1], [R1]).
 """.strip()
     # default detailed prompt - comprehensive and thorough
     return f"""
@@ -3716,8 +3739,8 @@ Context:
 
 PRIMARY GOAL:
 Produce notes that are **accurate, complete, and strictly relevant** to the given topic.  
-Use the provided context **only where it is clearly correct and directly applicable**.  
-If any part of the context is **irrelevant, weakly related, outdated, or incorrect**, **IGNORE it completely** and rely on your **own expert knowledge** instead.
+Use the provided context as the primary evidence source.
+Do not invent facts or citations that are not grounded in the provided excerpts.
 
 Context:
 {context}
@@ -3728,9 +3751,9 @@ STRICT CONTENT RULES:
 - Do NOT force‑fit unrelated context.
 - If a `RAG PRIORITY CONTEXT` block is present, treat it as highest-priority evidence.
 - Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
-- If information is missing, **generate it yourself accurately**.
+- If information is missing, explicitly state that it is not present in provided sources.
 - Ensure **conceptual correctness suitable for university exams**.
-- No hallucinated references; cite only well‑known, credible sources.
+- No hallucinated references.
 - Maintain a confident academic tone.
 
 STRUCTURE & DEPTH:
@@ -3753,14 +3776,8 @@ FORMATTING RULES:
 
 CITATIONS:
 - Add a final section: **## CITATIONS**
-- Map citation labels to URLs, using only trusted sources:
-  - [GFG] – GeeksforGeeks
-  - [TPT] – TutorialsPoint
-  - [Scaler] – Scaler Topics
-  - [Wiki] – Wikipedia
-  - [TP] – Trusted textbooks / official documentation
-- Inline‑cite like:  
-  "... explanation ... [GFG]" or "... definition ... [Wiki]"
+- Use only citation labels present in context (e.g., [W1], [R1]).
+- Never invent labels or URLs.
 
 TARGET LENGTH:
 - **900–1200 words**, unless the topic strictly requires less.
@@ -3770,6 +3787,114 @@ The output should be **exam‑ready**, **self‑contained**, and **require no fu
 Start with '# {topic}' and then the sections in a logical order.
 """.strip()
 
+
+def _strip_citations_section(md_text: str) -> str:
+    text = str(md_text or "")
+    return re.sub(r"\n##\s*CITATIONS\b[\s\S]*$", "", text, flags=re.IGNORECASE).rstrip()
+
+
+def _medix_ground_citations_markdown(
+    md_text: str,
+    source_map: Optional[Dict[str, Dict[str, str]]],
+) -> str:
+    """Keep only known citation labels and rebuild CITATIONS section."""
+    if not md_text:
+        return md_text
+    if not source_map:
+        return _strip_citations_section(md_text)
+
+    allowed = {str(k).upper(): v for k, v in source_map.items()}
+    body = _strip_citations_section(md_text)
+    cite_re = re.compile(r"\[([A-Za-z0-9_-]{2,20})\](?!\()")
+
+    used_order: List[str] = []
+
+    def _replace(m: re.Match) -> str:
+        raw = str(m.group(1) or "").strip()
+        key = raw.upper()
+        if key in allowed:
+            if key not in used_order:
+                used_order.append(key)
+            return f"[{key}]"
+        return ""
+
+    body = cite_re.sub(_replace, body)
+    body = re.sub(r"\s{2,}", " ", body)
+    body = re.sub(r"\n{3,}", "\n\n", body).rstrip()
+
+    lines = ["## CITATIONS"]
+    if used_order:
+        for key in used_order:
+            meta = allowed.get(key) or {}
+            url = str(meta.get("url") or "").strip()
+            title = str(meta.get("title") or "").strip()
+            kind = str(meta.get("kind") or "").strip()
+            if url:
+                lines.append(f"- [{key}]: {url} | {title}")
+            elif title:
+                suffix = f" ({kind})" if kind else ""
+                lines.append(f"- [{key}]: {title}{suffix}")
+            else:
+                lines.append(f"- [{key}]: provided source")
+    else:
+        lines.append("- No grounded citations were referenced in the final text.")
+
+    return f"{body}\n\n" + "\n".join(lines) + "\n"
+
+
+def _build_rag_priority_context(
+    rag_answer: Optional[str],
+    rag_citations: Optional[str],
+) -> Tuple[Optional[str], Dict[str, Dict[str, str]]]:
+    """Convert UI-provided RAG payload into a model-ready evidence block."""
+    rag_answer_text = normalize_text(str(rag_answer or "").strip())
+    rag_map: Dict[str, Dict[str, str]] = {}
+    lines: List[str] = []
+
+    if rag_answer_text:
+        lines.append("RAG PRIORITY SUMMARY:")
+        lines.append(rag_answer_text[:4000])
+
+    parsed_list: List[Dict[str, Any]] = []
+    if rag_citations:
+        try:
+            maybe = json.loads(rag_citations)
+            if isinstance(maybe, list):
+                parsed_list = [x for x in maybe if isinstance(x, dict)]
+        except Exception:
+            parsed_list = []
+
+    if parsed_list:
+        lines.append("")
+        lines.append("RAG SOURCE PACK (highest priority evidence):")
+        for idx, item in enumerate(parsed_list[:10], start=1):
+            label = f"R{idx}"
+            source_name = normalize_text(str(item.get("source_name") or "RAG source").strip()) or "RAG source"
+            section_title = normalize_text(str(item.get("section_title") or "").strip())
+            chunk_index = str(item.get("chunk_index") or "").strip()
+            chunk_text = normalize_text(str(item.get("chunk_text") or "").strip())
+            if len(chunk_text) > 950:
+                chunk_text = chunk_text[:950].rstrip() + " ..."
+
+            details = []
+            if section_title:
+                details.append(section_title)
+            if chunk_index:
+                details.append(f"chunk {chunk_index}")
+            detail_suffix = f" ({'; '.join(details)})" if details else ""
+
+            lines.append(f"- [{label}] {source_name}{detail_suffix}")
+            if chunk_text:
+                lines.append(f"  Excerpt: \"{chunk_text}\"")
+            rag_map[label] = {
+                "url": "",
+                "title": f"{source_name}{detail_suffix}".strip(),
+                "kind": "rag",
+            }
+
+    block = "\n".join(lines).strip()
+    return (block or None), rag_map
+
 def generate_notes_events(
     topic: str,
     *,
@@ -3777,6 +3902,7 @@ def generate_notes_events(
     variant: str = "detailed",
     degree: Optional[str] = None,
     rag_priority_context: Optional[str] = None,
+    rag_source_map: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Yield (event_name, payload) tuples describing real-time progress and final output.
 
@@ -3833,7 +3959,11 @@ def generate_notes_events(
 
         if stop_event and stop_event.is_set():
             return
-        context = assemble_context_for_llm(pages, merged_titles, topic)
+        context, web_source_map = assemble_context_for_llm(pages, merged_titles, topic)
+        effective_source_map: Dict[str, Dict[str, str]] = {}
+        effective_source_map.update(web_source_map)
+        if rag_source_map:
+            effective_source_map.update({str(k).upper(): v for k, v in rag_source_map.items()})
         if rag_priority_context:
             context = (
                 "RAG PRIORITY CONTEXT (use this first when relevant):\n"
@@ -3850,6 +3980,7 @@ def generate_notes_events(
             # Use safe runner in case we're under FastAPI's loop
             result = _run_assistant_blocking(assistant, user_prompt)
             content = result.messages[-1].content
+            content = _medix_ground_citations_markdown(content, effective_source_map)
         except Exception as e:
             yield ("error", {"message": f"LLM error: {e}"})
             return
@@ -5244,7 +5375,7 @@ def _normalize_parsed_struct(parsed: dict, hints: dict) -> ParsedSyllabusOut:
     return ParsedSyllabusOut(course_code=cc, title=ttl, units=units_in)
 
 
-GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-3.1-pro-preview").strip()
+GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-2.5-flash").strip()
 
 
 SYLLABUS_AI_PARSE_PROMPT = """Analyze this university syllabus/curriculum document and extract the structure as JSON.
@@ -5301,7 +5432,7 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-3.1-pro-preview")
+        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-2.5-flash")
         
         # Limit the text length to keep latency low
         max_chars = int(os.getenv("GEMINI_PARSE_MAX_CHARS", "100000"))
@@ -22873,7 +23004,7 @@ def _generate_variant_from_detailed_markdown(topic: str, detailed_markdown: str,
     ).strip()
 
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-3.1-pro-preview")
+    model = genai.GenerativeModel("gemini-2.5-flash")
 
     response = model.generate_content(
         [{"text": prompt_instruction}, {"text": source_md}],
@@ -23276,25 +23407,7 @@ async def generate_stream(
 ):
     async def event_source() -> AsyncGenerator[bytes, None]:
         normalized_variant = _normalize_variant(variant)
-        rag_priority_context: Optional[str] = None
-        rag_answer_text = (rag_answer or "").strip()
-        if rag_answer_text:
-            rag_lines: List[str] = [f"RAG summary: {rag_answer_text}"]
-            if rag_citations:
-                try:
-                    parsed = json.loads(rag_citations)
-                    if isinstance(parsed, list):
-                        for idx, item in enumerate(parsed[:10], start=1):
-                            if not isinstance(item, dict):
-                                continue
-                            src = str(item.get("source_name") or "RAG source").strip() or "RAG source"
-                            chunk = str(item.get("chunk_index") or "").strip()
-                            label = f"[RAG{idx}]"
-                            suffix = f" #{chunk}" if chunk else ""
-                            rag_lines.append(f"{label} {src}{suffix}")
-                except Exception:
-                    pass
-            rag_priority_context = "\n".join(rag_lines).strip()
+        rag_priority_context, rag_source_map = _build_rag_priority_context(rag_answer, rag_citations)
 
         yield b"event: open\n\n"
         # Early cache hit: exact-title lookup in DB
@@ -23410,6 +23523,7 @@ async def generate_stream(
                     variant=normalized_variant,
                     degree=degree,
                     rag_priority_context=rag_priority_context,
+                    rag_source_map=rag_source_map,
                 ):
                     if stop_event.is_set():
                         break
@@ -23484,9 +23598,9 @@ async def generate_stream(
 
 # --- Engineering Mathematics Notes (Gemini 3 Pro Preview only) ---
 
-MATHS_NOTES_MODEL = "gemini-3.1-flash-image-preview"
+MATHS_NOTES_MODEL = "gemini-3.1-pro-preview"
 
-PHYSICS_NOTES_MODEL = os.getenv("PHYSICS_NOTES_MODEL", "gemini-3.1-flash-image-preview")
+PHYSICS_NOTES_MODEL = os.getenv("PHYSICS_NOTES_MODEL", "gemini-3.1-pro-preview")
 
 PHYSICS_NOTES_SYSTEM_PROMPT_TEMPLATE = """You will compose comprehensive, exam-ready Markdown notes for the physics topic "{topic}".
 
@@ -25186,7 +25300,7 @@ def _generate_caseflow_scenario_question(markdown: str, topic: str) -> Tuple[str
         """
     ).strip()
 
-    model_name = "gemini-3.1-pro-preview"
+    model_name = "gemini-2.5-flash"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
     safety_settings = [
@@ -25311,7 +25425,7 @@ def _evaluate_caseflow_answer(
         """
     ).strip()
 
-    model_name = "gemini-3.1-pro-preview"
+    model_name = "gemini-2.5-flash"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -25739,7 +25853,7 @@ def _generate_viva_turn(
         """
     ).strip()
 
-    model_name = "gemini-3.1-pro-preview"
+    model_name = "gemini-2.5-flash"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -25830,7 +25944,7 @@ def _generate_clinical_decision_tree(topic: str, markdown: str) -> Dict[str, Any
         """
     ).strip()
 
-    model_name = "gemini-3.1-pro-preview"
+    model_name = "gemini-2.5-flash"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -26040,7 +26154,7 @@ def _generate_match_following(markdown: str, topic: str) -> Tuple[List[Dict[str,
         """
     ).strip()
 
-    model_name = "gemini-3.1-pro-preview"
+    model_name = "gemini-2.5-flash"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
     generation_config = genai.GenerationConfig(
@@ -26116,7 +26230,7 @@ def api_match_following(payload: Dict[str, Any] = Body(...)):
     """Generate 5 match-the-following pairs for a topic.
 
     Caches results in ai_notes_match keyed by topic_ci.
-    Uses gemini-3.1-pro-preview only.
+    Uses gemini-2.5-flash only.
     """
     topic = str(payload.get("topic") or "").strip()
     if not topic:
@@ -28022,7 +28136,7 @@ def _assign_exact_topics_to_questions(questions: List[Dict[str, Any]], selected_
 def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str = "balanced", selected_topics: Optional[List[str]] = None, selected_topic_units: Optional[Dict[str, int]] = None, selected_unit_numbers: Optional[List[int]] = None) -> Tuple[str, List[Dict[str, Any]], str]:
     """Generate MCQ questions from a topic for the teacher test builder.
 
-    IMPORTANT: Per product requirement, this uses gemini-3.1-pro-preview only.
+    IMPORTANT: Per product requirement, this uses gemini-2.5-flash only.
 
     Returns (title, questions, model_name).
     """
@@ -28033,7 +28147,7 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
 
-    model_name = "gemini-3.1-pro-preview"
+    model_name = "gemini-2.5-flash"
     safe_count = int(max(1, min(int(count or 10), 30)))
     cleaned_topic = (topic or "").strip()
     if not cleaned_topic:
@@ -28881,7 +28995,7 @@ def _teacher_results_generate_ai_insights(snapshot: Dict[str, Any]) -> Dict[str,
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-3.1-pro-preview")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         cfg = genai.GenerationConfig(
             response_mime_type="application/json",
             temperature=0.2,
@@ -28909,7 +29023,7 @@ def _teacher_results_generate_ai_insights(snapshot: Dict[str, Any]) -> Dict[str,
             "insights": insights,
             "actions": actions,
             "pro_move": pro_move,
-            "model": "gemini-3.1-pro-preview",
+            "model": "gemini-2.5-flash",
             "used_fallback": False,
         }
     except Exception:
@@ -32838,7 +32952,7 @@ async def generate_labx(req: LabXGenerateRequest):
         def _generate_sync():
             client = genai.Client(api_key=gemini_key)
             response = client.models.generate_content(
-                model="gemini-3.1-flash-image-preview",
+                model="gemini-3.1-pro-preview",
                 contents=prompt,
             )
             return response.text
@@ -33044,7 +33158,7 @@ async def generate_labx_stream(req: LabXGenerateRequest):
         try:
             client = genai.Client(api_key=gemini_key)
             response_stream = client.models.generate_content_stream(
-                model="gemini-3.1-flash-image-preview",
+                model="gemini-3.1-pro-preview",
                 contents=prompt,
             )
             
@@ -33189,7 +33303,7 @@ async def _generate_ai_response(messages: List[Dict[str, str]], study_mode: Opti
         
         # Create chat session with system instruction
         response = client.models.generate_content(
-            model="gemini-3.1-pro-preview",
+            model="gemini-2.5-flash",
             contents=gemini_messages,
             config=types.GenerateContentConfig(
                 system_instruction=STUDYAI_SYSTEM_PROMPT,
@@ -33438,7 +33552,7 @@ async def send_message(
         "role": "assistant",
         "content": ai_response,
         "attachments": [],
-        "metadata": {"model": "gemini-3.1-pro-preview"},
+        "metadata": {"model": "gemini-2.5-flash"},
     }
     
     try:
@@ -35815,7 +35929,7 @@ Generate {payload.count} professional, insightful feedback questions. Output ONL
         import google.generativeai as genai
         
         # Use Gemini 2.5 Flash as specified
-        model = genai.GenerativeModel("gemini-3.1-pro-preview")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         response = model.generate_content(prompt)
         
         response_text = response.text.strip()
@@ -35854,7 +35968,7 @@ Generate {payload.count} professional, insightful feedback questions. Output ONL
             if cleaned["question_text"]:
                 cleaned_questions.append(cleaned)
         
-        return {"questions": cleaned_questions[:payload.count], "model": "gemini-3.1-pro-preview"}
+        return {"questions": cleaned_questions[:payload.count], "model": "gemini-2.5-flash"}
         
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
@@ -37711,7 +37825,7 @@ async def math_td_question_history(session_id: str):
 # InnovateX — Smart Idea Engine
 # ==========================================
 
-INNOVATEX_MODEL = "gemini-3.1-flash-image-preview"
+INNOVATEX_MODEL = "gemini-3.1-pro-preview"
 
 class InnovateXIdeaRequest(BaseModel):
     skills: List[str] = Field(default=[], description="Optional skills the student knows")
@@ -39407,7 +39521,7 @@ MEDIX_RAG_CHUNKS_TABLE = os.getenv("MEDIX_RAG_CHUNKS_TABLE", "medix_rag_chunks")
 MEDIX_RAG_SESSIONS_TABLE = os.getenv("MEDIX_RAG_SESSIONS_TABLE", "medix_rag_sessions")
 MEDIX_RAG_MESSAGES_TABLE = os.getenv("MEDIX_RAG_MESSAGES_TABLE", "medix_rag_messages")
 
-MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-3.1-flash-image-preview")
+MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-3.1-pro-preview")
 MEDIX_EMBED_MODEL = "gemini-embedding-001"
 MEDIX_EMBED_DIM = int(os.getenv("MEDIX_RAG_EMBED_DIM", "768"))
 MEDIX_MAX_UPLOAD_MB = int(os.getenv("MEDIX_RAG_MAX_UPLOAD_MB", "50"))
