@@ -998,11 +998,12 @@ def _llm_tool_policy_enforce(*, tool_name: str, request: Optional[Request], user
         raise HTTPException(status_code=401, detail="Authenticated user required")
 
 
-def _rag_trust_validate_payload(*, file_name: str, raw: bytes) -> Dict[str, Any]:
+def _rag_trust_validate_payload(*, file_name: str, raw: bytes, max_upload_bytes: Optional[int] = None) -> Dict[str, Any]:
     if not raw:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
-    if len(raw) > RAG_MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail=f"File exceeds max size ({RAG_MAX_UPLOAD_BYTES} bytes)")
+    effective_max = int(max_upload_bytes or RAG_MAX_UPLOAD_BYTES)
+    if len(raw) > effective_max:
+        raise HTTPException(status_code=413, detail=f"File exceeds max size ({effective_max} bytes)")
 
     lower = (file_name or "").strip().lower()
     if not lower.endswith(".pdf"):
@@ -3541,9 +3542,9 @@ CRITICAL RULES:
 - Respect section headings actually observed on the referenced pages. You may merge similar headings (e.g., Advantages/Pros).
 - You MUST also include these blocks even if not present: Introduction, Examples, Conclusion.
 - Keep explanations concise but complete; use bullet points where helpful.
-- Include at least one Mermaid diagram when process/relationships are relevant.
+- Do NOT output Mermaid diagrams or Mermaid code fences.
 - Every non-obvious claim MUST carry an inline citation label that exists in the provided source pack (for example [W1], [R2]).
-- Prefer plain text + Mermaid diagrams; do not embed external images.
+- Prefer plain text markdown; do not embed external images.
 - Bold important keywords, symbols, and technical terms using Markdown **double asterisks**. Examples: **epsilon-greedy (ε-greedy)**, **Markov Decision Process (MDP)**, parameters like **θ**, **γ**, **α**, algorithm names like **Q-learning**.
 
 OUTPUT FORMAT (STRICT):
@@ -3551,8 +3552,7 @@ Return a single Markdown document with:
 1) A title line: '# <Topic>'
 2) For each merged section title (after light normalization), a '## <Section>' block
 3) Use bullet points, short paragraphs, tables when appropriate (GitHub MD)
-4) Mermaid diagram(s) in fenced code blocks: ```mermaid ... ```
-5) A final '## CITATIONS' list mapping labels to URLs with short quoted spans
+4) A final '## CITATIONS' list mapping labels to URLs with short quoted spans
 
 If sources contradict, mark the line with [conflict] and keep both with citations.
 Never fabricate citation labels or URLs.
@@ -3679,6 +3679,8 @@ Start with '# {topic}' and then the sections in a logical order.
     # Use safe runner to support both CLI and FastAPI contexts
     result = _run_assistant_blocking(assistant, user_prompt)
     content = result.messages[-1].content
+    content = _strip_mermaid_blocks(content)
+    content = _ensure_rag_labels_used_in_body(content, source_map)
     content = _medix_ground_citations_markdown(content, source_map)
     notes_logger.info("generate_notes_markdown:success", extra={"topic": topic, "length": len(content)})
     return content
@@ -3699,6 +3701,9 @@ Output rules (STRICT):
 - Keep it ultra concise (≈ 250-400 words). Use bullets and tables.
 - Start with a single H1: '# {topic} — Cheat Sheet'.
 - If a `RAG PRIORITY CONTEXT` block is present, prioritize those facts over generic web context.
+- If `RAG SOURCE PACK` labels exist (e.g., [ESSENTI], [MENTALH], [R2]), cite those first for core claims.
+- Use web labels only when RAG evidence is missing for that specific claim.
+- Do NOT output Mermaid diagrams or Mermaid code fences.
 - Use only citation labels present in the provided source pack (e.g., [W1], [R1]) when citing.
 - Never invent citation labels.
 - Sections (H2):
@@ -3723,6 +3728,9 @@ Output rules (STRICT):
 - Target length: 600–900 words, plain language, short sentences.
 - Start with '# {topic} — Simple Notes'.
 - If a `RAG PRIORITY CONTEXT` block is present, prioritize those facts over generic web context.
+- If `RAG SOURCE PACK` labels exist (e.g., [ESSENTI], [MENTALH], [R2]), prefer them in inline citations for key medical claims.
+- Use web labels only to supplement missing details.
+- Do NOT output Mermaid diagrams or Mermaid code fences.
 - Structure with logical H2 sections, including: Introduction, Concepts, Examples, Conclusion.
 - Explain in everyday words without dumbing down definitions.
 - Use bullets and small tables where helpful.
@@ -3750,6 +3758,8 @@ STRICT CONTENT RULES:
 - Use ONLY content that genuinely matches the topic.
 - Do NOT force‑fit unrelated context.
 - If a `RAG PRIORITY CONTEXT` block is present, treat it as highest-priority evidence.
+- If `RAG SOURCE PACK` labels exist (for example [ESSENTI], [ESSENT2], [MENTALH]), cite these for core claims before using web labels.
+- Use web labels (e.g., [W1]) only when a claim is not covered by RAG chunks.
 - Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
 - If information is missing, explicitly state that it is not present in provided sources.
 - Ensure **conceptual correctness suitable for university exams**.
@@ -3773,6 +3783,7 @@ FORMATTING RULES:
 - Start with: `# {topic}`
 - **Bold important terms, symbols, equations, and definitions** (use consistently, avoid overuse).
 - Use bullet points, tables, and sub‑headings for clarity.
+- Do NOT output Mermaid diagrams or Mermaid code fences.
 
 CITATIONS:
 - Add a final section: **## CITATIONS**
@@ -3791,6 +3802,53 @@ Start with '# {topic}' and then the sections in a logical order.
 def _strip_citations_section(md_text: str) -> str:
     text = str(md_text or "")
     return re.sub(r"\n##\s*CITATIONS\b[\s\S]*$", "", text, flags=re.IGNORECASE).rstrip()
+
+
+def _strip_mermaid_blocks(md_text: str) -> str:
+    """Remove Mermaid blocks and stray mermaid fence artifacts from markdown."""
+    text = str(md_text or "")
+    if not text:
+        return text
+    # Remove fenced Mermaid blocks entirely.
+    text = re.sub(r"```\s*mermaid\b[\s\S]*?```", "", text, flags=re.IGNORECASE)
+    # Remove inline/backtick artifacts like ``` mermaid that sometimes leak into prose.
+    text = re.sub(r"```\s*\"?mermaid\"?", "", text, flags=re.IGNORECASE)
+    # Remove lone 'mermaid' marker lines.
+    text = re.sub(r"^\s*\"?mermaid\"?\s*$", "", text, flags=re.IGNORECASE | re.MULTILINE)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _ensure_rag_labels_used_in_body(
+    md_text: str,
+    source_map: Optional[Dict[str, Dict[str, str]]],
+) -> str:
+    """Ensure at least some RAG labels are cited in body when RAG sources are available."""
+    text = str(md_text or "").strip()
+    if not text or not source_map:
+        return text
+
+    rag_labels = [
+        str(k).upper()
+        for k, v in (source_map or {}).items()
+        if str((v or {}).get("kind") or "").lower() == "rag"
+    ]
+    if not rag_labels:
+        return text
+
+    body = _strip_citations_section(text)
+    used = {m.upper() for m in re.findall(r"\[([A-Za-z0-9_-]{2,20})\]", body)}
+    if any(lbl in used for lbl in rag_labels):
+        return text
+
+    picks = rag_labels[: min(4, len(rag_labels))]
+    lines = ["## RAG Evidence Highlights"]
+    for lbl in picks:
+        meta = source_map.get(lbl) or source_map.get(lbl.upper()) or {}
+        title = str(meta.get("title") or "RAG source").strip()
+        lines.append(f"- Key reference used from **{title}** [{lbl}].")
+
+    return f"{body}\n\n" + "\n".join(lines)
 
 
 def _medix_ground_citations_markdown(
@@ -3867,8 +3925,32 @@ def _build_rag_priority_context(
     if parsed_list:
         lines.append("")
         lines.append("RAG SOURCE PACK (highest priority evidence):")
-        for idx, item in enumerate(parsed_list[:10], start=1):
-            label = f"R{idx}"
+        used_labels: set[str] = set()
+
+        def _safe_label(raw: str, fallback_idx: int) -> str:
+            token = re.sub(r"[^A-Za-z0-9_-]", "", str(raw or "").strip()).upper()
+            if not token:
+                token = f"R{fallback_idx}"
+            if len(token) > 20:
+                token = token[:20]
+            # Ensure uniqueness while keeping readability.
+            if token in used_labels:
+                n = 2
+                base = token[:18] if len(token) > 18 else token
+                cand = f"{base}{n}"
+                while cand in used_labels:
+                    n += 1
+                    cand = f"{base}{n}"
+                token = cand
+            used_labels.add(token)
+            return token
+
+        lines.append("")
+        lines.append("RAG SOURCE EXCERPTS (cite these labels first):")
+
+        for idx, item in enumerate(parsed_list[:16], start=1):
+            preferred = str(item.get("label") or item.get("rag_label") or "").strip()
+            label = _safe_label(preferred, idx)
             source_name = normalize_text(str(item.get("source_name") or "RAG source").strip()) or "RAG source"
             section_title = normalize_text(str(item.get("section_title") or "").strip())
             chunk_index = str(item.get("chunk_index") or "").strip()
@@ -3980,6 +4062,8 @@ def generate_notes_events(
             # Use safe runner in case we're under FastAPI's loop
             result = _run_assistant_blocking(assistant, user_prompt)
             content = result.messages[-1].content
+            content = _strip_mermaid_blocks(content)
+            content = _ensure_rag_labels_used_in_body(content, effective_source_map)
             content = _medix_ground_citations_markdown(content, effective_source_map)
         except Exception as e:
             yield ("error", {"message": f"LLM error: {e}"})
@@ -23458,6 +23542,7 @@ async def generate_stream(
                         detailed_row.get("markdown", ""),
                         normalized_variant,
                     )
+                    transformed_md = _strip_mermaid_blocks(transformed_md)
 
                     yield b"event: llm_done\n"
                     yield (
@@ -23486,7 +23571,7 @@ async def generate_stream(
                     yield b"event: close\n\n"
                     return
                 except Exception as exc:
-                    fallback_md = detailed_row.get("markdown", "")
+                    fallback_md = _strip_mermaid_blocks(detailed_row.get("markdown", ""))
                     inherited_images = detailed_row.get("image_urls") or []
                     saved_row = db_upsert_ai_note_by_title_variant(
                         topic,
@@ -39524,7 +39609,7 @@ MEDIX_RAG_MESSAGES_TABLE = os.getenv("MEDIX_RAG_MESSAGES_TABLE", "medix_rag_mess
 MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-3.1-pro-preview")
 MEDIX_EMBED_MODEL = "gemini-embedding-001"
 MEDIX_EMBED_DIM = int(os.getenv("MEDIX_RAG_EMBED_DIM", "768"))
-MEDIX_MAX_UPLOAD_MB = int(os.getenv("MEDIX_RAG_MAX_UPLOAD_MB", "50"))
+MEDIX_MAX_UPLOAD_MB = int(os.getenv("MEDIX_RAG_MAX_UPLOAD_MB", "80"))
 MEDIX_DEFAULT_TOP_K = int(os.getenv("MEDIX_RAG_DEFAULT_TOP_K", "12"))
 MEDIX_MAX_CONTEXT_CHARS = int(os.getenv("MEDIX_RAG_MAX_CONTEXT_CHARS", "26000"))
 MEDIX_CHUNK_TARGET_CHARS = int(os.getenv("MEDIX_RAG_CHUNK_TARGET_CHARS", "1400"))
@@ -40253,7 +40338,7 @@ def _medix_index_pdf_source(
     if len(raw) > max_size:
         raise HTTPException(status_code=413, detail=f"File too large ({file_name}). Max {MEDIX_MAX_UPLOAD_MB} MB")
 
-    trust_info = _rag_trust_validate_payload(file_name=file_name, raw=raw)
+    trust_info = _rag_trust_validate_payload(file_name=file_name, raw=raw, max_upload_bytes=max_size)
 
     _medix_progress(f"Indexing started: file={file_name}, size_mb={len(raw) / (1024 * 1024):.2f}")
 

@@ -4956,8 +4956,35 @@
       });
     }
 
+    function preprocessMarkdownForDisplay(md) {
+      const src = String(md || '').replace(/\r\n?/g, '\n');
+      if (!src) return '';
+      // Force-disable Mermaid in notes to avoid rendering breakage.
+      const srcNoMermaid = src.replace(/```\s*mermaid\b[\s\S]*?```/gi, '');
+      const parts = srcNoMermaid.split(/(```[\s\S]*?```)/g);
+      const out = parts.map((part) => {
+        if (!part || part.startsWith('```')) return part;
+        let text = part;
+        // Ensure markdown headings do not get glued to prior paragraph text.
+        text = text.replace(/([^\n])\s+(#{1,6}\s+)/g, '$1\n\n$2');
+        // Normalize one-line mermaid fences into proper fenced blocks.
+        text = text.replace(/```\s*mermaid\s+(graph\s+(?:TD|LR|RL|BT)[\s\S]*?)(?=\n\n|\n##\s|$)/gi, '```mermaid\n$1\n```\n');
+        // Inline stray citation labels that appear alone on a line (e.g., W6 / R2).
+        text = text.replace(/\n\s*([A-Z]{1,4}\d{1,4})\s*\n/g, ' [$1]\n');
+        // Tidy noisy spacing while preserving paragraph breaks.
+        text = text.replace(/[ \t]+\n/g, '\n');
+        text = text.replace(/\n{3,}/g, '\n\n');
+        return text;
+      });
+      let rebuilt = out.join('').trim();
+      // If an unmatched fence sneaks in, close it so rest of doc isn't rendered as code.
+      const fenceCount = (rebuilt.match(/```/g) || []).length;
+      if (fenceCount % 2 === 1) rebuilt += '\n```';
+      return rebuilt + '\n';
+    }
+
     async function renderMarkdown(md) {
-      lastMarkdown = md ?? '';
+      lastMarkdown = preprocessMarkdownForDisplay(md ?? '');
       try {
         await ensureMarkdownRuntime();
       } catch (err) {
@@ -4981,20 +5008,7 @@
         });
       }
 
-      // Mermaid blocks
-      const mmd = Array.from($output.querySelectorAll('code.language-mermaid, pre code.language-mermaid'));
-      for (let i = 0; i < mmd.length; i += 1) {
-        const codeEl = mmd[i];
-        const txt = codeEl.textContent;
-        const pre = codeEl.closest('pre');
-        const container = document.createElement('div');
-        container.className = 'my-4';
-        (pre || codeEl).replaceWith(container);
-        try {
-          const rendered = await mermaid.render('mmd-' + i + '-' + Date.now(), txt || '');
-          container.innerHTML = (rendered && rendered.svg) ? rendered.svg : '';
-        } catch { }
-      }
+      // Mermaid intentionally disabled for notes stability.
 
       // Syntax highlight
       try { hljs.highlightAll(); } catch { }
@@ -5101,6 +5115,16 @@
       ].join('\n');
       if (!trimmed) return working + '\n';
       return `${trimmed}\n\n${working}\n`;
+    }
+
+    function stripWorkingSectionIfNotPractical(md, courseType) {
+      if (normalizeCourseType(courseType) === 'practical') return md || '';
+      const text = String(md || '');
+      if (!text) return text;
+      return text
+        .replace(/\n##\s*Working\b[\s\S]*$/im, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
     }
 
     async function fetchCourseTypeForTopic(topic) {
@@ -5446,17 +5470,23 @@
         if (degree) url.searchParams.set('degree', degree);
         if (currentCourseType) url.searchParams.set('course_type', currentCourseType);
         if (allowedDomains.length) url.searchParams.set('allowed_urls', allowedDomains.join(','));
-        if (ragContext?.answer) {
-          url.searchParams.set('rag_answer', ragContext.answer.slice(0, 4000));
-        }
+        // Intentionally avoid sending raw RAG answer text to generation.
+        // We only pass compact citation chunks so final notes stay grounded
+        // in chunk evidence and avoid inheriting malformed markdown.
         if (ragContext?.citations?.length) {
-          const compactCitations = ragContext.citations.slice(0, 8).map((c) => ({
+          const labelUsed = new Set();
+          const compactCitations = ragContext.citations.slice(0, 12).map((c) => {
+            const source = String(c?.source_name || 'RAG source').trim();
+            const ragLabel = _ragShortLabel(source, labelUsed);
+            return ({
+            label: ragLabel,
             source_name: c.source_name,
             chunk_index: c.chunk_index,
             section_title: c.section_title,
             similarity: c.similarity,
-            chunk_text: (typeof c.chunk_text === 'string' ? c.chunk_text : '').slice(0, 1200),
-          }));
+            chunk_text: (typeof c.chunk_text === 'string' ? c.chunk_text : '').slice(0, 2600),
+          });
+          });
           url.searchParams.set('rag_citations', JSON.stringify(compactCitations));
         }
         es = new EventSource(url.toString(), { withCredentials: true });
@@ -5500,7 +5530,8 @@
         renderImageGallery(d.image_urls || d.urls || lastImageUrls);
         const workingTopic = (d.title || d.topic || t);
         const mdWithRag = appendRagCitations(d.markdown, ragContext);
-        const mdToRender = ensureWorkingSection(mdWithRag, workingTopic, currentCourseType);
+        const mdWithWorkingPolicy = stripWorkingSectionIfNotPractical(mdWithRag, currentCourseType);
+        const mdToRender = ensureWorkingSection(mdWithWorkingPolicy, workingTopic, currentCourseType);
         renderMarkdown(mdToRender);
         setEmphasis(emphasis);
         hideOutputLoader();
