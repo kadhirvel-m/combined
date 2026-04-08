@@ -2245,6 +2245,118 @@
       return '';
     }
 
+    function normalizeAccessToken(raw) {
+      const text = String(raw || '').trim();
+      if (!text) return '';
+      if (text === '__COOKIE_AUTH__' || text === 'null' || text === 'undefined') return '';
+      if (/^bearer\s+/i.test(text)) return text.replace(/^bearer\s+/i, '').trim();
+      if (text.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(text);
+          const nested = parsed?.currentSession?.access_token || parsed?.access_token || parsed?.session?.access_token || '';
+          return String(nested || '').trim();
+        } catch {
+          return '';
+        }
+      }
+      return text;
+    }
+
+    function hasAuthSessionSignal() {
+      try {
+        if (document.cookie && document.cookie.indexOf('paperx_auth=') !== -1) return true;
+      } catch { }
+      try {
+        if (localStorage.getItem('paperx_session_state') === '1') return true;
+      } catch { }
+      return false;
+    }
+
+    async function ensureStreamAccessToken() {
+      const direct = normalizeAccessToken(getAuthToken());
+      if (direct) return direct;
+
+      const fallbackKeys = ['paperx_bearer_fallback'];
+      for (const key of fallbackKeys) {
+        try {
+          const fromSession = normalizeAccessToken(sessionStorage.getItem(key));
+          if (fromSession) return fromSession;
+        } catch { }
+        try {
+          const fromLocal = normalizeAccessToken(localStorage.getItem(key));
+          if (fromLocal) return fromLocal;
+        } catch { }
+      }
+
+      if (!hasAuthSessionSignal()) return '';
+
+      try {
+        const refreshRes = await fetch(`${apiBase}/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: '{}',
+        });
+        if (!refreshRes.ok) return '';
+        const data = await refreshRes.json().catch(() => ({}));
+        const refreshed = normalizeAccessToken(data?.access_token || '');
+        if (!refreshed) return '';
+        try {
+          sessionStorage.setItem('paperx_bearer_fallback', refreshed);
+          localStorage.setItem('paperx_bearer_fallback', refreshed);
+        } catch { }
+        return refreshed;
+      } catch {
+        return '';
+      }
+    }
+
+    async function generateViaHttpFallback(topic, force, degree, ragContext) {
+      const streamToken = await ensureStreamAccessToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (streamToken) headers.Authorization = `Bearer ${streamToken}`;
+      const res = await fetch(`${apiBase}/api/notes/generate`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ topic, force: !!force, variant: currentVariant, degree: degree || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data && (data.detail || data.error)) || `HTTP ${res.status}`);
+      }
+
+      renderImageGallery(data.image_urls || data.urls || lastImageUrls);
+      const workingTopic = (data.title || data.topic || topic);
+      const mdWithRag = appendRagCitations(data.markdown || '', ragContext);
+      const mdWithWorkingPolicy = stripWorkingSectionIfNotPractical(mdWithRag, currentCourseType);
+      const mdToRender = ensureWorkingSection(mdWithWorkingPolicy, workingTopic, currentCourseType);
+      renderMarkdown(mdToRender);
+      setEmphasis(emphasis);
+      if (data.id) {
+        currentNoteId = data.id;
+        try {
+          localStorage.setItem(noteKey(currentVariant), currentNoteId);
+          if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+        } catch { }
+      }
+      const detectedTopic = (() => {
+        const fromHeading = (document.querySelector('#output h1')?.textContent || '').trim();
+        if (fromHeading) return fromHeading;
+        const fromPayload = (data.title || data.topic || '').trim();
+        if (fromPayload) return fromPayload;
+        const fromInput = ($topic ? $topic.value : '').trim();
+        if (fromInput) return fromInput;
+        return relatedVideosTopic || '';
+      })();
+      if (currentNoteId) {
+        enableFlashcardAccess(currentNoteId, detectedTopic);
+        enableMCQAccess(currentNoteId, detectedTopic);
+      }
+      persistGeneratedSnapshot(currentNoteId, workingTopic, mdToRender, data.image_urls || data.urls || lastImageUrls);
+      return true;
+    }
+
     // ===== Role-gated actions (admin / employee only) =====
     (function () {
       const privilegedEls = [
@@ -3239,6 +3351,13 @@
     let currentRagCitationLookup = {};
     let lastMarkdown = '';
     let lastImageUrls = [];
+    const RAG_META_TAG = 'PAPERX_RAG_META';
+    const RAG_MARKDOWN_SYSTEM_PROMPT = [
+      'The main problem is a Markdown line-break and spacing issue: headings and content are written on the same line instead of separate lines.',
+      'A heading like ## Introduction must be on its own line, followed by a newline before the paragraph starts; otherwise formatting, tables, and lists can break.',
+      'Leave one blank line before and after tables or lists.',
+      'Do not include a "## Working" section in the final output.',
+    ].join('\n');
     const VARIANTS = ['detailed', 'cheatsheet'];
     let currentVariant = 'detailed';
     let currentCourseType = '';
@@ -4957,34 +5076,45 @@
     }
 
     function preprocessMarkdownForDisplay(md) {
-      const src = String(md || '').replace(/\r\n?/g, '\n');
-      if (!src) return '';
-      // Force-disable Mermaid in notes to avoid rendering breakage.
-      const srcNoMermaid = src.replace(/```\s*mermaid\b[\s\S]*?```/gi, '');
-      const parts = srcNoMermaid.split(/(```[\s\S]*?```)/g);
-      const out = parts.map((part) => {
-        if (!part || part.startsWith('```')) return part;
-        let text = part;
-        // Ensure markdown headings do not get glued to prior paragraph text.
-        text = text.replace(/([^\n])\s+(#{1,6}\s+)/g, '$1\n\n$2');
-        // Normalize one-line mermaid fences into proper fenced blocks.
-        text = text.replace(/```\s*mermaid\s+(graph\s+(?:TD|LR|RL|BT)[\s\S]*?)(?=\n\n|\n##\s|$)/gi, '```mermaid\n$1\n```\n');
-        // Inline stray citation labels that appear alone on a line (e.g., W6 / R2).
-        text = text.replace(/\n\s*([A-Z]{1,4}\d{1,4})\s*\n/g, ' [$1]\n');
-        // Tidy noisy spacing while preserving paragraph breaks.
-        text = text.replace(/[ \t]+\n/g, '\n');
-        text = text.replace(/\n{3,}/g, '\n\n');
+      return String(md || '');
+    }
+
+    function extractRagMetaFromMarkdown(md) {
+      const input = String(md || '');
+      let merged = {};
+      const cleaned = input.replace(
+        /<!--\s*PAPERX_RAG_META\s+([^>]+?)\s*-->/g,
+        (_whole, encoded) => {
+          try {
+            const decoded = decodeURIComponent(String(encoded || '').trim());
+            const parsed = JSON.parse(decoded);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              merged = { ...merged, ...parsed };
+            }
+          } catch { }
+          return '';
+        }
+      );
+      return { markdown: cleaned, lookup: merged };
+    }
+
+    function embedRagMetaInMarkdown(md, lookup) {
+      const text = String(md || '');
+      const safeLookup = (lookup && typeof lookup === 'object' && !Array.isArray(lookup)) ? lookup : {};
+      if (!Object.keys(safeLookup).length) return text;
+      let encoded = '';
+      try {
+        encoded = encodeURIComponent(JSON.stringify(safeLookup));
+      } catch {
         return text;
-      });
-      let rebuilt = out.join('').trim();
-      // If an unmatched fence sneaks in, close it so rest of doc isn't rendered as code.
-      const fenceCount = (rebuilt.match(/```/g) || []).length;
-      if (fenceCount % 2 === 1) rebuilt += '\n```';
-      return rebuilt + '\n';
+      }
+      return `${text}\n\n<!-- ${RAG_META_TAG} ${encoded} -->\n`;
     }
 
     async function renderMarkdown(md) {
-      lastMarkdown = preprocessMarkdownForDisplay(md ?? '');
+      const parsed = extractRagMetaFromMarkdown(md ?? '');
+      currentRagCitationLookup = parsed.lookup || {};
+      lastMarkdown = preprocessMarkdownForDisplay(parsed.markdown);
       try {
         await ensureMarkdownRuntime();
       } catch (err) {
@@ -5101,30 +5231,11 @@
     }
 
     function ensureWorkingSection(md, topic, courseType) {
-      if (normalizeCourseType(courseType) !== 'practical') return md || '';
-      const text = md || '';
-      if (/^##\s*working\b/imu.test(text)) return text;
-      const trimmed = text.trim();
-      const working = [
-        '## Working',
-        `1. Prepare the required setup and apparatus for ${topic || 'this experiment'}.`,
-        '2. Configure the environment and verify all safety constraints.',
-        '3. Execute each step of the procedure methodically, capturing observations.',
-        '4. Record measurements/results with units after every key action.',
-        '5. Analyze the observations to derive the outcome, then clean up the setup.',
-      ].join('\n');
-      if (!trimmed) return working + '\n';
-      return `${trimmed}\n\n${working}\n`;
+      return md || '';
     }
 
     function stripWorkingSectionIfNotPractical(md, courseType) {
-      if (normalizeCourseType(courseType) === 'practical') return md || '';
-      const text = String(md || '');
-      if (!text) return text;
-      return text
-        .replace(/\n##\s*Working\b[\s\S]*$/im, '')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
+      return md || '';
     }
 
     async function fetchCourseTypeForTopic(topic) {
@@ -5309,7 +5420,39 @@
         };
         return `- ${label} ${source}${chunkIndex ? ` (chunk ${chunkIndex})` : ''}`;
       });
-      return `${md}\n\n## RAG CITATIONS\n${lines.join('\n')}\n`;
+      const withCitations = `${md}\n\n## RAG CITATIONS\n${lines.join('\n')}\n`;
+      return embedRagMetaInMarkdown(withCitations, currentRagCitationLookup);
+    }
+
+    async function persistGeneratedSnapshot(noteId, topic, markdown, imageUrls) {
+      const safeMarkdown = String(markdown || '');
+      const safeImages = Array.isArray(imageUrls) ? imageUrls : [];
+      try {
+        if (noteId) {
+          await fetch(`${apiBase}/notes/${encodeURIComponent(noteId)}?variant=${encodeURIComponent(currentVariant)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ markdown: safeMarkdown, image_urls: safeImages }),
+          });
+          return;
+        }
+        const res = await fetch(`${apiBase}/notes?variant=${encodeURIComponent(currentVariant)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: (topic || 'Untitled').trim(), markdown: safeMarkdown, image_urls: safeImages }),
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        const newId = (data && data.id) ? String(data.id).trim() : '';
+        if (!newId) return;
+        currentNoteId = newId;
+        try {
+          localStorage.setItem(noteKey(currentVariant), currentNoteId);
+          if (currentVariant === 'detailed') localStorage.setItem('paperx:lastNoteId', currentNoteId);
+        } catch { }
+      } catch (err) {
+        console.warn('[NotesChat] Snapshot persistence failed', err);
+      }
     }
 
     // ===== Streaming events =====
@@ -5489,16 +5632,35 @@
           });
           url.searchParams.set('rag_citations', JSON.stringify(compactCitations));
         }
+        url.searchParams.set('rag_system_prompt', RAG_MARKDOWN_SYSTEM_PROMPT);
+        const streamToken = await ensureStreamAccessToken();
+        if (streamToken) {
+          url.searchParams.set('access_token', streamToken);
+        }
         es = new EventSource(url.toString(), { withCredentials: true });
 
         es.addEventListener('open', () => { logEvent('Connected'); setProgress('start'); });
         es.addEventListener('error', () => {
           logEvent('Stream error');
-          hideOutputLoader();
-          setBusy(false);
-          snack('Generation failed – try again');
-          finishRun();
-          es && es.close(); es = null;
+          const hadStream = !!es;
+          if (hadStream) {
+            try { es.close(); } catch { }
+            es = null;
+          }
+          (async () => {
+            try {
+              logEvent('Fallback', 'Trying non-stream generation');
+              await generateViaHttpFallback(t, force, degree, ragContext);
+              logEvent('Complete (fallback)');
+            } catch (fallbackErr) {
+              console.error('[Generate] fallback failed:', fallbackErr);
+              snack('Generation failed – try again');
+            } finally {
+              hideOutputLoader();
+              setBusy(false);
+              finishRun();
+            }
+          })();
         });
         es.addEventListener('close', () => {
           hideOutputLoader();
@@ -5555,6 +5717,7 @@
           enableFlashcardAccess(currentNoteId, detectedTopic);
           enableMCQAccess(currentNoteId, detectedTopic);
         }
+        persistGeneratedSnapshot(currentNoteId, workingTopic, mdToRender, d.image_urls || d.urls || lastImageUrls);
         logEvent('Complete');
         finishRun();
         setBusy(false); es && es.close(); es = null;

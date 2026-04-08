@@ -2268,7 +2268,7 @@ deepseek_model_client =  OpenAIChatCompletionClient(
 
 gemini_model_client = OpenAIChatCompletionClient(
     base_url=os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-    model="gemini-3.1-pro-preview",
+    model="gemini-2.5-flash",
     api_key=(os.getenv("GEMINI_API_KEY", "") or "").strip(),
     model_info=ModelInfo(
         vision=True,
@@ -2917,7 +2917,7 @@ SERPAPI_API_KEY = (os.getenv("SERPAPI_API_KEY", "") or "").strip()
 SERPAPI_ENABLED = os.getenv("ENABLE_SERPAPI", "true").strip().lower() in {"1", "true", "yes", "on"}
 SERPAPI_TIMEOUT_SEC = float(os.getenv("SERPAPI_TIMEOUT_SEC", "8"))
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or "").strip()
-GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-3.1-pro-preview")
+GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-2.5-flash")
 MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
 # Default domains for notes/web search when DB has no config yet
@@ -3781,9 +3781,13 @@ MANDATORY SECTIONS TO INCLUDE (if applicable to the topic):
 FORMATTING RULES:
 - Output must be in **Markdown**.
 - Start with: `# {topic}`
+- Every heading (for example `## Introduction`) MUST be on its own line.
+- Add one blank line after each heading before starting paragraph text.
+- Keep one blank line before and after markdown lists and tables.
 - **Bold important terms, symbols, equations, and definitions** (use consistently, avoid overuse).
 - Use bullet points, tables, and sub‑headings for clarity.
 - Do NOT output Mermaid diagrams or Mermaid code fences.
+- Do NOT include a `## Working` section.
 
 CITATIONS:
 - Add a final section: **## CITATIONS**
@@ -3985,6 +3989,7 @@ def generate_notes_events(
     degree: Optional[str] = None,
     rag_priority_context: Optional[str] = None,
     rag_source_map: Optional[Dict[str, Dict[str, str]]] = None,
+    rag_system_prompt: Optional[str] = None,
 ) -> Iterator[Tuple[str, Dict[str, Any]]]:
     """Yield (event_name, payload) tuples describing real-time progress and final output.
 
@@ -4057,14 +4062,23 @@ def generate_notes_events(
 
         assistant = build_agent()
         user_prompt = _build_variant_user_prompt(context, topic, variant)
+        if rag_system_prompt:
+            extra_rules = normalize_text(str(rag_system_prompt or "").strip())
+            if extra_rules:
+                user_prompt = (
+                    user_prompt
+                    + "\n\nADDITIONAL RAG MARKDOWN OUTPUT RULES (STRICT):\n"
+                    + extra_rules
+                )
         yield ("llm_start", {})
         try:
             # Use safe runner in case we're under FastAPI's loop
             result = _run_assistant_blocking(assistant, user_prompt)
             content = result.messages[-1].content
-            content = _strip_mermaid_blocks(content)
-            content = _ensure_rag_labels_used_in_body(content, effective_source_map)
-            content = _medix_ground_citations_markdown(content, effective_source_map)
+            if not rag_system_prompt:
+                content = _strip_mermaid_blocks(content)
+                content = _ensure_rag_labels_used_in_body(content, effective_source_map)
+                content = _medix_ground_citations_markdown(content, effective_source_map)
         except Exception as e:
             yield ("error", {"message": f"LLM error: {e}"})
             return
@@ -23488,6 +23502,7 @@ async def generate_stream(
     degree: Optional[str] = None,
     rag_answer: Optional[str] = None,
     rag_citations: Optional[str] = None,
+    rag_system_prompt: Optional[str] = None,
 ):
     async def event_source() -> AsyncGenerator[bytes, None]:
         normalized_variant = _normalize_variant(variant)
@@ -23609,6 +23624,7 @@ async def generate_stream(
                     degree=degree,
                     rag_priority_context=rag_priority_context,
                     rag_source_map=rag_source_map,
+                    rag_system_prompt=rag_system_prompt,
                 ):
                     if stop_event.is_set():
                         break
@@ -23683,9 +23699,9 @@ async def generate_stream(
 
 # --- Engineering Mathematics Notes (Gemini 3 Pro Preview only) ---
 
-MATHS_NOTES_MODEL = "gemini-3.1-pro-preview"
+MATHS_NOTES_MODEL = "gemini-2.5-flash"
 
-PHYSICS_NOTES_MODEL = os.getenv("PHYSICS_NOTES_MODEL", "gemini-3.1-pro-preview")
+PHYSICS_NOTES_MODEL = os.getenv("PHYSICS_NOTES_MODEL", "gemini-2.5-flash")
 
 PHYSICS_NOTES_SYSTEM_PROMPT_TEMPLATE = """You will compose comprehensive, exam-ready Markdown notes for the physics topic "{topic}".
 
@@ -33037,7 +33053,7 @@ async def generate_labx(req: LabXGenerateRequest):
         def _generate_sync():
             client = genai.Client(api_key=gemini_key)
             response = client.models.generate_content(
-                model="gemini-3.1-pro-preview",
+                model="gemini-2.5-flash",
                 contents=prompt,
             )
             return response.text
@@ -33243,7 +33259,7 @@ async def generate_labx_stream(req: LabXGenerateRequest):
         try:
             client = genai.Client(api_key=gemini_key)
             response_stream = client.models.generate_content_stream(
-                model="gemini-3.1-pro-preview",
+                model="gemini-2.5-flash",
                 contents=prompt,
             )
             
@@ -37910,7 +37926,7 @@ async def math_td_question_history(session_id: str):
 # InnovateX — Smart Idea Engine
 # ==========================================
 
-INNOVATEX_MODEL = "gemini-3.1-pro-preview"
+INNOVATEX_MODEL = "gemini-2.5-flash"
 
 class InnovateXIdeaRequest(BaseModel):
     skills: List[str] = Field(default=[], description="Optional skills the student knows")
@@ -39606,7 +39622,7 @@ MEDIX_RAG_CHUNKS_TABLE = os.getenv("MEDIX_RAG_CHUNKS_TABLE", "medix_rag_chunks")
 MEDIX_RAG_SESSIONS_TABLE = os.getenv("MEDIX_RAG_SESSIONS_TABLE", "medix_rag_sessions")
 MEDIX_RAG_MESSAGES_TABLE = os.getenv("MEDIX_RAG_MESSAGES_TABLE", "medix_rag_messages")
 
-MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-3.1-pro-preview")
+MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-2.5-flash")
 MEDIX_EMBED_MODEL = "gemini-embedding-001"
 MEDIX_EMBED_DIM = int(os.getenv("MEDIX_RAG_EMBED_DIM", "768"))
 MEDIX_MAX_UPLOAD_MB = int(os.getenv("MEDIX_RAG_MAX_UPLOAD_MB", "80"))
