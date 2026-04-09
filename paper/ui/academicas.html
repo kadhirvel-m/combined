@@ -1764,6 +1764,9 @@
             try { return document.cookie.indexOf('paperx_auth=') !== -1; } catch { return false; }
         }
         function getToken() {
+            // Prefer cookie-auth sentinel first; global fetch wrapper will strip it
+            // and rely on HttpOnly cookies, avoiding stale bearer header races.
+            if (hasCookieAuthState()) return '__COOKIE_AUTH__';
             try {
                 const t = localStorage.getItem('px_token');
                 if (t && t !== '__COOKIE_AUTH__') return t;

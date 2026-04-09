@@ -770,16 +770,31 @@
         }
         return res.json().then(function (data) {
           var at = data && data.access_token ? String(data.access_token).trim() : '';
-          if (at) _setBearerFallback(at);
-          setAuthStateMarker(true);
-          try { sessionStorage.removeItem(REFRESH_SUPPRESS_UNTIL_KEY); } catch (_) { }
-          _emitRefreshEvent(true, 'refresh-ok');
-          return true;
+          if (at) {
+            _setBearerFallback(at);
+          } else if (hasAuthStateCookie()) {
+            // If refresh succeeded through cookie-only path, ensure stale fallback bearer
+            // does not override valid cookie-auth on subsequent requests.
+            clearBearerFallback();
+          }
+          var ok = !!at || hasAuthStateCookie();
+          if (ok) {
+            setAuthStateMarker(true);
+            try { sessionStorage.removeItem(REFRESH_SUPPRESS_UNTIL_KEY); } catch (_) { }
+          }
+          _emitRefreshEvent(ok, ok ? 'refresh-ok' : 'refresh-no-token');
+          return ok;
         }).catch(function () {
-          setAuthStateMarker(true);
-          try { sessionStorage.removeItem(REFRESH_SUPPRESS_UNTIL_KEY); } catch (_) { }
-          _emitRefreshEvent(true, 'refresh-ok-no-json');
-          return true;
+          var hasCookieAfter = hasAuthStateCookie();
+          if (hasCookieAfter) {
+            setAuthStateMarker(true);
+            clearBearerFallback();
+            try { sessionStorage.removeItem(REFRESH_SUPPRESS_UNTIL_KEY); } catch (_) { }
+            _emitRefreshEvent(true, 'refresh-ok-cookie-no-json');
+            return true;
+          }
+          _emitRefreshEvent(false, 'refresh-no-json-no-cookie');
+          return false;
         });
       }).catch(function () {
         _suppressRefreshFor(20 * 1000);
@@ -817,17 +832,28 @@
 
       var headers = new Headers(req.headers || {});
       var authHeader = headers.get('Authorization') || headers.get('authorization');
+      var cookieSessionPresent = hasAuthStateCookie();
+      var bearerFallbackCurrent = getBearerFallback();
       if (authHeader) {
         var m = authHeader.match(/^\s*Bearer\s+(.+)\s*$/i);
         if (m && m[1] && String(m[1]).trim() === AUTH_SENTINEL) {
           headers.delete('Authorization');
           headers.delete('authorization');
+        } else if (m && m[1] && cookieSessionPresent) {
+          var incomingBearer = String(m[1] || '').trim();
+          // If cookie auth exists and header is just the local fallback token,
+          // prefer cookie transport to avoid stale bearer 401 races.
+          if (bearerFallbackCurrent && incomingBearer === bearerFallbackCurrent) {
+            headers.delete('Authorization');
+            headers.delete('authorization');
+          }
         }
       }
 
       // Cookie fallback for privacy/antivirus-restricted browsers:
-      // if no Authorization header is present, attach short-lived in-tab bearer token.
-      if (!headers.has('Authorization') && !headers.has('authorization') && isApiRequest) {
+      // if no Authorization header is present, attach short-lived in-tab bearer token
+      // only when cookie session is not currently present.
+      if (!headers.has('Authorization') && !headers.has('authorization') && isApiRequest && !cookieSessionPresent) {
         var fallbackToken = getBearerFallback();
         if (fallbackToken) {
           headers.set('Authorization', 'Bearer ' + fallbackToken);
@@ -873,11 +899,13 @@
 
           var retryReq = Object.assign({}, req, { __paperxRetried: true });
           var retryHeaders = new Headers(retryReq.headers || {});
-          // Drop stale bearer before retry; we will attach latest fallback if present.
+          // Drop stale bearer before retry; re-attach only when cookie session is absent.
           retryHeaders.delete('Authorization');
           retryHeaders.delete('authorization');
-          var retryFallback = getBearerFallback();
-          if (retryFallback) retryHeaders.set('Authorization', 'Bearer ' + retryFallback);
+          if (!hasAuthStateCookie()) {
+            var retryFallback = getBearerFallback();
+            if (retryFallback) retryHeaders.set('Authorization', 'Bearer ' + retryFallback);
+          }
           retryReq.headers = retryHeaders;
 
           return _fetch(input, retryReq).then(function (retryResponse) {
