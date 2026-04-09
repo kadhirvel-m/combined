@@ -18335,16 +18335,30 @@ def refresh_token(request: Request, payload: Optional[RefreshTokenRequest] = Bod
 
     incoming_hash = _hash_refresh_token(refresh_candidate)
     existing_rotation = _auth_rotation_get(incoming_hash)
-    if existing_rotation and (
-        str(existing_rotation.get("status") or "").strip().lower() != "active"
-        or bool(existing_rotation.get("used_at"))
-    ):
-        fam = str(existing_rotation.get("family_id") or "").strip()
-        _auth_rotation_revoke_family(fam, "reuse-detected", _resolve_request_for_auth(request))
-        _security_emit("auth.refresh.reuse_detected", request=request, severity="warning", family_id=fam or None)
-        deny_res = JSONResponse({"detail": "Refresh token reuse detected. Please log in again."}, status_code=401)
-        _clear_auth_cookies(deny_res, request=_resolve_request_for_auth(request))
-        return deny_res
+    if existing_rotation:
+        req_obj = _resolve_request_for_auth(request)
+        rotation_status = str(existing_rotation.get("status") or "").strip().lower()
+        rotation_used = bool(existing_rotation.get("used_at"))
+        used_cookie_refresh = bool(cookie_refresh and refresh_candidate == cookie_refresh)
+
+        if rotation_status == "revoked":
+            _security_emit("auth.refresh.revoked_token", request=request, severity="warning")
+            deny_res = JSONResponse({"detail": "Session expired. Please log in again."}, status_code=401)
+            _clear_auth_cookies(deny_res, request=req_obj)
+            return deny_res
+
+        # Rotation races are expected when multiple requests/tabs refresh in parallel.
+        # If this request used the current refresh cookie and the token was just marked used,
+        # do not revoke the family or force logout.
+        if used_cookie_refresh and (rotation_status == "rotated" or rotation_used):
+            _security_emit("auth.refresh.replay_race_tolerated", request=request, severity="info")
+            return JSONResponse(
+                {
+                    "message": "Token refresh already processed",
+                    "token_transport": "cookie",
+                    "already_rotated": True,
+                }
+            )
 
     try:
         # Use Supabase's refresh_session method
@@ -30192,15 +30206,14 @@ def create_app() -> FastAPI:
 
             # Immediate remote sign-out enforcement:
             # If an authenticated browser still presents a refresh cookie whose rotation record
-            # is revoked/rotated, block access right away instead of waiting for access token expiry.
+            # is revoked, block access right away instead of waiting for access token expiry.
             effective_auth_token = auth_token or cookie_token
             refresh_cookie = _token_from_cookie(request, AUTH_REFRESH_COOKIE_NAME)
             if effective_auth_token and refresh_cookie:
                 refresh_row = _auth_rotation_get(_hash_refresh_token(refresh_cookie))
                 if refresh_row:
                     refresh_status = str(refresh_row.get("status") or "").strip().lower()
-                    refresh_used = bool(refresh_row.get("used_at"))
-                    if refresh_status != "active" or refresh_used:
+                    if refresh_status == "revoked":
                         deny = JSONResponse({"detail": "Session expired. Please sign in again."}, status_code=401)
                         _clear_auth_cookies(deny, request=request)
                         _security_emit(
@@ -30208,7 +30221,6 @@ def create_app() -> FastAPI:
                             request=request,
                             severity="warning",
                             status=refresh_status or None,
-                            used=refresh_used,
                         )
                         return deny
 
