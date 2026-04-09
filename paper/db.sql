@@ -1145,6 +1145,59 @@ CREATE TABLE public.syllabus_units (
   CONSTRAINT syllabus_units_pkey PRIMARY KEY (id),
   CONSTRAINT syllabus_units_course_id_fkey FOREIGN KEY (course_id) REFERENCES public.syllabus_courses(id)
 );
+CREATE TABLE public.garlic_study_plans (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid NOT NULL,
+  batch_id uuid,
+  semester integer,
+  college character varying,
+  generated_at timestamp with time zone NOT NULL DEFAULT now(),
+  last_updated timestamp with time zone NOT NULL DEFAULT now(),
+  status character varying NOT NULL DEFAULT 'generated'::character varying,
+  plan_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT garlic_study_plans_pkey PRIMARY KEY (id),
+  CONSTRAINT garlic_study_plans_student_id_fkey FOREIGN KEY (student_id) REFERENCES auth.users(id),
+  CONSTRAINT garlic_study_plans_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.batches(id),
+  CONSTRAINT garlic_study_plans_student_batch_semester_key UNIQUE (student_id, batch_id, semester)
+);
+CREATE TABLE public.garlic_study_plan_items (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  plan_id uuid NOT NULL,
+  subject_id uuid,
+  unit_id uuid,
+  topic_id uuid,
+  priority_score double precision NOT NULL DEFAULT 0,
+  confidence_score double precision NOT NULL DEFAULT 0,
+  estimated_time integer NOT NULL DEFAULT 30,
+  recommended_time integer NOT NULL DEFAULT 30,
+  reason text,
+  status text NOT NULL DEFAULT 'not_started'::text,
+  completed boolean NOT NULL DEFAULT false,
+  last_accessed timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  manual_adjusted boolean NOT NULL DEFAULT false,
+  interaction_count integer NOT NULL DEFAULT 0,
+  CONSTRAINT garlic_study_plan_items_pkey PRIMARY KEY (id),
+  CONSTRAINT garlic_study_plan_items_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.garlic_study_plans(id),
+  CONSTRAINT garlic_study_plan_items_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.syllabus_courses(id),
+  CONSTRAINT garlic_study_plan_items_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.syllabus_units(id),
+  CONSTRAINT garlic_study_plan_items_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id),
+  CONSTRAINT garlic_study_plan_items_plan_topic_key UNIQUE (plan_id, topic_id)
+);
+CREATE TABLE public.garlic_insights (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  plan_id uuid NOT NULL,
+  insight_text text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT garlic_insights_pkey PRIMARY KEY (id),
+  CONSTRAINT garlic_insights_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.garlic_study_plans(id)
+);
+CREATE INDEX garlic_study_plans_student_idx ON public.garlic_study_plans USING btree (student_id, generated_at DESC);
+CREATE INDEX garlic_study_plan_items_plan_idx ON public.garlic_study_plan_items USING btree (plan_id);
+CREATE INDEX garlic_study_plan_items_priority_idx ON public.garlic_study_plan_items USING btree (plan_id, priority_score DESC);
+CREATE INDEX garlic_study_plan_items_topic_idx ON public.garlic_study_plan_items USING btree (topic_id);
+CREATE INDEX garlic_insights_plan_idx ON public.garlic_insights USING btree (plan_id, created_at);
 CREATE TABLE public.teacher_applications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   auth_user_id uuid NOT NULL,

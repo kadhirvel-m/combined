@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GARLIC Autonomous System - Paper X</title>
+    <meta name="description" content="GARLIC autonomous AI study cockpit with ranked execution and explainable insights." />
+    <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap"
+        rel="stylesheet" />
+
+    <link rel="stylesheet" href="assets/css/tailwind.css" />
+    <script src="config.js"></script>
+    <script defer src="auth.js"></script>
+
+    <script>
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                container: { center: true, padding: '1rem' },
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 900: '#1E1E2F', 700: '#4C2A59', 500: '#9E4B8A' },
+                        brandlt: { 50: '#FAF5FB', 100: '#F3E7F2', 200: '#E7D0E4', 300: '#D9B4D3', 400: '#C88DBA', 500: '#9E4B8A', 700: '#4C2A59', 900: '#1E1E2F' }
+                    },
+                    boxShadow: {
+                        glow: '0 8px 30px rgba(158,75,138,0.28)',
+                        soft: '0 6px 22px rgba(30,30,47,0.14)',
+                        card: '0 24px 64px -20px rgba(30,30,47,0.45)',
+                        ringed: '0 0 0 1px rgba(158,75,138,0.35), 0 6px 22px rgba(158,75,138,0.35)'
+                    },
+                    backgroundImage: {
+                        'hero-dark': 'radial-gradient(900px 520px at 50% -15%, rgba(158,75,138,0.35), transparent 65%), linear-gradient(180deg,#1E1E2F 0%,#201934 55%,#141321 100%)',
+                        'hero-light': 'radial-gradient(1000px 560px at 50% -18%, rgba(158,75,138,0.18), transparent 62%), linear-gradient(180deg,#FFFFFF 0%,#FBF8FC 55%,#F7F2F9 100%)',
+                        'mesh-dark': 'radial-gradient(40% 50% at 20% 0%, rgba(158,75,138,0.18), transparent 60%), radial-gradient(40% 60% at 100% 0%, rgba(76,42,89,0.35), transparent 60%)'
+                    },
+                    keyframes: {
+                        fadeUp: { '0%': { opacity: 0, transform: 'translateY(10px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+                        pulseDot: { '0%,100%': { transform: 'scale(1)', opacity: .75 }, '50%': { transform: 'scale(1.16)', opacity: 1 } },
+                        scan: { '0%': { transform: 'translateX(-100%)' }, '100%': { transform: 'translateX(220%)' } },
+                    },
+                    animation: {
+                        fadeUp: 'fadeUp .55s cubic-bezier(.4,.1,.2,1)',
+                        pulseDot: 'pulseDot 1.9s ease-in-out infinite',
+                        scan: 'scan 3.8s linear infinite'
+                    }
+                }
+            }
+        };
+    </script>
+
+    <style>
+        .material-symbols-rounded {
+            vertical-align: -6px;
+        }
+
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, .85), rgba(255, 255, 255, .70));
+            backdrop-filter: blur(24px);
+            box-shadow: 0 12px 42px -12px rgba(30, 30, 47, .22);
+        }
+
+        .dark .glass-panel {
+            background: linear-gradient(180deg, rgba(30, 30, 47, .82), rgba(30, 30, 47, .62));
+            box-shadow: 0 22px 60px -16px rgba(0, 0, 0, .56);
+        }
+
+        .agent-grid {
+            position: relative;
+        }
+
+        .agent-grid::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: .35;
+            background-image:
+                linear-gradient(to right, rgba(158, 75, 138, .10) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(158, 75, 138, .10) 1px, transparent 1px);
+            background-size: 26px 26px;
+            mask-image: radial-gradient(circle at 50% 20%, black 30%, transparent 85%);
+        }
+
+        .status-chip,
+        .metric-chip {
+            border-radius: 999px;
+            padding: 3px 10px;
+            font-size: 11px;
+            line-height: 1.3;
+            border: 1px solid rgba(0, 0, 0, .12);
+        }
+
+        .dark .status-chip,
+        .dark .metric-chip {
+            border-color: rgba(255, 255, 255, .18);
+        }
+
+        .pri-high {
+            background: rgba(245, 158, 11, .16);
+            color: #92400e;
+        }
+
+        .pri-mid {
+            background: rgba(59, 130, 246, .14);
+            color: #1d4ed8;
+        }
+
+        .pri-low {
+            background: rgba(107, 114, 128, .15);
+            color: #374151;
+        }
+
+        .dark .pri-high {
+            color: #fde68a;
+        }
+
+        .dark .pri-mid {
+            color: #bfdbfe;
+        }
+
+        .dark .pri-low {
+            color: #d1d5db;
+        }
+
+        .st-not_started {
+            background: rgba(107, 114, 128, .14);
+        }
+
+        .st-in_progress {
+            background: rgba(59, 130, 246, .16);
+        }
+
+        .st-completed {
+            background: rgba(16, 185, 129, .18);
+        }
+
+        .neo-line {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .neo-line::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 2px;
+            width: 42%;
+            background: linear-gradient(90deg, transparent, rgba(158, 75, 138, .75), transparent);
+            animation: scan 4s linear infinite;
+        }
+
+        .kpi-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi-card::before {
+            content: "";
+            position: absolute;
+            inset: auto -35% -120% auto;
+            width: 240px;
+            height: 240px;
+            border-radius: 999px;
+            background: radial-gradient(circle at center, rgba(158, 75, 138, .22), transparent 72%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
+    <div class="pointer-events-none fixed inset-0 opacity-[.09] dark:opacity-[.14] bg-mesh-dark"></div>
+
+    <!-- ================= NAVBAR (Exact Academics) ================= -->
+    <header
+        class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
+        <div class="container flex items-center justify-between py-3.5">
+            <a href="index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
+                <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
+                <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
+            </a>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-neutral-700 dark:text-white/85">
+                <a href="index.html" class="hover:text-brandlt-900 dark:hover:text-white">Home</a>
+                <a href="wishlist.html"
+                    class="hover:text-brandlt-900 dark:hover:text-white inline-flex items-center gap-1"><span
+                        class="material-symbols-rounded text-base">favorite</span>Wishlist</a>
+                <a href="history.html"
+                    class="hover:text-brandlt-900 dark:hover:text-white inline-flex items-center gap-1"><span
+                        class="material-symbols-rounded text-base">history</span>History</a>
+                <a href="contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Contact</a>
+            </nav>
+            <div class="hidden md:flex items-center gap-2">
+                <button data-theme-toggle
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    aria-label="Toggle theme">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                    <span class="hidden lg:block">Theme</span>
+                </button>
+                <div id="devModeToggleDesktop" class="dev-toggle-wrap hidden">
+                    <span class="dev-toggle-label" id="devLabelDesktop">DEV</span>
+                    <label class="dev-toggle" title="Developer Mode">
+                        <input type="checkbox" id="devToggleDesktop" />
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <a href="login.html"
+                    class="px-3 py-2 text-sm text-neutral-700 dark:text-white/80 hover:text-brandlt-900 dark:hover:text-white rounded-full">Log
+                    in</a>
+                <a href="signup.html"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-sm font-semibold px-4 py-2.5 hover:shadow-glow transition">Sign
+                    up</a>
+                <a id="navProfile" href="profile.html" title="Profile"
+                    class="hidden items-center justify-center w-10 h-10 rounded-full overflow-hidden border border-black/10 dark:border-white/10 bg-white/90 dark:bg-brand-900/60">
+                    <img id="navProfileImg" alt="Profile" class="w-full h-full object-cover hidden" />
+                    <span id="navProfileInitial" class="text-xs font-semibold">ME</span>
+                </a>
+                <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out"
+                    class="hidden items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded text-base">logout</span>
+                    <span>Sign out</span>
+                </button>
+            </div>
+            <div class="md:hidden flex items-center gap-2">
+                <button id="mobileSearchBtn" type="button" aria-label="Search"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">search</span>
+                </button>
+                <button id="navEduEditBtn" type="button" aria-label="Edit education"
+                    class="hidden inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">edit</span>
+                </button>
+                <button type="button" data-theme-toggle aria-label="Toggle theme"
+                    class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded">dark_mode</span>
+                </button>
+                <div id="devModeToggleMobile" class="dev-toggle-wrap hidden">
+                    <label class="dev-toggle" title="Developer Mode">
+                        <input type="checkbox" id="devToggleMobile" />
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container relative pt-6 md:pt-8 pb-10 space-y-5 md:space-y-6">
+        <!-- Hero / Agent Command Surface -->
+        <section class="glass-panel rounded-3xl ring-1 ring-brand-500/25 p-5 md:p-6 neo-line animate-fadeUp">
+            <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                <div class="max-w-3xl">
+                    <div class="inline-flex items-center gap-2 rounded-full px-3 py-1 ring-1 ring-brand-500/30 bg-brand-500/10 text-brand-700 dark:text-brandlt-200 text-xs font-semibold">
+                        <span class="material-symbols-rounded text-[15px]">auto_awesome</span>
+                        GARLIC AUTONOMOUS AGENT MODE
+                    </div>
+                    <h1 class="mt-3 text-2xl md:text-4xl font-extrabold tracking-tight leading-tight">AI Study Operations Cockpit</h1>
+                    <p class="mt-2 text-sm md:text-base text-neutral-600 dark:text-white/75">Execution-first learning control center. Priorities, confidence signals, and strategy insights are continuously orchestrated for exam-maximized output.</p>
+                    <div class="mt-4 flex flex-wrap gap-2 text-[11px]">
+                        <span class="metric-chip">Gemini 2.5 Flash</span>
+                        <span class="metric-chip">Persistent Plan Memory</span>
+                        <span class="metric-chip">Agentic Reasoning Layer</span>
+                    </div>
+                </div>
+                <div class="min-w-[250px] rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-3">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-neutral-500 dark:text-white/60">Agent Runtime</span>
+                        <span class="inline-flex items-center gap-1 font-semibold"><span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulseDot"></span>ONLINE</span>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                        <div class="rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 px-3 py-2">
+                            <p class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/60">Plan State</p>
+                            <p id="planStatusLine" class="mt-1 text-sm font-semibold">Loading...</p>
+                        </div>
+                        <div class="rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 px-3 py-2">
+                            <p class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/60">Last Sync</p>
+                            <p id="planUpdatedLine" class="mt-1 text-xs font-semibold">--</p>
+                        </div>
+                    </div>
+                    <div class="mt-2 grid grid-cols-2 gap-2">
+                        <button id="regenBtn" type="button" class="rounded-xl px-3 py-2 text-left text-xs md:text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-700 shadow-glow hover:brightness-110 transition">
+                            <span class="material-symbols-rounded text-[16px] align-middle mr-1">autorenew</span>Regenerate
+                        </button>
+                        <button id="refreshBtn" type="button" class="rounded-xl px-3 py-2 text-left text-xs md:text-sm font-semibold ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition">
+                            <span class="material-symbols-rounded text-[16px] align-middle mr-1">refresh</span>Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <p id="statusMsg" class="hidden mt-4 text-xs rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15"></p>
+        </section>
+
+        <!-- Smart Metrics -->
+        <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 animate-fadeUp">
+            <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
+                <p class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Total Topics</p>
+                <p id="kpiTotalTopics" class="mt-2 text-2xl md:text-3xl font-extrabold">0</p>
+                <p class="text-xs text-neutral-500 dark:text-white/60">Indexed in current plan</p>
+            </article>
+            <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
+                <p class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">High Priority</p>
+                <p id="kpiHighPriority" class="mt-2 text-2xl md:text-3xl font-extrabold">0</p>
+                <p class="text-xs text-neutral-500 dark:text-white/60">Immediate impact set</p>
+            </article>
+            <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
+                <p class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Completion</p>
+                <p id="kpiCompletion" class="mt-2 text-2xl md:text-3xl font-extrabold">0%</p>
+                <p class="text-xs text-neutral-500 dark:text-white/60">Execution progress</p>
+            </article>
+            <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
+                <p class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Avg Confidence</p>
+                <p id="kpiConfidence" class="mt-2 text-2xl md:text-3xl font-extrabold">0</p>
+                <p class="text-xs text-neutral-500 dark:text-white/60">Learned mastery signal</p>
+            </article>
+        </section>
+
+        <section class="grid grid-cols-1 2xl:grid-cols-[1.3fr_0.7fr] gap-4 md:gap-5">
+            <div class="space-y-4">
+                <!-- Daily Execution -->
+                <div class="glass-panel rounded-3xl ring-1 ring-black/10 dark:ring-white/15 p-4 md:p-5 animate-fadeUp">
+                    <div class="flex items-end justify-between gap-3">
+                        <div>
+                            <h2 class="text-lg md:text-xl font-bold tracking-tight">Daily Execution Panel</h2>
+                            <p class="text-xs mt-1 text-neutral-500 dark:text-white/60">Top autonomous actions with reasoned ordering.</p>
+                        </div>
+                        <p id="estimatedLine" class="text-xs md:text-sm font-semibold">Estimated Time: --</p>
+                    </div>
+                    <div id="dailyFocus" class="mt-4 grid grid-cols-1 xl:grid-cols-3 gap-3"></div>
+                </div>
+
+                <!-- Ranked Priority Surface -->
+                <div class="glass-panel rounded-3xl ring-1 ring-black/10 dark:ring-white/15 p-4 md:p-5 agent-grid animate-fadeUp">
+                    <div class="relative z-10 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h2 class="text-lg md:text-xl font-bold tracking-tight">Priority Surface</h2>
+                            <p class="text-xs mt-1 text-neutral-500 dark:text-white/60">Subject → Unit → Topic graph with confidence and status.</p>
+                        </div>
+                        <div class="inline-flex items-center rounded-full p-1 ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5">
+                            <button id="viewGraphBtn" type="button" class="view-mode-btn rounded-full px-3 py-1.5 text-xs font-semibold bg-brand-500 text-white">Graph</button>
+                            <button id="viewListBtn" type="button" class="view-mode-btn rounded-full px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:text-white/80">List</button>
+                        </div>
+                    </div>
+                    <div id="hierarchyWrap" class="relative z-10 mt-4 space-y-3"></div>
+                </div>
+            </div>
+
+            <aside class="space-y-4">
+                <!-- Insights -->
+                <div class="glass-panel rounded-3xl ring-1 ring-black/10 dark:ring-white/15 p-4 md:p-5 animate-fadeUp">
+                    <h2 class="text-lg md:text-xl font-bold tracking-tight">AI Reasoning</h2>
+                    <p class="mt-1 text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">GARLIC Insights</p>
+                    <ul id="insightsList" class="mt-3 space-y-2 text-sm list-disc pl-5"></ul>
+                </div>
+
+                <!-- Status Board -->
+                <div class="glass-panel rounded-3xl ring-1 ring-black/10 dark:ring-white/15 p-4 md:p-5 animate-fadeUp">
+                    <h2 class="text-lg md:text-xl font-bold tracking-tight">Execution Status Board</h2>
+                    <p class="mt-1 text-xs text-neutral-500 dark:text-white/60">Autonomous queue by lifecycle stage.</p>
+                    <div id="statusBoard" class="mt-3 space-y-2"></div>
+                </div>
+            </aside>
+        </section>
+    </main>
+
+    <script>
+        const API_BASE = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+        const $ = (id) => document.getElementById(id);
+        let __ctx = null;
+        let __payload = null;
+        let __viewMode = 'graph';
+
+        function esc(value) {
+            const fn = (typeof window.escapeHtml === 'function') ? window.escapeHtml : null;
+            if (fn) return fn(value);
+            return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function showStatus(message, isError = false) {
+            const node = $('statusMsg');
+            if (!node) return;
+            node.textContent = message || '';
+            node.classList.toggle('hidden', !message);
+            node.classList.toggle('text-red-700', !!isError);
+            node.classList.toggle('dark:text-red-200', !!isError);
+            node.classList.toggle('bg-red-500/10', !!isError);
+            node.classList.toggle('ring-red-500/30', !!isError);
+            node.classList.toggle('text-neutral-700', !isError);
+            node.classList.toggle('dark:text-white/85', !isError);
+            node.classList.toggle('bg-black/5', !isError);
+            node.classList.toggle('dark:bg-white/5', !isError);
+        }
+
+        function getToken() {
+            const keys = ['paperx_bearer_fallback', 'px_token', 'teacherToken'];
+            for (const k of keys) {
+                const local = String(localStorage.getItem(k) || '').trim();
+                if (local && local !== '__COOKIE_AUTH__') return local;
+                const session = String(sessionStorage.getItem(k) || '').trim();
+                if (session && session !== '__COOKIE_AUTH__') return session;
+            }
+            return '';
+        }
+
+        function authHeaders() {
+            const token = getToken();
+            return token ? { Authorization: `Bearer ${token}` } : {};
+        }
+
+        async function fetchJson(url, opts = {}) {
+            const merged = {
+                credentials: 'include',
+                ...opts,
+                headers: { ...(opts.headers || {}) },
+            };
+            const res = await fetch(url, merged);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const detail = data?.detail || `HTTP ${res.status}`;
+                const err = new Error(String(detail));
+                err.status = res.status;
+                throw err;
+            }
+            return data;
+        }
+
+        function parseProfileContext(profile) {
+            const p = profile || {};
+            return {
+                student_id: String(p?.auth_user_id || '').trim(),
+                batch_id: String(p?.batch?.id || p?.batch_id || '').trim() || null,
+                semester: Number(p?.semester || 0) || null,
+                college: String(p?.college?.name || p?.college || '').trim() || null,
+            };
+        }
+
+        function priorityClass(score) {
+            const v = Number(score || 0);
+            if (v >= 75) return 'metric-chip pri-high';
+            if (v >= 50) return 'metric-chip pri-mid';
+            return 'metric-chip pri-low';
+        }
+
+        function statusClass(status) {
+            return `status-chip st-${String(status || 'not_started')}`;
+        }
+
+        function prettyStatus(value) {
+            const raw = String(value || 'not_started').replace(/_/g, ' ').trim();
+            return raw.charAt(0).toUpperCase() + raw.slice(1);
+        }
+
+        function notesPageByType(courseType) {
+            const t = String(courseType || '').toLowerCase();
+            if (t.includes('math')) return 'maths_notes.html';
+            if (t.includes('phys')) return 'physics_notes.html';
+            return 'notes_generator.html';
+        }
+
+        function flattenTopics(payload) {
+            const out = [];
+            const subjects = Array.isArray(payload?.subjects) ? payload.subjects : [];
+            subjects.forEach((subject) => {
+                const units = Array.isArray(subject?.units) ? subject.units : [];
+                units.forEach((unit) => {
+                    const topics = Array.isArray(unit?.topics) ? unit.topics : [];
+                    topics.forEach((topic) => {
+                        out.push({
+                            subject,
+                            unit,
+                            topic,
+                        });
+                    });
+                });
+            });
+            return out;
+        }
+
+        async function trackTopicOpen(itemId, topicId) {
+            try {
+                await fetchJson(`${API_BASE}/api/garlic/study-plan/interaction`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                    body: JSON.stringify({ item_id: itemId || null, topic_id: topicId || null, event_type: 'topic_click' }),
+                });
+                if (itemId) {
+                    await fetchJson(`${API_BASE}/api/garlic/study-plan/items/${encodeURIComponent(itemId)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                        body: JSON.stringify({ status: 'in_progress', last_accessed: new Date().toISOString() }),
+                    });
+                }
+            } catch (_) { }
+        }
+
+        function updateKpis(payload) {
+            const summary = payload?.summary || {};
+            const total = Number(summary?.total_topics || 0);
+            const done = Number(summary?.completed_topics || 0);
+            const high = Number(summary?.high_priority_topics || 0);
+            const topics = flattenTopics(payload);
+            const avgConfidence = topics.length
+                ? (topics.reduce((a, b) => a + Number(b?.topic?.confidence_score || 0), 0) / topics.length)
+                : 0;
+            const completionPct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+            $('kpiTotalTopics').textContent = String(total);
+            $('kpiHighPriority').textContent = String(high);
+            $('kpiCompletion').textContent = `${completionPct}%`;
+            $('kpiConfidence').textContent = avgConfidence.toFixed(1);
+        }
+
+        function renderDailyFocus(payload) {
+            const holder = $('dailyFocus');
+            if (!holder) return;
+            const list = Array.isArray(payload?.daily_focus) ? payload.daily_focus : [];
+            holder.innerHTML = '';
+
+            if (!list.length) {
+                holder.innerHTML = '<div class="rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-4 text-sm text-neutral-600 dark:text-white/70">No focus actions yet.</div>';
+                $('estimatedLine').textContent = 'Estimated Time: --';
+                return;
+            }
+
+            let total = 0;
+            list.forEach((item, idx) => {
+                const mins = Number(item?.estimated_time || 0);
+                total += mins;
+                const row = document.createElement('article');
+                row.className = 'rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-3';
+                row.innerHTML = `
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold">${idx + 1}. ${esc(item?.topic || 'Topic')}</p>
+                            <p class="mt-1 text-xs text-neutral-600 dark:text-white/70">${esc(item?.reason || 'High exam impact + lower confidence')}</p>
+                            <div class="mt-2 flex flex-wrap gap-1.5">
+                                <span class="${priorityClass(item?.priority_score)}">Priority ${Number(item?.priority_score || 0).toFixed(1)}</span>
+                                <span class="metric-chip">${mins} min</span>
+                                <span class="${statusClass(item?.status)}">${esc(prettyStatus(item?.status))}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                holder.appendChild(row);
+            });
+
+            const h = Math.floor(total / 60);
+            const m = total % 60;
+            $('estimatedLine').textContent = `Estimated Time: ${h > 0 ? `${h}h ` : ''}${m}m`;
+        }
+
+        function renderPriorityGraph(payload) {
+            const wrap = $('hierarchyWrap');
+            if (!wrap) return;
+            const subjects = Array.isArray(payload?.subjects) ? payload.subjects : [];
+            wrap.innerHTML = '';
+
+            if (!subjects.length) {
+                wrap.innerHTML = '<div class="rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-4 text-sm text-neutral-600 dark:text-white/70">No topics available in this plan.</div>';
+                return;
+            }
+
+            subjects.forEach((subject) => {
+                const subjectCard = document.createElement('section');
+                subjectCard.className = 'rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/75 dark:bg-white/5 p-3';
+                const units = Array.isArray(subject?.units) ? subject.units : [];
+
+                const unitBlocks = units.map((unit) => {
+                    const topics = Array.isArray(unit?.topics) ? unit.topics : [];
+                    topics.sort((a, b) => Number(b?.priority_score || 0) - Number(a?.priority_score || 0));
+                    const topicRows = topics.slice(0, 8).map((topic) => {
+                        const topicName = String(topic?.topic || '').trim();
+                        const page = notesPageByType(subject?.course_type || '');
+                        const href = `${page}?topic=${encodeURIComponent(topicName)}`;
+                        return `
+                            <a href="${href}" target="_blank" rel="noopener" data-item-id="${esc(topic?.item_id || '')}" data-topic-id="${esc(topic?.topic_id || '')}" class="topic-link group rounded-xl px-2.5 py-2 ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 hover:bg-brand-500/10 transition block">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-xs font-semibold text-brand-700 dark:text-brandlt-200 break-words">${esc(topicName)}</p>
+                                        <p class="text-[11px] mt-0.5 text-neutral-600 dark:text-white/70">${esc(topic?.reason || 'Reason unavailable')}</p>
+                                    </div>
+                                    <span class="${priorityClass(topic?.priority_score)}">${Number(topic?.priority_score || 0).toFixed(1)}</span>
+                                </div>
+                            </a>
+                        `;
+                    }).join('');
+
+                    return `
+                        <article class="rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-2.5 space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-xs font-semibold">${esc(unit?.unit_title || 'Unit')}</p>
+                                <span class="metric-chip">${topics.length} topics</span>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">${topicRows || '<div class="text-xs text-neutral-500 dark:text-white/60">No topics</div>'}</div>
+                        </article>
+                    `;
+                }).join('');
+
+                subjectCard.innerHTML = `
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <div>
+                            <p class="text-sm md:text-base font-bold tracking-tight">${esc(subject?.subject_title || 'Subject')}</p>
+                            <p class="text-xs text-neutral-500 dark:text-white/60">${esc(subject?.course_code || '')}</p>
+                        </div>
+                        <span class="metric-chip">${units.length} units</span>
+                    </div>
+                    <div class="space-y-2">${unitBlocks}</div>
+                `;
+                wrap.appendChild(subjectCard);
+            });
+
+            wrap.querySelectorAll('.topic-link').forEach((link) => {
+                link.addEventListener('click', (ev) => {
+                    const itemId = String(ev.currentTarget.getAttribute('data-item-id') || '').trim();
+                    const topicId = String(ev.currentTarget.getAttribute('data-topic-id') || '').trim();
+                    trackTopicOpen(itemId, topicId);
+                });
+            });
+        }
+
+        function renderPriorityList(payload) {
+            const wrap = $('hierarchyWrap');
+            if (!wrap) return;
+            const topics = flattenTopics(payload);
+            topics.sort((a, b) => Number(b?.topic?.priority_score || 0) - Number(a?.topic?.priority_score || 0));
+            const top = topics.slice(0, 70);
+
+            if (!top.length) {
+                wrap.innerHTML = '<div class="rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-4 text-sm text-neutral-600 dark:text-white/70">No ranked topics available.</div>';
+                return;
+            }
+
+            wrap.innerHTML = top.map(({ subject, unit, topic }, idx) => {
+                const topicName = String(topic?.topic || '').trim();
+                const page = notesPageByType(subject?.course_type || '');
+                const href = `${page}?topic=${encodeURIComponent(topicName)}`;
+                return `
+                    <article class="rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/75 dark:bg-white/5 px-3 py-2">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-xs text-neutral-500 dark:text-white/60">#${idx + 1} • ${esc(subject?.subject_title || 'Subject')} / ${esc(unit?.unit_title || 'Unit')}</p>
+                                <a href="${href}" target="_blank" rel="noopener" data-item-id="${esc(topic?.item_id || '')}" data-topic-id="${esc(topic?.topic_id || '')}" class="topic-link text-sm font-semibold text-brand-700 dark:text-brandlt-200 hover:underline break-words">${esc(topicName)}</a>
+                                <p class="text-xs mt-1 text-neutral-600 dark:text-white/70">${esc(topic?.reason || 'High impact recommendation.')}</p>
+                            </div>
+                            <div class="shrink-0 flex flex-col items-end gap-1.5">
+                                <span class="${priorityClass(topic?.priority_score)}">P ${Number(topic?.priority_score || 0).toFixed(1)}</span>
+                                <span class="metric-chip">C ${Number(topic?.confidence_score || 0).toFixed(1)}</span>
+                                <span class="${statusClass(topic?.status)}">${esc(prettyStatus(topic?.status))}</span>
+                            </div>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+
+            wrap.querySelectorAll('.topic-link').forEach((link) => {
+                link.addEventListener('click', (ev) => {
+                    const itemId = String(ev.currentTarget.getAttribute('data-item-id') || '').trim();
+                    const topicId = String(ev.currentTarget.getAttribute('data-topic-id') || '').trim();
+                    trackTopicOpen(itemId, topicId);
+                });
+            });
+        }
+
+        function renderInsights(payload) {
+            const node = $('insightsList');
+            if (!node) return;
+            const insights = Array.isArray(payload?.insights) ? payload.insights : [];
+            node.innerHTML = '';
+            if (!insights.length) {
+                node.innerHTML = '<li>No insights available yet.</li>';
+                return;
+            }
+            insights.forEach((line) => {
+                const li = document.createElement('li');
+                li.className = 'leading-relaxed';
+                li.textContent = String(line || '');
+                node.appendChild(li);
+            });
+        }
+
+        function renderStatusBoard(payload) {
+            const board = $('statusBoard');
+            if (!board) return;
+            const topics = flattenTopics(payload).map((x) => x.topic || {});
+            const groups = {
+                not_started: topics.filter((t) => String(t?.status || 'not_started') === 'not_started'),
+                in_progress: topics.filter((t) => String(t?.status || '') === 'in_progress'),
+                completed: topics.filter((t) => String(t?.status || '') === 'completed' || !!t?.completed),
+            };
+
+            const renderGroup = (label, key) => {
+                const arr = groups[key] || [];
+                const items = arr
+                    .sort((a, b) => Number(b?.priority_score || 0) - Number(a?.priority_score || 0))
+                    .slice(0, 4)
+                    .map((t) => `<li class="text-xs text-neutral-600 dark:text-white/70 truncate">${esc(t?.topic || 'Topic')}</li>`)
+                    .join('');
+                return `
+                    <section class="rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-3">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-xs font-semibold">${label}</p>
+                            <span class="${statusClass(key)}">${arr.length}</span>
+                        </div>
+                        <ul class="mt-2 space-y-1">${items || '<li class="text-xs text-neutral-500 dark:text-white/60">No topics</li>'}</ul>
+                    </section>
+                `;
+            };
+
+            board.innerHTML = [
+                renderGroup('Not Started', 'not_started'),
+                renderGroup('In Progress', 'in_progress'),
+                renderGroup('Completed', 'completed'),
+            ].join('');
+        }
+
+        function renderPlan(payload) {
+            __payload = payload;
+            const plan = payload?.plan || {};
+            const state = String(plan?.plan_status || plan?.status || 'loaded');
+            $('planStatusLine').textContent = state.toUpperCase();
+            const stamp = plan?.last_updated || plan?.generated_at;
+            $('planUpdatedLine').textContent = stamp ? new Date(stamp).toLocaleString() : '--';
+
+            updateKpis(payload);
+            renderDailyFocus(payload);
+            if (__viewMode === 'graph') renderPriorityGraph(payload);
+            else renderPriorityList(payload);
+            renderInsights(payload);
+            renderStatusBoard(payload);
+        }
+
+        async function loadProfile() {
+            const out = await fetchJson(`${API_BASE}/api/me`, { headers: { ...authHeaders() } });
+            return out?.profile || {};
+        }
+
+        async function loadPersistedPlan(studentId) {
+            return await fetchJson(`${API_BASE}/api/garlic/plan/${encodeURIComponent(studentId)}`, {
+                headers: { ...authHeaders() },
+            });
+        }
+
+        async function generatePlan(ctx, regenerate = false) {
+            const endpoint = regenerate ? '/api/garlic/regenerate' : '/api/garlic/generate';
+            return await fetchJson(`${API_BASE}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                body: JSON.stringify({
+                    student_id: ctx.student_id,
+                    batch_id: ctx.batch_id,
+                    semester: ctx.semester,
+                    college: ctx.college,
+                }),
+            });
+        }
+
+        function activateViewButton() {
+            const graphBtn = $('viewGraphBtn');
+            const listBtn = $('viewListBtn');
+            if (!graphBtn || !listBtn) return;
+            const graphOn = __viewMode === 'graph';
+            graphBtn.className = `view-mode-btn rounded-full px-3 py-1.5 text-xs font-semibold ${graphOn ? 'bg-brand-500 text-white' : 'text-neutral-700 dark:text-white/80'}`;
+            listBtn.className = `view-mode-btn rounded-full px-3 py-1.5 text-xs font-semibold ${!graphOn ? 'bg-brand-500 text-white' : 'text-neutral-700 dark:text-white/80'}`;
+        }
+
+        async function bootstrap() {
+            showStatus('Loading GARLIC autonomous plan...');
+            try {
+                const profile = await loadProfile();
+                const ctx = parseProfileContext(profile);
+                __ctx = ctx;
+                if (!ctx.student_id) throw new Error('Unable to resolve your account id. Please re-login.');
+
+                try {
+                    const payload = await loadPersistedPlan(ctx.student_id);
+                    renderPlan(payload);
+                    showStatus('Loaded saved GARLIC plan.');
+                } catch (err) {
+                    if (err && Number(err.status) === 404) {
+                        showStatus('No saved plan found. Generating plan...');
+                        const payload = await generatePlan(ctx, false);
+                        renderPlan(payload);
+                        showStatus('GARLIC plan generated and saved.');
+                    } else {
+                        throw err;
+                    }
+                }
+            } catch (err) {
+                showStatus(err?.message || 'Failed to initialize GARLIC mode.', true);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            activateViewButton();
+
+            $('viewGraphBtn')?.addEventListener('click', () => {
+                __viewMode = 'graph';
+                activateViewButton();
+                if (__payload) renderPriorityGraph(__payload);
+            });
+
+            $('viewListBtn')?.addEventListener('click', () => {
+                __viewMode = 'list';
+                activateViewButton();
+                if (__payload) renderPriorityList(__payload);
+            });
+
+            $('regenBtn')?.addEventListener('click', async () => {
+                if (!__ctx) return;
+                showStatus('Regenerating GARLIC plan...');
+                try {
+                    const payload = await generatePlan(__ctx, true);
+                    renderPlan(payload);
+                    showStatus('Plan regenerated and stored.');
+                } catch (err) {
+                    showStatus(err?.message || 'Failed to regenerate plan.', true);
+                }
+            });
+
+            $('refreshBtn')?.addEventListener('click', async () => {
+                if (!__ctx?.student_id) return;
+                showStatus('Refreshing saved insights...');
+                try {
+                    const payload = await loadPersistedPlan(__ctx.student_id);
+                    renderPlan(payload);
+                    showStatus('Latest persisted plan loaded.');
+                } catch (err) {
+                    showStatus(err?.message || 'Failed to refresh insights.', true);
+                }
+            });
+
+            bootstrap();
+        });
+    </script>
+</body>
+
+</html>

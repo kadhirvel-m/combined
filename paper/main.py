@@ -26,7 +26,7 @@ import ast
 import importlib
 from dataclasses import dataclass, field
 from datetime import datetime, date, timezone, timedelta
-from collections import deque
+from collections import defaultdict, deque
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
@@ -18360,9 +18360,26 @@ def refresh_token(request: Request, payload: Optional[RefreshTokenRequest] = Bod
                 }
             )
 
+    retryable_refresh_errors: tuple[Any, ...] = (AuthRetryableError,) + tuple(RETRYABLE_EXCEPTIONS)
+    if httpx is not None:
+        retryable_refresh_errors = retryable_refresh_errors + (httpx.TimeoutException, httpx.NetworkError)  # type: ignore
+
     try:
-        # Use Supabase's refresh_session method
-        res = anon_client.auth.refresh_session(refresh_candidate)
+        # Use Supabase's refresh_session method with short backoff for transient transport disconnects.
+        res = None
+        for attempt in range(3):
+            try:
+                res = anon_client.auth.refresh_session(refresh_candidate)
+                break
+            except retryable_refresh_errors as exc:  # type: ignore
+                if attempt < 2:
+                    time.sleep(0.25 * (attempt + 1))
+                    continue
+                raise
+
+        if res is None:
+            raise HTTPException(status_code=503, detail="Authentication service temporarily unavailable; please retry")
+
         session = getattr(res, "session", None)
         access_token = getattr(session, "access_token", None) if session else None
         rotated_refresh_token = getattr(session, "refresh_token", None) if session else None
@@ -18422,6 +18439,16 @@ def refresh_token(request: Request, payload: Optional[RefreshTokenRequest] = Bod
     except HTTPException as exc:
         _security_emit("auth.refresh.failure", request=request, severity="warning", detail=str(exc.detail))
         raise
+    except AuthApiError as e:
+        # Non-retryable auth failure (e.g., truly invalid/expired refresh token).
+        detail = getattr(e, "message", None) or "Token refresh failed: invalid or expired refresh token"
+        _security_emit("auth.refresh.failure", request=request, severity="warning", error=str(detail))
+        raise HTTPException(status_code=401, detail=detail)
+    except retryable_refresh_errors as e:  # type: ignore
+        # Retryable transport/auth backend failure; do not treat as invalid token.
+        supabase_logger.warning("Token refresh transient failure", exc_info=e)
+        _security_emit("auth.refresh.failure", request=request, severity="warning", error=str(e), retryable=True)
+        raise HTTPException(status_code=503, detail="Authentication service temporarily unavailable; please retry")
     except Exception as e:
         supabase_logger.exception("Token refresh failed")
         _security_emit("auth.refresh.failure", request=request, severity="warning", error=str(e))
@@ -20541,6 +20568,1104 @@ def clear_history(authorization: Optional[str] = Header(default=None)):
     supabase = get_service_client()
     supabase.table("user_topic_history").delete().eq("user_profile_id", profile_id).execute()
     return {"message": "History cleared"}
+
+
+# ---------- GARLIC Study Plan API ----------
+
+GARLIC_STUDY_PLANS_TABLE = "garlic_study_plans"
+GARLIC_STUDY_PLAN_ITEMS_TABLE = "garlic_study_plan_items"
+GARLIC_INSIGHTS_TABLE = "garlic_insights"
+
+garlic_router = APIRouter(prefix="/api/garlic", tags=["garlic"])
+
+
+class GarlicStudyPlanGenerateIn(BaseModel):
+    student_id: str = Field(..., min_length=6, max_length=64)
+    batch_id: Optional[str] = Field(default=None, max_length=64)
+    semester: Optional[int] = Field(default=None, ge=1, le=12)
+    college: Optional[str] = Field(default=None, max_length=255)
+    regenerate: Optional[bool] = False
+
+
+class GarlicStudyPlanItemUpdateIn(BaseModel):
+    completed: Optional[bool] = None
+    recommended_time: Optional[int] = Field(default=None, ge=5, le=480)
+    estimated_time: Optional[int] = Field(default=None, ge=5, le=480)
+    status: Optional[str] = Field(default=None, max_length=32)
+    last_accessed: Optional[datetime] = None
+
+
+class GarlicInteractionIn(BaseModel):
+    item_id: Optional[str] = Field(default=None, max_length=64)
+    topic_id: Optional[str] = Field(default=None, max_length=64)
+    event_type: str = Field(default="topic_click", min_length=2, max_length=64)
+    completed: Optional[bool] = None
+    time_spent_seconds: Optional[int] = Field(default=None, ge=0, le=86400)
+
+
+def _garlic_safe_topic_ids(rows: List[Dict[str, Any]]) -> List[str]:
+    return [str(r.get("id")) for r in rows if r.get("id")]
+
+
+def _garlic_priority_score(
+    *,
+    completed: bool,
+    history_count: int,
+    avg_rating: float,
+    wishlisted: bool,
+    topic_order: int,
+) -> Tuple[float, int]:
+    # Higher is better priority. Completed topics get strong down-weighting.
+    base = 40.0
+    completion_component = -34.0 if completed else 22.0
+    history_component = min(18.0, float(max(0, history_count) * 3))
+    rating_component = max(8.0, min(34.0, avg_rating * 12.0))
+    wishlist_component = 8.0 if wishlisted else 0.0
+    order_component = max(0.0, float(6 - max(1, topic_order)))
+    score = base + completion_component + history_component + rating_component + wishlist_component + order_component
+    score = max(1.0, min(100.0, score))
+    recommended_time = int(max(20, min(150, round(24 + (score * 0.9) + (0 if completed else 8)))))
+    return round(score, 2), recommended_time
+
+
+def _garlic_clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
+
+
+def _garlic_default_reason(*, completed: bool, wishlisted: bool, history_count: int, avg_rating: float, topic_order: int) -> str:
+    reasons: List[str] = []
+    if completed:
+        reasons.append("revision reinforcement for retention")
+    else:
+        reasons.append("pending coverage before exam")
+    if wishlisted:
+        reasons.append("you marked this topic as important")
+    if history_count <= 1:
+        reasons.append("low recent practice activity")
+    if avg_rating < 2.2:
+        reasons.append("historically low confidence signals")
+    if topic_order <= 2:
+        reasons.append("core unit concept")
+    return " + ".join(reasons[:3])
+
+
+def _garlic_extract_json_payload(raw_text: str) -> Optional[Dict[str, Any]]:
+    text = (raw_text or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        pass
+    match = re.search(r"\{[\s\S]*\}", text)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+
+def _garlic_generate_ai_rankings(
+    *,
+    student_id: str,
+    semester: int,
+    college: str,
+    topics_for_ai: List[Dict[str, Any]],
+) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
+    if not GEMINI_API_KEY or not topics_for_ai:
+        return {}, []
+
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception:
+        return {}, []
+
+    compact_topics: List[Dict[str, Any]] = []
+    for row in topics_for_ai:
+        compact_topics.append(
+            {
+                "topic_id": row.get("topic_id"),
+                "subject": row.get("subject"),
+                "unit": row.get("unit"),
+                "topic": row.get("topic"),
+                "completed": bool(row.get("completed")),
+                "interaction_count": int(row.get("interaction_count") or 0),
+                "wishlist": bool(row.get("wishlist")),
+                "avg_rating": float(row.get("avg_rating") or 0.0),
+                "topic_order": int(row.get("topic_order") or 0),
+            }
+        )
+
+    prompt = textwrap.dedent(
+        """
+        You are GARLIC - an autonomous academic optimization system.
+
+        Your task:
+        Generate a personalized study plan for a student.
+
+        INPUT:
+        - Subjects, units, topics
+        - Student interaction data (time spent, completion, weak areas)
+        - Objective: maximize exam marks in minimum time
+
+        OUTPUT JSON ONLY with this exact shape:
+        {
+          "topics": [
+            {
+              "topic_id": "uuid",
+              "priority_score": 0,
+              "confidence_score": 0,
+              "estimated_time": 0,
+              "reason": "why this topic is important"
+            }
+          ],
+          "insights": ["insight 1", "insight 2"]
+        }
+
+        Rules:
+        - Score range must be 0-100.
+        - estimated_time is minutes per topic (10-240).
+        - Return 5-8 insights.
+        - Include only topic_ids that are present in input.
+        """
+    ).strip()
+
+    body = {
+        "student_id": student_id,
+        "semester": semester,
+        "college": college,
+        "topics": compact_topics,
+    }
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        resp = model.generate_content(
+            [{"text": prompt}, {"text": json.dumps(body, ensure_ascii=True)}],
+            generation_config={"temperature": 0.2, "max_output_tokens": 4096},
+        )
+    except Exception:
+        return {}, []
+
+    out_text = ""
+    try:
+        quick = getattr(resp, "text", None)
+        if isinstance(quick, str) and quick.strip():
+            out_text = quick.strip()
+    except Exception:
+        out_text = ""
+
+    if not out_text:
+        try:
+            candidates = getattr(resp, "candidates", None) or []
+            if isinstance(candidates, dict):
+                candidates = [candidates]
+            chunks: List[str] = []
+            for cand in candidates:
+                content = getattr(cand, "content", None)
+                parts = getattr(content, "parts", None) if content is not None else None
+                if parts is None and isinstance(cand, dict):
+                    ccontent = cand.get("content")
+                    if isinstance(ccontent, dict):
+                        parts = ccontent.get("parts")
+                if not parts:
+                    continue
+                for part in parts:
+                    text_val = getattr(part, "text", None)
+                    if text_val is None and isinstance(part, dict):
+                        text_val = part.get("text")
+                    if text_val:
+                        chunks.append(str(text_val))
+            out_text = "\n".join(chunks).strip()
+        except Exception:
+            out_text = ""
+
+    parsed = _garlic_extract_json_payload(out_text)
+    if not parsed:
+        return {}, []
+
+    topic_map: Dict[str, Dict[str, Any]] = {}
+    for item in (parsed.get("topics") or []):
+        if not isinstance(item, dict):
+            continue
+        topic_id = str(item.get("topic_id") or "").strip()
+        if not topic_id:
+            continue
+        try:
+            pr = float(item.get("priority_score") or 0)
+            cf = float(item.get("confidence_score") or 0)
+            tm = int(item.get("estimated_time") or 0)
+        except Exception:
+            continue
+        topic_map[topic_id] = {
+            "priority_score": round(_garlic_clamp(pr, 0.0, 100.0), 2),
+            "confidence_score": round(_garlic_clamp(cf, 0.0, 100.0), 2),
+            "estimated_time": int(_garlic_clamp(float(tm), 10.0, 240.0)),
+            "reason": str(item.get("reason") or "").strip()[:280],
+        }
+
+    insights: List[str] = []
+    for raw in (parsed.get("insights") or []):
+        text = str(raw or "").strip()
+        if text:
+            insights.append(text[:300])
+
+    return topic_map, insights[:8]
+
+
+def _garlic_get_profile_context(supabase: Client, auth_user_id: str) -> Dict[str, Any]:
+    q = (
+        supabase.table("user_profiles")
+        .select("id,batch_id,semester,batch_from,batch_to,college_id,department_id,colleges(name),departments(name)")
+        .eq("auth_user_id", auth_user_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic profile): {q.error}")
+    if not q.data:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    row = q.data[0]
+    college_data = row.get("colleges")
+    if isinstance(college_data, list):
+        college_name = (college_data[0] or {}).get("name") if college_data else None
+    elif isinstance(college_data, dict):
+        college_name = college_data.get("name")
+    else:
+        college_name = None
+    dept_data = row.get("departments")
+    if isinstance(dept_data, list):
+        dept_name = (dept_data[0] or {}).get("name") if dept_data else None
+    elif isinstance(dept_data, dict):
+        dept_name = dept_data.get("name")
+    else:
+        dept_name = None
+    return {
+        "profile_id": row.get("id"),
+        "batch_id": row.get("batch_id"),
+        "semester": row.get("semester"),
+        "batch_from": row.get("batch_from"),
+        "batch_to": row.get("batch_to"),
+        "college_id": row.get("college_id"),
+        "department_id": row.get("department_id"),
+        "college_name": college_name,
+        "department_name": dept_name,
+    }
+
+
+def _garlic_resolve_batch_and_semester(
+    supabase: Client,
+    *,
+    auth_user_id: str,
+    profile_ctx: Dict[str, Any],
+    provided_batch_id: Optional[str],
+    provided_semester: Optional[int],
+) -> Tuple[Optional[str], Optional[int]]:
+    batch_id = str(provided_batch_id or profile_ctx.get("batch_id") or "").strip() or None
+    semester_val = int(provided_semester or profile_ctx.get("semester") or 0) or None
+
+    if batch_id and semester_val:
+        return batch_id, semester_val
+
+    profile_id = str(profile_ctx.get("profile_id") or "").strip()
+    edu_row: Dict[str, Any] = {}
+    if profile_id:
+        eq = (
+            supabase.table("user_education")
+            .select("batch_id,batch_range,current_semester,college_id,department_id")
+            .eq("user_profile_id", profile_id)
+            .order("current_semester", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not getattr(eq, "error", None) and eq.data:
+            edu_row = eq.data[0] or {}
+
+    if not semester_val:
+        try:
+            semester_val = int(edu_row.get("current_semester") or 0) or None
+        except Exception:
+            semester_val = None
+
+    if not batch_id:
+        edu_batch_id = str(edu_row.get("batch_id") or "").strip()
+        if edu_batch_id:
+            batch_id = edu_batch_id
+
+    if not batch_id:
+        college_id = str(edu_row.get("college_id") or profile_ctx.get("college_id") or "").strip()
+        department_id = str(edu_row.get("department_id") or profile_ctx.get("department_id") or "").strip()
+
+        from_year = profile_ctx.get("batch_from")
+        to_year = profile_ctx.get("batch_to")
+
+        if (not from_year or not to_year) and edu_row.get("batch_range"):
+            years = re.findall(r"\b(\d{4})\b", str(edu_row.get("batch_range") or ""))
+            if len(years) >= 2:
+                from_year = int(years[0])
+                to_year = int(years[1])
+
+        try:
+            fy = int(from_year) if from_year is not None else None
+            ty = int(to_year) if to_year is not None else None
+        except Exception:
+            fy, ty = None, None
+
+        if college_id and department_id and fy and ty:
+            bq = (
+                supabase.table("batches")
+                .select("id")
+                .eq("college_id", college_id)
+                .eq("department_id", department_id)
+                .eq("from_year", fy)
+                .eq("to_year", ty)
+                .limit(1)
+                .execute()
+            )
+            if not getattr(bq, "error", None) and bq.data:
+                batch_id = str(bq.data[0].get("id") or "").strip() or None
+
+    return batch_id, semester_val
+
+
+def _garlic_fetch_plan_payload(supabase: Client, plan_row: Dict[str, Any], *, plan_status: str = "loaded") -> Dict[str, Any]:
+    plan_id = str(plan_row.get("id") or "")
+    if not plan_id:
+        raise HTTPException(status_code=500, detail="GARLIC plan id missing")
+
+    items_q = (
+        supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+        .select(
+            "id,plan_id,subject_id,unit_id,topic_id,priority_score,confidence_score,estimated_time,recommended_time,reason,status,completed,last_accessed,manual_adjusted,interaction_count,"\
+            "syllabus_courses(id,course_code,title,type),"\
+            "syllabus_units(id,unit_title,order_in_course),"\
+            "syllabus_topics(id,topic,order_in_unit)"
+        )
+        .eq("plan_id", plan_id)
+        .order("priority_score", desc=True)
+        .execute()
+    )
+    if getattr(items_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic items): {items_q.error}")
+
+    rows = items_q.data or []
+    subjects_by_id: Dict[str, Dict[str, Any]] = {}
+    flat_topics: List[Dict[str, Any]] = []
+
+    for row in rows:
+        sdata = row.get("syllabus_courses") or {}
+        udata = row.get("syllabus_units") or {}
+        tdata = row.get("syllabus_topics") or {}
+
+        subject_id = str(row.get("subject_id") or sdata.get("id") or "unknown-subject")
+        unit_id = str(row.get("unit_id") or udata.get("id") or "unknown-unit")
+
+        subject = subjects_by_id.get(subject_id)
+        if not subject:
+            subject = {
+                "subject_id": subject_id,
+                "course_code": sdata.get("course_code"),
+                "subject_title": sdata.get("title") or "Subject",
+                "course_type": sdata.get("type") or "",
+                "units": [],
+                "_units": {},
+            }
+            subjects_by_id[subject_id] = subject
+
+        unit = subject["_units"].get(unit_id)
+        if not unit:
+            unit = {
+                "unit_id": unit_id,
+                "unit_title": udata.get("unit_title") or "Unit",
+                "order_in_course": udata.get("order_in_course") or 0,
+                "topics": [],
+            }
+            subject["_units"][unit_id] = unit
+            subject["units"].append(unit)
+
+        topic_entry = {
+            "item_id": row.get("id"),
+            "topic_id": row.get("topic_id") or tdata.get("id"),
+            "topic": tdata.get("topic") or "Topic",
+            "order_in_unit": tdata.get("order_in_unit") or 0,
+            "priority_score": float(row.get("priority_score") or 0),
+            "confidence_score": float(row.get("confidence_score") or 0),
+            "estimated_time": int(row.get("estimated_time") or row.get("recommended_time") or 30),
+            "recommended_time": int(row.get("recommended_time") or row.get("estimated_time") or 30),
+            "reason": str(row.get("reason") or "").strip(),
+            "status": str(row.get("status") or ("completed" if row.get("completed") else "not_started")),
+            "completed": bool(row.get("completed")),
+            "last_accessed": row.get("last_accessed"),
+            "manual_adjusted": bool(row.get("manual_adjusted")),
+            "interaction_count": int(row.get("interaction_count") or 0),
+        }
+        unit["topics"].append(topic_entry)
+        flat_topics.append(topic_entry)
+
+    subjects = list(subjects_by_id.values())
+    for subject in subjects:
+        for unit in subject["units"]:
+            unit["topics"].sort(key=lambda t: (-float(t.get("priority_score") or 0), int(t.get("order_in_unit") or 0)))
+            unit.pop("order_in_course", None)
+        subject["units"].sort(key=lambda u: str(u.get("unit_title") or ""))
+        subject.pop("_units", None)
+    subjects.sort(key=lambda s: str(s.get("subject_title") or ""))
+
+    total_topics = len(flat_topics)
+    completed_topics = sum(1 for t in flat_topics if t.get("completed"))
+    high_priority_topics = sum(1 for t in flat_topics if float(t.get("priority_score") or 0) >= 75.0)
+    total_estimated_minutes = sum(int(t.get("estimated_time") or t.get("recommended_time") or 0) for t in flat_topics)
+
+    insights_q = (
+        supabase.table(GARLIC_INSIGHTS_TABLE)
+        .select("id,insight_text,created_at")
+        .eq("plan_id", plan_id)
+        .order("created_at", desc=False)
+        .limit(12)
+        .execute()
+    )
+    insights: List[str] = []
+    if not getattr(insights_q, "error", None):
+        for row in (insights_q.data or []):
+            text = str(row.get("insight_text") or "").strip()
+            if text:
+                insights.append(text)
+
+    daily_focus = [
+        {
+            "item_id": t.get("item_id"),
+            "topic_id": t.get("topic_id"),
+            "topic": t.get("topic"),
+            "priority_score": float(t.get("priority_score") or 0),
+            "estimated_time": int(t.get("estimated_time") or t.get("recommended_time") or 30),
+            "reason": t.get("reason") or "",
+            "status": t.get("status") or "not_started",
+            "completed": bool(t.get("completed")),
+        }
+        for t in sorted(flat_topics, key=lambda x: (bool(x.get("completed")), -float(x.get("priority_score") or 0), str(x.get("topic") or "")))[:3]
+    ]
+
+    return {
+        "plan": {
+            "id": plan_id,
+            "student_id": plan_row.get("student_id"),
+            "batch_id": plan_row.get("batch_id"),
+            "semester": plan_row.get("semester"),
+            "college": plan_row.get("college"),
+            "generated_at": plan_row.get("generated_at"),
+            "last_updated": plan_row.get("last_updated"),
+            "status": plan_row.get("status"),
+            "plan_status": plan_status,
+        },
+        "summary": {
+            "total_topics": total_topics,
+            "completed_topics": completed_topics,
+            "remaining_topics": max(0, total_topics - completed_topics),
+            "high_priority_topics": high_priority_topics,
+            "total_estimated_minutes": total_estimated_minutes,
+        },
+        "daily_focus": daily_focus,
+        "insights": insights,
+        "subjects": subjects,
+    }
+
+
+def _garlic_generate_plan(
+    *,
+    supabase: Client,
+    auth_user_id: str,
+    profile_id: str,
+    batch_id: str,
+    semester: int,
+    college: str,
+    regenerate: bool,
+) -> Dict[str, Any]:
+    plan_q = (
+        supabase.table(GARLIC_STUDY_PLANS_TABLE)
+        .select("id,student_id,batch_id,semester,college,generated_at,last_updated,status")
+        .eq("student_id", auth_user_id)
+        .eq("batch_id", batch_id)
+        .eq("semester", semester)
+        .limit(1)
+        .execute()
+    )
+    if getattr(plan_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic plan lookup): {plan_q.error}")
+
+    existing_plan = plan_q.data[0] if plan_q.data else None
+    if existing_plan and not regenerate:
+        return _garlic_fetch_plan_payload(supabase, existing_plan)
+
+    courses_q = (
+        supabase.table("syllabus_courses")
+        .select("id,course_code,title,semester,type")
+        .eq("batch_id", batch_id)
+        .eq("semester", semester)
+        .order("course_code", desc=False)
+        .execute()
+    )
+    if getattr(courses_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic courses): {courses_q.error}")
+    courses = courses_q.data or []
+    if not courses:
+        raise HTTPException(status_code=404, detail="No syllabus courses found for the selected batch/semester")
+
+    course_ids = [str(c.get("id")) for c in courses if c.get("id")]
+    units_q = (
+        supabase.table("syllabus_units")
+        .select("id,course_id,unit_title,order_in_course")
+        .in_("course_id", course_ids)
+        .order("order_in_course", desc=False)
+        .execute()
+    )
+    if getattr(units_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic units): {units_q.error}")
+    units = units_q.data or []
+
+    unit_ids = [str(u.get("id")) for u in units if u.get("id")]
+    topics: List[Dict[str, Any]] = []
+    if unit_ids:
+        topics_q = (
+            supabase.table("syllabus_topics")
+            .select("id,unit_id,topic,order_in_unit")
+            .in_("unit_id", unit_ids)
+            .order("order_in_unit", desc=False)
+            .execute()
+        )
+        if getattr(topics_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic topics): {topics_q.error}")
+        topics = topics_q.data or []
+
+    topic_ids = _garlic_safe_topic_ids(topics)
+    completed_ids: Set[str] = set()
+    wishlisted_ids: Set[str] = set()
+    history_counts: Dict[str, int] = {}
+    avg_ratings: Dict[str, float] = {}
+
+    if topic_ids:
+        progress_q = (
+            supabase.table("user_topic_progress")
+            .select("topic_id")
+            .eq("user_profile_id", profile_id)
+            .in_("topic_id", topic_ids)
+            .execute()
+        )
+        if getattr(progress_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic progress): {progress_q.error}")
+        completed_ids = {str(r.get("topic_id")) for r in (progress_q.data or []) if r.get("topic_id")}
+
+        wishlist_q = (
+            supabase.table("user_topic_wishlist")
+            .select("topic_id")
+            .eq("user_profile_id", profile_id)
+            .in_("topic_id", topic_ids)
+            .execute()
+        )
+        if getattr(wishlist_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic wishlist): {wishlist_q.error}")
+        wishlisted_ids = {str(r.get("topic_id")) for r in (wishlist_q.data or []) if r.get("topic_id")}
+
+        history_q = (
+            supabase.table("user_topic_history")
+            .select("topic_id")
+            .eq("user_profile_id", profile_id)
+            .in_("topic_id", topic_ids)
+            .order("viewed_at", desc=True)
+            .limit(1200)
+            .execute()
+        )
+        if getattr(history_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic history): {history_q.error}")
+        for row in (history_q.data or []):
+            topic_id = str(row.get("topic_id") or "")
+            if not topic_id:
+                continue
+            history_counts[topic_id] = history_counts.get(topic_id, 0) + 1
+
+        ratings_q = (
+            supabase.table("topic_ratings")
+            .select("topic_id,rating")
+            .in_("topic_id", topic_ids)
+            .execute()
+        )
+        if getattr(ratings_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic ratings): {ratings_q.error}")
+        rating_buf: Dict[str, List[float]] = defaultdict(list)
+        for row in (ratings_q.data or []):
+            topic_id = str(row.get("topic_id") or "")
+            rating = row.get("rating")
+            if not topic_id or rating is None:
+                continue
+            try:
+                rating_buf[topic_id].append(float(rating))
+            except Exception:
+                continue
+        avg_ratings = {
+            topic_id: (sum(values) / max(1, len(values)))
+            for topic_id, values in rating_buf.items()
+            if values
+        }
+
+    course_by_id = {str(c.get("id")): c for c in courses if c.get("id")}
+    unit_by_id = {str(u.get("id")): u for u in units if u.get("id")}
+
+    topics_for_ai: List[Dict[str, Any]] = []
+    for topic in topics:
+        topic_id = str(topic.get("id") or "")
+        unit_id = str(topic.get("unit_id") or "")
+        unit = unit_by_id.get(unit_id) or {}
+        course_id = str(unit.get("course_id") or "")
+        course = course_by_id.get(course_id) or {}
+        topics_for_ai.append(
+            {
+                "topic_id": topic_id,
+                "subject": course.get("title") or "",
+                "unit": unit.get("unit_title") or "",
+                "topic": topic.get("topic") or "",
+                "completed": topic_id in completed_ids,
+                "interaction_count": int(history_counts.get(topic_id, 0)),
+                "wishlist": topic_id in wishlisted_ids,
+                "avg_rating": float(avg_ratings.get(topic_id, 0.0)),
+                "topic_order": int(topic.get("order_in_unit") or 0),
+            }
+        )
+
+    ai_topic_map, ai_insights = _garlic_generate_ai_rankings(
+        student_id=auth_user_id,
+        semester=semester,
+        college=college,
+        topics_for_ai=topics_for_ai,
+    )
+
+    snapshot = {
+        "generated_for": {
+            "student_id": auth_user_id,
+            "batch_id": batch_id,
+            "semester": semester,
+            "college": college,
+        },
+        "signals": {
+            "progress_topics": len(completed_ids),
+            "history_rows": sum(history_counts.values()) if history_counts else 0,
+            "wishlist_topics": len(wishlisted_ids),
+            "rating_topics": len(avg_ratings),
+        },
+    }
+
+    def _is_missing_plan_snapshot_column(exc: Exception) -> bool:
+        msg = str(exc or "").lower()
+        return (
+            "plan_snapshot" in msg
+            and "garlic_study_plans" in msg
+            and ("could not find" in msg or "schema cache" in msg)
+        )
+
+    def _extract_missing_item_column(exc: Exception) -> Optional[str]:
+        msg = str(exc or "")
+        lowered = msg.lower()
+        if "garlic_study_plan_items" not in lowered:
+            return None
+        m = re.search(r"'([a-zA-Z0-9_]+)'\s+column", msg)
+        if m:
+            return str(m.group(1) or "").strip() or None
+        return None
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if existing_plan:
+        plan_id = str(existing_plan.get("id"))
+        update_payload: Dict[str, Any] = {
+            "college": college,
+            "status": "regenerated" if regenerate else "generated",
+            "last_updated": now_iso,
+            "plan_snapshot": snapshot,
+        }
+        try:
+            upd = (
+                supabase.table(GARLIC_STUDY_PLANS_TABLE)
+                .update(update_payload)
+                .eq("id", plan_id)
+                .execute()
+            )
+        except APIError as exc:
+            if not _is_missing_plan_snapshot_column(exc):
+                raise
+            update_payload.pop("plan_snapshot", None)
+            upd = (
+                supabase.table(GARLIC_STUDY_PLANS_TABLE)
+                .update(update_payload)
+                .eq("id", plan_id)
+                .execute()
+            )
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic plan update): {upd.error}")
+        del_items = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).delete().eq("plan_id", plan_id).execute()
+        if getattr(del_items, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic plan reset): {del_items.error}")
+        supabase.table(GARLIC_INSIGHTS_TABLE).delete().eq("plan_id", plan_id).execute()
+    else:
+        insert_payload: Dict[str, Any] = {
+            "student_id": auth_user_id,
+            "batch_id": batch_id,
+            "semester": semester,
+            "college": college,
+            "generated_at": now_iso,
+            "last_updated": now_iso,
+            "status": "generated",
+            "plan_snapshot": snapshot,
+        }
+        try:
+            ins = (
+                supabase.table(GARLIC_STUDY_PLANS_TABLE)
+                .insert(insert_payload)
+                .execute()
+            )
+        except APIError as exc:
+            if not _is_missing_plan_snapshot_column(exc):
+                raise
+            insert_payload.pop("plan_snapshot", None)
+            ins = (
+                supabase.table(GARLIC_STUDY_PLANS_TABLE)
+                .insert(insert_payload)
+                .execute()
+            )
+        if getattr(ins, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic plan insert): {ins.error}")
+        if not ins.data:
+            raise HTTPException(status_code=500, detail="Failed to create GARLIC plan")
+        plan_id = str(ins.data[0].get("id"))
+
+    item_rows: List[Dict[str, Any]] = []
+    for topic in topics:
+        topic_id = str(topic.get("id") or "")
+        unit_id = str(topic.get("unit_id") or "")
+        unit = unit_by_id.get(unit_id) or {}
+        course_id = str(unit.get("course_id") or "")
+        completed = topic_id in completed_ids
+        score, rec_time = _garlic_priority_score(
+            completed=completed,
+            history_count=history_counts.get(topic_id, 0),
+            avg_rating=float(avg_ratings.get(topic_id, 1.8)),
+            wishlisted=topic_id in wishlisted_ids,
+            topic_order=int(topic.get("order_in_unit") or 0),
+        )
+        ai_row = ai_topic_map.get(topic_id) or {}
+        priority_score = round(_garlic_clamp(float(ai_row.get("priority_score") or score), 1.0, 100.0), 2)
+        confidence_score = round(
+            _garlic_clamp(
+                float(ai_row.get("confidence_score") or (max(12.0, min(96.0, (avg_ratings.get(topic_id, 2.2) * 20.0) - (6.0 if completed else 0.0))))),
+                0.0,
+                100.0,
+            ),
+            2,
+        )
+        estimated_time = int(_garlic_clamp(float(ai_row.get("estimated_time") or rec_time), 10.0, 240.0))
+        status = "completed" if completed else ("in_progress" if history_counts.get(topic_id, 0) > 0 else "not_started")
+        reason = str(
+            ai_row.get("reason")
+            or _garlic_default_reason(
+                completed=completed,
+                wishlisted=topic_id in wishlisted_ids,
+                history_count=history_counts.get(topic_id, 0),
+                avg_rating=float(avg_ratings.get(topic_id, 1.8)),
+                topic_order=int(topic.get("order_in_unit") or 0),
+            )
+        ).strip()
+        item_rows.append(
+            {
+                "plan_id": plan_id,
+                "subject_id": course_id or None,
+                "unit_id": unit_id or None,
+                "topic_id": topic_id or None,
+                "priority_score": priority_score,
+                "confidence_score": confidence_score,
+                "estimated_time": estimated_time,
+                "recommended_time": estimated_time,
+                "reason": reason,
+                "status": status,
+                "completed": completed,
+                "last_accessed": None,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+                "manual_adjusted": False,
+                "interaction_count": max(0, history_counts.get(topic_id, 0)),
+            }
+        )
+
+    if item_rows:
+        item_payload = [dict(row) for row in item_rows]
+        while True:
+            try:
+                ins_items = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).insert(item_payload).execute()
+                break
+            except APIError as exc:
+                missing_column = _extract_missing_item_column(exc)
+                if missing_column:
+                    for row in item_payload:
+                        row.pop(missing_column, None)
+                    continue
+                raise
+        if getattr(ins_items, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic item insert): {ins_items.error}")
+
+    insights_rows = [{"plan_id": plan_id, "insight_text": text} for text in (ai_insights or []) if str(text or "").strip()]
+    if not insights_rows:
+        insights_rows = [
+            {"plan_id": plan_id, "insight_text": f"You are weak in {sum(1 for tid in topic_ids if float(avg_ratings.get(tid, 0.0)) < 2.2)} topic clusters based on interaction confidence."},
+            {"plan_id": plan_id, "insight_text": f"{sum(1 for tid in topic_ids if tid in wishlisted_ids)} topics were marked important in your wishlist."},
+            {"plan_id": plan_id, "insight_text": f"{sum(1 for tid in topic_ids if tid not in completed_ids)} topics remain uncovered for semester {semester}."},
+            {"plan_id": plan_id, "insight_text": f"High engagement observed in {sum(1 for c in history_counts.values() if c >= 3)} topics from your recent study history."},
+            {"plan_id": plan_id, "insight_text": "Plan prioritizes high-value topics first to maximize exam marks per hour."},
+        ]
+    try:
+        supabase.table(GARLIC_INSIGHTS_TABLE).insert(insights_rows[:8]).execute()
+    except Exception:
+        pass
+
+    plan_refresh_q = (
+        supabase.table(GARLIC_STUDY_PLANS_TABLE)
+        .select("id,student_id,batch_id,semester,college,generated_at,last_updated,status")
+        .eq("id", plan_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(plan_refresh_q, "error", None) or not plan_refresh_q.data:
+        raise HTTPException(status_code=500, detail="GARLIC plan created but failed to reload")
+    return _garlic_fetch_plan_payload(
+        supabase,
+        plan_refresh_q.data[0],
+        plan_status="regenerated" if regenerate else "generated",
+    )
+
+
+@garlic_router.post("/study-plan/generate", summary="Generate or fetch GARLIC study plan")
+async def api_garlic_generate_study_plan(
+    payload: GarlicStudyPlanGenerateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, profile_id = _ensure_user_and_profile(token)
+    if str(payload.student_id) != auth_user_id:
+        raise HTTPException(status_code=403, detail="You can only generate your own GARLIC plan")
+
+    supabase = get_service_client()
+    profile_ctx = _garlic_get_profile_context(supabase, auth_user_id)
+
+    batch_id, semester_val = _garlic_resolve_batch_and_semester(
+        supabase,
+        auth_user_id=auth_user_id,
+        profile_ctx=profile_ctx,
+        provided_batch_id=payload.batch_id,
+        provided_semester=payload.semester,
+    )
+    semester = int(semester_val or 0)
+    college = str(payload.college or profile_ctx.get("college_name") or "").strip()
+
+    if not batch_id:
+        raise HTTPException(status_code=400, detail="Unable to resolve batch id from your profile. Please update college/department/batch details.")
+    if semester < 1:
+        raise HTTPException(status_code=400, detail="Unable to resolve semester from your profile. Please update current semester.")
+
+    return await run_in_threadpool(
+        _garlic_generate_plan,
+        supabase=supabase,
+        auth_user_id=auth_user_id,
+        profile_id=profile_id,
+        batch_id=batch_id,
+        semester=semester,
+        college=college,
+        regenerate=bool(payload.regenerate),
+    )
+
+
+@garlic_router.post("/generate", summary="Generate GARLIC plan if missing, else return saved plan")
+async def api_garlic_generate_v1(
+    payload: GarlicStudyPlanGenerateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    payload.regenerate = False
+    return await api_garlic_generate_study_plan(payload, authorization)
+
+
+@garlic_router.post("/regenerate", summary="Explicitly regenerate GARLIC plan")
+async def api_garlic_regenerate_v1(
+    payload: GarlicStudyPlanGenerateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    payload.regenerate = True
+    return await api_garlic_generate_study_plan(payload, authorization)
+
+
+@garlic_router.get("/study-plan/{student_id}", summary="Get latest GARLIC study plan")
+async def api_garlic_get_study_plan(
+    student_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    if str(student_id) != auth_user_id:
+        raise HTTPException(status_code=403, detail="You can only read your own GARLIC plan")
+
+    supabase = get_service_client()
+    plan_q = (
+        supabase.table(GARLIC_STUDY_PLANS_TABLE)
+        .select("id,student_id,batch_id,semester,college,generated_at,last_updated,status")
+        .eq("student_id", auth_user_id)
+        .order("last_updated", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if getattr(plan_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic fetch): {plan_q.error}")
+    if not plan_q.data:
+        raise HTTPException(status_code=404, detail="No GARLIC plan found")
+    return await run_in_threadpool(_garlic_fetch_plan_payload, supabase, plan_q.data[0])
+
+
+@garlic_router.get("/plan/{student_id}", summary="Load persisted GARLIC plan")
+async def api_garlic_get_plan_v1(
+    student_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    return await api_garlic_get_study_plan(student_id, authorization)
+
+
+@garlic_router.patch("/study-plan/items/{item_id}", summary="Update GARLIC plan item")
+def api_garlic_update_plan_item(
+    item_id: str,
+    payload: GarlicStudyPlanItemUpdateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    item_q = (
+        supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+        .select("id,plan_id,topic_id,garlic_study_plans!inner(student_id)")
+        .eq("id", item_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(item_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic item): {item_q.error}")
+    if not item_q.data:
+        raise HTTPException(status_code=404, detail="GARLIC item not found")
+
+    owner = item_q.data[0].get("garlic_study_plans") or {}
+    owner_id = owner.get("student_id") if isinstance(owner, dict) else None
+    if str(owner_id or "") != auth_user_id:
+        raise HTTPException(status_code=403, detail="Not allowed to modify this GARLIC item")
+
+    patch: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if payload.completed is not None:
+        patch["completed"] = bool(payload.completed)
+        patch["status"] = "completed" if payload.completed else "not_started"
+    if payload.recommended_time is not None:
+        patch["recommended_time"] = int(payload.recommended_time)
+        patch["estimated_time"] = int(payload.recommended_time)
+        patch["manual_adjusted"] = True
+    if payload.estimated_time is not None:
+        patch["estimated_time"] = int(payload.estimated_time)
+        patch["recommended_time"] = int(payload.estimated_time)
+        patch["manual_adjusted"] = True
+    if payload.status is not None:
+        normalized_status = str(payload.status).strip().lower().replace(" ", "_")
+        if normalized_status in {"not_started", "in_progress", "completed"}:
+            patch["status"] = normalized_status
+            if normalized_status == "completed":
+                patch["completed"] = True
+    if payload.last_accessed is not None:
+        patch["last_accessed"] = payload.last_accessed.isoformat()
+
+    upd = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).update(patch).eq("id", item_id).execute()
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic item update): {upd.error}")
+    return {"ok": True, "item_id": item_id}
+
+
+@garlic_router.post("/study-plan/interaction", summary="Track GARLIC topic interaction")
+def api_garlic_track_interaction(
+    payload: GarlicInteractionIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    item_id = str(payload.item_id or "").strip()
+    if not item_id and payload.topic_id:
+        latest_plan_q = (
+            supabase.table(GARLIC_STUDY_PLANS_TABLE)
+            .select("id")
+            .eq("student_id", auth_user_id)
+            .order("last_updated", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if getattr(latest_plan_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic interaction plan): {latest_plan_q.error}")
+        if latest_plan_q.data:
+            plan_id = latest_plan_q.data[0].get("id")
+            row_q = (
+                supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+                .select("id")
+                .eq("plan_id", plan_id)
+                .eq("topic_id", str(payload.topic_id))
+                .limit(1)
+                .execute()
+            )
+            if not getattr(row_q, "error", None) and row_q.data:
+                item_id = str(row_q.data[0].get("id"))
+
+    if item_id:
+        row_q = (
+            supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+            .select("id,interaction_count,garlic_study_plans!inner(student_id)")
+            .eq("id", item_id)
+            .limit(1)
+            .execute()
+        )
+        if getattr(row_q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic interaction item): {row_q.error}")
+        if row_q.data:
+            owner = row_q.data[0].get("garlic_study_plans") or {}
+            owner_id = owner.get("student_id") if isinstance(owner, dict) else None
+            if str(owner_id or "") == auth_user_id:
+                next_count = int(row_q.data[0].get("interaction_count") or 0) + 1
+                patch: Dict[str, Any] = {
+                    "interaction_count": next_count,
+                    "last_accessed": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                if payload.completed is not None:
+                    patch["completed"] = bool(payload.completed)
+                    patch["status"] = "completed" if payload.completed else "in_progress"
+                elif str(payload.event_type or "").strip().lower() in {"topic_click", "open_topic", "start_topic"}:
+                    patch["status"] = "in_progress"
+                supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).update(patch).eq("id", item_id).execute()
+
+    # Store event in analytics stream to support future digital-twin refinements.
+    event_payload = {
+        "user_id": auth_user_id,
+        "event_type": "garlic_interaction",
+        "event_data": {
+            "item_id": item_id or None,
+            "topic_id": payload.topic_id,
+            "event_type": payload.event_type,
+            "completed": payload.completed,
+            "time_spent_seconds": payload.time_spent_seconds,
+            "at": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+    try:
+        supabase.table("analytics_events").insert(event_payload).execute()
+    except Exception:
+        pass
+
+    return {"ok": True}
 
 
 # ---------- Profile update & uploads ----------
@@ -30390,6 +31515,7 @@ def create_app() -> FastAPI:
     app.include_router(learning_tracks_router)
     app.include_router(print_router)
     app.include_router(academics_router)
+    app.include_router(garlic_router)
     app.include_router(marketplace_router)
     app.include_router(teacher_router)
     app.include_router(youtube_transcript_router)
