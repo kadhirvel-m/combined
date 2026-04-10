@@ -104,42 +104,51 @@
         }
 
         .pri-high {
-            background: rgba(245, 158, 11, .16);
-            color: #92400e;
+            background: rgba(158, 75, 138, .16);
+            color: #6b2f66;
         }
 
         .pri-mid {
-            background: rgba(59, 130, 246, .14);
-            color: #1d4ed8;
+            background: rgba(176, 106, 179, .15);
+            color: #7a3f79;
         }
 
         .pri-low {
-            background: rgba(107, 114, 128, .15);
-            color: #374151;
+            background: rgba(76, 42, 89, .14);
+            color: #4c2a59;
         }
 
         .dark .pri-high {
-            color: #fde68a;
+            color: #f3e7f2;
         }
 
         .dark .pri-mid {
-            color: #bfdbfe;
+            color: #e7d0e4;
         }
 
         .dark .pri-low {
-            color: #d1d5db;
+            color: #d9b4d3;
         }
 
         .st-not_started {
-            background: rgba(107, 114, 128, .14);
+            background: rgba(76, 42, 89, .14);
+            color: #4c2a59;
         }
 
         .st-in_progress {
-            background: rgba(59, 130, 246, .16);
+            background: rgba(158, 75, 138, .18);
+            color: #6b2f66;
         }
 
         .st-completed {
-            background: rgba(16, 185, 129, .18);
+            background: rgba(176, 106, 179, .18);
+            color: #7a3f79;
+        }
+
+        .dark .st-not_started,
+        .dark .st-in_progress,
+        .dark .st-completed {
+            color: #f3e7f2;
         }
 
         .neo-line {
@@ -173,6 +182,10 @@
             background: radial-gradient(circle at center, rgba(158, 75, 138, .22), transparent 72%);
             pointer-events: none;
         }
+
+        .metric-ring {
+            background: conic-gradient(var(--ring-color, #9E4B8A) calc(var(--pct, 0)*1%), rgba(158, 75, 138, .16) 0);
+        }
     </style>
 </head>
 
@@ -203,6 +216,12 @@
                     aria-label="Toggle theme">
                     <span class="material-symbols-rounded">dark_mode</span>
                     <span class="hidden lg:block">Theme</span>
+                </button>
+                <button id="regenBtnNav" type="button"
+                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-700 hover:brightness-110 transition"
+                    aria-label="Regenerate GARLIC plan">
+                    <span class="material-symbols-rounded text-[18px]">autorenew</span>
+                    <span class="hidden lg:block">Regenerate</span>
                 </button>
                 <div id="devModeToggleDesktop" class="dev-toggle-wrap hidden">
                     <span class="dev-toggle-label" id="devLabelDesktop">DEV</span>
@@ -241,6 +260,10 @@
                     class="inline-flex items-center justify-center size-10 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5 transition">
                     <span class="material-symbols-rounded">dark_mode</span>
                 </button>
+                <button id="regenBtnNavMobile" type="button" aria-label="Regenerate GARLIC plan"
+                    class="inline-flex items-center justify-center size-10 rounded-full bg-gradient-to-r from-brand-500 to-brand-700 text-white hover:brightness-110 transition">
+                    <span class="material-symbols-rounded text-[18px]">autorenew</span>
+                </button>
                 <div id="devModeToggleMobile" class="dev-toggle-wrap hidden">
                     <label class="dev-toggle" title="Developer Mode">
                         <input type="checkbox" id="devToggleMobile" />
@@ -252,88 +275,77 @@
     </header>
 
     <main class="container relative pt-6 md:pt-8 pb-10 space-y-5 md:space-y-6">
-        <!-- Hero / Agent Command Surface -->
-        <section class="glass-panel rounded-3xl ring-1 ring-brand-500/25 p-5 md:p-6 neo-line animate-fadeUp">
-            <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-                <div class="max-w-3xl">
-                    <div class="inline-flex items-center gap-2 rounded-full px-3 py-1 ring-1 ring-brand-500/30 bg-brand-500/10 text-brand-700 dark:text-brandlt-200 text-xs font-semibold">
-                        <span class="material-symbols-rounded text-[15px]">auto_awesome</span>
-                        GARLIC AUTONOMOUS AGENT MODE
+        <!-- ================= HERO / OVERVIEW (GARLIC) ================= -->
+        <section class="relative overflow-hidden p-2 md:p-3 animate-fadeUp">
+            <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-3 md:gap-10 items-start relative z-10">
+                <!-- Left: GARLIC headline + KPIs -->
+                <div>
+                    <div class="inline-flex items-center gap-2 text-brand-700 dark:text-brandlt-200 text-xs font-semibold">
+                        <span class="material-symbols-rounded text-[15px]">bug_report</span>
+                        GARLIC AUTONOMOUS COMMAND MODE
                     </div>
-                    <h1 class="mt-3 text-2xl md:text-4xl font-extrabold tracking-tight leading-tight">AI Study Operations Cockpit</h1>
-                    <p class="mt-2 text-sm md:text-base text-neutral-600 dark:text-white/75">Execution-first learning control center. Priorities, confidence signals, and strategy insights are continuously orchestrated for exam-maximized output.</p>
-                    <div class="mt-4 flex flex-wrap gap-2 text-[11px]">
-                        <span class="metric-chip">Gemini 2.5 Flash</span>
-                        <span class="metric-chip">Persistent Plan Memory</span>
-                        <span class="metric-chip">Agentic Reasoning Layer</span>
+                    <div class="mt-3 mb-4 flex items-start gap-4 md:gap-5">
+                        <img src="assets/img/garlic-logo.png" alt="GARLIC" class="h-16 md:h-24 w-auto object-contain shrink-0" />
+                        <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight">
+                            Your GARLIC <span class="command-center-gradient bg-gradient-to-r from-brand-500 via-brand-700 to-brand-900 dark:from-brand-300 dark:via-brand-500 dark:to-brand-700 bg-clip-text text-transparent">Operations Center</span>
+                        </h1>
+                    </div>
+                    <p class="text-neutral-600 dark:text-white/70 max-w-xl">AI cockpit for high-impact revision with priority-driven daily execution.</p>
+
+                    <!-- KPI cards (4) -->
+                    <div class="mt-5 md:mt-10 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl md:max-w-5xl">
+                        <article class="glass-panel kpi-card rounded-2xl p-3 md:p-4 flex flex-col gap-2 ring-1 ring-black/10 dark:ring-white/15 w-full h-[132px]">
+                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">TOPICS DONE</p>
+                            <div class="flex items-end gap-2">
+                                <span id="kpiTopicsDone" class="text-2xl md:text-3xl font-extrabold">0</span>
+                                <span class="text-xs text-neutral-500 dark:text-white/50">/ <span id="kpiTopicsTotal">0</span></span>
+                            </div>
+                            <div class="h-1 rounded-full bg-brand-500/20 overflow-hidden">
+                                <div id="kpiTopicsBar" class="h-full w-0 bg-brand-500"></div>
+                            </div>
+                        </article>
+                        <article class="glass-panel kpi-card rounded-2xl p-3 md:p-4 flex flex-col gap-2 ring-1 ring-black/10 dark:ring-white/15 w-full h-[132px]">
+                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">COMPLETION</p>
+                            <div class="relative h-16 w-16">
+                                <div id="kpiCompletionRing" class="absolute inset-0 rounded-full metric-ring" style="--pct:0;--ring-color:#9E4B8A"></div>
+                                <div id="kpiCompletion" class="absolute inset-0 flex items-center justify-center text-sm font-bold">0%</div>
+                            </div>
+                        </article>
+                        <article class="glass-panel kpi-card rounded-2xl p-3 md:p-4 flex flex-col gap-2 ring-1 ring-black/10 dark:ring-white/15 w-full h-[132px]">
+                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">ACTIVE SUBJECTS</p>
+                            <p id="kpiActiveSubjects" class="text-4xl md:text-5xl font-bold leading-none">0</p>
+                        </article>
+                        <article class="glass-panel kpi-card rounded-2xl p-3 md:p-4 flex flex-col gap-2 ring-1 ring-black/10 dark:ring-white/15 w-full h-[132px]">
+                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">AVG CONFIDENCE</p>
+                            <p id="kpiConfidence" class="text-2xl font-extrabold">0</p>
+                            <div class="h-1 rounded-full bg-brand-500/20 overflow-hidden">
+                                <div id="kpiConfidenceBar" class="h-full w-0 bg-brand-500"></div>
+                            </div>
+                        </article>
                     </div>
                 </div>
-                <div class="min-w-[250px] rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-3">
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="text-neutral-500 dark:text-white/60">Agent Runtime</span>
-                        <span class="inline-flex items-center gap-1 font-semibold"><span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulseDot"></span>ONLINE</span>
-                    </div>
-                    <div class="mt-3 grid grid-cols-2 gap-2">
-                        <div class="rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 px-3 py-2">
-                            <p class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/60">Plan State</p>
-                            <p id="planStatusLine" class="mt-1 text-sm font-semibold">Loading...</p>
+
+                <!-- Right: Daily execution panel -->
+                <div class="relative">
+                    <div class="glass-panel rounded-3xl p-4 md:p-5 ring-1 ring-black/10 dark:ring-white/15 animate-fadeUp" style="animation-delay:.2s">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <h2 class="text-lg md:text-xl font-bold tracking-tight">Daily Execution Panel</h2>
+                                <p class="text-xs mt-1 text-neutral-600 dark:text-white/70">Top autonomous actions with reasoned ordering.</p>
+                            </div>
+                            <div class="text-right">
+                                <p id="estimatedLine" class="text-xs md:text-sm font-semibold rounded-full px-2.5 py-1 bg-brand-500/10 text-brand-700 dark:text-brandlt-200">Estimated Time: --</p>
+                            </div>
                         </div>
-                        <div class="rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 px-3 py-2">
-                            <p class="text-[10px] uppercase tracking-wide text-neutral-500 dark:text-white/60">Last Sync</p>
-                            <p id="planUpdatedLine" class="mt-1 text-xs font-semibold">--</p>
-                        </div>
-                    </div>
-                    <div class="mt-2 grid grid-cols-2 gap-2">
-                        <button id="regenBtn" type="button" class="rounded-xl px-3 py-2 text-left text-xs md:text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-700 shadow-glow hover:brightness-110 transition">
-                            <span class="material-symbols-rounded text-[16px] align-middle mr-1">autorenew</span>Regenerate
-                        </button>
-                        <button id="refreshBtn" type="button" class="rounded-xl px-3 py-2 text-left text-xs md:text-sm font-semibold ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition">
-                            <span class="material-symbols-rounded text-[16px] align-middle mr-1">refresh</span>Refresh
-                        </button>
+                        <div id="dailyFocus" class="mt-4 grid grid-cols-1 gap-3"></div>
                     </div>
                 </div>
             </div>
-            <p id="statusMsg" class="hidden mt-4 text-xs rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15"></p>
-        </section>
-
-        <!-- Smart Metrics -->
-        <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 animate-fadeUp">
-            <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
-                <p class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Total Topics</p>
-                <p id="kpiTotalTopics" class="mt-2 text-2xl md:text-3xl font-extrabold">0</p>
-                <p class="text-xs text-neutral-500 dark:text-white/60">Indexed in current plan</p>
-            </article>
-            <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
-                <p class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">High Priority</p>
-                <p id="kpiHighPriority" class="mt-2 text-2xl md:text-3xl font-extrabold">0</p>
-                <p class="text-xs text-neutral-500 dark:text-white/60">Immediate impact set</p>
-            </article>
-            <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
-                <p class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Completion</p>
-                <p id="kpiCompletion" class="mt-2 text-2xl md:text-3xl font-extrabold">0%</p>
-                <p class="text-xs text-neutral-500 dark:text-white/60">Execution progress</p>
-            </article>
-            <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
-                <p class="text-xs uppercase tracking-wide text-neutral-500 dark:text-white/60">Avg Confidence</p>
-                <p id="kpiConfidence" class="mt-2 text-2xl md:text-3xl font-extrabold">0</p>
-                <p class="text-xs text-neutral-500 dark:text-white/60">Learned mastery signal</p>
-            </article>
+            <p id="statusMsg" class="hidden mt-4 text-xs rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 relative z-10"></p>
         </section>
 
         <section class="grid grid-cols-1 2xl:grid-cols-[1.3fr_0.7fr] gap-4 md:gap-5">
             <div class="space-y-4">
-                <!-- Daily Execution -->
-                <div class="glass-panel rounded-3xl ring-1 ring-black/10 dark:ring-white/15 p-4 md:p-5 animate-fadeUp">
-                    <div class="flex items-end justify-between gap-3">
-                        <div>
-                            <h2 class="text-lg md:text-xl font-bold tracking-tight">Daily Execution Panel</h2>
-                            <p class="text-xs mt-1 text-neutral-500 dark:text-white/60">Top autonomous actions with reasoned ordering.</p>
-                        </div>
-                        <p id="estimatedLine" class="text-xs md:text-sm font-semibold">Estimated Time: --</p>
-                    </div>
-                    <div id="dailyFocus" class="mt-4 grid grid-cols-1 xl:grid-cols-3 gap-3"></div>
-                </div>
-
                 <!-- Ranked Priority Surface -->
                 <div class="glass-panel rounded-3xl ring-1 ring-black/10 dark:ring-white/15 p-4 md:p-5 agent-grid animate-fadeUp">
                     <div class="relative z-10 flex flex-wrap items-center justify-between gap-3">
@@ -341,7 +353,7 @@
                             <h2 class="text-lg md:text-xl font-bold tracking-tight">Priority Surface</h2>
                             <p class="text-xs mt-1 text-neutral-500 dark:text-white/60">Subject → Unit → Topic graph with confidence and status.</p>
                         </div>
-                        <div class="inline-flex items-center rounded-full p-1 ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5">
+                        <div class="hidden inline-flex items-center rounded-full p-1 ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5">
                             <button id="viewGraphBtn" type="button" class="view-mode-btn rounded-full px-3 py-1.5 text-xs font-semibold bg-brand-500 text-white">Graph</button>
                             <button id="viewListBtn" type="button" class="view-mode-btn rounded-full px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:text-white/80">List</button>
                         </div>
@@ -374,6 +386,11 @@
         let __ctx = null;
         let __payload = null;
         let __viewMode = 'graph';
+        let __completedTopicIds = new Set();
+        let __liveKpis = { totalTopics: 0, completedTopics: 0, activeSubjects: 0, ready: false };
+        const ensureAuthReady = (typeof window.__PX_ENSURE_AUTH_READY === 'function')
+            ? window.__PX_ENSURE_AUTH_READY
+            : (async () => false);
 
         function esc(value) {
             const fn = (typeof window.escapeHtml === 'function') ? window.escapeHtml : null;
@@ -397,16 +414,23 @@
         }
 
         function getToken() {
-            const hasCookieAuthState = document.cookie.includes('paperx_auth=');
-            if (hasCookieAuthState) return '';
-            const keys = ['paperx_bearer_fallback', 'px_token', 'teacherToken'];
-            for (const k of keys) {
-                const local = String(localStorage.getItem(k) || '').trim();
-                if (local && local !== '__COOKIE_AUTH__') return local;
-                const session = String(sessionStorage.getItem(k) || '').trim();
-                if (session && session !== '__COOKIE_AUTH__') return session;
-            }
-            return '';
+            const hasCookieAuthState = (() => {
+                try { return document.cookie.indexOf('paperx_auth=') !== -1; } catch (_) { return false; }
+            })();
+            if (hasCookieAuthState) return '__COOKIE_AUTH__';
+            try {
+                const t = localStorage.getItem('px_token');
+                if (t && t !== '__COOKIE_AUTH__') return t;
+            } catch (_) { }
+            try {
+                const fb = (sessionStorage.getItem('paperx_bearer_fallback') || '').trim();
+                if (fb) return fb;
+            } catch (_) { }
+            try {
+                const fb2 = (localStorage.getItem('paperx_bearer_fallback') || '').trim();
+                if (fb2) return fb2;
+            } catch (_) { }
+            return hasCookieAuthState ? '__COOKIE_AUTH__' : '';
         }
 
         function authHeaders() {
@@ -429,6 +453,31 @@
                 throw err;
             }
             return data;
+        }
+
+        async function fetchJsonWithAuthRetry(url, opts = {}) {
+            try {
+                return await fetchJson(url, opts);
+            } catch (err) {
+                if (Number(err?.status) !== 401) throw err;
+                try { await ensureAuthReady(); } catch (_) { }
+                return await fetchJson(url, opts);
+            }
+        }
+
+        async function fetchJsonCompat(url, opts = {}) {
+            try {
+                const r = await fetch(url, opts);
+                if (r.status === 401) return { unauthorized: true };
+                const data = await (r.ok ? r.json() : null);
+                return { status: r.status, data };
+            } catch (_) {
+                return { error: true };
+            }
+        }
+
+        function isSuccessCompat(res) {
+            return res && !res.error && !res.unauthorized && typeof res.status === 'number' && res.status >= 200 && res.status < 300;
         }
 
         function parseProfileContext(profile) {
@@ -462,6 +511,86 @@
             if (t.includes('math')) return 'maths_notes.html';
             if (t.includes('phys')) return 'physics_notes.html';
             return 'notes_generator.html';
+        }
+
+        function getProfileFromMeResponse(out) {
+            return out?.profile || out?.data?.profile || {};
+        }
+
+        function getSyllabusFromMeResponse(out) {
+            const value = out?.syllabus || out?.data?.syllabus;
+            return Array.isArray(value) ? value : [];
+        }
+
+        function getCompletedTopicIdsResponse(out) {
+            const value = out?.completed_topic_ids || out?.data?.completed_topic_ids;
+            return Array.isArray(value) ? value : [];
+        }
+
+        function countSyllabusTopics(syllabus) {
+            let total = 0;
+            const courses = Array.isArray(syllabus) ? syllabus : [];
+            courses.forEach((course) => {
+                const units = Array.isArray(course?.units) ? course.units : [];
+                units.forEach((unit) => {
+                    const topics = Array.isArray(unit?.topics) ? unit.topics : [];
+                    total += topics.length;
+                });
+            });
+            return total;
+        }
+
+        async function loadLiveAcademicMetrics() {
+            const maxAttempts = 2;
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                let meOut = await fetchJsonCompat(`${API_BASE}/api/me`, { headers: { ...authHeaders() }, credentials: 'include' });
+                let progOut = await fetchJsonCompat(`${API_BASE}/api/progress/topics`, { headers: { ...authHeaders() }, credentials: 'include' });
+
+                if (meOut.unauthorized || progOut.unauthorized) {
+                    try { await ensureAuthReady(); } catch (_) { }
+                    meOut = await fetchJsonCompat(`${API_BASE}/api/me`, { headers: { ...authHeaders() }, credentials: 'include' });
+                    progOut = await fetchJsonCompat(`${API_BASE}/api/progress/topics`, { headers: { ...authHeaders() }, credentials: 'include' });
+                }
+
+                if (!isSuccessCompat(meOut)) {
+                    if (attempt < maxAttempts - 1) continue;
+                    throw new Error('Unable to load live profile context');
+                }
+
+                if (!isSuccessCompat(progOut)) {
+                    progOut = { status: 200, data: { completed_topic_ids: [] } };
+                }
+
+                const meData = meOut?.data || {};
+                const progData = progOut?.data || {};
+                const syllabus = Array.isArray(meData?.syllabus)
+                    ? meData.syllabus
+                    : (Array.isArray(meData?.data?.syllabus) ? meData.data.syllabus : []);
+                const syllabusTopicIds = new Set();
+                (Array.isArray(syllabus) ? syllabus : []).forEach((course) => {
+                    (Array.isArray(course?.units) ? course.units : []).forEach((unit) => {
+                        (Array.isArray(unit?.topics) ? unit.topics : []).forEach((topic) => {
+                            const id = String(topic?.id || topic?.topic_id || '').trim();
+                            if (id) syllabusTopicIds.add(id);
+                        });
+                    });
+                });
+                const completed = (Array.isArray(progData?.completed_topic_ids)
+                    ? progData.completed_topic_ids
+                    : (Array.isArray(progData?.data?.completed_topic_ids) ? progData.data.completed_topic_ids : []))
+                    .map((id) => String(id || '').trim())
+                    .filter(Boolean);
+                const completedInSyllabus = completed.filter((id) => syllabusTopicIds.has(id));
+
+                __completedTopicIds = new Set(completed);
+                __liveKpis = {
+                    totalTopics: countSyllabusTopics(syllabus),
+                    completedTopics: completedInSyllabus.length,
+                    activeSubjects: syllabus.length,
+                    ready: true,
+                };
+                return;
+            }
         }
 
         function flattenTopics(payload) {
@@ -502,19 +631,37 @@
 
         function updateKpis(payload) {
             const summary = payload?.summary || {};
-            const total = Number(summary?.total_topics || 0);
-            const done = Number(summary?.completed_topics || 0);
-            const high = Number(summary?.high_priority_topics || 0);
+            const summaryTotal = Number(summary?.total_topics || 0);
+            const summaryDone = Number(summary?.completed_topics || 0);
+            const liveReady = !!__liveKpis?.ready;
+            const total = liveReady ? Number(__liveKpis?.totalTopics || 0) : summaryTotal;
+            const doneRaw = liveReady ? Number(__liveKpis?.completedTopics || 0) : summaryDone;
+            const done = Math.max(0, Math.min(doneRaw, total || doneRaw));
+            const activeSubjects = liveReady ? Number(__liveKpis?.activeSubjects || 0) : Number(summary?.total_subjects || 0);
             const topics = flattenTopics(payload);
             const avgConfidence = topics.length
                 ? (topics.reduce((a, b) => a + Number(b?.topic?.confidence_score || 0), 0) / topics.length)
                 : 0;
             const completionPct = total > 0 ? Math.round((done / total) * 100) : 0;
+            const confidencePct = Math.max(0, Math.min(100, Math.round(avgConfidence)));
 
-            $('kpiTotalTopics').textContent = String(total);
-            $('kpiHighPriority').textContent = String(high);
+            const kpiDone = $('kpiTopicsDone');
+            if (kpiDone) kpiDone.textContent = String(done);
+            const kpiTotal = $('kpiTopicsTotal');
+            if (kpiTotal) kpiTotal.textContent = String(total);
+            $('kpiActiveSubjects').textContent = String(activeSubjects);
             $('kpiCompletion').textContent = `${completionPct}%`;
             $('kpiConfidence').textContent = avgConfidence.toFixed(1);
+
+            const ring = $('kpiCompletionRing');
+            if (ring) ring.style.setProperty('--pct', String(completionPct));
+
+            const topicsBar = $('kpiTopicsBar');
+            if (topicsBar) topicsBar.style.width = `${completionPct}%`;
+
+            const confidenceBar = $('kpiConfidenceBar');
+            if (confidenceBar) confidenceBar.style.width = `${confidencePct}%`;
+
         }
 
         function renderDailyFocus(payload) {
@@ -534,12 +681,11 @@
                 const mins = Number(item?.estimated_time || 0);
                 total += mins;
                 const row = document.createElement('article');
-                row.className = 'rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-3';
+                row.className = 'rounded-2xl ring-1 ring-brand-500/20 bg-gradient-to-r from-white/90 to-brand-500/5 dark:from-white/5 dark:to-brand-500/10 p-3 md:p-3.5';
                 row.innerHTML = `
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
-                            <p class="text-sm font-semibold">${idx + 1}. ${esc(item?.topic || 'Topic')}</p>
-                            <p class="mt-1 text-xs text-neutral-600 dark:text-white/70">${esc(item?.reason || 'High exam impact + lower confidence')}</p>
+                            <p class="text-sm md:text-[15px] font-bold">${idx + 1}. ${esc(item?.topic || 'Topic')}</p>
                             <div class="mt-2 flex flex-wrap gap-1.5">
                                 <span class="${priorityClass(item?.priority_score)}">Priority ${Number(item?.priority_score || 0).toFixed(1)}</span>
                                 <span class="metric-chip">${mins} min</span>
@@ -569,51 +715,100 @@
 
             subjects.forEach((subject) => {
                 const subjectCard = document.createElement('section');
-                subjectCard.className = 'rounded-2xl ring-1 ring-black/10 dark:ring-white/15 bg-white/75 dark:bg-white/5 p-3';
+                subjectCard.className = 'rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/80 dark:bg-brand-900/55 backdrop-blur overflow-hidden';
                 const units = Array.isArray(subject?.units) ? subject.units : [];
 
                 const unitBlocks = units.map((unit) => {
                     const topics = Array.isArray(unit?.topics) ? unit.topics : [];
                     topics.sort((a, b) => Number(b?.priority_score || 0) - Number(a?.priority_score || 0));
-                    const topicRows = topics.slice(0, 8).map((topic) => {
+                    const topicRows = topics.map((topic) => {
                         const topicName = String(topic?.topic || '').trim();
+                        const topicId = String(topic?.topic_id || '').trim();
+                        const isCompleted = (topicId && __completedTopicIds.has(topicId)) || String(topic?.status || '') === 'completed' || !!topic?.completed;
+                        const topicClass = isCompleted ? 'line-through opacity-60' : '';
                         const page = notesPageByType(subject?.course_type || '');
                         const href = `${page}?topic=${encodeURIComponent(topicName)}`;
                         return `
-                            <a href="${href}" target="_blank" rel="noopener" data-item-id="${esc(topic?.item_id || '')}" data-topic-id="${esc(topic?.topic_id || '')}" class="topic-link group rounded-xl px-2.5 py-2 ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 hover:bg-brand-500/10 transition block">
-                                <div class="flex items-start justify-between gap-2">
-                                    <div class="min-w-0">
-                                        <p class="text-xs font-semibold text-brand-700 dark:text-brandlt-200 break-words">${esc(topicName)}</p>
-                                        <p class="text-[11px] mt-0.5 text-neutral-600 dark:text-white/70">${esc(topic?.reason || 'Reason unavailable')}</p>
-                                    </div>
-                                    <span class="${priorityClass(topic?.priority_score)}">${Number(topic?.priority_score || 0).toFixed(1)}</span>
-                                </div>
-                            </a>
+                            <li class="flex items-center gap-2 py-0.5 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm leading-tight">
+                                <a href="${href}" target="_blank" rel="noopener" data-item-id="${esc(topic?.item_id || '')}" data-topic-id="${esc(topic?.topic_id || '')}" class="topic-link flex-1 min-w-0">
+                                    <span class="text-brand-600 dark:text-brand-300 hover:underline break-words ${topicClass}">${esc(topicName)}</span>
+                                </a>
+                                <span class="${priorityClass(topic?.priority_score)}">${Number(topic?.priority_score || 0).toFixed(1)}</span>
+                                <span class="${statusClass(topic?.status)}">${esc(prettyStatus(topic?.status))}</span>
+                            </li>
                         `;
                     }).join('');
 
+                    const completedUnit = topics.length > 0 && topics.every((topic) => {
+                        const tId = String(topic?.topic_id || '').trim();
+                        return (tId && __completedTopicIds.has(tId)) || String(topic?.status || '') === 'completed' || !!topic?.completed;
+                    });
+
                     return `
-                        <article class="rounded-xl ring-1 ring-black/10 dark:ring-white/15 bg-white/70 dark:bg-white/5 p-2.5 space-y-2">
-                            <div class="flex items-center justify-between gap-2">
-                                <p class="text-xs font-semibold">${esc(unit?.unit_title || 'Unit')}</p>
-                                <span class="metric-chip">${topics.length} topics</span>
+                        <div class="rounded-xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-brand-900/40">
+                            <div class="w-full px-4 py-3 flex items-center justify-between hover:bg-white/60 dark:hover:bg-brand-900/30 transition-colors">
+                                <button type="button" data-unit-toggle aria-expanded="false" class="flex-1 text-left flex items-center gap-2 text-sm font-medium">
+                                    <span data-unit-caret class="material-symbols-rounded text-neutral-500 transition-transform duration-200 -rotate-90">expand_more</span>
+                                    <span class="${completedUnit ? 'line-through opacity-60' : ''}">${esc(unit?.unit_title || 'Unit')}</span>
+                                </button>
+                                <span class="text-[11px] rounded-full ring-1 ring-black/10 dark:ring-white/15 px-2 py-0.5">${topics.length} topics</span>
                             </div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">${topicRows || '<div class="text-xs text-neutral-500 dark:text-white/60">No topics</div>'}</div>
-                        </article>
+                            <div class="px-4 pb-4 hidden" data-unit-topics>
+                                <ul class="space-y-0.5 text-sm leading-tight">${topicRows || '<li class="text-xs text-neutral-500 dark:text-white/60">No topics</li>'}</ul>
+                            </div>
+                        </div>
                     `;
                 }).join('');
 
+                const subjectTitle = esc(subject?.subject_title || 'Subject');
+                const subjectCode = esc(subject?.course_code || '');
                 subjectCard.innerHTML = `
-                    <div class="flex items-center justify-between gap-2 mb-2">
-                        <div>
-                            <p class="text-sm md:text-base font-bold tracking-tight">${esc(subject?.subject_title || 'Subject')}</p>
-                            <p class="text-xs text-neutral-500 dark:text-white/60">${esc(subject?.course_code || '')}</p>
+                    <div class="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-white/70 dark:hover:bg-brand-900/40 transition-colors" data-subject-toggle aria-expanded="false">
+                        <div class="flex items-center gap-3 font-semibold text-sm md:text-base min-w-0">
+                            <span data-subject-caret class="material-symbols-rounded text-neutral-500 transition-transform duration-200 -rotate-90">expand_more</span>
+                            <span class="hidden md:inline text-brand-600 dark:text-brand-400">${subjectCode}</span>
+                            <span class="hidden md:inline opacity-40">•</span>
+                            <span class="truncate">${subjectTitle}</span>
                         </div>
-                        <span class="metric-chip">${units.length} units</span>
+                        <span class="text-[11px] rounded-full ring-1 ring-black/10 dark:ring-white/15 px-2 py-0.5">${units.length} units</span>
                     </div>
-                    <div class="space-y-2">${unitBlocks}</div>
+                    <div class="p-5 grid gap-4 hidden" data-subject-units>
+                        ${unitBlocks}
+                    </div>
                 `;
                 wrap.appendChild(subjectCard);
+            });
+
+            wrap.querySelectorAll('[data-subject-toggle]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const card = btn.closest('section');
+                    const target = card?.querySelector('[data-subject-units]');
+                    const caret = btn.querySelector('[data-subject-caret]');
+                    if (!target) return;
+                    const expand = target.classList.contains('hidden');
+                    target.classList.toggle('hidden', !expand);
+                    btn.setAttribute('aria-expanded', expand ? 'true' : 'false');
+                    if (caret) {
+                        caret.classList.toggle('-rotate-90', !expand);
+                        caret.classList.toggle('rotate-0', expand);
+                    }
+                });
+            });
+
+            wrap.querySelectorAll('[data-unit-toggle]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const unitWrap = btn.closest('.rounded-xl');
+                    const target = unitWrap?.querySelector('[data-unit-topics]');
+                    const caret = btn.querySelector('[data-unit-caret]');
+                    if (!target) return;
+                    const expand = target.classList.contains('hidden');
+                    target.classList.toggle('hidden', !expand);
+                    btn.setAttribute('aria-expanded', expand ? 'true' : 'false');
+                    if (caret) {
+                        caret.classList.toggle('-rotate-90', !expand);
+                        caret.classList.toggle('rotate-0', expand);
+                    }
+                });
             });
 
             wrap.querySelectorAll('.topic-link').forEach((link) => {
@@ -639,6 +834,9 @@
 
             wrap.innerHTML = top.map(({ subject, unit, topic }, idx) => {
                 const topicName = String(topic?.topic || '').trim();
+                const topicId = String(topic?.topic_id || '').trim();
+                const isCompleted = (topicId && __completedTopicIds.has(topicId)) || String(topic?.status || '') === 'completed' || !!topic?.completed;
+                const topicClass = isCompleted ? 'line-through opacity-60' : '';
                 const page = notesPageByType(subject?.course_type || '');
                 const href = `${page}?topic=${encodeURIComponent(topicName)}`;
                 return `
@@ -646,7 +844,7 @@
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="text-xs text-neutral-500 dark:text-white/60">#${idx + 1} • ${esc(subject?.subject_title || 'Subject')} / ${esc(unit?.unit_title || 'Unit')}</p>
-                                <a href="${href}" target="_blank" rel="noopener" data-item-id="${esc(topic?.item_id || '')}" data-topic-id="${esc(topic?.topic_id || '')}" class="topic-link text-sm font-semibold text-brand-700 dark:text-brandlt-200 hover:underline break-words">${esc(topicName)}</a>
+                                <a href="${href}" target="_blank" rel="noopener" data-item-id="${esc(topic?.item_id || '')}" data-topic-id="${esc(topic?.topic_id || '')}" class="topic-link text-sm font-semibold text-brand-700 dark:text-brandlt-200 hover:underline break-words ${topicClass}">${esc(topicName)}</a>
                                 <p class="text-xs mt-1 text-neutral-600 dark:text-white/70">${esc(topic?.reason || 'High impact recommendation.')}</p>
                             </div>
                             <div class="shrink-0 flex flex-col items-end gap-1.5">
@@ -722,12 +920,6 @@
 
         function renderPlan(payload) {
             __payload = payload;
-            const plan = payload?.plan || {};
-            const state = String(plan?.plan_status || plan?.status || 'loaded');
-            $('planStatusLine').textContent = state.toUpperCase();
-            const stamp = plan?.last_updated || plan?.generated_at;
-            $('planUpdatedLine').textContent = stamp ? new Date(stamp).toLocaleString() : '--';
-
             updateKpis(payload);
             renderDailyFocus(payload);
             if (__viewMode === 'graph') renderPriorityGraph(payload);
@@ -736,9 +928,8 @@
             renderStatusBoard(payload);
         }
 
-        async function loadProfile() {
-            const out = await fetchJson(`${API_BASE}/api/me`, { headers: { ...authHeaders() } });
-            return out?.profile || {};
+        async function loadMeBundle() {
+            return await fetchJson(`${API_BASE}/api/me`, { headers: { ...authHeaders() } });
         }
 
         async function loadPersistedPlan(studentId) {
@@ -773,21 +964,29 @@
         async function bootstrap() {
             showStatus('Loading GARLIC autonomous plan...');
             try {
-                const profile = await loadProfile();
+                try { await ensureAuthReady(); } catch (_) { }
+                const meOut = await loadMeBundle();
+                const profile = getProfileFromMeResponse(meOut);
                 const ctx = parseProfileContext(profile);
                 __ctx = ctx;
                 if (!ctx.student_id) throw new Error('Unable to resolve your account id. Please re-login.');
 
                 try {
+                    await loadLiveAcademicMetrics();
+                } catch (_) {
+                    // Ignore live KPI sync failures; plan data fallback will still render.
+                }
+
+                try {
                     const payload = await loadPersistedPlan(ctx.student_id);
                     renderPlan(payload);
-                    showStatus('Loaded saved GARLIC plan.');
+                    showStatus('');
                 } catch (err) {
                     if (err && Number(err.status) === 404) {
                         showStatus('No saved plan found. Generating plan...');
                         const payload = await generatePlan(ctx, false);
                         renderPlan(payload);
-                        showStatus('GARLIC plan generated and saved.');
+                        showStatus('');
                     } else {
                         throw err;
                     }
@@ -812,29 +1011,21 @@
                 if (__payload) renderPriorityList(__payload);
             });
 
-            $('regenBtn')?.addEventListener('click', async () => {
+            const handleRegenerate = async () => {
                 if (!__ctx) return;
                 showStatus('Regenerating GARLIC plan...');
                 try {
+                    try { await loadLiveAcademicMetrics(); } catch (_) { }
                     const payload = await generatePlan(__ctx, true);
                     renderPlan(payload);
                     showStatus('Plan regenerated and stored.');
                 } catch (err) {
                     showStatus(err?.message || 'Failed to regenerate plan.', true);
                 }
-            });
+            };
 
-            $('refreshBtn')?.addEventListener('click', async () => {
-                if (!__ctx?.student_id) return;
-                showStatus('Refreshing saved insights...');
-                try {
-                    const payload = await loadPersistedPlan(__ctx.student_id);
-                    renderPlan(payload);
-                    showStatus('Latest persisted plan loaded.');
-                } catch (err) {
-                    showStatus(err?.message || 'Failed to refresh insights.', true);
-                }
-            });
+            $('regenBtnNav')?.addEventListener('click', handleRegenerate);
+            $('regenBtnNavMobile')?.addEventListener('click', handleRegenerate);
 
             bootstrap();
         });

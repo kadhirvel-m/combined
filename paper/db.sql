@@ -1198,6 +1198,74 @@ CREATE INDEX garlic_study_plan_items_plan_idx ON public.garlic_study_plan_items 
 CREATE INDEX garlic_study_plan_items_priority_idx ON public.garlic_study_plan_items USING btree (plan_id, priority_score DESC);
 CREATE INDEX garlic_study_plan_items_topic_idx ON public.garlic_study_plan_items USING btree (topic_id);
 CREATE INDEX garlic_insights_plan_idx ON public.garlic_insights USING btree (plan_id, created_at);
+CREATE TABLE public.garlic_execution_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid NOT NULL,
+  plan_id uuid,
+  plan_item_id uuid,
+  topic_id uuid NOT NULL,
+  started_at timestamp with time zone NOT NULL DEFAULT now(),
+  ended_at timestamp with time zone,
+  duration_seconds integer NOT NULL DEFAULT 0,
+  active_seconds integer NOT NULL DEFAULT 0,
+  completion_percent double precision NOT NULL DEFAULT 0,
+  session_status text NOT NULL DEFAULT 'active'::text CHECK (session_status = ANY (ARRAY['active'::text, 'paused'::text, 'completed'::text, 'exited_early'::text])),
+  revisit_count integer NOT NULL DEFAULT 0,
+  pause_count integer NOT NULL DEFAULT 0,
+  expected_minutes integer,
+  engagement_score double precision,
+  engagement_signals jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT garlic_execution_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT garlic_execution_sessions_student_id_fkey FOREIGN KEY (student_id) REFERENCES auth.users(id),
+  CONSTRAINT garlic_execution_sessions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.garlic_study_plans(id),
+  CONSTRAINT garlic_execution_sessions_plan_item_id_fkey FOREIGN KEY (plan_item_id) REFERENCES public.garlic_study_plan_items(id),
+  CONSTRAINT garlic_execution_sessions_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id)
+);
+CREATE TABLE public.garlic_topic_confidence_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid NOT NULL,
+  topic_id uuid NOT NULL,
+  plan_item_id uuid,
+  session_id uuid,
+  previous_confidence double precision,
+  updated_confidence double precision NOT NULL,
+  learning_status text NOT NULL CHECK (learning_status = ANY (ARRAY['weak'::text, 'improving'::text, 'stable'::text, 'strong'::text])),
+  recommendation text NOT NULL CHECK (recommendation = ANY (ARRAY['revise'::text, 'continue'::text, 'skip'::text, 'test'::text])),
+  reasoning text,
+  model_name text NOT NULL DEFAULT 'gemini-2.5-flash'::text,
+  signals jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT garlic_topic_confidence_history_pkey PRIMARY KEY (id),
+  CONSTRAINT garlic_topic_confidence_history_student_id_fkey FOREIGN KEY (student_id) REFERENCES auth.users(id),
+  CONSTRAINT garlic_topic_confidence_history_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id),
+  CONSTRAINT garlic_topic_confidence_history_plan_item_id_fkey FOREIGN KEY (plan_item_id) REFERENCES public.garlic_study_plan_items(id),
+  CONSTRAINT garlic_topic_confidence_history_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.garlic_execution_sessions(id)
+);
+CREATE TABLE public.garlic_execution_event_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid NOT NULL,
+  plan_id uuid,
+  plan_item_id uuid,
+  topic_id uuid,
+  session_id uuid,
+  event_type text NOT NULL,
+  event_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT garlic_execution_event_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT garlic_execution_event_logs_student_id_fkey FOREIGN KEY (student_id) REFERENCES auth.users(id),
+  CONSTRAINT garlic_execution_event_logs_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.garlic_study_plans(id),
+  CONSTRAINT garlic_execution_event_logs_plan_item_id_fkey FOREIGN KEY (plan_item_id) REFERENCES public.garlic_study_plan_items(id),
+  CONSTRAINT garlic_execution_event_logs_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES public.syllabus_topics(id),
+  CONSTRAINT garlic_execution_event_logs_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.garlic_execution_sessions(id)
+);
+CREATE INDEX garlic_execution_sessions_student_topic_idx ON public.garlic_execution_sessions USING btree (student_id, topic_id, created_at DESC);
+CREATE INDEX garlic_execution_sessions_item_idx ON public.garlic_execution_sessions USING btree (plan_item_id, created_at DESC);
+CREATE INDEX garlic_execution_sessions_status_idx ON public.garlic_execution_sessions USING btree (student_id, session_status, created_at DESC);
+CREATE INDEX garlic_topic_confidence_history_topic_idx ON public.garlic_topic_confidence_history USING btree (student_id, topic_id, created_at DESC);
+CREATE INDEX garlic_execution_event_logs_student_idx ON public.garlic_execution_event_logs USING btree (student_id, created_at DESC);
+CREATE INDEX garlic_execution_event_logs_topic_idx ON public.garlic_execution_event_logs USING btree (topic_id, created_at DESC);
 CREATE TABLE public.teacher_applications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   auth_user_id uuid NOT NULL,

@@ -20603,6 +20603,47 @@ class GarlicInteractionIn(BaseModel):
     time_spent_seconds: Optional[int] = Field(default=None, ge=0, le=86400)
 
 
+GARLIC_RUNTIME_SESSIONS_TABLE = "garlic_execution_sessions"
+GARLIC_RUNTIME_CONFIDENCE_TABLE = "garlic_topic_confidence_history"
+GARLIC_RUNTIME_EVENTS_TABLE = "garlic_execution_event_logs"
+
+garlic_runtime_router = APIRouter(prefix="/api/garlic/runtime", tags=["garlic-runtime"])
+
+
+class GarlicRuntimeSessionStartIn(BaseModel):
+    plan_item_id: Optional[str] = Field(default=None, max_length=64)
+    topic_id: Optional[str] = Field(default=None, max_length=64)
+    expected_minutes: Optional[int] = Field(default=None, ge=5, le=360)
+
+
+class GarlicRuntimeSessionEndIn(BaseModel):
+    session_id: str = Field(..., min_length=6, max_length=64)
+    completion_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    active_seconds: Optional[int] = Field(default=None, ge=0, le=86400)
+    exited_early: Optional[bool] = False
+
+
+class GarlicRuntimeSessionTrackIn(BaseModel):
+    session_id: str = Field(..., min_length=6, max_length=64)
+    event_type: str = Field(default="heartbeat", min_length=2, max_length=64)
+    active_seconds_delta: Optional[int] = Field(default=0, ge=0, le=3600)
+    interaction_ratio: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    completion_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    revisit: Optional[bool] = False
+
+
+class GarlicRuntimeTopicCompleteIn(BaseModel):
+    plan_item_id: Optional[str] = Field(default=None, max_length=64)
+    topic_id: Optional[str] = Field(default=None, max_length=64)
+    session_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class GarlicRuntimeConfidenceUpdateIn(BaseModel):
+    plan_item_id: Optional[str] = Field(default=None, max_length=64)
+    topic_id: Optional[str] = Field(default=None, max_length=64)
+    session_id: Optional[str] = Field(default=None, max_length=64)
+
+
 def _garlic_safe_topic_ids(rows: List[Dict[str, Any]]) -> List[str]:
     return [str(r.get("id")) for r in rows if r.get("id")]
 
@@ -20666,6 +20707,501 @@ def _garlic_extract_json_payload(raw_text: str) -> Optional[Dict[str, Any]]:
         return parsed if isinstance(parsed, dict) else None
     except Exception:
         return None
+
+
+def _garlic_runtime_parse_dt(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(raw)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _garlic_runtime_clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
+
+
+def _garlic_runtime_learning_status(score: float) -> str:
+    if score < 40.0:
+        return "weak"
+    if score < 60.0:
+        return "improving"
+    if score < 80.0:
+        return "stable"
+    return "strong"
+
+
+def _garlic_runtime_recommendation(score: float, completion_ratio: float) -> str:
+    if completion_ratio < 0.35:
+        return "continue"
+    if score < 45.0:
+        return "revise"
+    if score >= 85.0 and completion_ratio >= 0.95:
+        return "test"
+    if score >= 72.0:
+        return "skip"
+    return "continue"
+
+
+def _garlic_runtime_log_event(
+    *,
+    supabase: Client,
+    student_id: str,
+    event_type: str,
+    plan_id: Optional[str] = None,
+    plan_item_id: Optional[str] = None,
+    topic_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    row = {
+        "student_id": student_id,
+        "plan_id": plan_id,
+        "plan_item_id": plan_item_id,
+        "topic_id": topic_id,
+        "session_id": session_id,
+        "event_type": str(event_type or "unknown")[:64],
+        "event_payload": payload or {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        supabase.table(GARLIC_RUNTIME_EVENTS_TABLE).insert(row).execute()
+    except Exception:
+        pass
+
+
+def _garlic_runtime_resolve_item_for_student(
+    *,
+    supabase: Client,
+    student_id: str,
+    plan_item_id: Optional[str],
+    topic_id: Optional[str],
+) -> Dict[str, Any]:
+    item_id = str(plan_item_id or "").strip()
+    t_id = str(topic_id or "").strip()
+
+    if item_id:
+        q = (
+            supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+            .select("id,plan_id,topic_id,recommended_time,estimated_time,confidence_score,priority_score,status,completed,garlic_study_plans!inner(student_id)")
+            .eq("id", item_id)
+            .limit(1)
+            .execute()
+        )
+        if getattr(q, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime item): {q.error}")
+        if not q.data:
+            raise HTTPException(status_code=404, detail="GARLIC plan item not found")
+        row = q.data[0] or {}
+        owner = row.get("garlic_study_plans") or {}
+        owner_id = owner.get("student_id") if isinstance(owner, dict) else None
+        if str(owner_id or "") != student_id:
+            raise HTTPException(status_code=403, detail="Not allowed to access this GARLIC item")
+        return row
+
+    if not t_id:
+        raise HTTPException(status_code=400, detail="Provide either plan_item_id or topic_id")
+
+    plan_q = (
+        supabase.table(GARLIC_STUDY_PLANS_TABLE)
+        .select("id")
+        .eq("student_id", student_id)
+        .order("last_updated", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if getattr(plan_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime plan): {plan_q.error}")
+    if not plan_q.data:
+        raise HTTPException(status_code=404, detail="No GARLIC plan found")
+
+    latest_plan_id = str(plan_q.data[0].get("id") or "").strip()
+    item_q = (
+        supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+        .select("id,plan_id,topic_id,recommended_time,estimated_time,confidence_score,priority_score,status,completed")
+        .eq("plan_id", latest_plan_id)
+        .eq("topic_id", t_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(item_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime topic item): {item_q.error}")
+    if not item_q.data:
+        raise HTTPException(status_code=404, detail="Topic is not present in your GARLIC plan")
+    return item_q.data[0] or {}
+
+
+def _garlic_runtime_start_or_resume_session(
+    *,
+    supabase: Client,
+    student_id: str,
+    item_row: Dict[str, Any],
+    expected_minutes: Optional[int],
+    event_source: str,
+) -> Tuple[Dict[str, Any], bool]:
+    plan_id = str(item_row.get("plan_id") or "").strip() or None
+    item_id = str(item_row.get("id") or "").strip() or None
+    topic_id = str(item_row.get("topic_id") or "").strip() or None
+    if not item_id or not topic_id:
+        raise HTTPException(status_code=400, detail="Invalid GARLIC item/topic mapping")
+
+    session_q = (
+        supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+        .select("id,session_status,started_at,active_seconds,revisit_count,pause_count,completion_percent,expected_minutes")
+        .eq("student_id", student_id)
+        .eq("plan_item_id", item_id)
+        .in_("session_status", ["active", "paused"])
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if getattr(session_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime session lookup): {session_q.error}")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    resumed = bool(session_q.data)
+    if resumed:
+        session = dict(session_q.data[0] or {})
+        patch = {
+            "session_status": "active",
+            "updated_at": now_iso,
+        }
+        if expected_minutes is not None:
+            patch["expected_minutes"] = int(expected_minutes)
+        upd = supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE).update(patch).eq("id", session.get("id")).execute()
+        if getattr(upd, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime resume): {upd.error}")
+        session.update(patch)
+    else:
+        expected = int(expected_minutes or item_row.get("recommended_time") or item_row.get("estimated_time") or 30)
+        ins_payload = {
+            "student_id": student_id,
+            "plan_id": plan_id,
+            "plan_item_id": item_id,
+            "topic_id": topic_id,
+            "started_at": now_iso,
+            "session_status": "active",
+            "expected_minutes": expected,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        ins = supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE).insert(ins_payload).execute()
+        if getattr(ins, "error", None) or not ins.data:
+            raise HTTPException(status_code=500, detail="Failed to create GARLIC runtime session")
+        session = dict(ins.data[0] or ins_payload)
+
+    # mark plan item as in progress if not completed
+    item_status = str(item_row.get("status") or "").strip().lower()
+    if item_status != "completed":
+        _ = (
+            supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+            .update(
+                {
+                    "status": "in_progress",
+                    "last_accessed": now_iso,
+                    "updated_at": now_iso,
+                }
+            )
+            .eq("id", item_id)
+            .execute()
+        )
+
+    _garlic_runtime_log_event(
+        supabase=supabase,
+        student_id=student_id,
+        plan_id=plan_id,
+        plan_item_id=item_id,
+        topic_id=topic_id,
+        session_id=str(session.get("id") or ""),
+        event_type="resume_topic" if resumed else "start_topic",
+        payload={"source": event_source, "expected_minutes": expected_minutes},
+    )
+    return session, resumed
+
+
+def _garlic_runtime_ai_confidence(
+    *,
+    topic_context: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if not GEMINI_API_KEY:
+        return None
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception:
+        return None
+
+    prompt = textwrap.dedent(
+        """
+        You are GARLIC execution intelligence.
+
+        Analyze behavioral learning signals and return JSON ONLY:
+        {
+          "updated_confidence": 0,
+          "learning_status": "weak|improving|stable|strong",
+          "reasoning": "short explanation",
+          "recommendation": "revise|continue|skip|test"
+        }
+
+        Rules:
+        - Confidence range 0..100
+        - Use provided behavioral history and expected-vs-actual time
+        - Favor conservative updates (avoid large jumps)
+        """
+    ).strip()
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        resp = model.generate_content(
+            [{"text": prompt}, {"text": json.dumps(topic_context, ensure_ascii=True)}],
+            generation_config={"temperature": 0.1, "max_output_tokens": 1024},
+        )
+    except Exception:
+        return None
+
+    text_out = ""
+    try:
+        quick = getattr(resp, "text", None)
+        if isinstance(quick, str) and quick.strip():
+            text_out = quick.strip()
+    except Exception:
+        text_out = ""
+
+    if not text_out:
+        try:
+            candidates = getattr(resp, "candidates", None) or []
+            chunks: List[str] = []
+            for cand in candidates:
+                content = getattr(cand, "content", None)
+                parts = getattr(content, "parts", None) if content is not None else None
+                if not parts:
+                    continue
+                for part in parts:
+                    ptxt = getattr(part, "text", None)
+                    if ptxt:
+                        chunks.append(str(ptxt))
+            text_out = "\n".join(chunks).strip()
+        except Exception:
+            text_out = ""
+
+    parsed = _garlic_extract_json_payload(text_out)
+    if not isinstance(parsed, dict):
+        return None
+
+    try:
+        conf = float(parsed.get("updated_confidence"))
+    except Exception:
+        return None
+    status = str(parsed.get("learning_status") or "").strip().lower()
+    recommendation = str(parsed.get("recommendation") or "").strip().lower()
+    if status not in {"weak", "improving", "stable", "strong"}:
+        status = _garlic_runtime_learning_status(conf)
+    if recommendation not in {"revise", "continue", "skip", "test"}:
+        recommendation = _garlic_runtime_recommendation(conf, float(topic_context.get("completion_ratio") or 0))
+
+    return {
+        "updated_confidence": round(_garlic_runtime_clamp(conf, 0.0, 100.0), 2),
+        "learning_status": status,
+        "recommendation": recommendation,
+        "reasoning": str(parsed.get("reasoning") or "").strip()[:600],
+    }
+
+
+def _garlic_runtime_confidence_fallback(
+    *,
+    previous_confidence: float,
+    expected_minutes: float,
+    total_active_seconds: float,
+    completion_ratio: float,
+    revisit_count: int,
+    session_count: int,
+) -> Dict[str, Any]:
+    expected_seconds = max(1.0, expected_minutes * 60.0)
+    pace_ratio = _garlic_runtime_clamp(total_active_seconds / expected_seconds, 0.0, 2.0)
+    revisit_penalty = min(14.0, float(max(0, revisit_count)) * 1.8)
+    completion_boost = _garlic_runtime_clamp(completion_ratio, 0.0, 1.0) * 30.0
+    pace_boost = pace_ratio * 18.0
+    consistency_boost = min(8.0, float(max(0, session_count - 1)) * 1.6)
+    next_conf = (previous_confidence * 0.58) + completion_boost + pace_boost + consistency_boost - revisit_penalty
+    next_conf = round(_garlic_runtime_clamp(next_conf, 0.0, 100.0), 2)
+    status = _garlic_runtime_learning_status(next_conf)
+    recommendation = _garlic_runtime_recommendation(next_conf, completion_ratio)
+    return {
+        "updated_confidence": next_conf,
+        "learning_status": status,
+        "recommendation": recommendation,
+        "reasoning": "Heuristic fallback applied because AI reasoning was unavailable.",
+    }
+
+
+def _garlic_runtime_update_confidence(
+    *,
+    supabase: Client,
+    student_id: str,
+    item_row: Dict[str, Any],
+    session_id: Optional[str],
+) -> Dict[str, Any]:
+    plan_item_id = str(item_row.get("id") or "").strip()
+    topic_id = str(item_row.get("topic_id") or "").strip()
+    plan_id = str(item_row.get("plan_id") or "").strip() or None
+    if not plan_item_id or not topic_id:
+        raise HTTPException(status_code=400, detail="Cannot update confidence without plan item/topic")
+
+    sessions_q = (
+        supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+        .select("id,started_at,ended_at,active_seconds,duration_seconds,completion_percent,revisit_count,pause_count,expected_minutes,session_status")
+        .eq("student_id", student_id)
+        .eq("topic_id", topic_id)
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+    )
+    if getattr(sessions_q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime sessions): {sessions_q.error}")
+    sessions = sessions_q.data or []
+
+    total_active_seconds = float(sum(int(s.get("active_seconds") or 0) for s in sessions))
+    total_duration_seconds = float(sum(int(s.get("duration_seconds") or 0) for s in sessions))
+    if total_duration_seconds <= 0:
+        now = datetime.now(timezone.utc)
+        for s in sessions:
+            started = _garlic_runtime_parse_dt(s.get("started_at"))
+            ended = _garlic_runtime_parse_dt(s.get("ended_at")) or now
+            if started:
+                total_duration_seconds += max(0.0, (ended - started).total_seconds())
+
+    completion_ratio = 0.0
+    if sessions:
+        completion_ratio = _garlic_runtime_clamp(
+            sum(float(s.get("completion_percent") or 0.0) for s in sessions) / (100.0 * len(sessions)),
+            0.0,
+            1.0,
+        )
+    if bool(item_row.get("completed")):
+        completion_ratio = 1.0
+
+    revisit_count = int(sum(int(s.get("revisit_count") or 0) for s in sessions))
+    previous_conf = float(item_row.get("confidence_score") or 0.0)
+    expected_minutes = float(item_row.get("recommended_time") or item_row.get("estimated_time") or 30)
+
+    topic_meta_q = (
+        supabase.table("syllabus_topics")
+        .select("id,topic,order_in_unit,syllabus_units!inner(id,unit_title,course_id,order_in_course,syllabus_courses(id,title,course_code,type))")
+        .eq("id", topic_id)
+        .limit(1)
+        .execute()
+    )
+    topic_meta = (topic_meta_q.data or [{}])[0] if not getattr(topic_meta_q, "error", None) else {}
+
+    ai_context = {
+        "topic_id": topic_id,
+        "plan_item_id": plan_item_id,
+        "previous_confidence": previous_conf,
+        "expected_minutes": expected_minutes,
+        "total_active_seconds": total_active_seconds,
+        "total_duration_seconds": total_duration_seconds,
+        "completion_ratio": completion_ratio,
+        "revisit_count": revisit_count,
+        "session_count": len(sessions),
+        "topic_metadata": topic_meta,
+        "recent_sessions": sessions[:8],
+    }
+
+    ai_decision = _garlic_runtime_ai_confidence(topic_context=ai_context)
+    decision = ai_decision or _garlic_runtime_confidence_fallback(
+        previous_confidence=previous_conf,
+        expected_minutes=expected_minutes,
+        total_active_seconds=total_active_seconds,
+        completion_ratio=completion_ratio,
+        revisit_count=revisit_count,
+        session_count=len(sessions),
+    )
+
+    updated_conf = float(decision.get("updated_confidence") or previous_conf)
+    learning_status = str(decision.get("learning_status") or _garlic_runtime_learning_status(updated_conf))
+    recommendation = str(decision.get("recommendation") or _garlic_runtime_recommendation(updated_conf, completion_ratio))
+    reasoning = str(decision.get("reasoning") or "").strip()
+
+    priority_score_prev = float(item_row.get("priority_score") or 0.0)
+    priority_shift = {"weak": 8.0, "improving": 4.0, "stable": 0.0, "strong": -6.0}.get(learning_status, 0.0)
+    priority_next = round(_garlic_runtime_clamp(priority_score_prev + priority_shift, 1.0, 100.0), 2)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    upd = (
+        supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+        .update(
+            {
+                "confidence_score": round(_garlic_runtime_clamp(updated_conf, 0.0, 100.0), 2),
+                "priority_score": priority_next,
+                "updated_at": now_iso,
+            }
+        )
+        .eq("id", plan_item_id)
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic confidence item update): {upd.error}")
+
+    history_row = {
+        "student_id": student_id,
+        "topic_id": topic_id,
+        "plan_item_id": plan_item_id,
+        "session_id": session_id,
+        "previous_confidence": previous_conf,
+        "updated_confidence": round(_garlic_runtime_clamp(updated_conf, 0.0, 100.0), 2),
+        "learning_status": learning_status,
+        "recommendation": recommendation,
+        "reasoning": reasoning,
+        "model_name": "gemini-2.5-flash",
+        "signals": {
+            "expected_minutes": expected_minutes,
+            "total_active_seconds": total_active_seconds,
+            "total_duration_seconds": total_duration_seconds,
+            "completion_ratio": completion_ratio,
+            "revisit_count": revisit_count,
+            "session_count": len(sessions),
+            "priority_previous": priority_score_prev,
+            "priority_updated": priority_next,
+        },
+        "created_at": now_iso,
+    }
+    history_ins = supabase.table(GARLIC_RUNTIME_CONFIDENCE_TABLE).insert(history_row).execute()
+    if getattr(history_ins, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic confidence history): {history_ins.error}")
+
+    _garlic_runtime_log_event(
+        supabase=supabase,
+        student_id=student_id,
+        event_type="confidence_updated",
+        plan_id=plan_id,
+        plan_item_id=plan_item_id,
+        topic_id=topic_id,
+        session_id=session_id,
+        payload={
+            "previous_confidence": previous_conf,
+            "updated_confidence": updated_conf,
+            "learning_status": learning_status,
+            "recommendation": recommendation,
+        },
+    )
+
+    return {
+        "topic_id": topic_id,
+        "plan_item_id": plan_item_id,
+        "previous_confidence": previous_conf,
+        "updated_confidence": round(_garlic_runtime_clamp(updated_conf, 0.0, 100.0), 2),
+        "learning_status": learning_status,
+        "recommendation": recommendation,
+        "reasoning": reasoning,
+        "priority_score": priority_next,
+    }
 
 
 def _garlic_generate_ai_rankings(
@@ -21665,7 +22201,457 @@ def api_garlic_track_interaction(
     except Exception:
         pass
 
+    event_name = str(payload.event_type or "").strip().lower()
+    if event_name in {"topic_click", "open_topic", "start_topic", "resume_topic"}:
+        try:
+            item_row = _garlic_runtime_resolve_item_for_student(
+                supabase=supabase,
+                student_id=auth_user_id,
+                plan_item_id=item_id or None,
+                topic_id=str(payload.topic_id or "").strip() or None,
+            )
+            _garlic_runtime_start_or_resume_session(
+                supabase=supabase,
+                student_id=auth_user_id,
+                item_row=item_row,
+                expected_minutes=None,
+                event_source="interaction_endpoint",
+            )
+        except Exception:
+            # Do not break interaction endpoint if runtime session bootstrap fails.
+            pass
+
     return {"ok": True}
+
+
+@garlic_runtime_router.post("/session/start", summary="Start or resume GARLIC execution session")
+def api_garlic_runtime_start_session(
+    payload: GarlicRuntimeSessionStartIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    item_row = _garlic_runtime_resolve_item_for_student(
+        supabase=supabase,
+        student_id=auth_user_id,
+        plan_item_id=payload.plan_item_id,
+        topic_id=payload.topic_id,
+    )
+    session, resumed = _garlic_runtime_start_or_resume_session(
+        supabase=supabase,
+        student_id=auth_user_id,
+        item_row=item_row,
+        expected_minutes=payload.expected_minutes,
+        event_source="runtime_start_endpoint",
+    )
+    return {
+        "ok": True,
+        "resumed": resumed,
+        "session": {
+            "id": session.get("id"),
+            "plan_id": item_row.get("plan_id"),
+            "plan_item_id": item_row.get("id"),
+            "topic_id": item_row.get("topic_id"),
+            "session_status": "active",
+            "started_at": session.get("started_at"),
+            "expected_minutes": session.get("expected_minutes") or payload.expected_minutes,
+        },
+    }
+
+
+@garlic_runtime_router.post("/session/end", summary="End a GARLIC execution session")
+def api_garlic_runtime_end_session(
+    payload: GarlicRuntimeSessionEndIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    q = (
+        supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+        .select("id,student_id,plan_id,plan_item_id,topic_id,started_at,active_seconds,completion_percent,session_status")
+        .eq("id", payload.session_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime end lookup): {q.error}")
+    if not q.data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    row = q.data[0] or {}
+    if str(row.get("student_id") or "") != auth_user_id:
+        raise HTTPException(status_code=403, detail="Not allowed to end this session")
+
+    started = _garlic_runtime_parse_dt(row.get("started_at"))
+    now_dt = datetime.now(timezone.utc)
+    duration_seconds = max(0, int((now_dt - started).total_seconds())) if started else int(row.get("duration_seconds") or 0)
+    completion_pct = float(payload.completion_percent if payload.completion_percent is not None else row.get("completion_percent") or 0.0)
+    completion_pct = _garlic_runtime_clamp(completion_pct, 0.0, 100.0)
+    session_status = "completed" if completion_pct >= 100.0 else ("exited_early" if payload.exited_early else "paused")
+    next_active_seconds = int(payload.active_seconds if payload.active_seconds is not None else row.get("active_seconds") or 0)
+
+    now_iso = now_dt.isoformat()
+    upd = (
+        supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+        .update(
+            {
+                "ended_at": now_iso,
+                "duration_seconds": duration_seconds,
+                "active_seconds": max(0, next_active_seconds),
+                "completion_percent": completion_pct,
+                "session_status": session_status,
+                "updated_at": now_iso,
+            }
+        )
+        .eq("id", payload.session_id)
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime end update): {upd.error}")
+
+    plan_item_id = str(row.get("plan_item_id") or "").strip()
+    if plan_item_id:
+        item_patch: Dict[str, Any] = {
+            "updated_at": now_iso,
+            "last_accessed": now_iso,
+        }
+        if completion_pct >= 100.0:
+            item_patch["completed"] = True
+            item_patch["status"] = "completed"
+        else:
+            item_patch["status"] = "in_progress"
+        _ = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).update(item_patch).eq("id", plan_item_id).execute()
+
+    _garlic_runtime_log_event(
+        supabase=supabase,
+        student_id=auth_user_id,
+        plan_id=str(row.get("plan_id") or "") or None,
+        plan_item_id=plan_item_id or None,
+        topic_id=str(row.get("topic_id") or "") or None,
+        session_id=str(row.get("id") or ""),
+        event_type="end_session",
+        payload={
+            "completion_percent": completion_pct,
+            "duration_seconds": duration_seconds,
+            "active_seconds": max(0, next_active_seconds),
+            "session_status": session_status,
+        },
+    )
+
+    return {
+        "ok": True,
+        "session_id": payload.session_id,
+        "session_status": session_status,
+        "duration_seconds": duration_seconds,
+        "active_seconds": max(0, next_active_seconds),
+        "completion_percent": round(completion_pct, 2),
+    }
+
+
+@garlic_runtime_router.post("/session/track", summary="Track live GARLIC execution behavior")
+def api_garlic_runtime_track_session(
+    payload: GarlicRuntimeSessionTrackIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    q = (
+        supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+        .select("id,student_id,plan_id,plan_item_id,topic_id,started_at,active_seconds,duration_seconds,revisit_count,pause_count,completion_percent,session_status")
+        .eq("id", payload.session_id)
+        .limit(1)
+        .execute()
+    )
+    if getattr(q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime track lookup): {q.error}")
+    if not q.data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    row = q.data[0] or {}
+    if str(row.get("student_id") or "") != auth_user_id:
+        raise HTTPException(status_code=403, detail="Not allowed to track this session")
+
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    started = _garlic_runtime_parse_dt(row.get("started_at"))
+    computed_duration = max(0, int((now_dt - started).total_seconds())) if started else int(row.get("duration_seconds") or 0)
+
+    active_delta = int(payload.active_seconds_delta or 0)
+    next_active = max(0, int(row.get("active_seconds") or 0) + active_delta)
+    completion_pct = float(payload.completion_percent if payload.completion_percent is not None else row.get("completion_percent") or 0.0)
+    completion_pct = _garlic_runtime_clamp(completion_pct, 0.0, 100.0)
+    revisit_count = int(row.get("revisit_count") or 0) + (1 if payload.revisit else 0)
+    pause_count = int(row.get("pause_count") or 0) + (1 if str(payload.event_type).strip().lower() == "pause" else 0)
+
+    interaction_ratio = float(payload.interaction_ratio if payload.interaction_ratio is not None else 1.0)
+    interaction_ratio = _garlic_runtime_clamp(interaction_ratio, 0.0, 1.0)
+    engagement_score = 0.0
+    if computed_duration > 0:
+        engagement_score = _garlic_runtime_clamp((next_active / computed_duration) * interaction_ratio * 100.0, 0.0, 100.0)
+
+    event_name = str(payload.event_type or "heartbeat").strip().lower()
+    session_status = str(row.get("session_status") or "active")
+    if event_name == "pause":
+        session_status = "paused"
+    elif event_name in {"resume", "heartbeat", "interaction", "active"}:
+        session_status = "active"
+    elif event_name == "complete" or completion_pct >= 100.0:
+        session_status = "completed"
+
+    upd = (
+        supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+        .update(
+            {
+                "active_seconds": next_active,
+                "duration_seconds": computed_duration,
+                "completion_percent": completion_pct,
+                "revisit_count": revisit_count,
+                "pause_count": pause_count,
+                "engagement_score": round(engagement_score, 2),
+                "engagement_signals": {
+                    "interaction_ratio": interaction_ratio,
+                    "last_event_type": event_name,
+                    "last_tracked_at": now_iso,
+                },
+                "session_status": session_status,
+                "updated_at": now_iso,
+            }
+        )
+        .eq("id", payload.session_id)
+        .execute()
+    )
+    if getattr(upd, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime track update): {upd.error}")
+
+    _garlic_runtime_log_event(
+        supabase=supabase,
+        student_id=auth_user_id,
+        plan_id=str(row.get("plan_id") or "") or None,
+        plan_item_id=str(row.get("plan_item_id") or "") or None,
+        topic_id=str(row.get("topic_id") or "") or None,
+        session_id=str(row.get("id") or ""),
+        event_type=event_name,
+        payload={
+            "active_seconds_delta": active_delta,
+            "active_seconds": next_active,
+            "duration_seconds": computed_duration,
+            "completion_percent": completion_pct,
+            "interaction_ratio": interaction_ratio,
+            "engagement_score": round(engagement_score, 2),
+            "revisit": bool(payload.revisit),
+        },
+    )
+
+    return {
+        "ok": True,
+        "session_id": payload.session_id,
+        "session_status": session_status,
+        "active_seconds": next_active,
+        "duration_seconds": computed_duration,
+        "completion_percent": round(completion_pct, 2),
+        "engagement_score": round(engagement_score, 2),
+    }
+
+
+@garlic_runtime_router.post("/topic/complete", summary="Complete a GARLIC topic execution")
+def api_garlic_runtime_complete_topic(
+    payload: GarlicRuntimeTopicCompleteIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    item_row: Optional[Dict[str, Any]] = None
+    session_id = str(payload.session_id or "").strip() or None
+    if session_id:
+        sq = (
+            supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+            .select("id,student_id,plan_id,plan_item_id,topic_id,started_at")
+            .eq("id", session_id)
+            .limit(1)
+            .execute()
+        )
+        if getattr(sq, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic runtime complete session): {sq.error}")
+        if not sq.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+        srow = sq.data[0] or {}
+        if str(srow.get("student_id") or "") != auth_user_id:
+            raise HTTPException(status_code=403, detail="Not allowed to complete this session")
+        item_row = _garlic_runtime_resolve_item_for_student(
+            supabase=supabase,
+            student_id=auth_user_id,
+            plan_item_id=str(srow.get("plan_item_id") or "") or None,
+            topic_id=str(srow.get("topic_id") or "") or None,
+        )
+    else:
+        item_row = _garlic_runtime_resolve_item_for_student(
+            supabase=supabase,
+            student_id=auth_user_id,
+            plan_item_id=payload.plan_item_id,
+            topic_id=payload.topic_id,
+        )
+
+    plan_item_id = str(item_row.get("id") or "").strip()
+    topic_id = str(item_row.get("topic_id") or "").strip()
+    plan_id = str(item_row.get("plan_id") or "").strip() or None
+    if not plan_item_id or not topic_id:
+        raise HTTPException(status_code=400, detail="Invalid topic completion payload")
+
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    upd_item = (
+        supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+        .update(
+            {
+                "completed": True,
+                "status": "completed",
+                "last_accessed": now_iso,
+                "updated_at": now_iso,
+            }
+        )
+        .eq("id", plan_item_id)
+        .execute()
+    )
+    if getattr(upd_item, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error (garlic complete item): {upd_item.error}")
+
+    # Ensure academics completion set is persistent too.
+    progress_exists_q = (
+        supabase.table("user_topic_progress")
+        .select("id")
+        .eq("user_profile_id", profile_id)
+        .eq("topic_id", topic_id)
+        .limit(1)
+        .execute()
+    )
+    if not getattr(progress_exists_q, "error", None) and not progress_exists_q.data:
+        try:
+            supabase.table("user_topic_progress").insert(
+                {
+                    "user_profile_id": profile_id,
+                    "topic_id": topic_id,
+                    "completed_at": now_iso,
+                }
+            ).execute()
+        except Exception:
+            pass
+
+    if session_id:
+        sq = (
+            supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+            .select("id,started_at,active_seconds")
+            .eq("id", session_id)
+            .limit(1)
+            .execute()
+        )
+        if not getattr(sq, "error", None) and sq.data:
+            srow = sq.data[0] or {}
+            started = _garlic_runtime_parse_dt(srow.get("started_at"))
+            duration_seconds = max(0, int((now_dt - started).total_seconds())) if started else int(srow.get("duration_seconds") or 0)
+            _ = (
+                supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+                .update(
+                    {
+                        "ended_at": now_iso,
+                        "duration_seconds": duration_seconds,
+                        "completion_percent": 100.0,
+                        "session_status": "completed",
+                        "updated_at": now_iso,
+                    }
+                )
+                .eq("id", session_id)
+                .execute()
+            )
+
+    _garlic_runtime_log_event(
+        supabase=supabase,
+        student_id=auth_user_id,
+        plan_id=plan_id,
+        plan_item_id=plan_item_id,
+        topic_id=topic_id,
+        session_id=session_id,
+        event_type="complete_topic",
+        payload={"completed_at": now_iso},
+    )
+
+    # Refresh item_row snapshot for confidence update.
+    refreshed_q = (
+        supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE)
+        .select("id,plan_id,topic_id,recommended_time,estimated_time,confidence_score,priority_score,status,completed")
+        .eq("id", plan_item_id)
+        .limit(1)
+        .execute()
+    )
+    refreshed_item = (refreshed_q.data or [item_row])[0]
+    confidence = _garlic_runtime_update_confidence(
+        supabase=supabase,
+        student_id=auth_user_id,
+        item_row=refreshed_item,
+        session_id=session_id,
+    )
+
+    return {
+        "ok": True,
+        "topic_id": topic_id,
+        "plan_item_id": plan_item_id,
+        "completed": True,
+        "confidence": confidence,
+    }
+
+
+@garlic_runtime_router.post("/confidence/update", summary="Update GARLIC topic confidence from runtime behavior")
+def api_garlic_runtime_update_confidence(
+    payload: GarlicRuntimeConfidenceUpdateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    item_row: Optional[Dict[str, Any]] = None
+    session_id = str(payload.session_id or "").strip() or None
+    if session_id:
+        sq = (
+            supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE)
+            .select("id,student_id,plan_item_id,topic_id")
+            .eq("id", session_id)
+            .limit(1)
+            .execute()
+        )
+        if getattr(sq, "error", None):
+            raise HTTPException(status_code=500, detail=f"Supabase error (garlic confidence session): {sq.error}")
+        if not sq.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+        srow = sq.data[0] or {}
+        if str(srow.get("student_id") or "") != auth_user_id:
+            raise HTTPException(status_code=403, detail="Not allowed to update confidence for this session")
+        item_row = _garlic_runtime_resolve_item_for_student(
+            supabase=supabase,
+            student_id=auth_user_id,
+            plan_item_id=str(srow.get("plan_item_id") or "") or payload.plan_item_id,
+            topic_id=str(srow.get("topic_id") or "") or payload.topic_id,
+        )
+    else:
+        item_row = _garlic_runtime_resolve_item_for_student(
+            supabase=supabase,
+            student_id=auth_user_id,
+            plan_item_id=payload.plan_item_id,
+            topic_id=payload.topic_id,
+        )
+
+    confidence = _garlic_runtime_update_confidence(
+        supabase=supabase,
+        student_id=auth_user_id,
+        item_row=item_row,
+        session_id=session_id,
+    )
+    return {"ok": True, "confidence": confidence}
 
 
 # ---------- Profile update & uploads ----------
@@ -31516,6 +32502,7 @@ def create_app() -> FastAPI:
     app.include_router(print_router)
     app.include_router(academics_router)
     app.include_router(garlic_router)
+    app.include_router(garlic_runtime_router)
     app.include_router(marketplace_router)
     app.include_router(teacher_router)
     app.include_router(youtube_transcript_router)
