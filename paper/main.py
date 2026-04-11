@@ -22654,6 +22654,1387 @@ def api_garlic_runtime_update_confidence(
     return {"ok": True, "confidence": confidence}
 
 
+# ---------- GARLIC V3: Autonomous Exam Intelligence Engine ----------
+
+GARLIC_EXAM_PROFILES_TABLE = "garlic_exam_profiles"
+GARLIC_DIAGNOSTIC_SESSIONS_TABLE = "garlic_diagnostic_sessions"
+GARLIC_DIAGNOSTIC_QUESTIONS_TABLE = "garlic_diagnostic_questions"
+GARLIC_ADAPTIVE_REPLAN_LOG_TABLE = "garlic_adaptive_replan_log"
+GARLIC_EXAM_INSIGHTS_TABLE = "garlic_exam_insights"
+GARLIC_OUTCOME_PREDICTIONS_TABLE = "garlic_outcome_predictions"
+
+garlic_v3_router = APIRouter(prefix="/api/garlic/v3", tags=["garlic-v3"])
+
+
+# --- Pydantic Models ---
+
+class GarlicExamModeActivateIn(BaseModel):
+    exam_date: Optional[str] = None
+    time_remaining_days: Optional[int] = Field(default=None, ge=1, le=365)
+
+
+class GarlicDiagnosticAnswerIn(BaseModel):
+    session_id: str = Field(..., min_length=6, max_length=64)
+    question_id: str = Field(..., min_length=6, max_length=64)
+    answer: str = Field(..., min_length=1, max_length=2000)
+
+
+class GarlicSessionAutoCloseIn(BaseModel):
+    session_id: str = Field(..., min_length=6, max_length=64)
+    active_seconds: Optional[int] = Field(default=0, ge=0, le=86400)
+    completion_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+
+
+# --- Intensity Level Logic ---
+
+def _garlic_v3_intensity_level(days_remaining: Optional[int]) -> str:
+    if days_remaining is None:
+        return "exam"
+    if days_remaining <= 7:
+        return "critical"
+    if days_remaining <= 30:
+        return "exam"
+    return "normal"
+
+
+def _garlic_v3_compute_days_remaining(exam_date_str: Optional[str]) -> Optional[int]:
+    if not exam_date_str:
+        return None
+    try:
+        ed = date.fromisoformat(str(exam_date_str).strip()[:10])
+        delta = (ed - date.today()).days
+        return max(0, delta)
+    except Exception:
+        return None
+
+
+# --- Exam Mode Endpoints ---
+
+@garlic_v3_router.post("/exam-mode/activate", summary="Activate GARLIC Exam Mode")
+def api_garlic_v3_activate_exam_mode(
+    payload: GarlicExamModeActivateIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    days = payload.time_remaining_days or _garlic_v3_compute_days_remaining(payload.exam_date)
+    intensity = _garlic_v3_intensity_level(days)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    existing_q = (
+        supabase.table(GARLIC_EXAM_PROFILES_TABLE)
+        .select("id,diagnostic_completed,diagnostic_session_id,intensity_level,exam_date,predicted_marks,readiness_score,plan_id")
+        .eq("student_id", auth_user_id)
+        .eq("exam_mode_active", True)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    if not getattr(existing_q, "error", None) and existing_q.data:
+        profile = existing_q.data[0]
+        patch = {"intensity_level": intensity, "updated_at": now_iso}
+        if payload.exam_date:
+            patch["exam_date"] = payload.exam_date
+        if days is not None:
+            patch["time_remaining_days"] = days
+        supabase.table(GARLIC_EXAM_PROFILES_TABLE).update(patch).eq("id", profile["id"]).execute()
+        profile.update(patch)
+        return {
+            "ok": True,
+            "status": "loaded",
+            "needs_diagnostic": not profile.get("diagnostic_completed"),
+            "profile": profile,
+            "intensity_level": intensity,
+        }
+
+    ins_payload = {
+        "student_id": auth_user_id,
+        "exam_mode_active": True,
+        "intensity_level": intensity,
+        "exam_date": payload.exam_date,
+        "time_remaining_days": days,
+        "diagnostic_completed": False,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    ins = supabase.table(GARLIC_EXAM_PROFILES_TABLE).insert(ins_payload).execute()
+    if getattr(ins, "error", None) or not ins.data:
+        raise HTTPException(status_code=500, detail="Failed to create exam profile")
+
+    return {
+        "ok": True,
+        "status": "created",
+        "needs_diagnostic": True,
+        "profile": ins.data[0],
+        "intensity_level": intensity,
+    }
+
+
+@garlic_v3_router.get("/exam-mode/status", summary="Get current exam mode status")
+def api_garlic_v3_exam_mode_status(
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    q = (
+        supabase.table(GARLIC_EXAM_PROFILES_TABLE)
+        .select("*")
+        .eq("student_id", auth_user_id)
+        .eq("exam_mode_active", True)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if getattr(q, "error", None):
+        raise HTTPException(status_code=500, detail=f"Supabase error: {q.error}")
+    if not q.data:
+        return {"active": False, "profile": None}
+
+    profile = q.data[0]
+    days = _garlic_v3_compute_days_remaining(profile.get("exam_date"))
+    if days is not None:
+        profile["time_remaining_days"] = days
+        profile["intensity_level"] = _garlic_v3_intensity_level(days)
+    return {"active": True, "profile": profile}
+
+
+@garlic_v3_router.post("/exam-mode/deactivate", summary="Deactivate exam mode")
+def api_garlic_v3_deactivate_exam_mode(
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+    supabase.table(GARLIC_EXAM_PROFILES_TABLE).update(
+        {"exam_mode_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}
+    ).eq("student_id", auth_user_id).eq("exam_mode_active", True).execute()
+    return {"ok": True, "message": "Exam mode deactivated"}
+
+
+# --- Diagnostic Question Engine ---
+
+def _garlic_v3_generate_diagnostic_questions(
+    *,
+    syllabus_context: List[Dict[str, Any]],
+    past_interactions: Dict[str, Any],
+    session_type: str = "full",
+    max_questions: int = 7,
+) -> Optional[List[Dict[str, Any]]]:
+    if not GEMINI_API_KEY:
+        return None
+    try:
+        import google.generativeai as genai
+    except Exception:
+        return None
+
+    q_count = max_questions if session_type == "full" else 2
+    prompt = f"""You are GARLIC Diagnostic Intelligence.
+
+Generate exactly {q_count} adaptive diagnostic questions to evaluate a student's exam readiness.
+
+RULES:
+- Cover DIFFERENT subjects and units (spread across syllabus)
+- Mix question types: conceptual understanding, problem-solving, memory recall
+- Difficulty: start at level 3, adjust based on subject complexity
+- Each question MUST have exactly 4 options (A, B, C, D)
+- Questions must be specific to the topic, not generic
+
+OUTPUT JSON ONLY:
+{{
+  "questions": [
+    {{
+      "topic_id": "uuid from input",
+      "subject_name": "...",
+      "unit_name": "...",
+      "topic_name": "...",
+      "question_text": "...",
+      "question_type": "conceptual|problem_solving|memory_recall",
+      "difficulty": 3,
+      "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
+      "correct_answer": "A"
+    }}
+  ]
+}}"""
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        resp = model.generate_content(
+            [{"text": prompt}, {"text": json.dumps({"syllabus": syllabus_context, "past_interactions": past_interactions}, ensure_ascii=True)}],
+            generation_config={"temperature": 0.3, "max_output_tokens": 4096},
+        )
+    except Exception:
+        return None
+
+    text_out = ""
+    try:
+        text_out = getattr(resp, "text", "") or ""
+    except Exception:
+        pass
+    if not text_out:
+        try:
+            for cand in (getattr(resp, "candidates", None) or []):
+                content = getattr(cand, "content", None)
+                for part in (getattr(content, "parts", None) or []):
+                    t = getattr(part, "text", None)
+                    if t:
+                        text_out += str(t)
+        except Exception:
+            pass
+
+    parsed = _garlic_extract_json_payload(text_out)
+    if not parsed:
+        return None
+    return parsed.get("questions") or []
+
+
+def _garlic_v3_evaluate_answer(
+    *,
+    question: Dict[str, Any],
+    student_answer: str,
+) -> Dict[str, Any]:
+    is_correct = str(student_answer).strip().upper()[:1] == str(question.get("correct_answer", "")).strip().upper()[:1]
+
+    if not GEMINI_API_KEY:
+        return {
+            "score": 100.0 if is_correct else 20.0,
+            "topic_understanding": "strong" if is_correct else "weak",
+            "confidence_estimate": 85.0 if is_correct else 25.0,
+            "explanation": "Correct answer" if is_correct else "Incorrect answer",
+        }
+
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        eval_prompt = """Evaluate this student's answer. Return JSON ONLY:
+{
+  "score": 0-100,
+  "topic_understanding": "weak|moderate|strong",
+  "confidence_estimate": 0-100,
+  "explanation": "brief explanation"
+}"""
+        context = {
+            "question": question.get("question_text"),
+            "correct_answer": question.get("correct_answer"),
+            "student_answer": student_answer,
+            "topic": question.get("topic_name"),
+            "is_correct": is_correct,
+        }
+        resp = model.generate_content(
+            [{"text": eval_prompt}, {"text": json.dumps(context)}],
+            generation_config={"temperature": 0.1, "max_output_tokens": 512},
+        )
+        text = getattr(resp, "text", "") or ""
+        parsed = _garlic_extract_json_payload(text)
+        if parsed:
+            return {
+                "score": float(parsed.get("score") or (100 if is_correct else 20)),
+                "topic_understanding": str(parsed.get("topic_understanding") or ("strong" if is_correct else "weak")),
+                "confidence_estimate": float(parsed.get("confidence_estimate") or (85 if is_correct else 25)),
+                "explanation": str(parsed.get("explanation") or ""),
+            }
+    except Exception:
+        pass
+
+    return {
+        "score": 100.0 if is_correct else 20.0,
+        "topic_understanding": "strong" if is_correct else "weak",
+        "confidence_estimate": 85.0 if is_correct else 25.0,
+        "explanation": "Correct" if is_correct else "Incorrect",
+    }
+
+
+@garlic_v3_router.post("/diagnostic/start", summary="Start diagnostic session")
+def api_garlic_v3_diagnostic_start(
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    profile_ctx = _garlic_get_profile_context(supabase, auth_user_id)
+    batch_id, semester_val = _garlic_resolve_batch_and_semester(
+        supabase, auth_user_id=auth_user_id, profile_ctx=profile_ctx,
+        provided_batch_id=None, provided_semester=None,
+    )
+    if not batch_id or not semester_val:
+        raise HTTPException(status_code=400, detail="Cannot resolve batch/semester for diagnostics")
+
+    courses_q = supabase.table("syllabus_courses").select("id,course_code,title,type").eq("batch_id", batch_id).eq("semester", semester_val).execute()
+    courses = courses_q.data or []
+    course_ids = [str(c["id"]) for c in courses if c.get("id")]
+    units_q = supabase.table("syllabus_units").select("id,course_id,unit_title").in_("course_id", course_ids).execute() if course_ids else type("R", (), {"data": []})()
+    units = units_q.data or []
+    unit_ids = [str(u["id"]) for u in units if u.get("id")]
+    topics_q = supabase.table("syllabus_topics").select("id,unit_id,topic").in_("unit_id", unit_ids).execute() if unit_ids else type("R", (), {"data": []})()
+    topics = topics_q.data or []
+
+    course_map = {str(c["id"]): c for c in courses}
+    unit_map = {str(u["id"]): u for u in units}
+    syllabus_ctx = []
+    for t in topics:
+        uid = str(t.get("unit_id") or "")
+        u = unit_map.get(uid, {})
+        cid = str(u.get("course_id") or "")
+        c = course_map.get(cid, {})
+        syllabus_ctx.append({
+            "topic_id": str(t.get("id")),
+            "topic": t.get("topic"),
+            "unit": u.get("unit_title"),
+            "subject": c.get("title"),
+            "course_type": c.get("type"),
+        })
+
+    history_q = supabase.table("user_topic_history").select("topic_id").eq("user_profile_id", profile_id).order("viewed_at", desc=True).limit(200).execute()
+    past = {"history_count": len(history_q.data or []), "recent_topics": [str(r.get("topic_id")) for r in (history_q.data or [])[:20]]}
+
+    questions = _garlic_v3_generate_diagnostic_questions(
+        syllabus_context=syllabus_ctx[:60],
+        past_interactions=past,
+        session_type="full",
+        max_questions=7,
+    )
+    if not questions:
+        raise HTTPException(status_code=500, detail="Failed to generate diagnostic questions")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    session_ins = supabase.table(GARLIC_DIAGNOSTIC_SESSIONS_TABLE).insert({
+        "student_id": auth_user_id,
+        "session_type": "full",
+        "status": "in_progress",
+        "questions_asked": len(questions),
+        "max_questions": 7,
+        "created_at": now_iso,
+    }).execute()
+    if getattr(session_ins, "error", None) or not session_ins.data:
+        raise HTTPException(status_code=500, detail="Failed to create diagnostic session")
+    session_id = str(session_ins.data[0]["id"])
+
+    q_rows = []
+    for idx, q in enumerate(questions[:10]):
+        q_rows.append({
+            "session_id": session_id,
+            "student_id": auth_user_id,
+            "question_index": idx,
+            "topic_id": q.get("topic_id"),
+            "subject_name": q.get("subject_name"),
+            "unit_name": q.get("unit_name"),
+            "topic_name": q.get("topic_name"),
+            "question_text": q.get("question_text", ""),
+            "question_type": q.get("question_type", "conceptual"),
+            "difficulty": int(q.get("difficulty") or 3),
+            "options": q.get("options", []),
+            "correct_answer": q.get("correct_answer", ""),
+            "created_at": now_iso,
+        })
+    if q_rows:
+        supabase.table(GARLIC_DIAGNOSTIC_QUESTIONS_TABLE).insert(q_rows).execute()
+
+    exam_profile_q = supabase.table(GARLIC_EXAM_PROFILES_TABLE).select("id").eq("student_id", auth_user_id).eq("exam_mode_active", True).order("created_at", desc=True).limit(1).execute()
+    if not getattr(exam_profile_q, "error", None) and exam_profile_q.data:
+        supabase.table(GARLIC_EXAM_PROFILES_TABLE).update({"diagnostic_session_id": session_id, "updated_at": now_iso}).eq("id", exam_profile_q.data[0]["id"]).execute()
+
+    safe_questions = []
+    for idx, q in enumerate(q_rows):
+        safe_questions.append({
+            "index": idx,
+            "question_id": None,
+            "topic_name": q.get("topic_name"),
+            "subject_name": q.get("subject_name"),
+            "question_text": q.get("question_text"),
+            "question_type": q.get("question_type"),
+            "difficulty": q.get("difficulty"),
+            "options": q.get("options"),
+        })
+
+    stored_q = supabase.table(GARLIC_DIAGNOSTIC_QUESTIONS_TABLE).select("id,question_index").eq("session_id", session_id).order("question_index").execute()
+    if not getattr(stored_q, "error", None) and stored_q.data:
+        for sq in stored_q.data:
+            idx = sq.get("question_index", 0)
+            if idx < len(safe_questions):
+                safe_questions[idx]["question_id"] = sq.get("id")
+
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "total_questions": len(safe_questions),
+        "questions": safe_questions,
+    }
+
+
+@garlic_v3_router.post("/diagnostic/answer", summary="Submit diagnostic answer")
+def api_garlic_v3_diagnostic_answer(
+    payload: GarlicDiagnosticAnswerIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    q = supabase.table(GARLIC_DIAGNOSTIC_QUESTIONS_TABLE).select("*").eq("id", payload.question_id).eq("session_id", payload.session_id).limit(1).execute()
+    if getattr(q, "error", None) or not q.data:
+        raise HTTPException(status_code=404, detail="Question not found")
+    question = q.data[0]
+    if str(question.get("student_id")) != auth_user_id:
+        raise HTTPException(status_code=403, detail="Not your question")
+
+    evaluation = _garlic_v3_evaluate_answer(question=question, student_answer=payload.answer)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    supabase.table(GARLIC_DIAGNOSTIC_QUESTIONS_TABLE).update({
+        "student_answer": payload.answer,
+        "is_correct": str(payload.answer).strip().upper()[:1] == str(question.get("correct_answer", "")).strip().upper()[:1],
+        "ai_score": evaluation.get("score"),
+        "ai_evaluation": evaluation,
+        "answered_at": now_iso,
+    }).eq("id", payload.question_id).execute()
+
+    session_q = supabase.table(GARLIC_DIAGNOSTIC_SESSIONS_TABLE).select("id,questions_asked,questions_answered").eq("id", payload.session_id).limit(1).execute()
+    if not getattr(session_q, "error", None) and session_q.data:
+        answered = int(session_q.data[0].get("questions_answered") or 0) + 1
+        supabase.table(GARLIC_DIAGNOSTIC_SESSIONS_TABLE).update({"questions_answered": answered, "updated_at": now_iso} if hasattr(supabase, '_') else {"questions_answered": answered}).eq("id", payload.session_id).execute()
+
+        asked = int(session_q.data[0].get("questions_asked") or 0)
+        if answered >= asked:
+            _garlic_v3_complete_diagnostic(supabase=supabase, student_id=auth_user_id, session_id=payload.session_id)
+
+    return {"ok": True, "evaluation": evaluation}
+
+
+def _garlic_v3_complete_diagnostic(*, supabase, student_id: str, session_id: str):
+    all_q = supabase.table(GARLIC_DIAGNOSTIC_QUESTIONS_TABLE).select("topic_id,topic_name,subject_name,is_correct,ai_score,ai_evaluation").eq("session_id", session_id).execute()
+    questions = all_q.data or []
+
+    topic_scores: Dict[str, List[float]] = defaultdict(list)
+    strong, weak = [], []
+    total_score = 0.0
+
+    for q in questions:
+        score = float(q.get("ai_score") or (100 if q.get("is_correct") else 20))
+        total_score += score
+        tid = q.get("topic_id") or q.get("topic_name") or "unknown"
+        topic_scores[tid].append(score)
+
+    overall = total_score / max(1, len(questions))
+    for tid, scores in topic_scores.items():
+        avg = sum(scores) / len(scores)
+        entry = {"topic_id": tid, "avg_score": round(avg, 2)}
+        if avg >= 70:
+            strong.append(entry)
+        else:
+            weak.append(entry)
+
+    focus_areas = [w["topic_id"] for w in sorted(weak, key=lambda x: x["avg_score"])[:5]]
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    supabase.table(GARLIC_DIAGNOSTIC_SESSIONS_TABLE).update({
+        "status": "completed",
+        "overall_score": round(overall, 2),
+        "strong_topics": strong,
+        "weak_topics": weak,
+        "focus_areas": focus_areas,
+        "completed_at": now_iso,
+    }).eq("id", session_id).execute()
+
+    supabase.table(GARLIC_EXAM_PROFILES_TABLE).update({
+        "diagnostic_completed": True,
+        "diagnostic_results": {
+            "overall_score": round(overall, 2),
+            "strong_topics": strong,
+            "weak_topics": weak,
+            "focus_areas": focus_areas,
+            "completed_at": now_iso,
+        },
+        "updated_at": now_iso,
+    }).eq("student_id", student_id).eq("exam_mode_active", True).execute()
+
+
+@garlic_v3_router.get("/diagnostic/results/{session_id}", summary="Get diagnostic results")
+def api_garlic_v3_diagnostic_results(
+    session_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    q = supabase.table(GARLIC_DIAGNOSTIC_SESSIONS_TABLE).select("*").eq("id", session_id).eq("student_id", auth_user_id).limit(1).execute()
+    if getattr(q, "error", None) or not q.data:
+        raise HTTPException(status_code=404, detail="Diagnostic session not found")
+    return {"ok": True, "session": q.data[0]}
+
+
+# --- Micro-Diagnostics (continuous re-evaluation) ---
+
+@garlic_v3_router.post("/diagnostic/micro", summary="Generate a micro-diagnostic question")
+def api_garlic_v3_micro_diagnostic(
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, profile_id = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    plan_q = supabase.table(GARLIC_STUDY_PLANS_TABLE).select("id").eq("student_id", auth_user_id).order("last_updated", desc=True).limit(1).execute()
+    if not plan_q.data:
+        raise HTTPException(status_code=404, detail="No plan found")
+    plan_id = plan_q.data[0]["id"]
+
+    recent_items_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select(
+        "topic_id,syllabus_topics(topic),syllabus_courses(title),syllabus_units(unit_title)"
+    ).eq("plan_id", plan_id).eq("status", "completed").order("updated_at", desc=True).limit(5).execute()
+
+    if not recent_items_q.data:
+        return {"ok": True, "question": None, "message": "No completed topics for micro-diagnostic yet"}
+
+    syllabus_ctx = []
+    for item in (recent_items_q.data or []):
+        t = item.get("syllabus_topics") or {}
+        c = item.get("syllabus_courses") or {}
+        u = item.get("syllabus_units") or {}
+        syllabus_ctx.append({
+            "topic_id": item.get("topic_id"),
+            "topic": t.get("topic"),
+            "subject": c.get("title"),
+            "unit": u.get("unit_title"),
+        })
+
+    questions = _garlic_v3_generate_diagnostic_questions(
+        syllabus_context=syllabus_ctx,
+        past_interactions={},
+        session_type="micro",
+        max_questions=1,
+    )
+    if not questions:
+        return {"ok": True, "question": None, "message": "Could not generate micro-diagnostic"}
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    session_ins = supabase.table(GARLIC_DIAGNOSTIC_SESSIONS_TABLE).insert({
+        "student_id": auth_user_id,
+        "session_type": "micro",
+        "status": "in_progress",
+        "questions_asked": 1,
+        "max_questions": 1,
+        "created_at": now_iso,
+    }).execute()
+    sid = str(session_ins.data[0]["id"]) if session_ins.data else None
+
+    q_data = questions[0]
+    q_row = {
+        "session_id": sid,
+        "student_id": auth_user_id,
+        "question_index": 0,
+        "topic_id": q_data.get("topic_id"),
+        "subject_name": q_data.get("subject_name"),
+        "unit_name": q_data.get("unit_name"),
+        "topic_name": q_data.get("topic_name"),
+        "question_text": q_data.get("question_text", ""),
+        "question_type": q_data.get("question_type", "memory_recall"),
+        "difficulty": int(q_data.get("difficulty") or 3),
+        "options": q_data.get("options", []),
+        "correct_answer": q_data.get("correct_answer", ""),
+        "created_at": now_iso,
+    }
+    ins = supabase.table(GARLIC_DIAGNOSTIC_QUESTIONS_TABLE).insert(q_row).execute()
+    q_id = str(ins.data[0]["id"]) if ins.data else None
+
+    return {
+        "ok": True,
+        "session_id": sid,
+        "question": {
+            "question_id": q_id,
+            "topic_name": q_data.get("topic_name"),
+            "question_text": q_data.get("question_text"),
+            "options": q_data.get("options"),
+            "question_type": q_data.get("question_type"),
+        },
+    }
+
+
+# --- Outcome Prediction Engine (Predicted Marks + Completion + Readiness + Risk) ---
+
+def _garlic_v3_compute_outcomes(
+    *,
+    supabase,
+    student_id: str,
+    plan_id: str,
+    trigger_event: str = "manual",
+) -> Dict[str, Any]:
+    items_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select(
+        "id,topic_id,priority_score,confidence_score,estimated_time,status,completed,last_accessed,interaction_count,revision_count"
+    ).eq("plan_id", plan_id).execute()
+    items = items_q.data or []
+
+    total = len(items)
+    completed = sum(1 for i in items if i.get("completed"))
+    remaining = total - completed
+    avg_confidence = sum(float(i.get("confidence_score") or 0) for i in items) / max(1, total)
+    total_est_minutes = sum(int(i.get("estimated_time") or 30) for i in items if not i.get("completed"))
+    high_priority_incomplete = sum(1 for i in items if not i.get("completed") and float(i.get("priority_score") or 0) >= 75)
+
+    exam_profile_q = supabase.table(GARLIC_EXAM_PROFILES_TABLE).select("exam_date,time_remaining_days,diagnostic_results").eq("student_id", student_id).eq("exam_mode_active", True).order("created_at", desc=True).limit(1).execute()
+    exam_profile = (exam_profile_q.data or [{}])[0] if not getattr(exam_profile_q, "error", None) else {}
+    days_remaining = _garlic_v3_compute_days_remaining(exam_profile.get("exam_date")) or exam_profile.get("time_remaining_days")
+
+    sessions_q = supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE).select("started_at,ended_at,active_seconds,completion_percent").eq("student_id", student_id).order("created_at", desc=True).limit(100).execute()
+    sessions = sessions_q.data or []
+
+    topics_per_day = 0.0
+    if sessions:
+        dates_set = set()
+        for s in sessions:
+            sa = s.get("started_at")
+            if sa:
+                try:
+                    dates_set.add(str(sa)[:10])
+                except Exception:
+                    pass
+        active_days = max(1, len(dates_set))
+        topics_per_day = round(completed / max(1, active_days), 2)
+
+    completion_prob = 0.0
+    required_daily = 0
+    projected_date = None
+    if days_remaining and days_remaining > 0:
+        required_daily = max(1, int(math.ceil(remaining / days_remaining)))
+        if topics_per_day > 0:
+            days_needed = math.ceil(remaining / topics_per_day)
+            completion_prob = min(100.0, max(0.0, (days_remaining / max(1, days_needed)) * 100.0))
+            projected_date = (date.today() + timedelta(days=days_needed)).isoformat()
+        else:
+            completion_prob = 10.0
+    elif remaining == 0:
+        completion_prob = 100.0
+    else:
+        completion_prob = max(5.0, (completed / max(1, total)) * 100.0)
+
+    completion_pct = (completed / max(1, total)) * 100.0
+    diagnostic_score = float((exam_profile.get("diagnostic_results") or {}).get("overall_score") or avg_confidence)
+
+    weak_items = [i for i in items if float(i.get("confidence_score") or 0) < 40 and not i.get("completed")]
+    strong_items = [i for i in items if float(i.get("confidence_score") or 0) >= 75]
+
+    risk_level = "low"
+    risk_reasons = []
+    if completion_pct < 30 and days_remaining is not None and days_remaining < 15:
+        risk_level = "critical"
+        risk_reasons.append("Very low completion with exam approaching")
+    elif len(weak_items) > total * 0.4:
+        risk_level = "high"
+        risk_reasons.append(f"{len(weak_items)} topics are in weak state")
+    elif topics_per_day < required_daily * 0.5 and days_remaining is not None:
+        risk_level = "high"
+        risk_reasons.append("Learning velocity too slow for remaining time")
+    elif high_priority_incomplete > 5:
+        risk_level = "moderate"
+        risk_reasons.append(f"{high_priority_incomplete} high-priority topics still incomplete")
+
+    readiness_score = round(
+        (avg_confidence * 0.35) + (completion_pct * 0.30) + (diagnostic_score * 0.20) + (min(100, topics_per_day * 20) * 0.15),
+        2,
+    )
+    if readiness_score >= 80:
+        readiness_level = "high_scorer_ready"
+    elif readiness_score >= 60:
+        readiness_level = "exam_ready"
+    elif readiness_score >= 40:
+        readiness_level = "partially_ready"
+    else:
+        readiness_level = "not_ready"
+
+    predicted_marks = round(
+        (readiness_score * 0.6) + (diagnostic_score * 0.25) + (completion_pct * 0.15),
+        2,
+    )
+    improvement_potential = round(min(100, max(0, 100 - predicted_marks)), 2)
+
+    ai_reasoning = ""
+    if GEMINI_API_KEY:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=GEMINI_API_KEY)
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            ai_prompt = """You are GARLIC Outcome Intelligence. Analyze this student's data and provide a brief 2-3 sentence reasoning about their exam readiness. Be direct and actionable. Return JSON: {"reasoning": "..."}"""
+            ai_ctx = {
+                "predicted_marks": predicted_marks,
+                "completion_pct": round(completion_pct, 1),
+                "avg_confidence": round(avg_confidence, 1),
+                "days_remaining": days_remaining,
+                "topics_per_day": topics_per_day,
+                "weak_topic_count": len(weak_items),
+                "risk_level": risk_level,
+            }
+            resp = model.generate_content(
+                [{"text": ai_prompt}, {"text": json.dumps(ai_ctx)}],
+                generation_config={"temperature": 0.2, "max_output_tokens": 512},
+            )
+            txt = getattr(resp, "text", "") or ""
+            p = _garlic_extract_json_payload(txt)
+            if p:
+                ai_reasoning = str(p.get("reasoning") or "")[:600]
+        except Exception:
+            pass
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    prediction_row = {
+        "student_id": student_id,
+        "plan_id": plan_id,
+        "predicted_marks": predicted_marks,
+        "confidence_band": "high" if readiness_score >= 70 else ("medium" if readiness_score >= 40 else "low"),
+        "completion_probability": round(completion_prob, 2),
+        "readiness_score": readiness_score,
+        "readiness_level": readiness_level,
+        "risk_level": risk_level,
+        "required_daily_target": required_daily,
+        "projected_completion_date": projected_date,
+        "learning_velocity_topics_per_day": topics_per_day,
+        "improvement_potential": improvement_potential,
+        "gap_analysis": {"risk_reasons": risk_reasons, "high_priority_incomplete": high_priority_incomplete},
+        "strong_areas": [str(i.get("topic_id")) for i in strong_items[:10]],
+        "weak_areas": [str(i.get("topic_id")) for i in weak_items[:10]],
+        "ai_reasoning": ai_reasoning,
+        "trigger_event": trigger_event,
+        "signals": {
+            "total_topics": total,
+            "completed": completed,
+            "avg_confidence": round(avg_confidence, 2),
+            "diagnostic_score": round(diagnostic_score, 2),
+            "days_remaining": days_remaining,
+        },
+        "created_at": now_iso,
+    }
+    try:
+        supabase.table(GARLIC_OUTCOME_PREDICTIONS_TABLE).insert(prediction_row).execute()
+    except Exception:
+        pass
+
+    supabase.table(GARLIC_EXAM_PROFILES_TABLE).update({
+        "predicted_marks": predicted_marks,
+        "readiness_score": readiness_score,
+        "readiness_level": readiness_level,
+        "completion_probability": round(completion_prob, 2),
+        "risk_level": risk_level,
+        "learning_velocity": {"topics_per_day": topics_per_day, "required_daily": required_daily},
+        "updated_at": now_iso,
+    }).eq("student_id", student_id).eq("exam_mode_active", True).execute()
+
+    return prediction_row
+
+
+@garlic_v3_router.get("/outcomes/{student_id}", summary="Get outcome predictions")
+def api_garlic_v3_outcomes(
+    student_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    if str(student_id) != auth_user_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    supabase = get_service_client()
+
+    plan_q = supabase.table(GARLIC_STUDY_PLANS_TABLE).select("id").eq("student_id", auth_user_id).order("last_updated", desc=True).limit(1).execute()
+    if not plan_q.data:
+        raise HTTPException(status_code=404, detail="No plan found")
+
+    result = _garlic_v3_compute_outcomes(
+        supabase=supabase,
+        student_id=auth_user_id,
+        plan_id=str(plan_q.data[0]["id"]),
+        trigger_event="manual_request",
+    )
+    return {"ok": True, "prediction": result}
+
+
+@garlic_v3_router.get("/outcomes/history/{student_id}", summary="Get prediction history")
+def api_garlic_v3_outcomes_history(
+    student_id: str,
+    limit: int = Query(default=20, le=100),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    if str(student_id) != auth_user_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    supabase = get_service_client()
+    q = supabase.table(GARLIC_OUTCOME_PREDICTIONS_TABLE).select("*").eq("student_id", auth_user_id).order("created_at", desc=True).limit(limit).execute()
+    return {"ok": True, "predictions": q.data or []}
+
+
+# --- Adaptive Replanning Engine ---
+
+def _garlic_v3_check_replan_triggers(
+    *,
+    supabase,
+    student_id: str,
+    plan_id: str,
+) -> Optional[str]:
+    items_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select("id,completed,confidence_score,status").eq("plan_id", plan_id).execute()
+    items = items_q.data or []
+    completed_count = sum(1 for i in items if i.get("completed"))
+
+    plan_q = supabase.table(GARLIC_STUDY_PLANS_TABLE).select("replan_count").eq("id", plan_id).limit(1).execute()
+    replan_count = int((plan_q.data or [{}])[0].get("replan_count") or 0)
+    expected_replans = completed_count // 5
+
+    if expected_replans > replan_count:
+        return "completed_5_topics"
+
+    conf_history_q = supabase.table(GARLIC_RUNTIME_CONFIDENCE_TABLE).select("previous_confidence,updated_confidence").eq("student_id", student_id).order("created_at", desc=True).limit(5).execute()
+    for ch in (conf_history_q.data or []):
+        prev = float(ch.get("previous_confidence") or 0)
+        upd = float(ch.get("updated_confidence") or 0)
+        if abs(upd - prev) > 20:
+            return "confidence_shift"
+
+    low_sessions_q = supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE).select("engagement_score").eq("student_id", student_id).order("created_at", desc=True).limit(3).execute()
+    low_count = sum(1 for s in (low_sessions_q.data or []) if float(s.get("engagement_score") or 100) < 30)
+    if low_count >= 3:
+        return "low_engagement_streak"
+
+    avg_conf = sum(float(i.get("confidence_score") or 0) for i in items) / max(1, len(items))
+    if avg_conf < 25 and completed_count > 3:
+        return "hard_reset_failing"
+
+    return None
+
+
+def _garlic_v3_adaptive_replan(
+    *,
+    supabase,
+    student_id: str,
+    plan_id: str,
+    trigger_reason: str,
+) -> Dict[str, Any]:
+    is_hard_reset = trigger_reason == "hard_reset_failing"
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    items_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select(
+        "id,topic_id,priority_score,confidence_score,estimated_time,status,completed,interaction_count,last_accessed"
+    ).eq("plan_id", plan_id).execute()
+    items = items_q.data or []
+
+    if is_hard_reset:
+        for item in items:
+            if not item.get("completed"):
+                new_pri = round(max(1.0, min(100.0, 80.0 - float(item.get("confidence_score") or 50) * 0.6)), 2)
+                supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).update({
+                    "priority_score": new_pri,
+                    "study_depth": "full_study",
+                    "updated_at": now_iso,
+                }).eq("id", item["id"]).execute()
+
+        supabase.table(GARLIC_ADAPTIVE_REPLAN_LOG_TABLE).insert({
+            "student_id": student_id,
+            "plan_id": plan_id,
+            "trigger_reason": trigger_reason,
+            "was_hard_reset": True,
+            "topics_reranked": len([i for i in items if not i.get("completed")]),
+            "ai_reasoning": "Hard reset triggered due to critically low performance across topics.",
+            "created_at": now_iso,
+        }).execute()
+
+        supabase.table(GARLIC_STUDY_PLANS_TABLE).update({
+            "replan_count": int((supabase.table(GARLIC_STUDY_PLANS_TABLE).select("replan_count").eq("id", plan_id).limit(1).execute().data or [{}])[0].get("replan_count") or 0) + 1,
+            "last_updated": now_iso,
+        }).eq("id", plan_id).execute()
+
+        return {"ok": True, "type": "hard_reset", "topics_reranked": len(items)}
+
+    exam_profile_q = supabase.table(GARLIC_EXAM_PROFILES_TABLE).select("exam_date,time_remaining_days,diagnostic_results").eq("student_id", student_id).eq("exam_mode_active", True).limit(1).execute()
+    exam_profile = (exam_profile_q.data or [{}])[0] if not getattr(exam_profile_q, "error", None) else {}
+    days_remaining = _garlic_v3_compute_days_remaining(exam_profile.get("exam_date")) or exam_profile.get("time_remaining_days")
+    intensity = _garlic_v3_intensity_level(days_remaining)
+
+    changes = []
+    for item in items:
+        if item.get("completed"):
+            continue
+        conf = float(item.get("confidence_score") or 50)
+        old_pri = float(item.get("priority_score") or 50)
+
+        if conf < 40:
+            shift = 12.0
+        elif conf < 60:
+            shift = 5.0
+        elif conf >= 80:
+            shift = -10.0
+        else:
+            shift = 0.0
+
+        if intensity == "critical":
+            if conf < 50:
+                shift += 15.0
+            elif conf >= 80:
+                shift -= 15.0
+
+        new_pri = round(max(1.0, min(100.0, old_pri + shift)), 2)
+
+        depth = "full_study"
+        if intensity == "critical" and conf >= 70:
+            depth = "quick_revision"
+        elif intensity == "critical" and conf < 30:
+            depth = "full_study"
+        elif conf >= 85:
+            depth = "skip"
+
+        if new_pri != old_pri:
+            supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).update({
+                "priority_score": new_pri,
+                "study_depth": depth,
+                "updated_at": now_iso,
+            }).eq("id", item["id"]).execute()
+            changes.append({"item_id": item["id"], "old": old_pri, "new": new_pri})
+
+    supabase.table(GARLIC_ADAPTIVE_REPLAN_LOG_TABLE).insert({
+        "student_id": student_id,
+        "plan_id": plan_id,
+        "trigger_reason": trigger_reason,
+        "was_hard_reset": False,
+        "topics_reranked": len(changes),
+        "priority_changes": changes[:50],
+        "ai_reasoning": f"Adaptive replan triggered by: {trigger_reason}. Intensity: {intensity}. {len(changes)} topics re-ranked.",
+        "created_at": now_iso,
+    }).execute()
+
+    supabase.table(GARLIC_STUDY_PLANS_TABLE).update({
+        "replan_count": int((supabase.table(GARLIC_STUDY_PLANS_TABLE).select("replan_count").eq("id", plan_id).limit(1).execute().data or [{}])[0].get("replan_count") or 0) + 1,
+        "last_updated": now_iso,
+    }).eq("id", plan_id).execute()
+
+    _garlic_v3_compute_outcomes(supabase=supabase, student_id=student_id, plan_id=plan_id, trigger_event="adaptive_replan")
+
+    return {"ok": True, "type": "adaptive", "trigger": trigger_reason, "topics_reranked": len(changes)}
+
+
+@garlic_v3_router.post("/replan", summary="Trigger adaptive replan")
+def api_garlic_v3_replan(
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    plan_q = supabase.table(GARLIC_STUDY_PLANS_TABLE).select("id").eq("student_id", auth_user_id).order("last_updated", desc=True).limit(1).execute()
+    if not plan_q.data:
+        raise HTTPException(status_code=404, detail="No plan found")
+    plan_id = str(plan_q.data[0]["id"])
+
+    trigger = _garlic_v3_check_replan_triggers(supabase=supabase, student_id=auth_user_id, plan_id=plan_id)
+    if not trigger:
+        trigger = "manual_trigger"
+
+    result = _garlic_v3_adaptive_replan(supabase=supabase, student_id=auth_user_id, plan_id=plan_id, trigger_reason=trigger)
+    return result
+
+
+# --- Confidence Decay System ---
+
+@garlic_v3_router.post("/confidence-decay", summary="Apply confidence decay to un-revised topics")
+def api_garlic_v3_confidence_decay(
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    plan_q = supabase.table(GARLIC_STUDY_PLANS_TABLE).select("id").eq("student_id", auth_user_id).order("last_updated", desc=True).limit(1).execute()
+    if not plan_q.data:
+        return {"ok": True, "decayed": 0}
+    plan_id = str(plan_q.data[0]["id"])
+
+    items_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select(
+        "id,confidence_score,last_accessed,completed,confidence_decay_applied_at"
+    ).eq("plan_id", plan_id).execute()
+    items = items_q.data or []
+
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    decayed_count = 0
+
+    for item in items:
+        if item.get("completed"):
+            continue
+        last_access = _garlic_runtime_parse_dt(item.get("last_accessed"))
+        if not last_access:
+            continue
+        days_since = (now - last_access).days
+        if days_since < 3:
+            continue
+        last_decay = _garlic_runtime_parse_dt(item.get("confidence_decay_applied_at"))
+        if last_decay and (now - last_decay).days < 1:
+            continue
+
+        conf = float(item.get("confidence_score") or 50)
+        decay_rate = min(8.0, days_since * 1.2)
+        new_conf = round(max(0.0, conf - decay_rate), 2)
+
+        if new_conf != conf:
+            supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).update({
+                "confidence_score": new_conf,
+                "confidence_decay_applied_at": now_iso,
+                "updated_at": now_iso,
+            }).eq("id", item["id"]).execute()
+            decayed_count += 1
+
+    return {"ok": True, "decayed": decayed_count}
+
+
+# --- Deviation Detection ---
+
+@garlic_v3_router.post("/deviation/log", summary="Log a study plan deviation")
+def api_garlic_v3_log_deviation(
+    topic_id: str = Body(..., embed=True),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    plan_q = supabase.table(GARLIC_STUDY_PLANS_TABLE).select("id").eq("student_id", auth_user_id).order("last_updated", desc=True).limit(1).execute()
+    if not plan_q.data:
+        return {"ok": True, "deviation_logged": False}
+    plan_id = str(plan_q.data[0]["id"])
+
+    top_items_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select("topic_id").eq("plan_id", plan_id).eq("completed", False).order("priority_score", desc=True).limit(3).execute()
+    top_ids = {str(i.get("topic_id")) for i in (top_items_q.data or [])}
+
+    topic_id_str = str(topic_id).strip()
+    is_deviation = topic_id_str not in top_ids
+
+    if is_deviation:
+        item_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select("id,deviation_count,confidence_score").eq("plan_id", plan_id).eq("topic_id", topic_id_str).limit(1).execute()
+        if item_q.data:
+            item = item_q.data[0]
+            dev_count = int(item.get("deviation_count") or 0) + 1
+            conf_penalty = min(5.0, dev_count * 1.5)
+            new_conf = max(0, float(item.get("confidence_score") or 50) - conf_penalty)
+            supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).update({
+                "deviation_count": dev_count,
+                "confidence_score": round(new_conf, 2),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", item["id"]).execute()
+
+        _garlic_runtime_log_event(
+            supabase=supabase,
+            student_id=auth_user_id,
+            plan_id=plan_id,
+            topic_id=topic_id_str,
+            event_type="deviation_detected",
+            payload={"expected_topics": list(top_ids), "actual_topic": topic_id_str},
+        )
+
+    return {"ok": True, "is_deviation": is_deviation}
+
+
+# --- Daily Target Enforcement ---
+
+@garlic_v3_router.get("/daily-target/{student_id}", summary="Get today's target and progress")
+def api_garlic_v3_daily_target(
+    student_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    if str(student_id) != auth_user_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    supabase = get_service_client()
+
+    plan_q = supabase.table(GARLIC_STUDY_PLANS_TABLE).select("id,daily_target").eq("student_id", auth_user_id).order("last_updated", desc=True).limit(1).execute()
+    if not plan_q.data:
+        return {"ok": True, "daily_target": 3, "completed_today": 0, "on_track": True}
+    plan = plan_q.data[0]
+    plan_id = str(plan["id"])
+    daily_target = int(plan.get("daily_target") or 3)
+
+    exam_q = supabase.table(GARLIC_EXAM_PROFILES_TABLE).select("exam_date,time_remaining_days").eq("student_id", auth_user_id).eq("exam_mode_active", True).limit(1).execute()
+    if exam_q.data:
+        days = _garlic_v3_compute_days_remaining(exam_q.data[0].get("exam_date"))
+        if days is not None and days > 0:
+            items_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select("id").eq("plan_id", plan_id).eq("completed", False).execute()
+            remaining = len(items_q.data or [])
+            daily_target = max(1, int(math.ceil(remaining / days)))
+
+    today_str = date.today().isoformat()
+    events_q = supabase.table(GARLIC_RUNTIME_EVENTS_TABLE).select("id").eq("student_id", auth_user_id).eq("event_type", "complete_topic").gte("created_at", today_str + "T00:00:00Z").execute()
+    completed_today = len(events_q.data or [])
+
+    on_track = completed_today >= daily_target
+    message = f"You must complete {daily_target} topics today to stay on track." if not on_track else "Great job! You're on track for today."
+
+    return {
+        "ok": True,
+        "daily_target": daily_target,
+        "completed_today": completed_today,
+        "on_track": on_track,
+        "message": message,
+    }
+
+
+# --- Exam Intelligence Insights ---
+
+@garlic_v3_router.get("/exam-insights/{student_id}", summary="Get actionable exam insights")
+def api_garlic_v3_exam_insights(
+    student_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    if str(student_id) != auth_user_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    supabase = get_service_client()
+
+    plan_q = supabase.table(GARLIC_STUDY_PLANS_TABLE).select("id").eq("student_id", auth_user_id).order("last_updated", desc=True).limit(1).execute()
+    if not plan_q.data:
+        return {"ok": True, "insights": []}
+    plan_id = str(plan_q.data[0]["id"])
+
+    items_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select(
+        "topic_id,priority_score,confidence_score,estimated_time,status,completed,interaction_count,last_accessed,syllabus_topics(topic),syllabus_courses(title)"
+    ).eq("plan_id", plan_id).execute()
+    items = items_q.data or []
+
+    total = len(items)
+    completed = sum(1 for i in items if i.get("completed"))
+    weak_high_pri = [i for i in items if float(i.get("confidence_score") or 0) < 40 and float(i.get("priority_score") or 0) >= 70 and not i.get("completed")]
+    skipped_important = [i for i in items if float(i.get("priority_score") or 0) >= 80 and int(i.get("interaction_count") or 0) == 0 and not i.get("completed")]
+    low_time_high_conf = [i for i in items if float(i.get("confidence_score") or 0) >= 75 and int(i.get("interaction_count") or 0) <= 1 and i.get("completed")]
+
+    insights = []
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if weak_high_pri:
+        marks_at_risk = len(weak_high_pri) * 4
+        insights.append({
+            "type": "risk", "severity": "critical", "actionable": True,
+            "text": f"You have {len(weak_high_pri)} weak topics with high exam impact. Skipping them may cost ~{marks_at_risk} marks.",
+            "marks_impact": marks_at_risk,
+        })
+
+    if skipped_important:
+        insights.append({
+            "type": "urgency", "severity": "warning", "actionable": True,
+            "text": f"You skipped {len(skipped_important)} high-impact topics entirely. Start with them immediately.",
+            "marks_impact": len(skipped_important) * 5,
+        })
+
+    if low_time_high_conf:
+        insights.append({
+            "type": "risk", "severity": "warning", "actionable": True,
+            "text": f"{len(low_time_high_conf)} topics show high confidence but very low study time. Risk of overconfidence detected.",
+            "marks_impact": len(low_time_high_conf) * 3,
+        })
+
+    completion_pct = round((completed / max(1, total)) * 100, 1)
+    if completion_pct < 40:
+        insights.append({
+            "type": "urgency", "severity": "critical", "actionable": True,
+            "text": f"Only {completion_pct}% of syllabus completed. You are behind optimal pace.",
+        })
+
+    if GEMINI_API_KEY:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=GEMINI_API_KEY)
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            ai_prompt = """You are GARLIC Exam Intelligence. Generate 3 aggressive, actionable insights for this student.
+Be specific. Include estimated marks impact.
+Return JSON: {"insights": [{"text": "...", "type": "risk|opportunity|urgency", "severity": "info|warning|critical", "marks_impact": 0}]}"""
+            summary = {
+                "total_topics": total, "completed": completed, "completion_pct": completion_pct,
+                "weak_high_impact_count": len(weak_high_pri), "skipped_important_count": len(skipped_important),
+                "overconfidence_risk_count": len(low_time_high_conf),
+            }
+            resp = model.generate_content(
+                [{"text": ai_prompt}, {"text": json.dumps(summary)}],
+                generation_config={"temperature": 0.3, "max_output_tokens": 1024},
+            )
+            txt = getattr(resp, "text", "") or ""
+            p = _garlic_extract_json_payload(txt)
+            if p and p.get("insights"):
+                for ai_ins in p["insights"][:3]:
+                    insights.append({
+                        "type": str(ai_ins.get("type") or "general"),
+                        "severity": str(ai_ins.get("severity") or "info"),
+                        "actionable": True,
+                        "text": str(ai_ins.get("text") or ""),
+                        "marks_impact": float(ai_ins.get("marks_impact") or 0),
+                    })
+        except Exception:
+            pass
+
+    ins_rows = []
+    for ins in insights[:10]:
+        ins_rows.append({
+            "student_id": auth_user_id,
+            "plan_id": plan_id,
+            "insight_type": ins.get("type", "general"),
+            "severity": ins.get("severity", "info"),
+            "insight_text": ins.get("text", ""),
+            "marks_impact": ins.get("marks_impact"),
+            "actionable": ins.get("actionable", True),
+            "created_at": now_iso,
+        })
+    if ins_rows:
+        try:
+            supabase.table(GARLIC_EXAM_INSIGHTS_TABLE).insert(ins_rows).execute()
+        except Exception:
+            pass
+
+    return {"ok": True, "insights": insights}
+
+
+# --- Session Auto-Close (sendBeacon compatible) ---
+
+@garlic_v3_router.post("/session/auto-close", summary="Auto-close GARLIC session on page exit")
+def api_garlic_v3_session_auto_close(
+    payload: GarlicSessionAutoCloseIn,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    supabase = get_service_client()
+
+    q = supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE).select(
+        "id,student_id,plan_id,plan_item_id,topic_id,started_at,active_seconds,session_status"
+    ).eq("id", payload.session_id).limit(1).execute()
+
+    if getattr(q, "error", None) or not q.data:
+        return Response(status_code=204)
+
+    row = q.data[0]
+    if str(row.get("student_id") or "") != auth_user_id:
+        return Response(status_code=204)
+
+    if str(row.get("session_status") or "") in {"completed", "exited_early"}:
+        return Response(status_code=204)
+
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    started = _garlic_runtime_parse_dt(row.get("started_at"))
+    duration = max(0, int((now_dt - started).total_seconds())) if started else 0
+    active = max(0, int(payload.active_seconds or row.get("active_seconds") or 0))
+    completion = float(payload.completion_percent if payload.completion_percent is not None else row.get("completion_percent") or 0)
+
+    supabase.table(GARLIC_RUNTIME_SESSIONS_TABLE).update({
+        "ended_at": now_iso,
+        "duration_seconds": duration,
+        "active_seconds": active,
+        "completion_percent": completion,
+        "session_status": "exited_early",
+        "updated_at": now_iso,
+    }).eq("id", payload.session_id).execute()
+
+    plan_item_id = str(row.get("plan_item_id") or "").strip()
+    if plan_item_id:
+        supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).update({
+            "last_accessed": now_iso,
+            "updated_at": now_iso,
+        }).eq("id", plan_item_id).execute()
+
+    _garlic_runtime_log_event(
+        supabase=supabase,
+        student_id=auth_user_id,
+        plan_id=str(row.get("plan_id") or "") or None,
+        plan_item_id=plan_item_id or None,
+        topic_id=str(row.get("topic_id") or "") or None,
+        session_id=str(row.get("id") or ""),
+        event_type="auto_close",
+        payload={"active_seconds": active, "duration_seconds": duration, "completion_percent": completion},
+    )
+
+    # Check if replan is needed after session close
+    plan_id = str(row.get("plan_id") or "").strip()
+    if plan_id:
+        trigger = _garlic_v3_check_replan_triggers(supabase=supabase, student_id=auth_user_id, plan_id=plan_id)
+        if trigger:
+            try:
+                _garlic_v3_adaptive_replan(supabase=supabase, student_id=auth_user_id, plan_id=plan_id, trigger_reason=trigger)
+            except Exception:
+                pass
+
+    return Response(status_code=204)
+
+
+# --- Learning Velocity Tracking ---
+
+@garlic_v3_router.get("/velocity/{student_id}", summary="Get learning velocity metrics")
+def api_garlic_v3_velocity(
+    student_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    token = _parse_bearer_token(authorization)
+    auth_user_id, _ = _ensure_user_and_profile(token)
+    if str(student_id) != auth_user_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    supabase = get_service_client()
+
+    events_q = supabase.table(GARLIC_RUNTIME_EVENTS_TABLE).select("created_at").eq("student_id", auth_user_id).eq("event_type", "complete_topic").order("created_at", desc=True).limit(200).execute()
+    events = events_q.data or []
+
+    dates: Dict[str, int] = defaultdict(int)
+    for e in events:
+        d = str(e.get("created_at") or "")[:10]
+        if d:
+            dates[d] += 1
+
+    active_days = len(dates)
+    total_completed = sum(dates.values())
+    avg_per_day = round(total_completed / max(1, active_days), 2)
+
+    last_7 = [d for d in sorted(dates.keys(), reverse=True)[:7]]
+    last_7_total = sum(dates.get(d, 0) for d in last_7)
+    last_7_avg = round(last_7_total / max(1, len(last_7)), 2)
+
+    plan_q = supabase.table(GARLIC_STUDY_PLANS_TABLE).select("id").eq("student_id", auth_user_id).order("last_updated", desc=True).limit(1).execute()
+    remaining = 0
+    if plan_q.data:
+        items_q = supabase.table(GARLIC_STUDY_PLAN_ITEMS_TABLE).select("id").eq("plan_id", plan_q.data[0]["id"]).eq("completed", False).execute()
+        remaining = len(items_q.data or [])
+
+    exam_q = supabase.table(GARLIC_EXAM_PROFILES_TABLE).select("exam_date").eq("student_id", auth_user_id).eq("exam_mode_active", True).limit(1).execute()
+    days_left = None
+    will_complete = None
+    if exam_q.data:
+        days_left = _garlic_v3_compute_days_remaining(exam_q.data[0].get("exam_date"))
+        if days_left and avg_per_day > 0:
+            days_needed = math.ceil(remaining / avg_per_day)
+            will_complete = days_needed <= days_left
+
+    pace_message = ""
+    if days_left is not None and remaining > 0:
+        required = math.ceil(remaining / max(1, days_left))
+        if avg_per_day < required * 0.5:
+            pace_message = f"At current pace, you will NOT complete syllabus before exam. Need {required}/day, doing {avg_per_day}/day."
+        elif avg_per_day < required:
+            pace_message = f"You're slightly behind. Need {required}/day, currently averaging {avg_per_day}/day."
+        else:
+            pace_message = "You're on track to complete before the exam."
+
+    return {
+        "ok": True,
+        "velocity": {
+            "topics_per_day_overall": avg_per_day,
+            "topics_per_day_last_7": last_7_avg,
+            "total_completed": total_completed,
+            "active_days": active_days,
+            "remaining_topics": remaining,
+            "days_until_exam": days_left,
+            "will_complete_in_time": will_complete,
+            "pace_message": pace_message,
+            "daily_breakdown": dict(sorted(dates.items(), reverse=True)[:14]),
+        },
+    }
+
+
+# --- Register V3 Router ---
+# (included alongside garlic_router and garlic_runtime_router)
+
+
 # ---------- Profile update & uploads ----------
 
 
@@ -32503,6 +33884,7 @@ def create_app() -> FastAPI:
     app.include_router(academics_router)
     app.include_router(garlic_router)
     app.include_router(garlic_runtime_router)
+    app.include_router(garlic_v3_router)
     app.include_router(marketplace_router)
     app.include_router(teacher_router)
     app.include_router(youtube_transcript_router)

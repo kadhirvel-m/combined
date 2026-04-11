@@ -57,6 +57,19 @@
     </script>
 
     <style>
+        /* Modern GARLIC Branded Custom Cursors */
+        html, body, div:not(.cursor-pointer):not(.topic-link), span, p, h1, h2, h3, h4, h5, h6, section, main, header, nav, article {
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"><path d="M4.5 2 L19 13.5 L12.5 15.5 L9.5 22.5 Z" fill="rgb(158,75,138)" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>') 7 3, auto !important;
+        }
+
+        a, button, [role="button"], .cursor-pointer, .topic-link, [data-unit-toggle], [data-subject-toggle] {
+            cursor: pointer !important;
+        }
+
+        input, textarea, .cursor-text {
+            cursor: text !important;
+        }
+
         .material-symbols-rounded {
             vertical-align: -6px;
         }
@@ -187,15 +200,24 @@
             background: conic-gradient(var(--ring-color, #9E4B8A) calc(var(--pct, 0)*1%), rgba(158, 75, 138, .16) 0);
         }
     </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://esm.sh/three@0.160.0",
+          "postprocessing": "https://esm.sh/postprocessing@6.34.3"
+        }
+      }
+    </script>
 </head>
 
-<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white bg-hero-light dark:bg-hero-dark">
-    <div class="pointer-events-none fixed inset-0 opacity-[.09] dark:opacity-[.14] bg-mesh-dark"></div>
+<body class="min-h-screen font-sans antialiased text-neutral-900 dark:text-white relative bg-hero-light dark:bg-hero-dark">
+    <div id="pixel-blast-bg" class="fixed inset-0 pointer-events-none opacity-60 dark:opacity-75" style="z-index: 0;"></div>
+    <!-- Layer main content on top -->
+    <div class="relative z-10">
 
     <!-- ================= NAVBAR (Exact Academics) ================= -->
-    <header
-        class="sticky top-0 z-50 bg-white/70 dark:bg-brand-900/60 backdrop-blur supports-[backdrop-filter]:saturate-150 border-b border-black/5 dark:border-white/10">
-        <div class="container flex items-center justify-between py-3.5">
+    <header class="sticky top-4 md:top-6 z-50 px-4">
+        <div class="max-w-5xl mx-auto w-full flex items-center justify-between py-2 md:py-2.5 px-4 md:px-5 bg-black/10 dark:bg-black/50 backdrop-blur-md supports-[backdrop-filter]:saturate-150 border border-black/5 dark:border-white/10 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
             <a href="index.html" class="flex items-center gap-3 shrink-0" aria-label="Paper X Home">
                 <img src="assets/img/logo-light.svg" class="h-9 w-auto dark:hidden" alt="Paper X" />
                 <img src="assets/img/logo-dark.svg" class="h-9 w-auto hidden dark:block" alt="Paper X" />
@@ -208,20 +230,22 @@
                 <a href="history.html"
                     class="hover:text-brandlt-900 dark:hover:text-white inline-flex items-center gap-1"><span
                         class="material-symbols-rounded text-base">history</span>History</a>
-                <a href="contact.html" class="hover:text-brandlt-900 dark:hover:text-white">Contact</a>
             </nav>
-            <div class="hidden md:flex items-center gap-2">
+            <div class="hidden md:flex items-center gap-3">
+            <div class="hidden md:flex items-center gap-3">
                 <button data-theme-toggle
-                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/5"
+                    class="relative flex items-center w-14 h-8 rounded-full bg-black/10 dark:bg-black/40 ring-1 ring-black/10 dark:ring-white/20 transition-colors shrink-0"
                     aria-label="Toggle theme">
-                    <span class="material-symbols-rounded">dark_mode</span>
-                    <span class="hidden lg:block">Theme</span>
+                    <span class="absolute left-1 top-1 w-6 h-6 rounded-full bg-white dark:bg-brand-500 shadow-sm transition-transform duration-300 translate-x-0 dark:translate-x-6"></span>
+                    <div class="relative z-10 w-full flex justify-between px-1.5 pointer-events-none">
+                        <span class="material-symbols-rounded text-[15px] font-medium text-brand-700 dark:text-white/40">light_mode</span>
+                        <span class="material-symbols-rounded text-[15px] font-medium text-neutral-400 dark:text-white">dark_mode</span>
+                    </div>
                 </button>
                 <button id="regenBtnNav" type="button"
-                    class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-700 hover:brightness-110 transition"
+                    class="inline-flex items-center justify-center size-8 rounded-full ring-1 ring-black/10 dark:ring-white/15 hover:bg-black/5 dark:hover:bg-white/10 transition text-neutral-700 dark:text-white/80 hover:text-brand-600 dark:hover:text-brand-400"
                     aria-label="Regenerate GARLIC plan">
                     <span class="material-symbols-rounded text-[18px]">autorenew</span>
-                    <span class="hidden lg:block">Regenerate</span>
                 </button>
                 <div id="devModeToggleDesktop" class="dev-toggle-wrap hidden">
                     <span class="dev-toggle-label" id="devLabelDesktop">DEV</span>
@@ -242,9 +266,8 @@
                     <span id="navProfileInitial" class="text-xs font-semibold">ME</span>
                 </a>
                 <button id="signOutBtn" type="button" title="Sign out" aria-label="Sign out"
-                    class="hidden items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 text-sm text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
-                    <span class="material-symbols-rounded text-base">logout</span>
-                    <span>Sign out</span>
+                    class="hidden items-center justify-center size-8 rounded-full border border-black/10 dark:border-white/15 text-neutral-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                    <span class="material-symbols-rounded text-[18px]">logout</span>
                 </button>
             </div>
             <div class="md:hidden flex items-center gap-2">
@@ -276,48 +299,48 @@
 
     <main class="container relative pt-6 md:pt-8 pb-10 space-y-5 md:space-y-6">
         <!-- ================= HERO / OVERVIEW (GARLIC) ================= -->
-        <section class="relative overflow-hidden p-2 md:p-3 animate-fadeUp">
+        <section class="relative overflow-hidden p-2 md:p-3 my-12 md:my-20 animate-fadeUp">
             <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-3 md:gap-10 items-start relative z-10">
                 <!-- Left: GARLIC headline + KPIs -->
                 <div>
-                    <div class="inline-flex items-center gap-2 text-brand-700 dark:text-brandlt-200 text-xs font-semibold">
-                        <span class="material-symbols-rounded text-[15px]">bug_report</span>
+                    <div class="inline-flex items-center gap-2 text-brand-700 dark:text-brandlt-200 text-[11px] font-semibold">
+                        <span class="material-symbols-rounded text-[14px]">bug_report</span>
                         GARLIC AUTONOMOUS COMMAND MODE
                     </div>
                     <div class="mt-3 mb-4 flex items-start gap-4 md:gap-5">
                         <img src="assets/img/garlic-logo.png" alt="GARLIC" class="h-16 md:h-24 w-auto object-contain shrink-0" />
-                        <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight">
-                            Your GARLIC <span class="command-center-gradient bg-gradient-to-r from-brand-500 via-brand-700 to-brand-900 dark:from-brand-300 dark:via-brand-500 dark:to-brand-700 bg-clip-text text-transparent">Operations Center</span>
+                        <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight leading-[1.15]">
+                            <span class="command-center-gradient bg-gradient-to-r from-brand-500 via-brand-700 to-brand-900 dark:from-brand-300 dark:via-brand-500 dark:to-brand-700 bg-clip-text text-transparent">Your Garlic </span>Operation <br>Center
                         </h1>
                     </div>
-                    <p class="text-neutral-600 dark:text-white/70 max-w-xl">AI cockpit for high-impact revision with priority-driven daily execution.</p>
+                    <p class="text-sm text-neutral-600 dark:text-white/70 max-w-xl">AI cockpit for high-impact revision with priority-driven daily execution.</p>
 
                     <!-- KPI cards (4) -->
                     <div class="mt-5 md:mt-10 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl md:max-w-5xl">
                         <article class="glass-panel kpi-card rounded-2xl p-3 md:p-4 flex flex-col gap-2 ring-1 ring-black/10 dark:ring-white/15 w-full h-[132px]">
-                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">TOPICS DONE</p>
+                            <p class="text-[10px] md:text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">TOPICS DONE</p>
                             <div class="flex items-end gap-2">
-                                <span id="kpiTopicsDone" class="text-2xl md:text-3xl font-extrabold">0</span>
-                                <span class="text-xs text-neutral-500 dark:text-white/50">/ <span id="kpiTopicsTotal">0</span></span>
+                                <span id="kpiTopicsDone" class="text-xl md:text-2xl font-extrabold">0</span>
+                                <span class="text-[11px] text-neutral-500 dark:text-white/50">/ <span id="kpiTopicsTotal">0</span></span>
                             </div>
                             <div class="h-1 rounded-full bg-brand-500/20 overflow-hidden">
                                 <div id="kpiTopicsBar" class="h-full w-0 bg-brand-500"></div>
                             </div>
                         </article>
                         <article class="glass-panel kpi-card rounded-2xl p-3 md:p-4 flex flex-col gap-2 ring-1 ring-black/10 dark:ring-white/15 w-full h-[132px]">
-                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">COMPLETION</p>
+                            <p class="text-[10px] md:text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">COMPLETION</p>
                             <div class="relative h-16 w-16">
                                 <div id="kpiCompletionRing" class="absolute inset-0 rounded-full metric-ring" style="--pct:0;--ring-color:#9E4B8A"></div>
-                                <div id="kpiCompletion" class="absolute inset-0 flex items-center justify-center text-sm font-bold">0%</div>
+                                <div id="kpiCompletion" class="absolute inset-0 flex items-center justify-center text-[13px] font-bold">0%</div>
                             </div>
                         </article>
                         <article class="glass-panel kpi-card rounded-2xl p-3 md:p-4 flex flex-col gap-2 ring-1 ring-black/10 dark:ring-white/15 w-full h-[132px]">
-                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">ACTIVE SUBJECTS</p>
-                            <p id="kpiActiveSubjects" class="text-4xl md:text-5xl font-bold leading-none">0</p>
+                            <p class="text-[10px] md:text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">ACTIVE SUBJECTS</p>
+                            <p id="kpiActiveSubjects" class="text-3xl md:text-4xl font-bold leading-none">0</p>
                         </article>
                         <article class="glass-panel kpi-card rounded-2xl p-3 md:p-4 flex flex-col gap-2 ring-1 ring-black/10 dark:ring-white/15 w-full h-[132px]">
-                            <p class="text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">AVG CONFIDENCE</p>
-                            <p id="kpiConfidence" class="text-2xl font-extrabold">0</p>
+                            <p class="text-[10px] md:text-[11px] uppercase tracking-wide text-neutral-600 dark:text-white/60">AVG CONFIDENCE</p>
+                            <p id="kpiConfidence" class="text-xl font-extrabold">0</p>
                             <div class="h-1 rounded-full bg-brand-500/20 overflow-hidden">
                                 <div id="kpiConfidenceBar" class="h-full w-0 bg-brand-500"></div>
                             </div>
@@ -330,19 +353,265 @@
                     <div class="glass-panel rounded-3xl p-4 md:p-5 ring-1 ring-black/10 dark:ring-white/15 animate-fadeUp" style="animation-delay:.2s">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <h2 class="text-lg md:text-xl font-bold tracking-tight">Daily Execution Panel</h2>
-                                <p class="text-xs mt-1 text-neutral-600 dark:text-white/70">Top autonomous actions with reasoned ordering.</p>
+                                <h2 class="text-base md:text-lg font-bold tracking-tight">Daily Execution Panel</h2>
+                                <p class="text-[11px] mt-1 text-neutral-600 dark:text-white/70">Top autonomous actions with reasoned ordering.</p>
                             </div>
                             <div class="text-right">
-                                <p id="estimatedLine" class="text-xs md:text-sm font-semibold rounded-full px-2.5 py-1 bg-brand-500/10 text-brand-700 dark:text-brandlt-200">Estimated Time: --</p>
+                                <p id="estimatedLine" class="text-[11px] md:text-xs font-semibold rounded-full px-2.5 py-1 bg-brand-500/10 text-brand-700 dark:text-brandlt-200">Estimated Time: --</p>
                             </div>
                         </div>
-                        <div id="dailyFocus" class="mt-4 grid grid-cols-1 gap-3"></div>
+                        <div id="dailyFocus" class="mt-4 flex flex-col pt-1"></div>
                     </div>
                 </div>
             </div>
             <p id="statusMsg" class="hidden mt-4 text-xs rounded-xl px-3 py-2 ring-1 ring-black/10 dark:ring-white/15 relative z-10"></p>
         </section>
+
+        <!-- ================= GARLIC EXAM COMMAND CENTER ================= -->
+        <section id="examCommandCenter" class="hidden animate-fadeUp space-y-4 md:space-y-5">
+            <!-- Header bar -->
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-2 h-2 rounded-full bg-red-500 animate-pulseDot"></div>
+                    <h2 class="text-lg md:text-xl font-extrabold tracking-tight">EXAM COMMAND CENTER</h2>
+                    <span id="eccIntensityBadge" class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-brand-500/15 text-brand-700 dark:text-brandlt-200 ring-1 ring-brand-500/25">EXAM MODE</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="eccCountdown" class="text-[11px] font-mono font-bold text-red-600 dark:text-red-400"></span>
+                    <button id="eccDeactivateBtn" type="button" class="text-[10px] px-2.5 py-1 rounded-full ring-1 ring-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 transition font-semibold">EXIT EXAM MODE</button>
+                </div>
+            </div>
+
+            <!-- Row 1: Outcome Panel (4 cards) -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                <!-- Predicted Marks -->
+                <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15 flex flex-col gap-2 relative overflow-hidden">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-rounded text-brand-500 text-[16px]">analytics</span>
+                        <p class="text-[10px] uppercase tracking-wider text-neutral-500 dark:text-white/50 font-semibold">PREDICTED MARKS</p>
+                    </div>
+                    <div class="flex items-end gap-1">
+                        <span id="eccPredictedMarks" class="text-3xl md:text-4xl font-black tabular-nums leading-none">--</span>
+                        <span class="text-[12px] text-neutral-400 dark:text-white/40 font-semibold mb-0.5">/100</span>
+                    </div>
+                    <div id="eccMarksTrend" class="text-[10px] font-bold text-green-600 dark:text-green-400"></div>
+                </article>
+
+                <!-- Completion Probability -->
+                <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15 flex flex-col gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-rounded text-brand-500 text-[16px]">pie_chart</span>
+                        <p class="text-[10px] uppercase tracking-wider text-neutral-500 dark:text-white/50 font-semibold">COMPLETION PROB.</p>
+                    </div>
+                    <div class="relative h-16 w-16">
+                        <div id="eccCompletionRing" class="absolute inset-0 rounded-full metric-ring" style="--pct:0;--ring-color:#9E4B8A"></div>
+                        <div id="eccCompletionPct" class="absolute inset-0 flex items-center justify-center text-[14px] font-black">0%</div>
+                    </div>
+                </article>
+
+                <!-- Readiness Score -->
+                <article class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15 flex flex-col gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-rounded text-brand-500 text-[16px]">psychology</span>
+                        <p class="text-[10px] uppercase tracking-wider text-neutral-500 dark:text-white/50 font-semibold">READINESS</p>
+                    </div>
+                    <span id="eccReadinessScore" class="text-3xl md:text-4xl font-black tabular-nums leading-none">--</span>
+                    <span id="eccReadinessLevel" class="text-[10px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400"></span>
+                </article>
+
+                <!-- Risk Level -->
+                <article id="eccRiskCard" class="glass-panel kpi-card rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15 flex flex-col gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-rounded text-brand-500 text-[16px]">warning</span>
+                        <p class="text-[10px] uppercase tracking-wider text-neutral-500 dark:text-white/50 font-semibold">RISK LEVEL</p>
+                    </div>
+                    <span id="eccRiskLevel" class="text-2xl md:text-3xl font-black uppercase leading-none">LOW</span>
+                    <div id="eccRiskReasons" class="text-[10px] text-neutral-500 dark:text-white/50 leading-tight"></div>
+                </article>
+            </div>
+
+            <!-- Row 2: What-If-You-Stop + Daily Target + Recommendation -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                <!-- "WHAT IF YOU STOP NOW" -->
+                <div class="glass-panel rounded-2xl p-4 ring-1 ring-red-500/20 dark:ring-red-500/30 relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-500 via-orange-500 to-red-500 opacity-60"></div>
+                    <h3 class="text-[11px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                        <span class="material-symbols-rounded text-[14px]">dangerous</span>
+                        IF YOU STOP NOW
+                    </h3>
+                    <div class="mt-3 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-neutral-600 dark:text-white/60">Expected Marks</span>
+                            <span id="eccStopMarks" class="text-sm font-black text-red-600 dark:text-red-400 tabular-nums">--</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-neutral-600 dark:text-white/60">Risk Increase</span>
+                            <span id="eccStopRisk" class="text-sm font-black text-orange-600 dark:text-orange-400">--</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-neutral-600 dark:text-white/60">Completion Delay</span>
+                            <span id="eccStopDelay" class="text-sm font-black text-orange-500 dark:text-orange-300">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Daily Execution Target -->
+                <div class="glass-panel rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
+                    <h3 class="text-[11px] font-bold uppercase tracking-wider text-neutral-600 dark:text-white/60 flex items-center gap-1.5">
+                        <span class="material-symbols-rounded text-[14px] text-brand-500">task_alt</span>
+                        TODAY'S TARGET
+                    </h3>
+                    <div class="mt-3 flex items-end gap-2">
+                        <span id="eccDailyDone" class="text-3xl font-black tabular-nums leading-none">0</span>
+                        <span class="text-neutral-400 dark:text-white/40 font-bold">/</span>
+                        <span id="eccDailyTarget" class="text-3xl font-black tabular-nums leading-none text-brand-600 dark:text-brand-400">3</span>
+                        <span class="text-[11px] text-neutral-500 dark:text-white/50 mb-0.5">topics</span>
+                    </div>
+                    <div class="mt-3 h-2.5 rounded-full bg-brand-500/15 overflow-hidden">
+                        <div id="eccDailyBar" class="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-700 transition-all duration-700" style="width:0%"></div>
+                    </div>
+                    <p id="eccDailyMsg" class="mt-2 text-[11px] font-semibold text-neutral-600 dark:text-white/60"></p>
+                </div>
+
+                <!-- GARLIC Recommendation -->
+                <div class="glass-panel rounded-2xl p-4 ring-1 ring-brand-500/20 dark:ring-brand-500/30 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-[11px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
+                            <span class="material-symbols-rounded text-[14px]">auto_awesome</span>
+                            GARLIC RECOMMENDS
+                        </h3>
+                        <p id="eccRecommendation" class="mt-3 text-[13px] font-semibold leading-snug text-neutral-800 dark:text-white/90">"Loading intelligence..."</p>
+                    </div>
+                    <div id="eccAiReasoning" class="mt-3 text-[10px] italic text-neutral-500 dark:text-white/40 leading-relaxed line-clamp-3"></div>
+                </div>
+            </div>
+
+            <!-- Row 3: Exam Mode Status + Next Best Action + Velocity -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                <!-- Exam Mode Status Card -->
+                <div id="eccStatusCard" class="glass-panel rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
+                    <h3 class="text-[11px] font-bold uppercase tracking-wider text-neutral-600 dark:text-white/60 flex items-center gap-1.5">
+                        <span class="material-symbols-rounded text-[14px] text-brand-500">shield</span>
+                        EXAM MODE
+                    </h3>
+                    <div class="mt-3 flex items-center gap-3">
+                        <div id="eccModeIcon" class="w-10 h-10 rounded-full flex items-center justify-center bg-brand-500/15">
+                            <span class="material-symbols-rounded text-brand-500 text-[22px]">speed</span>
+                        </div>
+                        <div>
+                            <p id="eccModeName" class="text-lg font-black uppercase">EXAM</p>
+                            <p id="eccModeDesc" class="text-[10px] text-neutral-500 dark:text-white/50">Aggressive topic prioritization active</p>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex items-center gap-2 text-[10px]">
+                        <span class="material-symbols-rounded text-[12px]">schedule</span>
+                        <span id="eccTimeImpact" class="font-semibold text-neutral-600 dark:text-white/60">--</span>
+                    </div>
+                </div>
+
+                <!-- NEXT BEST ACTION BUTTON -->
+                <div class="glass-panel rounded-2xl p-4 ring-1 ring-brand-500/30 dark:ring-brand-500/40 flex flex-col items-center justify-center text-center relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-br from-brand-500/5 to-brand-700/10 dark:from-brand-500/10 dark:to-brand-700/20 pointer-events-none"></div>
+                    <span class="material-symbols-rounded text-brand-500 text-[32px] mb-2 relative z-10">rocket_launch</span>
+                    <p class="text-[10px] uppercase tracking-wider font-bold text-neutral-500 dark:text-white/50 mb-2 relative z-10">NEXT BEST ACTION</p>
+                    <button id="eccNextActionBtn" type="button" class="relative z-10 w-full max-w-[220px] py-3 px-5 rounded-xl bg-gradient-to-r from-brand-500 to-brand-700 text-white font-bold text-sm shadow-glow hover:shadow-ringed hover:scale-[1.02] transition-all duration-300 active:scale-95">
+                        Continue Optimal Path
+                    </button>
+                    <p id="eccNextTopic" class="mt-2 text-[11px] font-semibold text-neutral-600 dark:text-white/60 relative z-10 truncate max-w-full"></p>
+                </div>
+
+                <!-- Learning Velocity -->
+                <div class="glass-panel rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
+                    <h3 class="text-[11px] font-bold uppercase tracking-wider text-neutral-600 dark:text-white/60 flex items-center gap-1.5">
+                        <span class="material-symbols-rounded text-[14px] text-brand-500">trending_up</span>
+                        LEARNING VELOCITY
+                    </h3>
+                    <div class="mt-3 grid grid-cols-2 gap-3">
+                        <div>
+                            <p class="text-[10px] text-neutral-500 dark:text-white/40">Overall</p>
+                            <p id="eccVelocityOverall" class="text-xl font-black tabular-nums">0</p>
+                            <p class="text-[9px] text-neutral-400 dark:text-white/30">topics/day</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] text-neutral-500 dark:text-white/40">Last 7 days</p>
+                            <p id="eccVelocityRecent" class="text-xl font-black tabular-nums">0</p>
+                            <p class="text-[9px] text-neutral-400 dark:text-white/30">topics/day</p>
+                        </div>
+                    </div>
+                    <p id="eccVelocityMsg" class="mt-2 text-[10px] font-semibold leading-snug"></p>
+                </div>
+            </div>
+
+            <!-- Row 4: Active Insights -->
+            <div class="glass-panel rounded-2xl p-4 ring-1 ring-black/10 dark:ring-white/15">
+                <h3 class="text-[11px] font-bold uppercase tracking-wider text-neutral-600 dark:text-white/60 flex items-center gap-1.5 mb-3">
+                    <span class="material-symbols-rounded text-[14px] text-red-500">notification_important</span>
+                    ACTIVE INTELLIGENCE ALERTS
+                </h3>
+                <div id="eccInsightsContainer" class="space-y-2"></div>
+            </div>
+        </section>
+
+        <!-- ================= EXAM MODE ACTIVATION BANNER ================= -->
+        <section id="examModeActivator" class="animate-fadeUp">
+            <div class="glass-panel rounded-2xl p-5 md:p-6 ring-1 ring-brand-500/20 dark:ring-brand-500/30 relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-r from-brand-500/5 via-transparent to-brand-700/5 pointer-events-none"></div>
+                <div class="relative z-10 flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-4 min-w-0">
+                        <div class="w-12 h-12 rounded-full bg-brand-500/15 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-rounded text-brand-500 text-[24px]">target</span>
+                        </div>
+                        <div class="min-w-0">
+                            <h3 class="text-base font-bold">Activate Exam Intelligence</h3>
+                            <p class="text-xs text-neutral-600 dark:text-white/60 mt-0.5">Enter exam date to unlock predictive outcome tracking, risk-based prioritization, and daily target enforcement.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 shrink-0">
+                        <input id="examDateInput" type="date" class="text-sm px-3 py-2 rounded-lg ring-1 ring-black/10 dark:ring-white/15 bg-white dark:bg-brand-900/60 text-neutral-800 dark:text-white outline-none focus:ring-2 focus:ring-brand-500" />
+                        <button id="activateExamBtn" type="button" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-500 to-brand-700 text-white font-bold text-sm shadow-glow hover:shadow-ringed hover:scale-[1.02] transition-all duration-300 active:scale-95">
+                            <span class="flex items-center gap-1.5"><span class="material-symbols-rounded text-[16px]">bolt</span> Activate</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= MICRO-DIAGNOSTIC MODAL ================= -->
+        <div id="microDiagModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div class="glass-panel rounded-3xl p-6 md:p-8 max-w-lg w-[95%] ring-1 ring-black/10 dark:ring-white/15 shadow-card animate-fadeUp">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-base font-bold flex items-center gap-2">
+                        <span class="material-symbols-rounded text-brand-500">quiz</span>
+                        Quick Check
+                    </h3>
+                    <button id="microDiagClose" class="w-8 h-8 rounded-full ring-1 ring-black/10 dark:ring-white/15 flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 transition">
+                        <span class="material-symbols-rounded text-[18px]">close</span>
+                    </button>
+                </div>
+                <p id="microDiagTopic" class="text-[11px] font-semibold text-brand-600 dark:text-brand-400 mb-3"></p>
+                <p id="microDiagQuestion" class="text-sm font-medium leading-relaxed mb-4"></p>
+                <div id="microDiagOptions" class="space-y-2"></div>
+                <div id="microDiagResult" class="hidden mt-4 p-3 rounded-xl ring-1 ring-black/10 dark:ring-white/15 text-sm"></div>
+            </div>
+        </div>
+
+        <!-- ================= INTERVENTION ALERT ================= -->
+        <div id="interventionAlert" class="fixed top-20 left-1/2 -translate-x-1/2 z-[90] hidden max-w-md w-[92%]">
+            <div class="glass-panel rounded-2xl p-4 ring-2 ring-red-500/40 shadow-card animate-fadeUp">
+                <div class="flex items-start gap-3">
+                    <div class="w-8 h-8 rounded-full bg-red-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                        <span class="material-symbols-rounded text-red-500 text-[18px]">emergency</span>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">GARLIC INTERVENTION</p>
+                        <p id="interventionMsg" class="text-sm font-medium mt-1 leading-relaxed"></p>
+                    </div>
+                    <button id="interventionDismiss" class="shrink-0 w-7 h-7 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 transition">
+                        <span class="material-symbols-rounded text-[16px]">close</span>
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <section class="grid grid-cols-1 2xl:grid-cols-[1.3fr_0.7fr] gap-4 md:gap-5">
             <div class="space-y-4">
@@ -680,19 +949,46 @@
             list.forEach((item, idx) => {
                 const mins = Number(item?.estimated_time || 0);
                 total += mins;
+                const isDone = String(item?.status || '') === 'completed';
+                const ringStyle = isDone ? 'bg-green-500 border-none' : 'border-2 border-neutral-300 dark:border-neutral-600';
+                
+                // Use inline style for absolute guarantee of color rendering to bypass Tailwind JIT purging
+                const pulse = isDone ? '<span class="material-symbols-rounded text-white text-[12px] font-bold">check</span>' : '<div class="w-2.5 h-2.5 rounded-full animate-pulse" style="background-color: #9E4B8A;"></div>';
+
+                // Find course_type to route the click correctly
+                const flat = flattenTopics(payload);
+                let cType = item?.course_type || '';
+                if (!cType) {
+                    const matched = flat.find(f => String(f?.topic?.topic_id) === String(item?.topic_id) || String(f?.topic?.topic) === String(item?.topic));
+                    cType = matched?.subject?.course_type || '';
+                }
+                const page = notesPageByType(cType);
+                const href = `${page}?topic=${encodeURIComponent(item?.topic || '')}`;
+
                 const row = document.createElement('article');
-                row.className = 'rounded-2xl ring-1 ring-brand-500/20 bg-gradient-to-r from-white/90 to-brand-500/5 dark:from-white/5 dark:to-brand-500/10 p-3 md:p-3.5';
+                row.className = 'group relative flex items-center justify-between gap-4 py-3.5 border-b border-black/5 dark:border-white/10 last:border-0 hover:bg-black/[0.03] dark:hover:bg-white/[0.04] px-3 -mx-3 rounded-xl transition-colors cursor-pointer';
                 row.innerHTML = `
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <p class="text-sm md:text-[15px] font-bold">${idx + 1}. ${esc(item?.topic || 'Topic')}</p>
-                            <div class="mt-2 flex flex-wrap gap-1.5">
-                                <span class="${priorityClass(item?.priority_score)}">Priority ${Number(item?.priority_score || 0).toFixed(1)}</span>
-                                <span class="metric-chip">${mins} min</span>
-                                <span class="${statusClass(item?.status)}">${esc(prettyStatus(item?.status))}</span>
-                            </div>
-                        </div>
-                    </div>
+                   <a href="${href}" target="_blank" rel="noopener" data-item-id="${esc(item?.item_id || '')}" data-topic-id="${esc(item?.topic_id || '')}" class="topic-link absolute inset-0 z-10 rounded-xl"></a>
+                   <div class="flex items-center gap-4 min-w-0">
+                       <div class="shrink-0 flex items-center justify-center relative z-20">
+                           <div class="w-5 h-5 rounded-full flex items-center justify-center ${ringStyle}">
+                              ${pulse}
+                           </div>
+                       </div>
+                       <div class="min-w-0">
+                           <h3 class="text-[14px] font-bold text-neutral-800 dark:text-white/95 truncate ${isDone ? 'line-through opacity-70' : ''}">${esc(item?.topic || 'Topic')}</h3>
+                           <div class="flex items-center flex-wrap gap-3 mt-1.5 text-xs text-neutral-500 dark:text-neutral-400 font-medium tracking-wide">
+                               <span class="flex items-center gap-1 opacity-90"><span class="material-symbols-rounded text-[15px]">timer</span> ${mins}m</span>
+                               <span class="flex items-center gap-1 text-orange-600 dark:text-orange-400"><span class="material-symbols-rounded text-[15px]">local_fire_department</span> P${Number(item?.priority_score || 0).toFixed(1)}</span>
+                               <span class="uppercase font-bold pt-0.5 ${isDone ? 'text-green-600 dark:text-green-400' : 'text-brand-600 dark:text-brand-400'}" style="font-size: 10px;">${esc(prettyStatus(item?.status))}</span>
+                           </div>
+                       </div>
+                   </div>
+                   <div class="shrink-0 md:opacity-0 group-hover:opacity-100 transition-opacity relative z-20 pointer-events-none">
+                       <button class="size-8 rounded-full bg-white dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/20 flex items-center justify-center text-brand-600 dark:text-brand-400 hover:scale-105 transition-transform shadow-sm" aria-label="Start Task">
+                           <span class="material-symbols-rounded text-[18px]">play_arrow</span>
+                       </button>
+                   </div>
                 `;
                 holder.appendChild(row);
             });
@@ -729,12 +1025,18 @@
                         const page = notesPageByType(subject?.course_type || '');
                         const href = `${page}?topic=${encodeURIComponent(topicName)}`;
                         return `
-                            <li class="flex items-center gap-2 py-0.5 px-2 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm leading-tight">
-                                <a href="${href}" target="_blank" rel="noopener" data-item-id="${esc(topic?.item_id || '')}" data-topic-id="${esc(topic?.topic_id || '')}" class="topic-link flex-1 min-w-0">
-                                    <span class="text-brand-600 dark:text-brand-300 hover:underline break-words ${topicClass}">${esc(topicName)}</span>
-                                </a>
-                                <span class="${priorityClass(topic?.priority_score)}">${Number(topic?.priority_score || 0).toFixed(1)}</span>
-                                <span class="${statusClass(topic?.status)}">${esc(prettyStatus(topic?.status))}</span>
+                            <li class="group flex items-center gap-3 py-2.5 px-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors relative">
+                                <a href="${href}" target="_blank" rel="noopener" data-item-id="${esc(topic?.item_id || '')}" data-topic-id="${esc(topic?.topic_id || '')}" class="topic-link absolute inset-0 z-10"></a>
+                                <div class="shrink-0 w-4 flex justify-center">
+                                    <span class="material-symbols-rounded text-[16px] ${isCompleted ? 'text-green-500' : 'text-neutral-300 dark:text-neutral-600'}">${isCompleted ? 'check_circle' : 'radio_button_unchecked'}</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <span class="block text-[13.5px] font-medium text-neutral-700 dark:text-white/80 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors truncate ${topicClass}">${esc(topicName)}</span>
+                                </div>
+                                <div class="shrink-0 flex items-center gap-2 relative z-20 pointer-events-none">
+                                    <span class="flex items-center gap-1 text-[10px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded-md"><span class="material-symbols-rounded text-[11px]">local_fire_department</span>${Number(topic?.priority_score || 0).toFixed(1)}</span>
+                                    <span class="${statusClass(topic?.status)} !text-[10px] !py-0.5 !px-1.5 rounded-md">${esc(prettyStatus(topic?.status))}</span>
+                                </div>
                             </li>
                         `;
                     }).join('');
@@ -745,16 +1047,19 @@
                     });
 
                     return `
-                        <div class="rounded-xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-brand-900/40">
-                            <div class="w-full px-4 py-3 flex items-center justify-between hover:bg-white/60 dark:hover:bg-brand-900/30 transition-colors">
-                                <button type="button" data-unit-toggle aria-expanded="false" class="flex-1 text-left flex items-center gap-2 text-sm font-medium">
-                                    <span data-unit-caret class="material-symbols-rounded text-neutral-500 transition-transform duration-200 -rotate-90">expand_more</span>
-                                    <span class="${completedUnit ? 'line-through opacity-60' : ''}">${esc(unit?.unit_title || 'Unit')}</span>
-                                </button>
-                                <span class="text-[11px] rounded-full ring-1 ring-black/10 dark:ring-white/15 px-2 py-0.5">${topics.length} topics</span>
-                            </div>
-                            <div class="px-4 pb-4 hidden" data-unit-topics>
-                                <ul class="space-y-0.5 text-sm leading-tight">${topicRows || '<li class="text-xs text-neutral-500 dark:text-white/60">No topics</li>'}</ul>
+                        <div class="rounded-xl border border-black/5 dark:border-white/5 bg-white shadow-sm dark:bg-white/5 overflow-hidden">
+                            <button type="button" data-unit-toggle aria-expanded="false" class="w-full px-4 py-3.5 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-white/[0.02] transition-colors outline-none cursor-pointer">
+                                <div class="flex items-center gap-3">
+                                   <div class="w-1.5 h-1.5 rounded-full ${completedUnit ? 'bg-green-500' : 'bg-brand-500'}"></div>
+                                   <span class="text-[14px] font-semibold text-neutral-800 dark:text-white/90 ${completedUnit ? 'line-through opacity-50' : ''}">${esc(unit?.unit_title || 'Unit')}</span>
+                                </div>
+                                <div class="flex items-center gap-3 text-neutral-400">
+                                   <span class="text-[11px] font-medium opacity-80">${topics.length} topics</span>
+                                   <span data-unit-caret class="material-symbols-rounded text-[20px] transition-transform duration-300">expand_more</span>
+                                </div>
+                            </button>
+                            <div class="hidden border-t border-black/5 dark:border-white/5 bg-neutral-50/50 dark:bg-black/20" data-unit-topics>
+                                <ul class="divide-y divide-black/5 dark:divide-white/5 text-sm">${topicRows || '<li class="p-3 text-xs text-neutral-500">No topics</li>'}</ul>
                             </div>
                         </div>
                     `;
@@ -762,18 +1067,26 @@
 
                 const subjectTitle = esc(subject?.subject_title || 'Subject');
                 const subjectCode = esc(subject?.course_code || '');
+                subjectCard.className = 'group rounded-2xl border border-black/5 dark:border-white/10 bg-white/60 dark:bg-white/[0.02] overflow-hidden hover:bg-white/80 dark:hover:bg-white/[0.04] transition-colors';
                 subjectCard.innerHTML = `
-                    <div class="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-white/70 dark:hover:bg-brand-900/40 transition-colors" data-subject-toggle aria-expanded="false">
-                        <div class="flex items-center gap-3 font-semibold text-sm md:text-base min-w-0">
-                            <span data-subject-caret class="material-symbols-rounded text-neutral-500 transition-transform duration-200 -rotate-90">expand_more</span>
-                            <span class="hidden md:inline text-brand-600 dark:text-brand-400">${subjectCode}</span>
-                            <span class="hidden md:inline opacity-40">•</span>
-                            <span class="truncate">${subjectTitle}</span>
+                    <button class="w-full px-5 py-4 flex items-center justify-between cursor-pointer outline-none focus-visible:bg-black/5" data-subject-toggle aria-expanded="false">
+                        <div class="flex items-center gap-4 min-w-0">
+                            <div class="size-10 rounded-full bg-brand-500/10 flex items-center justify-center shrink-0">
+                                <span class="material-symbols-rounded text-[20px] text-brand-600 dark:text-brand-400">library_books</span>
+                            </div>
+                            <div class="text-left min-w-0">
+                                <h3 class="font-bold text-[15px] truncate text-neutral-900 dark:text-white/95">${subjectTitle}</h3>
+                                <p class="text-[12px] text-neutral-500 dark:text-white/50 mt-0.5 font-medium">${units.length} Units Built-in</p>
+                            </div>
                         </div>
-                        <span class="text-[11px] rounded-full ring-1 ring-black/10 dark:ring-white/15 px-2 py-0.5">${units.length} units</span>
-                    </div>
-                    <div class="p-5 grid gap-4 hidden" data-subject-units>
-                        ${unitBlocks}
+                        <div class="shrink-0 ml-4 flex items-center justify-center">
+                            <span data-subject-caret class="material-symbols-rounded text-neutral-400 transition-transform duration-300">chevron_right</span>
+                        </div>
+                    </button>
+                    <div class="hidden border-t border-black/5 dark:border-white/5 bg-black/[0.015] dark:bg-black/[0.2]" data-subject-units>
+                        <div class="p-4 md:p-5 flex flex-col gap-3">
+                            ${unitBlocks}
+                        </div>
                     </div>
                 `;
                 wrap.appendChild(subjectCard);
@@ -789,8 +1102,8 @@
                     target.classList.toggle('hidden', !expand);
                     btn.setAttribute('aria-expanded', expand ? 'true' : 'false');
                     if (caret) {
-                        caret.classList.toggle('-rotate-90', !expand);
-                        caret.classList.toggle('rotate-0', expand);
+                        caret.classList.toggle('rotate-90', expand);
+                        caret.classList.toggle('rotate-0', !expand);
                     }
                 });
             });
@@ -805,8 +1118,8 @@
                     target.classList.toggle('hidden', !expand);
                     btn.setAttribute('aria-expanded', expand ? 'true' : 'false');
                     if (caret) {
-                        caret.classList.toggle('-rotate-90', !expand);
-                        caret.classList.toggle('rotate-0', expand);
+                        caret.classList.toggle('rotate-180', expand);
+                        caret.classList.toggle('rotate-0', !expand);
                     }
                 });
             });
@@ -1028,8 +1341,470 @@
             $('regenBtnNavMobile')?.addEventListener('click', handleRegenerate);
 
             bootstrap();
+
+            // ========== EXAM COMMAND CENTER: FULL INTELLIGENCE UI ==========
+            const V3 = `${API_BASE}/api/garlic/v3`;
+            let __examProfile = null;
+            let __outcomeData = null;
+            let __eccActive = false;
+            let __controlLoopTimer = null;
+            let __microDiagSessionId = null;
+            let __lastOutcomeFetch = 0;
+            let __nextTopicCache = null;
+            let __interventionCooldown = 0;
+
+            function eccShow(show) {
+                const ecc = $('examCommandCenter');
+                const activator = $('examModeActivator');
+                if (ecc) ecc.classList.toggle('hidden', !show);
+                if (activator) activator.classList.toggle('hidden', !!show);
+                __eccActive = show;
+            }
+
+            // --- Exam Mode Activation ---
+            $('activateExamBtn')?.addEventListener('click', async () => {
+                const dateVal = $('examDateInput')?.value;
+                if (!dateVal) { alert('Please select your exam date.'); return; }
+                try {
+                    const res = await fetchJson(`${V3}/exam-mode/activate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                        body: JSON.stringify({ exam_date: dateVal }),
+                    });
+                    __examProfile = res?.profile || {};
+                    eccShow(true);
+                    eccUpdateStatus(res);
+                    eccRefreshAll();
+                    eccStartControlLoop();
+                } catch (err) {
+                    alert('Failed to activate exam mode: ' + (err?.message || 'Unknown error'));
+                }
+            });
+
+            // --- Deactivation ---
+            $('eccDeactivateBtn')?.addEventListener('click', async () => {
+                if (!confirm('Exit Exam Mode? Your prediction data will be preserved.')) return;
+                try {
+                    await fetchJson(`${V3}/exam-mode/deactivate`, { method: 'POST', headers: authHeaders() });
+                    __examProfile = null;
+                    __eccActive = false;
+                    eccShow(false);
+                    eccStopControlLoop();
+                } catch (_) {}
+            });
+
+            // --- Check exam mode on boot ---
+            async function eccCheckOnBoot() {
+                try {
+                    const res = await fetchJson(`${V3}/exam-mode/status`, { headers: authHeaders() });
+                    if (res?.active && res?.profile) {
+                        __examProfile = res.profile;
+                        eccShow(true);
+                        eccUpdateStatus({ profile: res.profile, intensity_level: res.profile?.intensity_level });
+                        eccRefreshAll();
+                        eccStartControlLoop();
+                    }
+                } catch (_) {}
+            }
+            // Run after bootstrap completes
+            setTimeout(eccCheckOnBoot, 1500);
+
+            // --- Update Status Card ---
+            function eccUpdateStatus(data) {
+                const profile = data?.profile || __examProfile || {};
+                const intensity = data?.intensity_level || profile?.intensity_level || 'exam';
+                const days = profile?.time_remaining_days;
+
+                const badge = $('eccIntensityBadge');
+                if (badge) {
+                    const colors = {
+                        normal: 'bg-green-500/15 text-green-700 dark:text-green-400 ring-green-500/25',
+                        exam: 'bg-brand-500/15 text-brand-700 dark:text-brandlt-200 ring-brand-500/25',
+                        critical: 'bg-red-500/15 text-red-700 dark:text-red-400 ring-red-500/25',
+                    };
+                    badge.className = `text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ring-1 ${colors[intensity] || colors.exam}`;
+                    badge.textContent = `${intensity.toUpperCase()} MODE`;
+                }
+
+                const countdown = $('eccCountdown');
+                if (countdown) {
+                    countdown.textContent = days != null ? `${days} DAYS LEFT` : '';
+                }
+
+                const modeName = $('eccModeName');
+                const modeDesc = $('eccModeDesc');
+                const timeImpact = $('eccTimeImpact');
+                const descriptions = {
+                    normal: 'Balanced learning across full syllabus',
+                    exam: 'Aggressive topic prioritization active',
+                    critical: 'SURVIVAL MODE — only high-yield topics',
+                };
+                if (modeName) modeName.textContent = intensity.toUpperCase();
+                if (modeDesc) modeDesc.textContent = descriptions[intensity] || descriptions.exam;
+                if (timeImpact) {
+                    if (days != null) {
+                        if (days <= 7) timeImpact.textContent = `⚠️ CRITICAL: Only ${days} days. Every minute counts.`;
+                        else if (days <= 30) timeImpact.textContent = `${days} days until exam — prioritizing high-impact topics.`;
+                        else timeImpact.textContent = `${days} days remaining — steady pace recommended.`;
+                    }
+                }
+
+                // Risk card visual
+                const riskCard = $('eccRiskCard');
+                const riskLevel = profile?.risk_level || 'low';
+                if (riskCard) {
+                    const riskColors = {
+                        low: 'ring-green-500/20',
+                        moderate: 'ring-yellow-500/30',
+                        high: 'ring-orange-500/40',
+                        critical: 'ring-red-500/50',
+                    };
+                    riskCard.className = riskCard.className.replace(/ring-(green|yellow|orange|red)-\d+\/\d+/g, '');
+                    riskCard.classList.add(riskColors[riskLevel] || 'ring-black/10');
+                }
+            }
+
+            // --- Fetch & Render Outcomes ---
+            async function eccFetchOutcomes() {
+                if (!__ctx?.student_id) return;
+                try {
+                    const res = await fetchJson(`${V3}/outcomes/${encodeURIComponent(__ctx.student_id)}`, { headers: authHeaders() });
+                    __outcomeData = res?.prediction || {};
+                    __lastOutcomeFetch = Date.now();
+                    eccRenderOutcomes(__outcomeData);
+                } catch (_) {}
+            }
+
+            function eccRenderOutcomes(d) {
+                const marks = Number(d?.predicted_marks || 0).toFixed(1);
+                const completion = Number(d?.completion_probability || 0).toFixed(0);
+                const readiness = Number(d?.readiness_score || 0).toFixed(1);
+                const risk = String(d?.risk_level || 'low').toUpperCase();
+                const reasons = d?.gap_analysis?.risk_reasons || [];
+
+                if ($('eccPredictedMarks')) $('eccPredictedMarks').textContent = marks;
+                if ($('eccCompletionPct')) $('eccCompletionPct').textContent = `${completion}%`;
+                if ($('eccCompletionRing')) $('eccCompletionRing').style.setProperty('--pct', completion);
+                if ($('eccReadinessScore')) $('eccReadinessScore').textContent = readiness;
+                if ($('eccReadinessLevel')) {
+                    const levels = { not_ready: 'NOT READY', partially_ready: 'PARTIAL', exam_ready: 'READY', high_scorer_ready: 'HIGH SCORER' };
+                    $('eccReadinessLevel').textContent = levels[d?.readiness_level] || d?.readiness_level || '';
+                }
+                if ($('eccRiskLevel')) {
+                    $('eccRiskLevel').textContent = risk;
+                    const riskColors = { LOW: 'text-green-600 dark:text-green-400', MODERATE: 'text-yellow-600 dark:text-yellow-400', HIGH: 'text-orange-600 dark:text-orange-400', CRITICAL: 'text-red-600 dark:text-red-400' };
+                    $('eccRiskLevel').className = `text-2xl md:text-3xl font-black uppercase leading-none ${riskColors[risk] || ''}`;
+                }
+                if ($('eccRiskReasons')) $('eccRiskReasons').textContent = reasons.slice(0, 2).join(' • ');
+
+                // What-If-You-Stop
+                const stopMarksDrop = Math.max(5, Number(d?.improvement_potential || 30) * 0.6).toFixed(0);
+                const currentMarks = Number(d?.predicted_marks || 0);
+                if ($('eccStopMarks')) $('eccStopMarks').textContent = `${Math.max(0, currentMarks - stopMarksDrop).toFixed(0)}/100 (−${stopMarksDrop})`;
+                if ($('eccStopRisk')) {
+                    const nextRisk = { low: 'MODERATE', moderate: 'HIGH', high: 'CRITICAL', critical: 'CRITICAL' };
+                    $('eccStopRisk').textContent = `→ ${nextRisk[d?.risk_level] || 'HIGH'}`;
+                }
+                if ($('eccStopDelay')) {
+                    const velocity = Number(d?.learning_velocity_topics_per_day || 0);
+                    const remaining = Number(d?.signals?.total_topics || 0) - Number(d?.signals?.completed || 0);
+                    const delayDays = velocity > 0 ? Math.ceil(remaining * 0.3 / velocity) : remaining;
+                    $('eccStopDelay').textContent = `+${delayDays} days behind`;
+                }
+
+                // AI reasoning & recommendation
+                if ($('eccAiReasoning')) $('eccAiReasoning').textContent = d?.ai_reasoning || '';
+
+                // Update exam profile with latest data
+                if (__examProfile) {
+                    __examProfile.predicted_marks = d?.predicted_marks;
+                    __examProfile.readiness_score = d?.readiness_score;
+                    __examProfile.risk_level = d?.risk_level;
+                }
+            }
+
+            // --- Daily Target ---
+            async function eccFetchDailyTarget() {
+                if (!__ctx?.student_id) return;
+                try {
+                    const res = await fetchJson(`${V3}/daily-target/${encodeURIComponent(__ctx.student_id)}`, { headers: authHeaders() });
+                    if ($('eccDailyDone')) $('eccDailyDone').textContent = String(res?.completed_today || 0);
+                    if ($('eccDailyTarget')) $('eccDailyTarget').textContent = String(res?.daily_target || 3);
+                    if ($('eccDailyMsg')) {
+                        $('eccDailyMsg').textContent = res?.message || '';
+                        $('eccDailyMsg').className = `mt-2 text-[11px] font-semibold ${res?.on_track ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`;
+                    }
+                    const pct = res?.daily_target > 0 ? Math.min(100, Math.round((res?.completed_today / res?.daily_target) * 100)) : 0;
+                    if ($('eccDailyBar')) $('eccDailyBar').style.width = `${pct}%`;
+                } catch (_) {}
+            }
+
+            // --- Learning Velocity ---
+            async function eccFetchVelocity() {
+                if (!__ctx?.student_id) return;
+                try {
+                    const res = await fetchJson(`${V3}/velocity/${encodeURIComponent(__ctx.student_id)}`, { headers: authHeaders() });
+                    const v = res?.velocity || {};
+                    if ($('eccVelocityOverall')) $('eccVelocityOverall').textContent = String(v?.topics_per_day_overall || 0);
+                    if ($('eccVelocityRecent')) $('eccVelocityRecent').textContent = String(v?.topics_per_day_last_7 || 0);
+                    if ($('eccVelocityMsg')) {
+                        $('eccVelocityMsg').textContent = v?.pace_message || '';
+                        const ok = v?.will_complete_in_time !== false;
+                        $('eccVelocityMsg').className = `mt-2 text-[10px] font-semibold leading-snug ${ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`;
+                    }
+                } catch (_) {}
+            }
+
+            // --- Exam Insights ---
+            async function eccFetchInsights() {
+                if (!__ctx?.student_id) return;
+                try {
+                    const res = await fetchJson(`${V3}/exam-insights/${encodeURIComponent(__ctx.student_id)}`, { headers: authHeaders() });
+                    const container = $('eccInsightsContainer');
+                    if (!container) return;
+                    const insights = res?.insights || [];
+                    if (!insights.length) {
+                        container.innerHTML = '<p class="text-xs text-neutral-500 dark:text-white/50">No active alerts.</p>';
+                        return;
+                    }
+                    container.innerHTML = insights.slice(0, 6).map(ins => {
+                        const sevColors = { info: 'ring-blue-500/20 bg-blue-500/5', warning: 'ring-yellow-500/25 bg-yellow-500/5', critical: 'ring-red-500/30 bg-red-500/5' };
+                        const sevIcons = { info: 'info', warning: 'warning', critical: 'error' };
+                        const sevTextColors = { info: 'text-blue-600 dark:text-blue-400', warning: 'text-yellow-600 dark:text-yellow-400', critical: 'text-red-600 dark:text-red-400' };
+                        const cls = sevColors[ins?.severity] || sevColors.info;
+                        const icon = sevIcons[ins?.severity] || 'info';
+                        const txtCls = sevTextColors[ins?.severity] || sevTextColors.info;
+                        const impact = ins?.marks_impact ? `<span class="font-black ml-1">(~${Number(ins.marks_impact).toFixed(0)} marks)</span>` : '';
+                        return `<div class="rounded-xl p-3 ring-1 ${cls} flex items-start gap-2.5">
+                            <span class="material-symbols-rounded text-[16px] mt-0.5 shrink-0 ${txtCls}">${icon}</span>
+                            <p class="text-[12px] font-medium leading-snug">${esc(ins?.text || '')}${impact}</p>
+                        </div>`;
+                    }).join('');
+                } catch (_) {}
+            }
+
+            // --- NEXT BEST ACTION ENGINE ---
+            function eccGetNextTopic() {
+                if (!__payload) return null;
+                const topics = flattenTopics(__payload);
+                const available = topics
+                    .filter(t => !t?.topic?.completed && String(t?.topic?.status || '') !== 'completed')
+                    .sort((a, b) => Number(b?.topic?.priority_score || 0) - Number(a?.topic?.priority_score || 0));
+                return available[0] || null;
+            }
+
+            function eccUpdateNextAction() {
+                const next = eccGetNextTopic();
+                __nextTopicCache = next;
+                const topicLabel = $('eccNextTopic');
+                const recLabel = $('eccRecommendation');
+                if (!next) {
+                    if (topicLabel) topicLabel.textContent = 'All topics completed!';
+                    if (recLabel) recLabel.textContent = '"You have covered everything. Focus on revision now."';
+                    return;
+                }
+                const name = next?.topic?.topic || 'Unknown Topic';
+                const subject = next?.subject?.subject_title || '';
+                const pri = Number(next?.topic?.priority_score || 0).toFixed(0);
+                if (topicLabel) topicLabel.textContent = `→ ${name}`;
+                if (recLabel) recLabel.textContent = `"Do ${name} next — Priority ${pri}, part of ${subject}."`;
+            }
+
+            $('eccNextActionBtn')?.addEventListener('click', () => {
+                const next = __nextTopicCache || eccGetNextTopic();
+                if (!next) { alert('All topics completed!'); return; }
+                const name = next?.topic?.topic || '';
+                const cType = next?.subject?.course_type || '';
+                const page = notesPageByType(cType);
+                const href = `${page}?topic=${encodeURIComponent(name)}`;
+                // Track the interaction
+                trackTopicOpen(next?.topic?.item_id, next?.topic?.topic_id);
+                // Randomly trigger micro-diagnostic (20% chance)
+                if (Math.random() < 0.2 && __eccActive) {
+                    eccTriggerMicroDiag();
+                }
+                window.open(href, '_blank');
+            });
+
+            // --- MICRO-DIAGNOSTIC MODAL ---
+            async function eccTriggerMicroDiag() {
+                try {
+                    const res = await fetchJson(`${V3}/diagnostic/micro`, { method: 'POST', headers: authHeaders() });
+                    if (!res?.question) return;
+                    __microDiagSessionId = res?.session_id;
+                    const q = res.question;
+                    const modal = $('microDiagModal');
+                    if ($('microDiagTopic')) $('microDiagTopic').textContent = q?.topic_name || '';
+                    if ($('microDiagQuestion')) $('microDiagQuestion').textContent = q?.question_text || '';
+                    if ($('microDiagResult')) { $('microDiagResult').classList.add('hidden'); $('microDiagResult').innerHTML = ''; }
+
+                    const optionsContainer = $('microDiagOptions');
+                    if (optionsContainer) {
+                        optionsContainer.innerHTML = (q?.options || []).map((opt, idx) => {
+                            const letter = String.fromCharCode(65 + idx);
+                            return `<button type="button" data-answer="${letter}" data-qid="${q?.question_id || ''}" class="w-full text-left px-4 py-3 rounded-xl ring-1 ring-black/10 dark:ring-white/15 hover:bg-brand-500/10 hover:ring-brand-500/30 transition text-sm font-medium">${esc(opt)}</button>`;
+                        }).join('');
+
+                        optionsContainer.querySelectorAll('button[data-answer]').forEach(btn => {
+                            btn.addEventListener('click', async (e) => {
+                                const answer = e.currentTarget.getAttribute('data-answer');
+                                const qid = e.currentTarget.getAttribute('data-qid');
+                                // Disable all buttons
+                                optionsContainer.querySelectorAll('button').forEach(b => b.disabled = true);
+                                e.currentTarget.classList.add('ring-brand-500', 'bg-brand-500/10');
+
+                                try {
+                                    const evalRes = await fetchJson(`${V3}/diagnostic/answer`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                                        body: JSON.stringify({ session_id: __microDiagSessionId, question_id: qid, answer }),
+                                    });
+                                    const ev = evalRes?.evaluation || {};
+                                    const resultEl = $('microDiagResult');
+                                    if (resultEl) {
+                                        const isGood = Number(ev?.score || 0) >= 60;
+                                        resultEl.className = `mt-4 p-3 rounded-xl ring-1 text-sm ${isGood ? 'ring-green-500/30 bg-green-500/5' : 'ring-red-500/30 bg-red-500/5'}`;
+                                        resultEl.innerHTML = `<p class="font-bold ${isGood ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">${isGood ? '✓ Correct' : '✗ Needs Review'} — Score: ${Number(ev?.score || 0).toFixed(0)}/100</p><p class="mt-1 text-xs text-neutral-600 dark:text-white/60">${esc(ev?.explanation || '')}</p>`;
+                                        resultEl.classList.remove('hidden');
+                                    }
+                                } catch (_) {}
+                            });
+                        });
+                    }
+                    if (modal) modal.classList.remove('hidden');
+                } catch (_) {}
+            }
+
+            $('microDiagClose')?.addEventListener('click', () => {
+                $('microDiagModal')?.classList.add('hidden');
+            });
+            $('microDiagModal')?.addEventListener('click', (e) => {
+                if (e.target === $('microDiagModal')) $('microDiagModal')?.classList.add('hidden');
+            });
+
+            // --- INTERVENTION SYSTEM ---
+            function eccShowIntervention(msg) {
+                if (Date.now() < __interventionCooldown) return;
+                __interventionCooldown = Date.now() + 180000; // 3 min cooldown
+                const el = $('interventionAlert');
+                if ($('interventionMsg')) $('interventionMsg').textContent = msg;
+                if (el) {
+                    el.classList.remove('hidden');
+                    setTimeout(() => el.classList.add('hidden'), 12000);
+                }
+            }
+
+            $('interventionDismiss')?.addEventListener('click', () => {
+                $('interventionAlert')?.classList.add('hidden');
+            });
+
+            // --- REAL-TIME CONTROL LOOP (every 3 minutes) ---
+            let __loopCount = 0;
+
+            async function eccControlLoop() {
+                if (!__eccActive || !__ctx?.student_id) return;
+                __loopCount++;
+
+                try {
+                    // 1. Refresh outcomes every cycle
+                    await eccFetchOutcomes();
+
+                    // 2. Apply confidence decay
+                    if (__loopCount % 3 === 0) { // every 9 min
+                        try { await fetchJson(`${V3}/confidence-decay`, { method: 'POST', headers: authHeaders() }); } catch (_) {}
+                    }
+
+                    // 3. Check for replan triggers
+                    if (__loopCount % 2 === 0) { // every 6 min
+                        try {
+                            const replanRes = await fetchJson(`${V3}/replan`, { method: 'POST', headers: authHeaders() });
+                            if (replanRes?.topics_reranked > 0) {
+                                eccShowIntervention(`GARLIC re-ranked ${replanRes.topics_reranked} topics based on your progress. Plan updated.`);
+                                // Reload plan
+                                try {
+                                    const payload = await loadPersistedPlan(__ctx.student_id);
+                                    renderPlan(payload);
+                                } catch (_) {}
+                            }
+                        } catch (_) {}
+                    }
+
+                    // 4. Refresh daily target
+                    await eccFetchDailyTarget();
+
+                    // 5. Update next action
+                    eccUpdateNextAction();
+
+                    // 6. Intervention checks
+                    if (__outcomeData) {
+                        const risk = String(__outcomeData?.risk_level || 'low');
+                        if (risk === 'critical') {
+                            eccShowIntervention('⚠️ CRITICAL RISK: Your exam readiness is dangerously low. Complete at least 3 topics NOW to recover.');
+                        } else if (risk === 'high') {
+                            eccShowIntervention('You are falling behind. Focus on high-priority topics immediately.');
+                        }
+                    }
+
+                    // 7. Re-fetch velocity + insights less frequently
+                    if (__loopCount % 5 === 0) { // every ~15 min
+                        await eccFetchVelocity();
+                        await eccFetchInsights();
+                    }
+
+                } catch (_) {}
+            }
+
+            function eccStartControlLoop() {
+                eccStopControlLoop();
+                __controlLoopTimer = setInterval(eccControlLoop, 180000); // 3 min
+            }
+
+            function eccStopControlLoop() {
+                if (__controlLoopTimer) { clearInterval(__controlLoopTimer); __controlLoopTimer = null; }
+            }
+
+            // --- Refresh all ECC panels ---
+            async function eccRefreshAll() {
+                await Promise.all([
+                    eccFetchOutcomes(),
+                    eccFetchDailyTarget(),
+                    eccFetchVelocity(),
+                    eccFetchInsights(),
+                ]);
+                eccUpdateNextAction();
+            }
         });
     </script>
+
+    <script type="module">
+        import { PixelBlast } from './assets/js/pixelBlast.js';
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('pixel-blast-bg');
+            if (container) {
+                new PixelBlast(container, {
+                    variant: 'square',
+                    pixelSize: 4,
+                    color: '#9E4B8A', // GARLIC Theme brand-500
+                    patternScale: 2,
+                    patternDensity: 1,
+                    pixelSizeJitter: 0,
+                    enableRipples: true,
+                    rippleSpeed: 0.4,
+                    rippleThickness: 0.12,
+                    rippleIntensityScale: 1.5,
+                    liquid: false,
+                    liquidStrength: 0.12,
+                    liquidRadius: 1.2,
+                    liquidWobbleSpeed: 5,
+                    speed: 0.5,
+                    edgeFade: 0.25,
+                    transparent: true
+                });
+            }
+        });
+    </script>
+    </div> <!-- /relative z-10 wrap -->
 </body>
 
 </html>

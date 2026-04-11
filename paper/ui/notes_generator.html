@@ -4497,4 +4497,80 @@
 <!-- Marker overlay (browser-only) -->
 <script src="assets/js/marker_overlay.js"></script>
 
+<!-- GARLIC V3: Session Auto-Close via sendBeacon -->
+<script>
+(function() {
+  const apiBase = (window.API_BASE || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+  let _garlicSessionId = null;
+  let _garlicActiveSeconds = 0;
+  let _garlicStartTs = null;
+  let _garlicClosed = false;
+
+  // Track active GARLIC session (set from external code or auto-detected)
+  window.__garlicSetSession = function(sessionId) {
+    _garlicSessionId = sessionId;
+    _garlicStartTs = Date.now();
+    _garlicActiveSeconds = 0;
+    _garlicClosed = false;
+  };
+
+  // Heartbeat: increment active seconds every 10s while page visible
+  setInterval(function() {
+    if (_garlicSessionId && !_garlicClosed && document.visibilityState === 'visible') {
+      _garlicActiveSeconds += 10;
+    }
+  }, 10000);
+
+  function _closeGarlicSession() {
+    if (!_garlicSessionId || _garlicClosed) return;
+    _garlicClosed = true;
+
+    function getToken() {
+      try {
+        if (typeof getAuthToken === 'function') return getAuthToken() || '';
+      } catch(e) {}
+      var keys = ['px_token', 'teacherToken', 'userToken'];
+      for (var i = 0; i < keys.length; i++) {
+        try { var v = localStorage.getItem(keys[i]); if (v) return v; } catch(e) {}
+      }
+      return '';
+    }
+
+    var token = getToken();
+    if (!token) return;
+
+    var payload = JSON.stringify({
+      session_id: _garlicSessionId,
+      active_seconds: _garlicActiveSeconds,
+      completion_percent: null
+    });
+
+    // Use sendBeacon for reliability on tab close
+    var url = apiBase + '/api/garlic/v3/session/auto-close';
+    try {
+      var blob = new Blob([payload], { type: 'application/json' });
+      navigator.sendBeacon(url, blob);
+    } catch(e) {
+      // Fallback: synchronous XHR (last resort)
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', url, false);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+        xhr.send(payload);
+      } catch(e2) {}
+    }
+  }
+
+  // Attach to all exit events
+  window.addEventListener('pagehide', _closeGarlicSession);
+  window.addEventListener('beforeunload', _closeGarlicSession);
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'hidden') {
+      _closeGarlicSession();
+    }
+  });
+})();
+</script>
+
 </html>
