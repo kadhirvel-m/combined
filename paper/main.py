@@ -119,6 +119,23 @@ except Exception:  # pragma: no cover
     Presentation = None  # type: ignore
 
 try:
+    from fastapi_mcp import FastApiMCP  # type: ignore
+except Exception:  # pragma: no cover
+    FastApiMCP = None  # type: ignore
+
+# OpenTelemetry — conditional import for MCP tracing (Feature 5)
+try:
+    from opentelemetry import trace as otel_trace
+    from opentelemetry.sdk.trace import TracerProvider as OtelTracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor as OtelBatchSpanProcessor
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter as OtelOTLPExporter
+except Exception:  # pragma: no cover
+    otel_trace = None  # type: ignore
+    OtelTracerProvider = None  # type: ignore
+    OtelBatchSpanProcessor = None  # type: ignore
+    OtelOTLPExporter = None  # type: ignore
+
+try:
     import textract  # type: ignore
 except Exception:  # pragma: no cover
     textract = None  # type: ignore
@@ -221,6 +238,13 @@ AUTH_PUBLIC_EXACT_ROUTES: Set[str] = {
     "/api/signup/full",
     "/api/teacher/signup",
     "/api/hod/signup",
+    "/.well-known/oauth-protected-resource",
+    # MCP health endpoints (F7) — public for monitoring/heartbeat
+    "/mcp/health",
+    "/mcp/student/health",
+    "/mcp/teacher/health",
+    "/mcp/hod/health",
+    "/mcp/admin/health",
 }
 AUTH_PUBLIC_PREFIX_ROUTES: Tuple[str, ...] = (
     "/ui/",
@@ -245,6 +269,22 @@ RBAC_TEACHER_PREFIXES: Tuple[str, ...] = (
 RBAC_HOD_PREFIXES: Tuple[str, ...] = (
     "/api/hod",
 )
+MCP_ENABLED = (os.getenv("MCP_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
+
+# ── MCP Hardening Configuration ──────────────────────────────────────────────
+# Service Account (F4/F6): Static Bearer token for daemon/agent auth — never expires.
+MCP_SERVICE_ACCOUNT_TOKEN = (os.getenv("MCP_SERVICE_ACCOUNT_TOKEN") or "").strip()
+MCP_SERVICE_ACCOUNT_ID = (os.getenv("MCP_SERVICE_ACCOUNT_ID") or "agent:openclaw").strip()
+MCP_SERVICE_ACCOUNT_ROLE = (os.getenv("MCP_SERVICE_ACCOUNT_ROLE") or "hod").strip()
+# Audit Log (F2): Per-tool invocation logging to structured JSON + Supabase table.
+MCP_AUDIT_LOG_ENABLED = (os.getenv("MCP_AUDIT_LOG_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+MCP_AUDIT_TABLE = os.getenv("MCP_AUDIT_TABLE", "mcp_audit_log")
+# Injection Defense (F3): Scan tool args (input) and response content (output).
+MCP_INJECTION_DEFENSE_ENABLED = (os.getenv("MCP_INJECTION_DEFENSE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+MCP_INJECTION_DEFENSE_ENFORCE = (os.getenv("MCP_INJECTION_DEFENSE_ENFORCE", "false").strip().lower() in {"1", "true", "yes", "on"})
+# OTel (F5): Activated when OTEL_EXPORTER_OTLP_ENDPOINT is set (standard OTel config).
+_OTEL_ENDPOINT = (os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") or "").strip()
+MCP_OTEL_ENABLED = bool(_OTEL_ENDPOINT and otel_trace is not None)
 
 RATE_LIMIT_AI_PREFIXES: Tuple[str, ...] = (
     "/api/innovatex/",
@@ -964,6 +1004,131 @@ def _llm_guardrails_check(prompt: str) -> Tuple[bool, Optional[str]]:
         if re.search(pat, low):
             return False, pat
     return True, None
+
+
+# ── MCP Prompt Injection Defense (F3) ────────────────────────────────────────
+_MCP_INJECTION_PATTERNS = [
+    # Hidden instruction markers used by common LLM prompt injection attacks
+    r"\[INST\]",
+    r"<\|system\|>",
+    r"<\|im_start\|>",
+    r"BEGINPROMPT",
+    r"ENDPROMPT",
+    # Role hijacking / override attempts
+    r"you\s+are\s+now\s+",
+    r"act\s+as\s+(admin|root|superuser)",
+    r"switch\s+to\s+(admin|root|system)\s+mode",
+    r"override\s+previous\s+(instructions|rules|constraints)",
+    # Data exfiltration via URL encoding
+    r"https?://[^\s]*\?.*=(token|secret|password|key|jwt|auth)",
+    r"fetch\s*\(\s*['\"]https?://",
+    # Tool override / chain manipulation
+    r"call\s+tool\s*:",
+    r"execute\s+function\s*:",
+    r"invoke\s+endpoint\s*:",
+    # Existing guardrail patterns extended for MCP context
+    r"ignore\s+previous\s+instructions",
+    r"reveal\s+system\s+prompt",
+    r"print\s+all\s+secrets",
+    r"exfiltrat(e|ion)",
+    r"bypass\s+security",
+    r"disable\s+guardrails",
+]
+
+
+def _mcp_injection_scan(text: str) -> Tuple[bool, Optional[str]]:
+    """Scan text for prompt injection patterns (used for both input args and output content).
+
+    Returns (is_safe, matched_pattern). When is_safe is False, matched_pattern
+    contains the regex that triggered the detection.
+    """
+    if not MCP_INJECTION_DEFENSE_ENABLED:
+        return True, None
+    content = (text or "").strip()
+    if not content:
+        return True, None
+    low = content.lower()
+    for pat in _MCP_INJECTION_PATTERNS:
+        if re.search(pat, low):
+            return False, pat
+    return True, None
+
+
+# ── MCP Audit Logging (F2) ──────────────────────────────────────────────────
+
+def _mcp_audit_log(
+    *,
+    event_type: str = "mcp.tool_call",
+    agent_id: str = "unknown",
+    user_id: Optional[str] = None,
+    tool_name: Optional[str] = None,
+    mount: Optional[str] = None,
+    method: Optional[str] = None,
+    status_code: Optional[int] = None,
+    latency_ms: Optional[float] = None,
+    client_ip: Optional[str] = None,
+    injection_detected: bool = False,
+    injection_pattern: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Emit a structured JSON audit log entry for an MCP tool invocation."""
+    if not MCP_AUDIT_LOG_ENABLED:
+        return
+    event: Dict[str, Any] = {
+        "ts": datetime.utcnow().isoformat() + "Z",
+        "event_type": event_type,
+        "agent_id": agent_id,
+        "user_id": user_id,
+        "tool_name": tool_name,
+        "mount": mount,
+        "method": method,
+        "status_code": status_code,
+        "latency_ms": round(latency_ms, 2) if latency_ms is not None else None,
+        "client_ip": client_ip,
+    }
+    if injection_detected:
+        event["injection_detected"] = True
+        event["injection_pattern"] = injection_pattern
+    if extra:
+        event.update(extra)
+    line = json.dumps(event, default=str, separators=(",", ":"))
+    security_logger.info(line)
+
+
+def _mcp_audit_db_insert(
+    *,
+    agent_id: str,
+    tool_name: Optional[str],
+    status_code: Optional[int],
+    latency_ms: Optional[float],
+    mount: Optional[str] = None,
+    user_id: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> None:
+    """Insert a row into the mcp_audit_log Supabase table (called as a background task)."""
+    if not MCP_AUDIT_LOG_ENABLED:
+        return
+    try:
+        supabase = get_service_client()
+        if not supabase:
+            return
+        row = {
+            "agent_id": agent_id or "unknown",
+            "tool_name": tool_name,
+            "status_code": status_code,
+            "latency_ms": round(latency_ms, 2) if latency_ms is not None else None,
+            "mount": mount,
+            "user_id": user_id,
+            "client_ip": client_ip,
+            "created_at": datetime.utcnow().isoformat() + "Z",
+        }
+        _supabase_retry(
+            lambda: supabase.table(MCP_AUDIT_TABLE).insert(row).execute(),
+            retries=2,
+            base_delay=0.2,
+        )
+    except Exception as exc:
+        security_logger.warning("mcp_audit_db_insert failed: %s", exc)
 
 
 def _llm_tool_policy_enforce(*, tool_name: str, request: Optional[Request], user_id: Optional[str], is_admin: bool = False) -> None:
@@ -33829,6 +33994,22 @@ def create_app() -> FastAPI:
         if not token:
             return JSONResponse({"detail": "Authentication required"}, status_code=401)
 
+        # ── F4/F6: MCP Service Account token bypass ─────────────────────────
+        # When MCP_SERVICE_ACCOUNT_TOKEN is configured and the incoming Bearer
+        # token matches (timing-safe comparison), authenticate as the service
+        # account without JWT validation.  The token never expires, solving the
+        # 1-hour Supabase JWT expiry problem for daemon agents.
+        if MCP_SERVICE_ACCOUNT_TOKEN and hmac.compare_digest(token, MCP_SERVICE_ACCOUNT_TOKEN):
+            request.state.mcp_agent_id = MCP_SERVICE_ACCOUNT_ID
+            request.state.mcp_service_account = True
+            request.state.user_id = MCP_SERVICE_ACCOUNT_ID
+            # RBAC: check service account role against required roles for path
+            if RBAC_ENFORCEMENT_ENABLED:
+                required_roles = _rbac_required_roles_for_path(path)
+                if required_roles and MCP_SERVICE_ACCOUNT_ROLE not in required_roles:
+                    return JSONResponse({"detail": "Forbidden"}, status_code=403)
+            return await call_next(request)
+
         try:
             claims = _validate_token_claims(token)
             user_id = _get_user_id_with_retry(token)
@@ -33842,6 +34023,10 @@ def create_app() -> FastAPI:
             return JSONResponse({"detail": "Unauthorized"}, status_code=401)
         except Exception:
             return JSONResponse({"detail": "Authentication service temporarily unavailable"}, status_code=503)
+
+        # Set agent identity for human MCP users (F6)
+        request.state.mcp_agent_id = request.headers.get("X-MCP-Agent-Id", "human")
+        request.state.mcp_service_account = False
 
         if RBAC_ENFORCEMENT_ENABLED:
             required_roles = _rbac_required_roles_for_path(path)
@@ -33931,6 +34116,24 @@ def create_app() -> FastAPI:
     def health():
         """Lightweight health probe used by the Render load balancer."""
         return {"status": "ok", "timestamp": datetime.utcnow().isoformat() + "Z"}
+
+    # ── F1: OAuth 2.1 Protected Resource Metadata (RFC 9728) ────────────────
+    @app.get("/.well-known/oauth-protected-resource", tags=["system"])
+    def oauth_protected_resource_metadata():
+        """RFC 9728 — OAuth 2.1 Protected Resource Metadata for MCP client auto-discovery.
+
+        Compliant MCP clients (Claude Desktop, Cursor, OpenClaw) use this endpoint
+        to discover the authorization server, supported bearer methods, and scopes.
+        """
+        base_url = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+        auth_server = AUTH_TOKEN_EXPECTED_ISSUER or ""
+        return {
+            "resource": base_url or None,
+            "authorization_servers": [auth_server] if auth_server else [],
+            "bearer_methods_supported": ["header"],
+            "scopes_supported": ["student", "teacher", "hod", "admin"],
+            "resource_documentation": f"{base_url}/docs" if base_url else None,
+        }
 
     ui_dir = Path(__file__).resolve().parent / "ui"
     if ui_dir.is_dir():
@@ -45457,4 +45660,498 @@ def medix_rag_session_messages(
         "session_id": session_id,
         "items": getattr(res, "data", None) or [],
     }
+
+
+# ==========================================
+# MCP (Model Context Protocol) MOUNTS
+# ==========================================
+# Role-scoped MCP endpoints for AI agent tool discovery.
+# Each mount exposes a curated subset of API operations (<50 tools each)
+# to avoid performance degradation.
+# Gated behind MCP_ENABLED env var to prevent accidental exposure.
+
+if MCP_ENABLED and FastApiMCP is not None:
+    supabase_logger.info("MCP_ENABLED=true — mounting role-scoped MCP servers")
+
+    # ── F5: OpenTelemetry tracer setup ──────────────────────────────────────
+    _mcp_otel_tracer = None
+    if MCP_OTEL_ENABLED and OtelTracerProvider is not None:
+        try:
+            _otel_provider = OtelTracerProvider()
+            _otel_exporter = OtelOTLPExporter(endpoint=_OTEL_ENDPOINT, insecure=not _OTEL_ENDPOINT.startswith("https"))
+            _otel_provider.add_span_processor(OtelBatchSpanProcessor(_otel_exporter))
+            otel_trace.set_tracer_provider(_otel_provider)
+            _mcp_otel_tracer = otel_trace.get_tracer("paperx.mcp", "1.0.0")
+            supabase_logger.info("OTel MCP tracing enabled — exporting to %s", _OTEL_ENDPOINT)
+        except Exception as _otel_exc:
+            supabase_logger.warning("OTel MCP tracing init failed: %s", _otel_exc)
+            _mcp_otel_tracer = None
+
+    # ── Tool count registry (used by health endpoints) ──────────────────────
+    _MCP_MOUNT_TOOLS: Dict[str, int] = {}
+
+    # ── F7: MCP Health Endpoints (registered BEFORE mounts) ─────────────────
+    @app.get("/mcp/health", tags=["system", "mcp"])
+    def mcp_health_aggregate():
+        """Aggregate health check for all MCP mounts."""
+        mounts = {}
+        for mount_path, tool_count in _MCP_MOUNT_TOOLS.items():
+            mounts[mount_path] = {"status": "ok", "tools": tool_count}
+        return {
+            "status": "ok",
+            "mcp_enabled": True,
+            "mounts": mounts,
+            "total_tools": sum(_MCP_MOUNT_TOOLS.values()),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+    @app.get("/mcp/student/health", tags=["system", "mcp"])
+    def mcp_health_student():
+        """Health check for Student MCP mount."""
+        return {
+            "status": "ok",
+            "mount": "/mcp/student",
+            "tools": _MCP_MOUNT_TOOLS.get("/mcp/student", 0),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+    @app.get("/mcp/teacher/health", tags=["system", "mcp"])
+    def mcp_health_teacher():
+        """Health check for Teacher MCP mount."""
+        return {
+            "status": "ok",
+            "mount": "/mcp/teacher",
+            "tools": _MCP_MOUNT_TOOLS.get("/mcp/teacher", 0),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+    @app.get("/mcp/hod/health", tags=["system", "mcp"])
+    def mcp_health_hod():
+        """Health check for HOD MCP mount."""
+        return {
+            "status": "ok",
+            "mount": "/mcp/hod",
+            "tools": _MCP_MOUNT_TOOLS.get("/mcp/hod", 0),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+    @app.get("/mcp/admin/health", tags=["system", "mcp"])
+    def mcp_health_admin():
+        """Health check for Admin MCP mount."""
+        return {
+            "status": "ok",
+            "mount": "/mcp/admin",
+            "tools": _MCP_MOUNT_TOOLS.get("/mcp/admin", 0),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+    # ── F2/F3/F5: MCP Audit Middleware ──────────────────────────────────────
+    # This middleware wraps all /mcp/ requests (excluding health checks).
+    # It parses the JSON-RPC body for the tool name, runs injection scanning
+    # on input args, emits structured audit logs, traces with OTel, and
+    # inserts audit rows into Supabase in a background task.
+    @app.middleware("http")
+    async def mcp_audit_middleware(request: Request, call_next):
+        path = _rl_norm_path(request.url.path)
+
+        # Only intercept /mcp/ paths, skip health checks
+        if not path.startswith("/mcp/") or path.endswith("/health"):
+            return await call_next(request)
+
+        started = time.perf_counter()
+        tool_name: Optional[str] = None
+        mount = "/" + "/".join(path.split("/")[:3])  # e.g. /mcp/student
+        agent_id = getattr(request.state, "mcp_agent_id", None) or request.headers.get("X-MCP-Agent-Id", "unknown")
+        user_id = getattr(request.state, "user_id", None)
+        client_ip = _security_extract_ip(request)
+        injection_detected = False
+        injection_pattern: Optional[str] = None
+
+        # Parse JSON-RPC request body to extract tool name and args
+        try:
+            body_bytes = await request.body()
+            if body_bytes:
+                body_json = json.loads(body_bytes)
+                # JSON-RPC: {"method": "tools/call", "params": {"name": "get_me", "arguments": {...}}}
+                params = body_json.get("params") if isinstance(body_json, dict) else None
+                if isinstance(params, dict):
+                    tool_name = params.get("name")
+                    # F3: Input injection scanning — scan tool arguments before execution
+                    tool_args = params.get("arguments")
+                    if tool_args and MCP_INJECTION_DEFENSE_ENABLED:
+                        args_text = json.dumps(tool_args, default=str) if not isinstance(tool_args, str) else tool_args
+                        is_safe, matched = _mcp_injection_scan(args_text)
+                        if not is_safe:
+                            injection_detected = True
+                            injection_pattern = matched
+                            _mcp_audit_log(
+                                event_type="mcp.injection.input",
+                                agent_id=agent_id,
+                                user_id=str(user_id) if user_id else None,
+                                tool_name=tool_name,
+                                mount=mount,
+                                method=request.method,
+                                client_ip=client_ip,
+                                injection_detected=True,
+                                injection_pattern=matched,
+                            )
+                            if MCP_INJECTION_DEFENSE_ENFORCE:
+                                return JSONResponse(
+                                    {"detail": "Request blocked by injection defense"},
+                                    status_code=400,
+                                )
+        except Exception:
+            pass  # Non-JSON or unparseable body — proceed without tool name
+
+        # Start OTel span if tracing is enabled
+        otel_span = None
+        if _mcp_otel_tracer is not None:
+            otel_span = _mcp_otel_tracer.start_span(
+                f"mcp.tool_call {tool_name or 'unknown'}",
+                attributes={
+                    "mcp.tool.name": tool_name or "unknown",
+                    "mcp.mount": mount,
+                    "mcp.agent.id": agent_id,
+                    "http.method": request.method or "",
+                    "http.url": str(request.url),
+                },
+            )
+
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - started) * 1000
+            _mcp_audit_log(
+                event_type="mcp.tool_call.error",
+                agent_id=agent_id,
+                user_id=str(user_id) if user_id else None,
+                tool_name=tool_name,
+                mount=mount,
+                method=request.method,
+                status_code=500,
+                latency_ms=latency_ms,
+                client_ip=client_ip,
+                injection_detected=injection_detected,
+                injection_pattern=injection_pattern,
+            )
+            if otel_span is not None:
+                otel_span.set_attribute("http.status_code", 500)
+                otel_span.set_attribute("mcp.latency_ms", latency_ms)
+                otel_span.set_attribute("error", True)
+                otel_span.end()
+            raise
+
+        latency_ms = (time.perf_counter() - started) * 1000
+
+        # F3: Output injection scanning — scan response body for injected content
+        # Only do this for successful JSON-RPC responses that contain tool results
+        if MCP_INJECTION_DEFENSE_ENABLED and hasattr(response, "body"):
+            try:
+                resp_body = getattr(response, "body", None)
+                if resp_body:
+                    resp_text = resp_body.decode("utf-8", errors="ignore") if isinstance(resp_body, bytes) else str(resp_body)
+                    out_safe, out_matched = _mcp_injection_scan(resp_text)
+                    if not out_safe:
+                        injection_detected = True
+                        injection_pattern = out_matched
+                        _mcp_audit_log(
+                            event_type="mcp.injection.output",
+                            agent_id=agent_id,
+                            user_id=str(user_id) if user_id else None,
+                            tool_name=tool_name,
+                            mount=mount,
+                            method=request.method,
+                            status_code=response.status_code,
+                            latency_ms=latency_ms,
+                            client_ip=client_ip,
+                            injection_detected=True,
+                            injection_pattern=out_matched,
+                        )
+            except Exception:
+                pass
+
+        # Emit structured audit log
+        _mcp_audit_log(
+            agent_id=agent_id,
+            user_id=str(user_id) if user_id else None,
+            tool_name=tool_name,
+            mount=mount,
+            method=request.method,
+            status_code=response.status_code,
+            latency_ms=latency_ms,
+            client_ip=client_ip,
+            injection_detected=injection_detected,
+            injection_pattern=injection_pattern,
+        )
+
+        # F2: Background task — insert audit row into Supabase mcp_audit_log table
+        try:
+            threading.Thread(
+                target=_mcp_audit_db_insert,
+                kwargs={
+                    "agent_id": agent_id,
+                    "tool_name": tool_name,
+                    "status_code": response.status_code,
+                    "latency_ms": latency_ms,
+                    "mount": mount,
+                    "user_id": str(user_id) if user_id else None,
+                    "client_ip": client_ip,
+                },
+                daemon=True,
+            ).start()
+        except Exception:
+            pass  # Never let audit insertion failure break the response
+
+        # Finish OTel span
+        if otel_span is not None:
+            otel_span.set_attribute("http.status_code", response.status_code)
+            otel_span.set_attribute("mcp.latency_ms", latency_ms)
+            if tool_name:
+                otel_span.update_name(f"mcp.tool_call {tool_name}")
+            otel_span.end()
+
+        return response
+
+    # ── STUDENT MCP ──────────────────────────────────────────────
+    _student_ops = [
+        # Profile & Identity
+        "get_me",
+        "get_profile_me",
+        "update_profile_me",
+        "get_public_profile",
+        # Progress & Streaks
+        "progress_summary",
+        "get_completed_topics",
+        "toggle_topic",
+        "get_user_streak",
+        "ping_streak",
+        "get_leaderboard",
+        # Syllabus
+        "api_get_syllabus_course",
+        "api_list_topics_for_unit",
+        "api_find_topics_by_title",
+        "get_course_topic_ratings",
+        "get_topic_rating",
+        "set_topic_rating",
+        "get_topic_ratings_batch",
+        # Notes & Study
+        "api_list_notes",
+        "api_read_note",
+        "api_download_note",
+        "api_note_pdf",
+        "generate",
+        "api_generate_flashcards",
+        "api_generate_mcq",
+        "api_resolve_note",
+        "api_search_topics",
+        # StudyAI Chat
+        "list_conversations",
+        "create_conversation",
+        "get_conversation",
+        "update_conversation",
+        "delete_conversation",
+        "send_message",
+        "toggle_message_bookmark",
+        "export_conversation_markdown",
+        # Assignments (Student)
+        "get_student_assignments",
+        "get_student_assignment",
+        "submit_assignment",
+        "request_extension",
+        # Tests (Student)
+        "api_get_test",
+        "api_start_attempt",
+        "api_submit_attempt",
+        # Skills
+        "start_skill_test",
+        "submit_skill_test",
+        "list_my_skill_verifications",
+        # Wishlist
+        "get_wishlist",
+        "check_wishlist",
+        "toggle_wishlist",
+    ]
+    student_mcp = FastApiMCP(
+        app,
+        name="PaperX - Student Tools",
+        description="Tools for students: profile, progress, syllabus, notes, study AI, assignments, tests, skills, wishlist",
+        include_operations=_student_ops,
+    )
+    student_mcp.mount(mount_path="/mcp/student")
+    _MCP_MOUNT_TOOLS["/mcp/student"] = len(_student_ops)
+
+    # ── TEACHER MCP ──────────────────────────────────────────────
+    _teacher_ops = [
+        # Teacher Profile
+        "teacher_me_status",
+        "upsert_teacher_profile",
+        "get_teacher_profile",
+        # Classes
+        "list_my_teacher_classes",
+        "create_teacher_class",
+        "get_teacher_class",
+        "update_teacher_class",
+        "delete_teacher_class",
+        "list_teacher_class_students",
+        # Assignments (Teacher)
+        "list_assignments",
+        "create_assignment",
+        "get_assignment",
+        "update_assignment",
+        "delete_assignment",
+        "publish_assignment",
+        "close_assignment",
+        "get_submissions",
+        "grade_submission",
+        "get_assignment_analytics",
+        "get_duplicate_submissions",
+        "get_comments",
+        "add_comment",
+        "get_extensions",
+        "respond_to_extension",
+        # Tests (Teacher)
+        "api_list_tests",
+        "api_create_test",
+        "api_update_test",
+        "api_delete_test",
+        "api_toggle_accepting",
+        "api_list_attempts",
+        "api_test_results",
+        "api_teacher_generate_test_ai",
+        # Notes
+        "teacher_my_notes",
+        "teacher_notes_meta",
+        # Applications
+        "list_teacher_applications",
+        "review_teacher_application",
+        # Connections
+        "list_my_connections",
+        "teacher_connect",
+        # Feedback Forms
+        "list_feedback_forms",
+        "create_feedback_form",
+        "get_feedback_form",
+        "get_feedback_responses",
+        "get_feedback_analytics",
+    ]
+    teacher_mcp = FastApiMCP(
+        app,
+        name="PaperX - Teacher Tools",
+        description="Tools for teachers: classes, grading, assignments, tests, notes, feedback forms",
+        include_operations=_teacher_ops,
+    )
+    teacher_mcp.mount(mount_path="/mcp/teacher")
+    _MCP_MOUNT_TOOLS["/mcp/teacher"] = len(_teacher_ops)
+
+    # ── HOD MCP ──────────────────────────────────────────────────
+    _hod_ops = [
+        "hod_me",
+        "hod_list_staff",
+        "hod_remove_staff",
+        "hod_list_classes",
+        "hod_assign_class",
+        "hod_reassign_class",
+        "hod_list_batches",
+        "hod_get_batch_management",
+        "hod_update_batch_management",
+        "hod_list_teacher_applications",
+        "hod_review_application",
+        "hod_ai_meeting_agenda",
+        "hod_ai_risk_flags",
+    ]
+    hod_mcp = FastApiMCP(
+        app,
+        name="PaperX - HOD Tools",
+        description="Tools for heads of department: staff management, class assignment, batch management, AI tools",
+        include_operations=_hod_ops,
+    )
+    hod_mcp.mount(mount_path="/mcp/hod")
+    _MCP_MOUNT_TOOLS["/mcp/hod"] = len(_hod_ops)
+
+    # ── ADMIN MCP ────────────────────────────────────────────────
+    _admin_ops = [
+        # Users
+        "list_admin_users",
+        "delete_user",
+        "admin_update_user_academic",
+        "update_user_role",
+        # Roles
+        "admin_role_me",
+        "admin_self_check",
+        # Plans
+        "admin_list_plans",
+        "admin_create_plan",
+        "admin_update_plan",
+        "admin_delete_plan",
+        "admin_disable_plan",
+        "admin_duplicate_plan",
+        "admin_rest_plan_limits",
+        # Usage Limits
+        "admin_list_usage_limits",
+        "admin_create_usage_limit",
+        "admin_update_usage_limit",
+        "admin_delete_usage_limit",
+        # Security
+        "admin_list_security_events",
+        "admin_list_security_incidents",
+        "admin_update_security_incident",
+        "admin_security_metrics",
+        # Teacher Profiles
+        "admin_backfill_teacher_profiles",
+        "admin_teacher_profiles_diagnostics",
+        "admin_get_teacher_profile_row",
+        "admin_resync_teacher_profile",
+        # HOD Applications
+        "list_hod_role_applications",
+        "review_hod_role_application",
+        # Notes Feedback
+        "admin_list_notes_feedback",
+        "admin_get_notes_feedback",
+        "admin_update_notes_feedback",
+        # Print Admin
+        "admin_list_shops",
+        "admin_shop_jobs",
+        "admin_close_job",
+        "admin_settle_shop",
+        # Manual Access
+        "admin_manual_access_search",
+        "admin_manual_access_get",
+        "admin_manual_access_action",
+        # Analytics
+        "start_session",
+        "analytics_event",
+        "analytics_dashboard",
+        "analytics_active_users",
+        "analytics_engineer_profile",
+    ]
+    admin_mcp = FastApiMCP(
+        app,
+        name="PaperX - Admin Tools",
+        description="Full admin: user management, plans, usage limits, security, teacher profiles, print admin, analytics",
+        include_operations=_admin_ops,
+    )
+    admin_mcp.mount(mount_path="/mcp/admin")
+    _MCP_MOUNT_TOOLS["/mcp/admin"] = len(_admin_ops)
+
+    supabase_logger.info(
+        "MCP mounts ready: /mcp/student (%d), /mcp/teacher (%d), /mcp/hod (%d), /mcp/admin (%d) — total %d tools",
+        _MCP_MOUNT_TOOLS.get("/mcp/student", 0),
+        _MCP_MOUNT_TOOLS.get("/mcp/teacher", 0),
+        _MCP_MOUNT_TOOLS.get("/mcp/hod", 0),
+        _MCP_MOUNT_TOOLS.get("/mcp/admin", 0),
+        sum(_MCP_MOUNT_TOOLS.values()),
+    )
+    if MCP_SERVICE_ACCOUNT_TOKEN:
+        supabase_logger.info("MCP service account configured — agent=%s role=%s", MCP_SERVICE_ACCOUNT_ID, MCP_SERVICE_ACCOUNT_ROLE)
+    if MCP_AUDIT_LOG_ENABLED:
+        supabase_logger.info("MCP audit logging enabled — table=%s", MCP_AUDIT_TABLE)
+    if MCP_INJECTION_DEFENSE_ENABLED:
+        supabase_logger.info("MCP injection defense enabled — enforce=%s", MCP_INJECTION_DEFENSE_ENFORCE)
+    if MCP_OTEL_ENABLED:
+        supabase_logger.info("MCP OTel tracing active — endpoint=%s", _OTEL_ENDPOINT)
+else:
+    if not MCP_ENABLED:
+        supabase_logger.info("MCP_ENABLED is not set — MCP mounts disabled")
+    elif FastApiMCP is None:
+        supabase_logger.warning("fastapi-mcp package not installed — MCP mounts disabled")
 
