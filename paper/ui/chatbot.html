@@ -548,7 +548,7 @@
               </div>
             </div>
           </button>
-          <button onclick="quickPrompt('Summarize the key points of Newton\\'s Laws of Motion')"
+          <button onclick="quickPrompt('Summarize the key points of Newton\'s Laws of Motion')"
             class="text-left p-4 rounded-xl glass hover:shadow-lg transition group">
             <div class="flex items-start gap-3">
               <span class="material-symbols-rounded text-2xl text-rose-500">summarize</span>
@@ -955,7 +955,7 @@
         messagesList.classList.remove('hidden');
 
         (data.messages || []).forEach(msg => {
-          appendMessage(msg.role, msg.content, msg.id);
+          appendMessage(msg.role, msg.content, msg.id, msg.metadata || {});
         });
 
         // Update active state
@@ -1048,7 +1048,7 @@
 
         // Add AI response
         if (data.ai_message) {
-          appendMessage('assistant', data.ai_message.content, data.ai_message.id);
+          appendMessage('assistant', data.ai_message.content, data.ai_message.id, data.ai_message.metadata || {});
         }
 
         // Update title if changed
@@ -1072,12 +1072,14 @@
       }
     }
 
-    function appendMessage(role, content, messageId = null) {
+    function appendMessage(role, content, messageId = null, metadata = {}) {
       const msgDiv = document.createElement('div');
       msgDiv.className = `flex ${role === 'user' ? 'justify-end' : 'gap-3 items-start'}`;
       if (messageId) msgDiv.dataset.messageId = messageId;
 
       const renderedContent = renderMarkdown(content);
+      const toolCalls = Array.isArray(metadata?.tool_calls) ? metadata.tool_calls : [];
+      const toolCallsHtml = role === 'assistant' ? renderToolCalls(toolCalls) : '';
 
       if (role === 'user') {
         msgDiv.innerHTML = `
@@ -1092,6 +1094,7 @@
           </div>
           <div class="msg-ai px-4 py-3 max-w-[85%] sm:max-w-[80%]">
             <div class="msg-content prose prose-sm max-w-none" style="color: var(--surface-contrast);">${renderedContent}</div>
+            ${toolCallsHtml}
             <div class="flex items-center gap-2 mt-3 pt-2 border-t" style="border-color: var(--outline);">
               <button onclick="copyMessage(this)" class="p-1.5 rounded-lg hover:bg-[var(--brand-soft)] transition" title="Copy">
                 <span class="material-symbols-rounded text-base" style="color: var(--muted);">content_copy</span>
@@ -1138,6 +1141,43 @@
 
       const html = marked.parse(text);
       return DOMPurify.sanitize(html);
+    }
+
+    function renderToolCalls(toolCalls) {
+      if (!Array.isArray(toolCalls) || !toolCalls.length) return '';
+
+      const rows = toolCalls.slice(0, 5).map((call, idx) => {
+        const tool = escapeHtml(call.tool || 'unknown_tool');
+        const endpoint = escapeHtml(call.endpoint || 'n/a');
+        const status = Number.isFinite(Number(call.status)) ? Number(call.status) : '-';
+        const ok = !!call.ok;
+        const argsRaw = call.args && typeof call.args === 'object' ? JSON.stringify(call.args) : '{}';
+        const args = escapeHtml(argsRaw.length > 180 ? argsRaw.slice(0, 180) + '...' : argsRaw);
+
+        return `
+          <div class="rounded-lg border p-2.5" style="border-color: var(--outline); background: var(--brand-soft);">
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs font-semibold" style="color: var(--surface-contrast);">Tool ${idx + 1}: ${tool}</div>
+              <span class="text-[11px] px-2 py-0.5 rounded-full" style="background: ${ok ? 'rgba(16,185,129,0.16)' : 'rgba(239,68,68,0.16)'}; color: ${ok ? '#059669' : '#dc2626'};">${status}</span>
+            </div>
+            <div class="text-[11px] mt-1" style="color: var(--muted);">Endpoint: ${endpoint}</div>
+            <div class="text-[11px] mt-1 break-all" style="color: var(--muted);">Args: ${args}</div>
+          </div>
+        `;
+      }).join('');
+
+      const extra = toolCalls.length > 5
+        ? `<div class="text-[11px] mt-2" style="color: var(--muted);">+${toolCalls.length - 5} more tool calls</div>`
+        : '';
+
+      return `
+        <details class="mt-3 border rounded-xl" style="border-color: var(--outline);">
+          <summary class="px-3 py-2 text-xs font-semibold cursor-pointer select-none" style="color: var(--surface-contrast);">
+            Agentic Tool Calls (${toolCalls.length})
+          </summary>
+          <div class="px-3 pb-3 space-y-2">${rows}${extra}</div>
+        </details>
+      `;
     }
 
     // ============================================================================

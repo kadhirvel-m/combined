@@ -37091,43 +37091,317 @@ def _build_study_mode_prompt(mode: str, content: str) -> str:
     return mode_prompts.get(mode, content)
 
 
-async def _generate_ai_response(messages: List[Dict[str, str]], study_mode: Optional[str] = None) -> str:
-    """Generate AI response using Gemini 2.5 Flash."""
-    if not genai:
+def _studyai_base_url_from_request(request: Request) -> str:
+    configured = (os.getenv("STUDYAI_TOOL_BASE_URL", "") or "").strip().rstrip("/")
+    if configured:
+        return configured
+    return f"{request.url.scheme}://{request.url.netloc}"
+
+
+def _studyai_extract_text(response: Any) -> str:
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    candidates = getattr(response, "candidates", None) or []
+    for cand in candidates:
+        content = getattr(cand, "content", None)
+        parts = getattr(content, "parts", None) if content is not None else None
+        if not parts and isinstance(cand, dict):
+            parts = ((cand.get("content") or {}).get("parts") if isinstance(cand.get("content"), dict) else None)
+        texts: List[str] = []
+        for part in parts or []:
+            part_text = getattr(part, "text", None)
+            if part_text is None and isinstance(part, dict):
+                part_text = part.get("text")
+            if part_text:
+                texts.append(str(part_text))
+        if texts:
+            return "\n".join(texts).strip()
+    return ""
+
+
+def _studyai_extract_function_calls(response: Any) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    direct = getattr(response, "function_calls", None)
+    if direct:
+        for fc in direct:
+            name = getattr(fc, "name", None)
+            args = getattr(fc, "args", None)
+            if isinstance(fc, dict):
+                name = name or fc.get("name")
+                args = args if args is not None else fc.get("args")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except Exception:
+                    args = {}
+            if name:
+                out.append({"name": str(name), "args": args if isinstance(args, dict) else {}})
+        if out:
+            return out
+
+    candidates = getattr(response, "candidates", None) or []
+    for cand in candidates:
+        content = getattr(cand, "content", None)
+        parts = getattr(content, "parts", None) if content is not None else None
+        if not parts and isinstance(cand, dict):
+            parts = ((cand.get("content") or {}).get("parts") if isinstance(cand.get("content"), dict) else None)
+        for part in parts or []:
+            fn = getattr(part, "function_call", None)
+            if fn is None and isinstance(part, dict):
+                fn = part.get("function_call") or part.get("functionCall")
+            if not fn:
+                continue
+            name = getattr(fn, "name", None) or (fn.get("name") if isinstance(fn, dict) else None)
+            args = getattr(fn, "args", None) if not isinstance(fn, dict) else fn.get("args")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except Exception:
+                    args = {}
+            if name:
+                out.append({"name": str(name), "args": args if isinstance(args, dict) else {}})
+    return out
+
+
+def _studyai_make_tool_response_part(tool_name: str, payload: Dict[str, Any]) -> Any:
+    if types and hasattr(types, "Part") and hasattr(types.Part, "from_function_response"):
+        return types.Part.from_function_response(name=tool_name, response=payload)
+    return {"functionResponse": {"name": tool_name, "response": payload}}
+
+
+def _studyai_function_tools() -> List[Any]:
+    if not types:
+        return []
+    declarations = [
+        types.FunctionDeclaration(
+            name="get_my_profile",
+            description="Calls GET /api/me to fetch the authenticated user profile.",
+            parameters={"type": "object", "properties": {}},
+        ),
+        types.FunctionDeclaration(
+            name="get_progress_summary",
+            description="Calls GET /api/progress/summary to fetch student progress details.",
+            parameters={"type": "object", "properties": {}},
+        ),
+        types.FunctionDeclaration(
+            name="list_student_assignments",
+            description="Calls GET /api/student/assignments to fetch the user's assignments.",
+            parameters={"type": "object", "properties": {}},
+        ),
+        types.FunctionDeclaration(
+            name="list_notes",
+            description="Calls GET /api/notes to list generated notes.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "variant": {
+                        "type": "string",
+                        "description": "Note variant: detailed, cheatsheet, simple",
+                    }
+                },
+            },
+        ),
+        types.FunctionDeclaration(
+            name="search_notes_topics",
+            description="Calls GET /api/notes/topics/search to search note topics.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "q": {"type": "string", "description": "Search query"},
+                    "limit": {"type": "integer", "description": "Max results 1-50"},
+                },
+                "required": ["q"],
+            },
+        ),
+    ]
+    return [types.Tool(function_declarations=declarations)]
+
+
+def _studyai_call_endpoint(
+    *,
+    request: Request,
+    authorization: Optional[str],
+    method: str,
+    path: str,
+    params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    base_url = _studyai_base_url_from_request(request)
+    url = f"{base_url}{path}"
+    headers = {"Accept": "application/json"}
+    if authorization:
+        headers["Authorization"] = authorization
+    timeout_s = max(3.0, float(os.getenv("STUDYAI_TOOL_TIMEOUT_SECONDS", "12")))
+
+    response = requests.request(method=method.upper(), url=url, headers=headers, params=params or {}, timeout=timeout_s)
+
+    body: Any
+    try:
+        body = response.json()
+    except Exception:
+        body = {"raw": (response.text or "")[:2000]}
+
+    if isinstance(body, list):
+        body = body[:25]
+    elif isinstance(body, dict):
+        for key in list(body.keys())[:40]:
+            value = body.get(key)
+            if isinstance(value, list) and len(value) > 25:
+                body[key] = value[:25]
+
+    return {
+        "ok": response.status_code < 400,
+        "status": response.status_code,
+        "endpoint": path,
+        "method": method.upper(),
+        "data": body,
+    }
+
+
+def _studyai_dispatch_tool(
+    *,
+    tool_name: str,
+    args: Dict[str, Any],
+    request: Request,
+    authorization: Optional[str],
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    normalized_args = args if isinstance(args, dict) else {}
+    trace: Dict[str, Any] = {
+        "tool": tool_name,
+        "args": normalized_args,
+        "endpoint": None,
+        "status": None,
+        "ok": False,
+    }
+
+    tool_map = {
+        "get_my_profile": ("GET", "/api/me", {}),
+        "get_progress_summary": ("GET", "/api/progress/summary", {}),
+        "list_student_assignments": ("GET", "/api/student/assignments", {}),
+        "list_notes": (
+            "GET",
+            "/api/notes",
+            {"variant": str(normalized_args.get("variant") or "detailed").strip().lower()},
+        ),
+        "search_notes_topics": (
+            "GET",
+            "/api/notes/topics/search",
+            {
+                "q": str(normalized_args.get("q") or "").strip()[:120],
+                "limit": max(1, min(50, int(normalized_args.get("limit") or 12))),
+            },
+        ),
+    }
+
+    if tool_name not in tool_map:
+        payload = {"ok": False, "error": f"Unknown tool: {tool_name}"}
+        trace["error"] = payload["error"]
+        return payload, trace
+
+    method, path, params = tool_map[tool_name]
+    trace["endpoint"] = path
+    try:
+        result = _studyai_call_endpoint(
+            request=request,
+            authorization=authorization,
+            method=method,
+            path=path,
+            params=params,
+        )
+        trace["status"] = result.get("status")
+        trace["ok"] = bool(result.get("ok"))
+        return result, trace
+    except Exception as exc:
+        trace["error"] = str(exc)
+        return {"ok": False, "error": f"Tool call failed: {exc}"}, trace
+
+
+async def _generate_ai_response(
+    messages: List[Dict[str, str]],
+    study_mode: Optional[str] = None,
+    request: Optional[Request] = None,
+    authorization: Optional[str] = None,
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """Generate AI response using Gemini 2.5 Flash with endpoint tool-calling."""
+    if not genai or not types:
         raise HTTPException(status_code=500, detail="AI service not available")
-    
+
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not gemini_key:
         raise HTTPException(status_code=500, detail="AI API key not configured")
-    
-    def _call_gemini():
+
+    if request is None:
+        raise HTTPException(status_code=500, detail="Request context missing for tool calls")
+
+    def _call_gemini() -> Tuple[str, List[Dict[str, Any]]]:
         client = genai.Client(api_key=gemini_key)
-        
-        # Build conversation history
-        gemini_messages = []
+        max_tool_calls = max(1, min(8, int(os.getenv("STUDYAI_MAX_TOOL_CALLS", "4"))))
+        tool_traces: List[Dict[str, Any]] = []
+
+        gemini_messages: List[Any] = []
         for msg in messages:
-            role = "user" if msg["role"] == "user" else "model"
-            gemini_messages.append({
-                "role": role,
-                "parts": [{"text": msg["content"]}]
-            })
-        
-        # Create chat session with system instruction
-        response = client.models.generate_content(
+            role = "user" if msg.get("role") == "user" else "model"
+            gemini_messages.append({"role": role, "parts": [{"text": str(msg.get("content") or "")}]})
+
+        tools = _studyai_function_tools()
+        remaining_calls = max_tool_calls
+
+        for _ in range(max_tool_calls + 1):
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=gemini_messages,
+                config=types.GenerateContentConfig(
+                    system_instruction=STUDYAI_SYSTEM_PROMPT,
+                    temperature=0.7,
+                    max_output_tokens=4096,
+                    tools=tools,
+                ),
+            )
+
+            function_calls = _studyai_extract_function_calls(response)
+            if not function_calls:
+                return (_studyai_extract_text(response) or "I could not generate a response."), tool_traces
+
+            candidates = getattr(response, "candidates", None) or []
+            if candidates:
+                model_content = getattr(candidates[0], "content", None)
+                if model_content is not None:
+                    gemini_messages.append(model_content)
+
+            tool_parts: List[Any] = []
+            for call in function_calls:
+                if remaining_calls <= 0:
+                    break
+                tool_name = str(call.get("name") or "").strip()
+                call_args = call.get("args") if isinstance(call.get("args"), dict) else {}
+                result, trace = _studyai_dispatch_tool(
+                    tool_name=tool_name,
+                    args=call_args,
+                    request=request,
+                    authorization=authorization,
+                )
+                tool_traces.append(trace)
+                tool_parts.append(_studyai_make_tool_response_part(tool_name, result))
+                remaining_calls -= 1
+
+            if not tool_parts:
+                break
+
+            gemini_messages.append(types.Content(role="tool", parts=tool_parts))
+
+        final_response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=gemini_messages,
             config=types.GenerateContentConfig(
                 system_instruction=STUDYAI_SYSTEM_PROMPT,
                 temperature=0.7,
                 max_output_tokens=4096,
-            )
+            ),
         )
-        
-        return response.text if hasattr(response, 'text') else str(response)
-    
+        return (_studyai_extract_text(final_response) or "I could not generate a response."), tool_traces
+
     try:
-        result = await run_in_threadpool(_call_gemini)
-        return result
+        return await run_in_threadpool(_call_gemini)
     except Exception as e:
         print(f"[StudyAI] Error generating response: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate AI response: {str(e)}")
@@ -37142,14 +37416,13 @@ async def create_conversation(
     user_id = get_user_id_from_token(authorization)
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     supabase = get_service_client()
-    
     conversation_data = {
         "user_id": user_id,
         "title": (payload.title or "New Chat").strip()[:100],
     }
-    
+
     try:
         result = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).insert(conversation_data).execute()
         if not result.data:
@@ -37169,24 +37442,21 @@ async def list_conversations(
     user_id = get_user_id_from_token(authorization)
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     supabase = get_service_client()
-    
+
     try:
-        # Get conversations with latest message preview
         result = supabase.table(AI_CHAT_CONVERSATIONS_TABLE).select(
             "id, title, share_code, is_public, created_at, updated_at"
         ).eq("user_id", user_id).order("updated_at", desc=True).range(offset, offset + limit - 1).execute()
-        
+
         conversations = result.data or []
-        
-        # Get message count for each conversation
         for conv in conversations:
             msg_count = supabase.table(AI_CHAT_MESSAGES_TABLE).select(
                 "id", count="exact"
             ).eq("conversation_id", conv["id"]).execute()
-            conv["message_count"] = msg_count.count if hasattr(msg_count, 'count') else len(msg_count.data or [])
-        
+            conv["message_count"] = msg_count.count if hasattr(msg_count, "count") else len(msg_count.data or [])
+
         return {"conversations": conversations, "total": len(conversations)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -37299,6 +37569,7 @@ async def delete_conversation(
 async def send_message(
     conversation_id: str,
     payload: ChatMessageCreate,
+    request: Request,
     authorization: Optional[str] = Header(default=None)
 ):
     """Send a message and get AI response."""
@@ -37350,8 +37621,14 @@ async def send_message(
     ai_messages.append({"role": "user", "content": user_content})
     
     # Generate AI response
+    tool_traces: List[Dict[str, Any]] = []
     try:
-        ai_response = await _generate_ai_response(ai_messages, payload.study_mode)
+        ai_response, tool_traces = await _generate_ai_response(
+            ai_messages,
+            payload.study_mode,
+            request=request,
+            authorization=authorization,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -37363,7 +37640,7 @@ async def send_message(
         "role": "assistant",
         "content": ai_response,
         "attachments": [],
-        "metadata": {"model": "gemini-2.5-flash"},
+        "metadata": {"model": "gemini-2.5-flash", "tool_calls": tool_traces},
     }
     
     try:
@@ -37395,6 +37672,7 @@ async def send_message(
     return {
         "user_message": user_message,
         "ai_message": ai_message,
+        "tool_calls": tool_traces,
     }
 
 
