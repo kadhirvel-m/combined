@@ -2433,7 +2433,7 @@ deepseek_model_client =  OpenAIChatCompletionClient(
 
 gemini_model_client = OpenAIChatCompletionClient(
     base_url=os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-    model="gemini-2.5-flash",
+    model="gemini-3-flash-preview",
     api_key=(os.getenv("GEMINI_API_KEY", "") or "").strip(),
     model_info=ModelInfo(
         vision=True,
@@ -3082,7 +3082,7 @@ SERPAPI_API_KEY = (os.getenv("SERPAPI_API_KEY", "") or "").strip()
 SERPAPI_ENABLED = os.getenv("ENABLE_SERPAPI", "true").strip().lower() in {"1", "true", "yes", "on"}
 SERPAPI_TIMEOUT_SEC = float(os.getenv("SERPAPI_TIMEOUT_SEC", "8"))
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or "").strip()
-GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-2.5-flash")
+GEMINI_NOTES_MODEL = os.getenv("GEMINI_NOTES_MODEL", "gemini-3-flash-preview")
 MAX_TRANSCRIPT_CHARS_FOR_NOTES = int(os.getenv("TRANSCRIPT_NOTES_MAX_CHARS", "20000"))
 
 # Default domains for notes/web search when DB has no config yet
@@ -3177,7 +3177,7 @@ def load_learning_tracks_config() -> Dict[str, Any]:
     goals = _parse_env_list("LEARNING_TRACK_GOALS", LEARNING_TRACK_DEFAULT_GOALS)
     companies = _parse_env_list("LEARNING_TRACK_COMPANIES", LEARNING_TRACK_DEFAULT_COMPANIES)
     compiler_languages = _parse_env_json_array("LEARNING_TRACK_COMPILER_LANGUAGES", LEARNING_TRACK_DEFAULT_COMPILER_LANGUAGES)
-    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-2.5-flash"))
+    planner_model = os.getenv("LEARNING_TRACK_PLANNER_MODEL", os.getenv("GEMINI_PLANNER_MODEL", "gemini-3-flash-preview"))
     flashcard_model = os.getenv("LEARNING_TRACK_FLASHCARD_MODEL", GEMINI_NOTES_MODEL)
     code_explainer_model = os.getenv("LEARNING_TRACK_CODE_MODEL", GEMINI_NOTES_MODEL)
     mcq_model = os.getenv("LEARNING_TRACK_MCQ_MODEL", GEMINI_NOTES_MODEL)
@@ -3795,7 +3795,8 @@ You will compose comprehensive, exam-ready Markdown notes for the topic "{topic}
 
 PRIMARY GOAL:
 Produce notes that are **accurate, complete, and strictly relevant** to the given topic.  
-Use the provided context as the primary evidence and ground claims with provided source labels.
+Use the provided context **only where it is clearly correct and directly applicable**.  
+If any part of the context is **irrelevant, weakly related, outdated, or incorrect**, **IGNORE it completely** and rely on your **own expert knowledge** instead.
 
 Context:
 {context}
@@ -3805,9 +3806,9 @@ STRICT CONTENT RULES:
 - Use ONLY content that genuinely matches the topic.
 - Do NOT force‑fit unrelated context.
 - Do NOT include phrases like *"needs review"*, *"may vary"*, or *"depends"*.
-- If information is missing in provided sources, clearly say it is not available in source excerpts.
+- If information is missing, **generate it yourself accurately**.
 - Ensure **conceptual correctness suitable for university exams**.
-- No hallucinated references; use only source labels provided in context.
+- No hallucinated references; cite only well‑known, credible sources.
 - Maintain a confident academic tone.
 
 STRUCTURE & DEPTH:
@@ -3830,8 +3831,14 @@ FORMATTING RULES:
 
 CITATIONS:
 - Add a final section: **## CITATIONS**
-- Use only labels present in source pack (for example [W1], [W2], [R1]).
-- Never invent labels or URLs.
+- Map citation labels to URLs, using only trusted sources:
+  - [GFG] – GeeksforGeeks
+  - [TPT] – TutorialsPoint
+  - [Scaler] – Scaler Topics
+  - [Wiki] – Wikipedia
+  - [TP] – Trusted textbooks / official documentation
+- Inline‑cite like:  
+  "... explanation ... [GFG]" or "... definition ... [Wiki]"
 
 TARGET LENGTH:
 - **900–1200 words**, unless the topic strictly requires less.
@@ -3844,9 +3851,7 @@ Start with '# {topic}' and then the sections in a logical order.
     # Use safe runner to support both CLI and FastAPI contexts
     result = _run_assistant_blocking(assistant, user_prompt)
     content = result.messages[-1].content
-    content = _strip_mermaid_blocks(content)
-    content = _ensure_rag_labels_used_in_body(content, source_map)
-    content = _medix_ground_citations_markdown(content, source_map)
+    content = _normalize_markdown_structure(content)
     notes_logger.info("generate_notes_markdown:success", extra={"topic": topic, "length": len(content)})
     return content
 
@@ -3988,6 +3993,68 @@ def _strip_mermaid_blocks(md_text: str) -> str:
     return text.strip()
 
 
+def _normalize_markdown_structure(md_text: str) -> str:
+    """Post-process LLM markdown to ensure proper formatting structure.
+
+    Fixes common LLM output issues:
+    - Headings (# / ## / ###) that lack a preceding blank line
+    - Bullet/numbered list items that lack a preceding blank line after a paragraph
+    - Inline headings appearing mid-paragraph (e.g., "...text ## Heading ...")
+    - Excessive blank lines (3+) collapsed to 2
+    """
+    text = str(md_text or "").strip()
+    if not text:
+        return text
+
+    # 1. Split inline headings: if a heading marker (## etc.) appears after non-newline
+    #    text on the same line, force it onto its own line.
+    #    Match: "some text ## Heading" -> "some text\n\n## Heading"
+    #    But skip lines that START with # (already a heading line).
+    text = re.sub(
+        r"([^\n])[ \t]+(#{1,6}\s+)",
+        r"\1\n\n\2",
+        text,
+    )
+
+    lines = text.split("\n")
+    out: list[str] = []
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+
+        # Detect heading lines (# / ## / ### / #### etc.)
+        is_heading = bool(re.match(r"^#{1,6}\s+", stripped))
+
+        # Detect list items (*, -, 1., 2. etc.)
+        is_list_item = bool(re.match(r"^(?:[-*+]|\d+[.)]\s)", stripped))
+
+        if is_heading and i > 0:
+            # Ensure at least one blank line before any heading
+            prev = out[-1].strip() if out else ""
+            if prev:  # previous line is not blank
+                out.append("")
+        elif is_list_item and i > 0:
+            # Ensure blank line before list start (first item after a paragraph)
+            prev = out[-1].strip() if out else ""
+            # Only add blank line if previous line is a paragraph (not blank, not another list item, not a heading)
+            prev_is_list = bool(re.match(r"^(?:[-*+]|\d+[.)]\s)", prev))
+            prev_is_heading = bool(re.match(r"^#{1,6}\s+", prev))
+            if prev and not prev_is_list and not prev_is_heading:
+                out.append("")
+
+        out.append(line)
+
+        # Add blank line after heading if next line is not blank
+        if is_heading:
+            # Check if next line exists and is not blank
+            if i + 1 < len(lines) and lines[i + 1].strip():
+                out.append("")
+
+    result = "\n".join(out)
+    # Collapse 3+ consecutive blank lines down to 2
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
+
+
 def _ensure_rag_labels_used_in_body(
     md_text: str,
     source_map: Optional[Dict[str, Dict[str, str]]],
@@ -4046,7 +4113,8 @@ def _medix_ground_citations_markdown(
         return ""
 
     body = cite_re.sub(_replace, body)
-    body = re.sub(r"\s{2,}", " ", body)
+    # Only collapse horizontal whitespace (spaces/tabs); preserve newlines for markdown structure.
+    body = re.sub(r"[^\S\n\r]{2,}", " ", body)
     body = re.sub(r"\n{3,}", "\n\n", body).rstrip()
 
     lines = ["## CITATIONS"]
@@ -4242,8 +4310,11 @@ def generate_notes_events(
             content = result.messages[-1].content
             if not rag_system_prompt:
                 content = _strip_mermaid_blocks(content)
+                content = _normalize_markdown_structure(content)
                 content = _ensure_rag_labels_used_in_body(content, effective_source_map)
                 content = _medix_ground_citations_markdown(content, effective_source_map)
+            else:
+                content = _normalize_markdown_structure(content)
         except Exception as e:
             yield ("error", {"message": f"LLM error: {e}"})
             return
@@ -5638,7 +5709,7 @@ def _normalize_parsed_struct(parsed: dict, hints: dict) -> ParsedSyllabusOut:
     return ParsedSyllabusOut(course_code=cc, title=ttl, units=units_in)
 
 
-GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-2.5-flash").strip()
+GEMINI_PARSE_MODEL = os.getenv("GEMINI_PARSE_MODEL", "gemini-3-flash-preview").strip()
 
 
 SYLLABUS_AI_PARSE_PROMPT = """Analyze this university syllabus/curriculum document and extract the structure as JSON.
@@ -5695,7 +5766,7 @@ def _gemini_parse(text: str, hints: dict) -> Optional[dict]:
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-2.5-flash")
+        model = genai.GenerativeModel(GEMINI_PARSE_MODEL or "gemini-3-flash-preview")
         
         # Limit the text length to keep latency low
         max_chars = int(os.getenv("GEMINI_PARSE_MAX_CHARS", "100000"))
@@ -18643,6 +18714,15 @@ def public_supabase_config():
     return {"url": base_url, "anonKey": anon}
 
 
+@academics_router.get("/api/public/feature-flags", summary="Public feature flags for UI")
+def public_feature_flags():
+    """Return feature toggle states read from environment variables."""
+    garlic_os = os.getenv("GARLIC_OS", "off").strip().lower()
+    return {
+        "garlic_os": garlic_os == "on",
+    }
+
+
 @academics_router.get("/api/public/turnstile", summary="Public Cloudflare Turnstile config")
 def public_turnstile_config(request: Request):
     site_key, _ = _resolve_turnstile_keys(request)
@@ -21123,7 +21203,7 @@ def _garlic_runtime_ai_confidence(
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3-flash-preview")
         resp = model.generate_content(
             [{"text": prompt}, {"text": json.dumps(topic_context, ensure_ascii=True)}],
             generation_config={"temperature": 0.1, "max_output_tokens": 1024},
@@ -21324,7 +21404,7 @@ def _garlic_runtime_update_confidence(
         "learning_status": learning_status,
         "recommendation": recommendation,
         "reasoning": reasoning,
-        "model_name": "gemini-2.5-flash",
+        "model_name": "gemini-3-flash-preview",
         "signals": {
             "expected_minutes": expected_minutes,
             "total_active_seconds": total_active_seconds,
@@ -21443,7 +21523,7 @@ def _garlic_generate_ai_rankings(
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3-flash-preview")
         resp = model.generate_content(
             [{"text": prompt}, {"text": json.dumps(body, ensure_ascii=True)}],
             generation_config={"temperature": 0.2, "max_output_tokens": 4096},
@@ -23028,7 +23108,7 @@ OUTPUT JSON ONLY:
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3-flash-preview")
         resp = model.generate_content(
             [{"text": prompt}, {"text": json.dumps({"syllabus": syllabus_context, "past_interactions": past_interactions}, ensure_ascii=True)}],
             generation_config={"temperature": 0.3, "max_output_tokens": 4096},
@@ -23076,7 +23156,7 @@ def _garlic_v3_evaluate_answer(
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3-flash-preview")
         eval_prompt = """Evaluate this student's answer. Return JSON ONLY:
 {
   "score": 0-100,
@@ -23523,7 +23603,7 @@ def _garlic_v3_compute_outcomes(
         try:
             import google.generativeai as genai
             genai.configure(api_key=GEMINI_API_KEY)
-            model = genai.GenerativeModel("gemini-2.5-flash")
+            model = genai.GenerativeModel("gemini-3-flash-preview")
             ai_prompt = """You are GARLIC Outcome Intelligence. Analyze this student's data and provide a brief 2-3 sentence reasoning about their exam readiness. Be direct and actionable. Return JSON: {"reasoning": "..."}"""
             ai_ctx = {
                 "predicted_marks": predicted_marks,
@@ -24005,7 +24085,7 @@ def api_garlic_v3_exam_insights(
         try:
             import google.generativeai as genai
             genai.configure(api_key=GEMINI_API_KEY)
-            model = genai.GenerativeModel("gemini-2.5-flash")
+            model = genai.GenerativeModel("gemini-3-flash-preview")
             ai_prompt = """You are GARLIC Exam Intelligence. Generate 3 aggressive, actionable insights for this student.
 Be specific. Include estimated marks impact.
 Return JSON: {"insights": [{"text": "...", "type": "risk|opportunity|urgency", "severity": "info|warning|critical", "marks_impact": 0}]}"""
@@ -26773,7 +26853,7 @@ def _generate_variant_from_detailed_markdown(topic: str, detailed_markdown: str,
     ).strip()
 
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-3-flash-preview")
 
     response = model.generate_content(
         [{"text": prompt_instruction}, {"text": source_md}],
@@ -27370,9 +27450,9 @@ async def generate_stream(
 
 # --- Engineering Mathematics Notes (Gemini 3 Pro Preview only) ---
 
-MATHS_NOTES_MODEL = "gemini-2.5-flash"
+MATHS_NOTES_MODEL = "gemini-3-flash-preview"
 
-PHYSICS_NOTES_MODEL = os.getenv("PHYSICS_NOTES_MODEL", "gemini-2.5-flash")
+PHYSICS_NOTES_MODEL = os.getenv("PHYSICS_NOTES_MODEL", "gemini-3-flash-preview")
 
 PHYSICS_NOTES_SYSTEM_PROMPT_TEMPLATE = """You will compose comprehensive, exam-ready Markdown notes for the physics topic "{topic}".
 
@@ -29072,7 +29152,7 @@ def _generate_caseflow_scenario_question(markdown: str, topic: str) -> Tuple[str
         """
     ).strip()
 
-    model_name = "gemini-2.5-flash"
+    model_name = "gemini-3-flash-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
     safety_settings = [
@@ -29197,7 +29277,7 @@ def _evaluate_caseflow_answer(
         """
     ).strip()
 
-    model_name = "gemini-2.5-flash"
+    model_name = "gemini-3-flash-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -29625,7 +29705,7 @@ def _generate_viva_turn(
         """
     ).strip()
 
-    model_name = "gemini-2.5-flash"
+    model_name = "gemini-3-flash-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -29716,7 +29796,7 @@ def _generate_clinical_decision_tree(topic: str, markdown: str) -> Dict[str, Any
         """
     ).strip()
 
-    model_name = "gemini-2.5-flash"
+    model_name = "gemini-3-flash-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
 
@@ -29926,7 +30006,7 @@ def _generate_match_following(markdown: str, topic: str) -> Tuple[List[Dict[str,
         """
     ).strip()
 
-    model_name = "gemini-2.5-flash"
+    model_name = "gemini-3-flash-preview"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(model_name)
     generation_config = genai.GenerationConfig(
@@ -30002,7 +30082,7 @@ def api_match_following(payload: Dict[str, Any] = Body(...)):
     """Generate 5 match-the-following pairs for a topic.
 
     Caches results in ai_notes_match keyed by topic_ci.
-    Uses gemini-2.5-flash only.
+    Uses gemini-3-flash-preview only.
     """
     topic = str(payload.get("topic") or "").strip()
     if not topic:
@@ -31908,7 +31988,7 @@ def _assign_exact_topics_to_questions(questions: List[Dict[str, Any]], selected_
 def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str = "balanced", selected_topics: Optional[List[str]] = None, selected_topic_units: Optional[Dict[str, int]] = None, selected_unit_numbers: Optional[List[int]] = None) -> Tuple[str, List[Dict[str, Any]], str]:
     """Generate MCQ questions from a topic for the teacher test builder.
 
-    IMPORTANT: Per product requirement, this uses gemini-2.5-flash only.
+    IMPORTANT: Per product requirement, this uses gemini-3-flash-preview only.
 
     Returns (title, questions, model_name).
     """
@@ -31919,7 +31999,7 @@ def _generate_topic_mcq_for_teacher(topic: str, count: int, difficulty_pref: str
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"Gemini client library missing: {exc}") from exc
 
-    model_name = "gemini-2.5-flash"
+    model_name = "gemini-3-flash-preview"
     safe_count = int(max(1, min(int(count or 10), 30)))
     cleaned_topic = (topic or "").strip()
     if not cleaned_topic:
@@ -32767,7 +32847,7 @@ def _teacher_results_generate_ai_insights(snapshot: Dict[str, Any]) -> Dict[str,
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3-flash-preview")
         cfg = genai.GenerationConfig(
             response_mime_type="application/json",
             temperature=0.2,
@@ -32795,7 +32875,7 @@ def _teacher_results_generate_ai_insights(snapshot: Dict[str, Any]) -> Dict[str,
             "insights": insights,
             "actions": actions,
             "pro_move": pro_move,
-            "model": "gemini-2.5-flash",
+            "model": "gemini-3-flash-preview",
             "used_fallback": False,
         }
     except Exception:
@@ -36763,7 +36843,7 @@ async def generate_labx(req: LabXGenerateRequest):
         def _generate_sync():
             client = genai.Client(api_key=gemini_key)
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3-flash-preview",
                 contents=prompt,
             )
             return response.text
@@ -36969,7 +37049,7 @@ async def generate_labx_stream(req: LabXGenerateRequest):
         try:
             client = genai.Client(api_key=gemini_key)
             response_stream = client.models.generate_content_stream(
-                model="gemini-2.5-flash",
+                model="gemini-3-flash-preview",
                 contents=prompt,
             )
             
@@ -37348,7 +37428,7 @@ async def _generate_ai_response(
 
         for _ in range(max_tool_calls + 1):
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3-flash-preview",
                 contents=gemini_messages,
                 config=types.GenerateContentConfig(
                     system_instruction=STUDYAI_SYSTEM_PROMPT,
@@ -37390,7 +37470,7 @@ async def _generate_ai_response(
             gemini_messages.append(types.Content(role="tool", parts=tool_parts))
 
         final_response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3-flash-preview",
             contents=gemini_messages,
             config=types.GenerateContentConfig(
                 system_instruction=STUDYAI_SYSTEM_PROMPT,
@@ -37640,7 +37720,7 @@ async def send_message(
         "role": "assistant",
         "content": ai_response,
         "attachments": [],
-        "metadata": {"model": "gemini-2.5-flash", "tool_calls": tool_traces},
+        "metadata": {"model": "gemini-3-flash-preview", "tool_calls": tool_traces},
     }
     
     try:
@@ -40018,7 +40098,7 @@ Generate {payload.count} professional, insightful feedback questions. Output ONL
         import google.generativeai as genai
         
         # Use Gemini 2.5 Flash as specified
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-3-flash-preview")
         response = model.generate_content(prompt)
         
         response_text = response.text.strip()
@@ -40057,7 +40137,7 @@ Generate {payload.count} professional, insightful feedback questions. Output ONL
             if cleaned["question_text"]:
                 cleaned_questions.append(cleaned)
         
-        return {"questions": cleaned_questions[:payload.count], "model": "gemini-2.5-flash"}
+        return {"questions": cleaned_questions[:payload.count], "model": "gemini-3-flash-preview"}
         
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
@@ -41914,7 +41994,7 @@ async def math_td_question_history(session_id: str):
 # InnovateX — Smart Idea Engine
 # ==========================================
 
-INNOVATEX_MODEL = "gemini-2.5-flash"
+INNOVATEX_MODEL = "gemini-3-flash-preview"
 
 class InnovateXIdeaRequest(BaseModel):
     skills: List[str] = Field(default=[], description="Optional skills the student knows")
@@ -43610,7 +43690,7 @@ MEDIX_RAG_CHUNKS_TABLE = os.getenv("MEDIX_RAG_CHUNKS_TABLE", "medix_rag_chunks")
 MEDIX_RAG_SESSIONS_TABLE = os.getenv("MEDIX_RAG_SESSIONS_TABLE", "medix_rag_sessions")
 MEDIX_RAG_MESSAGES_TABLE = os.getenv("MEDIX_RAG_MESSAGES_TABLE", "medix_rag_messages")
 
-MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-2.5-flash")
+MEDIX_CHAT_MODEL = os.getenv("MEDIX_RAG_CHAT_MODEL", "gemini-3-flash-preview")
 MEDIX_EMBED_MODEL = "gemini-embedding-001"
 MEDIX_EMBED_DIM = int(os.getenv("MEDIX_RAG_EMBED_DIM", "768"))
 MEDIX_MAX_UPLOAD_MB = int(os.getenv("MEDIX_RAG_MAX_UPLOAD_MB", "80"))

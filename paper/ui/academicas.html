@@ -1057,7 +1057,7 @@
     </header>
 
     
-    <section id="garlic-section" class="relative py-6 border-t border-black/5 dark:border-white/10">
+    <section id="garlic-section" class="relative py-6 border-t border-black/5 dark:border-white/10 hidden">
         <div class="container">
             <div class="rounded-2xl ring-1 ring-brand-500/25 bg-gradient-to-r from-brand-500/10 via-brandlt-200/40 to-white/60 dark:from-brand-900/70 dark:via-brand-700/35 dark:to-brand-900/50 backdrop-blur p-4 md:p-5">
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -3922,6 +3922,24 @@
     <!-- Unified Toggle All Logic -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // GARLIC section: show only when GARLIC_OS=on in .env
+            (async () => {
+                const garlicSection = document.getElementById('garlic-section');
+                if (!garlicSection) return;
+                try {
+                    const flagsApi = (window.API_BASE || window.__API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+                    const res = await fetch(`${flagsApi}/api/public/feature-flags`);
+                    if (!res.ok) return;
+                    const flags = await res.json();
+                    if (flags && flags.garlic_os === true) {
+                        garlicSection.classList.remove('hidden');
+                    }
+                } catch (e) {
+                    // Feature flag check failed — keep section hidden
+                    console.warn('Feature flags check failed:', e);
+                }
+            })();
+
             const garlicBtn = document.getElementById('garlic-btn');
             if (garlicBtn) {
                 garlicBtn.addEventListener('click', () => {
